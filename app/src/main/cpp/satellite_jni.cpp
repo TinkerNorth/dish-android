@@ -80,13 +80,30 @@ Java_com_tinkernorth_dish_SatelliteNative_openSocket(
     if (g_udpSock >= 0) { close(g_udpSock); g_udpSock = -1; }
     g_udpSock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (g_udpSock < 0) { LOGE("socket() failed"); return JNI_FALSE; }
+
+    // #4: DSCP marking — tag packets as EF (Expedited Forwarding, 0x2E = 46).
+    // Wi-Fi WMM maps DSCP EF to AC_VO (voice priority), the highest QoS class.
+    // This reduces Wi-Fi contention latency by ~2-5ms on congested networks.
+    int tos = 0xB8;  // DSCP EF (46) << 2 = 0xB8
+    if (setsockopt(g_udpSock, IPPROTO_IP, IP_TOS, &tos, sizeof(tos)) < 0) {
+        LOGI("IP_TOS not supported (non-fatal): %s", strerror(errno));
+    }
+
+    // #5: SO_BUSY_POLL — kernel busy-polls the NIC for up to 50μs before sleeping.
+    // Reduces kernel-side send/recv latency by avoiding the interrupt→softirq path.
+    // Silently ignored on kernels that don't support it.
+    int busyPoll = 50;  // microseconds
+    if (setsockopt(g_udpSock, SOL_SOCKET, SO_BUSY_POLL, &busyPoll, sizeof(busyPoll)) < 0) {
+        LOGI("SO_BUSY_POLL not supported (non-fatal): %s", strerror(errno));
+    }
+
     const char* s = env->GetStringUTFChars(ip, nullptr);
     memset(&g_dest, 0, sizeof(g_dest));
     g_dest.sin_family = AF_INET;
     g_dest.sin_port   = htons((uint16_t)port);
     inet_pton(AF_INET, s, &g_dest.sin_addr);
     env->ReleaseStringUTFChars(ip, s);
-    LOGI("UDP socket opened -> port %d", port);
+    LOGI("UDP socket opened -> port %d (TOS=0x%02X)", port, tos);
     return JNI_TRUE;
 }
 

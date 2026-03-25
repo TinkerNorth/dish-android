@@ -259,7 +259,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
-                        android:layout_marginBottom="16dp">
+                        android:layout_marginBottom="8dp">
                         <TextView
                             android:layout_width="0dp" android:layout_height="wrap_content"
                             android:layout_weight="1" android:text="ADDRESS"
@@ -269,6 +269,41 @@
                             android:id="@+id/tvConnectedIp"
                             android:layout_width="wrap_content" android:layout_height="wrap_content"
                             android:textColor="@color/colorOnSurface" android:textSize="13sp"
+                            android:fontFamily="monospace" />
+                    </LinearLayout>
+                    <!-- ── Active lock indicators ──────────────────────── -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="4dp">
+                        <TextView
+                            android:layout_width="0dp" android:layout_height="wrap_content"
+                            android:layout_weight="1" android:text="SCREEN"
+                            android:textColor="@color/colorMuted" android:textSize="12sp"
+                            android:letterSpacing="0.04" />
+                        <TextView
+                            android:id="@+id/tvScreenLock"
+                            android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="OFF"
+                            android:textColor="@color/colorMuted" android:textSize="13sp"
+                            android:fontFamily="monospace" />
+                    </LinearLayout>
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="16dp">
+                        <TextView
+                            android:layout_width="0dp" android:layout_height="wrap_content"
+                            android:layout_weight="1" android:text="WAKE LOCK"
+                            android:textColor="@color/colorMuted" android:textSize="12sp"
+                            android:letterSpacing="0.04" />
+                        <TextView
+                            android:id="@+id/tvWakeLock"
+                            android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="OFF"
+                            android:textColor="@color/colorMuted" android:textSize="13sp"
                             android:fontFamily="monospace" />
                     </LinearLayout>
                     <com.google.android.material.button.MaterialButton

@@ -5,6 +5,9 @@ import android.graphics.drawable.GradientDrawable
 import android.hardware.input.InputManager
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.os.Process
+import android.view.WindowManager
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.KeyEvent
@@ -33,7 +36,7 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
     private lateinit var binding: ActivityMainBinding
     private lateinit var inputManager: InputManager
 
-    // Controller axes / buttons (written on main thread by input handlers)
+    // Controller axes / buttons (main thread only)
     private var wButtons = 0
     private var bLT = 0; private var bRT = 0
     private var sLX = 0; private var sLY = 0; private var sRX = 0; private var sRY = 0
@@ -42,6 +45,11 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
     // App state
     private var appState   = State.SCANNING
     private var selServer: DiscoveredServer? = null
+
+    // Wake / screen locks — acquired when connected + controller present
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var screenLockActive = false
+    private var wakeLockActive   = false
 
     // Telemetry — per-second window counters (main thread only)
     private var telEventCount  = 0
@@ -85,6 +93,11 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Elevate main thread to near-real-time priority.
+        // Input dispatch + sendReport() both run here for zero queue overhead.
+        Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
+
         // GameActivity.onCreate already calls setContentView with its own FrameLayout.
         // Add our UI layout on top so the SurfaceView stays in the hierarchy.
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -107,6 +120,60 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
         telHandler.removeCallbacks(telRunnable)
         inputManager.unregisterInputDeviceListener(this)
         SatelliteNative.closeSocket()
+        releaseLocks()
+    }
+
+    // ── Wake / screen lock management ─────────────────────────────────────────
+    // Acquired when both conditions are met: connected to a server AND controller present.
+    // Keeps the CPU awake (PARTIAL_WAKE_LOCK) and the screen on (FLAG_KEEP_SCREEN_ON)
+    // so the connection stays alive even during idle periods with no input.
+
+    private fun updateLocks() {
+        val shouldLock = appState == State.CONNECTED && controllerConnected
+        if (shouldLock) acquireLocks() else releaseLocks()
+    }
+
+    private fun acquireLocks() {
+        // Screen on
+        if (!screenLockActive) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            screenLockActive = true
+        }
+        // CPU wake lock
+        if (wakeLock == null) {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = pm.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "Dish::ControllerStream"
+            ).apply { acquire() }
+            wakeLockActive = true
+        }
+        updateLockIndicators()
+    }
+
+    private fun releaseLocks() {
+        if (screenLockActive) {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            screenLockActive = false
+        }
+        wakeLock?.let {
+            if (it.isHeld) it.release()
+            wakeLock = null
+            wakeLockActive = false
+        }
+        updateLockIndicators()
+    }
+
+    private fun updateLockIndicators() {
+        if (!::binding.isInitialized) return
+        binding.tvScreenLock.text = if (screenLockActive) "ON" else "OFF"
+        binding.tvScreenLock.setTextColor(
+            getColor(if (screenLockActive) R.color.colorSuccess else R.color.colorMuted)
+        )
+        binding.tvWakeLock.text = if (wakeLockActive) "ON" else "OFF"
+        binding.tvWakeLock.setTextColor(
+            getColor(if (wakeLockActive) R.color.colorSuccess else R.color.colorMuted)
+        )
     }
 
     // ── Controller dot shape ──────────────────────────────────────────────────
@@ -123,6 +190,7 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
                     else                     getColor(R.color.colorMuted)
         (binding.dotController.background as? GradientDrawable)?.setColor(color)
         binding.tvControllerStatus.text = if (controllerConnected) "CONNECTED" else "NONE"
+        updateLocks()
     }
 
     // ── InputManager callbacks ────────────────────────────────────────────────
@@ -145,25 +213,23 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
     override fun onInputDeviceChanged(deviceId: Int)  { checkGamepadConnected() }
 
     // ── Gamepad input ─────────────────────────────────────────────────────────
-    // Direct Java→JNI path: extract axes/buttons, call sendReport() immediately.
-    // This bypasses GameActivity's native input buffer (which doesn't work for
-    // hybrid non-game layouts) and gives equivalent or better latency since
-    // sendto() fires on the calling thread with zero buffering.
+    // All input processing + sendReport() runs directly on the main thread for
+    // zero queue overhead. sendto() is non-blocking (~50μs), far cheaper than
+    // a HandlerThread context switch (~1-3ms under load).
 
-    // Override dispatchKeyEvent to intercept gamepad keys BEFORE GameActivity's
-    // InputEnabledSurfaceView / GameTextInput InputConnection can consume them.
+    // Intercept gamepad keys BEFORE GameActivity's InputEnabledSurfaceView consumes them.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.source and InputDevice.SOURCE_GAMEPAD != 0 ||
             event.source and InputDevice.SOURCE_JOYSTICK != 0) {
             return if (event.action == KeyEvent.ACTION_DOWN)
-                handleKeyDown(event.keyCode, event)
+                handleKeyDown(event.keyCode)
             else
-                handleKeyUp(event.keyCode, event)
+                handleKeyUp(event.keyCode)
         }
         return super.dispatchKeyEvent(event)
     }
 
-    private fun handleKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+    private fun handleKeyDown(keyCode: Int): Boolean {
         when (keyCode) {
             KeyEvent.KEYCODE_BUTTON_L2 -> { bLT = 255; trySend(); return true }
             KeyEvent.KEYCODE_BUTTON_R2 -> { bRT = 255; trySend(); return true }
@@ -172,7 +238,7 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
         return false
     }
 
-    private fun handleKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+    private fun handleKeyUp(keyCode: Int): Boolean {
         when (keyCode) {
             KeyEvent.KEYCODE_BUTTON_L2 -> { bLT = 0; trySend(); return true }
             KeyEvent.KEYCODE_BUTTON_R2 -> { bRT = 0; trySend(); return true }
@@ -199,15 +265,6 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
         return super.dispatchGenericMotionEvent(event)
     }
 
-    private fun zeroAxes() {
-        sLX = 0; sLY = 0; sRX = 0; sRY = 0; bLT = 0; bRT = 0; wButtons = 0
-    }
-
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        if (!hasFocus) { zeroAxes(); trySend() }
-    }
-
     private fun processJoystickInput(event: MotionEvent, histPos: Int) {
         fun axis(a: Int) = if (histPos < 0) event.getAxisValue(a)
                            else event.getHistoricalAxisValue(a, histPos)
@@ -227,6 +284,15 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
         if (hy >  0.5f) wButtons = wButtons or 0x0002
         telSampleCount++
         trySend()
+    }
+
+    private fun zeroAxes() {
+        sLX = 0; sLY = 0; sRX = 0; sRY = 0; bLT = 0; bRT = 0; wButtons = 0
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus) { zeroAxes(); trySend() }
     }
 
     private fun trySend() {
@@ -386,6 +452,7 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
     }
 
     private fun disconnect() {
+        releaseLocks()
         SatelliteNative.closeSocket(); selServer = null; startDiscovery()
     }
 
