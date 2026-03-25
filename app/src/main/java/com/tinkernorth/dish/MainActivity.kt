@@ -40,6 +40,9 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
     private var wButtons = 0
     private var bLT = 0; private var bRT = 0
     private var sLX = 0; private var sLY = 0; private var sRX = 0; private var sRY = 0
+    // Track whether triggers are currently held via key events (digital).
+    // When true, axis reads (which report 0 on digital-only controllers) won't clobber.
+    private var ltFromKey = false; private var rtFromKey = false
     private var controllerConnected = false
 
     // App state
@@ -231,8 +234,8 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
 
     private fun handleKeyDown(keyCode: Int): Boolean {
         when (keyCode) {
-            KeyEvent.KEYCODE_BUTTON_L2 -> { bLT = 255; trySend(); return true }
-            KeyEvent.KEYCODE_BUTTON_R2 -> { bRT = 255; trySend(); return true }
+            KeyEvent.KEYCODE_BUTTON_L2 -> { ltFromKey = true;  bLT = 255; trySend(); return true }
+            KeyEvent.KEYCODE_BUTTON_R2 -> { rtFromKey = true;  bRT = 255; trySend(); return true }
         }
         BUTTON_MAP[keyCode]?.let { bit -> wButtons = wButtons or bit; trySend(); return true }
         return false
@@ -240,8 +243,8 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
 
     private fun handleKeyUp(keyCode: Int): Boolean {
         when (keyCode) {
-            KeyEvent.KEYCODE_BUTTON_L2 -> { bLT = 0; trySend(); return true }
-            KeyEvent.KEYCODE_BUTTON_R2 -> { bRT = 0; trySend(); return true }
+            KeyEvent.KEYCODE_BUTTON_L2 -> { ltFromKey = false; bLT = 0; trySend(); return true }
+            KeyEvent.KEYCODE_BUTTON_R2 -> { rtFromKey = false; bRT = 0; trySend(); return true }
         }
         BUTTON_MAP[keyCode]?.let { bit -> wButtons = wButtons and bit.inv(); trySend(); return true }
         return false
@@ -274,8 +277,11 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
         sLY = (dead(axis(MotionEvent.AXIS_Y),  MotionEvent.AXIS_Y)  * -32767f).toInt().coerceIn(-32768, 32767)
         sRX = (dead(axis(MotionEvent.AXIS_Z),  MotionEvent.AXIS_Z)  *  32767f).toInt().coerceIn(-32768, 32767)
         sRY = (dead(axis(MotionEvent.AXIS_RZ), MotionEvent.AXIS_RZ) * -32767f).toInt().coerceIn(-32768, 32767)
-        bLT = (maxOf(axis(MotionEvent.AXIS_LTRIGGER), axis(MotionEvent.AXIS_BRAKE))  * 255f).toInt().coerceIn(0, 255)
-        bRT = (maxOf(axis(MotionEvent.AXIS_RTRIGGER), axis(MotionEvent.AXIS_GAS))    * 255f).toInt().coerceIn(0, 255)
+        // Only update triggers from axes if not currently held via key events.
+        // Digital-only controllers (e.g. Switch Pro) send triggers as key events
+        // but report 0 on the axis — without this guard, axis reads clobber the key state.
+        if (!ltFromKey) bLT = (maxOf(axis(MotionEvent.AXIS_LTRIGGER), axis(MotionEvent.AXIS_BRAKE))  * 255f).toInt().coerceIn(0, 255)
+        if (!rtFromKey) bRT = (maxOf(axis(MotionEvent.AXIS_RTRIGGER), axis(MotionEvent.AXIS_GAS))    * 255f).toInt().coerceIn(0, 255)
         val hx = axis(MotionEvent.AXIS_HAT_X); val hy = axis(MotionEvent.AXIS_HAT_Y)
         wButtons = wButtons and 0x000F.inv()
         if (hx < -0.5f) wButtons = wButtons or 0x0004
@@ -288,6 +294,7 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
 
     private fun zeroAxes() {
         sLX = 0; sLY = 0; sRX = 0; sRY = 0; bLT = 0; bRT = 0; wButtons = 0
+        ltFromKey = false; rtFromKey = false
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
