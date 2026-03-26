@@ -14,8 +14,10 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.lifecycle.lifecycleScope
 import com.google.androidgamesdk.GameActivity
 import com.tinkernorth.dish.databinding.ActivityMainBinding
@@ -424,28 +426,73 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
                 SatelliteNative.pair(server.ip, server.pairPort, deviceId, deviceName, "")
             }
             if (result.contains("\"ok\":true")) connectToServer(server)
-            else {
-                transitionTo(State.PAIRING)
-                binding.tvPairingServer.text = server.name
-                binding.etPin.text?.clear()
-                binding.tvPairError.text = ""
-            }
+            else showPinDialog(server)
         }
     }
 
-    private fun attemptPairing() {
-        val server = selServer ?: return
-        val pin = binding.etPin.text.toString().trim()
-        if (pin.isEmpty()) { binding.tvPairError.text = "Enter the PIN shown on the server"; return }
-        binding.btnPair.isEnabled = false; binding.tvPairError.text = ""
-        lifecycleScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                SatelliteNative.pair(server.ip, server.pairPort, deviceId, deviceName, pin)
-            }
-            binding.btnPair.isEnabled = true
-            if (result.contains("\"ok\":true")) connectToServer(server)
-            else binding.tvPairError.text = jsonGet(result, "error") ?: "Pairing failed"
+    /**
+     * Show a PIN-entry dialog. Using an AlertDialog gives the EditText its own
+     * window, which bypasses GameActivity's native InputConnection interception
+     * that prevents the soft keyboard from delivering text to in-layout EditTexts.
+     */
+    private fun showPinDialog(server: DiscoveredServer) {
+        transitionTo(State.SERVER_LIST)
+
+        val dp = resources.displayMetrics.density
+        val input = EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            hint = "PIN"
+            textSize = 24f
+            gravity = android.view.Gravity.CENTER
+            typeface = android.graphics.Typeface.MONOSPACE
+            letterSpacing = 0.2f
+            filters = arrayOf(android.text.InputFilter.LengthFilter(8))
+            val pad = (16 * dp).toInt()
+            setPadding(pad, pad, pad, pad)
         }
+
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle("Pair with ${server.name}")
+            .setMessage("Enter the PIN shown in the server web UI:")
+            .setView(input)
+            .setPositiveButton("PAIR", null)   // set listener below to prevent auto-dismiss
+            .setNegativeButton("CANCEL") { d, _ -> d.dismiss() }
+            .setCancelable(true)
+            .create()
+
+        dialog.setOnShowListener {
+            input.requestFocus()
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val pin = input.text.toString().trim()
+                if (pin.isEmpty()) {
+                    input.error = "Enter the PIN shown on the server"
+                    return@setOnClickListener
+                }
+                input.error = null
+                input.isEnabled = false
+                dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).isEnabled = false
+                lifecycleScope.launch {
+                    val result = withContext(Dispatchers.IO) {
+                        SatelliteNative.pair(server.ip, server.pairPort, deviceId, deviceName, pin)
+                    }
+                    if (result.contains("\"ok\":true")) {
+                        dialog.dismiss()
+                        connectToServer(server)
+                    } else {
+                        input.isEnabled = true
+                        dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).isEnabled = true
+                        input.error = jsonGet(result, "error") ?: "Pairing failed"
+                    }
+                }
+            }
+        }
+
+        dialog.show()
+    }
+
+    private fun attemptPairing() {
+        // Kept for btnPair click wired in setupButtons; now a no-op since
+        // pairing is handled entirely through showPinDialog.
     }
 
     private fun connectToServer(server: DiscoveredServer) {
