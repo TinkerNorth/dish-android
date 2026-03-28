@@ -3,7 +3,8 @@
  * GameActivity provides the native thread (android_main) for lifecycle.
  * Controller input is handled via direct JNI calls from Kotlin for
  * lowest latency (Java dispatchGenericMotionEvent → JNI sendReport → sendto).
- * Also handles LAN discovery and TCP pairing via JNI.
+ * Also handles LAN discovery, TCP pairing, HTTP connection API, and
+ * encrypted UDP streaming (ChaCha20-Poly1305) via JNI.
  */
 #include <jni.h>
 #include <android/log.h>
@@ -22,10 +23,24 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
+#include <thread>
+#include <atomic>
+#include <mutex>
+#include <sodium.h>
 
 #define TAG "SatelliteJNI"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
+
+/* ── Constants ─────────────────────────────────────────────────────────────── */
+static constexpr int HEARTBEAT_INTERVAL_MS = 2000;
+static constexpr int HEARTBEAT_MISS_MAX    = 3;
+// Message types
+static constexpr uint16_t MSG_GAMEPAD_DATA     = 0x0001;
+static constexpr uint16_t MSG_HEARTBEAT_PING   = 0x0002;
+static constexpr uint16_t MSG_HEARTBEAT_ACK    = 0x0003;
+static constexpr uint16_t MSG_CONTROLLER_ADD   = 0x0004;
+static constexpr uint16_t MSG_CONTROLLER_REMOVE= 0x0005;
 
 #pragma pack(push, 1)
 struct XUSB_REPORT {
@@ -40,13 +55,98 @@ struct XUSB_REPORT {
 #pragma pack(pop)
 static_assert(sizeof(XUSB_REPORT) == 12, "XUSB_REPORT must be 12 bytes");
 
-static int               g_udpSock = -1;
-static struct sockaddr_in g_dest   = {};
+/* ── Connection state ──────────────────────────────────────────────────────── */
+static int                g_udpSock = -1;
+static struct sockaddr_in g_dest    = {};
+static uint8_t            g_token[4]  = {};
+static uint8_t            g_key[32]   = {};
+static std::atomic<uint32_t> g_counter{0};
+static std::mutex         g_sendMtx;  // protects sendto
+
+// Heartbeat thread
+static std::thread        g_heartbeatThread;
+static std::atomic<bool>  g_heartbeatRunning{false};
+static std::atomic<int>   g_missedAcks{0};
+static std::atomic<bool>  g_connectionAlive{true};
 
 static uint64_t nowMs() {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000u + (uint64_t)ts.tv_nsec / 1000000u;
+}
+
+/* ── Helpers: big-endian encoding ──────────────────────────────────────────── */
+static void putBE16(uint8_t* dst, uint16_t v) {
+    dst[0] = (uint8_t)(v >> 8); dst[1] = (uint8_t)(v);
+}
+static void putBE32(uint8_t* dst, uint32_t v) {
+    dst[0] = (uint8_t)(v >> 24); dst[1] = (uint8_t)(v >> 16);
+    dst[2] = (uint8_t)(v >> 8);  dst[3] = (uint8_t)(v);
+}
+
+/* ── Encrypt and send a message over the UDP channel ───────────────────────── */
+static bool sendEncrypted(uint16_t msgType, const uint8_t* payload, uint16_t payloadLen) {
+    if (g_udpSock < 0) return false;
+
+    // Inner message: type(2) + length(2) + payload
+    uint16_t innerLen = 4 + payloadLen;
+    uint8_t inner[4 + 256]; // max payload ~256 bytes
+    if (innerLen > sizeof(inner)) return false;
+    putBE16(inner, msgType);
+    putBE16(inner + 2, payloadLen);
+    if (payloadLen > 0) memcpy(inner + 4, payload, payloadLen);
+
+    // Get next counter
+    uint32_t ctr = g_counter.fetch_add(1, std::memory_order_relaxed);
+
+    // Nonce: counter zero-padded to 12 bytes (big-endian, left-padded)
+    uint8_t nonce[12] = {};
+    putBE32(nonce + 8, ctr);
+
+    // Encrypt: ciphertext = encrypted(inner) + 16-byte auth tag
+    uint8_t ciphertext[sizeof(inner) + crypto_aead_chacha20poly1305_ietf_ABYTES];
+    unsigned long long cipherLen = 0;
+    crypto_aead_chacha20poly1305_ietf_encrypt(
+        ciphertext, &cipherLen,
+        inner, innerLen,
+        g_token, 4,  // AAD = token
+        nullptr,     // nsec (unused)
+        nonce, g_key);
+
+    // Packet: token(4) + counter(4) + ciphertext
+    uint8_t packet[8 + sizeof(ciphertext)];
+    memcpy(packet, g_token, 4);
+    putBE32(packet + 4, ctr);
+    memcpy(packet + 8, ciphertext, (size_t)cipherLen);
+
+    size_t totalLen = 8 + (size_t)cipherLen;
+    std::lock_guard<std::mutex> lock(g_sendMtx);
+    ssize_t sent = sendto(g_udpSock, packet, totalLen, 0,
+                          (struct sockaddr*)&g_dest, sizeof(g_dest));
+    return sent == (ssize_t)totalLen;
+}
+
+/* ── Heartbeat thread ──────────────────────────────────────────────────────── */
+static void heartbeatLoop() {
+    LOGI("Heartbeat thread started");
+    while (g_heartbeatRunning.load(std::memory_order_relaxed)) {
+        // Send heartbeat ping
+        sendEncrypted(MSG_HEARTBEAT_PING, nullptr, 0);
+        g_missedAcks.fetch_add(1, std::memory_order_relaxed);
+
+        // Check if we've missed too many
+        if (g_missedAcks.load(std::memory_order_relaxed) >= HEARTBEAT_MISS_MAX) {
+            LOGE("Missed %d heartbeat ACKs — connection dead", HEARTBEAT_MISS_MAX);
+            g_connectionAlive.store(false, std::memory_order_relaxed);
+        }
+
+        // Sleep for heartbeat interval (in 100ms increments for responsiveness)
+        for (int i = 0; i < HEARTBEAT_INTERVAL_MS / 100; i++) {
+            if (!g_heartbeatRunning.load(std::memory_order_relaxed)) break;
+            usleep(100000); // 100ms
+        }
+    }
+    LOGI("Heartbeat thread stopped");
 }
 /* ── android_main — GameActivity native entry point (lifecycle only) ───── */
 void android_main(struct android_app* app) {
@@ -72,30 +172,36 @@ void android_main(struct android_app* app) {
 
 extern "C" {
 
-/* ── UDP Streaming ────────────────────────────────────────────────────────── */
+/* ── libsodium init ────────────────────────────────────────────────────────── */
+static std::once_flag g_sodiumInit;
+static void ensureSodiumInit() {
+    std::call_once(g_sodiumInit, []() {
+        if (sodium_init() < 0) LOGE("sodium_init() failed!");
+        else LOGI("libsodium initialized");
+    });
+}
+
+/* ── UDP Socket ────────────────────────────────────────────────────────────── */
 
 JNIEXPORT jboolean JNICALL
 Java_com_tinkernorth_dish_SatelliteNative_openSocket(
         JNIEnv* env, jobject, jstring ip, jint port) {
+    ensureSodiumInit();
     if (g_udpSock >= 0) { close(g_udpSock); g_udpSock = -1; }
     g_udpSock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (g_udpSock < 0) { LOGE("socket() failed"); return JNI_FALSE; }
 
-    // #4: DSCP marking — tag packets as EF (Expedited Forwarding, 0x2E = 46).
-    // Wi-Fi WMM maps DSCP EF to AC_VO (voice priority), the highest QoS class.
-    // This reduces Wi-Fi contention latency by ~2-5ms on congested networks.
-    int tos = 0xB8;  // DSCP EF (46) << 2 = 0xB8
-    if (setsockopt(g_udpSock, IPPROTO_IP, IP_TOS, &tos, sizeof(tos)) < 0) {
+    int tos = 0xB8;
+    if (setsockopt(g_udpSock, IPPROTO_IP, IP_TOS, &tos, sizeof(tos)) < 0)
         LOGI("IP_TOS not supported (non-fatal): %s", strerror(errno));
-    }
 
-    // #5: SO_BUSY_POLL — kernel busy-polls the NIC for up to 50μs before sleeping.
-    // Reduces kernel-side send/recv latency by avoiding the interrupt→softirq path.
-    // Silently ignored on kernels that don't support it.
-    int busyPoll = 50;  // microseconds
-    if (setsockopt(g_udpSock, SOL_SOCKET, SO_BUSY_POLL, &busyPoll, sizeof(busyPoll)) < 0) {
+    int busyPoll = 50;
+    if (setsockopt(g_udpSock, SOL_SOCKET, SO_BUSY_POLL, &busyPoll, sizeof(busyPoll)) < 0)
         LOGI("SO_BUSY_POLL not supported (non-fatal): %s", strerror(errno));
-    }
+
+    // Set recv timeout for heartbeat ACK reception
+    struct timeval rtv = { 0, 500000 }; // 500ms
+    setsockopt(g_udpSock, SOL_SOCKET, SO_RCVTIMEO, &rtv, sizeof(rtv));
 
     const char* s = env->GetStringUTFChars(ip, nullptr);
     memset(&g_dest, 0, sizeof(g_dest));
@@ -109,22 +215,143 @@ Java_com_tinkernorth_dish_SatelliteNative_openSocket(
 
 JNIEXPORT void JNICALL
 Java_com_tinkernorth_dish_SatelliteNative_closeSocket(JNIEnv*, jobject) {
+    // Stop heartbeat first
+    g_heartbeatRunning.store(false);
+    if (g_heartbeatThread.joinable()) g_heartbeatThread.join();
     if (g_udpSock >= 0) { close(g_udpSock); g_udpSock = -1; }
+    g_counter.store(0);
+    memset(g_key, 0, sizeof(g_key));
+    memset(g_token, 0, sizeof(g_token));
+    g_missedAcks.store(0);
+    g_connectionAlive.store(true);
 }
+
+/* ── Connection params (called after HTTP POST /api/connections) ───────────── */
+
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_SatelliteNative_setConnectionParams(
+        JNIEnv* env, jobject,
+        jbyteArray tokenArr, jbyteArray keyArr) {
+    ensureSodiumInit();
+    jbyte* tokenBytes = env->GetByteArrayElements(tokenArr, nullptr);
+    jbyte* keyBytes   = env->GetByteArrayElements(keyArr,   nullptr);
+    memcpy(g_token, tokenBytes, 4);
+    memcpy(g_key,   keyBytes,   32);
+    g_counter.store(0);
+    g_missedAcks.store(0);
+    g_connectionAlive.store(true);
+    env->ReleaseByteArrayElements(tokenArr, tokenBytes, JNI_ABORT);
+    env->ReleaseByteArrayElements(keyArr,   keyBytes,   JNI_ABORT);
+    LOGI("Connection params set (token=%02x%02x%02x%02x)",
+         g_token[0], g_token[1], g_token[2], g_token[3]);
+}
+
+/* ── Encrypted gamepad data ────────────────────────────────────────────────── */
 
 JNIEXPORT void JNICALL
 Java_com_tinkernorth_dish_SatelliteNative_sendReport(
         JNIEnv*, jobject,
+        jint controllerIndex,
         jint wB, jint bLT, jint bRT, jint sLX, jint sLY, jint sRX, jint sRY) {
     if (g_udpSock < 0) return;
-    XUSB_REPORT r;
-    r.wButtons      = (uint16_t)(wB  & 0xFFFF);
-    r.bLeftTrigger  = (uint8_t) (bLT & 0xFF);
-    r.bRightTrigger = (uint8_t) (bRT & 0xFF);
-    r.sThumbLX = (int16_t)sLX; r.sThumbLY = (int16_t)sLY;
-    r.sThumbRX = (int16_t)sRX; r.sThumbRY = (int16_t)sRY;
-    sendto(g_udpSock, &r, sizeof(r), 0,
-           (struct sockaddr*)&g_dest, sizeof(g_dest));
+    // Payload: controller_index(1B) + XUSB_REPORT(12B) = 13 bytes
+    uint8_t payload[13];
+    payload[0] = (uint8_t)(controllerIndex & 0xFF);
+    XUSB_REPORT* r = (XUSB_REPORT*)(payload + 1);
+    r->wButtons      = (uint16_t)(wB  & 0xFFFF);
+    r->bLeftTrigger  = (uint8_t) (bLT & 0xFF);
+    r->bRightTrigger = (uint8_t) (bRT & 0xFF);
+    r->sThumbLX = (int16_t)sLX; r->sThumbLY = (int16_t)sLY;
+    r->sThumbRX = (int16_t)sRX; r->sThumbRY = (int16_t)sRY;
+    sendEncrypted(MSG_GAMEPAD_DATA, payload, 13);
+}
+
+/* ── Controller add/remove ─────────────────────────────────────────────────── */
+
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_SatelliteNative_controllerAdd(
+        JNIEnv*, jobject, jint controllerIndex, jint capabilities) {
+    // Payload: controller_index(1B) + capabilities(2B big-endian)
+    uint8_t payload[3];
+    payload[0] = (uint8_t)(controllerIndex & 0xFF);
+    putBE16(payload + 1, (uint16_t)(capabilities & 0xFFFF));
+    sendEncrypted(MSG_CONTROLLER_ADD, payload, 3);
+    LOGI("Sent controller add: index=%d caps=0x%04X", controllerIndex, capabilities);
+}
+
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_SatelliteNative_controllerRemove(
+        JNIEnv*, jobject, jint controllerIndex) {
+    uint8_t payload[1] = { (uint8_t)(controllerIndex & 0xFF) };
+    sendEncrypted(MSG_CONTROLLER_REMOVE, payload, 1);
+    LOGI("Sent controller remove: index=%d", controllerIndex);
+}
+
+/* ── Heartbeat start/stop ──────────────────────────────────────────────────── */
+
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_SatelliteNative_startHeartbeat(JNIEnv*, jobject) {
+    if (g_heartbeatRunning.load()) return;
+    g_heartbeatRunning.store(true);
+    g_missedAcks.store(0);
+    g_connectionAlive.store(true);
+    g_heartbeatThread = std::thread(heartbeatLoop);
+}
+
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_SatelliteNative_stopHeartbeat(JNIEnv*, jobject) {
+    g_heartbeatRunning.store(false);
+    if (g_heartbeatThread.joinable()) g_heartbeatThread.join();
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_tinkernorth_dish_SatelliteNative_isConnectionAlive(JNIEnv*, jobject) {
+    return g_connectionAlive.load() ? JNI_TRUE : JNI_FALSE;
+}
+
+/* ── Receive ACK (called from a background thread) ────────────────────────── */
+
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_SatelliteNative_receiveAck(JNIEnv*, jobject) {
+    if (g_udpSock < 0) return;
+    uint8_t buf[128];
+    struct sockaddr_in from = {};
+    socklen_t fl = sizeof(from);
+    ssize_t n = recvfrom(g_udpSock, buf, sizeof(buf), 0,
+                         (struct sockaddr*)&from, &fl);
+    if (n < 8) return; // too small
+
+    // Verify token matches
+    if (memcmp(buf, g_token, 4) != 0) return;
+
+    // Extract counter
+    uint32_t ctr = ((uint32_t)buf[4] << 24) | ((uint32_t)buf[5] << 16) |
+                   ((uint32_t)buf[6] << 8)  | (uint32_t)buf[7];
+
+    // Build nonce
+    uint8_t nonce[12] = {};
+    putBE32(nonce + 8, ctr);
+
+    // Decrypt
+    uint8_t decrypted[64];
+    unsigned long long decLen = 0;
+    size_t cipherLen = (size_t)n - 8;
+    if (crypto_aead_chacha20poly1305_ietf_decrypt(
+            decrypted, &decLen,
+            nullptr, // nsec
+            buf + 8, cipherLen,
+            g_token, 4, // AAD
+            nonce, g_key) != 0) {
+        return; // decryption failed
+    }
+
+    // Parse inner message: type(2B) + length(2B)
+    if (decLen < 4) return;
+    uint16_t msgType = ((uint16_t)decrypted[0] << 8) | decrypted[1];
+    if (msgType == MSG_HEARTBEAT_ACK) {
+        g_missedAcks.store(0);
+        g_connectionAlive.store(true);
+    }
 }
 
 /* ── LAN Discovery ────────────────────────────────────────────────────────── */
@@ -212,13 +439,22 @@ Java_com_tinkernorth_dish_SatelliteNative_pair(
             msg += idStr; msg += "\",\"deviceName\":\"";
             msg += nameStr; msg += "\",\"pin\":\"";
             msg += pinStr; msg += "\"}";
+            LOGI("pair: sending %s", msg.c_str());
             send(sock, msg.c_str(), (int)msg.size(), 0);
             struct timeval rtv = { 5, 0 };
             setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &rtv, sizeof(rtv));
             char buf[512] = {};
             int n = (int)recv(sock, buf, sizeof(buf) - 1, 0);
-            if (n > 0) { buf[n] = '\0'; result = std::string(buf, (size_t)n); }
-            else        { result = "{\"ok\":false,\"error\":\"no response\"}"; }
+            if (n > 0) {
+                buf[n] = '\0';
+                result = std::string(buf, (size_t)n);
+                LOGI("pair: received %d bytes: %s", n, buf);
+            } else {
+                LOGE("pair: recv failed (n=%d, errno=%d: %s)", n, errno, strerror(errno));
+                result = "{\"ok\":false,\"error\":\"no response\"}";
+            }
+        } else {
+            LOGE("pair: connect failed (ret=%d, errno=%d: %s)", ret, errno, strerror(errno));
         }
         close(sock);
     }
@@ -226,6 +462,138 @@ Java_com_tinkernorth_dish_SatelliteNative_pair(
     env->ReleaseStringUTFChars(deviceId,   idStr);
     env->ReleaseStringUTFChars(deviceName, nameStr);
     env->ReleaseStringUTFChars(pin,        pinStr);
+    LOGI("pair: result = %s", result.c_str());
+    return env->NewStringUTF(result.c_str());
+}
+
+/* ── HTTP helpers (minimal, no external deps) ──────────────────────────────── */
+
+static std::string httpRequest(const char* method, const char* ip, int port,
+                               const char* path, const char* body) {
+    LOGI("httpRequest: %s %s:%d%s", method, ip, port, path);
+    int sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (sock < 0) {
+        LOGE("httpRequest: socket() failed: %s", strerror(errno));
+        return "{\"error\":\"socket failed\"}";
+    }
+
+    int flags = fcntl(sock, F_GETFL, 0);
+    fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+    struct sockaddr_in addr = {};
+    addr.sin_family = AF_INET;
+    addr.sin_port   = htons((uint16_t)port);
+    inet_pton(AF_INET, ip, &addr.sin_addr);
+
+    int ret = connect(sock, (struct sockaddr*)&addr, sizeof(addr));
+    if (ret == 0) {
+        // Immediate success (rare but valid)
+    } else if (ret < 0 && errno == EINPROGRESS) {
+        struct timeval tv = { 5, 0 };
+        fd_set wset; FD_ZERO(&wset); FD_SET(sock, &wset);
+        ret = select(sock + 1, nullptr, &wset, nullptr, &tv);
+        if (ret <= 0) {
+            LOGE("httpRequest: select() timeout/error connecting to %s:%d", ip, port);
+            close(sock);
+            return "{\"error\":\"connect timeout\"}";
+        }
+        // Check if the connection actually succeeded
+        int sockerr = 0; socklen_t sl = sizeof(sockerr);
+        getsockopt(sock, SOL_SOCKET, SO_ERROR, &sockerr, &sl);
+        if (sockerr != 0) {
+            LOGE("httpRequest: connect to %s:%d failed: %s", ip, port, strerror(sockerr));
+            close(sock);
+            return std::string("{\"error\":\"connect refused: ") + strerror(sockerr) + "\"}";
+        }
+    } else {
+        LOGE("httpRequest: connect() to %s:%d failed immediately: %s", ip, port, strerror(errno));
+        close(sock);
+        return std::string("{\"error\":\"connect failed: ") + strerror(errno) + "\"}";
+    }
+    fcntl(sock, F_SETFL, flags & ~O_NONBLOCK);
+
+    // Build HTTP request
+    std::string req = std::string(method) + " " + path + " HTTP/1.1\r\n";
+    req += "Host: "; req += ip; req += "\r\n";
+    req += "Content-Type: application/json\r\n";
+    req += "Connection: close\r\n";
+    if (body && strlen(body) > 0) {
+        req += "Content-Length: " + std::to_string(strlen(body)) + "\r\n";
+    } else {
+        req += "Content-Length: 0\r\n";
+    }
+    req += "\r\n";
+    if (body && strlen(body) > 0) req += body;
+
+    send(sock, req.c_str(), (int)req.size(), 0);
+
+    struct timeval rtv = { 5, 0 };
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &rtv, sizeof(rtv));
+
+    // Read response
+    std::string response;
+    char buf[2048];
+    while (true) {
+        int n = (int)recv(sock, buf, sizeof(buf) - 1, 0);
+        if (n <= 0) break;
+        buf[n] = '\0';
+        response += buf;
+    }
+    close(sock);
+
+    // Extract body (after \r\n\r\n)
+    size_t bodyStart = response.find("\r\n\r\n");
+    if (bodyStart != std::string::npos) {
+        return response.substr(bodyStart + 4);
+    }
+    return response;
+}
+
+/* ── POST /api/connections ─────────────────────────────────────────────────── */
+
+JNIEXPORT jstring JNICALL
+Java_com_tinkernorth_dish_SatelliteNative_httpConnect(
+        JNIEnv* env, jobject,
+        jstring ip, jint httpPort, jstring deviceId) {
+    const char* ipStr = env->GetStringUTFChars(ip, nullptr);
+    const char* idStr = env->GetStringUTFChars(deviceId, nullptr);
+
+    std::string body = "{\"deviceId\":\"";
+    body += idStr;
+    body += "\"}";
+
+    std::string result = httpRequest("POST", ipStr, (int)httpPort,
+                                     "/api/connections", body.c_str());
+
+    env->ReleaseStringUTFChars(ip, ipStr);
+    env->ReleaseStringUTFChars(deviceId, idStr);
+    LOGI("POST /api/connections -> %s", result.c_str());
+    return env->NewStringUTF(result.c_str());
+}
+
+/* ── DELETE /api/connections/:id ───────────────────────────────────────────── */
+
+JNIEXPORT jstring JNICALL
+Java_com_tinkernorth_dish_SatelliteNative_httpDisconnect(
+        JNIEnv* env, jobject,
+        jstring ip, jint httpPort, jstring connectionId, jstring deviceId) {
+    const char* ipStr   = env->GetStringUTFChars(ip, nullptr);
+    const char* connStr = env->GetStringUTFChars(connectionId, nullptr);
+    const char* idStr   = env->GetStringUTFChars(deviceId, nullptr);
+
+    std::string path = "/api/connections/";
+    path += connStr;
+
+    std::string body = "{\"deviceId\":\"";
+    body += idStr;
+    body += "\"}";
+
+    std::string result = httpRequest("DELETE", ipStr, (int)httpPort,
+                                     path.c_str(), body.c_str());
+
+    env->ReleaseStringUTFChars(ip, ipStr);
+    env->ReleaseStringUTFChars(connectionId, connStr);
+    env->ReleaseStringUTFChars(deviceId, idStr);
+    LOGI("DELETE %s -> %s", path.c_str(), result.c_str());
     return env->NewStringUTF(result.c_str());
 }
 

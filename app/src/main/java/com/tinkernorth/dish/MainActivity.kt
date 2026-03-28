@@ -9,6 +9,7 @@ import android.os.PowerManager
 import android.os.Process
 import android.view.WindowManager
 import android.os.SystemClock
+
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -22,13 +23,17 @@ import androidx.lifecycle.lifecycleScope
 import com.google.androidgamesdk.GameActivity
 import com.tinkernorth.dish.databinding.ActivityMainBinding
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
 data class DiscoveredServer(
     val name: String, val ip: String,
-    val udpPort: Int, val pairPort: Int
+    val udpPort: Int, val pairPort: Int,
+    val httpPort: Int
 )
 
 class MainActivity : GameActivity(), InputManager.InputDeviceListener {
@@ -50,6 +55,11 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
     // App state
     private var appState   = State.SCANNING
     private var selServer: DiscoveredServer? = null
+
+    // Connection state (from POST /api/connections)
+    private var connectionId: String? = null
+    private var ackReceiverJob: Job?  = null
+    private var aliveMonitorJob: Job? = null
 
     // Wake / screen locks — acquired when connected + controller present
     private var wakeLock: PowerManager.WakeLock? = null
@@ -124,6 +134,8 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
         super.onDestroy()
         telHandler.removeCallbacks(telRunnable)
         inputManager.unregisterInputDeviceListener(this)
+        ackReceiverJob?.cancel()
+        aliveMonitorJob?.cancel()
         SatelliteNative.closeSocket()
         releaseLocks()
     }
@@ -306,7 +318,7 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
 
     private fun trySend() {
         if (appState == State.CONNECTED) {
-            SatelliteNative.sendReport(wButtons, bLT, bRT, sLX, sLY, sRX, sRY)
+            SatelliteNative.sendReport(0, wButtons, bLT, bRT, sLX, sLY, sRX, sRY)
             telSendCount++
             telTotalSent++
         }
@@ -425,8 +437,10 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
             val result = withContext(Dispatchers.IO) {
                 SatelliteNative.pair(server.ip, server.pairPort, deviceId, deviceName, "")
             }
-            if (result.contains("\"ok\":true")) connectToServer(server)
-            else showPinDialog(server)
+            if (result.contains("\"ok\":true")) {
+                savePairKey(result)
+                connectToServer(server)
+            } else showPinDialog(server)
         }
     }
 
@@ -476,6 +490,7 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
                         SatelliteNative.pair(server.ip, server.pairPort, deviceId, deviceName, pin)
                     }
                     if (result.contains("\"ok\":true")) {
+                        savePairKey(result)
                         dialog.dismiss()
                         connectToServer(server)
                     } else {
@@ -496,18 +511,103 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
     }
 
     private fun connectToServer(server: DiscoveredServer) {
-        if (!SatelliteNative.openSocket(server.ip, server.udpPort)) {
-            transitionTo(State.SERVER_LIST); return
+        transitionTo(State.SCANNING)
+        binding.tvScanningLabel.text = "Opening connection…"
+        lifecycleScope.launch {
+            // 0. Get stored shared key from pairing (hex-encoded, 64 chars → 32 bytes)
+            val sharedKeyHex = getStoredPairKey()
+            if (sharedKeyHex.length != 64) {
+                binding.tvScanningLabel.text = "Error: no shared key — re-pair needed"
+                transitionTo(State.SERVER_LIST)
+                return@launch
+            }
+            val key = hexToBytes(sharedKeyHex)
+
+            // 1. POST /api/connections to get connectionId and token
+            val response = withContext(Dispatchers.IO) {
+                SatelliteNative.httpConnect(server.ip, server.httpPort, deviceId)
+            }
+            val connId = jsonGet(response, "connectionId")
+            val tokenHex = jsonGet(response, "token")
+
+            if (connId == null || tokenHex == null) {
+                val error = jsonGet(response, "error") ?: "connection failed"
+                binding.tvScanningLabel.text = "Error: $error"
+                transitionTo(State.SERVER_LIST)
+                return@launch
+            }
+
+            // 2. Parse token (hex, 8 chars → 4 bytes)
+            val token = hexToBytes(tokenHex)
+            if (token.size != 4 || key.size != 32) {
+                binding.tvScanningLabel.text = "Error: invalid connection params"
+                transitionTo(State.SERVER_LIST)
+                return@launch
+            }
+
+            // 3. Open UDP socket
+            if (!SatelliteNative.openSocket(server.ip, server.udpPort)) {
+                transitionTo(State.SERVER_LIST); return@launch
+            }
+
+            // 4. Set connection params (token + encryption key)
+            SatelliteNative.setConnectionParams(token, key)
+            connectionId = connId
+
+            // 5. Send controller add (index 0, caps: analog triggers + rumble)
+            SatelliteNative.controllerAdd(0, 0x0003)
+
+            // 6. Start heartbeat
+            SatelliteNative.startHeartbeat()
+
+            // 7. Start ACK receiver coroutine
+            ackReceiverJob = lifecycleScope.launch(Dispatchers.IO) {
+                while (isActive) {
+                    SatelliteNative.receiveAck()
+                }
+            }
+
+            // 8. Start alive monitor
+            aliveMonitorJob = lifecycleScope.launch {
+                while (isActive) {
+                    delay(1000)
+                    if (!SatelliteNative.isConnectionAlive()) {
+                        disconnect()
+                        break
+                    }
+                }
+            }
+
+            transitionTo(State.CONNECTED)
+            binding.tvConnectedServer.text = server.name
+            binding.tvConnectedIp.text = "${server.ip}  •  UDP:${server.udpPort}"
+            updateControllerDot()
         }
-        transitionTo(State.CONNECTED)
-        binding.tvConnectedServer.text = server.name
-        binding.tvConnectedIp.text = "${server.ip}  •  UDP:${server.udpPort}"
-        updateControllerDot()
     }
 
     private fun disconnect() {
+        // Stop alive monitor first (prevents re-entrant disconnect)
+        aliveMonitorJob?.cancel(); aliveMonitorJob = null
+
+        // Send controller remove while socket is still open and key is valid
+        SatelliteNative.controllerRemove(0)
+
+        // Stop heartbeat and ACK receiver, close socket, wipe keys
+        ackReceiverJob?.cancel(); ackReceiverJob = null
+        SatelliteNative.closeSocket()
         releaseLocks()
-        SatelliteNative.closeSocket(); selServer = null; startDiscovery()
+
+        // DELETE /api/connections/:id (fire-and-forget on IO)
+        val server = selServer
+        val connId = connectionId
+        if (server != null && connId != null) {
+            lifecycleScope.launch(Dispatchers.IO) {
+                SatelliteNative.httpDisconnect(server.ip, server.httpPort, connId, deviceId)
+            }
+        }
+        connectionId = null
+        selServer = null
+        startDiscovery()
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -516,6 +616,17 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
         val p = getSharedPreferences("satellite", Context.MODE_PRIVATE)
         return p.getString("deviceId", null) ?: UUID.randomUUID().toString().replace("-", "")
             .also { p.edit().putString("deviceId", it).apply() }
+    }
+
+    private fun savePairKey(pairResult: String) {
+        val key = jsonGet(pairResult, "sharedKey") ?: return
+        getSharedPreferences("satellite", Context.MODE_PRIVATE)
+            .edit().putString("sharedKey", key).apply()
+    }
+
+    private fun getStoredPairKey(): String {
+        return getSharedPreferences("satellite", Context.MODE_PRIVATE)
+            .getString("sharedKey", "") ?: ""
     }
 
     private fun jsonGet(json: String, key: String): String? {
@@ -530,6 +641,18 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
             val end = json.substring(pos).indexOfFirst { it == ',' || it == '}' }
             if (end < 0) json.substring(pos) else json.substring(pos, pos + end)
         }
+    }
+
+    private fun hexToBytes(hex: String): ByteArray {
+        val len = hex.length
+        val data = ByteArray(len / 2)
+        var i = 0
+        while (i < len) {
+            data[i / 2] = ((Character.digit(hex[i], 16) shl 4) +
+                            Character.digit(hex[i + 1], 16)).toByte()
+            i += 2
+        }
+        return data
     }
 
     private fun parseServers(json: String): List<DiscoveredServer> {
@@ -547,7 +670,8 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
                         val ip       = jsonGet(obj, "ip")   ?: continue
                         val udpPort  = jsonGet(obj, "udpPort")  ?.toIntOrNull() ?: 9876
                         val pairPort = jsonGet(obj, "pairPort") ?.toIntOrNull() ?: 9878
-                        result.add(DiscoveredServer(name, ip, udpPort, pairPort))
+                        val httpPort = jsonGet(obj, "httpPort") ?.toIntOrNull() ?: 9877
+                        result.add(DiscoveredServer(name, ip, udpPort, pairPort, httpPort))
                     }
                 }
             }
