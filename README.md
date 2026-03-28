@@ -67,7 +67,8 @@ Kotlin UI (MainActivity)
 │   │   │   ├── CMakeLists.txt          # NDK build config
 │   │   │   └── satellite_jni.cpp       # UDP streaming, discovery, pairing
 │   │   └── res/                        # Layouts, drawables, themes
-│   └── build.gradle.kts
+│   ├── build.gradle.kts
+│   └── detekt.yml                      # detekt config (tuned thresholds)
 ├── gradle/
 │   └── libs.versions.toml              # Version catalog
 ├── .github/
@@ -79,6 +80,11 @@ Kotlin UI (MainActivity)
 └── settings.gradle.kts
 ```
 
+Shared config files live at the **repo root** (`TinkerNorth/`):
+- `.clang-format` — C++ formatting rules (used by both Satellite and Dish JNI)
+- `.clang-tidy` — C++ static analysis checks
+- `.editorconfig` — whitespace/indentation rules for all file types
+
 ## Building
 
 | Task | Command |
@@ -86,7 +92,28 @@ Kotlin UI (MainActivity)
 | Debug APK | `./gradlew assembleDebug` |
 | Release APK | `./gradlew assembleRelease` |
 | Run unit tests | `./gradlew testDebugUnitTest` |
-| Run lint | `./gradlew lint` |
+
+## Code Quality
+
+### Kotlin
+
+| Tool | Check | Auto-fix |
+|------|-------|----------|
+| **ktlint** (formatting + linting) | `./gradlew ktlintCheck` | `./gradlew ktlintFormat` |
+| **detekt** (static analysis) | `./gradlew detekt` | — |
+| **Android Lint** (Android-specific) | `./gradlew lint` | — |
+
+### C++ / JNI (`app/src/main/cpp/`)
+
+The JNI layer shares `.clang-format` and `.clang-tidy` with the Satellite server. Run from the **repo root**:
+
+```bash
+# Format
+clang-format -i Dish/app/src/main/cpp/satellite_jni.cpp
+
+# Compiler warnings (applied automatically via CMake)
+# CMakeLists.txt uses: -Wall -Wextra -Wpedantic
+```
 
 ## Contributing
 

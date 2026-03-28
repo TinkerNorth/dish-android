@@ -60,7 +60,7 @@ target_compile_options(sodium_static PRIVATE -O2 -fvisibility=hidden -Wno-unused
 # ── Main satellite library ──────────────────────────────────────────────────
 add_library(satellite SHARED satellite_jni.cpp)
 
-target_compile_options(satellite PRIVATE -O2 -Wall)
+target_compile_options(satellite PRIVATE -O2 -Wall -Wextra -Wpedantic)
 
 target_link_libraries(satellite
     log

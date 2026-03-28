@@ -7,7 +7,6 @@ package com.tinkernorth.dish
  * must be called from a background coroutine (Dispatchers.IO).
  */
 object SatelliteNative {
-
     init {
         System.loadLibrary("satellite")
     }
@@ -15,7 +14,10 @@ object SatelliteNative {
     // ── UDP Socket ──────────────────────────────────────────────────────────
 
     /** Open a UDP socket aimed at ip:port for streaming. Returns true on success. */
-    external fun openSocket(ip: String, port: Int): Boolean
+    external fun openSocket(
+        ip: String,
+        port: Int,
+    ): Boolean
 
     /** Close the streaming UDP socket and stop heartbeat. */
     external fun closeSocket()
@@ -23,7 +25,10 @@ object SatelliteNative {
     // ── Connection params ───────────────────────────────────────────────────
 
     /** Set the 4-byte token and 32-byte encryption key for this connection. */
-    external fun setConnectionParams(token: ByteArray, key: ByteArray)
+    external fun setConnectionParams(
+        token: ByteArray,
+        key: ByteArray,
+    )
 
     // ── Encrypted gamepad data ──────────────────────────────────────────────
 
@@ -33,14 +38,22 @@ object SatelliteNative {
      */
     external fun sendReport(
         controllerIndex: Int,
-        wButtons: Int, bLeftTrigger: Int, bRightTrigger: Int,
-        sThumbLX: Int, sThumbLY: Int, sThumbRX: Int, sThumbRY: Int
+        wButtons: Int,
+        bLeftTrigger: Int,
+        bRightTrigger: Int,
+        sThumbLX: Int,
+        sThumbLY: Int,
+        sThumbRX: Int,
+        sThumbRY: Int,
     )
 
     // ── Controller management ───────────────────────────────────────────────
 
     /** Send 0x0004 Controller Add message. */
-    external fun controllerAdd(controllerIndex: Int, capabilities: Int)
+    external fun controllerAdd(
+        controllerIndex: Int,
+        capabilities: Int,
+    )
 
     /** Send 0x0005 Controller Remove message. */
     external fun controllerRemove(controllerIndex: Int)
@@ -93,14 +106,23 @@ object SatelliteNative {
      * Returns the server's JSON response (connectionId, token, maxControllers, vigemAvailable).
      * BLOCKING — call on Dispatchers.IO.
      */
-    external fun httpConnect(ip: String, httpPort: Int, deviceId: String): String
+    external fun httpConnect(
+        ip: String,
+        httpPort: Int,
+        deviceId: String,
+    ): String
 
     /**
      * DELETE /api/connections/:id — closes the connection and removes all controllers.
      * Returns the server's JSON response.
      * BLOCKING — call on Dispatchers.IO.
      */
-    external fun httpDisconnect(ip: String, httpPort: Int, connectionId: String, deviceId: String): String
+    external fun httpDisconnect(
+        ip: String,
+        httpPort: Int,
+        connectionId: String,
+        deviceId: String,
+    ): String
 
     // ── Discovery & Pairing ─────────────────────────────────────────────────
 
@@ -109,7 +131,10 @@ object SatelliteNative {
      * broadcasts. Returns a JSON array of server objects (name, ip, udpPort, pairPort).
      * BLOCKING — call on Dispatchers.IO.
      */
-    external fun discoverServers(discPort: Int, timeoutMs: Int): String
+    external fun discoverServers(
+        discPort: Int,
+        timeoutMs: Int,
+    ): String
 
     /**
      * Perform a TCP pairing handshake with the server.
@@ -117,8 +142,10 @@ object SatelliteNative {
      * BLOCKING — call on Dispatchers.IO.
      */
     external fun pair(
-        ip: String, pairPort: Int,
-        deviceId: String, deviceName: String, pin: String
+        ip: String,
+        pairPort: Int,
+        deviceId: String,
+        deviceName: String,
+        pin: String,
     ): String
 }
-
