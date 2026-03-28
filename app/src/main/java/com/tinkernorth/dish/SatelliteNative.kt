@@ -57,7 +57,31 @@ object SatelliteNative {
     external fun isConnectionAlive(): Boolean
 
     /**
-     * Try to receive and process one UDP packet (heartbeat ACK).
+     * Returns the last controller ACK as a packed int32:
+     *   bits 31-16: requestType (0x0004 or 0x0005)
+     *   bits 15-8:  controllerIndex
+     *   bits 7-0:   result code (0x00=OK, 0x01=VIGEM_UNAVAIL, etc.)
+     * Returns -1 if no ACK has been received yet.
+     */
+    external fun getLastControllerAck(): Int
+
+    /** Reset the controller ACK state to -1 (no ACK pending). */
+    external fun resetControllerAck()
+
+    /**
+     * Returns ViGEm availability from the latest 0x0007 Server Status message.
+     * -1 = unknown (no status received yet), 0 = idle/unavailable, 1 = bus open
+     */
+    external fun getVigemAvailable(): Int
+
+    /**
+     * Returns the global active controller count from the latest 0x0007 Server Status.
+     * -1 = unknown (no status received yet), 0+ = count across all connections
+     */
+    external fun getActiveControllerCount(): Int
+
+    /**
+     * Try to receive and process one UDP packet (heartbeat ACK / controller ACK / server status).
      * Non-blocking with 500ms timeout. Call from a background thread.
      */
     external fun receiveAck()
@@ -66,7 +90,7 @@ object SatelliteNative {
 
     /**
      * POST /api/connections — opens a new connection for this device.
-     * Returns the server's JSON response (connectionId, token, encryptionKey, maxControllers).
+     * Returns the server's JSON response (connectionId, token, maxControllers, vigemAvailable).
      * BLOCKING — call on Dispatchers.IO.
      */
     external fun httpConnect(ip: String, httpPort: Int, deviceId: String): String

@@ -51,6 +51,7 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
     // When true, axis reads (which report 0 on digital-only controllers) won't clobber.
     private var ltFromKey = false; private var rtFromKey = false
     private var controllerConnected = false
+    private var vigemActive = false   // true while we have an active virtual controller on the server
 
     // App state
     private var appState   = State.SCANNING
@@ -224,10 +225,62 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
         val dev = InputDevice.getDevice(deviceId) ?: return
         if ((dev.sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD) {
             controllerConnected = true; updateControllerDot()
+            // Dynamically add virtual controller if connected to server
+            if (appState == State.CONNECTED && !vigemActive) {
+                sendControllerAdd()
+            }
         }
     }
-    override fun onInputDeviceRemoved(deviceId: Int) { checkGamepadConnected() }
-    override fun onInputDeviceChanged(deviceId: Int)  { checkGamepadConnected() }
+    override fun onInputDeviceRemoved(deviceId: Int) {
+        val wasConnected = controllerConnected
+        checkGamepadConnected()
+        android.util.Log.i("Dish", "onInputDeviceRemoved: id=$deviceId wasConnected=$wasConnected nowConnected=$controllerConnected state=$appState vigemActive=$vigemActive")
+        // Dynamically remove virtual controller if no gamepads remain
+        if (wasConnected && !controllerConnected && appState == State.CONNECTED && vigemActive) {
+            sendControllerRemove()
+        }
+    }
+    override fun onInputDeviceChanged(deviceId: Int) {
+        val wasConnected = controllerConnected
+        checkGamepadConnected()
+        android.util.Log.i("Dish", "onInputDeviceChanged: id=$deviceId wasConnected=$wasConnected nowConnected=$controllerConnected state=$appState vigemActive=$vigemActive")
+        // Handle controller disconnect reported as a "change" rather than "remove"
+        if (wasConnected && !controllerConnected && appState == State.CONNECTED && vigemActive) {
+            sendControllerRemove()
+        }
+    }
+
+    /** Send controller-add + wait for ACK, update UI accordingly. */
+    private fun sendControllerAdd() {
+        SatelliteNative.resetControllerAck()
+        SatelliteNative.controllerAdd(0, 0x0003)
+        binding.tvControllerAckStatus.text = "PENDING"
+        binding.tvControllerAckStatus.setTextColor(getColor(R.color.colorMuted))
+        lifecycleScope.launch {
+            val ackResult = withContext(Dispatchers.IO) {
+                var ack = -1
+                for (i in 0 until 30) { // 30 × 100ms = 3s
+                    ack = SatelliteNative.getLastControllerAck()
+                    if (ack != -1) break
+                    Thread.sleep(100)
+                }
+                ack
+            }
+            if (ackResult != -1 && (ackResult and 0xFF) == 0x00) {
+                vigemActive = true
+            }
+            android.util.Log.i("Dish", "sendControllerAdd ACK: packed=$ackResult result=${if (ackResult != -1) ackResult and 0xFF else -1} vigemActive=$vigemActive")
+            updateControllerAckUI(ackResult)
+        }
+    }
+
+    /** Send controller-remove, update UI. */
+    private fun sendControllerRemove() {
+        SatelliteNative.controllerRemove(0)
+        vigemActive = false
+        binding.tvControllerAckStatus.text = "—"
+        binding.tvControllerAckStatus.setTextColor(getColor(R.color.colorMuted))
+    }
 
     // ── Gamepad input ─────────────────────────────────────────────────────────
     // All input processing + sendReport() runs directly on the main thread for
@@ -554,20 +607,49 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
             SatelliteNative.setConnectionParams(token, key)
             connectionId = connId
 
-            // 5. Send controller add (index 0, caps: analog triggers + rumble)
-            SatelliteNative.controllerAdd(0, 0x0003)
-
-            // 6. Start heartbeat
-            SatelliteNative.startHeartbeat()
-
-            // 7. Start ACK receiver coroutine
+            // 5. Start ACK receiver BEFORE sending controller add (so we catch the ACK)
+            SatelliteNative.resetControllerAck()
             ackReceiverJob = lifecycleScope.launch(Dispatchers.IO) {
                 while (isActive) {
                     SatelliteNative.receiveAck()
                 }
             }
 
-            // 8. Start alive monitor
+            // 6. Start heartbeat
+            SatelliteNative.startHeartbeat()
+
+            // 7. Transition to CONNECTED and show initial status
+            transitionTo(State.CONNECTED)
+            binding.tvConnectedServer.text = server.name
+            binding.tvConnectedIp.text = "${server.ip}  •  UDP:${server.udpPort}"
+            binding.tvVigemStatus.text = "—"
+            binding.tvVigemStatus.setTextColor(getColor(R.color.colorMuted))
+            binding.tvControllerAckStatus.text = "—"
+            binding.tvControllerAckStatus.setTextColor(getColor(R.color.colorMuted))
+            updateControllerDot()
+
+            // 8. If a gamepad is already connected, add virtual controller now
+            if (controllerConnected) {
+                SatelliteNative.controllerAdd(0, 0x0003)
+                binding.tvControllerAckStatus.text = "PENDING"
+                binding.tvControllerAckStatus.setTextColor(getColor(R.color.colorMuted))
+
+                val ackResult = withContext(Dispatchers.IO) {
+                    var ack = -1
+                    for (i in 0 until 30) { // 30 × 100ms = 3s
+                        ack = SatelliteNative.getLastControllerAck()
+                        if (ack != -1) break
+                        Thread.sleep(100)
+                    }
+                    ack
+                }
+                if (ackResult != -1 && (ackResult and 0xFF) == 0x00) {
+                    vigemActive = true
+                }
+                updateControllerAckUI(ackResult)
+            }
+
+            // 10. Start alive monitor (also updates live server status)
             aliveMonitorJob = lifecycleScope.launch {
                 while (isActive) {
                     delay(1000)
@@ -575,22 +657,54 @@ class MainActivity : GameActivity(), InputManager.InputDeviceListener {
                         disconnect()
                         break
                     }
+                    updateVigemStatusUI()
                 }
             }
-
-            transitionTo(State.CONNECTED)
-            binding.tvConnectedServer.text = server.name
-            binding.tvConnectedIp.text = "${server.ip}  •  UDP:${server.udpPort}"
-            updateControllerDot()
         }
+    }
+
+    private fun updateControllerAckUI(packed: Int) {
+        if (packed == -1) {
+            binding.tvControllerAckStatus.text = "NO RESPONSE"
+            binding.tvControllerAckStatus.setTextColor(getColor(R.color.colorError))
+            return
+        }
+        val result = packed and 0xFF
+        val (text, color) = when (result) {
+            0x00 -> "ACTIVE" to R.color.colorSuccess
+            0x01 -> "VIGEM UNAVAILABLE" to R.color.colorError
+            0x02 -> "NO SLOTS" to R.color.colorError
+            0x03 -> "ALREADY EXISTS" to R.color.colorMuted
+            0x04 -> "NOT FOUND" to R.color.colorError
+            0x05 -> "PLUGIN FAILED" to R.color.colorError
+            else -> "UNKNOWN (0x${"%02X".format(result)})" to R.color.colorError
+        }
+        binding.tvControllerAckStatus.text = text
+        binding.tvControllerAckStatus.setTextColor(getColor(color))
+    }
+
+    private fun updateVigemStatusUI() {
+        val vigem = SatelliteNative.getVigemAvailable()
+        val count = SatelliteNative.getActiveControllerCount()
+        val (text, color) = when {
+            vigem == -1        -> "—" to R.color.colorMuted
+            vigem == 1         -> "OPEN · $count active" to R.color.colorSuccess
+            count == 0         -> "IDLE · no devices" to R.color.colorMuted
+            else               -> "UNAVAILABLE" to R.color.colorError
+        }
+        binding.tvVigemStatus.text = text
+        binding.tvVigemStatus.setTextColor(getColor(color))
     }
 
     private fun disconnect() {
         // Stop alive monitor first (prevents re-entrant disconnect)
         aliveMonitorJob?.cancel(); aliveMonitorJob = null
 
-        // Send controller remove while socket is still open and key is valid
-        SatelliteNative.controllerRemove(0)
+        // Send controller remove only if we have an active virtual controller
+        if (vigemActive) {
+            SatelliteNative.controllerRemove(0)
+            vigemActive = false
+        }
 
         // Stop heartbeat and ACK receiver, close socket, wipe keys
         ackReceiverJob?.cancel(); ackReceiverJob = null

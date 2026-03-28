@@ -41,6 +41,16 @@ static constexpr uint16_t MSG_HEARTBEAT_PING   = 0x0002;
 static constexpr uint16_t MSG_HEARTBEAT_ACK    = 0x0003;
 static constexpr uint16_t MSG_CONTROLLER_ADD   = 0x0004;
 static constexpr uint16_t MSG_CONTROLLER_REMOVE= 0x0005;
+static constexpr uint16_t MSG_CONTROLLER_ACK   = 0x0006;
+static constexpr uint16_t MSG_SERVER_STATUS    = 0x0007;
+
+// ACK result codes
+static constexpr uint8_t ACK_OK                = 0x00;
+static constexpr uint8_t ACK_ERR_VIGEM_UNAVAIL = 0x01;
+static constexpr uint8_t ACK_ERR_NO_SLOTS      = 0x02;
+static constexpr uint8_t ACK_ERR_ALREADY_EXISTS = 0x03;
+static constexpr uint8_t ACK_ERR_NOT_FOUND     = 0x04;
+static constexpr uint8_t ACK_ERR_PLUGIN_FAIL   = 0x05;
 
 #pragma pack(push, 1)
 struct XUSB_REPORT {
@@ -68,6 +78,15 @@ static std::thread        g_heartbeatThread;
 static std::atomic<bool>  g_heartbeatRunning{false};
 static std::atomic<int>   g_missedAcks{0};
 static std::atomic<bool>  g_connectionAlive{true};
+
+// Controller ACK tracking
+// Packed as: (requestType << 16) | (ctrlIdx << 8) | result
+// -1 means no ACK received yet
+static std::atomic<int32_t> g_lastControllerAck{-1};
+
+// Server status (from 0x0007)
+static std::atomic<int8_t>  g_vigemAvailable{-1}; // -1=unknown, 0=idle/unavailable, 1=available
+static std::atomic<int8_t>  g_activeControllerCount{-1}; // -1=unknown, 0+=count
 
 static uint64_t nowMs() {
     struct timespec ts;
@@ -224,6 +243,9 @@ Java_com_tinkernorth_dish_SatelliteNative_closeSocket(JNIEnv*, jobject) {
     memset(g_token, 0, sizeof(g_token));
     g_missedAcks.store(0);
     g_connectionAlive.store(true);
+    g_lastControllerAck.store(-1);
+    g_vigemAvailable.store(-1);
+    g_activeControllerCount.store(-1);
 }
 
 /* ── Connection params (called after HTTP POST /api/connections) ───────────── */
@@ -309,6 +331,41 @@ Java_com_tinkernorth_dish_SatelliteNative_isConnectionAlive(JNIEnv*, jobject) {
     return g_connectionAlive.load() ? JNI_TRUE : JNI_FALSE;
 }
 
+/**
+ * Returns the last controller ACK as a packed int32:
+ *   bits 31-16: requestType (0x0004 or 0x0005)
+ *   bits 15-8:  controllerIndex
+ *   bits 7-0:   result code (0x00=OK, 0x01=VIGEM_UNAVAIL, etc.)
+ * Returns -1 if no ACK has been received yet.
+ */
+JNIEXPORT jint JNICALL
+Java_com_tinkernorth_dish_SatelliteNative_getLastControllerAck(JNIEnv*, jobject) {
+    return g_lastControllerAck.load(std::memory_order_acquire);
+}
+
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_SatelliteNative_resetControllerAck(JNIEnv*, jobject) {
+    g_lastControllerAck.store(-1, std::memory_order_release);
+}
+
+/**
+ * Returns ViGEm availability from the latest 0x0007 Server Status message.
+ * -1 = unknown (no status received yet), 0 = idle/unavailable, 1 = available (bus open)
+ */
+JNIEXPORT jint JNICALL
+Java_com_tinkernorth_dish_SatelliteNative_getVigemAvailable(JNIEnv*, jobject) {
+    return (jint)g_vigemAvailable.load(std::memory_order_acquire);
+}
+
+/**
+ * Returns the global active controller count from the latest 0x0007 Server Status.
+ * -1 = unknown (no status received yet), 0+ = count across all connections
+ */
+JNIEXPORT jint JNICALL
+Java_com_tinkernorth_dish_SatelliteNative_getActiveControllerCount(JNIEnv*, jobject) {
+    return (jint)g_activeControllerCount.load(std::memory_order_acquire);
+}
+
 /* ── Receive ACK (called from a background thread) ────────────────────────── */
 
 JNIEXPORT void JNICALL
@@ -345,12 +402,31 @@ Java_com_tinkernorth_dish_SatelliteNative_receiveAck(JNIEnv*, jobject) {
         return; // decryption failed
     }
 
-    // Parse inner message: type(2B) + length(2B)
+    // Parse inner message: type(2B) + length(2B) + payload
     if (decLen < 4) return;
     uint16_t msgType = ((uint16_t)decrypted[0] << 8) | decrypted[1];
+    uint16_t msgLen  = ((uint16_t)decrypted[2] << 8) | decrypted[3];
+
     if (msgType == MSG_HEARTBEAT_ACK) {
         g_missedAcks.store(0);
         g_connectionAlive.store(true);
+    } else if (msgType == MSG_CONTROLLER_ACK && msgLen >= 4 && decLen >= 8) {
+        // Payload: requestType(2B) + controllerIndex(1B) + result(1B)
+        uint16_t reqType  = ((uint16_t)decrypted[4] << 8) | decrypted[5];
+        uint8_t  ctrlIdx  = decrypted[6];
+        uint8_t  result   = decrypted[7];
+        int32_t packed = ((int32_t)reqType << 16) | ((int32_t)ctrlIdx << 8) | (int32_t)result;
+        g_lastControllerAck.store(packed, std::memory_order_release);
+        LOGI("Controller ACK: reqType=0x%04X idx=%d result=0x%02X", reqType, ctrlIdx, result);
+    } else if (msgType == MSG_SERVER_STATUS && msgLen >= 2 && decLen >= 6) {
+        // Payload: vigemAvailable(1B) + activeControllerCount(1B)
+        uint8_t vigem = decrypted[4];
+        uint8_t count = decrypted[5];
+        int8_t prevVigem = g_vigemAvailable.exchange((int8_t)(vigem ? 1 : 0), std::memory_order_release);
+        int8_t prevCount = g_activeControllerCount.exchange((int8_t)count, std::memory_order_release);
+        if (prevVigem != (int8_t)(vigem ? 1 : 0) || prevCount != (int8_t)count) {
+            LOGI("Server status: vigemAvailable=%d activeControllers=%d", vigem, count);
+        }
     }
 }
 
