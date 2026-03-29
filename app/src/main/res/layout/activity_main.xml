@@ -271,6 +271,48 @@
                             android:textColor="@color/colorOnSurface" android:textSize="13sp"
                             android:fontFamily="monospace" />
                     </LinearLayout>
+                    <!-- ── Per-device status ────────────────────────────── -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="4dp">
+                        <TextView
+                            android:layout_width="0dp" android:layout_height="wrap_content"
+                            android:layout_weight="1" android:text="VIGEM BUS"
+                            android:textColor="@color/colorMuted" android:textSize="12sp"
+                            android:letterSpacing="0.04" />
+                        <TextView
+                            android:id="@+id/tvVigemStatus"
+                            android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="—"
+                            android:textColor="@color/colorMuted" android:textSize="13sp"
+                            android:fontFamily="monospace" />
+                    </LinearLayout>
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="8dp">
+                        <TextView
+                            android:layout_width="0dp" android:layout_height="wrap_content"
+                            android:layout_weight="1" android:text="DEVICE #0"
+                            android:textColor="@color/colorMuted" android:textSize="12sp"
+                            android:letterSpacing="0.04" />
+                        <TextView
+                            android:id="@+id/tvControllerAckStatus"
+                            android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="PENDING"
+                            android:textColor="@color/colorMuted" android:textSize="13sp"
+                            android:fontFamily="monospace" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="@color/colorOutline"
+                        android:layout_marginBottom="8dp" />
+
                     <!-- ── Active lock indicators ──────────────────────── -->
                     <LinearLayout
                         android:layout_width="match_parent"

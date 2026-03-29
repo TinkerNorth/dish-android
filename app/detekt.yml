@@ -1,0 +1,29 @@
+# Dish — detekt configuration
+# Tuned for a single-activity Android gamepad controller app.
+
+complexity:
+  LongMethod:
+    threshold: 100
+  CyclomaticComplexMethod:
+    threshold: 20
+  LargeClass:
+    threshold: 1500
+  TooManyFunctions:
+    thresholdInClasses: 50
+    thresholdInObjects: 20
+  LongParameterList:
+    functionThreshold: 10
+    constructorThreshold: 10
+  ComplexCondition:
+    threshold: 5
+
+style:
+  MagicNumber:
+    active: false
+  ReturnCount:
+    max: 5
+  LoopWithTooManyJumpStatements:
+    maxJumpCount: 3
+  MaxLineLength:
+    maxLineLength: 140
+
