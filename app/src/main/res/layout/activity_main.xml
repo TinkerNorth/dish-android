@@ -13,6 +13,7 @@
         android:padding="20dp"
         android:gravity="center_horizontal">
 
+        <!-- ── Header ────────────────────────────────────────────── -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -22,11 +23,13 @@
             android:textStyle="bold"
             android:letterSpacing="0.12"
             android:layout_marginTop="20dp"
-            android:layout_marginBottom="20dp" />
+            android:layout_marginBottom="6dp" />
 
+        <!-- ── App-level status bar (locks + server) ─────────────── -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
             app:cardBackgroundColor="@color/colorSurface"
             app:strokeColor="@color/colorCardStroke"
             app:strokeWidth="1dp"
@@ -37,340 +40,154 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:padding="20dp">
+                android:padding="16dp">
 
-                <!-- ── Controller status (always visible) ─────────────── -->
+                <!-- Server connection row -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:gravity="center_vertical">
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="6dp">
                     <View
-                        android:id="@+id/dotController"
-                        android:layout_width="10dp"
-                        android:layout_height="10dp"
+                        android:id="@+id/dotServer"
+                        android:layout_width="8dp"
+                        android:layout_height="8dp"
                         android:layout_marginEnd="10dp" />
                     <TextView
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="CONTROLLER"
+                        android:text="SERVER"
                         android:textColor="@color/colorMuted"
-                        android:textSize="12sp"
+                        android:textSize="11sp"
                         android:letterSpacing="0.05" />
                     <TextView
-                        android:id="@+id/tvControllerStatus"
+                        android:id="@+id/tvServerStatus"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="NONE"
-                        android:textColor="@color/colorOnSurface"
-                        android:textSize="13sp"
+                        android:text="NOT CONNECTED"
+                        android:textColor="@color/colorMuted"
+                        android:textSize="12sp"
                         android:fontFamily="monospace" />
                 </LinearLayout>
 
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:background="@color/colorOutline"
-                    android:layout_marginTop="16dp"
-                    android:layout_marginBottom="16dp" />
-
-                <!-- ── SCANNING ────────────────────────────────────────── -->
+                <!-- Screen lock row -->
                 <LinearLayout
-                    android:id="@+id/llScanning"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:gravity="center"
-                    android:paddingTop="12dp"
-                    android:paddingBottom="12dp">
-                    <ProgressBar
-                        android:layout_width="36dp"
-                        android:layout_height="36dp"
-                        android:indeterminateTint="@color/colorPrimary" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="4dp">
                     <TextView
-                        android:id="@+id/tvScanningLabel"
-                        android:layout_width="wrap_content"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:text="Scanning for servers on LAN…"
+                        android:layout_weight="1"
+                        android:text="SCREEN"
                         android:textColor="@color/colorMuted"
-                        android:textSize="13sp"
-                        android:layout_marginTop="12dp" />
-                </LinearLayout>
-
-                <!-- ── SERVER LIST ─────────────────────────────────────── -->
-                <LinearLayout
-                    android:id="@+id/llServerList"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="gone">
+                        android:textSize="11sp"
+                        android:letterSpacing="0.04"
+                        android:layout_marginStart="18dp" />
                     <TextView
+                        android:id="@+id/tvScreenLock"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="SERVERS"
-                        android:textColor="@color/colorPrimary"
-                        android:textSize="12sp"
-                        android:textStyle="bold"
-                        android:letterSpacing="0.06"
-                        android:layout_marginBottom="10dp" />
-                    <LinearLayout
-                        android:id="@+id/llServers"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical" />
-                    <TextView
-                        android:id="@+id/tvNoServers"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="No servers found on the local network"
+                        android:text="OFF"
                         android:textColor="@color/colorMuted"
-                        android:textSize="13sp"
-                        android:gravity="center"
-                        android:paddingTop="8dp"
-                        android:paddingBottom="8dp"
-                        android:visibility="gone" />
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnRescan"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="RESCAN"
-                        android:layout_marginTop="12dp"
-                        app:backgroundTint="@color/colorOutline"
-                        android:textColor="@color/colorOnSurface" />
+                        android:textSize="12sp"
+                        android:fontFamily="monospace" />
                 </LinearLayout>
 
-                <!-- ── PAIRING ────────────────────────────────────────── -->
+                <!-- Wake lock row -->
                 <LinearLayout
-                    android:id="@+id/llPairing"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="gone">
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
                     <TextView
-                        android:layout_width="wrap_content"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:text="PAIR DEVICE"
-                        android:textColor="@color/colorPrimary"
-                        android:textSize="12sp"
-                        android:textStyle="bold"
-                        android:letterSpacing="0.06"
-                        android:layout_marginBottom="8dp" />
-                    <TextView
-                        android:id="@+id/tvPairingServer"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:textColor="@color/colorOnSurface"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        android:layout_marginBottom="12dp" />
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Enter the PIN shown in the server web UI:"
+                        android:layout_weight="1"
+                        android:text="WAKE LOCK"
                         android:textColor="@color/colorMuted"
-                        android:textSize="13sp"
-                        android:layout_marginBottom="8dp" />
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="PIN"
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                        app:boxStrokeColor="@color/colorPrimary"
-                        app:hintTextColor="@color/colorMuted">
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/etPin"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="number"
-                            android:maxLength="8"
-                            android:textColor="@color/colorPrimary"
-                            android:fontFamily="monospace"
-                            android:textSize="24sp"
-                            android:gravity="center"
-                            android:letterSpacing="0.2" />
-                    </com.google.android.material.textfield.TextInputLayout>
+                        android:textSize="11sp"
+                        android:letterSpacing="0.04"
+                        android:layout_marginStart="18dp" />
                     <TextView
-                        android:id="@+id/tvPairError"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:textColor="@color/colorError"
-                        android:textSize="12sp"
-                        android:layout_marginTop="4dp"
-                        android:minHeight="18dp" />
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:layout_marginTop="8dp">
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnCancel"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="CANCEL"
-                            android:layout_marginEnd="8dp"
-                            app:backgroundTint="@color/colorOutline"
-                            android:textColor="@color/colorOnSurface" />
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnPair"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="PAIR"
-                            app:backgroundTint="@color/colorPrimary"
-                            android:textColor="@color/colorOnPrimary" />
-                    </LinearLayout>
-                </LinearLayout>
-
-                <!-- ── CONNECTED ───────────────────────────────────────── -->
-                <LinearLayout
-                    android:id="@+id/llConnected"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="gone">
-                    <TextView
+                        android:id="@+id/tvWakeLock"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="CONNECTED"
-                        android:textColor="@color/colorSuccess"
+                        android:text="OFF"
+                        android:textColor="@color/colorMuted"
                         android:textSize="12sp"
-                        android:textStyle="bold"
-                        android:letterSpacing="0.06"
-                        android:layout_marginBottom="12dp" />
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:layout_marginBottom="8dp">
-                        <TextView
-                            android:layout_width="0dp" android:layout_height="wrap_content"
-                            android:layout_weight="1" android:text="SERVER"
-                            android:textColor="@color/colorMuted" android:textSize="12sp"
-                            android:letterSpacing="0.04" />
-                        <TextView
-                            android:id="@+id/tvConnectedServer"
-                            android:layout_width="wrap_content" android:layout_height="wrap_content"
-                            android:textColor="@color/colorOnSurface" android:textSize="13sp"
-                            android:fontFamily="monospace" />
-                    </LinearLayout>
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:layout_marginBottom="8dp">
-                        <TextView
-                            android:layout_width="0dp" android:layout_height="wrap_content"
-                            android:layout_weight="1" android:text="ADDRESS"
-                            android:textColor="@color/colorMuted" android:textSize="12sp"
-                            android:letterSpacing="0.04" />
-                        <TextView
-                            android:id="@+id/tvConnectedIp"
-                            android:layout_width="wrap_content" android:layout_height="wrap_content"
-                            android:textColor="@color/colorOnSurface" android:textSize="13sp"
-                            android:fontFamily="monospace" />
-                    </LinearLayout>
-                    <!-- ── Per-device status ────────────────────────────── -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:layout_marginBottom="4dp">
-                        <TextView
-                            android:layout_width="0dp" android:layout_height="wrap_content"
-                            android:layout_weight="1" android:text="VIGEM BUS"
-                            android:textColor="@color/colorMuted" android:textSize="12sp"
-                            android:letterSpacing="0.04" />
-                        <TextView
-                            android:id="@+id/tvVigemStatus"
-                            android:layout_width="wrap_content" android:layout_height="wrap_content"
-                            android:text="—"
-                            android:textColor="@color/colorMuted" android:textSize="13sp"
-                            android:fontFamily="monospace" />
-                    </LinearLayout>
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:layout_marginBottom="8dp">
-                        <TextView
-                            android:layout_width="0dp" android:layout_height="wrap_content"
-                            android:layout_weight="1" android:text="DEVICE #0"
-                            android:textColor="@color/colorMuted" android:textSize="12sp"
-                            android:letterSpacing="0.04" />
-                        <TextView
-                            android:id="@+id/tvControllerAckStatus"
-                            android:layout_width="wrap_content" android:layout_height="wrap_content"
-                            android:text="PENDING"
-                            android:textColor="@color/colorMuted" android:textSize="13sp"
-                            android:fontFamily="monospace" />
-                    </LinearLayout>
-
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1dp"
-                        android:background="@color/colorOutline"
-                        android:layout_marginBottom="8dp" />
-
-                    <!-- ── Active lock indicators ──────────────────────── -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:layout_marginBottom="4dp">
-                        <TextView
-                            android:layout_width="0dp" android:layout_height="wrap_content"
-                            android:layout_weight="1" android:text="SCREEN"
-                            android:textColor="@color/colorMuted" android:textSize="12sp"
-                            android:letterSpacing="0.04" />
-                        <TextView
-                            android:id="@+id/tvScreenLock"
-                            android:layout_width="wrap_content" android:layout_height="wrap_content"
-                            android:text="OFF"
-                            android:textColor="@color/colorMuted" android:textSize="13sp"
-                            android:fontFamily="monospace" />
-                    </LinearLayout>
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:layout_marginBottom="16dp">
-                        <TextView
-                            android:layout_width="0dp" android:layout_height="wrap_content"
-                            android:layout_weight="1" android:text="WAKE LOCK"
-                            android:textColor="@color/colorMuted" android:textSize="12sp"
-                            android:letterSpacing="0.04" />
-                        <TextView
-                            android:id="@+id/tvWakeLock"
-                            android:layout_width="wrap_content" android:layout_height="wrap_content"
-                            android:text="OFF"
-                            android:textColor="@color/colorMuted" android:textSize="13sp"
-                            android:fontFamily="monospace" />
-                    </LinearLayout>
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnDisconnect"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="DISCONNECT"
-                        app:backgroundTint="@color/colorPrimaryDark"
-                        android:textColor="@color/colorOnSurface" />
+                        android:fontFamily="monospace" />
                 </LinearLayout>
-
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- ── CLIENT TELEMETRY ──────────────────────────────────────────── -->
-        <com.google.android.material.card.MaterialCardView
+        <!-- ── Empty state (no controllers) ──────────────────────── -->
+        <LinearLayout
+            android:id="@+id/llEmptyState"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:paddingTop="48dp"
+            android:paddingBottom="48dp">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🎮"
+                android:textSize="48sp"
+                android:layout_marginBottom="16dp" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Connect a gamepad"
+                android:textColor="@color/colorOnSurface"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Plug in a controller to get started"
+                android:textColor="@color/colorMuted"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <!-- ── Dynamic controller cards container ────────────────── -->
+        <LinearLayout
+            android:id="@+id/llControllerCards"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <!-- ── Disconnect All button (shown when server connected) ─ -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDisconnectAll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="DISCONNECT ALL"
             android:layout_marginTop="12dp"
+            android:layout_marginBottom="8dp"
+            app:backgroundTint="@color/colorPrimaryDark"
+            android:textColor="@color/colorOnSurface"
+            android:visibility="gone" />
+
+        <!-- ── CLIENT TELEMETRY ──────────────────────────────────── -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardTelemetry"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
             android:layout_marginBottom="20dp"
             app:cardBackgroundColor="@color/colorSurface"
             app:strokeColor="@color/colorCardStroke"
             app:strokeWidth="1dp"
             app:cardElevation="0dp"
-            app:cardCornerRadius="6dp">
+            app:cardCornerRadius="6dp"
+            android:visibility="gone">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -418,16 +235,6 @@
                         android:text="—" android:textColor="@color/colorOnSurface" android:textSize="13sp" android:fontFamily="monospace"/>
                 </LinearLayout>
 
-                <!-- Hist/event row -->
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginBottom="5dp">
-                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                        android:text="HIST / EVENT" android:textColor="@color/colorMuted" android:textSize="12sp" android:letterSpacing="0.04"/>
-                    <TextView android:id="@+id/tvTelHistAvg"
-                        android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="—" android:textColor="@color/colorOnSurface" android:textSize="13sp" android:fontFamily="monospace"/>
-                </LinearLayout>
-
                 <!-- Sends/s row -->
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginBottom="5dp">
@@ -448,23 +255,14 @@
                         android:text="0" android:textColor="@color/colorOnSurface" android:textSize="13sp" android:fontFamily="monospace"/>
                 </LinearLayout>
 
-                <!-- Last event row -->
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginBottom="12dp">
-                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                        android:text="LAST EVENT" android:textColor="@color/colorMuted" android:textSize="12sp" android:letterSpacing="0.04"/>
-                    <TextView android:id="@+id/tvTelLastEvent"
-                        android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="—" android:textColor="@color/colorOnSurface" android:textSize="13sp" android:fontFamily="monospace"/>
-                </LinearLayout>
-
                 <View android:layout_width="match_parent" android:layout_height="1dp"
-                    android:background="@color/colorOutline" android:layout_marginBottom="12dp"/>
+                    android:background="@color/colorOutline" android:layout_marginBottom="12dp"
+                    android:layout_marginTop="8dp"/>
 
                 <!-- Controller state -->
                 <TextView
                     android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="CONTROLLER STATE"
+                    android:text="INPUT STATE"
                     android:textColor="@color/colorMuted" android:textSize="11sp"
                     android:letterSpacing="0.08" android:layout_marginBottom="8dp"/>
 
@@ -539,4 +337,3 @@
 
     </LinearLayout>
 </ScrollView>
-

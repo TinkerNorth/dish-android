@@ -1,13 +1,16 @@
 package com.tinkernorth.dish
 
 import android.content.Context
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.hardware.input.InputManager
 import android.os.Build
 import android.os.Bundle
+import android.os.CountDownTimer
 import android.os.PowerManager
 import android.os.Process
 import android.os.SystemClock
+import android.view.Gravity
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -16,8 +19,11 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.androidgamesdk.GameActivity
 import com.tinkernorth.dish.databinding.ActivityMainBinding
@@ -37,15 +43,50 @@ data class DiscoveredServer(
     val httpPort: Int,
 )
 
+/** Per-controller state tracked by the dashboard. */
+enum class ControllerCardState {
+    NEED_SERVER, // gamepad detected, no server connection
+    SCANNING, // scanning for servers
+    SERVER_LIST, // showing discovered servers
+    ADDING, // adding to already-connected server
+    ACTIVE, // streaming, vigem active
+    DISCONNECTING, // physical gamepad unplugged, countdown running
+}
+
+/** Mutable state for one physical controller. */
+data class ControllerEntry(
+    val androidDeviceId: Int,
+    val name: String,
+    var controllerIndex: Int = -1,
+    var cardState: ControllerCardState = ControllerCardState.NEED_SERVER,
+    var vigemActive: Boolean = false,
+    var countdownTimer: CountDownTimer? = null,
+    var countdownSeconds: Int = 10,
+    // UI references (set when card is built)
+    var cardView: MaterialCardView? = null,
+    var contentContainer: LinearLayout? = null,
+)
+
 class MainActivity :
     GameActivity(),
     InputManager.InputDeviceListener {
-    private enum class State { SCANNING, SERVER_LIST, PAIRING, CONNECTED }
-
     private lateinit var binding: ActivityMainBinding
     private lateinit var inputManager: InputManager
 
-    // Controller axes / buttons (main thread only)
+    // ── Multi-controller tracking ─────────────────────────────────────────────
+    private val controllers = mutableMapOf<Int, ControllerEntry>()
+    private var nextControllerIndex = 0
+
+    // ── Server connection (shared across all controllers) ─────────────────────
+    private var connectedServer: DiscoveredServer? = null
+    private var connectionId: String? = null
+    private var serverConnected = false
+    private var ackReceiverJob: Job? = null
+    private var aliveMonitorJob: Job? = null
+
+    // ── Per-controller input state (main thread only) ─────────────────────────
+    // For simplicity, input from the most recently active gamepad is sent.
+    // Future: per-device input multiplexing when multiple gamepads are active.
     private var wButtons = 0
     private var bLT = 0
     private var bRT = 0
@@ -53,32 +94,17 @@ class MainActivity :
     private var sLY = 0
     private var sRX = 0
     private var sRY = 0
-
-    // Track whether triggers are currently held via key events (digital).
-    // When true, axis reads (which report 0 on digital-only controllers) won't clobber.
     private var ltFromKey = false
     private var rtFromKey = false
-    private var controllerConnected = false
-    private var vigemActive = false // true while we have an active virtual controller on the server
 
-    // App state
-    private var appState = State.SCANNING
-    private var selServer: DiscoveredServer? = null
-
-    // Connection state (from POST /api/connections)
-    private var connectionId: String? = null
-    private var ackReceiverJob: Job? = null
-    private var aliveMonitorJob: Job? = null
-
-    // Wake / screen locks — acquired when connected + controller present
+    // ── Wake / screen locks (app-level) ───────────────────────────────────────
     private var wakeLock: PowerManager.WakeLock? = null
     private var screenLockActive = false
     private var wakeLockActive = false
 
-    // Telemetry — per-second window counters (main thread only)
+    // ── Telemetry ─────────────────────────────────────────────────────────────
     private var telEventCount = 0
     private var telSampleCount = 0
-    private var telHistTotal = 0
     private var telSendCount = 0
     private var telTotalSent = 0L
     private var telLastEventMs = 0L
@@ -96,6 +122,8 @@ class MainActivity :
     private val deviceName by lazy { Build.MODEL }
 
     companion object {
+        private const val MAX_CONTROLLERS = 16
+        private const val COUNTDOWN_SECONDS = 10
         private val BUTTON_MAP =
             mapOf(
                 KeyEvent.KEYCODE_BUTTON_A to 0x1000,
@@ -119,13 +147,8 @@ class MainActivity :
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Elevate main thread to near-real-time priority.
-        // Input dispatch + sendReport() both run here for zero queue overhead.
         Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
 
-        // GameActivity.onCreate already calls setContentView with its own FrameLayout.
-        // Add our UI layout on top so the SurfaceView stays in the hierarchy.
         binding = ActivityMainBinding.inflate(layoutInflater)
         val root = findViewById<ViewGroup>(android.R.id.content)
         root.addView(
@@ -137,10 +160,10 @@ class MainActivity :
         )
         inputManager = getSystemService(Context.INPUT_SERVICE) as InputManager
         inputManager.registerInputDeviceListener(this, null)
-        initDotDrawable()
-        checkGamepadConnected()
-        setupButtons()
-        startDiscovery()
+        initServerDot()
+        binding.btnDisconnectAll.setOnClickListener { disconnectAll() }
+        scanExistingGamepads()
+        refreshDashboard()
         telHandler.post(telRunnable)
     }
 
@@ -148,29 +171,29 @@ class MainActivity :
         super.onDestroy()
         telHandler.removeCallbacks(telRunnable)
         inputManager.unregisterInputDeviceListener(this)
+        controllers.values.forEach { it.countdownTimer?.cancel() }
         ackReceiverJob?.cancel()
         aliveMonitorJob?.cancel()
         SatelliteNative.closeSocket()
         releaseLocks()
     }
 
-    // ── Wake / screen lock management ─────────────────────────────────────────
-    // Acquired when both conditions are met: connected to a server AND controller present.
-    // Keeps the CPU awake (PARTIAL_WAKE_LOCK) and the screen on (FLAG_KEEP_SCREEN_ON)
-    // so the connection stays alive even during idle periods with no input.
+    // ── Wake / screen lock management (app-level) ─────────────────────────────
 
     private fun updateLocks() {
-        val shouldLock = appState == State.CONNECTED && controllerConnected
+        val hasActiveControllers =
+            controllers.values.any {
+                it.cardState == ControllerCardState.ACTIVE
+            }
+        val shouldLock = serverConnected && hasActiveControllers
         if (shouldLock) acquireLocks() else releaseLocks()
     }
 
     private fun acquireLocks() {
-        // Screen on
         if (!screenLockActive) {
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             screenLockActive = true
         }
-        // CPU wake lock
         if (wakeLock == null) {
             val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
             wakeLock =
@@ -209,89 +232,176 @@ class MainActivity :
         )
     }
 
-    // ── Controller dot shape ──────────────────────────────────────────────────
+    // ── Server dot ────────────────────────────────────────────────────────────
 
-    private fun initDotDrawable() {
+    private fun initServerDot() {
         val d = GradientDrawable()
         d.shape = GradientDrawable.OVAL
         d.setColor(getColor(R.color.colorMuted))
-        binding.dotController.background = d
+        binding.dotServer.background = d
     }
 
-    private fun updateControllerDot() {
-        val color =
-            if (controllerConnected) {
-                getColor(R.color.colorSuccess)
+    private fun updateServerStatus() {
+        val color = if (serverConnected) R.color.colorSuccess else R.color.colorMuted
+        (binding.dotServer.background as? GradientDrawable)?.setColor(getColor(color))
+        binding.tvServerStatus.text =
+            if (serverConnected) {
+                connectedServer?.name ?: "CONNECTED"
             } else {
-                getColor(R.color.colorMuted)
+                "NOT CONNECTED"
             }
-        (binding.dotController.background as? GradientDrawable)?.setColor(color)
-        binding.tvControllerStatus.text = if (controllerConnected) "CONNECTED" else "NONE"
-        updateLocks()
+        binding.tvServerStatus.setTextColor(getColor(color))
+        binding.btnDisconnectAll.visibility =
+            if (serverConnected) View.VISIBLE else View.GONE
     }
 
-    // ── InputManager callbacks ────────────────────────────────────────────────
+    // ── Gamepad scanning & InputManager callbacks ───────────────────────────
 
-    private fun checkGamepadConnected() {
-        controllerConnected =
-            InputDevice.getDeviceIds().any { id ->
-                val dev = InputDevice.getDevice(id) ?: return@any false
-                (dev.sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
+    private fun scanExistingGamepads() {
+        InputDevice.getDeviceIds().forEach { id ->
+            val dev = InputDevice.getDevice(id) ?: return@forEach
+            if ((dev.sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD) {
+                addController(id, dev.name)
             }
-        updateControllerDot()
+        }
     }
 
     override fun onInputDeviceAdded(deviceId: Int) {
         val dev = InputDevice.getDevice(deviceId) ?: return
-        if ((dev.sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD) {
-            controllerConnected = true
-            updateControllerDot()
-            // Dynamically add virtual controller if connected to server
-            if (appState == State.CONNECTED && !vigemActive) {
-                sendControllerAdd()
-            }
+        if ((dev.sources and InputDevice.SOURCE_GAMEPAD) != InputDevice.SOURCE_GAMEPAD) return
+
+        // Check if this device is in DISCONNECTING countdown — cancel and restore
+        val existing = controllers[deviceId]
+        if (existing != null && existing.cardState == ControllerCardState.DISCONNECTING) {
+            existing.countdownTimer?.cancel()
+            existing.countdownTimer = null
+            existing.cardState = ControllerCardState.ACTIVE
+            rebuildCardContent(existing)
+            return
         }
+
+        addController(deviceId, dev.name)
     }
 
     override fun onInputDeviceRemoved(deviceId: Int) {
-        val wasConnected = controllerConnected
-        checkGamepadConnected()
-        android.util.Log.i(
-            "Dish",
-            "onInputDeviceRemoved: id=$deviceId wasConnected=$wasConnected " +
-                "nowConnected=$controllerConnected state=$appState vigemActive=$vigemActive",
-        )
-        // Dynamically remove virtual controller if no gamepads remain
-        if (wasConnected && !controllerConnected && appState == State.CONNECTED && vigemActive) {
-            sendControllerRemove()
+        val entry = controllers[deviceId] ?: return
+        android.util.Log.i("Dish", "onInputDeviceRemoved: id=$deviceId name=${entry.name}")
+
+        if (entry.cardState == ControllerCardState.ACTIVE && entry.vigemActive) {
+            startDisconnectCountdown(entry)
+        } else {
+            removeController(deviceId)
         }
     }
 
     override fun onInputDeviceChanged(deviceId: Int) {
-        val wasConnected = controllerConnected
-        checkGamepadConnected()
-        android.util.Log.i(
-            "Dish",
-            "onInputDeviceChanged: id=$deviceId wasConnected=$wasConnected " +
-                "nowConnected=$controllerConnected state=$appState vigemActive=$vigemActive",
-        )
-        // Handle controller disconnect reported as a "change" rather than "remove"
-        if (wasConnected && !controllerConnected && appState == State.CONNECTED && vigemActive) {
-            sendControllerRemove()
+        // Check if the device is still a gamepad
+        val dev = InputDevice.getDevice(deviceId)
+        val stillGamepad =
+            dev != null &&
+                (dev.sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
+        val entry = controllers[deviceId] ?: return
+
+        if (!stillGamepad) {
+            // Device changed to non-gamepad — treat as removal
+            if (entry.cardState == ControllerCardState.ACTIVE && entry.vigemActive) {
+                startDisconnectCountdown(entry)
+            } else {
+                removeController(deviceId)
+            }
         }
     }
 
-    /** Send controller-add + wait for ACK, update UI accordingly. */
-    private fun sendControllerAdd() {
+    // ── Controller lifecycle ──────────────────────────────────────────────────
+
+    private fun addController(
+        androidDeviceId: Int,
+        name: String,
+    ) {
+        if (controllers.containsKey(androidDeviceId)) return
+        if (controllers.size >= MAX_CONTROLLERS) return
+
+        val index = nextControllerIndex++
+        val entry =
+            ControllerEntry(
+                androidDeviceId = androidDeviceId,
+                name = name,
+                controllerIndex = index,
+            )
+
+        // If we're already connected to a server, auto-add this controller
+        if (serverConnected) {
+            entry.cardState = ControllerCardState.ADDING
+        }
+
+        controllers[androidDeviceId] = entry
+        refreshDashboard()
+
+        // If server is connected, send controller-add right away
+        if (serverConnected) {
+            sendControllerAdd(entry)
+        }
+    }
+
+    private fun removeController(androidDeviceId: Int) {
+        val entry = controllers.remove(androidDeviceId) ?: return
+        entry.countdownTimer?.cancel()
+        if (entry.vigemActive) {
+            SatelliteNative.controllerRemove(entry.controllerIndex)
+            entry.vigemActive = false
+        }
+        refreshDashboard()
+        updateLocks()
+    }
+
+    private fun startDisconnectCountdown(entry: ControllerEntry) {
+        entry.cardState = ControllerCardState.DISCONNECTING
+        entry.countdownSeconds = COUNTDOWN_SECONDS
+        rebuildCardContent(entry)
+
+        entry.countdownTimer =
+            object : CountDownTimer(
+                (COUNTDOWN_SECONDS * 1000).toLong(),
+                1000,
+            ) {
+                override fun onTick(millisUntilFinished: Long) {
+                    entry.countdownSeconds = (millisUntilFinished / 1000).toInt() + 1
+                    // Update the countdown text in the card
+                    rebuildCardContent(entry)
+                }
+
+                override fun onFinish() {
+                    finalizeControllerDisconnect(entry)
+                }
+            }.start()
+    }
+
+    private fun finalizeControllerDisconnect(entry: ControllerEntry) {
+        entry.countdownTimer?.cancel()
+        entry.countdownTimer = null
+        if (entry.vigemActive) {
+            SatelliteNative.controllerRemove(entry.controllerIndex)
+            entry.vigemActive = false
+        }
+        controllers.remove(entry.androidDeviceId)
+        refreshDashboard()
+        updateLocks()
+
+        // If no controllers remain, disconnect from server entirely
+        if (controllers.isEmpty() && serverConnected) {
+            disconnectAll()
+        }
+    }
+
+    /** Send controller-add to server and wait for ACK. */
+    private fun sendControllerAdd(entry: ControllerEntry) {
         SatelliteNative.resetControllerAck()
-        SatelliteNative.controllerAdd(0, 0x0003)
-        binding.tvControllerAckStatus.text = "PENDING"
-        binding.tvControllerAckStatus.setTextColor(getColor(R.color.colorMuted))
+        SatelliteNative.controllerAdd(entry.controllerIndex, 0x0003)
         lifecycleScope.launch {
             val ackResult =
                 withContext(Dispatchers.IO) {
                     var ack = -1
-                    for (i in 0 until 30) { // 30 × 100ms = 3s
+                    for (i in 0 until 30) {
                         ack = SatelliteNative.getLastControllerAck()
                         if (ack != -1) break
                         Thread.sleep(100)
@@ -299,24 +409,14 @@ class MainActivity :
                     ack
                 }
             if (ackResult != -1 && (ackResult and 0xFF) == 0x00) {
-                vigemActive = true
+                entry.vigemActive = true
+                entry.cardState = ControllerCardState.ACTIVE
+            } else {
+                entry.cardState = ControllerCardState.ACTIVE // show status even on error
             }
-            android.util.Log.i(
-                "Dish",
-                "sendControllerAdd ACK: packed=$ackResult " +
-                    "result=${if (ackResult != -1) ackResult and 0xFF else -1} " +
-                    "vigemActive=$vigemActive",
-            )
-            updateControllerAckUI(ackResult)
+            rebuildCardContent(entry)
+            updateLocks()
         }
-    }
-
-    /** Send controller-remove, update UI. */
-    private fun sendControllerRemove() {
-        SatelliteNative.controllerRemove(0)
-        vigemActive = false
-        binding.tvControllerAckStatus.text = "—"
-        binding.tvControllerAckStatus.setTextColor(getColor(R.color.colorMuted))
     }
 
     // ── Gamepad input ─────────────────────────────────────────────────────────
@@ -395,7 +495,6 @@ class MainActivity :
                 }
                 MotionEvent.ACTION_MOVE -> {
                     telEventCount++
-                    telHistTotal += event.historySize
                     telLastEventMs = SystemClock.elapsedRealtime()
                     for (i in 0 until event.historySize) processJoystickInput(event, i)
                     processJoystickInput(event, -1)
@@ -470,11 +569,25 @@ class MainActivity :
     }
 
     private fun trySend() {
-        if (appState == State.CONNECTED) {
-            SatelliteNative.sendReport(0, wButtons, bLT, bRT, sLX, sLY, sRX, sRY)
-            telSendCount++
-            telTotalSent++
-        }
+        if (!serverConnected) return
+        // Send report on behalf of the first active controller
+        // (future: per-device input multiplexing)
+        val activeEntry =
+            controllers.values.firstOrNull {
+                it.cardState == ControllerCardState.ACTIVE && it.vigemActive
+            } ?: return
+        SatelliteNative.sendReport(
+            activeEntry.controllerIndex,
+            wButtons,
+            bLT,
+            bRT,
+            sLX,
+            sLY,
+            sRX,
+            sRY,
+        )
+        telSendCount++
+        telTotalSent++
     }
 
     // ── Telemetry ─────────────────────────────────────────────────────────────
@@ -483,26 +596,14 @@ class MainActivity :
         val events = telEventCount
         val samples = telSampleCount
         val sends = telSendCount
-        val hist = telHistTotal
         telEventCount = 0
         telSampleCount = 0
         telSendCount = 0
-        telHistTotal = 0
-
-        val histAvg = if (events > 0) hist.toFloat() / events else 0f
-        val ageSec =
-            if (telLastEventMs == 0L) {
-                "—"
-            } else {
-                "${SystemClock.elapsedRealtime() - telLastEventMs} ms ago"
-            }
 
         binding.tvTelEventRate.text = "$events / s"
         binding.tvTelSampleRate.text = "$samples / s"
-        binding.tvTelHistAvg.text = "%.1f".format(histAvg)
         binding.tvTelSendRate.text = "$sends / s"
         binding.tvTelTotalSent.text = "$telTotalSent"
-        binding.tvTelLastEvent.text = ageSec
 
         binding.tvTelLX.text = "%+6d".format(sLX)
         binding.tvTelLY.text = "%+6d".format(sLY)
@@ -513,50 +614,298 @@ class MainActivity :
         binding.tvTelBtns.text = "0x%04X".format(wButtons)
     }
 
-    // ── UI button wiring ──────────────────────────────────────────────────────
+    // ── Dashboard UI ──────────────────────────────────────────────────────────
 
-    private fun setupButtons() {
-        binding.btnRescan.setOnClickListener { startDiscovery() }
-        binding.btnCancel.setOnClickListener {
-            selServer = null
-            startDiscovery()
+    /** Rebuild the entire dashboard: empty state vs controller cards. */
+    private fun refreshDashboard() {
+        val container = binding.llControllerCards
+        container.removeAllViews()
+
+        if (controllers.isEmpty()) {
+            // Show empty state
+            binding.llEmptyState.visibility = View.VISIBLE
+            container.visibility = View.GONE
+        } else {
+            binding.llEmptyState.visibility = View.GONE
+            container.visibility = View.VISIBLE
+            controllers.values.forEach { entry ->
+                val card = buildControllerCard(entry)
+                entry.cardView = card
+                container.addView(card)
+            }
         }
-        binding.btnPair.setOnClickListener { attemptPairing() }
-        binding.btnDisconnect.setOnClickListener { disconnect() }
+        updateServerStatus()
+        updateLocks()
     }
 
-    // ── State machine ─────────────────────────────────────────────────────────
+    /** Build a MaterialCardView for one controller. */
+    @Suppress("LongMethod")
+    private fun buildControllerCard(entry: ControllerEntry): MaterialCardView {
+        val dp = resources.displayMetrics.density
+        val card =
+            MaterialCardView(this).apply {
+                setCardBackgroundColor(getColor(R.color.colorSurface))
+                strokeColor = getColor(R.color.colorOutline)
+                strokeWidth = (1 * dp).toInt()
+                radius = 8 * dp
+                val lp =
+                    LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                    )
+                lp.bottomMargin = (12 * dp).toInt()
+                layoutParams = lp
+            }
 
-    private fun transitionTo(state: State) {
-        appState = state
-        binding.llScanning.visibility = if (state == State.SCANNING) View.VISIBLE else View.GONE
-        binding.llServerList.visibility = if (state == State.SERVER_LIST) View.VISIBLE else View.GONE
-        binding.llPairing.visibility = if (state == State.PAIRING) View.VISIBLE else View.GONE
-        binding.llConnected.visibility = if (state == State.CONNECTED) View.VISIBLE else View.GONE
+        val content =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                val pad = (16 * dp).toInt()
+                setPadding(pad, pad, pad, pad)
+            }
+        entry.contentContainer = content
+        card.addView(content)
+        populateCardContent(content, entry)
+        return card
     }
 
-    // ── Discovery ─────────────────────────────────────────────────────────────
+    /** Refresh the content of an existing card without rebuilding all cards. */
+    private fun rebuildCardContent(entry: ControllerEntry) {
+        val content = entry.contentContainer ?: return
+        content.removeAllViews()
+        populateCardContent(content, entry)
+    }
 
-    private fun startDiscovery() {
-        transitionTo(State.SCANNING)
-        binding.tvScanningLabel.text = "Scanning for servers on LAN…"
-        lifecycleScope.launch {
-            val json = withContext(Dispatchers.IO) { SatelliteNative.discoverServers(9879, 4000) }
-            val servers = parseServers(json)
-            transitionTo(State.SERVER_LIST)
-            if (servers.isEmpty()) {
-                binding.tvNoServers.visibility = View.VISIBLE
-                binding.llServers.visibility = View.GONE
-            } else {
-                binding.tvNoServers.visibility = View.GONE
-                binding.llServers.visibility = View.VISIBLE
-                populateServerList(servers)
+    /** Fill card content based on the controller's current state. */
+    @Suppress("LongMethod")
+    private fun populateCardContent(
+        container: LinearLayout,
+        entry: ControllerEntry,
+    ) {
+        val dp = resources.displayMetrics.density
+
+        // Header: controller name + index
+        val header =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+        val dot =
+            View(this).apply {
+                val size = (10 * dp).toInt()
+                layoutParams =
+                    LinearLayout.LayoutParams(size, size).apply {
+                        marginEnd = (8 * dp).toInt()
+                    }
+                background =
+                    GradientDrawable().apply {
+                        shape = GradientDrawable.OVAL
+                        setColor(getColor(stateColor(entry.cardState)))
+                    }
+            }
+        val tvName =
+            TextView(this).apply {
+                text = entry.name
+                setTextColor(getColor(R.color.colorOnSurface))
+                textSize = 15f
+                typeface = Typeface.DEFAULT_BOLD
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+        val tvIndex =
+            TextView(this).apply {
+                text = "#${entry.controllerIndex}"
+                setTextColor(getColor(R.color.colorMuted))
+                textSize = 12f
+                typeface = Typeface.MONOSPACE
+            }
+        header.addView(dot)
+        header.addView(tvName)
+        header.addView(tvIndex)
+        container.addView(header)
+
+        // State-specific content
+        when (entry.cardState) {
+            ControllerCardState.NEED_SERVER -> {
+                addLabel(container, "Ready to connect", R.color.colorMuted)
+                val btn =
+                    MaterialButton(this).apply {
+                        text = "Connect to Server"
+                        setOnClickListener { startDiscoveryForController(entry) }
+                        val lp =
+                            LinearLayout.LayoutParams(
+                                LinearLayout.LayoutParams.MATCH_PARENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT,
+                            )
+                        lp.topMargin = (8 * dp).toInt()
+                        layoutParams = lp
+                    }
+                container.addView(btn)
+            }
+            ControllerCardState.SCANNING -> {
+                addLabel(container, "Scanning for servers…", R.color.colorMuted)
+                val progress =
+                    ProgressBar(this).apply {
+                        isIndeterminate = true
+                        val lp =
+                            LinearLayout.LayoutParams(
+                                LinearLayout.LayoutParams.WRAP_CONTENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT,
+                            )
+                        lp.topMargin = (8 * dp).toInt()
+                        lp.gravity = Gravity.CENTER_HORIZONTAL
+                        layoutParams = lp
+                    }
+                container.addView(progress)
+            }
+            ControllerCardState.SERVER_LIST -> {
+                addLabel(container, "Select a server:", R.color.colorMuted)
+                // Server list will be populated by the discovery callback
+            }
+            ControllerCardState.ADDING -> {
+                addLabel(container, "Adding to server…", R.color.colorMuted)
+                val progress =
+                    ProgressBar(this).apply {
+                        isIndeterminate = true
+                        val lp =
+                            LinearLayout.LayoutParams(
+                                LinearLayout.LayoutParams.WRAP_CONTENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT,
+                            )
+                        lp.topMargin = (8 * dp).toInt()
+                        lp.gravity = Gravity.CENTER_HORIZONTAL
+                        layoutParams = lp
+                    }
+                container.addView(progress)
+            }
+            ControllerCardState.ACTIVE -> {
+                val statusText = if (entry.vigemActive) "Streaming" else "Connected (no ViGEm)"
+                val statusColor = if (entry.vigemActive) R.color.colorSuccess else R.color.colorWarning
+                addLabel(container, statusText, statusColor)
+            }
+            ControllerCardState.DISCONNECTING -> {
+                addLabel(
+                    container,
+                    "Controller disconnected — removing in ${entry.countdownSeconds}s",
+                    R.color.colorWarning,
+                )
+                val btn =
+                    MaterialButton(this).apply {
+                        text = "Disconnect Now"
+                        setOnClickListener { finalizeControllerDisconnect(entry) }
+                        val lp =
+                            LinearLayout.LayoutParams(
+                                LinearLayout.LayoutParams.MATCH_PARENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT,
+                            )
+                        lp.topMargin = (8 * dp).toInt()
+                        layoutParams = lp
+                    }
+                container.addView(btn)
             }
         }
     }
 
-    private fun populateServerList(servers: List<DiscoveredServer>) {
-        binding.llServers.removeAllViews()
+    private fun addLabel(
+        parent: LinearLayout,
+        text: String,
+        colorRes: Int,
+    ) {
+        val dp = resources.displayMetrics.density
+        val tv =
+            TextView(this).apply {
+                this.text = text
+                setTextColor(getColor(colorRes))
+                textSize = 13f
+                val lp =
+                    LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                    )
+                lp.topMargin = (4 * dp).toInt()
+                layoutParams = lp
+            }
+        parent.addView(tv)
+    }
+
+    private fun stateColor(state: ControllerCardState): Int =
+        when (state) {
+            ControllerCardState.NEED_SERVER -> R.color.colorMuted
+            ControllerCardState.SCANNING -> R.color.colorMuted
+            ControllerCardState.SERVER_LIST -> R.color.colorMuted
+            ControllerCardState.ADDING -> R.color.colorMuted
+            ControllerCardState.ACTIVE -> R.color.colorSuccess
+            ControllerCardState.DISCONNECTING -> R.color.colorWarning
+        }
+
+    // ── Discovery ─────────────────────────────────────────────────────────────
+
+    private fun startDiscoveryForController(entry: ControllerEntry) {
+        // If we're already connected to a server, just add this controller
+        if (serverConnected) {
+            entry.cardState = ControllerCardState.ADDING
+            rebuildCardContent(entry)
+            sendControllerAdd(entry)
+            return
+        }
+
+        entry.cardState = ControllerCardState.SCANNING
+        // Set all other NEED_SERVER controllers to SCANNING too (shared server)
+        controllers.values
+            .filter {
+                it.cardState == ControllerCardState.NEED_SERVER
+            }.forEach {
+                it.cardState = ControllerCardState.SCANNING
+            }
+        refreshDashboard()
+
+        lifecycleScope.launch {
+            val json =
+                withContext(Dispatchers.IO) {
+                    SatelliteNative.discoverServers(9879, 4000)
+                }
+            val servers = parseServers(json)
+            if (servers.isEmpty()) {
+                // Reset to NEED_SERVER
+                controllers.values
+                    .filter {
+                        it.cardState == ControllerCardState.SCANNING
+                    }.forEach {
+                        it.cardState = ControllerCardState.NEED_SERVER
+                    }
+                refreshDashboard()
+                // Show a toast
+                android.widget.Toast
+                    .makeText(
+                        this@MainActivity,
+                        "No servers found — check your network",
+                        android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+            } else {
+                // Show server list in the first scanning controller's card
+                controllers.values
+                    .filter {
+                        it.cardState == ControllerCardState.SCANNING
+                    }.forEach {
+                        it.cardState = ControllerCardState.SERVER_LIST
+                    }
+                refreshDashboard()
+                // Populate server list in the first controller's card
+                val firstEntry =
+                    controllers.values.firstOrNull {
+                        it.cardState == ControllerCardState.SERVER_LIST
+                    }
+                if (firstEntry != null) {
+                    populateServerListInCard(firstEntry, servers)
+                }
+            }
+        }
+    }
+
+    private fun populateServerListInCard(
+        entry: ControllerEntry,
+        servers: List<DiscoveredServer>,
+    ) {
+        val content = entry.contentContainer ?: return
         val dp = resources.displayMetrics.density
         servers.forEach { server ->
             val item =
@@ -564,19 +913,18 @@ class MainActivity :
                     orientation = LinearLayout.VERTICAL
                     val pad = (12 * dp).toInt()
                     setPadding(pad, pad, pad, pad)
-                    val bg =
+                    background =
                         GradientDrawable().apply {
                             setColor(getColor(R.color.colorBackground))
                             cornerRadius = 4 * dp
                             setStroke((1 * dp).toInt(), getColor(R.color.colorOutline))
                         }
-                    background = bg
                     val lp =
                         LinearLayout.LayoutParams(
                             LinearLayout.LayoutParams.MATCH_PARENT,
                             LinearLayout.LayoutParams.WRAP_CONTENT,
                         )
-                    lp.bottomMargin = (8 * dp).toInt()
+                    lp.topMargin = (8 * dp).toInt()
                     layoutParams = lp
                     setOnClickListener { onServerSelected(server) }
                 }
@@ -585,27 +933,56 @@ class MainActivity :
                     text = server.name
                     setTextColor(getColor(R.color.colorOnSurface))
                     textSize = 15f
-                    setTypeface(null, android.graphics.Typeface.BOLD)
+                    typeface = Typeface.DEFAULT_BOLD
                 }
             val tvMeta =
                 TextView(this).apply {
                     text = "${server.ip}  •  UDP:${server.udpPort}"
                     setTextColor(getColor(R.color.colorMuted))
                     textSize = 12f
-                    typeface = android.graphics.Typeface.MONOSPACE
+                    typeface = Typeface.MONOSPACE
                 }
             item.addView(tvName)
             item.addView(tvMeta)
-            binding.llServers.addView(item)
+            content.addView(item)
         }
+
+        // Add rescan button
+        val btnRescan =
+            MaterialButton(this).apply {
+                text = "Rescan"
+                val lp =
+                    LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                    )
+                lp.topMargin = (8 * dp).toInt()
+                layoutParams = lp
+                setOnClickListener {
+                    controllers.values
+                        .filter {
+                            it.cardState == ControllerCardState.SERVER_LIST
+                        }.forEach {
+                            it.cardState = ControllerCardState.NEED_SERVER
+                        }
+                    startDiscoveryForController(entry)
+                }
+            }
+        content.addView(btnRescan)
     }
 
     // ── Server selection & pairing ────────────────────────────────────────────
 
     private fun onServerSelected(server: DiscoveredServer) {
-        selServer = server
-        transitionTo(State.SCANNING)
-        binding.tvScanningLabel.text = "Connecting to ${server.name}…"
+        // Move all SERVER_LIST controllers to SCANNING
+        controllers.values
+            .filter {
+                it.cardState == ControllerCardState.SERVER_LIST
+            }.forEach {
+                it.cardState = ControllerCardState.SCANNING
+            }
+        refreshDashboard()
+
         lifecycleScope.launch {
             val result =
                 withContext(Dispatchers.IO) {
@@ -626,16 +1003,14 @@ class MainActivity :
      * that prevents the soft keyboard from delivering text to in-layout EditTexts.
      */
     private fun showPinDialog(server: DiscoveredServer) {
-        transitionTo(State.SERVER_LIST)
-
         val dp = resources.displayMetrics.density
         val input =
             EditText(this).apply {
                 inputType = android.text.InputType.TYPE_CLASS_NUMBER
                 hint = "PIN"
                 textSize = 24f
-                gravity = android.view.Gravity.CENTER
-                typeface = android.graphics.Typeface.MONOSPACE
+                gravity = Gravity.CENTER
+                typeface = Typeface.MONOSPACE
                 letterSpacing = 0.2f
                 filters = arrayOf(android.text.InputFilter.LengthFilter(8))
                 val pad = (16 * dp).toInt()
@@ -647,7 +1022,7 @@ class MainActivity :
                 .setTitle("Pair with ${server.name}")
                 .setMessage("Enter the PIN shown in the server web UI:")
                 .setView(input)
-                .setPositiveButton("PAIR", null) // set listener below to prevent auto-dismiss
+                .setPositiveButton("PAIR", null)
                 .setNegativeButton("CANCEL") { d, _ -> d.dismiss() }
                 .setCancelable(true)
                 .create()
@@ -666,7 +1041,13 @@ class MainActivity :
                 lifecycleScope.launch {
                     val result =
                         withContext(Dispatchers.IO) {
-                            SatelliteNative.pair(server.ip, server.pairPort, deviceId, deviceName, pin)
+                            SatelliteNative.pair(
+                                server.ip,
+                                server.pairPort,
+                                deviceId,
+                                deviceName,
+                                pin,
+                            )
                         }
                     if (result.contains("\"ok\":true")) {
                         savePairKey(result)
@@ -680,29 +1061,30 @@ class MainActivity :
                 }
             }
         }
-
         dialog.show()
     }
 
-    private fun attemptPairing() {
-        // Kept for btnPair click wired in setupButtons; now a no-op since
-        // pairing is handled entirely through showPinDialog.
-    }
+    // ── Connection ────────────────────────────────────────────────────────────
 
+    @Suppress("LongMethod")
     private fun connectToServer(server: DiscoveredServer) {
-        transitionTo(State.SCANNING)
-        binding.tvScanningLabel.text = "Opening connection…"
         lifecycleScope.launch {
-            // 0. Get stored shared key from pairing (hex-encoded, 64 chars → 32 bytes)
             val sharedKeyHex = getStoredPairKey()
             if (sharedKeyHex.length != 64) {
-                binding.tvScanningLabel.text = "Error: no shared key — re-pair needed"
-                transitionTo(State.SERVER_LIST)
+                android.widget.Toast
+                    .makeText(
+                        this@MainActivity,
+                        "No shared key — re-pair needed",
+                        android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                controllers.values.forEach {
+                    it.cardState = ControllerCardState.NEED_SERVER
+                }
+                refreshDashboard()
                 return@launch
             }
             val key = hexToBytes(sharedKeyHex)
 
-            // 1. POST /api/connections to get connectionId and token
             val response =
                 withContext(Dispatchers.IO) {
                     SatelliteNative.httpConnect(server.ip, server.httpPort, deviceId)
@@ -712,30 +1094,41 @@ class MainActivity :
 
             if (connId == null || tokenHex == null) {
                 val error = jsonGet(response, "error") ?: "connection failed"
-                binding.tvScanningLabel.text = "Error: $error"
-                transitionTo(State.SERVER_LIST)
+                android.widget.Toast
+                    .makeText(
+                        this@MainActivity,
+                        "Error: $error",
+                        android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                controllers.values.forEach {
+                    it.cardState = ControllerCardState.NEED_SERVER
+                }
+                refreshDashboard()
                 return@launch
             }
 
-            // 2. Parse token (hex, 8 chars → 4 bytes)
             val token = hexToBytes(tokenHex)
             if (token.size != 4 || key.size != 32) {
-                binding.tvScanningLabel.text = "Error: invalid connection params"
-                transitionTo(State.SERVER_LIST)
+                controllers.values.forEach {
+                    it.cardState = ControllerCardState.NEED_SERVER
+                }
+                refreshDashboard()
                 return@launch
             }
 
-            // 3. Open UDP socket
             if (!SatelliteNative.openSocket(server.ip, server.udpPort)) {
-                transitionTo(State.SERVER_LIST)
+                controllers.values.forEach {
+                    it.cardState = ControllerCardState.NEED_SERVER
+                }
+                refreshDashboard()
                 return@launch
             }
 
-            // 4. Set connection params (token + encryption key)
             SatelliteNative.setConnectionParams(token, key)
             connectionId = connId
+            connectedServer = server
+            serverConnected = true
 
-            // 5. Start ACK receiver BEFORE sending controller add (so we catch the ACK)
             SatelliteNative.resetControllerAck()
             ackReceiverJob =
                 lifecycleScope.launch(Dispatchers.IO) {
@@ -744,119 +1137,68 @@ class MainActivity :
                     }
                 }
 
-            // 6. Start heartbeat
             SatelliteNative.startHeartbeat()
+            updateServerStatus()
 
-            // 7. Transition to CONNECTED and show initial status
-            transitionTo(State.CONNECTED)
-            binding.tvConnectedServer.text = server.name
-            binding.tvConnectedIp.text = "${server.ip}  •  UDP:${server.udpPort}"
-            binding.tvVigemStatus.text = "—"
-            binding.tvVigemStatus.setTextColor(getColor(R.color.colorMuted))
-            binding.tvControllerAckStatus.text = "—"
-            binding.tvControllerAckStatus.setTextColor(getColor(R.color.colorMuted))
-            updateControllerDot()
-
-            // 8. If a gamepad is already connected, add virtual controller now
-            if (controllerConnected) {
-                SatelliteNative.controllerAdd(0, 0x0003)
-                binding.tvControllerAckStatus.text = "PENDING"
-                binding.tvControllerAckStatus.setTextColor(getColor(R.color.colorMuted))
-
-                val ackResult =
-                    withContext(Dispatchers.IO) {
-                        var ack = -1
-                        for (i in 0 until 30) { // 30 × 100ms = 3s
-                            ack = SatelliteNative.getLastControllerAck()
-                            if (ack != -1) break
-                            Thread.sleep(100)
-                        }
-                        ack
-                    }
-                if (ackResult != -1 && (ackResult and 0xFF) == 0x00) {
-                    vigemActive = true
-                }
-                updateControllerAckUI(ackResult)
+            // Add all current controllers to the server
+            controllers.values.forEach { entry ->
+                entry.cardState = ControllerCardState.ADDING
+                rebuildCardContent(entry)
+                sendControllerAdd(entry)
             }
 
-            // 10. Start alive monitor (also updates live server status)
+            // Start alive monitor
             aliveMonitorJob =
                 lifecycleScope.launch {
                     while (isActive) {
                         delay(1000)
                         if (!SatelliteNative.isConnectionAlive()) {
-                            disconnect()
+                            disconnectAll()
                             break
                         }
-                        updateVigemStatusUI()
                     }
                 }
         }
     }
 
-    private fun updateControllerAckUI(packed: Int) {
-        if (packed == -1) {
-            binding.tvControllerAckStatus.text = "NO RESPONSE"
-            binding.tvControllerAckStatus.setTextColor(getColor(R.color.colorError))
-            return
-        }
-        val result = packed and 0xFF
-        val (text, color) =
-            when (result) {
-                0x00 -> "ACTIVE" to R.color.colorSuccess
-                0x01 -> "VIGEM UNAVAILABLE" to R.color.colorError
-                0x02 -> "NO SLOTS" to R.color.colorError
-                0x03 -> "ALREADY EXISTS" to R.color.colorMuted
-                0x04 -> "NOT FOUND" to R.color.colorError
-                0x05 -> "PLUGIN FAILED" to R.color.colorError
-                else -> "UNKNOWN (0x${"%02X".format(result)})" to R.color.colorError
-            }
-        binding.tvControllerAckStatus.text = text
-        binding.tvControllerAckStatus.setTextColor(getColor(color))
-    }
-
-    private fun updateVigemStatusUI() {
-        val vigem = SatelliteNative.getVigemAvailable()
-        val count = SatelliteNative.getActiveControllerCount()
-        val (text, color) =
-            when {
-                vigem == -1 -> "—" to R.color.colorMuted
-                vigem == 1 -> "OPEN · $count active" to R.color.colorSuccess
-                count == 0 -> "IDLE · no devices" to R.color.colorMuted
-                else -> "UNAVAILABLE" to R.color.colorError
-            }
-        binding.tvVigemStatus.text = text
-        binding.tvVigemStatus.setTextColor(getColor(color))
-    }
-
-    private fun disconnect() {
-        // Stop alive monitor first (prevents re-entrant disconnect)
+    /** Disconnect all controllers and tear down server connection. */
+    private fun disconnectAll() {
         aliveMonitorJob?.cancel()
         aliveMonitorJob = null
 
-        // Send controller remove only if we have an active virtual controller
-        if (vigemActive) {
-            SatelliteNative.controllerRemove(0)
-            vigemActive = false
+        // Remove all virtual controllers
+        controllers.values.forEach { entry ->
+            entry.countdownTimer?.cancel()
+            entry.countdownTimer = null
+            if (entry.vigemActive) {
+                SatelliteNative.controllerRemove(entry.controllerIndex)
+                entry.vigemActive = false
+            }
+            entry.cardState = ControllerCardState.NEED_SERVER
         }
 
-        // Stop heartbeat and ACK receiver, close socket, wipe keys
         ackReceiverJob?.cancel()
         ackReceiverJob = null
         SatelliteNative.closeSocket()
         releaseLocks()
 
-        // DELETE /api/connections/:id (fire-and-forget on IO)
-        val server = selServer
+        // DELETE /api/connections/:id
+        val server = connectedServer
         val connId = connectionId
         if (server != null && connId != null) {
             lifecycleScope.launch(Dispatchers.IO) {
-                SatelliteNative.httpDisconnect(server.ip, server.httpPort, connId, deviceId)
+                SatelliteNative.httpDisconnect(
+                    server.ip,
+                    server.httpPort,
+                    connId,
+                    deviceId,
+                )
             }
         }
         connectionId = null
-        selServer = null
-        startDiscovery()
+        connectedServer = null
+        serverConnected = false
+        refreshDashboard()
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
