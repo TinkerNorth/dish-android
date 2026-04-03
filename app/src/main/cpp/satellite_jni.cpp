@@ -43,6 +43,7 @@ static constexpr uint16_t MSG_CONTROLLER_ADD = 0x0004;
 static constexpr uint16_t MSG_CONTROLLER_REMOVE = 0x0005;
 static constexpr uint16_t MSG_CONTROLLER_ACK = 0x0006;
 static constexpr uint16_t MSG_SERVER_STATUS = 0x0007;
+static constexpr uint16_t MSG_CONTROLLER_TYPE = 0x0008;
 
 // ACK result codes
 static constexpr uint8_t ACK_OK = 0x00;
@@ -313,6 +314,16 @@ Java_com_tinkernorth_dish_SatelliteNative_controllerRemove(JNIEnv*, jobject, jin
     uint8_t payload[1] = {(uint8_t)(controllerIndex & 0xFF)};
     sendEncrypted(MSG_CONTROLLER_REMOVE, payload, 1);
     LOGI("Sent controller remove: index=%d", controllerIndex);
+}
+
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_SatelliteNative_sendControllerType(
+    JNIEnv*, jobject, jint controllerIndex, jint controllerType) {
+    // Payload: controller_index(1B) + controller_type(1B)
+    uint8_t payload[2];
+    payload[0] = (uint8_t)(controllerIndex & 0xFF);
+    payload[1] = (uint8_t)(controllerType & 0xFF);
+    sendEncrypted(MSG_CONTROLLER_TYPE, payload, 2);
+    LOGI("Sent controller type: index=%d type=%d", controllerIndex, controllerType);
 }
 
 /* ── Heartbeat start/stop ──────────────────────────────────────────────────── */
