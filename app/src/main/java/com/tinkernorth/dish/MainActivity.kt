@@ -123,6 +123,15 @@ class MainActivity :
     private var screenLockActive = false
     private var wakeLockActive = false
 
+    // ── Low-power mode ─────────────────────────────────────────────────────────
+    private enum class LowPowerState { IDLE, COUNTDOWN, ACTIVE }
+
+    private var lowPowerState = LowPowerState.IDLE
+    private var savedBrightness = -1f
+    private val inactivityHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var lowPowerCountdownTimer: CountDownTimer? = null
+    private val lowPowerClockHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
     // ── Telemetry ─────────────────────────────────────────────────────────────
     private var telEventCount = 0
     private var telSampleCount = 0
@@ -145,6 +154,9 @@ class MainActivity :
     companion object {
         private const val MAX_CONTROLLERS = 16
         private const val COUNTDOWN_SECONDS = 10
+        private const val INACTIVITY_DELAY_MS = 15_000L
+        private const val LOW_POWER_COUNTDOWN_SECONDS = 5
+        private const val LOW_POWER_MIN_BRIGHTNESS = 0.01f
         private val BUTTON_MAP =
             mapOf(
                 KeyEvent.KEYCODE_BUTTON_A to 0x1000,
@@ -190,6 +202,7 @@ class MainActivity :
 
     override fun onDestroy() {
         super.onDestroy()
+        cancelLowPowerMode()
         telHandler.removeCallbacks(telRunnable)
         inputManager.unregisterInputDeviceListener(this)
         controllers.values.forEach { it.countdownTimer?.cancel() }
@@ -226,9 +239,11 @@ class MainActivity :
             wakeLockActive = true
         }
         updateLockIndicators()
+        updateLowPowerTimer()
     }
 
     private fun releaseLocks() {
+        cancelLowPowerMode()
         if (screenLockActive) {
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             screenLockActive = false
@@ -251,6 +266,145 @@ class MainActivity :
         binding.tvWakeLock.setTextColor(
             getColor(if (wakeLockActive) R.color.colorSuccess else R.color.colorMuted),
         )
+    }
+
+    // ── Low-power mode ────────────────────────────────────────────────────────
+
+    private val inactivityRunnable = Runnable { startLowPowerCountdown() }
+
+    /** Called whenever locks change. Start/stop the inactivity timer. */
+    private fun updateLowPowerTimer() {
+        val shouldTrack = screenLockActive && wakeLockActive
+        if (shouldTrack && lowPowerState == LowPowerState.IDLE) {
+            resetInactivityTimer()
+        } else if (!shouldTrack) {
+            cancelLowPowerMode()
+        }
+    }
+
+    private fun resetInactivityTimer() {
+        inactivityHandler.removeCallbacks(inactivityRunnable)
+        if (screenLockActive && wakeLockActive && lowPowerState == LowPowerState.IDLE) {
+            inactivityHandler.postDelayed(inactivityRunnable, INACTIVITY_DELAY_MS)
+        }
+    }
+
+    private fun startLowPowerCountdown() {
+        if (!screenLockActive || !wakeLockActive) return
+        lowPowerState = LowPowerState.COUNTDOWN
+        binding.llCountdownBanner.visibility = View.VISIBLE
+        binding.tvCountdownSeconds.text = LOW_POWER_COUNTDOWN_SECONDS.toString()
+
+        lowPowerCountdownTimer?.cancel()
+        lowPowerCountdownTimer =
+            object : CountDownTimer(
+                LOW_POWER_COUNTDOWN_SECONDS * 1000L,
+                1000L,
+            ) {
+                override fun onTick(millisUntilFinished: Long) {
+                    binding.tvCountdownSeconds.text =
+                        ((millisUntilFinished / 1000) + 1).toString()
+                }
+
+                override fun onFinish() {
+                    enterLowPowerMode()
+                }
+            }.start()
+    }
+
+    private fun enterLowPowerMode() {
+        lowPowerState = LowPowerState.ACTIVE
+        binding.llCountdownBanner.visibility = View.GONE
+
+        // Save and dim brightness
+        val lp = window.attributes
+        savedBrightness = lp.screenBrightness
+        lp.screenBrightness = LOW_POWER_MIN_BRIGHTNESS
+        window.attributes = lp
+
+        // Show overlay
+        binding.flLowPowerOverlay.visibility = View.VISIBLE
+        updateLowPowerStatus()
+        startLowPowerClock()
+    }
+
+    private fun exitLowPowerMode() {
+        if (lowPowerState == LowPowerState.IDLE) return
+        lowPowerState = LowPowerState.IDLE
+
+        // Cancel any active countdown
+        lowPowerCountdownTimer?.cancel()
+        lowPowerCountdownTimer = null
+        binding.llCountdownBanner.visibility = View.GONE
+
+        // Hide overlay
+        binding.flLowPowerOverlay.visibility = View.GONE
+        stopLowPowerClock()
+
+        // Restore brightness
+        val lp = window.attributes
+        lp.screenBrightness = if (savedBrightness >= 0) savedBrightness else -1f
+        window.attributes = lp
+        savedBrightness = -1f
+
+        // Restart inactivity timer if still connected
+        if (screenLockActive && wakeLockActive) {
+            resetInactivityTimer()
+        }
+    }
+
+    /** Called when connection drops — cancel everything immediately. */
+    private fun cancelLowPowerMode() {
+        inactivityHandler.removeCallbacks(inactivityRunnable)
+        exitLowPowerMode()
+    }
+
+    private fun updateLowPowerStatus() {
+        if (!::binding.isInitialized) return
+        val active = controllers.values.count { it.vigemActive }
+        binding.tvLowPowerStatus.text =
+            if (active > 0) {
+                "Streaming · $active controller${if (active > 1) "s" else ""}"
+            } else {
+                "Connected"
+            }
+    }
+
+    private val lowPowerClockRunnable =
+        object : Runnable {
+            override fun run() {
+                if (lowPowerState != LowPowerState.ACTIVE) return
+                val now = java.util.Calendar.getInstance()
+                val h = now.get(java.util.Calendar.HOUR_OF_DAY)
+                val m = now.get(java.util.Calendar.MINUTE)
+                binding.tvLowPowerTime.text =
+                    String.format(java.util.Locale.ROOT, "%02d:%02d", h, m)
+                updateLowPowerStatus()
+                lowPowerClockHandler.postDelayed(this, 15_000L)
+            }
+        }
+
+    private fun startLowPowerClock() {
+        lowPowerClockRunnable.run()
+    }
+
+    private fun stopLowPowerClock() {
+        lowPowerClockHandler.removeCallbacks(lowPowerClockRunnable)
+    }
+
+    /** Screen touch while connected — reset inactivity or exit low-power. */
+    private fun onUserScreenInteraction() {
+        when (lowPowerState) {
+            LowPowerState.ACTIVE -> exitLowPowerMode()
+            LowPowerState.COUNTDOWN -> {
+                lowPowerCountdownTimer?.cancel()
+                lowPowerCountdownTimer = null
+                binding.llCountdownBanner.visibility = View.GONE
+                lowPowerState = LowPowerState.IDLE
+                resetInactivityTimer()
+            }
+            LowPowerState.IDLE -> resetInactivityTimer()
+        }
     }
 
     // ── Server dot ────────────────────────────────────────────────────────────
@@ -452,6 +606,14 @@ class MainActivity :
     // All input processing + sendReport() runs directly on the main thread for
     // zero queue overhead. sendto() is non-blocking (~50μs), far cheaper than
     // a HandlerThread context switch (~1-3ms under load).
+
+    // Intercept screen touches to manage low-power inactivity timer.
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.action == MotionEvent.ACTION_DOWN && screenLockActive) {
+            onUserScreenInteraction()
+        }
+        return super.dispatchTouchEvent(ev)
+    }
 
     // Intercept gamepad keys BEFORE GameActivity's InputEnabledSurfaceView consumes them.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -1287,6 +1449,7 @@ class MainActivity :
 
         ackReceiverJob?.cancel()
         ackReceiverJob = null
+        SatelliteNative.stopHeartbeat()
         SatelliteNative.closeSocket()
         releaseLocks()
 
