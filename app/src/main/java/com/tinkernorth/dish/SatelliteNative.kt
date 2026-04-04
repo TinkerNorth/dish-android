@@ -58,6 +58,12 @@ object SatelliteNative {
     /** Send 0x0005 Controller Remove message. */
     external fun controllerRemove(controllerIndex: Int)
 
+    /** Send 0x0008 Controller Type message. */
+    external fun sendControllerType(
+        controllerIndex: Int,
+        controllerType: Int,
+    )
+
     // ── Heartbeat ───────────────────────────────────────────────────────────
 
     /** Start the heartbeat sender thread (sends 0x0002 every 2s). */

@@ -17,9 +17,12 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.widget.ArrayAdapter
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.Spinner
 import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
@@ -53,6 +56,23 @@ enum class ControllerCardState {
     DISCONNECTING, // physical gamepad unplugged, countdown running
 }
 
+/** Supported controller visual types (must match satellite types.h values). */
+enum class ControllerType(
+    val wireValue: Int,
+    val label: String,
+    val drawableRes: Int,
+) {
+    XBOX(0, "Xbox", R.drawable.ctrl_xbox),
+    PLAYSTATION(1, "PlayStation", R.drawable.ctrl_playstation),
+    ;
+
+    companion object {
+        val labels = entries.map { it.label }
+
+        fun fromIndex(index: Int) = entries.getOrElse(index) { XBOX }
+    }
+}
+
 /** Mutable state for one physical controller. */
 data class ControllerEntry(
     val androidDeviceId: Int,
@@ -60,6 +80,7 @@ data class ControllerEntry(
     var controllerIndex: Int = -1,
     var cardState: ControllerCardState = ControllerCardState.NEED_SERVER,
     var vigemActive: Boolean = false,
+    var controllerType: ControllerType = ControllerType.XBOX,
     var countdownTimer: CountDownTimer? = null,
     var countdownSeconds: Int = 10,
     // UI references (set when card is built)
@@ -337,9 +358,12 @@ class MainActivity :
         controllers[androidDeviceId] = entry
         refreshDashboard()
 
-        // If server is connected, send controller-add right away
+        // If server is connected, send controller-add right away;
+        // otherwise auto-start discovery so servers appear immediately
         if (serverConnected) {
             sendControllerAdd(entry)
+        } else if (entry.cardState == ControllerCardState.NEED_SERVER) {
+            startDiscoveryForController(entry)
         }
     }
 
@@ -411,6 +435,11 @@ class MainActivity :
             if (ackResult != -1 && (ackResult and 0xFF) == 0x00) {
                 entry.vigemActive = true
                 entry.cardState = ControllerCardState.ACTIVE
+                // Send the current controller type to the server
+                SatelliteNative.sendControllerType(
+                    entry.controllerIndex,
+                    entry.controllerType.wireValue,
+                )
             } else {
                 entry.cardState = ControllerCardState.ACTIVE // show status even on error
             }
@@ -726,10 +755,11 @@ class MainActivity :
         // State-specific content
         when (entry.cardState) {
             ControllerCardState.NEED_SERVER -> {
-                addLabel(container, "Ready to connect", R.color.colorMuted)
+                addLabel(container, "No servers found", R.color.colorMuted)
+                addControllerTypeSelector(container, entry, dp)
                 val btn =
                     MaterialButton(this).apply {
-                        text = "Connect to Server"
+                        text = "Scan for Servers"
                         setOnClickListener { startDiscoveryForController(entry) }
                         val lp =
                             LinearLayout.LayoutParams(
@@ -781,6 +811,7 @@ class MainActivity :
                 val statusText = if (entry.vigemActive) "Streaming" else "Connected (no ViGEm)"
                 val statusColor = if (entry.vigemActive) R.color.colorSuccess else R.color.colorWarning
                 addLabel(container, statusText, statusColor)
+                addControllerTypeSelector(container, entry, dp)
             }
             ControllerCardState.DISCONNECTING -> {
                 addLabel(
@@ -825,6 +856,83 @@ class MainActivity :
                 layoutParams = lp
             }
         parent.addView(tv)
+    }
+
+    @Suppress("LongMethod")
+    private fun addControllerTypeSelector(
+        container: LinearLayout,
+        entry: ControllerEntry,
+        dp: Float,
+    ) {
+        val row =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                val lp =
+                    LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                    )
+                lp.topMargin = (8 * dp).toInt()
+                layoutParams = lp
+            }
+
+        val icon =
+            ImageView(this).apply {
+                setImageResource(entry.controllerType.drawableRes)
+                val size = (40 * dp).toInt()
+                layoutParams =
+                    LinearLayout.LayoutParams(size, size).apply {
+                        marginEnd = (10 * dp).toInt()
+                    }
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                contentDescription = entry.controllerType.label
+            }
+
+        val spinner =
+            Spinner(this).apply {
+                adapter =
+                    ArrayAdapter(
+                        this@MainActivity,
+                        android.R.layout.simple_spinner_item,
+                        ControllerType.labels,
+                    ).also {
+                        it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                    }
+                setSelection(entry.controllerType.ordinal, false)
+                onItemSelectedListener =
+                    object : android.widget.AdapterView.OnItemSelectedListener {
+                        override fun onItemSelected(
+                            parent: android.widget.AdapterView<*>?,
+                            view: View?,
+                            position: Int,
+                            id: Long,
+                        ) {
+                            val newType = ControllerType.fromIndex(position)
+                            if (newType != entry.controllerType) {
+                                entry.controllerType = newType
+                                icon.setImageResource(newType.drawableRes)
+                                icon.contentDescription = newType.label
+                                // If active, send type change to server
+                                if (entry.vigemActive) {
+                                    SatelliteNative.sendControllerType(
+                                        entry.controllerIndex,
+                                        newType.wireValue,
+                                    )
+                                }
+                            }
+                        }
+
+                        override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {
+                            // Required by interface — no action needed
+                        }
+                    }
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+
+        row.addView(icon)
+        row.addView(spinner)
+        container.addView(row)
     }
 
     private fun stateColor(state: ControllerCardState): Int =
