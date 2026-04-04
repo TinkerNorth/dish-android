@@ -17,12 +17,10 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
-import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
-import android.widget.Spinner
 import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
@@ -1030,6 +1028,18 @@ class MainActivity :
             LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
+                background =
+                    android.graphics.drawable.GradientDrawable().apply {
+                        setColor(getColor(R.color.colorSurface))
+                        setStroke((1 * dp).toInt(), getColor(R.color.colorOutline))
+                        cornerRadius = 12 * dp
+                    }
+                setPadding(
+                    (14 * dp).toInt(),
+                    (10 * dp).toInt(),
+                    (14 * dp).toInt(),
+                    (10 * dp).toInt(),
+                )
                 val lp =
                     LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT,
@@ -1037,64 +1047,148 @@ class MainActivity :
                     )
                 lp.topMargin = (8 * dp).toInt()
                 layoutParams = lp
+                isClickable = true
+                isFocusable = true
             }
 
         val icon =
             ImageView(this).apply {
                 setImageResource(entry.controllerType.drawableRes)
-                val size = (40 * dp).toInt()
+                val size = (36 * dp).toInt()
                 layoutParams =
                     LinearLayout.LayoutParams(size, size).apply {
-                        marginEnd = (10 * dp).toInt()
+                        marginEnd = (12 * dp).toInt()
                     }
                 scaleType = ImageView.ScaleType.FIT_CENTER
                 contentDescription = entry.controllerType.label
             }
 
-        val spinner =
-            Spinner(this).apply {
-                adapter =
-                    ArrayAdapter(
-                        this@MainActivity,
-                        android.R.layout.simple_spinner_item,
-                        ControllerType.labels,
-                    ).also {
-                        it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-                    }
-                setSelection(entry.controllerType.ordinal, false)
-                onItemSelectedListener =
-                    object : android.widget.AdapterView.OnItemSelectedListener {
-                        override fun onItemSelected(
-                            parent: android.widget.AdapterView<*>?,
-                            view: View?,
-                            position: Int,
-                            id: Long,
-                        ) {
-                            val newType = ControllerType.fromIndex(position)
-                            if (newType != entry.controllerType) {
-                                entry.controllerType = newType
-                                icon.setImageResource(newType.drawableRes)
-                                icon.contentDescription = newType.label
-                                // If active, send type change to server
-                                if (entry.vigemActive) {
-                                    SatelliteNative.sendControllerType(
-                                        entry.controllerIndex,
-                                        newType.wireValue,
-                                    )
-                                }
-                            }
-                        }
-
-                        override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {
-                            // Required by interface — no action needed
-                        }
-                    }
+        val label =
+            TextView(this).apply {
+                text = entry.controllerType.label
+                setTextColor(getColor(R.color.colorOnSurface))
+                textSize = 15f
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             }
 
+        val chevron =
+            TextView(this).apply {
+                text = "▾"
+                setTextColor(getColor(R.color.colorMuted))
+                textSize = 18f
+            }
+
         row.addView(icon)
-        row.addView(spinner)
+        row.addView(label)
+        row.addView(chevron)
+
+        row.setOnClickListener {
+            showControllerTypePicker(entry, icon, label)
+        }
+
         container.addView(row)
+    }
+
+    private fun showControllerTypePicker(
+        entry: ControllerEntry,
+        iconView: ImageView,
+        labelView: TextView,
+    ) {
+        val dp = resources.displayMetrics.density
+        val types = ControllerType.entries
+
+        val listLayout =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
+            }
+
+        val dialog =
+            com.google.android.material.dialog
+                .MaterialAlertDialogBuilder(this)
+                .setTitle("Controller Type")
+                .setView(listLayout)
+                .setNegativeButton("Cancel", null)
+                .create()
+
+        for (type in types) {
+            val isSelected = type == entry.controllerType
+            val option =
+                LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(
+                        (20 * dp).toInt(),
+                        (14 * dp).toInt(),
+                        (20 * dp).toInt(),
+                        (14 * dp).toInt(),
+                    )
+                    if (isSelected) {
+                        setBackgroundColor(getColor(R.color.colorOutline))
+                    }
+                    isClickable = true
+                    isFocusable = true
+                    foreground = getRippleDrawable(android.R.attr.selectableItemBackground)
+                }
+
+            val optIcon =
+                ImageView(this).apply {
+                    setImageResource(type.drawableRes)
+                    val size = (40 * dp).toInt()
+                    layoutParams =
+                        LinearLayout.LayoutParams(size, size).apply {
+                            marginEnd = (16 * dp).toInt()
+                        }
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                }
+
+            val optLabel =
+                TextView(this).apply {
+                    text = type.label
+                    setTextColor(getColor(R.color.colorOnSurface))
+                    textSize = 16f
+                    layoutParams =
+                        LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                }
+
+            val optCheck =
+                TextView(this).apply {
+                    text = if (isSelected) "✓" else ""
+                    setTextColor(getColor(R.color.colorPrimary))
+                    textSize = 18f
+                }
+
+            option.addView(optIcon)
+            option.addView(optLabel)
+            option.addView(optCheck)
+
+            option.setOnClickListener {
+                if (type != entry.controllerType) {
+                    entry.controllerType = type
+                    iconView.setImageResource(type.drawableRes)
+                    iconView.contentDescription = type.label
+                    labelView.text = type.label
+                    if (entry.vigemActive) {
+                        SatelliteNative.sendControllerType(
+                            entry.controllerIndex,
+                            type.wireValue,
+                        )
+                    }
+                }
+                dialog.dismiss()
+            }
+
+            listLayout.addView(option)
+        }
+
+        dialog.show()
+    }
+
+    private fun getRippleDrawable(attr: Int): android.graphics.drawable.Drawable? {
+        val ta = obtainStyledAttributes(intArrayOf(attr))
+        val drawable = ta.getDrawable(0)
+        ta.recycle()
+        return drawable
     }
 
     private fun stateColor(state: ControllerCardState): Int =
