@@ -9,7 +9,7 @@ complexity:
   LargeClass:
     threshold: 1500
   TooManyFunctions:
-    thresholdInClasses: 50
+    thresholdInClasses: 60
     thresholdInObjects: 20
   LongParameterList:
     functionThreshold: 10

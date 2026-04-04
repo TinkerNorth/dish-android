@@ -34,7 +34,7 @@
 
 /* ── Constants ─────────────────────────────────────────────────────────────── */
 static constexpr int HEARTBEAT_INTERVAL_MS = 2000;
-static constexpr int HEARTBEAT_MISS_MAX = 3;
+static constexpr int HEARTBEAT_MISS_MAX = 5;
 // Message types
 static constexpr uint16_t MSG_GAMEPAD_DATA = 0x0001;
 static constexpr uint16_t MSG_HEARTBEAT_PING = 0x0002;

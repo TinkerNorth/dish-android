@@ -17,12 +17,10 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
-import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
-import android.widget.Spinner
 import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
@@ -123,6 +121,15 @@ class MainActivity :
     private var screenLockActive = false
     private var wakeLockActive = false
 
+    // ── Low-power mode ─────────────────────────────────────────────────────────
+    private enum class LowPowerState { IDLE, COUNTDOWN, ACTIVE }
+
+    private var lowPowerState = LowPowerState.IDLE
+    private var savedBrightness = -1f
+    private val inactivityHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var lowPowerCountdownTimer: CountDownTimer? = null
+    private val lowPowerClockHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
     // ── Telemetry ─────────────────────────────────────────────────────────────
     private var telEventCount = 0
     private var telSampleCount = 0
@@ -145,6 +152,9 @@ class MainActivity :
     companion object {
         private const val MAX_CONTROLLERS = 16
         private const val COUNTDOWN_SECONDS = 10
+        private const val INACTIVITY_DELAY_MS = 15_000L
+        private const val LOW_POWER_COUNTDOWN_SECONDS = 5
+        private const val LOW_POWER_MIN_BRIGHTNESS = 0.01f
         private val BUTTON_MAP =
             mapOf(
                 KeyEvent.KEYCODE_BUTTON_A to 0x1000,
@@ -190,6 +200,7 @@ class MainActivity :
 
     override fun onDestroy() {
         super.onDestroy()
+        cancelLowPowerMode()
         telHandler.removeCallbacks(telRunnable)
         inputManager.unregisterInputDeviceListener(this)
         controllers.values.forEach { it.countdownTimer?.cancel() }
@@ -226,9 +237,11 @@ class MainActivity :
             wakeLockActive = true
         }
         updateLockIndicators()
+        updateLowPowerTimer()
     }
 
     private fun releaseLocks() {
+        cancelLowPowerMode()
         if (screenLockActive) {
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             screenLockActive = false
@@ -251,6 +264,145 @@ class MainActivity :
         binding.tvWakeLock.setTextColor(
             getColor(if (wakeLockActive) R.color.colorSuccess else R.color.colorMuted),
         )
+    }
+
+    // ── Low-power mode ────────────────────────────────────────────────────────
+
+    private val inactivityRunnable = Runnable { startLowPowerCountdown() }
+
+    /** Called whenever locks change. Start/stop the inactivity timer. */
+    private fun updateLowPowerTimer() {
+        val shouldTrack = screenLockActive && wakeLockActive
+        if (shouldTrack && lowPowerState == LowPowerState.IDLE) {
+            resetInactivityTimer()
+        } else if (!shouldTrack) {
+            cancelLowPowerMode()
+        }
+    }
+
+    private fun resetInactivityTimer() {
+        inactivityHandler.removeCallbacks(inactivityRunnable)
+        if (screenLockActive && wakeLockActive && lowPowerState == LowPowerState.IDLE) {
+            inactivityHandler.postDelayed(inactivityRunnable, INACTIVITY_DELAY_MS)
+        }
+    }
+
+    private fun startLowPowerCountdown() {
+        if (!screenLockActive || !wakeLockActive) return
+        lowPowerState = LowPowerState.COUNTDOWN
+        binding.llCountdownBanner.visibility = View.VISIBLE
+        binding.tvCountdownSeconds.text = LOW_POWER_COUNTDOWN_SECONDS.toString()
+
+        lowPowerCountdownTimer?.cancel()
+        lowPowerCountdownTimer =
+            object : CountDownTimer(
+                LOW_POWER_COUNTDOWN_SECONDS * 1000L,
+                1000L,
+            ) {
+                override fun onTick(millisUntilFinished: Long) {
+                    binding.tvCountdownSeconds.text =
+                        ((millisUntilFinished / 1000) + 1).toString()
+                }
+
+                override fun onFinish() {
+                    enterLowPowerMode()
+                }
+            }.start()
+    }
+
+    private fun enterLowPowerMode() {
+        lowPowerState = LowPowerState.ACTIVE
+        binding.llCountdownBanner.visibility = View.GONE
+
+        // Save and dim brightness
+        val lp = window.attributes
+        savedBrightness = lp.screenBrightness
+        lp.screenBrightness = LOW_POWER_MIN_BRIGHTNESS
+        window.attributes = lp
+
+        // Show overlay
+        binding.flLowPowerOverlay.visibility = View.VISIBLE
+        updateLowPowerStatus()
+        startLowPowerClock()
+    }
+
+    private fun exitLowPowerMode() {
+        if (lowPowerState == LowPowerState.IDLE) return
+        lowPowerState = LowPowerState.IDLE
+
+        // Cancel any active countdown
+        lowPowerCountdownTimer?.cancel()
+        lowPowerCountdownTimer = null
+        binding.llCountdownBanner.visibility = View.GONE
+
+        // Hide overlay
+        binding.flLowPowerOverlay.visibility = View.GONE
+        stopLowPowerClock()
+
+        // Restore brightness
+        val lp = window.attributes
+        lp.screenBrightness = if (savedBrightness >= 0) savedBrightness else -1f
+        window.attributes = lp
+        savedBrightness = -1f
+
+        // Restart inactivity timer if still connected
+        if (screenLockActive && wakeLockActive) {
+            resetInactivityTimer()
+        }
+    }
+
+    /** Called when connection drops — cancel everything immediately. */
+    private fun cancelLowPowerMode() {
+        inactivityHandler.removeCallbacks(inactivityRunnable)
+        exitLowPowerMode()
+    }
+
+    private fun updateLowPowerStatus() {
+        if (!::binding.isInitialized) return
+        val active = controllers.values.count { it.vigemActive }
+        binding.tvLowPowerStatus.text =
+            if (active > 0) {
+                "Streaming · $active controller${if (active > 1) "s" else ""}"
+            } else {
+                "Connected"
+            }
+    }
+
+    private val lowPowerClockRunnable =
+        object : Runnable {
+            override fun run() {
+                if (lowPowerState != LowPowerState.ACTIVE) return
+                val now = java.util.Calendar.getInstance()
+                val h = now.get(java.util.Calendar.HOUR_OF_DAY)
+                val m = now.get(java.util.Calendar.MINUTE)
+                binding.tvLowPowerTime.text =
+                    String.format(java.util.Locale.ROOT, "%02d:%02d", h, m)
+                updateLowPowerStatus()
+                lowPowerClockHandler.postDelayed(this, 15_000L)
+            }
+        }
+
+    private fun startLowPowerClock() {
+        lowPowerClockRunnable.run()
+    }
+
+    private fun stopLowPowerClock() {
+        lowPowerClockHandler.removeCallbacks(lowPowerClockRunnable)
+    }
+
+    /** Screen touch while connected — reset inactivity or exit low-power. */
+    private fun onUserScreenInteraction() {
+        when (lowPowerState) {
+            LowPowerState.ACTIVE -> exitLowPowerMode()
+            LowPowerState.COUNTDOWN -> {
+                lowPowerCountdownTimer?.cancel()
+                lowPowerCountdownTimer = null
+                binding.llCountdownBanner.visibility = View.GONE
+                lowPowerState = LowPowerState.IDLE
+                resetInactivityTimer()
+            }
+            LowPowerState.IDLE -> resetInactivityTimer()
+        }
     }
 
     // ── Server dot ────────────────────────────────────────────────────────────
@@ -452,6 +604,14 @@ class MainActivity :
     // All input processing + sendReport() runs directly on the main thread for
     // zero queue overhead. sendto() is non-blocking (~50μs), far cheaper than
     // a HandlerThread context switch (~1-3ms under load).
+
+    // Intercept screen touches to manage low-power inactivity timer.
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.action == MotionEvent.ACTION_DOWN && screenLockActive) {
+            onUserScreenInteraction()
+        }
+        return super.dispatchTouchEvent(ev)
+    }
 
     // Intercept gamepad keys BEFORE GameActivity's InputEnabledSurfaceView consumes them.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -868,6 +1028,18 @@ class MainActivity :
             LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
+                background =
+                    android.graphics.drawable.GradientDrawable().apply {
+                        setColor(getColor(R.color.colorSurface))
+                        setStroke((1 * dp).toInt(), getColor(R.color.colorOutline))
+                        cornerRadius = 12 * dp
+                    }
+                setPadding(
+                    (14 * dp).toInt(),
+                    (10 * dp).toInt(),
+                    (14 * dp).toInt(),
+                    (10 * dp).toInt(),
+                )
                 val lp =
                     LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT,
@@ -875,64 +1047,148 @@ class MainActivity :
                     )
                 lp.topMargin = (8 * dp).toInt()
                 layoutParams = lp
+                isClickable = true
+                isFocusable = true
             }
 
         val icon =
             ImageView(this).apply {
                 setImageResource(entry.controllerType.drawableRes)
-                val size = (40 * dp).toInt()
+                val size = (36 * dp).toInt()
                 layoutParams =
                     LinearLayout.LayoutParams(size, size).apply {
-                        marginEnd = (10 * dp).toInt()
+                        marginEnd = (12 * dp).toInt()
                     }
                 scaleType = ImageView.ScaleType.FIT_CENTER
                 contentDescription = entry.controllerType.label
             }
 
-        val spinner =
-            Spinner(this).apply {
-                adapter =
-                    ArrayAdapter(
-                        this@MainActivity,
-                        android.R.layout.simple_spinner_item,
-                        ControllerType.labels,
-                    ).also {
-                        it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-                    }
-                setSelection(entry.controllerType.ordinal, false)
-                onItemSelectedListener =
-                    object : android.widget.AdapterView.OnItemSelectedListener {
-                        override fun onItemSelected(
-                            parent: android.widget.AdapterView<*>?,
-                            view: View?,
-                            position: Int,
-                            id: Long,
-                        ) {
-                            val newType = ControllerType.fromIndex(position)
-                            if (newType != entry.controllerType) {
-                                entry.controllerType = newType
-                                icon.setImageResource(newType.drawableRes)
-                                icon.contentDescription = newType.label
-                                // If active, send type change to server
-                                if (entry.vigemActive) {
-                                    SatelliteNative.sendControllerType(
-                                        entry.controllerIndex,
-                                        newType.wireValue,
-                                    )
-                                }
-                            }
-                        }
-
-                        override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {
-                            // Required by interface — no action needed
-                        }
-                    }
+        val label =
+            TextView(this).apply {
+                text = entry.controllerType.label
+                setTextColor(getColor(R.color.colorOnSurface))
+                textSize = 15f
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             }
 
+        val chevron =
+            TextView(this).apply {
+                text = "▾"
+                setTextColor(getColor(R.color.colorMuted))
+                textSize = 18f
+            }
+
         row.addView(icon)
-        row.addView(spinner)
+        row.addView(label)
+        row.addView(chevron)
+
+        row.setOnClickListener {
+            showControllerTypePicker(entry, icon, label)
+        }
+
         container.addView(row)
+    }
+
+    private fun showControllerTypePicker(
+        entry: ControllerEntry,
+        iconView: ImageView,
+        labelView: TextView,
+    ) {
+        val dp = resources.displayMetrics.density
+        val types = ControllerType.entries
+
+        val listLayout =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(0, (8 * dp).toInt(), 0, (8 * dp).toInt())
+            }
+
+        val dialog =
+            com.google.android.material.dialog
+                .MaterialAlertDialogBuilder(this)
+                .setTitle("Controller Type")
+                .setView(listLayout)
+                .setNegativeButton("Cancel", null)
+                .create()
+
+        for (type in types) {
+            val isSelected = type == entry.controllerType
+            val option =
+                LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(
+                        (20 * dp).toInt(),
+                        (14 * dp).toInt(),
+                        (20 * dp).toInt(),
+                        (14 * dp).toInt(),
+                    )
+                    if (isSelected) {
+                        setBackgroundColor(getColor(R.color.colorOutline))
+                    }
+                    isClickable = true
+                    isFocusable = true
+                    foreground = getRippleDrawable(android.R.attr.selectableItemBackground)
+                }
+
+            val optIcon =
+                ImageView(this).apply {
+                    setImageResource(type.drawableRes)
+                    val size = (40 * dp).toInt()
+                    layoutParams =
+                        LinearLayout.LayoutParams(size, size).apply {
+                            marginEnd = (16 * dp).toInt()
+                        }
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                }
+
+            val optLabel =
+                TextView(this).apply {
+                    text = type.label
+                    setTextColor(getColor(R.color.colorOnSurface))
+                    textSize = 16f
+                    layoutParams =
+                        LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                }
+
+            val optCheck =
+                TextView(this).apply {
+                    text = if (isSelected) "✓" else ""
+                    setTextColor(getColor(R.color.colorPrimary))
+                    textSize = 18f
+                }
+
+            option.addView(optIcon)
+            option.addView(optLabel)
+            option.addView(optCheck)
+
+            option.setOnClickListener {
+                if (type != entry.controllerType) {
+                    entry.controllerType = type
+                    iconView.setImageResource(type.drawableRes)
+                    iconView.contentDescription = type.label
+                    labelView.text = type.label
+                    if (entry.vigemActive) {
+                        SatelliteNative.sendControllerType(
+                            entry.controllerIndex,
+                            type.wireValue,
+                        )
+                    }
+                }
+                dialog.dismiss()
+            }
+
+            listLayout.addView(option)
+        }
+
+        dialog.show()
+    }
+
+    private fun getRippleDrawable(attr: Int): android.graphics.drawable.Drawable? {
+        val ta = obtainStyledAttributes(intArrayOf(attr))
+        val drawable = ta.getDrawable(0)
+        ta.recycle()
+        return drawable
     }
 
     private fun stateColor(state: ControllerCardState): Int =
@@ -1287,6 +1543,7 @@ class MainActivity :
 
         ackReceiverJob?.cancel()
         ackReceiverJob = null
+        SatelliteNative.stopHeartbeat()
         SatelliteNative.closeSocket()
         releaseLocks()
 
