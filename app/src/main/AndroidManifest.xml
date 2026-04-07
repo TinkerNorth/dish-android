@@ -8,6 +8,16 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Bluetooth HID gamepad -->
+    <uses-permission android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
+
     <application
         android:usesCleartextTraffic="true"
         android:allowBackup="true"
@@ -31,6 +41,14 @@
             <meta-data android:name="android.app.lib_name"
                 android:value="satellite" />
         </activity>
+        <activity
+            android:name=".BluetoothGamepadActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Dish"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            tools:targetApi="p" />
+
     </application>
 
 </manifest>

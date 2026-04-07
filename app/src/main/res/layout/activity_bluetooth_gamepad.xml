@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/colorBackground"
+    android:keepScreenOn="true">
+
+    <!-- ── Status bar (top) ────────────────────────── -->
+    <LinearLayout
+        android:id="@+id/llStatusBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="8dp"
+        android:background="#CC0D1117">
+
+        <TextView
+            android:id="@+id/tvBtStatus"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Not connected"
+            android:textColor="@color/colorMuted"
+            android:textSize="13sp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnBtConnect"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="Start"
+            android:textSize="12sp"
+            style="@style/Widget.Material3.Button.TonalButton" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnBtBack"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="Exit"
+            android:textSize="12sp"
+            android:layout_marginStart="4dp"
+            style="@style/Widget.Material3.Button.OutlinedButton" />
+    </LinearLayout>
+
+    <!-- ── Gamepad touch surface ───────────────────── -->
+    <com.tinkernorth.dish.GamepadTouchView
+        android:id="@+id/gamepadTouchView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginTop="48dp" />
+
+</FrameLayout>
