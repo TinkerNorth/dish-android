@@ -1,11 +1,6 @@
 package com.tinkernorth.dish.data.repository
 
 import com.tinkernorth.dish.data.network.SatelliteNative
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
-
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -14,7 +9,6 @@ import javax.inject.Singleton
  */
 @Singleton
 class ControllerRepository @Inject constructor() {
-    private val mutex = Mutex()
 
     fun openSocket(ip: String, port: Int): Boolean {
         // Simple call, but could be guarded if we're worried about concurrent socket management
