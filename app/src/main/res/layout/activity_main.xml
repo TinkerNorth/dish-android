@@ -161,11 +161,12 @@
         </LinearLayout>
 
         <!-- ── Dynamic controller cards container ────────────────── -->
-        <LinearLayout
-            android:id="@+id/llControllerCards"
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvControllers"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical" />
+            android:nestedScrollingEnabled="false"
+            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
 
         <!-- ── Disconnect All button (shown when server connected) ─ -->
         <com.google.android.material.button.MaterialButton

@@ -44,7 +44,7 @@
     </LinearLayout>
 
     <!-- ── Gamepad touch surface ───────────────────── -->
-    <com.tinkernorth.dish.GamepadTouchView
+    <com.tinkernorth.dish.ui.common.GamepadTouchView
         android:id="@+id/gamepadTouchView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"

@@ -19,6 +19,7 @@
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 
     <application
+        android:name=".DishApplication"
         android:usesCleartextTraffic="true"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -30,7 +31,7 @@
         android:theme="@style/Theme.Dish">
 
         <activity
-            android:name=".MainActivity"
+            android:name=".ui.main.MainActivity"
             android:exported="true"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|navigation"
             android:label="@string/app_name">
@@ -42,7 +43,7 @@
                 android:value="satellite" />
         </activity>
         <activity
-            android:name=".BluetoothGamepadActivity"
+            android:name=".ui.bluetooth.BluetoothGamepadActivity"
             android:exported="false"
             android:theme="@style/Theme.Dish"
             android:screenOrientation="landscape"
