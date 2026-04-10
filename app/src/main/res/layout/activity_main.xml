@@ -176,8 +176,6 @@
             android:text="DISCONNECT ALL"
             android:layout_marginTop="12dp"
             android:layout_marginBottom="8dp"
-            app:backgroundTint="@color/colorPrimaryDark"
-            android:textColor="@color/colorOnSurface"
             android:visibility="gone" />
 
         <!-- ── CLIENT TELEMETRY ──────────────────────────────────── -->
@@ -343,12 +341,12 @@
         <!-- ── Bluetooth Gamepad button ──────────────────── -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnBluetoothGamepad"
+            style="@style/Widget.Dish.Button.Outlined"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="🎮  Bluetooth Gamepad"
-            android:textAllCaps="false"
-            style="@style/Widget.Material3.Button.OutlinedButton" />
+            android:textAllCaps="false" />
 
     </LinearLayout>
 </ScrollView>

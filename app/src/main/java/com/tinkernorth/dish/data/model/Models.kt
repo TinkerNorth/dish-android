@@ -4,11 +4,11 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class DiscoveredServer(
-    val name: String,
-    val ip: String,
-    val udpPort: Int,
-    val pairPort: Int,
-    val httpPort: Int,
+    val name: String = "",
+    val ip: String = "",
+    val udpPort: Int = 9876,
+    val pairPort: Int = 9878,
+    val httpPort: Int = 9877,
 )
 
 @Serializable

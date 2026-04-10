@@ -37,7 +37,7 @@ class ServerConnectionManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val scope: CoroutineScope,
     private val discoveryRepo: DiscoveryRepository,
-    private val controllerRepo: ControllerRepository,
+    val controllerRepo: ControllerRepository,
     private val json: Json
 ) {
     private val _isConnected = MutableStateFlow(false)
@@ -58,7 +58,7 @@ class ServerConnectionManager @Inject constructor(
     var connectionId: String? = null ; private set
 
     private val deviceId by lazy { getOrCreateDeviceId() }
-    private val deviceName by lazy { android.os.Build.MODEL }
+    private val deviceName by lazy { android.os.Build.MODEL ?: "Android" }
 
     private var ackReceiverJob: Job? = null
     private var aliveMonitorJob: Job? = null

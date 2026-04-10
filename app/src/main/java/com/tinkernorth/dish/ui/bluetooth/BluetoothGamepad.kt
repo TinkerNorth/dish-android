@@ -215,19 +215,20 @@ class BluetoothGamepad(
         rightTrigger: Int,
     ): ByteArray {
         val report = ByteArray(REPORT_SIZE)
-        report[0] = (buttons and 0xFF).toByte()
-        report[1] = ((buttons shr 8) and 0xFF).toByte()
-        report[2] = (hatSwitch and 0xFF).toByte()
-        report[3] = (leftX.toInt() and 0xFF).toByte()
-        report[4] = ((leftX.toInt() shr 8) and 0xFF).toByte()
-        report[5] = (leftY.toInt() and 0xFF).toByte()
-        report[6] = ((leftY.toInt() shr 8) and 0xFF).toByte()
-        report[7] = (rightX.toInt() and 0xFF).toByte()
-        report[8] = ((rightX.toInt() shr 8) and 0xFF).toByte()
-        report[9] = (rightY.toInt() and 0xFF).toByte()
-        report[10] = ((rightY.toInt() shr 8) and 0xFF).toByte()
-        report[11] = (leftTrigger and 0xFF).toByte()
-        report[12] = (rightTrigger and 0xFF).toByte()
+        report[0] = REPORT_ID.toByte()
+        report[1] = (buttons and 0xFF).toByte()
+        report[2] = ((buttons shr 8) and 0xFF).toByte()
+        report[3] = (hatSwitch and 0xFF).toByte()
+        report[4] = (leftX.toInt() and 0xFF).toByte()
+        report[5] = ((leftX.toInt() shr 8) and 0xFF).toByte()
+        report[6] = (leftY.toInt() and 0xFF).toByte()
+        report[7] = ((leftY.toInt() shr 8) and 0xFF).toByte()
+        report[8] = (rightX.toInt() and 0xFF).toByte()
+        report[9] = ((rightX.toInt() shr 8) and 0xFF).toByte()
+        report[10] = (rightY.toInt() and 0xFF).toByte()
+        report[11] = ((rightY.toInt() shr 8) and 0xFF).toByte()
+        report[12] = (leftTrigger and 0xFF).toByte()
+        report[13] = (rightTrigger and 0xFF).toByte()
         return report
     }
 
@@ -356,14 +357,14 @@ class BluetoothGamepad(
     fun sendReport(report: ByteArray): Boolean {
         val hid = hidDevice ?: return false
         val device = connectedDevice ?: return false
-        val ok = hid.sendReport(device, REPORT_ID, report)
+        val ok = hid.sendReport(device, REPORT_ID, report.sliceArray(1 until report.size))
         if (!ok) android.util.Log.w("BtGamepad", "sendReport FAILED")
         return ok
     }
 }
 
 private const val REPORT_ID = 1
-private const val REPORT_SIZE = 13
+private const val REPORT_SIZE = 14
 private const val TOKEN_RATE = 3200 // 250 reports/sec × 13 bytes
 private const val BT_SLOT_US = 625 // Bluetooth Classic slot duration
 private const val JITTER_US = 1250

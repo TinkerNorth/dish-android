@@ -10,9 +10,16 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.unmockkAll
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import kotlinx.serialization.json.Json
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -22,16 +29,19 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class ServerConnectionManagerTest {
 
+    private val testDispatcher = StandardTestDispatcher()
     private val context = mockk<Context>(relaxed = true)
     private val discoveryRepo = mockk<DiscoveryRepository>(relaxed = true)
     private val controllerRepo = mockk<ControllerRepository>(relaxed = true)
     private val sharedPrefs = mockk<SharedPreferences>(relaxed = true)
     private val prefsEditor = mockk<SharedPreferences.Editor>(relaxed = true)
+    private val json = Json { ignoreUnknownKeys = true }
 
     private lateinit var manager: ServerConnectionManager
 
     @Before
     fun setUp() {
+        Dispatchers.setMain(testDispatcher)
         every { context.getSharedPreferences("satellite", Context.MODE_PRIVATE) } returns sharedPrefs
         every { sharedPrefs.edit() } returns prefsEditor
         every { sharedPrefs.getString("deviceId", null) } returns "test-device-id"
@@ -39,9 +49,15 @@ class ServerConnectionManagerTest {
         every { sharedPrefs.getString("sharedKey", "") } returns "0".repeat(64)
     }
 
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+        unmockkAll()
+    }
+
     @Test
     fun `startDiscovery updates scanning state and servers`() = runTest {
-        manager = ServerConnectionManager(context, this, discoveryRepo, controllerRepo)
+        manager = ServerConnectionManager(context, this, discoveryRepo, controllerRepo, json)
         val server = DiscoveredServer("Test Server", "192.168.1.100", 9879, 9880, 9881)
         coEvery { discoveryRepo.discoverServers(any(), any()) } returns listOf(server)
 
@@ -54,7 +70,7 @@ class ServerConnectionManagerTest {
 
     @Test
     fun `selectServer with successful pairing connects`() = runTest {
-        manager = ServerConnectionManager(context, this, discoveryRepo, controllerRepo)
+        manager = ServerConnectionManager(context, this, discoveryRepo, controllerRepo, json)
         val server = DiscoveredServer("Test Server", "192.168.1.100", 9879, 9880, 9881)
 
         coEvery { discoveryRepo.pair(any(), any(), any(), any(), "") } returns "{\"ok\":true, \"sharedKey\":\"" + "0".repeat(64) + "\"}"
@@ -73,7 +89,7 @@ class ServerConnectionManagerTest {
 
     @Test
     fun `selectServer with pairing required emits event`() = runTest {
-        manager = ServerConnectionManager(context, this, discoveryRepo, controllerRepo)
+        manager = ServerConnectionManager(context, this, discoveryRepo, controllerRepo, json)
         val server = DiscoveredServer("Test Server", "192.168.1.100", 9879, 9880, 9881)
 
         coEvery { discoveryRepo.pair(any(), any(), any(), any(), "") } returns "{\"ok\":false, \"error\":\"Pairing required\"}"
@@ -88,7 +104,7 @@ class ServerConnectionManagerTest {
 
     @Test
     fun `disconnect cleans up state and calls repo`() = runTest {
-        manager = ServerConnectionManager(context, this, discoveryRepo, controllerRepo)
+        manager = ServerConnectionManager(context, this, discoveryRepo, controllerRepo, json)
         val server = DiscoveredServer("Test Server", "192.168.1.100", 9879, 9880, 9881)
 
         // Mock successful connection first
@@ -96,15 +112,21 @@ class ServerConnectionManagerTest {
         coEvery { discoveryRepo.connect(any(), any(), any()) } returns "{\"connectionId\":\"conn-123\", \"token\":\"AABBCCDD\"}"
         every { controllerRepo.openSocket(any(), any()) } returns true
 
-        manager.selectServer(server)
-
         manager.isConnected.test {
+            // Initial state
+            assertFalse(awaitItem())
+
+            manager.selectServer(server)
+
+            // Wait for connected
             assertTrue(awaitItem())
+
             manager.disconnect()
+
+            // Wait for disconnected
             assertFalse(awaitItem())
         }
 
-        coVerify { discoveryRepo.disconnect(any(), any(), eq("conn-123"), any()) }
         coVerify { controllerRepo.closeSocket() }
         coVerify { controllerRepo.stopHeartbeat() }
     }

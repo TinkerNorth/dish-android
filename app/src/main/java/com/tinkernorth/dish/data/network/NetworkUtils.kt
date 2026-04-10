@@ -29,6 +29,7 @@ fun hexToBytes(hex: String): ByteArray {
 fun parseServers(jsonString: String): List<DiscoveredServer> {
     return try {
         json.decodeFromString<List<DiscoveredServer>>(jsonString)
+            .filter { it.name.isNotEmpty() && it.ip.isNotEmpty() }
     } catch (e: Exception) {
         emptyList()
     }

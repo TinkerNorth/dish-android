@@ -80,6 +80,10 @@ class MainViewModel @Inject constructor(
 
     fun onControllerConnected(id: Int, name: String) {
         controllerManager.addController(id, name)
+        // Auto-start discovery when a controller connects and no server is connected
+        if (!serverManager.isConnected.value && !serverManager.isScanning.value) {
+            serverManager.startDiscovery()
+        }
     }
 
     fun onControllerDisconnected(id: Int) {
