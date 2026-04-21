@@ -50,6 +50,13 @@
             android:configChanges="orientation|screenSize|keyboardHidden"
             tools:targetApi="p" />
 
+        <activity
+            android:name=".ui.main.GamepadOverlayActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Dish"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
     </application>
 
 </manifest>

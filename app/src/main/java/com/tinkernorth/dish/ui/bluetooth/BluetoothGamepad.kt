@@ -65,6 +65,13 @@ class BluetoothGamepad(
     var currentProfile = GamepadProfile.XBOX
         private set
 
+    /**
+     * MAC address of a previously-connected host. When non-null, the callback
+     * attempts to reconnect automatically as soon as the HID app is registered.
+     * One-shot: cleared after the attempt so we never re-trigger on reconnect.
+     */
+    private var autoConnectMac: String? = null
+
     val isRegistered get() = registered
     val isConnected get() = connectedDevice != null
 
@@ -264,6 +271,7 @@ class BluetoothGamepad(
                 this@BluetoothGamepad.registered = registered
                 if (registered) {
                     listener.onRegistered()
+                    tryAutoReconnect()
                 } else {
                     connectedDevice = null
                     listener.onUnregistered()
@@ -277,6 +285,7 @@ class BluetoothGamepad(
                 when (state) {
                     BluetoothProfile.STATE_CONNECTED -> {
                         connectedDevice = device
+                        autoConnectMac = null
                         listener.onConnected(device)
                     }
                     BluetoothProfile.STATE_DISCONNECTED -> {
@@ -288,6 +297,39 @@ class BluetoothGamepad(
                 }
             }
         }
+
+    /**
+     * If a saved host MAC is set, try to restore the connection. First checks
+     * the HID profile's already-connected devices (host may have auto-reopened
+     * the ACL link), then falls back to an active [BluetoothHidDevice.connect].
+     */
+    @SuppressLint("MissingPermission")
+    private fun tryAutoReconnect() {
+        val mac = autoConnectMac ?: return
+        val hid = hidDevice ?: return
+        try {
+            val already = hid
+                .getDevicesMatchingConnectionStates(intArrayOf(BluetoothProfile.STATE_CONNECTED))
+                .firstOrNull { it.address.equals(mac, ignoreCase = true) }
+            if (already != null) {
+                connectedDevice = already
+                autoConnectMac = null
+                listener.onConnected(already)
+                return
+            }
+        } catch (_: SecurityException) {
+            // Fall through to active connect below.
+        }
+        val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+        val adapter = manager?.adapter ?: return
+        try {
+            val device = adapter.getRemoteDevice(mac)
+            hid.connect(device)
+        } catch (_: IllegalArgumentException) {
+            autoConnectMac = null
+            listener.onError("Invalid saved host address")
+        }
+    }
 
     @SuppressLint("MissingPermission")
     private fun registerApp() {
@@ -315,8 +357,9 @@ class BluetoothGamepad(
     // ── Public API ───────────────────────────────────────────────────────────
 
     @SuppressLint("MissingPermission")
-    fun start(profile: GamepadProfile) {
+    fun start(profile: GamepadProfile, autoConnectMac: String? = null) {
         currentProfile = profile
+        this.autoConnectMac = autoConnectMac
         val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
         val adapter = manager?.adapter
         if (adapter == null || !adapter.isEnabled) {

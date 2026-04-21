@@ -5,447 +5,64 @@
     android:layout_height="match_parent"
     android:background="@color/colorBackground">
 
-<ScrollView
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:fillViewport="true">
-
+    <!-- ═══ DASHBOARD ═══ -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="20dp"
-        android:gravity="center_horizontal">
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
-        <!-- ── Header ────────────────────────────────────────────── -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="DISH"
-            android:textColor="@color/colorPrimary"
-            android:textSize="26sp"
-            android:textStyle="bold"
-            android:letterSpacing="0.12"
-            android:layout_marginTop="20dp"
-            android:layout_marginBottom="6dp" />
-
-        <!-- ── App-level status bar (locks + server) ─────────────── -->
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
-            app:cardBackgroundColor="@color/colorSurface"
-            app:strokeColor="@color/colorCardStroke"
-            app:strokeWidth="1dp"
-            app:cardElevation="0dp"
-            app:cardCornerRadius="6dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <!-- Server connection row -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="6dp">
-                    <View
-                        android:id="@+id/dotServer"
-                        android:layout_width="8dp"
-                        android:layout_height="8dp"
-                        android:layout_marginEnd="10dp" />
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="SERVER"
-                        android:textColor="@color/colorMuted"
-                        android:textSize="11sp"
-                        android:letterSpacing="0.05" />
-                    <TextView
-                        android:id="@+id/tvServerStatus"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="NOT CONNECTED"
-                        android:textColor="@color/colorMuted"
-                        android:textSize="12sp"
-                        android:fontFamily="monospace" />
-                </LinearLayout>
-
-                <!-- Screen lock row -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="4dp">
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="SCREEN"
-                        android:textColor="@color/colorMuted"
-                        android:textSize="11sp"
-                        android:letterSpacing="0.04"
-                        android:layout_marginStart="18dp" />
-                    <TextView
-                        android:id="@+id/tvScreenLock"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="OFF"
-                        android:textColor="@color/colorMuted"
-                        android:textSize="12sp"
-                        android:fontFamily="monospace" />
-                </LinearLayout>
-
-                <!-- Wake lock row -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="WAKE LOCK"
-                        android:textColor="@color/colorMuted"
-                        android:textSize="11sp"
-                        android:letterSpacing="0.04"
-                        android:layout_marginStart="18dp" />
-                    <TextView
-                        android:id="@+id/tvWakeLock"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="OFF"
-                        android:textColor="@color/colorMuted"
-                        android:textSize="12sp"
-                        android:fontFamily="monospace" />
-                </LinearLayout>
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- ── Empty state (no controllers) ──────────────────────── -->
+        <!-- Fixed header -->
         <LinearLayout
-            android:id="@+id/llEmptyState"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:gravity="center"
-            android:paddingTop="48dp"
-            android:paddingBottom="48dp">
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="🎮"
-                android:textSize="48sp"
-                android:layout_marginBottom="16dp" />
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Connect a gamepad"
-                android:textColor="@color/colorOnSurface"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="8dp" />
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Plug in a controller to get started"
-                android:textColor="@color/colorMuted"
-                android:textSize="14sp" />
+            android:paddingHorizontal="20dp"
+            android:paddingTop="24dp">
+
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="DISH" android:textColor="@color/colorPrimary" android:textSize="24sp"
+                android:textStyle="bold" android:letterSpacing="0.12" android:layout_marginBottom="2dp" />
+
+            <!-- Status row -->
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:gravity="center_vertical"
+                android:paddingVertical="10dp">
+                <View android:id="@+id/dotServer" android:layout_width="8dp" android:layout_height="8dp"
+                    android:layout_marginEnd="8dp" />
+                <TextView android:id="@+id/tvServerStatus" android:layout_width="0dp"
+                    android:layout_height="wrap_content" android:layout_weight="1"
+                    android:text="No active connections" android:textColor="@color/colorMuted"
+                    android:textSize="12sp" android:fontFamily="monospace" />
+                <TextView android:id="@+id/tvScreenLock" android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" android:text="SCR" android:textColor="@color/colorMuted"
+                    android:textSize="10sp" android:fontFamily="monospace" android:layout_marginEnd="8dp" />
+                <TextView android:id="@+id/tvWakeLock" android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" android:text="WK" android:textColor="@color/colorMuted"
+                    android:textSize="10sp" android:fontFamily="monospace" />
+            </LinearLayout>
+
+            <View android:layout_width="match_parent" android:layout_height="1dp"
+                android:background="@color/colorOutline" />
+
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="CONTROLLERS" android:textColor="@color/colorPrimary"
+                android:textSize="11sp" android:fontFamily="monospace" android:letterSpacing="0.12"
+                android:paddingTop="14dp" android:paddingBottom="8dp" />
         </LinearLayout>
 
-        <!-- ── Dynamic controller cards container ────────────────── -->
+        <!-- Scrollable slot list + telemetry -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/rvControllers"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:nestedScrollingEnabled="false"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipToPadding="false"
+            android:paddingHorizontal="20dp"
+            android:paddingBottom="16dp"
             app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
-
-        <!-- ── Disconnect All button (shown when server connected) ─ -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnDisconnectAll"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="DISCONNECT ALL"
-            android:layout_marginTop="12dp"
-            android:layout_marginBottom="8dp"
-            android:visibility="gone" />
-
-        <!-- ── CLIENT TELEMETRY ──────────────────────────────────── -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardTelemetry"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:layout_marginBottom="20dp"
-            app:cardBackgroundColor="@color/colorSurface"
-            app:strokeColor="@color/colorCardStroke"
-            app:strokeWidth="1dp"
-            app:cardElevation="0dp"
-            app:cardCornerRadius="6dp"
-            android:visibility="gone">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="20dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="CLIENT TELEMETRY"
-                    android:textColor="@color/colorPrimary"
-                    android:textSize="12sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.06"
-                    android:layout_marginBottom="12dp" />
-
-                <!-- Pipeline stats -->
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="PIPELINE"
-                    android:textColor="@color/colorMuted"
-                    android:textSize="11sp"
-                    android:letterSpacing="0.08"
-                    android:layout_marginBottom="8dp" />
-
-                <!-- Events/s row -->
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginBottom="5dp">
-                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                        android:text="EVENTS / S" android:textColor="@color/colorMuted" android:textSize="12sp" android:letterSpacing="0.04"/>
-                    <TextView android:id="@+id/tvTelEventRate"
-                        android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="—" android:textColor="@color/colorOnSurface" android:textSize="13sp" android:fontFamily="monospace"/>
-                </LinearLayout>
-
-                <!-- Samples/s row -->
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginBottom="5dp">
-                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                        android:text="SAMPLES / S" android:textColor="@color/colorMuted" android:textSize="12sp" android:letterSpacing="0.04"/>
-                    <TextView android:id="@+id/tvTelSampleRate"
-                        android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="—" android:textColor="@color/colorOnSurface" android:textSize="13sp" android:fontFamily="monospace"/>
-                </LinearLayout>
-
-                <!-- Sends/s row -->
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginBottom="5dp">
-                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                        android:text="SENDS / S" android:textColor="@color/colorMuted" android:textSize="12sp" android:letterSpacing="0.04"/>
-                    <TextView android:id="@+id/tvTelSendRate"
-                        android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="—" android:textColor="@color/colorOnSurface" android:textSize="13sp" android:fontFamily="monospace"/>
-                </LinearLayout>
-
-                <!-- Total sent row -->
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginBottom="5dp">
-                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
-                        android:text="TOTAL SENT" android:textColor="@color/colorMuted" android:textSize="12sp" android:letterSpacing="0.04"/>
-                    <TextView android:id="@+id/tvTelTotalSent"
-                        android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="0" android:textColor="@color/colorOnSurface" android:textSize="13sp" android:fontFamily="monospace"/>
-                </LinearLayout>
-
-                <View android:layout_width="match_parent" android:layout_height="1dp"
-                    android:background="@color/colorOutline" android:layout_marginBottom="12dp"
-                    android:layout_marginTop="8dp"/>
-
-                <!-- Controller state -->
-                <TextView
-                    android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="INPUT STATE"
-                    android:textColor="@color/colorMuted" android:textSize="11sp"
-                    android:letterSpacing="0.08" android:layout_marginBottom="8dp"/>
-
-                <!-- LX / LY -->
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:orientation="horizontal" android:layout_marginBottom="5dp">
-                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
-                        android:layout_weight="1" android:orientation="horizontal" android:gravity="center_vertical">
-                        <TextView android:layout_width="36dp" android:layout_height="wrap_content"
-                            android:text="LX" android:textColor="@color/colorMuted" android:textSize="12sp"/>
-                        <TextView android:id="@+id/tvTelLX" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                            android:text="     0" android:textColor="@color/colorOnSurface" android:textSize="13sp" android:fontFamily="monospace"/>
-                    </LinearLayout>
-                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
-                        android:layout_weight="1" android:orientation="horizontal" android:gravity="center_vertical">
-                        <TextView android:layout_width="36dp" android:layout_height="wrap_content"
-                            android:text="LY" android:textColor="@color/colorMuted" android:textSize="12sp"/>
-                        <TextView android:id="@+id/tvTelLY" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                            android:text="     0" android:textColor="@color/colorOnSurface" android:textSize="13sp" android:fontFamily="monospace"/>
-                    </LinearLayout>
-                </LinearLayout>
-
-                <!-- RX / RY -->
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:orientation="horizontal" android:layout_marginBottom="5dp">
-                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
-                        android:layout_weight="1" android:orientation="horizontal" android:gravity="center_vertical">
-                        <TextView android:layout_width="36dp" android:layout_height="wrap_content"
-                            android:text="RX" android:textColor="@color/colorMuted" android:textSize="12sp"/>
-                        <TextView android:id="@+id/tvTelRX" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                            android:text="     0" android:textColor="@color/colorOnSurface" android:textSize="13sp" android:fontFamily="monospace"/>
-                    </LinearLayout>
-                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
-                        android:layout_weight="1" android:orientation="horizontal" android:gravity="center_vertical">
-                        <TextView android:layout_width="36dp" android:layout_height="wrap_content"
-                            android:text="RY" android:textColor="@color/colorMuted" android:textSize="12sp"/>
-                        <TextView android:id="@+id/tvTelRY" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                            android:text="     0" android:textColor="@color/colorOnSurface" android:textSize="13sp" android:fontFamily="monospace"/>
-                    </LinearLayout>
-                </LinearLayout>
-
-                <!-- LT / RT -->
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:orientation="horizontal" android:layout_marginBottom="5dp">
-                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
-                        android:layout_weight="1" android:orientation="horizontal" android:gravity="center_vertical">
-                        <TextView android:layout_width="36dp" android:layout_height="wrap_content"
-                            android:text="LT" android:textColor="@color/colorMuted" android:textSize="12sp"/>
-                        <TextView android:id="@+id/tvTelLT" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                            android:text="  0" android:textColor="@color/colorOnSurface" android:textSize="13sp" android:fontFamily="monospace"/>
-                    </LinearLayout>
-                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content"
-                        android:layout_weight="1" android:orientation="horizontal" android:gravity="center_vertical">
-                        <TextView android:layout_width="36dp" android:layout_height="wrap_content"
-                            android:text="RT" android:textColor="@color/colorMuted" android:textSize="12sp"/>
-                        <TextView android:id="@+id/tvTelRT" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                            android:text="  0" android:textColor="@color/colorOnSurface" android:textSize="13sp" android:fontFamily="monospace"/>
-                    </LinearLayout>
-                </LinearLayout>
-
-                <!-- BTNS -->
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                    android:orientation="horizontal" android:gravity="center_vertical">
-                    <TextView android:layout_width="36dp" android:layout_height="wrap_content"
-                        android:text="BTN" android:textColor="@color/colorMuted" android:textSize="12sp"/>
-                    <TextView android:id="@+id/tvTelBtns" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="0x0000" android:textColor="@color/colorOnSurface" android:textSize="13sp" android:fontFamily="monospace"/>
-                </LinearLayout>
-
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- ── Bluetooth Gamepad button ──────────────────── -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnBluetoothGamepad"
-            style="@style/Widget.Dish.Button.Outlined"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="🎮  Bluetooth Gamepad"
-            android:textAllCaps="false" />
-
     </LinearLayout>
-</ScrollView>
 
-<!-- ── Low-power countdown banner (slides down from top) ──── -->
-<LinearLayout
-    android:id="@+id/llCountdownBanner"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:gravity="center"
-    android:background="#CC000000"
-    android:padding="20dp"
-    android:clickable="true"
-    android:focusable="true"
-    android:visibility="gone">
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Going into low power mode"
-        android:textColor="@color/colorWarning"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:layout_marginBottom="6dp" />
-
-    <TextView
-        android:id="@+id/tvCountdownSeconds"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="5"
-        android:textColor="@color/colorOnSurface"
-        android:textSize="32sp"
-        android:textStyle="bold"
-        android:fontFamily="monospace" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Tap anywhere to cancel"
-        android:textColor="@color/colorMuted"
-        android:textSize="12sp"
-        android:layout_marginTop="8dp" />
-</LinearLayout>
-
-<!-- ── Low-power mode full-screen overlay ──────────────────── -->
-<FrameLayout
-    android:id="@+id/flLowPowerOverlay"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="#FF000000"
-    android:visibility="gone"
-    android:clickable="true"
-    android:focusable="true">
-
-    <LinearLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:orientation="vertical"
-        android:gravity="center"
-        android:padding="32dp">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="🔋"
-            android:textSize="36sp"
-            android:layout_marginBottom="16dp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="LOW POWER MODE"
-            android:textColor="#4DFFFFFF"
-            android:textSize="12sp"
-            android:letterSpacing="0.12"
-            android:textStyle="bold"
-            android:layout_marginBottom="12dp" />
-
-        <TextView
-            android:id="@+id/tvLowPowerTime"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="00:00"
-            android:textColor="#80FFFFFF"
-            android:textSize="28sp"
-            android:fontFamily="monospace"
-            android:layout_marginBottom="8dp" />
-
-        <TextView
-            android:id="@+id/tvLowPowerStatus"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Streaming"
-            android:textColor="#33FFFFFF"
-            android:textSize="11sp"
-            android:letterSpacing="0.06" />
-    </LinearLayout>
-</FrameLayout>
+    <!-- Low-power overlays -->
+    <include layout="@layout/overlay_low_power" />
 
 </FrameLayout>

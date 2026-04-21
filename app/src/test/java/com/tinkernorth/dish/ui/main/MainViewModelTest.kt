@@ -66,14 +66,16 @@ class MainViewModelTest {
     }
 
     @Test
-    fun `initial state is correct`() = runTest {
+    fun `initial state has virtual slot and no connections`() = runTest {
         createViewModel(this)
         viewModel.uiState.test {
-            val initialState = awaitItem()
-            assertFalse(initialState.isConnected)
-            assertFalse(initialState.isScanning)
-            assertTrue(initialState.discoveredServers.isEmpty())
-            assertTrue(initialState.controllers.isEmpty())
+            val s = awaitItem()
+            assertFalse(s.anyConnected)
+            assertFalse(s.isScanning)
+            assertTrue(s.discoveredServers.isEmpty())
+            // Virtual slot always present
+            assertEquals(1, s.slots.size)
+            assertEquals(VIRTUAL_SLOT_ID, s.slots[0].id)
         }
     }
 
@@ -87,7 +89,6 @@ class MainViewModelTest {
             awaitItem() // skip initial
             viewModel.onScanClicked()
 
-            // Collect until we see the final state with discovered servers
             var state = awaitItem()
             while (state.discoveredServers.isEmpty()) {
                 state = awaitItem()
@@ -98,18 +99,20 @@ class MainViewModelTest {
     }
 
     @Test
-    fun `onControllerConnected adds controller to state`() = runTest {
+    fun `onControllerConnected adds physical slot`() = runTest {
         createViewModel(this)
         viewModel.uiState.test {
-            awaitItem() // initial
+            awaitItem() // initial (1 virtual slot)
             viewModel.onControllerConnected(1, "Test Controller")
 
             var state = awaitItem()
-            while (state.controllers.isEmpty()) {
+            while (state.physicalSlots.isEmpty()) {
                 state = awaitItem()
             }
-            assertEquals(1, state.controllers.size)
-            assertEquals("Test Controller", state.controllers[0].name)
+            assertEquals(1, state.physicalSlots.size)
+            assertEquals("Test Controller", state.physicalSlots[0].name)
+            // Virtual slot still there
+            assertEquals(VIRTUAL_SLOT_ID, state.slots[0].id)
         }
     }
 }

@@ -4,12 +4,15 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.drawable.Drawable
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.tinkernorth.dish.R
 import kotlin.math.atan2
 import kotlin.math.hypot
@@ -98,6 +101,27 @@ class GamepadTouchView
         private val paintBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF1A1F25.toInt() }
         private val paintStickBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF1E293B.toInt() }
         private val paintPressed = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x403B82F6.toInt() }
+        private val paintStickRing = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            color = 0xFF475569.toInt()
+        }
+        private val paintStickDir = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            color = 0x80CBD5E1.toInt()
+            strokeCap = Paint.Cap.ROUND
+        }
+        private val paintStickThumb = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFCBD5E1.toInt() }
+        private val paintStickThumbActive = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF60A5FA.toInt() }
+        private val paintStickLabel = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFF0F172A.toInt()
+            textAlign = Paint.Align.CENTER
+            isFakeBoldText = true
+        }
+        private val paintPillBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF293548.toInt() }
+        private val paintPillPressed = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF3B82F6.toInt() }
+
+        // ── Safe-area insets (system bars + display cutouts) ─────────────────────
+        private val safeInsets = Rect()
 
         // ── Drawables ────────────────────────────────────────────────────────────
 
@@ -122,6 +146,21 @@ class GamepadTouchView
 
         init {
             loadDrawables()
+            ViewCompat.setOnApplyWindowInsetsListener(this) { v, wi ->
+                val ins = wi.getInsets(
+                    WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
+                )
+                if (ins.left != safeInsets.left || ins.top != safeInsets.top ||
+                    ins.right != safeInsets.right || ins.bottom != safeInsets.bottom
+                ) {
+                    safeInsets.set(ins.left, ins.top, ins.right, ins.bottom)
+                    if (v.width > 0 && v.height > 0) {
+                        onSizeChanged(v.width, v.height, v.width, v.height)
+                        invalidate()
+                    }
+                }
+                wi
+            }
         }
 
         @Suppress("CyclomaticComplexMethod")
@@ -215,6 +254,7 @@ class GamepadTouchView
         private var dpadPointerId = -1
         private var abxyPointerId = -1
 
+        @Suppress("LongMethod", "MagicNumber")
         override fun onSizeChanged(
             w: Int,
             h: Int,
@@ -223,58 +263,75 @@ class GamepadTouchView
         ) {
             super.onSizeChanged(w, h, oldW, oldH)
             dp = resources.displayMetrics.density
-            val pad = 24 * dp
-            val qw = w / 4f
 
-            // Xbox: stick top-left, d-pad bottom-left
-            // PlayStation: d-pad top-left, stick bottom-left
-            val topLeftCy = h * 0.32f
-            val bottomLeftCy = h * 0.75f
-            val dpadSize = min(qw - pad * 2, h * 0.4f)
-            val dpadCx = qw * 0.5f
-            val dpadCy = if (usePlayStation) topLeftCy else bottomLeftCy
+            // Safe-area envelope: system bars + display cutouts + small cushion so
+            // nothing abuts rounded corners / gesture zones.
+            val cushion = 6 * dp
+            val safeTop = safeInsets.top + cushion
+            val safeLeft = safeInsets.left + cushion
+            val safeRight = w - safeInsets.right - cushion
+            val safeBottom = h - safeInsets.bottom - cushion
+
+            // Shoulder band along the top, trigger columns along the sides. The
+            // inner content rect is what's left — all other controls are laid out
+            // relative to it so they never float over shoulders/triggers.
+            val sbH = 56 * dp
+            val sbCornerInset = (safeRight - safeLeft) * 0.04f
+            val tW = 52 * dp
+            val gap = 6 * dp
+
+            lbRect.set(safeLeft + sbCornerInset, safeTop, (safeLeft + safeRight) / 2f - 80 * dp, safeTop + sbH)
+            rbRect.set((safeLeft + safeRight) / 2f + 80 * dp, safeTop, safeRight - sbCornerInset, safeTop + sbH)
+
+            val contentTop = safeTop + sbH + gap
+            val contentBottom = safeBottom
+            ltRect.set(safeLeft, contentTop, safeLeft + tW, contentBottom)
+            rtRect.set(safeRight - tW, contentTop, safeRight, contentBottom)
+
+            val contentLeft = ltRect.right + gap
+            val contentRight = rtRect.left - gap
+            val contentW = contentRight - contentLeft
+            val contentH = contentBottom - contentTop
+            val qw = contentW / 4f
+
+            // Top row centre y / bottom row centre y inside the content rect.
+            val topRowCy = contentTop + contentH * 0.28f
+            val bottomRowCy = contentTop + contentH * 0.75f
+
+            val pad = 12 * dp
+            val dpadSize = min(qw * 2f - pad * 2, contentH * 0.42f)
+            val dpadCx = contentLeft + qw * 0.55f
+            // Xbox: stick top-left, d-pad bottom-left. PlayStation: swap.
+            val dpadCy = if (usePlayStation) topRowCy else bottomRowCy
             dpadRect.set(dpadCx - dpadSize / 2, dpadCy - dpadSize / 2, dpadCx + dpadSize / 2, dpadCy + dpadSize / 2)
 
-            stickRadius = min(qw * 0.28f, h * 0.18f)
+            stickRadius = min(qw * 0.42f, contentH * 0.2f)
             l3StickRadius = stickRadius * 0.7f
-            leftStickCx = qw * 0.4f
-            leftStickCy = if (usePlayStation) bottomLeftCy else topLeftCy
-
-            // L3 stick: to the right of L stick, same vertical
+            leftStickCx = contentLeft + qw * 0.5f
+            leftStickCy = if (usePlayStation) bottomRowCy else topRowCy
             l3StickCx = leftStickCx + stickRadius + l3StickRadius + 12 * dp
             l3StickCy = leftStickCy
 
-            // ABXY: top-right quadrant
-            val abxyCx = w - qw * 0.4f
-            val abxyCy = h * 0.32f
+            // ABXY mirrors the d-pad on the right; right stick mirrors the left stick.
+            val abxyCx = contentRight - qw * 0.55f
+            val abxyCy = topRowCy
             val abxySize = dpadSize
             abxyRect.set(abxyCx - abxySize / 2, abxyCy - abxySize / 2, abxyCx + abxySize / 2, abxyCy + abxySize / 2)
             btnRadius = abxySize * 0.18f
 
-            // Right stick: bottom-right
-            rightStickCx = w - qw * 0.4f
-            rightStickCy = h * 0.75f
-
-            // R3 stick: to the left of R stick, same vertical
+            rightStickCx = contentRight - qw * 0.5f
+            rightStickCy = bottomRowCy
             r3StickCx = rightStickCx - stickRadius - l3StickRadius - 12 * dp
             r3StickCy = rightStickCy
 
-            // Center buttons
-            centerBtnCy = h * 0.25f
-            selectCx = w / 2f - 40 * dp
-            startCx = w / 2f + 40 * dp
-            homeCx = w / 2f
+            // Centre cluster sits between the shoulder band and the top row so it
+            // never overlaps the d-pad / ABXY groups.
             smallBtnRadius = 14 * dp
-
-            // Shoulder buttons (LB/RB)
-            val sbH = 28 * dp
-            lbRect.set(qw * 0.15f, 0f, qw * 0.85f, sbH)
-            rbRect.set(w - qw * 0.85f, 0f, w - qw * 0.15f, sbH)
-
-            // Trigger strips (LT/RT)
-            val tW = 28 * dp
-            ltRect.set(0f, sbH, tW, h.toFloat())
-            rtRect.set(w - tW, sbH, w.toFloat(), h.toFloat())
+            centerBtnCy = contentTop + smallBtnRadius * 1.8f
+            val centerCx = (contentLeft + contentRight) / 2f
+            selectCx = centerCx - 40 * dp
+            startCx = centerCx + 40 * dp
+            homeCx = centerCx
         }
 
         // ── Drawing ──────────────────────────────────────────────────────────────
@@ -312,10 +369,10 @@ class GamepadTouchView
 
             drawDpad(canvas)
             drawAbxy(canvas)
-            drawStick(canvas, leftStickCx, leftStickCy, leftStickDx, leftStickDy, stickRadius, icStickL)
-            drawStick(canvas, rightStickCx, rightStickCy, rightStickDx, rightStickDy, stickRadius, icStickR)
-            drawStick(canvas, l3StickCx, l3StickCy, l3StickDx, l3StickDy, l3StickRadius, icStickL)
-            drawStick(canvas, r3StickCx, r3StickCy, r3StickDx, r3StickDy, l3StickRadius, icStickR)
+            drawStick(canvas, leftStickCx, leftStickCy, leftStickDx, leftStickDy, stickRadius, "L")
+            drawStick(canvas, rightStickCx, rightStickCy, rightStickDx, rightStickDy, stickRadius, "R")
+            drawStick(canvas, l3StickCx, l3StickCy, l3StickDx, l3StickDy, l3StickRadius, "L3")
+            drawStick(canvas, r3StickCx, r3StickCy, r3StickDx, r3StickDy, l3StickRadius, "R3")
             drawCenterButtons(canvas)
             drawShoulders(canvas)
             drawTriggers(canvas)
@@ -364,6 +421,7 @@ class GamepadTouchView
             }
         }
 
+        @Suppress("MagicNumber")
         private fun drawStick(
             c: Canvas,
             cx: Float,
@@ -371,13 +429,32 @@ class GamepadTouchView
             dx: Float,
             dy: Float,
             radius: Float,
-            icon: Drawable?,
+            label: String,
         ) {
+            // Top-down view: outer base ring, a direction line from center to the
+            // displaced thumb cap, then the thumb cap with its label. No side-view
+            // stem, so the stick no longer appears to always point down.
             c.drawCircle(cx, cy, radius, paintStickBg)
-            val thumbCx = cx + dx * radius
-            val thumbCy = cy + dy * radius
-            val thumbSize = radius * 1.1f
-            drawDrawable(c, icon, thumbCx, thumbCy, thumbSize)
+            paintStickRing.strokeWidth = 2f * dp
+            c.drawCircle(cx, cy, radius, paintStickRing)
+
+            val travel = radius * 0.55f
+            val thumbCx = cx + dx * travel
+            val thumbCy = cy + dy * travel
+            val thumbR = radius * 0.55f
+
+            if (dx != 0f || dy != 0f) {
+                paintStickDir.strokeWidth = thumbR * 0.35f
+                c.drawLine(cx, cy, thumbCx, thumbCy, paintStickDir)
+            }
+
+            val active = (dx != 0f || dy != 0f)
+            c.drawCircle(thumbCx, thumbCy, thumbR, if (active) paintStickThumbActive else paintStickThumb)
+            paintStickRing.strokeWidth = 1.5f * dp
+            c.drawCircle(thumbCx, thumbCy, thumbR, paintStickRing)
+
+            paintStickLabel.textSize = thumbR * (if (label.length > 1) 0.7f else 0.95f)
+            c.drawText(label, thumbCx, thumbCy + thumbR * 0.33f, paintStickLabel)
         }
 
         private fun drawCenterButtons(c: Canvas) {
@@ -387,16 +464,32 @@ class GamepadTouchView
             drawIcon(c, icHome, homeCx, centerBtnCy + smallBtnRadius * 2.5f, sz * 0.8f, state.buttons and BTN_HOME != 0)
         }
 
+        private fun drawPillButton(
+            c: Canvas,
+            rect: RectF,
+            d: Drawable?,
+            pressed: Boolean,
+        ) {
+            val r = min(rect.width(), rect.height()) * 0.35f
+            c.drawRoundRect(rect, r, r, if (pressed) paintPillPressed else paintPillBg)
+            if (d != null) {
+                val iconSize = (min(rect.width(), rect.height()) * 0.8f).toInt()
+                val half = iconSize / 2
+                val cx = rect.centerX().toInt()
+                val cy = rect.centerY().toInt()
+                d.setBounds(cx - half, cy - half, cx + half, cy + half)
+                d.draw(c)
+            }
+        }
+
         private fun drawShoulders(c: Canvas) {
-            val lbSz = lbRect.height() * 2f
-            drawIcon(c, icLB, lbRect.centerX(), lbRect.centerY(), lbSz, state.buttons and BTN_LB != 0)
-            drawIcon(c, icRB, rbRect.centerX(), rbRect.centerY(), lbSz, state.buttons and BTN_RB != 0)
+            drawPillButton(c, lbRect, icLB, state.buttons and BTN_LB != 0)
+            drawPillButton(c, rbRect, icRB, state.buttons and BTN_RB != 0)
         }
 
         private fun drawTriggers(c: Canvas) {
-            val ltSz = ltRect.width() * 2f
-            drawIcon(c, icLT, ltRect.centerX(), ltRect.centerY(), ltSz, state.leftTrigger > 0)
-            drawIcon(c, icRT, rtRect.centerX(), rtRect.centerY(), ltSz, state.rightTrigger > 0)
+            drawPillButton(c, ltRect, icLT, state.leftTrigger > 0)
+            drawPillButton(c, rtRect, icRT, state.rightTrigger > 0)
         }
 
         // ── Touch handling ───────────────────────────────────────────────────────

@@ -64,6 +64,10 @@ class BluetoothGamepadActivity :
 
         setupUI()
         observeViewModel()
+
+        // Attempt to auto-reconnect to the last known host if we have one on
+        // record and permissions are already granted. Silent no-op otherwise.
+        viewModel.tryAutoStart(hasBluetoothPermissions())
     }
 
     private fun setupUI() {
