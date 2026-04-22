@@ -11,7 +11,6 @@ import org.junit.Test
  *   [jsonGet], [hexToBytes], [parseServers]
  */
 class HelpersTest {
-
     // ── jsonGet ───────────────────────────────────────────────────────────
 
     @Test

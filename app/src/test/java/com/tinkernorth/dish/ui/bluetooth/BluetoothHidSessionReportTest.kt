@@ -14,7 +14,6 @@ import org.junit.Test
  * during reconnects.
  */
 class BluetoothHidSessionReportTest {
-
     private lateinit var fake: FakeHidProxyClient
     private lateinit var session: BluetoothHidSession
 
@@ -40,14 +39,17 @@ class BluetoothHidSessionReportTest {
     @Test
     fun `sendReport in Registered returns false`() {
         session.start(GamepadProfile.XBOX, null)
-        fake.fireAcquired(); fake.fireAppRegistered()
+        fake.fireAcquired()
+        fake.fireAppRegistered()
         assertFalse(session.sendReport(ByteArray(14)))
     }
 
     @Test
     fun `sendReport in Connected delegates to the proxy and returns its result`() {
         session.start(GamepadProfile.XBOX, null)
-        fake.fireAcquired(); fake.fireAppRegistered(); fake.fireHostConnected("AA", "X")
+        fake.fireAcquired()
+        fake.fireAppRegistered()
+        fake.fireHostConnected("AA", "X")
         fake.sendReportReturns = true
 
         val report = ByteArray(14).also { it[0] = 1 }
@@ -61,7 +63,9 @@ class BluetoothHidSessionReportTest {
     @Test
     fun `sendReport falls through when proxy returns false`() {
         session.start(GamepadProfile.XBOX, null)
-        fake.fireAcquired(); fake.fireAppRegistered(); fake.fireHostConnected("AA", "X")
+        fake.fireAcquired()
+        fake.fireAppRegistered()
+        fake.fireHostConnected("AA", "X")
         fake.sendReportReturns = false
 
         assertFalse(session.sendReport(ByteArray(14)))

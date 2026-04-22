@@ -14,7 +14,6 @@ package com.tinkernorth.dish.ui.bluetooth
  * expected whenever the user taps "reconnect" on a stale session.
  */
 interface HidProxyClient {
-
     interface Events {
         /** Profile proxy successfully bound; the session may now register the app. */
         fun onAcquired()
@@ -28,7 +27,11 @@ interface HidProxyClient {
         /** HID app registration was lost (framework teardown, OEM freeze, etc). */
         fun onAppUnregistered()
 
-        fun onHostConnected(mac: String, name: String?)
+        fun onHostConnected(
+            mac: String,
+            name: String?,
+        )
+
         fun onHostDisconnected(mac: String)
 
         /** Any unrecoverable error from the profile binding or registration. */

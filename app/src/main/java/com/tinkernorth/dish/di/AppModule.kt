@@ -19,18 +19,18 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
-
     @Provides
     @Singleton
     fun provideApplicationScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     @Provides
     @Singleton
-    fun provideJson(): Json = Json {
-        ignoreUnknownKeys = true
-        coerceInputValues = true
-        encodeDefaults = true
-    }
+    fun provideJson(): Json =
+        Json {
+            ignoreUnknownKeys = true
+            coerceInputValues = true
+            encodeDefaults = true
+        }
 
     /**
      * A fresh [HidProxyClient] per session start — each profile-proxy binding
@@ -43,30 +43,36 @@ object AppModule {
     @Singleton
     fun provideHidProxyFactory(
         @ApplicationContext context: Context,
-    ): @JvmSuppressWildcards () -> HidProxyClient = {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            AndroidHidProxyClient(context)
-        } else {
-            UnavailableHidProxyClient
+    ): @JvmSuppressWildcards () -> HidProxyClient =
+        {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                AndroidHidProxyClient(context)
+            } else {
+                UnavailableHidProxyClient
+            }
         }
-    }
 
     @Provides
     @Singleton
-    fun provideBluetoothHidSession(
-        factory: @JvmSuppressWildcards () -> HidProxyClient,
-    ): BluetoothHidSession = BluetoothHidSession(factory)
+    fun provideBluetoothHidSession(factory: @JvmSuppressWildcards () -> HidProxyClient): BluetoothHidSession = BluetoothHidSession(factory)
 }
 
 private object UnavailableHidProxyClient : HidProxyClient {
     override fun isAdapterEnabled(): Boolean = false
+
     override fun acquire(events: HidProxyClient.Events) {
         events.onError("Bluetooth HID Device requires Android 9+")
     }
+
     override fun registerApp(profile: com.tinkernorth.dish.ui.bluetooth.BluetoothGamepad.GamepadProfile) = Unit
+
     override fun connectToHost(mac: String) = Unit
+
     override fun disconnectCurrentHost() = Unit
+
     override fun findOsConnectedHost(mac: String): String? = null
+
     override fun sendReport(report: ByteArray): Boolean = false
+
     override fun unregisterAndRelease() = Unit
 }

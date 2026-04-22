@@ -33,12 +33,13 @@ class TelemetryTracker(
     var views: Views? = null
 
     private val handler = Handler(Looper.getMainLooper())
-    private val runnable = object : Runnable {
-        override fun run() {
-            update()
-            handler.postDelayed(this, INTERVAL_MS)
+    private val runnable =
+        object : Runnable {
+            override fun run() {
+                update()
+                handler.postDelayed(this, INTERVAL_MS)
+            }
         }
-    }
 
     fun start() {
         handler.post(runnable)

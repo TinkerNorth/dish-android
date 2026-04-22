@@ -16,7 +16,6 @@ import org.junit.Test
  * matching update on the host side as well.
  */
 class BluetoothGamepadReportTest {
-
     // ── Layout ────────────────────────────────────────────────────────────
 
     @Test

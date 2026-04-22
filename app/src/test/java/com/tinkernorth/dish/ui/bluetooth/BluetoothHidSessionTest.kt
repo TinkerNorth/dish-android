@@ -2,7 +2,6 @@ package com.tinkernorth.dish.ui.bluetooth
 
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepad.GamepadProfile
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -18,7 +17,6 @@ import org.junit.Test
  * original bug was caused by skipping `unregisterAndRelease` on re-start.
  */
 class BluetoothHidSessionTest {
-
     private lateinit var fake: FakeHidProxyClient
     private lateinit var session: BluetoothHidSession
 
@@ -98,7 +96,8 @@ class BluetoothHidSessionTest {
     @Test
     fun `onHostConnected from Registered transitions to Connected with mac and name`() {
         session.start(GamepadProfile.XBOX, null)
-        fake.fireAcquired(); fake.fireAppRegistered()
+        fake.fireAcquired()
+        fake.fireAppRegistered()
 
         fake.fireHostConnected("11:22", "Xbox One")
 
@@ -111,7 +110,9 @@ class BluetoothHidSessionTest {
     @Test
     fun `onHostDisconnected from Connected drops back to Registered and clears autoConnectMac`() {
         session.start(GamepadProfile.XBOX, autoConnectMac = "11:22")
-        fake.fireAcquired(); fake.fireAppRegistered(); fake.fireHostConnected("11:22", "Xbox One")
+        fake.fireAcquired()
+        fake.fireAppRegistered()
+        fake.fireHostConnected("11:22", "Xbox One")
 
         fake.fireHostDisconnected("11:22")
 
@@ -123,7 +124,9 @@ class BluetoothHidSessionTest {
     @Test
     fun `onHostDisconnected for a different mac while Connected is ignored`() {
         session.start(GamepadProfile.XBOX, null)
-        fake.fireAcquired(); fake.fireAppRegistered(); fake.fireHostConnected("11:22", "Xbox")
+        fake.fireAcquired()
+        fake.fireAppRegistered()
+        fake.fireHostConnected("11:22", "Xbox")
 
         fake.fireHostDisconnected("OTHER")
 

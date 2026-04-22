@@ -8,7 +8,6 @@ import org.junit.Test
  * Unit tests for model types: [ControllerEntry], [DiscoveredServer].
  */
 class ModelsTest {
-
     // ── ControllerEntry defaults ──────────────────────────────────────────
 
     @Test

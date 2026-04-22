@@ -22,7 +22,6 @@ import org.junit.Test
  * get caught by unit tests.
  */
 class BluetoothGamepadRegistryTest {
-
     private lateinit var fake: FakeHidProxyClient
     private lateinit var session: BluetoothHidSession
     private lateinit var store: ConnectionStore
@@ -32,13 +31,18 @@ class BluetoothGamepadRegistryTest {
     fun setUp() {
         fake = FakeHidProxyClient()
         session = BluetoothHidSession { fake }
-        store = mockk(relaxed = true) {
-            every { rememberedBt() } returns emptyList()
-        }
+        store =
+            mockk(relaxed = true) {
+                every { rememberedBt() } returns emptyList()
+            }
         registry = BluetoothGamepadRegistry(store, session)
     }
 
-    private fun driveToConnected(connId: String, mac: String, name: String?) {
+    private fun driveToConnected(
+        connId: String,
+        mac: String,
+        name: String?,
+    ) {
         registry.start(connId, GamepadProfile.XBOX)
         fake.fireAcquired()
         fake.fireAppRegistered()
@@ -83,7 +87,8 @@ class BluetoothGamepadRegistryTest {
     @Test
     fun `onAppRegistered flips the active slot to registered=true`() {
         registry.start("bt-pending-1", GamepadProfile.XBOX)
-        fake.fireAcquired(); fake.fireAppRegistered()
+        fake.fireAcquired()
+        fake.fireAppRegistered()
 
         assertTrue(registry.state("bt-pending-1").registered)
         assertFalse(registry.state("bt-pending-1").connected)
@@ -94,7 +99,8 @@ class BluetoothGamepadRegistryTest {
     @Test
     fun `Connected re-keys slot from temp id to bt-mac id and removes temp entry`() {
         registry.start("bt-pending-42", GamepadProfile.XBOX)
-        fake.fireAcquired(); fake.fireAppRegistered()
+        fake.fireAcquired()
+        fake.fireAppRegistered()
 
         fake.fireHostConnected("AA:BB:CC", "Xbox One")
 
@@ -110,7 +116,8 @@ class BluetoothGamepadRegistryTest {
     @Test
     fun `Connected persists the host under the stable id`() {
         registry.start("bt-pending-9", GamepadProfile.PLAYSTATION)
-        fake.fireAcquired(); fake.fireAppRegistered()
+        fake.fireAcquired()
+        fake.fireAppRegistered()
 
         val captured = slot<RememberedBt>()
         every { store.rememberBt(capture(captured)) } returns Unit
@@ -126,7 +133,8 @@ class BluetoothGamepadRegistryTest {
     @Test
     fun `Connected without a name falls back to the MAC address`() {
         registry.start("bt-pending-7", GamepadProfile.XBOX)
-        fake.fireAcquired(); fake.fireAppRegistered()
+        fake.fireAcquired()
+        fake.fireAppRegistered()
 
         val captured = slot<RememberedBt>()
         every { store.rememberBt(capture(captured)) } returns Unit
@@ -140,7 +148,8 @@ class BluetoothGamepadRegistryTest {
     @Test
     fun `Connected with a stable connId does not churn the states map`() {
         registry.start("bt:AA", GamepadProfile.XBOX, autoConnectMac = "AA")
-        fake.fireAcquired(); fake.fireAppRegistered()
+        fake.fireAcquired()
+        fake.fireAppRegistered()
 
         fake.fireHostConnected("AA", "Xbox")
 
@@ -230,7 +239,8 @@ class BluetoothGamepadRegistryTest {
     @Test
     fun `sendReport is dropped when the slot is not connected`() {
         registry.start("bt-pending-1", GamepadProfile.XBOX)
-        fake.fireAcquired(); fake.fireAppRegistered()
+        fake.fireAcquired()
+        fake.fireAppRegistered()
 
         registry.sendReport("bt-pending-1", ByteArray(14))
 
@@ -279,9 +289,10 @@ class BluetoothGamepadRegistryTest {
 
     @Test
     fun `tryAutoReconnect starts the session with the remembered profile and mac`() {
-        every { store.rememberedBt() } returns listOf(
-            RememberedBt(id = "bt:AA", name = "Xbox", mac = "AA", profileName = "XBOX"),
-        )
+        every { store.rememberedBt() } returns
+            listOf(
+                RememberedBt(id = "bt:AA", name = "Xbox", mac = "AA", profileName = "XBOX"),
+            )
 
         val profile = registry.tryAutoReconnect("bt:AA")
 
@@ -292,11 +303,13 @@ class BluetoothGamepadRegistryTest {
 
     @Test
     fun `tryAutoReconnect is a no-op when the slot is already registered`() {
-        every { store.rememberedBt() } returns listOf(
-            RememberedBt(id = "bt:AA", name = "Xbox", mac = "AA", profileName = "XBOX"),
-        )
+        every { store.rememberedBt() } returns
+            listOf(
+                RememberedBt(id = "bt:AA", name = "Xbox", mac = "AA", profileName = "XBOX"),
+            )
         registry.start("bt:AA", GamepadProfile.XBOX, autoConnectMac = "AA")
-        fake.fireAcquired(); fake.fireAppRegistered()
+        fake.fireAcquired()
+        fake.fireAppRegistered()
         val before = fake.calls.size
 
         registry.tryAutoReconnect("bt:AA")
@@ -306,9 +319,10 @@ class BluetoothGamepadRegistryTest {
 
     @Test
     fun `tryAutoReconnect drops entries whose profileName no longer maps`() {
-        every { store.rememberedBt() } returns listOf(
-            RememberedBt(id = "bt:AA", name = "Xbox", mac = "AA", profileName = "UNKNOWN"),
-        )
+        every { store.rememberedBt() } returns
+            listOf(
+                RememberedBt(id = "bt:AA", name = "Xbox", mac = "AA", profileName = "UNKNOWN"),
+            )
 
         assertNull(registry.tryAutoReconnect("bt:AA"))
     }
@@ -318,7 +332,9 @@ class BluetoothGamepadRegistryTest {
     @Test
     fun `states StateFlow reflects the latest registry snapshot`() {
         registry.start("bt-pending-1", GamepadProfile.XBOX)
-        fake.fireAcquired(); fake.fireAppRegistered(); fake.fireHostConnected("AA", "Xbox")
+        fake.fireAcquired()
+        fake.fireAppRegistered()
+        fake.fireHostConnected("AA", "Xbox")
 
         val snapshot = registry.states.value
         assertEquals(1, snapshot.size)

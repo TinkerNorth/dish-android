@@ -29,9 +29,10 @@ data class ControllerSlot(
 // ── Top-level UI state ───────────────────────────────────────────────────
 
 data class MainUiState(
-    val slots: List<ControllerSlot> = listOf(
-        ControllerSlot(id = VIRTUAL_SLOT_ID, inputType = SlotInputType.VIRTUAL, name = "Virtual Controller")
-    ),
+    val slots: List<ControllerSlot> =
+        listOf(
+            ControllerSlot(id = VIRTUAL_SLOT_ID, inputType = SlotInputType.VIRTUAL, name = "Virtual Controller"),
+        ),
     val connections: List<ConnectionSummary> = emptyList(),
 ) {
     val virtualSlot get() = slots.first { it.id == VIRTUAL_SLOT_ID }
@@ -44,6 +45,11 @@ const val VIRTUAL_SLOT_ID = "virtual"
 // ── Events ───────────────────────────────────────────────────────────────
 
 sealed class MainEvent {
-    data class ShowToast(val message: String) : MainEvent()
-    data class ShowPairingDialog(val connectionId: String) : MainEvent()
+    data class ShowToast(
+        val message: String,
+    ) : MainEvent()
+
+    data class ShowPairingDialog(
+        val connectionId: String,
+    ) : MainEvent()
 }

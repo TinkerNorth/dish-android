@@ -29,8 +29,10 @@ class WakeLockManager(
     /** Called whenever the combined lock state changes (both active or not). */
     var onLockStateChanged: ((active: Boolean) -> Unit)? = null
 
-    var screenLockActive = false; private set
-    var wakeLockActive = false; private set
+    var screenLockActive = false
+        private set
+    var wakeLockActive = false
+        private set
     private var wakeLock: PowerManager.WakeLock? = null
 
     val isActive get() = screenLockActive && wakeLockActive
@@ -65,10 +67,12 @@ class WakeLockManager(
         }
         if (wakeLock == null) {
             val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-            wakeLock = pm.newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK,
-                "Dish::ControllerStream",
-            ).apply { acquire() }
+            wakeLock =
+                pm
+                    .newWakeLock(
+                        PowerManager.PARTIAL_WAKE_LOCK,
+                        "Dish::ControllerStream",
+                    ).apply { acquire() }
             wakeLockActive = true
         }
         updateIndicators()

@@ -3,9 +3,7 @@ package com.tinkernorth.dish.ui.bluetooth
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepad.GamepadProfile
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotSame
-import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -29,7 +27,6 @@ import org.junit.Test
  *     current session's state.
  */
 class BluetoothHidSessionRecoveryTest {
-
     private lateinit var fakes: ArrayDeque<FakeHidProxyClient>
     private lateinit var session: BluetoothHidSession
 
@@ -46,7 +43,9 @@ class BluetoothHidSessionRecoveryTest {
     fun `start() while Connected releases the old proxy and acquires a brand-new one`() {
         val first = fakes.first()
         session.start(GamepadProfile.XBOX, null)
-        first.fireAcquired(); first.fireAppRegistered(); first.fireHostConnected("AA", "Xbox")
+        first.fireAcquired()
+        first.fireAppRegistered()
+        first.fireHostConnected("AA", "Xbox")
         assertTrue(session.state.value is SessionState.Connected)
 
         val second = fakes.first()
@@ -66,7 +65,9 @@ class BluetoothHidSessionRecoveryTest {
     fun `stop() from Connected releases the proxy and returns to Idle`() {
         val first = fakes.first()
         session.start(GamepadProfile.XBOX, null)
-        first.fireAcquired(); first.fireAppRegistered(); first.fireHostConnected("AA", "X")
+        first.fireAcquired()
+        first.fireAppRegistered()
+        first.fireHostConnected("AA", "X")
 
         session.stop()
 
@@ -86,7 +87,8 @@ class BluetoothHidSessionRecoveryTest {
     fun `onReleased while non-Idle returns to Idle and does not re-acquire on its own`() {
         val first = fakes.first()
         session.start(GamepadProfile.XBOX, "AA")
-        first.fireAcquired(); first.fireAppRegistered()
+        first.fireAcquired()
+        first.fireAppRegistered()
         // Framework yanks the proxy (backgrounding, BT toggle, OEM freeze).
         first.fireReleased()
 
@@ -98,7 +100,8 @@ class BluetoothHidSessionRecoveryTest {
     fun `after onReleased, a subsequent start acquires a FRESH proxy (regression test)`() {
         val first = fakes.first()
         session.start(GamepadProfile.XBOX, "AA")
-        first.fireAcquired(); first.fireAppRegistered()
+        first.fireAcquired()
+        first.fireAppRegistered()
         first.fireReleased()
 
         // This is exactly the "user taps Reconnect after returning from bg".
@@ -110,7 +113,9 @@ class BluetoothHidSessionRecoveryTest {
         assertEquals(1, secondAcquire.size)
 
         // Drive the new proxy through to Connected to prove the bug is gone.
-        second.fireAcquired(); second.fireAppRegistered(); second.fireHostConnected("AA", "Xbox")
+        second.fireAcquired()
+        second.fireAppRegistered()
+        second.fireHostConnected("AA", "Xbox")
         assertTrue(session.state.value is SessionState.Connected)
     }
 
@@ -118,11 +123,13 @@ class BluetoothHidSessionRecoveryTest {
     fun `events from a stale (released) proxy are ignored after restart`() {
         val first = fakes.first()
         session.start(GamepadProfile.XBOX, null)
-        first.fireAcquired(); first.fireAppRegistered()
+        first.fireAcquired()
+        first.fireAppRegistered()
 
         val second = fakes.first()
         session.start(GamepadProfile.PLAYSTATION, null)
-        second.fireAcquired(); second.fireAppRegistered()
+        second.fireAcquired()
+        second.fireAppRegistered()
 
         // A late callback from the first (already released) proxy arrives.
         first.fireHostConnected("GHOST:MAC", "zombie")
@@ -136,7 +143,9 @@ class BluetoothHidSessionRecoveryTest {
     fun `onAppUnregistered while Connected returns to Idle and releases the proxy`() {
         val first = fakes.first()
         session.start(GamepadProfile.XBOX, null)
-        first.fireAcquired(); first.fireAppRegistered(); first.fireHostConnected("AA", "X")
+        first.fireAcquired()
+        first.fireAppRegistered()
+        first.fireHostConnected("AA", "X")
 
         first.fireAppUnregistered()
 

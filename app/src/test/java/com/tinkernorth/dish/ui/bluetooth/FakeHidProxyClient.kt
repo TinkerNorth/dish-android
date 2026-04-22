@@ -12,14 +12,26 @@ internal class FakeHidProxyClient(
     var osConnectedHosts: MutableMap<String, String?> = mutableMapOf(),
     var sendReportReturns: Boolean = true,
 ) : HidProxyClient {
-
     sealed interface Call {
-        data class Acquire(val events: HidProxyClient.Events) : Call
-        data class RegisterApp(val profile: BluetoothGamepad.GamepadProfile) : Call
-        data class ConnectToHost(val mac: String) : Call
+        data class Acquire(
+            val events: HidProxyClient.Events,
+        ) : Call
+
+        data class RegisterApp(
+            val profile: BluetoothGamepad.GamepadProfile,
+        ) : Call
+
+        data class ConnectToHost(
+            val mac: String,
+        ) : Call
+
         data object DisconnectCurrentHost : Call
+
         data object UnregisterAndRelease : Call
-        data class SendReport(val report: ByteArray) : Call
+
+        data class SendReport(
+            val report: ByteArray,
+        ) : Call
     }
 
     val calls: MutableList<Call> = mutableListOf()
@@ -44,8 +56,7 @@ internal class FakeHidProxyClient(
         calls += Call.DisconnectCurrentHost
     }
 
-    override fun findOsConnectedHost(mac: String): String? =
-        if (osConnectedHosts.containsKey(mac)) osConnectedHosts[mac] else null
+    override fun findOsConnectedHost(mac: String): String? = if (osConnectedHosts.containsKey(mac)) osConnectedHosts[mac] else null
 
     override fun sendReport(report: ByteArray): Boolean {
         calls += Call.SendReport(report)
@@ -60,11 +71,20 @@ internal class FakeHidProxyClient(
     // ── Event injection ─────────────────────────────────────────────────
 
     fun fireAcquired() = events?.onAcquired() ?: Unit
+
     fun fireReleased() = events?.onReleased() ?: Unit
+
     fun fireAppRegistered() = events?.onAppRegistered() ?: Unit
+
     fun fireAppUnregistered() = events?.onAppUnregistered() ?: Unit
-    fun fireHostConnected(mac: String, name: String? = null) = events?.onHostConnected(mac, name) ?: Unit
+
+    fun fireHostConnected(
+        mac: String,
+        name: String? = null,
+    ) = events?.onHostConnected(mac, name) ?: Unit
+
     fun fireHostDisconnected(mac: String) = events?.onHostDisconnected(mac) ?: Unit
+
     fun fireError(message: String) = events?.onError(message) ?: Unit
 
     fun hasLiveEvents(): Boolean = events != null

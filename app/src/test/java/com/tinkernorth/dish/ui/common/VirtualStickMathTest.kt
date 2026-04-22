@@ -23,7 +23,6 @@ import kotlin.math.hypot
  *     them or leaks onto the opposite axis.
  */
 class VirtualStickMathTest {
-
     private val max = Short.MAX_VALUE.toInt() // 32767
     private val eps = 2 // allow 1-bit float/rounding slop in the int16 result
 
@@ -140,7 +139,11 @@ class VirtualStickMathTest {
 
     // ── Helpers ───────────────────────────────────────────────────────────
 
-    private fun assertNear(expected: Int, actual: Int, tolerance: Int = eps) {
+    private fun assertNear(
+        expected: Int,
+        actual: Int,
+        tolerance: Int = eps,
+    ) {
         assertTrue(
             "expected $expected ± $tolerance, got $actual",
             abs(expected - actual) <= tolerance,

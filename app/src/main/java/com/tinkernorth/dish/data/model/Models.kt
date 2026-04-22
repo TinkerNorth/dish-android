@@ -15,14 +15,14 @@ data class DiscoveredServer(
 data class PairResponse(
     val ok: Boolean = false,
     val error: String? = null,
-    val sharedKey: String? = null
+    val sharedKey: String? = null,
 )
 
 @Serializable
 data class ConnectResponse(
     val connectionId: String? = null,
     val token: String? = null,
-    val error: String? = null
+    val error: String? = null,
 )
 
 /** Per-controller state tracked by the dashboard. */

@@ -37,7 +37,8 @@ class LowPowerManager(
 
     enum class State { IDLE, COUNTDOWN, ACTIVE }
 
-    var state = State.IDLE; private set
+    var state = State.IDLE
+        private set
 
     private var savedBrightness = -1f
     private val inactivityHandler = Handler(Looper.getMainLooper())
@@ -62,9 +63,11 @@ class LowPowerManager(
         when (state) {
             State.ACTIVE -> exit()
             State.COUNTDOWN -> {
-                countdownTimer?.cancel(); countdownTimer = null
+                countdownTimer?.cancel()
+                countdownTimer = null
                 views?.llCountdownBanner?.visibility = View.GONE
-                state = State.IDLE; resetInactivityTimer()
+                state = State.IDLE
+                resetInactivityTimer()
             }
             State.IDLE -> resetInactivityTimer()
         }
@@ -91,12 +94,16 @@ class LowPowerManager(
         v.llCountdownBanner.visibility = View.VISIBLE
         v.tvCountdownSeconds.text = COUNTDOWN_SECONDS.toString()
         countdownTimer?.cancel()
-        countdownTimer = object : CountDownTimer(COUNTDOWN_SECONDS * 1000L, 1000L) {
-            override fun onTick(millisUntilFinished: Long) {
-                v.tvCountdownSeconds.text = ((millisUntilFinished / 1000) + 1).toString()
-            }
-            override fun onFinish() { enter() }
-        }.start()
+        countdownTimer =
+            object : CountDownTimer(COUNTDOWN_SECONDS * 1000L, 1000L) {
+                override fun onTick(millisUntilFinished: Long) {
+                    v.tvCountdownSeconds.text = ((millisUntilFinished / 1000) + 1).toString()
+                }
+
+                override fun onFinish() {
+                    enter()
+                }
+            }.start()
     }
 
     private fun enter() {
@@ -108,42 +115,60 @@ class LowPowerManager(
         lp.screenBrightness = MIN_BRIGHTNESS
         window.attributes = lp
         v.flLowPowerOverlay.visibility = View.VISIBLE
-        updateStatus(); startClock()
+        updateStatus()
+        startClock()
     }
 
     private fun exit() {
         if (state == State.IDLE) return
         state = State.IDLE
-        countdownTimer?.cancel(); countdownTimer = null
+        countdownTimer?.cancel()
+        countdownTimer = null
         val v = views
         v?.llCountdownBanner?.visibility = View.GONE
         v?.flLowPowerOverlay?.visibility = View.GONE
         stopClock()
         val lp = window.attributes
         lp.screenBrightness = if (savedBrightness >= 0) savedBrightness else -1f
-        window.attributes = lp; savedBrightness = -1f
+        window.attributes = lp
+        savedBrightness = -1f
     }
 
     private fun updateStatus() {
         val v = views ?: return
         val active = activeControllerCount()
-        v.tvLowPowerStatus.text = if (active > 0)
-            "Streaming · $active controller${if (active > 1) "s" else ""}" else "Connected"
+        v.tvLowPowerStatus.text =
+            if (active > 0) {
+                "Streaming · $active controller${if (active > 1) "s" else ""}"
+            } else {
+                "Connected"
+            }
     }
 
-    private val clockRunnable = object : Runnable {
-        override fun run() {
-            if (state != State.ACTIVE) return
-            val now = Calendar.getInstance()
-            views?.tvLowPowerTime?.text = String.format(
-                Locale.ROOT, "%02d:%02d",
-                now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE),
-            )
-            updateStatus(); clockHandler.postDelayed(this, 15_000L)
+    private val clockRunnable =
+        object : Runnable {
+            override fun run() {
+                if (state != State.ACTIVE) return
+                val now = Calendar.getInstance()
+                views?.tvLowPowerTime?.text =
+                    String.format(
+                        Locale.ROOT,
+                        "%02d:%02d",
+                        now.get(Calendar.HOUR_OF_DAY),
+                        now.get(Calendar.MINUTE),
+                    )
+                updateStatus()
+                clockHandler.postDelayed(this, 15_000L)
+            }
         }
+
+    private fun startClock() {
+        clockRunnable.run()
     }
-    private fun startClock() { clockRunnable.run() }
-    private fun stopClock() { clockHandler.removeCallbacks(clockRunnable) }
+
+    private fun stopClock() {
+        clockHandler.removeCallbacks(clockRunnable)
+    }
 
     companion object {
         private const val INACTIVITY_DELAY_MS = 15_000L
