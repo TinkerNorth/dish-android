@@ -17,6 +17,7 @@ import com.tinkernorth.dish.data.network.ConnectionLive
 import com.tinkernorth.dish.data.network.WifiConnectionManager
 import com.tinkernorth.dish.databinding.ActivityGamepadOverlayBinding
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
+import com.tinkernorth.dish.ui.bluetooth.hidToXusb
 import com.tinkernorth.dish.ui.common.GamepadTouchView
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -32,10 +33,13 @@ import javax.inject.Inject
  * session is reused on re-entry.
  */
 @AndroidEntryPoint
-class GamepadOverlayActivity : AppCompatActivity(), GamepadTouchView.Listener {
-
+class GamepadOverlayActivity :
+    AppCompatActivity(),
+    GamepadTouchView.Listener {
     @Inject lateinit var btRegistry: BluetoothGamepadRegistry
+
     @Inject lateinit var wifi: WifiConnectionManager
+
     @Inject lateinit var hub: ConnectionHub
 
     private lateinit var binding: ActivityGamepadOverlayBinding
@@ -50,10 +54,11 @@ class GamepadOverlayActivity : AppCompatActivity(), GamepadTouchView.Listener {
         connectionId = intent.getStringExtra(EXTRA_CONNECTION_ID).orEmpty()
         binding.gamepadTouchView.listener = this
         binding.gamepadTouchView.usePlayStation = intent.getBooleanExtra(EXTRA_USE_PS_LAYOUT, false)
-        binding.dotOverlay.background = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            setColor(getColor(R.color.colorMuted))
-        }
+        binding.dotOverlay.background =
+            GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(getColor(R.color.colorMuted))
+            }
         binding.btnExitGamepad.setOnClickListener { finish() }
 
         lifecycleScope.launch {
@@ -66,12 +71,13 @@ class GamepadOverlayActivity : AppCompatActivity(), GamepadTouchView.Listener {
     private fun refreshStatus() {
         val summary = hub.summary(connectionId)
         val connected = summary?.live == ConnectionLive.CONNECTED
-        binding.tvOverlayStatus.text = when {
-            connected -> summary?.label ?: "Streaming"
-            summary?.live == ConnectionLive.CONNECTING -> "Connecting…"
-            summary == null -> "Unknown connection"
-            else -> "Not connected"
-        }
+        binding.tvOverlayStatus.text =
+            when {
+                connected -> summary?.label ?: "Streaming"
+                summary?.live == ConnectionLive.CONNECTING -> "Connecting…"
+                summary == null -> "Unknown connection"
+                else -> "Not connected"
+            }
         (binding.dotOverlay.background as? GradientDrawable)?.setColor(
             getColor(if (connected) R.color.colorSuccess else R.color.colorMuted),
         )
@@ -82,19 +88,33 @@ class GamepadOverlayActivity : AppCompatActivity(), GamepadTouchView.Listener {
         if (summary.live != ConnectionLive.CONNECTED) return
         when (summary.kind) {
             ConnectionKind.BLUETOOTH -> {
-                val report = btRegistry.buildReport(
-                    connectionId,
-                    state.buttons, state.hatSwitch,
-                    state.leftX, state.leftY, state.rightX, state.rightY,
-                    state.leftTrigger, state.rightTrigger,
-                ) ?: return
+                val report =
+                    btRegistry.buildReport(
+                        connectionId,
+                        state.buttons,
+                        state.hatSwitch,
+                        state.leftX,
+                        state.leftY,
+                        state.rightX,
+                        state.rightY,
+                        state.leftTrigger,
+                        state.rightTrigger,
+                    ) ?: return
                 btRegistry.sendReport(connectionId, report)
             }
             ConnectionKind.WIFI -> {
+                // The touch view emits HID-layout button bits plus a
+                // separate hat-switch; the Wi-Fi path wants an XUSB
+                // wButtons with the d-pad folded back into the low nibble.
+                val wButtons = hidToXusb(state.buttons, state.hatSwitch)
                 wifi.get(connectionId)?.sendReport(
-                    state.buttons, state.leftTrigger, state.rightTrigger,
-                    state.leftX.toInt(), state.leftY.toInt(),
-                    state.rightX.toInt(), state.rightY.toInt(),
+                    wButtons,
+                    state.leftTrigger,
+                    state.rightTrigger,
+                    state.leftX.toInt(),
+                    state.leftY.toInt(),
+                    state.rightX.toInt(),
+                    state.rightY.toInt(),
                 )
             }
         }
@@ -112,7 +132,7 @@ class GamepadOverlayActivity : AppCompatActivity(), GamepadTouchView.Listener {
                 View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
                     or View.SYSTEM_UI_FLAG_FULLSCREEN
                     or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                )
+            )
         }
     }
 
