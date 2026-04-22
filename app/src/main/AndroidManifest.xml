@@ -33,8 +33,7 @@
         <activity
             android:name=".ui.main.MainActivity"
             android:exported="true"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|navigation"
-            android:label="@string/app_name">
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|navigation">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

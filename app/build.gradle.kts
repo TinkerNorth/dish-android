@@ -63,6 +63,12 @@ android {
             version = "3.22.1"
         }
     }
+    lint {
+        // NonNullableMutableLiveDataDetector crashes under the K2 analysis API
+        // (IncompatibleClassChangeError) with the current AGP/Kotlin pairing.
+        // The detector's own crash message suggests disabling it as the workaround.
+        disable += "NullSafeMutableLiveData"
+    }
 }
 
 kotlin {
