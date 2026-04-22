@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:id="@+id/cardRoot"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginBottom="10dp"
@@ -14,32 +13,29 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:padding="14dp">
 
-        <!-- ── Header row: icon + name + status dot ── -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:padding="14dp"
             android:gravity="center_vertical">
 
-            <ImageView
-                android:id="@+id/ivControllerType"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:src="@drawable/ctrl_xbox"
-                app:tint="@color/colorPrimary" />
+            <View
+                android:id="@+id/dotRow"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:layout_marginEnd="10dp" />
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginStart="14dp"
                 android:orientation="vertical">
 
                 <TextView
-                    android:id="@+id/tvControllerName"
+                    android:id="@+id/tvRowTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="@color/colorOnSurface"
@@ -47,63 +43,46 @@
                     android:textStyle="bold" />
 
                 <TextView
-                    android:id="@+id/tvSlotStatus"
+                    android:id="@+id/tvRowDetail"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="@color/colorMuted"
-                    android:textSize="12sp" />
+                    android:textSize="12sp"
+                    android:fontFamily="monospace" />
             </LinearLayout>
 
-            <View
-                android:id="@+id/dotStatus"
-                android:layout_width="8dp"
-                android:layout_height="8dp" />
-        </LinearLayout>
-
-        <!-- ── Expandable body: bind-to-connection picker + actions ── -->
-        <LinearLayout
-            android:id="@+id/llBody"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingHorizontal="14dp"
-            android:paddingBottom="14dp"
-            android:visibility="gone">
-
             <TextView
-                android:layout_width="match_parent"
+                android:id="@+id/tvRowStatus"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Output to"
                 android:textColor="@color/colorMuted"
                 android:textSize="11sp"
-                android:fontFamily="monospace"
-                android:letterSpacing="0.12"
-                android:paddingBottom="6dp" />
+                android:fontFamily="monospace" />
+        </LinearLayout>
 
-            <LinearLayout
-                android:id="@+id/llConnectionList"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnUnbind"
-                style="@style/Widget.Dish.Button.Outlined"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="Unbind"
-                android:textAllCaps="false"
-                android:visibility="gone" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="10dp">
 
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnOpenGamepad"
-                style="@style/Widget.Dish.Button.Outlined"
-                android:layout_width="match_parent"
+                android:id="@+id/btnRowAction"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="Open Gamepad"
+                android:layout_weight="1"
                 android:textAllCaps="false"
+                android:text="Connect" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnRowSecondary"
+                style="@style/Widget.Dish.Button.Outlined"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:textAllCaps="false"
+                android:text="Forget"
                 android:visibility="gone" />
         </LinearLayout>
     </LinearLayout>

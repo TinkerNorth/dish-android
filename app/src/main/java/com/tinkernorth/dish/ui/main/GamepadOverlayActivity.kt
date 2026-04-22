@@ -11,7 +11,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.data.network.ServerConnectionManager
+import com.tinkernorth.dish.data.network.ConnectionHub
+import com.tinkernorth.dish.data.network.ConnectionKind
+import com.tinkernorth.dish.data.network.ConnectionLive
+import com.tinkernorth.dish.data.network.WifiConnectionManager
 import com.tinkernorth.dish.databinding.ActivityGamepadOverlayBinding
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.ui.common.GamepadTouchView
@@ -20,23 +23,23 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * Full-screen landscape activity that hosts the on-screen touch gamepad.
+ * Full-screen landscape activity hosting the on-screen touch gamepad.
  *
- * State (dest type, PS-vs-Xbox layout) is passed via Intent extras so this
- * activity doesn't depend on an activity-scoped [MainViewModel]. Reports are
- * forwarded through the singleton [BluetoothGamepadRegistry] (BT destination)
- * or [ServerConnectionManager] (WiFi destination), both of which survive the
- * MainActivity pause.
+ * Bound to a single connection id passed via [EXTRA_CONNECTION_ID]; reports
+ * are routed to that connection through either the [BluetoothGamepadRegistry]
+ * or the matching [com.tinkernorth.dish.data.network.WifiConnection] in the
+ * [WifiConnectionManager]. Both owners outlive the host activity so the same
+ * session is reused on re-entry.
  */
 @AndroidEntryPoint
 class GamepadOverlayActivity : AppCompatActivity(), GamepadTouchView.Listener {
 
     @Inject lateinit var btRegistry: BluetoothGamepadRegistry
-    @Inject lateinit var serverManager: ServerConnectionManager
+    @Inject lateinit var wifi: WifiConnectionManager
+    @Inject lateinit var hub: ConnectionHub
 
     private lateinit var binding: ActivityGamepadOverlayBinding
-
-    private var destType: SlotDestType = SlotDestType.NONE
+    private var connectionId: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,10 +47,7 @@ class GamepadOverlayActivity : AppCompatActivity(), GamepadTouchView.Listener {
         setContentView(binding.root)
         hideSystemBars()
 
-        destType = intent.getStringExtra(EXTRA_DEST_TYPE)
-            ?.let { runCatching { SlotDestType.valueOf(it) }.getOrNull() }
-            ?: SlotDestType.NONE
-
+        connectionId = intent.getStringExtra(EXTRA_CONNECTION_ID).orEmpty()
         binding.gamepadTouchView.listener = this
         binding.gamepadTouchView.usePlayStation = intent.getBooleanExtra(EXTRA_USE_PS_LAYOUT, false)
         binding.dotOverlay.background = GradientDrawable().apply {
@@ -56,63 +56,47 @@ class GamepadOverlayActivity : AppCompatActivity(), GamepadTouchView.Listener {
         }
         binding.btnExitGamepad.setOnClickListener { finish() }
 
-        observeConnectionState()
-    }
-
-    private fun observeConnectionState() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                btRegistry.states.collect { refreshStatus() }
-            }
-        }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                serverManager.isConnected.collect { refreshStatus() }
+                hub.connections.collect { refreshStatus() }
             }
         }
     }
 
     private fun refreshStatus() {
-        val bt = btRegistry.state(VIRTUAL_SLOT_ID)
-        val connected = when (destType) {
-            SlotDestType.BLUETOOTH -> bt.connected
-            SlotDestType.WIFI -> serverManager.isConnected.value
-            SlotDestType.NONE -> false
-        }
-        val label = when {
-            connected && destType == SlotDestType.BLUETOOTH -> bt.connectedName ?: "Streaming"
-            connected && destType == SlotDestType.WIFI -> serverManager.connectedServer.value?.name ?: "Streaming"
-            destType == SlotDestType.NONE -> "No destination selected"
+        val summary = hub.summary(connectionId)
+        val connected = summary?.live == ConnectionLive.CONNECTED
+        binding.tvOverlayStatus.text = when {
+            connected -> summary?.label ?: "Streaming"
+            summary?.live == ConnectionLive.CONNECTING -> "Connecting…"
+            summary == null -> "Unknown connection"
             else -> "Not connected"
         }
-        binding.tvOverlayStatus.text = label
         (binding.dotOverlay.background as? GradientDrawable)?.setColor(
             getColor(if (connected) R.color.colorSuccess else R.color.colorMuted),
         )
     }
 
     override fun onGamepadStateChanged(state: GamepadTouchView.GamepadState) {
-        when (destType) {
-            SlotDestType.BLUETOOTH -> {
-                if (!btRegistry.isConnected(VIRTUAL_SLOT_ID)) return
+        val summary = hub.summary(connectionId) ?: return
+        if (summary.live != ConnectionLive.CONNECTED) return
+        when (summary.kind) {
+            ConnectionKind.BLUETOOTH -> {
                 val report = btRegistry.buildReport(
-                    VIRTUAL_SLOT_ID,
+                    connectionId,
                     state.buttons, state.hatSwitch,
                     state.leftX, state.leftY, state.rightX, state.rightY,
                     state.leftTrigger, state.rightTrigger,
                 ) ?: return
-                btRegistry.sendReport(VIRTUAL_SLOT_ID, report)
+                btRegistry.sendReport(connectionId, report)
             }
-            SlotDestType.WIFI -> {
-                if (!serverManager.isConnected.value) return
-                serverManager.controllerRepo.sendReport(
-                    0, state.buttons,
-                    state.leftTrigger, state.rightTrigger,
+            ConnectionKind.WIFI -> {
+                wifi.get(connectionId)?.sendReport(
+                    state.buttons, state.leftTrigger, state.rightTrigger,
                     state.leftX.toInt(), state.leftY.toInt(),
                     state.rightX.toInt(), state.rightY.toInt(),
                 )
             }
-            SlotDestType.NONE -> {}
         }
     }
 
@@ -133,7 +117,7 @@ class GamepadOverlayActivity : AppCompatActivity(), GamepadTouchView.Listener {
     }
 
     companion object {
-        const val EXTRA_DEST_TYPE = "extra_dest_type"
+        const val EXTRA_CONNECTION_ID = "extra_connection_id"
         const val EXTRA_USE_PS_LAYOUT = "extra_use_ps_layout"
     }
 }

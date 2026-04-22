@@ -5,73 +5,65 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Repository handling controller management and report streaming via SatelliteNative.
+ * Thin wrapper around [SatelliteNative] that forwards every call with the
+ * session [handle] returned from [openSocket]. Multiple sessions run in
+ * parallel; state is kept inside the native library keyed by handle.
  */
 @Singleton
 class ControllerRepository @Inject constructor() {
 
-    fun openSocket(ip: String, port: Int): Boolean {
-        // Simple call, but could be guarded if we're worried about concurrent socket management
+    /** Returns a session handle >= 1 on success, or -1 on failure. */
+    fun openSocket(ip: String, port: Int): Int {
         return SatelliteNative.openSocket(ip, port)
     }
 
-    fun closeSocket() {
-        SatelliteNative.closeSocket()
+    fun closeSocket(handle: Int) {
+        SatelliteNative.closeSocket(handle)
     }
 
-    fun setConnectionParams(token: ByteArray, key: ByteArray) {
-        SatelliteNative.setConnectionParams(token, key)
+    fun setConnectionParams(handle: Int, token: ByteArray, key: ByteArray) {
+        SatelliteNative.setConnectionParams(handle, token, key)
     }
 
     fun sendReport(
-        index: Int, buttons: Int, lt: Int, rt: Int, lx: Int, ly: Int, rx: Int, ry: Int
+        handle: Int, index: Int, buttons: Int, lt: Int, rt: Int, lx: Int, ly: Int, rx: Int, ry: Int
     ) {
-        // Gamepad reports are high-frequency; mutex might add latency,
-        // but let's ensure thread-safety if called from multiple coroutines.
-        SatelliteNative.sendReport(index, buttons, lt, rt, lx, ly, rx, ry)
+        SatelliteNative.sendReport(handle, index, buttons, lt, rt, lx, ly, rx, ry)
     }
 
-    fun addController(index: Int, capabilities: Int) {
-        SatelliteNative.controllerAdd(index, capabilities)
+    fun addController(handle: Int, index: Int, capabilities: Int) {
+        SatelliteNative.controllerAdd(handle, index, capabilities)
     }
 
-    fun removeController(index: Int) {
-        SatelliteNative.controllerRemove(index)
+    fun removeController(handle: Int, index: Int) {
+        SatelliteNative.controllerRemove(handle, index)
     }
 
-    fun getVigemAvailable(): Int {
-        return SatelliteNative.getVigemAvailable()
+    fun getVigemAvailable(handle: Int): Int = SatelliteNative.getVigemAvailable(handle)
+
+    fun getActiveControllerCount(handle: Int): Int = SatelliteNative.getActiveControllerCount(handle)
+
+    fun getLastControllerAck(handle: Int): Int = SatelliteNative.getLastControllerAck(handle)
+
+    fun sendControllerType(handle: Int, index: Int, type: Int) {
+        SatelliteNative.sendControllerType(handle, index, type)
     }
 
-    fun getActiveControllerCount(): Int {
-        return SatelliteNative.getActiveControllerCount()
+    fun resetControllerAck(handle: Int) {
+        SatelliteNative.resetControllerAck(handle)
     }
 
-    fun getLastControllerAck(): Int {
-        return SatelliteNative.getLastControllerAck()
+    fun startHeartbeat(handle: Int) {
+        SatelliteNative.startHeartbeat(handle)
     }
 
-    fun sendControllerType(index: Int, type: Int) {
-        SatelliteNative.sendControllerType(index, type)
+    fun stopHeartbeat(handle: Int) {
+        SatelliteNative.stopHeartbeat(handle)
     }
 
-    fun resetControllerAck() {
-        SatelliteNative.resetControllerAck()
-    }
+    fun isConnectionAlive(handle: Int): Boolean = SatelliteNative.isConnectionAlive(handle)
 
-    fun startHeartbeat() {
-        SatelliteNative.startHeartbeat()
-    }
-
-    fun stopHeartbeat() {
-        SatelliteNative.stopHeartbeat()
-    }
-
-    fun isConnectionAlive(): Boolean {
-        return SatelliteNative.isConnectionAlive()
-    }
-
-    fun receiveAck() {
-        SatelliteNative.receiveAck()
+    fun receiveAck(handle: Int) {
+        SatelliteNative.receiveAck(handle)
     }
 }

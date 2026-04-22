@@ -3,7 +3,8 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/colorBackground">
+    android:background="@color/colorBackground"
+    android:fitsSystemWindows="true">
 
     <!-- ═══ DASHBOARD ═══ -->
     <LinearLayout
@@ -43,6 +44,60 @@
 
             <View android:layout_width="match_parent" android:layout_height="1dp"
                 android:background="@color/colorOutline" />
+
+            <!-- Connections summary card -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardConnections"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:cardBackgroundColor="@color/colorSurface"
+                app:cardCornerRadius="8dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/colorCardStroke"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:padding="14dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="CONNECTIONS"
+                            android:textColor="@color/colorPrimary"
+                            android:textSize="11sp"
+                            android:fontFamily="monospace"
+                            android:letterSpacing="0.12" />
+
+                        <TextView
+                            android:id="@+id/tvConnectionsSummary"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="No connections yet"
+                            android:textColor="@color/colorOnSurface"
+                            android:textSize="14sp"
+                            android:layout_marginTop="2dp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnManageConnections"
+                        style="@style/Widget.Dish.Button.Outlined"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Manage"
+                        android:textAllCaps="false" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
 
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
                 android:text="CONTROLLERS" android:textColor="@color/colorPrimary"

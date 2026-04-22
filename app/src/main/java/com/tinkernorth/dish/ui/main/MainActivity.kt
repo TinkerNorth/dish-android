@@ -1,35 +1,28 @@
 package com.tinkernorth.dish.ui.main
 
-import android.Manifest
-import android.app.Activity
-import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
 import android.content.Context
-import android.content.DialogInterface
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.drawable.GradientDrawable
 import android.hardware.input.InputManager
-import android.os.Build
 import android.os.Bundle
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
-import android.widget.EditText
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.data.model.DiscoveredServer
+import com.tinkernorth.dish.data.network.ConnectionHub
+import com.tinkernorth.dish.data.network.ConnectionKind
+import com.tinkernorth.dish.data.network.ConnectionLive
+import com.tinkernorth.dish.data.network.WifiConnectionManager
 import com.tinkernorth.dish.databinding.ActivityMainBinding
-import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepad
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
+import com.tinkernorth.dish.ui.connections.ConnectionsActivity
 import com.tinkernorth.dish.util.LowPowerManager
 import com.tinkernorth.dish.util.TelemetryTracker
 import com.tinkernorth.dish.util.WakeLockManager
@@ -38,8 +31,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
-class MainActivity : AppCompatActivity(), InputManager.InputDeviceListener,
-    SlotActionListener {
+class MainActivity : AppCompatActivity(), InputManager.InputDeviceListener, SlotActionListener {
 
     private lateinit var binding: ActivityMainBinding
     private val viewModel: MainViewModel by viewModels()
@@ -47,37 +39,13 @@ class MainActivity : AppCompatActivity(), InputManager.InputDeviceListener,
     private lateinit var inputManager: InputManager
 
     @Inject lateinit var btRegistry: BluetoothGamepadRegistry
+    @Inject lateinit var wifi: WifiConnectionManager
+    @Inject lateinit var hub: ConnectionHub
 
-    // Gamepad input, telemetry, wake-lock, low-power
     private val inputProcessor = GamepadInputProcessor()
     private lateinit var wakeLockManager: WakeLockManager
     private lateinit var lowPowerManager: LowPowerManager
     private lateinit var telemetryTracker: TelemetryTracker
-
-    // Which slot is currently doing a BT permission/profile flow
-    private var pendingBtSlotId: String? = null
-    // Per-slot listener references so we can detach/replace cleanly on restart.
-    private val btListeners = mutableMapOf<String, BluetoothGamepad.Listener>()
-
-    private val btPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { results ->
-        val slotId = pendingBtSlotId ?: return@registerForActivityResult
-        if (results.values.all { it }) {
-            showProfilePicker(slotId)
-        } else {
-            viewModel.onBtError(slotId, "Bluetooth permissions denied")
-        }
-    }
-
-    private val btDiscoverableLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        val slotId = pendingBtSlotId ?: return@registerForActivityResult
-        if (result.resultCode == Activity.RESULT_CANCELED) {
-            viewModel.onBtError(slotId, "Discoverability denied")
-        }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -85,58 +53,65 @@ class MainActivity : AppCompatActivity(), InputManager.InputDeviceListener,
         setContentView(binding.root)
         inputManager = getSystemService(Context.INPUT_SERVICE) as InputManager
         controllerAdapter = ControllerAdapter(this)
-
         setupUI()
         setupManagers()
         observeViewModel()
-        tryAutoReconnectBt()
+        autoReconnect()
     }
 
-    // ═══════════════════════════════════════════════════════════
-    //  UI SETUP
-    // ═══════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
+    //  UI
+    // ═══════════════════════════════════════════════════════════════════════
 
     private fun setupUI() {
         binding.rvControllers.adapter = controllerAdapter
         initDot(binding.dotServer)
+        binding.btnManageConnections.setOnClickListener {
+            startActivity(Intent(this, ConnectionsActivity::class.java))
+        }
     }
 
     private fun initDot(v: View) {
-        v.background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(getColor(R.color.colorMuted)) }
+        v.background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL; setColor(getColor(R.color.colorMuted))
+        }
     }
-
     private fun setDot(v: View, colorRes: Int) {
         (v.background as? GradientDrawable)?.setColor(getColor(colorRes))
     }
 
     private fun setupManagers() {
-        // Wire physical gamepad input → find the slot for that device and send to its destination
         inputProcessor.reportSender =
             GamepadInputProcessor.ReportSender { wButtons, bLT, bRT, sLX, sLY, sRX, sRY ->
                 val s = viewModel.uiState.value
-                // Send to every connected physical slot
-                for (slot in s.physicalSlots.filter { it.isConnected }) {
-                    when (slot.destType) {
-                        SlotDestType.WIFI -> viewModel.serverManager.controllerRepo.sendReport(
-                            0, wButtons, bLT, bRT, sLX, sLY, sRX, sRY
-                        )
-                        SlotDestType.BLUETOOTH -> btRegistry.sendReport(
-                            slot.id,
-                            buildXInputReport(wButtons, bLT, bRT, sLX, sLY, sRX, sRY),
-                        )
-                        SlotDestType.NONE -> {}
+                for (slot in s.physicalSlots) {
+                    val cid = slot.boundConnectionId ?: continue
+                    val summary = slot.boundStatus ?: continue
+                    if (summary.live != ConnectionLive.CONNECTED) continue
+                    when (summary.kind) {
+                        ConnectionKind.WIFI ->
+                            wifi.get(cid)?.sendReport(wButtons, bLT, bRT, sLX, sLY, sRX, sRY)
+                        ConnectionKind.BLUETOOTH -> {
+                            // The low nibble of wButtons encodes the d-pad (see
+                            // GamepadInputProcessor); split it out into the HID
+                            // hat switch that the Bluetooth descriptor expects.
+                            val hat = dpadToHat(wButtons and 0x000F)
+                            val hidButtons = wButtons and 0x000F.inv()
+                            val report = btRegistry.buildReport(
+                                cid, hidButtons, hat,
+                                sLX.toShort(), sLY.toShort(), sRX.toShort(), sRY.toShort(),
+                                bLT, bRT,
+                            ) ?: return@ReportSender
+                            btRegistry.sendReport(cid, report)
+                        }
                     }
                 }
             }
 
-        // Wake lock
         wakeLockManager = WakeLockManager(this, window)
         wakeLockManager.views = WakeLockManager.Views(
-            tvScreenLock = binding.tvScreenLock,
-            tvWakeLock = binding.tvWakeLock,
+            tvScreenLock = binding.tvScreenLock, tvWakeLock = binding.tvWakeLock,
         )
-
-        // Low-power
         lowPowerManager = LowPowerManager(window)
         lowPowerManager.views = LowPowerManager.Views(
             llCountdownBanner = findViewById(R.id.llCountdownBanner),
@@ -145,17 +120,13 @@ class MainActivity : AppCompatActivity(), InputManager.InputDeviceListener,
             tvLowPowerTime = findViewById(R.id.tvLowPowerTime),
             tvLowPowerStatus = findViewById(R.id.tvLowPowerStatus),
         )
-        lowPowerManager.activeControllerCount = { viewModel.uiState.value.slots.count { it.isConnected } }
+        lowPowerManager.activeControllerCount = {
+            viewModel.uiState.value.connections.count { it.live == ConnectionLive.CONNECTED }
+        }
         wakeLockManager.onLockStateChanged = { lowPowerManager.onLockStateChanged(it) }
-
-        // Telemetry
         telemetryTracker = TelemetryTracker(inputProcessor)
         telemetryTracker.start()
     }
-
-    // ═══════════════════════════════════════════════════════════
-    //  OBSERVE + UPDATE
-    // ═══════════════════════════════════════════════════════════
 
     private fun observeViewModel() {
         lifecycleScope.launch {
@@ -167,200 +138,83 @@ class MainActivity : AppCompatActivity(), InputManager.InputDeviceListener,
     }
 
     private fun updateUI(s: MainUiState) {
-        // Status bar
-        val anyConn = s.anyConnected
-        setDot(binding.dotServer, if (anyConn) R.color.colorSuccess else R.color.colorMuted)
-        val connSlots = s.slots.filter { it.isConnected }
+        val liveCount = s.connections.count { it.live == ConnectionLive.CONNECTED }
+        setDot(binding.dotServer, if (liveCount > 0) R.color.colorSuccess else R.color.colorMuted)
         binding.tvServerStatus.text = when {
-            connSlots.size > 1 -> "${connSlots.size} connections"
-            connSlots.size == 1 -> connSlots[0].connectedName ?: "Connected"
-            s.isScanning -> "Scanning…"
-            else -> "No active connections"
+            liveCount > 1 -> "$liveCount active connections"
+            liveCount == 1 -> s.connections.first { it.live == ConnectionLive.CONNECTED }.label
+            s.connections.isNotEmpty() -> "${s.connections.size} remembered"
+            else -> "No connections yet"
         }
-        binding.tvServerStatus.setTextColor(getColor(if (anyConn) R.color.colorSuccess else R.color.colorMuted))
-
-        // Slot list
-        controllerAdapter.submitSlots(s.slots, s.discoveredServers, s.isScanning)
-
-        // Wake lock
-        wakeLockManager.update(anyConn)
+        binding.tvServerStatus.setTextColor(
+            getColor(if (liveCount > 0) R.color.colorSuccess else R.color.colorMuted)
+        )
+        binding.tvConnectionsSummary.text = when {
+            liveCount == 0 && s.connections.isEmpty() -> "Tap Manage to add one"
+            liveCount == 0 -> "${s.connections.size} remembered"
+            else -> "$liveCount of ${s.connections.size} connected"
+        }
+        controllerAdapter.submitSlots(s.slots, s.connections)
+        wakeLockManager.update(liveCount > 0)
     }
 
     private fun handleEvent(event: MainEvent) {
         when (event) {
             is MainEvent.ShowToast -> Toast.makeText(this, event.message, Toast.LENGTH_SHORT).show()
-            is MainEvent.ShowPairingDialog -> showPairingDialog(event.server)
-            is MainEvent.RequestBluetoothPermissions -> {
-                pendingBtSlotId = event.slotId
-                requestBtPermissions()
-            }
-            is MainEvent.RequestDiscoverable -> {
-                pendingBtSlotId = event.slotId
-                requestDiscoverable()
-            }
+            is MainEvent.ShowPairingDialog -> Toast.makeText(
+                this, "Pairing needed — open Connections", Toast.LENGTH_LONG,
+            ).show()
         }
     }
 
-    private fun showPairingDialog(server: DiscoveredServer) {
-        val v = layoutInflater.inflate(R.layout.dialog_pairing, null)
-        val etPin = v.findViewById<EditText>(R.id.et_pin)
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-            .setView(v)
-            .setPositiveButton("Connect") { _: DialogInterface, _: Int ->
-                viewModel.onPairingPinEntered(server, etPin.text.toString().ifEmpty { "0000" })
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
+    // ═══════════════════════════════════════════════════════════════════════
+    //  SLOT ACTIONS
+    // ═══════════════════════════════════════════════════════════════════════
 
-    // ═══════════════════════════════════════════════════════════
-    //  SLOT ACTION LISTENER
-    // ═══════════════════════════════════════════════════════════
-
-    override fun onSlotTapped(slotId: String) = viewModel.toggleSlotExpanded(slotId)
-    override fun onDestWifi(slotId: String) = viewModel.setSlotDestWifi(slotId)
-    override fun onDestBt(slotId: String) = viewModel.setSlotDestBt(slotId)
-    override fun onScan(slotId: String) = viewModel.onScanClicked()
-    override fun onServerSelected(slotId: String, server: DiscoveredServer) = viewModel.onServerSelected(slotId, server)
-    override fun onBtStart(slotId: String) {
-        pendingBtSlotId = slotId
-        requestBtPermissions()
+    override fun onSlotTapped(slotId: String) {
+        controllerAdapter.toggleExpanded(slotId)
+        controllerAdapter.submitSlots(viewModel.uiState.value.slots, viewModel.uiState.value.connections)
     }
-    override fun onDisconnect(slotId: String) {
-        btListeners.remove(slotId)?.let { btRegistry.removeListener(slotId, it) }
-        btRegistry.stop(slotId)
-        // User-initiated disconnect: forget the host so we don't auto-reconnect next launch.
-        btRegistry.forgetHost(slotId)
-        viewModel.disconnectSlot(slotId)
-    }
+    override fun onBind(slotId: String, connectionId: String) = viewModel.bindSlot(slotId, connectionId)
+    override fun onUnbind(slotId: String) = viewModel.unbindSlot(slotId)
     override fun onOpenGamepad() {
-        val vSlot = viewModel.uiState.value.virtualSlot
+        val v = viewModel.uiState.value.virtualSlot
+        val cid = v.boundConnectionId ?: run {
+            Toast.makeText(this, "Bind a connection first", Toast.LENGTH_SHORT).show(); return
+        }
+        val summary = v.boundStatus
         val intent = Intent(this, GamepadOverlayActivity::class.java).apply {
-            putExtra(GamepadOverlayActivity.EXTRA_DEST_TYPE, vSlot.destType.name)
-            putExtra(GamepadOverlayActivity.EXTRA_USE_PS_LAYOUT, vSlot.usePlayStationLayout)
+            putExtra(GamepadOverlayActivity.EXTRA_CONNECTION_ID, cid)
+            putExtra(GamepadOverlayActivity.EXTRA_USE_PS_LAYOUT, summary?.btProfile == "PlayStation")
         }
         startActivity(intent)
     }
 
-    // ═══════════════════════════════════════════════════════════
-    //  BLUETOOTH
-    // ═══════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
+    //  AUTO-RECONNECT ON LAUNCH
+    // ═══════════════════════════════════════════════════════════════════════
 
-    private fun hasBluetoothPermissions(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
-        return arrayOf(
-            Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.BLUETOOTH_ADVERTISE,
-        ).all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }
+    private fun autoReconnect() {
+        // The hub reads straight from persisted [ConnectionStore] so this is
+        // immune to the race between its async `combine` collector and
+        // `onCreate` — which was silently dropping BT reconnects on cold start
+        // after a process kill.
+        hub.autoReconnectAll()
     }
 
-    private fun requestBtPermissions() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val needed = arrayOf(
-                Manifest.permission.BLUETOOTH_CONNECT,
-                Manifest.permission.BLUETOOTH_ADVERTISE,
-            ).filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
-            if (needed.isNotEmpty()) { btPermissionLauncher.launch(needed.toTypedArray()); return }
-        }
-        showProfilePicker(pendingBtSlotId ?: return)
-    }
-
-    private fun showProfilePicker(slotId: String) {
-        val profiles = BluetoothGamepad.GamepadProfile.entries
-        val names = profiles.map { it.profileName }.toTypedArray()
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-            .setTitle("Controller Profile")
-            .setItems(names) { _, which ->
-                startBtGamepad(slotId, profiles[which], autoConnectMac = null)
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    /**
-     * Starts a [BluetoothGamepad] for [slotId] with [profile] via the singleton
-     * registry. When [autoConnectMac] is non-null we're in silent auto-reconnect
-     * mode: the Discoverable prompt is suppressed and the gamepad tries to
-     * re-establish the link directly.
-     */
-    private fun startBtGamepad(
-        slotId: String,
-        profile: BluetoothGamepad.GamepadProfile,
-        autoConnectMac: String?,
-    ) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
-        viewModel.setBtProfile(slotId, profile.profileName)
-        attachBtListener(slotId)
-        btRegistry.start(slotId, profile, autoConnectMac)
-    }
-
-    /**
-     * Ensures a single listener is attached to the registry for [slotId] that
-     * forwards events to the [MainViewModel]. Replaces any previously-attached
-     * listener for the same slot so restarts don't leak duplicates.
-     */
-    private fun attachBtListener(slotId: String) {
-        btListeners.remove(slotId)?.let { btRegistry.removeListener(slotId, it) }
-        val listener = object : BluetoothGamepad.Listener {
-            override fun onRegistered() = runOnUiThread {
-                val silent = btRegistry.isAutoReconnecting(slotId)
-                viewModel.onBtRegistered(slotId, requestDiscoverable = !silent)
-            }
-            override fun onUnregistered() = runOnUiThread { viewModel.onBtDisconnected(slotId) }
-            override fun onConnected(device: BluetoothDevice) = runOnUiThread {
-                viewModel.onBtConnected(slotId, device.name ?: "Unknown")
-            }
-            override fun onDisconnected(device: BluetoothDevice) = runOnUiThread {
-                viewModel.onBtDisconnected(slotId)
-            }
-            override fun onError(message: String) = runOnUiThread {
-                viewModel.onBtError(slotId, message)
-            }
-        }
-        btRegistry.addListener(slotId, listener)
-        btListeners[slotId] = listener
-    }
-
-    /**
-     * If the last successful BT host is on record, silently re-register and
-     * reconnect the owning slot on launch. Only attempts the virtual slot
-     * (always present); physical slots depend on a transient InputDevice id and
-     * aren't safe to restore here.
-     */
-    private fun tryAutoReconnectBt() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
-        if (!hasBluetoothPermissions()) return
-        if (btRegistry.isActive(VIRTUAL_SLOT_ID)) return
-        attachBtListener(VIRTUAL_SLOT_ID)
-        val profile = btRegistry.tryAutoReconnect(VIRTUAL_SLOT_ID)
-        if (profile == null) {
-            btListeners.remove(VIRTUAL_SLOT_ID)?.let { btRegistry.removeListener(VIRTUAL_SLOT_ID, it) }
-            return
-        }
-        viewModel.setSlotDestBt(VIRTUAL_SLOT_ID)
-        viewModel.setBtProfile(VIRTUAL_SLOT_ID, profile.profileName)
-    }
-
-    private fun requestDiscoverable() {
-        val intent = Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).apply {
-            putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 120)
-        }
-        btDiscoverableLauncher.launch(intent)
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    //  GAMEPAD INPUT DISPATCH
-    // ═══════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
+    //  INPUT DISPATCH (physical gamepads)
+    // ═══════════════════════════════════════════════════════════════════════
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (viewModel.uiState.value.physicalSlots.any { it.isConnected }) {
+        if (viewModel.uiState.value.physicalSlots.any { it.boundStatus?.live == ConnectionLive.CONNECTED }) {
             inputProcessor.handleKeyEvent(event)?.let { return it }
         }
         return super.dispatchKeyEvent(event)
     }
 
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
-        if (viewModel.uiState.value.physicalSlots.any { it.isConnected }) {
+        if (viewModel.uiState.value.physicalSlots.any { it.boundStatus?.live == ConnectionLive.CONNECTED }) {
             inputProcessor.handleMotionEvent(event)?.let { return it }
         }
         return super.dispatchGenericMotionEvent(event)
@@ -376,19 +230,14 @@ class MainActivity : AppCompatActivity(), InputManager.InputDeviceListener,
         if (!hasFocus) { inputProcessor.zeroAxes(); inputProcessor.trySend() }
     }
 
-    // ═══════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
     //  INPUT DEVICE LISTENER
-    // ═══════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════
 
     override fun onResume() { super.onResume(); inputManager.registerInputDeviceListener(this, null); syncControllers() }
     override fun onPause() { super.onPause(); inputManager.unregisterInputDeviceListener(this) }
     override fun onDestroy() {
         super.onDestroy()
-        // The registry is process-scoped and intentionally outlives this activity
-        // so the overlay activity keeps the same HID sessions; only detach the
-        // per-slot listeners we installed above.
-        btListeners.forEach { (slotId, l) -> btRegistry.removeListener(slotId, l) }
-        btListeners.clear()
         lowPowerManager.cancel(); telemetryTracker.stop(); wakeLockManager.release()
     }
 
@@ -414,8 +263,6 @@ class MainActivity : AppCompatActivity(), InputManager.InputDeviceListener,
         val isGame = (s and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
                 (s and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
         if (!isGame) return false
-
-        // Filter out touchscreens/sensors (like goodix_tso) that lack gamepad buttons
         return d.hasKeys(
             KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_BUTTON_B,
             KeyEvent.KEYCODE_BUTTON_X, KeyEvent.KEYCODE_BUTTON_Y,
@@ -423,19 +270,26 @@ class MainActivity : AppCompatActivity(), InputManager.InputDeviceListener,
         ).any { it }
     }
 
-    // ═══════════════════════════════════════════════════════════
-    //  HELPERS
-    // ═══════════════════════════════════════════════════════════
-
-    private fun buildXInputReport(wBtn: Int, bLT: Int, bRT: Int, sLX: Int, sLY: Int, sRX: Int, sRY: Int): ByteArray {
-        val r = ByteArray(14)
-        r[0] = 0; r[1] = 0x14
-        r[2] = (wBtn and 0xFF).toByte(); r[3] = ((wBtn shr 8) and 0xFF).toByte()
-        r[4] = bLT.toByte(); r[5] = bRT.toByte()
-        r[6] = (sLX and 0xFF).toByte(); r[7] = ((sLX shr 8) and 0xFF).toByte()
-        r[8] = (sLY and 0xFF).toByte(); r[9] = ((sLY shr 8) and 0xFF).toByte()
-        r[10] = (sRX and 0xFF).toByte(); r[11] = ((sRX shr 8) and 0xFF).toByte()
-        r[12] = (sRY and 0xFF).toByte(); r[13] = ((sRY shr 8) and 0xFF).toByte()
-        return r
+    /**
+     * Maps the d-pad bitmask used by [GamepadInputProcessor] (bit 0=up,
+     * 1=down, 2=left, 3=right) to the HID hat-switch values 1..8 expected by
+     * the Bluetooth descriptor (1=N, 3=E, 5=S, 7=W, 0=neutral).
+     */
+    private fun dpadToHat(dpadBits: Int): Int {
+        val up = dpadBits and 0x1 != 0
+        val down = dpadBits and 0x2 != 0
+        val left = dpadBits and 0x4 != 0
+        val right = dpadBits and 0x8 != 0
+        return when {
+            up && right -> 2
+            right && down -> 4
+            down && left -> 6
+            left && up -> 8
+            up -> 1
+            right -> 3
+            down -> 5
+            left -> 7
+            else -> 0
+        }
     }
 }

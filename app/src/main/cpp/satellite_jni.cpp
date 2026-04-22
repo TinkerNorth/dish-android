@@ -26,6 +26,8 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <memory>
+#include <unordered_map>
 #include <sodium.h>
 
 #define TAG "SatelliteJNI"
@@ -45,13 +47,7 @@ static constexpr uint16_t MSG_CONTROLLER_ACK = 0x0006;
 static constexpr uint16_t MSG_SERVER_STATUS = 0x0007;
 static constexpr uint16_t MSG_CONTROLLER_TYPE = 0x0008;
 
-// ACK result codes
-static constexpr uint8_t ACK_OK = 0x00;
-static constexpr uint8_t ACK_ERR_VIGEM_UNAVAIL = 0x01;
-static constexpr uint8_t ACK_ERR_NO_SLOTS = 0x02;
-static constexpr uint8_t ACK_ERR_ALREADY_EXISTS = 0x03;
-static constexpr uint8_t ACK_ERR_NOT_FOUND = 0x04;
-static constexpr uint8_t ACK_ERR_PLUGIN_FAIL = 0x05;
+
 
 #pragma pack(push, 1)
 struct XUSB_REPORT {
@@ -66,28 +62,40 @@ struct XUSB_REPORT {
 #pragma pack(pop)
 static_assert(sizeof(XUSB_REPORT) == 12, "XUSB_REPORT must be 12 bytes");
 
-/* ── Connection state ──────────────────────────────────────────────────────── */
-static int g_udpSock = -1;
-static struct sockaddr_in g_dest = {};
-static uint8_t g_token[4] = {};
-static uint8_t g_key[32] = {};
-static std::atomic<uint32_t> g_counter{0};
-static std::mutex g_sendMtx; // protects sendto
+/* ── Per-session connection state ──────────────────────────────────────────── */
+// The JNI layer supports multiple concurrent UDP sessions, each keyed by a
+// positive integer handle returned from openSocket(). All subsequent calls take
+// the handle so independent WiFi servers can run side by side.
+struct Session {
+    int udpSock = -1;
+    struct sockaddr_in dest = {};
+    uint8_t token[4] = {};
+    uint8_t key[32] = {};
+    std::atomic<uint32_t> counter{0};
+    std::mutex sendMtx; // protects sendto for this session
 
-// Heartbeat thread
-static std::thread g_heartbeatThread;
-static std::atomic<bool> g_heartbeatRunning{false};
-static std::atomic<int> g_missedAcks{0};
-static std::atomic<bool> g_connectionAlive{true};
+    std::thread heartbeatThread;
+    std::atomic<bool> heartbeatRunning{false};
+    std::atomic<int> missedAcks{0};
+    std::atomic<bool> connectionAlive{true};
 
-// Controller ACK tracking
-// Packed as: (requestType << 16) | (ctrlIdx << 8) | result
-// -1 means no ACK received yet
-static std::atomic<int32_t> g_lastControllerAck{-1};
+    // Controller ACK tracking: (requestType << 16) | (ctrlIdx << 8) | result.
+    // -1 means no ACK received yet.
+    std::atomic<int32_t> lastControllerAck{-1};
 
-// Server status (from 0x0007)
-static std::atomic<int8_t> g_vigemAvailable{-1}; // -1=unknown, 0=idle/unavailable, 1=available
-static std::atomic<int8_t> g_activeControllerCount{-1}; // -1=unknown, 0+=count
+    std::atomic<int8_t> vigemAvailable{-1};
+    std::atomic<int8_t> activeControllerCount{-1};
+};
+
+static std::mutex g_sessionsMtx;
+static std::unordered_map<int, std::shared_ptr<Session>> g_sessions;
+static std::atomic<int> g_nextHandle{1};
+
+static std::shared_ptr<Session> getSession(int handle) {
+    std::lock_guard<std::mutex> lock(g_sessionsMtx);
+    auto it = g_sessions.find(handle);
+    return it == g_sessions.end() ? nullptr : it->second;
+}
 
 static uint64_t nowMs() {
     struct timespec ts;
@@ -108,8 +116,8 @@ static void putBE32(uint8_t* dst, uint32_t v) {
 }
 
 /* ── Encrypt and send a message over the UDP channel ───────────────────────── */
-static bool sendEncrypted(uint16_t msgType, const uint8_t* payload, uint16_t payloadLen) {
-    if (g_udpSock < 0) return false;
+static bool sendEncrypted(Session* s, uint16_t msgType, const uint8_t* payload, uint16_t payloadLen) {
+    if (!s || s->udpSock < 0) return false;
 
     // Inner message: type(2) + length(2) + payload
     uint16_t innerLen = 4 + payloadLen;
@@ -119,8 +127,7 @@ static bool sendEncrypted(uint16_t msgType, const uint8_t* payload, uint16_t pay
     putBE16(inner + 2, payloadLen);
     if (payloadLen > 0) memcpy(inner + 4, payload, payloadLen);
 
-    // Get next counter
-    uint32_t ctr = g_counter.fetch_add(1, std::memory_order_relaxed);
+    uint32_t ctr = s->counter.fetch_add(1, std::memory_order_relaxed);
 
     // Nonce: counter zero-padded to 12 bytes (big-endian, left-padded)
     uint8_t nonce[12] = {};
@@ -129,41 +136,38 @@ static bool sendEncrypted(uint16_t msgType, const uint8_t* payload, uint16_t pay
     // Encrypt: ciphertext = encrypted(inner) + 16-byte auth tag
     uint8_t ciphertext[sizeof(inner) + crypto_aead_chacha20poly1305_ietf_ABYTES];
     unsigned long long cipherLen = 0;
-    crypto_aead_chacha20poly1305_ietf_encrypt(ciphertext, &cipherLen, inner, innerLen, g_token,
+    crypto_aead_chacha20poly1305_ietf_encrypt(ciphertext, &cipherLen, inner, innerLen, s->token,
                                               4,       // AAD = token
                                               nullptr, // nsec (unused)
-                                              nonce, g_key);
+                                              nonce, s->key);
 
     // Packet: token(4) + counter(4) + ciphertext
     uint8_t packet[8 + sizeof(ciphertext)];
-    memcpy(packet, g_token, 4);
+    memcpy(packet, s->token, 4);
     putBE32(packet + 4, ctr);
     memcpy(packet + 8, ciphertext, (size_t)cipherLen);
 
     size_t totalLen = 8 + (size_t)cipherLen;
-    std::lock_guard<std::mutex> lock(g_sendMtx);
+    std::lock_guard<std::mutex> lock(s->sendMtx);
     ssize_t sent =
-        sendto(g_udpSock, packet, totalLen, 0, (struct sockaddr*)&g_dest, sizeof(g_dest));
+        sendto(s->udpSock, packet, totalLen, 0, (struct sockaddr*)&s->dest, sizeof(s->dest));
     return sent == (ssize_t)totalLen;
 }
 
-/* ── Heartbeat thread ──────────────────────────────────────────────────────── */
-static void heartbeatLoop() {
-    LOGI("Heartbeat thread started");
-    while (g_heartbeatRunning.load(std::memory_order_relaxed)) {
-        // Send heartbeat ping
-        sendEncrypted(MSG_HEARTBEAT_PING, nullptr, 0);
-        g_missedAcks.fetch_add(1, std::memory_order_relaxed);
+/* ── Heartbeat thread (one per session) ────────────────────────────────────── */
+static void heartbeatLoop(std::shared_ptr<Session> s) {
+    LOGI("Heartbeat thread started (sock=%d)", s->udpSock);
+    while (s->heartbeatRunning.load(std::memory_order_relaxed)) {
+        sendEncrypted(s.get(), MSG_HEARTBEAT_PING, nullptr, 0);
+        s->missedAcks.fetch_add(1, std::memory_order_relaxed);
 
-        // Check if we've missed too many
-        if (g_missedAcks.load(std::memory_order_relaxed) >= HEARTBEAT_MISS_MAX) {
+        if (s->missedAcks.load(std::memory_order_relaxed) >= HEARTBEAT_MISS_MAX) {
             LOGE("Missed %d heartbeat ACKs — connection dead", HEARTBEAT_MISS_MAX);
-            g_connectionAlive.store(false, std::memory_order_relaxed);
+            s->connectionAlive.store(false, std::memory_order_relaxed);
         }
 
-        // Sleep for heartbeat interval (in 100ms increments for responsiveness)
         for (int i = 0; i < HEARTBEAT_INTERVAL_MS / 100; i++) {
-            if (!g_heartbeatRunning.load(std::memory_order_relaxed)) break;
+            if (!s->heartbeatRunning.load(std::memory_order_relaxed)) break;
             usleep(100000); // 100ms
         }
     }
@@ -204,84 +208,89 @@ static void ensureSodiumInit() {
 
 /* ── UDP Socket ────────────────────────────────────────────────────────────── */
 
-JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_openSocket(JNIEnv* env,
+JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_openSocket(JNIEnv* env,
                                                                                 jobject, jstring ip,
                                                                                 jint port) {
     ensureSodiumInit();
-    if (g_udpSock >= 0) {
-        close(g_udpSock);
-        g_udpSock = -1;
-    }
-    g_udpSock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (g_udpSock < 0) {
+    int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (sock < 0) {
         LOGE("socket() failed");
-        return JNI_FALSE;
+        return -1;
     }
 
     int tos = 0xB8;
-    if (setsockopt(g_udpSock, IPPROTO_IP, IP_TOS, &tos, sizeof(tos)) < 0)
+    if (setsockopt(sock, IPPROTO_IP, IP_TOS, &tos, sizeof(tos)) < 0)
         LOGI("IP_TOS not supported (non-fatal): %s", strerror(errno));
 
     int busyPoll = 50;
-    if (setsockopt(g_udpSock, SOL_SOCKET, SO_BUSY_POLL, &busyPoll, sizeof(busyPoll)) < 0)
+    if (setsockopt(sock, SOL_SOCKET, SO_BUSY_POLL, &busyPoll, sizeof(busyPoll)) < 0)
         LOGI("SO_BUSY_POLL not supported (non-fatal): %s", strerror(errno));
 
-    // Set recv timeout for heartbeat ACK reception
-    struct timeval rtv = {0, 500000}; // 500ms
-    setsockopt(g_udpSock, SOL_SOCKET, SO_RCVTIMEO, &rtv, sizeof(rtv));
+    struct timeval rtv = {0, 500000}; // 500ms recv timeout
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &rtv, sizeof(rtv));
 
+    auto session = std::make_shared<Session>();
+    session->udpSock = sock;
     const char* s = env->GetStringUTFChars(ip, nullptr);
-    memset(&g_dest, 0, sizeof(g_dest));
-    g_dest.sin_family = AF_INET;
-    g_dest.sin_port = htons((uint16_t)port);
-    inet_pton(AF_INET, s, &g_dest.sin_addr);
+    session->dest.sin_family = AF_INET;
+    session->dest.sin_port = htons((uint16_t)port);
+    inet_pton(AF_INET, s, &session->dest.sin_addr);
     env->ReleaseStringUTFChars(ip, s);
-    LOGI("UDP socket opened -> port %d (TOS=0x%02X)", port, tos);
-    return JNI_TRUE;
+
+    int handle = g_nextHandle.fetch_add(1, std::memory_order_relaxed);
+    {
+        std::lock_guard<std::mutex> lock(g_sessionsMtx);
+        g_sessions[handle] = session;
+    }
+    LOGI("UDP session %d opened -> port %d (TOS=0x%02X)", handle, port, tos);
+    return handle;
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_closeSocket(JNIEnv*, jobject) {
-    // Stop heartbeat first
-    g_heartbeatRunning.store(false);
-    if (g_heartbeatThread.joinable()) g_heartbeatThread.join();
-    if (g_udpSock >= 0) {
-        close(g_udpSock);
-        g_udpSock = -1;
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_closeSocket(JNIEnv*, jobject, jint handle) {
+    std::shared_ptr<Session> s;
+    {
+        std::lock_guard<std::mutex> lock(g_sessionsMtx);
+        auto it = g_sessions.find(handle);
+        if (it == g_sessions.end()) return;
+        s = it->second;
+        g_sessions.erase(it);
     }
-    g_counter.store(0);
-    memset(g_key, 0, sizeof(g_key));
-    memset(g_token, 0, sizeof(g_token));
-    g_missedAcks.store(0);
-    g_connectionAlive.store(true);
-    g_lastControllerAck.store(-1);
-    g_vigemAvailable.store(-1);
-    g_activeControllerCount.store(-1);
+    s->heartbeatRunning.store(false);
+    if (s->heartbeatThread.joinable()) s->heartbeatThread.join();
+    if (s->udpSock >= 0) {
+        close(s->udpSock);
+        s->udpSock = -1;
+    }
+    LOGI("UDP session %d closed", handle);
 }
 
 /* ── Connection params (called after HTTP POST /api/connections) ───────────── */
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_setConnectionParams(
-    JNIEnv* env, jobject, jbyteArray tokenArr, jbyteArray keyArr) {
+    JNIEnv* env, jobject, jint handle, jbyteArray tokenArr, jbyteArray keyArr) {
     ensureSodiumInit();
+    auto s = getSession(handle);
+    if (!s) return;
     jbyte* tokenBytes = env->GetByteArrayElements(tokenArr, nullptr);
     jbyte* keyBytes = env->GetByteArrayElements(keyArr, nullptr);
-    memcpy(g_token, tokenBytes, 4);
-    memcpy(g_key, keyBytes, 32);
-    g_counter.store(0);
-    g_missedAcks.store(0);
-    g_connectionAlive.store(true);
+    memcpy(s->token, tokenBytes, 4);
+    memcpy(s->key, keyBytes, 32);
+    s->counter.store(0);
+    s->missedAcks.store(0);
+    s->connectionAlive.store(true);
     env->ReleaseByteArrayElements(tokenArr, tokenBytes, JNI_ABORT);
     env->ReleaseByteArrayElements(keyArr, keyBytes, JNI_ABORT);
-    LOGI("Connection params set (token=%02x%02x%02x%02x)", g_token[0], g_token[1], g_token[2],
-         g_token[3]);
+    LOGI("Session %d params set (token=%02x%02x%02x%02x)", handle, s->token[0], s->token[1], s->token[2],
+         s->token[3]);
 }
 
 /* ── Encrypted gamepad data ────────────────────────────────────────────────── */
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_sendReport(
-    JNIEnv*, jobject, jint controllerIndex, jint wB, jint bLT, jint bRT, jint sLX, jint sLY,
+    JNIEnv*, jobject, jint handle, jint controllerIndex, jint wB, jint bLT, jint bRT, jint sLX, jint sLY,
     jint sRX, jint sRY) {
-    if (g_udpSock < 0) return;
+    auto s = getSession(handle);
+    if (!s) return;
     // Payload: controller_index(1B) + XUSB_REPORT(12B) = 13 bytes
     uint8_t payload[13];
     payload[0] = (uint8_t)(controllerIndex & 0xFF);
@@ -293,152 +302,150 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_se
     r->sThumbLY = (int16_t)sLY;
     r->sThumbRX = (int16_t)sRX;
     r->sThumbRY = (int16_t)sRY;
-    sendEncrypted(MSG_GAMEPAD_DATA, payload, 13);
+    sendEncrypted(s.get(), MSG_GAMEPAD_DATA, payload, 13);
 }
 
 /* ── Controller add/remove ─────────────────────────────────────────────────── */
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_controllerAdd(JNIEnv*, jobject,
+                                                                               jint handle,
                                                                                jint controllerIndex,
                                                                                jint capabilities) {
-    // Payload: controller_index(1B) + capabilities(2B big-endian)
+    auto s = getSession(handle);
+    if (!s) return;
     uint8_t payload[3];
     payload[0] = (uint8_t)(controllerIndex & 0xFF);
     putBE16(payload + 1, (uint16_t)(capabilities & 0xFFFF));
-    sendEncrypted(MSG_CONTROLLER_ADD, payload, 3);
-    LOGI("Sent controller add: index=%d caps=0x%04X", controllerIndex, capabilities);
+    sendEncrypted(s.get(), MSG_CONTROLLER_ADD, payload, 3);
+    LOGI("Session %d: sent controller add idx=%d caps=0x%04X", handle, controllerIndex, capabilities);
 }
 
 JNIEXPORT void JNICALL
-Java_com_tinkernorth_dish_data_network_SatelliteNative_controllerRemove(JNIEnv*, jobject, jint controllerIndex) {
+Java_com_tinkernorth_dish_data_network_SatelliteNative_controllerRemove(JNIEnv*, jobject, jint handle, jint controllerIndex) {
+    auto s = getSession(handle);
+    if (!s) return;
     uint8_t payload[1] = {(uint8_t)(controllerIndex & 0xFF)};
-    sendEncrypted(MSG_CONTROLLER_REMOVE, payload, 1);
-    LOGI("Sent controller remove: index=%d", controllerIndex);
+    sendEncrypted(s.get(), MSG_CONTROLLER_REMOVE, payload, 1);
+    LOGI("Session %d: sent controller remove idx=%d", handle, controllerIndex);
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_sendControllerType(
-    JNIEnv*, jobject, jint controllerIndex, jint controllerType) {
-    // Payload: controller_index(1B) + controller_type(1B)
+    JNIEnv*, jobject, jint handle, jint controllerIndex, jint controllerType) {
+    auto s = getSession(handle);
+    if (!s) return;
     uint8_t payload[2];
     payload[0] = (uint8_t)(controllerIndex & 0xFF);
     payload[1] = (uint8_t)(controllerType & 0xFF);
-    sendEncrypted(MSG_CONTROLLER_TYPE, payload, 2);
-    LOGI("Sent controller type: index=%d type=%d", controllerIndex, controllerType);
+    sendEncrypted(s.get(), MSG_CONTROLLER_TYPE, payload, 2);
+    LOGI("Session %d: sent controller type idx=%d type=%d", handle, controllerIndex, controllerType);
 }
 
 /* ── Heartbeat start/stop ──────────────────────────────────────────────────── */
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_startHeartbeat(JNIEnv*, jobject) {
-    if (g_heartbeatRunning.load()) return;
-    g_heartbeatRunning.store(true);
-    g_missedAcks.store(0);
-    g_connectionAlive.store(true);
-    g_heartbeatThread = std::thread(heartbeatLoop);
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_startHeartbeat(JNIEnv*, jobject, jint handle) {
+    auto s = getSession(handle);
+    if (!s) return;
+    if (s->heartbeatRunning.load()) return;
+    s->heartbeatRunning.store(true);
+    s->missedAcks.store(0);
+    s->connectionAlive.store(true);
+    s->heartbeatThread = std::thread(heartbeatLoop, s);
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_stopHeartbeat(JNIEnv*, jobject) {
-    g_heartbeatRunning.store(false);
-    if (g_heartbeatThread.joinable()) g_heartbeatThread.join();
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_stopHeartbeat(JNIEnv*, jobject, jint handle) {
+    auto s = getSession(handle);
+    if (!s) return;
+    s->heartbeatRunning.store(false);
+    if (s->heartbeatThread.joinable()) s->heartbeatThread.join();
 }
 
 JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_isConnectionAlive(JNIEnv*,
-                                                                                       jobject) {
-    return g_connectionAlive.load() ? JNI_TRUE : JNI_FALSE;
+                                                                                       jobject, jint handle) {
+    auto s = getSession(handle);
+    if (!s) return JNI_FALSE;
+    return s->connectionAlive.load() ? JNI_TRUE : JNI_FALSE;
 }
 
-/**
- * Returns the last controller ACK as a packed int32:
- *   bits 31-16: requestType (0x0004 or 0x0005)
- *   bits 15-8:  controllerIndex
- *   bits 7-0:   result code (0x00=OK, 0x01=VIGEM_UNAVAIL, etc.)
- * Returns -1 if no ACK has been received yet.
- */
 JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_getLastControllerAck(JNIEnv*,
-                                                                                      jobject) {
-    return g_lastControllerAck.load(std::memory_order_acquire);
+                                                                                      jobject, jint handle) {
+    auto s = getSession(handle);
+    if (!s) return -1;
+    return s->lastControllerAck.load(std::memory_order_acquire);
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_resetControllerAck(JNIEnv*,
-                                                                                    jobject) {
-    g_lastControllerAck.store(-1, std::memory_order_release);
+                                                                                    jobject, jint handle) {
+    auto s = getSession(handle);
+    if (!s) return;
+    s->lastControllerAck.store(-1, std::memory_order_release);
 }
 
-/**
- * Returns ViGEm availability from the latest 0x0007 Server Status message.
- * -1 = unknown (no status received yet), 0 = idle/unavailable, 1 = available (bus open)
- */
 JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_getVigemAvailable(JNIEnv*,
-                                                                                   jobject) {
-    return (jint)g_vigemAvailable.load(std::memory_order_acquire);
+                                                                                   jobject, jint handle) {
+    auto s = getSession(handle);
+    if (!s) return -1;
+    return (jint)s->vigemAvailable.load(std::memory_order_acquire);
 }
 
-/**
- * Returns the global active controller count from the latest 0x0007 Server Status.
- * -1 = unknown (no status received yet), 0+ = count across all connections
- */
 JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_getActiveControllerCount(JNIEnv*,
-                                                                                          jobject) {
-    return (jint)g_activeControllerCount.load(std::memory_order_acquire);
+                                                                                          jobject, jint handle) {
+    auto s = getSession(handle);
+    if (!s) return -1;
+    return (jint)s->activeControllerCount.load(std::memory_order_acquire);
 }
 
 /* ── Receive ACK (called from a background thread) ────────────────────────── */
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_receiveAck(JNIEnv*, jobject) {
-    if (g_udpSock < 0) return;
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_receiveAck(JNIEnv*, jobject, jint handle) {
+    auto s = getSession(handle);
+    if (!s || s->udpSock < 0) return;
     uint8_t buf[128];
     struct sockaddr_in from = {};
     socklen_t fl = sizeof(from);
-    ssize_t n = recvfrom(g_udpSock, buf, sizeof(buf), 0, (struct sockaddr*)&from, &fl);
-    if (n < 8) return; // too small
+    ssize_t n = recvfrom(s->udpSock, buf, sizeof(buf), 0, (struct sockaddr*)&from, &fl);
+    if (n < 8) return;
 
-    // Verify token matches
-    if (memcmp(buf, g_token, 4) != 0) return;
+    if (memcmp(buf, s->token, 4) != 0) return;
 
-    // Extract counter
     uint32_t ctr = ((uint32_t)buf[4] << 24) | ((uint32_t)buf[5] << 16) | ((uint32_t)buf[6] << 8) |
                    (uint32_t)buf[7];
 
-    // Build nonce
     uint8_t nonce[12] = {};
     putBE32(nonce + 8, ctr);
 
-    // Decrypt
     uint8_t decrypted[64];
     unsigned long long decLen = 0;
     size_t cipherLen = (size_t)n - 8;
     if (crypto_aead_chacha20poly1305_ietf_decrypt(decrypted, &decLen,
-                                                  nullptr,                        // nsec
-                                                  buf + 8, cipherLen, g_token, 4, // AAD
-                                                  nonce, g_key) != 0) {
-        return; // decryption failed
+                                                  nullptr,
+                                                  buf + 8, cipherLen, s->token, 4,
+                                                  nonce, s->key) != 0) {
+        return;
     }
 
-    // Parse inner message: type(2B) + length(2B) + payload
     if (decLen < 4) return;
     uint16_t msgType = ((uint16_t)decrypted[0] << 8) | decrypted[1];
     uint16_t msgLen = ((uint16_t)decrypted[2] << 8) | decrypted[3];
 
     if (msgType == MSG_HEARTBEAT_ACK) {
-        g_missedAcks.store(0);
-        g_connectionAlive.store(true);
+        s->missedAcks.store(0);
+        s->connectionAlive.store(true);
     } else if (msgType == MSG_CONTROLLER_ACK && msgLen >= 4 && decLen >= 8) {
-        // Payload: requestType(2B) + controllerIndex(1B) + result(1B)
         uint16_t reqType = ((uint16_t)decrypted[4] << 8) | decrypted[5];
         uint8_t ctrlIdx = decrypted[6];
         uint8_t result = decrypted[7];
         int32_t packed = ((int32_t)reqType << 16) | ((int32_t)ctrlIdx << 8) | (int32_t)result;
-        g_lastControllerAck.store(packed, std::memory_order_release);
-        LOGI("Controller ACK: reqType=0x%04X idx=%d result=0x%02X", reqType, ctrlIdx, result);
+        s->lastControllerAck.store(packed, std::memory_order_release);
+        LOGI("Session %d controller ACK: reqType=0x%04X idx=%d result=0x%02X", handle, reqType, ctrlIdx, result);
     } else if (msgType == MSG_SERVER_STATUS && msgLen >= 2 && decLen >= 6) {
-        // Payload: vigemAvailable(1B) + activeControllerCount(1B)
         uint8_t vigem = decrypted[4];
         uint8_t count = decrypted[5];
         int8_t prevVigem =
-            g_vigemAvailable.exchange((int8_t)(vigem ? 1 : 0), std::memory_order_release);
+            s->vigemAvailable.exchange((int8_t)(vigem ? 1 : 0), std::memory_order_release);
         int8_t prevCount =
-            g_activeControllerCount.exchange((int8_t)count, std::memory_order_release);
+            s->activeControllerCount.exchange((int8_t)count, std::memory_order_release);
         if (prevVigem != (int8_t)(vigem ? 1 : 0) || prevCount != (int8_t)count) {
-            LOGI("Server status: vigemAvailable=%d activeControllers=%d", vigem, count);
+            LOGI("Session %d server status: vigemAvailable=%d activeControllers=%d", handle, vigem, count);
         }
     }
 }

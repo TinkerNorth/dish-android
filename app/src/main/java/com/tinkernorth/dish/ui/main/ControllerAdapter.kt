@@ -11,163 +11,156 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.data.model.DiscoveredServer
+import com.tinkernorth.dish.data.network.ConnectionKind
+import com.tinkernorth.dish.data.network.ConnectionLive
+import com.tinkernorth.dish.data.network.ConnectionSummary
 import com.tinkernorth.dish.databinding.ItemControllerBinding
 
 interface SlotActionListener {
     fun onSlotTapped(slotId: String)
-    fun onDestWifi(slotId: String)
-    fun onDestBt(slotId: String)
-    fun onScan(slotId: String)
-    fun onServerSelected(slotId: String, server: DiscoveredServer)
-    fun onBtStart(slotId: String)
-    fun onDisconnect(slotId: String)
+    fun onBind(slotId: String, connectionId: String)
+    fun onUnbind(slotId: String)
     fun onOpenGamepad()
 }
 
 class ControllerAdapter(
     private val listener: SlotActionListener,
-) : ListAdapter<ControllerSlot, ControllerAdapter.VH>(Diff) {
+) : ListAdapter<ControllerAdapter.Row, ControllerAdapter.VH>(Diff) {
 
-    private var servers: List<DiscoveredServer> = emptyList()
-    private var scanning = false
+    data class Row(
+        val slot: ControllerSlot,
+        val connections: List<ConnectionSummary>,
+        val expanded: Boolean,
+    )
 
-    fun submitSlots(slots: List<ControllerSlot>, discoveredServers: List<DiscoveredServer>, isScanning: Boolean) {
-        servers = discoveredServers
-        scanning = isScanning
-        submitList(slots.toList())
+    private val expandedIds = mutableSetOf(VIRTUAL_SLOT_ID)
+
+    fun submitSlots(slots: List<ControllerSlot>, connections: List<ConnectionSummary>) {
+        submitList(slots.map { Row(it, connections, expandedIds.contains(it.id)) })
+    }
+
+    fun toggleExpanded(slotId: String) {
+        if (!expandedIds.add(slotId)) expandedIds.remove(slotId)
     }
 
     inner class VH(private val b: ItemControllerBinding) : RecyclerView.ViewHolder(b.root) {
-
-        fun bind(slot: ControllerSlot) {
+        fun bind(row: Row) {
+            val slot = row.slot
             val ctx = b.root.context
             val dp = ctx.resources.displayMetrics.density
-
-            // ── Header ──
             val isVirtual = slot.inputType == SlotInputType.VIRTUAL
+
             b.ivControllerType.setImageResource(
                 if (isVirtual) android.R.drawable.ic_menu_compass else R.drawable.ctrl_xbox
             )
             b.tvControllerName.text = slot.name
             b.tvSlotStatus.text = slotStatusText(slot)
 
-            // Status dot
             initDot(b.dotStatus)
             setDot(b.dotStatus, when {
                 slot.isDisconnecting -> R.color.colorWarning
-                slot.isConnected -> R.color.colorSuccess
-                slot.connectionState == SlotConnectionState.CONNECTING -> R.color.colorPrimary
+                slot.boundStatus?.live == ConnectionLive.CONNECTED -> R.color.colorSuccess
+                slot.boundStatus?.live == ConnectionLive.CONNECTING -> R.color.colorPrimary
                 else -> R.color.colorMuted
             })
-
-            // Alpha for disconnecting
             b.root.alpha = if (slot.isDisconnecting) 0.5f else 1f
 
-            // Card tap → expand/collapse
             b.cardRoot.strokeColor = ctx.getColor(
-                if (slot.destExpanded) R.color.colorPrimary else R.color.colorCardStroke
+                if (row.expanded) R.color.colorPrimary else R.color.colorCardStroke,
             )
             b.root.setOnClickListener { listener.onSlotTapped(slot.id) }
 
-            // ── Body ──
-            b.llBody.visibility = if (slot.destExpanded) View.VISIBLE else View.GONE
-            if (!slot.destExpanded) return
+            b.llBody.visibility = if (row.expanded) View.VISIBLE else View.GONE
+            if (!row.expanded) return
 
-            // Destination selector buttons
-            highlightBtn(b.btnDestWifi, slot.destType == SlotDestType.WIFI)
-            highlightBtn(b.btnDestBt, slot.destType == SlotDestType.BLUETOOTH)
-            b.btnDestWifi.setOnClickListener { listener.onDestWifi(slot.id) }
-            b.btnDestBt.setOnClickListener { listener.onDestBt(slot.id) }
+            // Unbind button
+            if (slot.boundConnectionId != null) {
+                b.btnUnbind.visibility = View.VISIBLE
+                b.btnUnbind.setOnClickListener { listener.onUnbind(slot.id) }
+            } else {
+                b.btnUnbind.visibility = View.GONE
+            }
 
-            // ── Dynamic content ──
-            b.llDestContent.removeAllViews()
-            b.llActions.visibility = View.GONE
-            b.btnDisconnect.visibility = View.GONE
-            b.btnOpenGamepad.visibility = View.GONE
-
-            when (slot.destType) {
-                SlotDestType.WIFI -> buildWifiContent(slot, dp)
-                SlotDestType.BLUETOOTH -> buildBtContent(slot)
-                SlotDestType.NONE -> addLabel(b.llDestContent, dp, "Choose a destination above", R.color.colorMuted)
+            // Connection list
+            b.llConnectionList.removeAllViews()
+            if (row.connections.isEmpty()) {
+                addLabel(b.llConnectionList, dp, "No connections yet — tap Manage above", R.color.colorMuted)
+            } else {
+                row.connections.forEach { summary ->
+                    addConnectionRow(b.llConnectionList, dp, slot, summary)
+                }
             }
 
             // Virtual-only: open gamepad button
-            if (isVirtual && slot.isConnected) {
+            if (isVirtual && slot.boundStatus?.live == ConnectionLive.CONNECTED) {
                 b.btnOpenGamepad.visibility = View.VISIBLE
                 b.btnOpenGamepad.setOnClickListener { listener.onOpenGamepad() }
+            } else {
+                b.btnOpenGamepad.visibility = View.GONE
             }
         }
 
-        private fun buildWifiContent(slot: ControllerSlot, dp: Float) {
-            b.llActions.visibility = View.VISIBLE
-            if (slot.isConnected) {
-                b.btnAction.text = "RESCAN"
-                b.btnAction.setOnClickListener { listener.onScan(slot.id) }
-                b.btnDisconnect.visibility = View.VISIBLE
-                b.btnDisconnect.setOnClickListener { listener.onDisconnect(slot.id) }
-                addLabel(b.llDestContent, dp, "Connected to ${slot.connectedName}", R.color.colorSuccess)
-            } else if (scanning) {
-                b.btnAction.text = "SCANNING…"
-                b.btnAction.isEnabled = false
-                addLabel(b.llDestContent, dp, "Searching for servers…", R.color.colorMuted)
-            } else {
-                b.btnAction.text = if (servers.isNotEmpty()) "RESCAN" else "SCAN"
-                b.btnAction.isEnabled = true
-                b.btnAction.setOnClickListener { listener.onScan(slot.id) }
-                if (servers.isEmpty()) {
-                    addLabel(b.llDestContent, dp, "No servers found yet", R.color.colorMuted)
-                } else {
-                    addLabel(b.llDestContent, dp, "Select a server:", R.color.colorMuted)
-                    for (s in servers) addServerItem(b.llDestContent, dp, slot.id, s)
+        private fun addConnectionRow(
+            parent: LinearLayout, dp: Float, slot: ControllerSlot, c: ConnectionSummary,
+        ) {
+            val ctx = parent.context
+            val bound = slot.boundConnectionId == c.id
+            val ownedByOther = c.boundSlotId != null && c.boundSlotId != slot.id
+            val row = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                val pad = (10 * dp).toInt(); setPadding(pad, pad, pad, pad)
+                background = GradientDrawable().apply {
+                    setColor(ctx.getColor(R.color.colorBackground))
+                    cornerRadius = 6 * dp
+                    setStroke((1 * dp).toInt(), ctx.getColor(
+                        if (bound) R.color.colorPrimary else R.color.colorOutline))
                 }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = (6 * dp).toInt() }
+                alpha = if (ownedByOther) 0.5f else 1f
+                isClickable = !ownedByOther
+                if (!ownedByOther) setOnClickListener { listener.onBind(slot.id, c.id) }
             }
-        }
-
-        private fun buildBtContent(slot: ControllerSlot) {
-            val dp = b.root.context.resources.displayMetrics.density
-            b.llActions.visibility = View.VISIBLE
-            if (slot.isConnected) {
-                b.btnAction.text = "STOP"
-                b.btnAction.setOnClickListener { listener.onDisconnect(slot.id) }
-                b.btnDisconnect.visibility = View.GONE
-                addLabel(b.llDestContent, dp, "Connected to ${slot.connectedName}", R.color.colorSuccess)
-            } else if (slot.btRegistered) {
-                b.btnAction.text = "STOP"
-                b.btnAction.setOnClickListener { listener.onDisconnect(slot.id) }
-                addLabel(b.llDestContent, dp, "Waiting for host…", R.color.colorMuted)
-            } else {
-                b.btnAction.text = "START"
-                b.btnAction.setOnClickListener { listener.onBtStart(slot.id) }
-                addLabel(b.llDestContent, dp, "Register as Bluetooth gamepad", R.color.colorMuted)
+            val prefix = when (c.kind) { ConnectionKind.WIFI -> "📡 "; ConnectionKind.BLUETOOTH -> "🔗 " }
+            val statusSuffix = when (c.live) {
+                ConnectionLive.CONNECTED -> " • connected"
+                ConnectionLive.CONNECTING -> " • connecting…"
+                ConnectionLive.IDLE -> ""
             }
+            row.addView(TextView(ctx).apply {
+                text = "$prefix${c.label}$statusSuffix"
+                setTextColor(ctx.getColor(R.color.colorOnSurface))
+                textSize = 14f; typeface = Typeface.DEFAULT_BOLD
+            })
+            val detail = buildString {
+                append(c.detail)
+                if (bound) append(" • bound here")
+                else if (ownedByOther) append(" • in use")
+            }
+            row.addView(TextView(ctx).apply {
+                text = detail
+                setTextColor(ctx.getColor(R.color.colorMuted))
+                textSize = 11f; typeface = Typeface.MONOSPACE
+            })
+            parent.addView(row)
         }
-
-        // ── Helpers ──
 
         private fun slotStatusText(s: ControllerSlot) = when {
             s.isDisconnecting -> "Disconnecting… ${s.disconnectTimeLeft}s"
-            s.isConnected -> s.connectedName ?: "Connected"
-            s.connectionState == SlotConnectionState.CONNECTING -> "Connecting…"
-            s.destType != SlotDestType.NONE -> "Ready"
-            else -> "Tap to configure"
-        }
-
-        private fun highlightBtn(btn: com.google.android.material.button.MaterialButton, active: Boolean) {
-            val ctx = btn.context
-            if (active) {
-                btn.setBackgroundColor(ctx.getColor(R.color.colorPrimaryDark))
-                btn.setTextColor(ctx.getColor(R.color.colorOnSurface))
-            } else {
-                btn.setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                btn.setTextColor(ctx.getColor(R.color.colorOnSurface))
-                btn.strokeColor = android.content.res.ColorStateList.valueOf(ctx.getColor(R.color.colorOutline))
-            }
+            s.boundStatus?.live == ConnectionLive.CONNECTED ->
+                "→ ${s.boundStatus.label}"
+            s.boundStatus?.live == ConnectionLive.CONNECTING -> "Connecting…"
+            s.boundConnectionId != null -> "Bound"
+            else -> "Tap to bind"
         }
 
         private fun initDot(v: View) {
             if (v.background is GradientDrawable) return
-            v.background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(v.context.getColor(R.color.colorMuted)) }
+            v.background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(v.context.getColor(R.color.colorMuted))
+            }
         }
 
         private fun setDot(v: View, colorRes: Int) {
@@ -175,36 +168,14 @@ class ControllerAdapter(
         }
     }
 
-    // ── Shared dynamic-view builders (called from VH) ──
-
     private fun addLabel(parent: LinearLayout, dp: Float, text: String, colorRes: Int) {
         val ctx = parent.context
         parent.addView(TextView(ctx).apply {
             this.text = text; setTextColor(ctx.getColor(colorRes)); textSize = 12f
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = (4 * dp).toInt()
-            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = (4 * dp).toInt() }
         })
-    }
-
-    private fun addServerItem(parent: LinearLayout, dp: Float, slotId: String, server: DiscoveredServer) {
-        val ctx = parent.context
-        val item = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-            val pad = (10 * dp).toInt(); setPadding(pad, pad, pad, pad)
-            background = GradientDrawable().apply {
-                setColor(ctx.getColor(R.color.colorBackground)); cornerRadius = 6 * dp
-                setStroke((1 * dp).toInt(), ctx.getColor(R.color.colorOutline))
-            }
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = (6 * dp).toInt()
-            }
-            setOnClickListener { listener.onServerSelected(slotId, server) }
-            isClickable = true; isFocusable = true
-        }
-        item.addView(TextView(ctx).apply { text = server.name; setTextColor(ctx.getColor(R.color.colorOnSurface)); textSize = 14f; typeface = Typeface.DEFAULT_BOLD })
-        item.addView(TextView(ctx).apply { text = "${server.ip} • UDP:${server.udpPort}"; setTextColor(ctx.getColor(R.color.colorMuted)); textSize = 11f; typeface = Typeface.MONOSPACE })
-        parent.addView(item)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
@@ -212,8 +183,8 @@ class ControllerAdapter(
 
     override fun onBindViewHolder(holder: VH, position: Int) = holder.bind(getItem(position))
 
-    companion object Diff : DiffUtil.ItemCallback<ControllerSlot>() {
-        override fun areItemsTheSame(o: ControllerSlot, n: ControllerSlot) = o.id == n.id
-        override fun areContentsTheSame(o: ControllerSlot, n: ControllerSlot) = o == n
+    companion object Diff : DiffUtil.ItemCallback<Row>() {
+        override fun areItemsTheSame(o: Row, n: Row) = o.slot.id == n.slot.id
+        override fun areContentsTheSame(o: Row, n: Row) = o == n
     }
 }

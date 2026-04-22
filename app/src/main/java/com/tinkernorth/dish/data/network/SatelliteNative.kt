@@ -11,21 +11,26 @@ object SatelliteNative {
         System.loadLibrary("satellite")
     }
 
-    // ── UDP Socket ──────────────────────────────────────────────────────────
+    // ── UDP Session (handle-based) ──────────────────────────────────────────
+    // openSocket returns a positive session handle, or -1 on failure. All other
+    // session-scoped calls take that handle so multiple WiFi servers can run
+    // side-by-side with independent sockets, tokens, counters and heartbeat
+    // threads.
 
-    /** Open a UDP socket aimed at ip:port for streaming. Returns true on success. */
+    /** Open a UDP socket aimed at ip:port. Returns handle >= 1 on success, -1 on failure. */
     external fun openSocket(
         ip: String,
         port: Int,
-    ): Boolean
+    ): Int
 
-    /** Close the streaming UDP socket and stop heartbeat. */
-    external fun closeSocket()
+    /** Close the session identified by [handle] and stop its heartbeat. */
+    external fun closeSocket(handle: Int)
 
     // ── Connection params ───────────────────────────────────────────────────
 
-    /** Set the 4-byte token and 32-byte encryption key for this connection. */
+    /** Set the 4-byte token and 32-byte encryption key for [handle]. */
     external fun setConnectionParams(
+        handle: Int,
         token: ByteArray,
         key: ByteArray,
     )
@@ -33,10 +38,12 @@ object SatelliteNative {
     // ── Encrypted gamepad data ──────────────────────────────────────────────
 
     /**
-     * Send an encrypted gamepad report (0x0001) for the given controller index.
-     * Non-blocking sendto, called from main thread for minimum latency.
+     * Send an encrypted gamepad report (0x0001) on [handle] for the given
+     * controller index. Non-blocking sendto, called from main thread for
+     * minimum latency.
      */
     external fun sendReport(
+        handle: Int,
         controllerIndex: Int,
         wButtons: Int,
         bLeftTrigger: Int,
@@ -49,61 +56,57 @@ object SatelliteNative {
 
     // ── Controller management ───────────────────────────────────────────────
 
-    /** Send 0x0004 Controller Add message. */
+    /** Send 0x0004 Controller Add message on [handle]. */
     external fun controllerAdd(
+        handle: Int,
         controllerIndex: Int,
         capabilities: Int,
     )
 
-    /** Send 0x0005 Controller Remove message. */
-    external fun controllerRemove(controllerIndex: Int)
+    /** Send 0x0005 Controller Remove message on [handle]. */
+    external fun controllerRemove(handle: Int, controllerIndex: Int)
 
-    /** Send 0x0008 Controller Type message. */
+    /** Send 0x0008 Controller Type message on [handle]. */
     external fun sendControllerType(
+        handle: Int,
         controllerIndex: Int,
         controllerType: Int,
     )
 
     // ── Heartbeat ───────────────────────────────────────────────────────────
 
-    /** Start the heartbeat sender thread (sends 0x0002 every 2s). */
-    external fun startHeartbeat()
+    /** Start the heartbeat sender thread for [handle] (sends 0x0002 every 2s). */
+    external fun startHeartbeat(handle: Int)
 
-    /** Stop the heartbeat sender thread. */
-    external fun stopHeartbeat()
+    /** Stop the heartbeat sender thread for [handle]. */
+    external fun stopHeartbeat(handle: Int)
 
-    /** Check if the connection is still alive (no missed ACK timeout). */
-    external fun isConnectionAlive(): Boolean
+    /** Check if [handle]'s connection is still alive (no missed ACK timeout). */
+    external fun isConnectionAlive(handle: Int): Boolean
 
     /**
-     * Returns the last controller ACK as a packed int32:
+     * Returns the last controller ACK for [handle] as a packed int32:
      *   bits 31-16: requestType (0x0004 or 0x0005)
      *   bits 15-8:  controllerIndex
      *   bits 7-0:   result code (0x00=OK, 0x01=VIGEM_UNAVAIL, etc.)
      * Returns -1 if no ACK has been received yet.
      */
-    external fun getLastControllerAck(): Int
+    external fun getLastControllerAck(handle: Int): Int
 
-    /** Reset the controller ACK state to -1 (no ACK pending). */
-    external fun resetControllerAck()
+    /** Reset the controller ACK state for [handle] to -1. */
+    external fun resetControllerAck(handle: Int)
 
-    /**
-     * Returns ViGEm availability from the latest 0x0007 Server Status message.
-     * -1 = unknown (no status received yet), 0 = idle/unavailable, 1 = bus open
-     */
-    external fun getVigemAvailable(): Int
+    /** ViGEm availability from the latest 0x0007 Server Status on [handle]. */
+    external fun getVigemAvailable(handle: Int): Int
 
-    /**
-     * Returns the global active controller count from the latest 0x0007 Server Status.
-     * -1 = unknown (no status received yet), 0+ = count across all connections
-     */
-    external fun getActiveControllerCount(): Int
+    /** Active controller count from the latest 0x0007 Server Status on [handle]. */
+    external fun getActiveControllerCount(handle: Int): Int
 
     /**
-     * Try to receive and process one UDP packet (heartbeat ACK / controller ACK / server status).
-     * Non-blocking with 500ms timeout. Call from a background thread.
+     * Receive and process one UDP packet on [handle] (heartbeat/controller ACK
+     * or server status). Non-blocking with 500ms timeout. Call from background.
      */
-    external fun receiveAck()
+    external fun receiveAck(handle: Int)
 
     // ── HTTP Connection API ─────────────────────────────────────────────────
 

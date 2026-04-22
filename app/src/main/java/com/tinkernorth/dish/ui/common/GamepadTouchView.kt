@@ -15,8 +15,10 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.tinkernorth.dish.R
 import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.min
+import kotlin.math.sin
 
 /**
  * Custom View rendering an on-screen gamepad with touch input.
@@ -84,7 +86,7 @@ class GamepadTouchView
             const val HAT_W = 7
             const val HAT_NW = 8
 
-            private const val AXIS_MAX = 32767f
+            private const val TRIGGER_MAX = 255
         }
 
         // ── Controller profile ──────────────────────────────────────────────────
@@ -249,10 +251,10 @@ class GamepadTouchView
         private var r3StickDy = 0f
         private var ltPointerId = -1
         private var rtPointerId = -1
-        private var ltStartY = 0f
-        private var rtStartY = 0f
         private var dpadPointerId = -1
         private var abxyPointerId = -1
+        private var lbPointerId = -1
+        private var rbPointerId = -1
 
         @Suppress("LongMethod", "MagicNumber")
         override fun onSizeChanged(
@@ -550,24 +552,28 @@ class GamepadTouchView
                 return
             }
 
-            // Triggers
+            // Triggers — binary press, tracked by pointer id so drag-off still
+            // releases cleanly on UP.
             if (ltRect.contains(x, y)) {
                 ltPointerId = pid
-                ltStartY = y
+                state.leftTrigger = TRIGGER_MAX
                 return
             }
             if (rtRect.contains(x, y)) {
                 rtPointerId = pid
-                rtStartY = y
+                state.rightTrigger = TRIGGER_MAX
                 return
             }
 
-            // Shoulders
+            // Shoulders — pointer-id tracked so release works regardless of
+            // where the finger ends up on UP.
             if (lbRect.contains(x, y)) {
+                lbPointerId = pid
                 state.buttons = state.buttons or BTN_LB
                 return
             }
             if (rbRect.contains(x, y)) {
+                rbPointerId = pid
                 state.buttons = state.buttons or BTN_RB
                 return
             }
@@ -611,55 +617,29 @@ class GamepadTouchView
             val pid = event.getPointerId(idx)
 
             if (pid == leftStickPointerId) {
-                val dx = (x - leftStickCx) / stickRadius
-                val dy = (y - leftStickCy) / stickRadius
-                val d = hypot(dx, dy).coerceAtMost(1f)
-                val angle = atan2(dy, dx)
-                leftStickDx = d * kotlin.math.cos(angle)
-                leftStickDy = d * kotlin.math.sin(angle)
-                state.leftX = (leftStickDx * AXIS_MAX).toInt().toShort()
-                state.leftY = (leftStickDy * AXIS_MAX).toInt().toShort()
+                val r = computeStickAxes((x - leftStickCx) / stickRadius, (y - leftStickCy) / stickRadius)
+                leftStickDx = r.dx; leftStickDy = r.dy
+                state.leftX = r.axisX; state.leftY = r.axisY
             }
             if (pid == rightStickPointerId) {
-                val dx = (x - rightStickCx) / stickRadius
-                val dy = (y - rightStickCy) / stickRadius
-                val d = hypot(dx, dy).coerceAtMost(1f)
-                val angle = atan2(dy, dx)
-                rightStickDx = d * kotlin.math.cos(angle)
-                rightStickDy = d * kotlin.math.sin(angle)
-                state.rightX = (rightStickDx * AXIS_MAX).toInt().toShort()
-                state.rightY = (rightStickDy * AXIS_MAX).toInt().toShort()
+                val r = computeStickAxes((x - rightStickCx) / stickRadius, (y - rightStickCy) / stickRadius)
+                rightStickDx = r.dx; rightStickDy = r.dy
+                state.rightX = r.axisX; state.rightY = r.axisY
             }
             // L3 stick — same axes as L stick, plus L3 button held
             if (pid == l3StickPointerId) {
-                val dx = (x - l3StickCx) / l3StickRadius
-                val dy = (y - l3StickCy) / l3StickRadius
-                val d = hypot(dx, dy).coerceAtMost(1f)
-                val angle = atan2(dy, dx)
-                l3StickDx = d * kotlin.math.cos(angle)
-                l3StickDy = d * kotlin.math.sin(angle)
-                state.leftX = (l3StickDx * AXIS_MAX).toInt().toShort()
-                state.leftY = (l3StickDy * AXIS_MAX).toInt().toShort()
+                val r = computeStickAxes((x - l3StickCx) / l3StickRadius, (y - l3StickCy) / l3StickRadius)
+                l3StickDx = r.dx; l3StickDy = r.dy
+                state.leftX = r.axisX; state.leftY = r.axisY
             }
             // R3 stick — same axes as R stick, plus R3 button held
             if (pid == r3StickPointerId) {
-                val dx = (x - r3StickCx) / l3StickRadius
-                val dy = (y - r3StickCy) / l3StickRadius
-                val d = hypot(dx, dy).coerceAtMost(1f)
-                val angle = atan2(dy, dx)
-                r3StickDx = d * kotlin.math.cos(angle)
-                r3StickDy = d * kotlin.math.sin(angle)
-                state.rightX = (r3StickDx * AXIS_MAX).toInt().toShort()
-                state.rightY = (r3StickDy * AXIS_MAX).toInt().toShort()
+                val r = computeStickAxes((x - r3StickCx) / l3StickRadius, (y - r3StickCy) / l3StickRadius)
+                r3StickDx = r.dx; r3StickDy = r.dy
+                state.rightX = r.axisX; state.rightY = r.axisY
             }
-            if (pid == ltPointerId) {
-                val drag = ((y - ltStartY) / (ltRect.height() * 0.4f)).coerceIn(0f, 1f)
-                state.leftTrigger = (drag * 255).toInt()
-            }
-            if (pid == rtPointerId) {
-                val drag = ((y - rtStartY) / (rtRect.height() * 0.4f)).coerceIn(0f, 1f)
-                state.rightTrigger = (drag * 255).toInt()
-            }
+            // Triggers are binary — no move-modulation. The DOWN/UP handlers
+            // set the value; MOVE is a no-op for trigger pointers.
 
             // Live D-Pad tracking — only for the pointer that started on the d-pad
             if (pid == dpadPointerId) {
@@ -677,8 +657,6 @@ class GamepadTouchView
             idx: Int,
         ) {
             val pid = event.getPointerId(idx)
-            val x = event.getX(idx)
-            val y = event.getY(idx)
 
             if (pid == leftStickPointerId) {
                 leftStickPointerId = -1
@@ -725,7 +703,9 @@ class GamepadTouchView
                 return
             }
 
-            // D-pad and ABXY — clear by pointer ID, not position
+            // All button-region pointers clear by pointer ID, never by
+            // position — otherwise dragging the finger off the rect before
+            // release leaves the bit stuck.
             if (pid == dpadPointerId) {
                 dpadPointerId = -1
                 state.hatSwitch = HAT_NONE
@@ -736,17 +716,18 @@ class GamepadTouchView
                 state.buttons = state.buttons and (BTN_A or BTN_B or BTN_X or BTN_Y).inv()
                 return
             }
-
-            // Shoulders and discrete buttons — clear by position
-            if (lbRect.contains(x, y)) {
+            if (pid == lbPointerId) {
+                lbPointerId = -1
                 state.buttons = state.buttons and BTN_LB.inv()
                 return
             }
-            if (rbRect.contains(x, y)) {
+            if (pid == rbPointerId) {
+                rbPointerId = -1
                 state.buttons = state.buttons and BTN_RB.inv()
                 return
             }
-            // Clear all discrete buttons for simplicity on up
+            // Center / stick-click buttons: the pointer isn't tracked by id so
+            // just drop all of them on any unmatched up — same as before.
             state.buttons = state.buttons and (BTN_SELECT or BTN_START or BTN_HOME or BTN_LS or BTN_RS).inv()
         }
 
@@ -768,6 +749,8 @@ class GamepadTouchView
             r3StickDy = 0f
             dpadPointerId = -1
             abxyPointerId = -1
+            lbPointerId = -1
+            rbPointerId = -1
         }
 
         @Suppress("MagicNumber")
@@ -807,3 +790,53 @@ class GamepadTouchView
             if (hypot(x - (cx + sp), y - cy) < btnRadius * 1.3f) state.buttons = state.buttons or BTN_B
         }
     }
+
+/**
+ * Result of mapping a virtual-stick finger offset to visual + wire values.
+ *
+ * @property dx     unit-circle-clamped finger x for rendering, range -1f..1f
+ * @property dy     unit-circle-clamped finger y for rendering, range -1f..1f
+ *                  (y-down: positive = below stick center, matching Android
+ *                  view coordinates).
+ * @property axisX  signed 16-bit wire value: +32767 = full right, -32767 = full left.
+ * @property axisY  signed 16-bit wire value: +32767 = full up,    -32767 = full down.
+ *                  Note the sign flip vs [dy] — see [computeStickAxes].
+ */
+internal data class StickAxes(
+    val dx: Float,
+    val dy: Float,
+    val axisX: Short,
+    val axisY: Short,
+)
+
+/**
+ * Maps a raw finger offset (in units of the virtual stick's radius, relative
+ * to the stick center) to the clamped visual position and the int16 axis
+ * values carried over the wire.
+ *
+ * Contract:
+ *  - Magnitude is clamped to 1 while preserving direction (so a finger
+ *    dragged outside the stick well still yields axes saturated at
+ *    ±Short.MAX_VALUE in that direction).
+ *  - Android view coordinates are y-down, but the Xbox/XInput wire format
+ *    expects "stick up = positive Y". This function returns
+ *    `axisY = -dy * Short.MAX_VALUE`, matching the `-AXIS_MAX` scaling used
+ *    in the physical path ([GamepadInputProcessor.processJoystickInput]).
+ *  - A neutral input (0, 0) returns an all-zero result.
+ *
+ * This is the single source of truth for virtual-stick axis math; all four
+ * on-screen sticks (L, R, L3, R3) funnel through it.
+ */
+internal fun computeStickAxes(rawDx: Float, rawDy: Float): StickAxes {
+    val d = hypot(rawDx, rawDy).coerceAtMost(1f)
+    val angle = atan2(rawDy, rawDx)
+    val dx = d * cos(angle)
+    val dy = d * sin(angle)
+    val max = Short.MAX_VALUE.toFloat()
+    return StickAxes(
+        dx = dx,
+        dy = dy,
+        axisX = (dx * max).toInt().toShort(),
+        axisY = (-dy * max).toInt().toShort(),
+    )
+}

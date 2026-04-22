@@ -207,10 +207,6 @@ class BluetoothGamepad(
             0xC0.toByte(), // End Collection
         )
 
-    // Report is: [reportId=1][buttons 2B][hat 1B][LX 2B][LY 2B][RX 2B][RY 2B][LT 1B][RT 1B]
-    // Total: 13 bytes (without report ID prefix, which BluetoothHidDevice adds)
-
-    @Suppress("MagicNumber")
     fun buildReport(
         buttons: Int,
         hatSwitch: Int,
@@ -220,24 +216,9 @@ class BluetoothGamepad(
         rightY: Short,
         leftTrigger: Int,
         rightTrigger: Int,
-    ): ByteArray {
-        val report = ByteArray(REPORT_SIZE)
-        report[0] = REPORT_ID.toByte()
-        report[1] = (buttons and 0xFF).toByte()
-        report[2] = ((buttons shr 8) and 0xFF).toByte()
-        report[3] = (hatSwitch and 0xFF).toByte()
-        report[4] = (leftX.toInt() and 0xFF).toByte()
-        report[5] = ((leftX.toInt() shr 8) and 0xFF).toByte()
-        report[6] = (leftY.toInt() and 0xFF).toByte()
-        report[7] = ((leftY.toInt() shr 8) and 0xFF).toByte()
-        report[8] = (rightX.toInt() and 0xFF).toByte()
-        report[9] = ((rightX.toInt() shr 8) and 0xFF).toByte()
-        report[10] = (rightY.toInt() and 0xFF).toByte()
-        report[11] = ((rightY.toInt() shr 8) and 0xFF).toByte()
-        report[12] = (leftTrigger and 0xFF).toByte()
-        report[13] = (rightTrigger and 0xFF).toByte()
-        return report
-    }
+    ): ByteArray = buildHidReport(
+        buttons, hatSwitch, leftX, leftY, rightX, rightY, leftTrigger, rightTrigger,
+    )
 
     // ── Bluetooth HID lifecycle ──────────────────────────────────────────────
 
@@ -406,8 +387,61 @@ class BluetoothGamepad(
     }
 }
 
-private const val REPORT_ID = 1
-private const val REPORT_SIZE = 14
+internal const val REPORT_ID = 1
+internal const val REPORT_SIZE = 14
 private const val TOKEN_RATE = 3200 // 250 reports/sec × 13 bytes
 private const val BT_SLOT_US = 625 // Bluetooth Classic slot duration
 private const val JITTER_US = 1250
+
+/**
+ * Packs a single HID gamepad input report into a 14-byte little-endian frame.
+ *
+ * Wire layout (all little-endian; byte indices are zero-based):
+ *
+ *   [0]      report id (always [REPORT_ID] = 1)
+ *   [1..2]   buttons — u16 bitfield (see [GamepadInputProcessor.BUTTON_MAP])
+ *   [3]      hat switch — u8, low nibble: 0=neutral, 1=N, 2=NE, 3=E, 4=SE,
+ *            5=S, 6=SW, 7=W, 8=NW
+ *   [4..5]   left stick X  — i16, +32767 = right,  -32767 = left
+ *   [6..7]   left stick Y  — i16, +32767 = up,     -32767 = down (Xbox/XInput)
+ *   [8..9]   right stick X — i16, +32767 = right,  -32767 = left
+ *   [10..11] right stick Y — i16, +32767 = up,     -32767 = down (Xbox/XInput)
+ *   [12]     left trigger  — u8, 0..255
+ *   [13]     right trigger — u8, 0..255
+ *
+ * Callers are responsible for delivering axis values in the Xbox/XInput
+ * "stick up = positive Y" convention; this function performs no sign
+ * inversion. See `GamepadInputProcessor.processJoystickInput` (physical
+ * path) and `computeStickAxes` (virtual path) for the producers.
+ *
+ * Button and trigger ints are masked to their on-wire width; hat to low
+ * nibble. Axis shorts are stored as-is.
+ */
+@Suppress("MagicNumber")
+internal fun buildHidReport(
+    buttons: Int,
+    hatSwitch: Int,
+    leftX: Short,
+    leftY: Short,
+    rightX: Short,
+    rightY: Short,
+    leftTrigger: Int,
+    rightTrigger: Int,
+): ByteArray {
+    val report = ByteArray(REPORT_SIZE)
+    report[0] = REPORT_ID.toByte()
+    report[1] = (buttons and 0xFF).toByte()
+    report[2] = ((buttons shr 8) and 0xFF).toByte()
+    report[3] = (hatSwitch and 0xFF).toByte()
+    report[4] = (leftX.toInt() and 0xFF).toByte()
+    report[5] = ((leftX.toInt() shr 8) and 0xFF).toByte()
+    report[6] = (leftY.toInt() and 0xFF).toByte()
+    report[7] = ((leftY.toInt() shr 8) and 0xFF).toByte()
+    report[8] = (rightX.toInt() and 0xFF).toByte()
+    report[9] = ((rightX.toInt() shr 8) and 0xFF).toByte()
+    report[10] = (rightY.toInt() and 0xFF).toByte()
+    report[11] = ((rightY.toInt() shr 8) and 0xFF).toByte()
+    report[12] = (leftTrigger and 0xFF).toByte()
+    report[13] = (rightTrigger and 0xFF).toByte()
+    return report
+}
