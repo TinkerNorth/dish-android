@@ -103,22 +103,25 @@ class GamepadTouchView
         private val paintBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF1A1F25.toInt() }
         private val paintStickBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF1E293B.toInt() }
         private val paintPressed = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x403B82F6.toInt() }
-        private val paintStickRing = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            color = 0xFF475569.toInt()
-        }
-        private val paintStickDir = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            color = 0x80CBD5E1.toInt()
-            strokeCap = Paint.Cap.ROUND
-        }
+        private val paintStickRing =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                color = 0xFF475569.toInt()
+            }
+        private val paintStickDir =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                color = 0x80CBD5E1.toInt()
+                strokeCap = Paint.Cap.ROUND
+            }
         private val paintStickThumb = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFCBD5E1.toInt() }
         private val paintStickThumbActive = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF60A5FA.toInt() }
-        private val paintStickLabel = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFF0F172A.toInt()
-            textAlign = Paint.Align.CENTER
-            isFakeBoldText = true
-        }
+        private val paintStickLabel =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = 0xFF0F172A.toInt()
+                textAlign = Paint.Align.CENTER
+                isFakeBoldText = true
+            }
         private val paintPillBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF293548.toInt() }
         private val paintPillPressed = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF3B82F6.toInt() }
 
@@ -149,11 +152,14 @@ class GamepadTouchView
         init {
             loadDrawables()
             ViewCompat.setOnApplyWindowInsetsListener(this) { v, wi ->
-                val ins = wi.getInsets(
-                    WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
-                )
-                if (ins.left != safeInsets.left || ins.top != safeInsets.top ||
-                    ins.right != safeInsets.right || ins.bottom != safeInsets.bottom
+                val ins =
+                    wi.getInsets(
+                        WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
+                    )
+                if (ins.left != safeInsets.left ||
+                    ins.top != safeInsets.top ||
+                    ins.right != safeInsets.right ||
+                    ins.bottom != safeInsets.bottom
                 ) {
                     safeInsets.set(ins.left, ins.top, ins.right, ins.bottom)
                     if (v.width > 0 && v.height > 0) {
@@ -618,25 +624,33 @@ class GamepadTouchView
 
             if (pid == leftStickPointerId) {
                 val r = computeStickAxes((x - leftStickCx) / stickRadius, (y - leftStickCy) / stickRadius)
-                leftStickDx = r.dx; leftStickDy = r.dy
-                state.leftX = r.axisX; state.leftY = r.axisY
+                leftStickDx = r.dx
+                leftStickDy = r.dy
+                state.leftX = r.axisX
+                state.leftY = r.axisY
             }
             if (pid == rightStickPointerId) {
                 val r = computeStickAxes((x - rightStickCx) / stickRadius, (y - rightStickCy) / stickRadius)
-                rightStickDx = r.dx; rightStickDy = r.dy
-                state.rightX = r.axisX; state.rightY = r.axisY
+                rightStickDx = r.dx
+                rightStickDy = r.dy
+                state.rightX = r.axisX
+                state.rightY = r.axisY
             }
             // L3 stick — same axes as L stick, plus L3 button held
             if (pid == l3StickPointerId) {
                 val r = computeStickAxes((x - l3StickCx) / l3StickRadius, (y - l3StickCy) / l3StickRadius)
-                l3StickDx = r.dx; l3StickDy = r.dy
-                state.leftX = r.axisX; state.leftY = r.axisY
+                l3StickDx = r.dx
+                l3StickDy = r.dy
+                state.leftX = r.axisX
+                state.leftY = r.axisY
             }
             // R3 stick — same axes as R stick, plus R3 button held
             if (pid == r3StickPointerId) {
                 val r = computeStickAxes((x - r3StickCx) / l3StickRadius, (y - r3StickCy) / l3StickRadius)
-                r3StickDx = r.dx; r3StickDy = r.dy
-                state.rightX = r.axisX; state.rightY = r.axisY
+                r3StickDx = r.dx
+                r3StickDy = r.dy
+                state.rightX = r.axisX
+                state.rightY = r.axisY
             }
             // Triggers are binary — no move-modulation. The DOWN/UP handlers
             // set the value; MOVE is a no-op for trigger pointers.
@@ -827,7 +841,10 @@ internal data class StickAxes(
  * This is the single source of truth for virtual-stick axis math; all four
  * on-screen sticks (L, R, L3, R3) funnel through it.
  */
-internal fun computeStickAxes(rawDx: Float, rawDy: Float): StickAxes {
+internal fun computeStickAxes(
+    rawDx: Float,
+    rawDy: Float,
+): StickAxes {
     val d = hypot(rawDx, rawDy).coerceAtMost(1f)
     val angle = atan2(rawDy, rawDx)
     val dx = d * cos(angle)

@@ -14,20 +14,26 @@ import kotlinx.coroutines.flow.asStateFlow
  */
 sealed interface SessionState {
     data object Idle : SessionState
+
     data class Acquiring(
         val profile: BluetoothGamepad.GamepadProfile,
         val autoConnectMac: String?,
     ) : SessionState
+
     data class Registered(
         val profile: BluetoothGamepad.GamepadProfile,
         val autoConnectMac: String?,
     ) : SessionState
+
     data class Connected(
         val profile: BluetoothGamepad.GamepadProfile,
         val mac: String,
         val name: String?,
     ) : SessionState
-    data class Failed(val message: String) : SessionState
+
+    data class Failed(
+        val message: String,
+    ) : SessionState
 }
 
 /**
@@ -72,7 +78,10 @@ class BluetoothHidSession(
         synchronized(lock) { listeners -= listener }
     }
 
-    fun start(profile: BluetoothGamepad.GamepadProfile, autoConnectMac: String?) {
+    fun start(
+        profile: BluetoothGamepad.GamepadProfile,
+        autoConnectMac: String?,
+    ) {
         synchronized(lock) {
             teardownLocked()
             val newProxy = proxyFactory()
@@ -91,9 +100,10 @@ class BluetoothHidSession(
     }
 
     fun sendReport(report: ByteArray): Boolean {
-        val (px, canSend) = synchronized(lock) {
-            proxy to (_state.value is SessionState.Connected)
-        }
+        val (px, canSend) =
+            synchronized(lock) {
+                proxy to (_state.value is SessionState.Connected)
+            }
         return if (canSend) px?.sendReport(report) ?: false else false
     }
 
@@ -117,61 +127,75 @@ class BluetoothHidSession(
      * mutate the current session's state. Every callback re-checks the
      * generation it was created with; stale calls are silently dropped.
      */
-    private fun eventsFor(gen: Int) = object : HidProxyClient.Events {
-        override fun onAcquired() = ifCurrent(gen) {
-            val s = _state.value as? SessionState.Acquiring ?: return@ifCurrent
-            proxy?.registerApp(s.profile)
-        }
+    private fun eventsFor(gen: Int) =
+        object : HidProxyClient.Events {
+            override fun onAcquired() =
+                ifCurrent(gen) {
+                    val s = _state.value as? SessionState.Acquiring ?: return@ifCurrent
+                    proxy?.registerApp(s.profile)
+                }
 
-        override fun onReleased() = ifCurrent(gen) {
-            // Framework yanked the proxy: drop everything back to Idle. The
-            // foreground observer is responsible for waking us up again.
-            teardownLocked()
-            emitLocked(SessionState.Idle)
-        }
+            override fun onReleased() =
+                ifCurrent(gen) {
+                    // Framework yanked the proxy: drop everything back to Idle. The
+                    // foreground observer is responsible for waking us up again.
+                    teardownLocked()
+                    emitLocked(SessionState.Idle)
+                }
 
-        override fun onAppRegistered() = ifCurrent(gen) {
-            val s = _state.value as? SessionState.Acquiring ?: return@ifCurrent
-            emitLocked(SessionState.Registered(s.profile, s.autoConnectMac))
-            val mac = s.autoConnectMac ?: return@ifCurrent
-            val alreadyConnectedName = proxy?.findOsConnectedHost(mac)
-            if (alreadyConnectedName != null) {
-                emitLocked(SessionState.Connected(s.profile, mac, alreadyConnectedName))
-            } else {
-                proxy?.connectToHost(mac)
+            override fun onAppRegistered() =
+                ifCurrent(gen) {
+                    val s = _state.value as? SessionState.Acquiring ?: return@ifCurrent
+                    emitLocked(SessionState.Registered(s.profile, s.autoConnectMac))
+                    val mac = s.autoConnectMac ?: return@ifCurrent
+                    val alreadyConnectedName = proxy?.findOsConnectedHost(mac)
+                    if (alreadyConnectedName != null) {
+                        emitLocked(SessionState.Connected(s.profile, mac, alreadyConnectedName))
+                    } else {
+                        proxy?.connectToHost(mac)
+                    }
+                }
+
+            override fun onAppUnregistered() =
+                ifCurrent(gen) {
+                    teardownLocked()
+                    emitLocked(SessionState.Idle)
+                }
+
+            override fun onHostConnected(
+                mac: String,
+                name: String?,
+            ) = ifCurrent(gen) {
+                val profile = currentProfileLocked() ?: return@ifCurrent
+                emitLocked(SessionState.Connected(profile, mac, name))
             }
+
+            override fun onHostDisconnected(mac: String) =
+                ifCurrent(gen) {
+                    val connected = _state.value as? SessionState.Connected ?: return@ifCurrent
+                    if (!connected.mac.equals(mac, ignoreCase = true)) return@ifCurrent
+                    emitLocked(SessionState.Registered(connected.profile, autoConnectMac = null))
+                }
+
+            override fun onError(message: String) =
+                ifCurrent(gen) {
+                    teardownLocked()
+                    emitLocked(SessionState.Failed(message))
+                }
         }
 
-        override fun onAppUnregistered() = ifCurrent(gen) {
-            teardownLocked()
-            emitLocked(SessionState.Idle)
+    private fun currentProfileLocked(): BluetoothGamepad.GamepadProfile? =
+        when (val s = _state.value) {
+            is SessionState.Acquiring -> s.profile
+            is SessionState.Registered -> s.profile
+            is SessionState.Connected -> s.profile
+            else -> null
         }
 
-        override fun onHostConnected(mac: String, name: String?) = ifCurrent(gen) {
-            val profile = currentProfileLocked() ?: return@ifCurrent
-            emitLocked(SessionState.Connected(profile, mac, name))
-        }
-
-        override fun onHostDisconnected(mac: String) = ifCurrent(gen) {
-            val connected = _state.value as? SessionState.Connected ?: return@ifCurrent
-            if (!connected.mac.equals(mac, ignoreCase = true)) return@ifCurrent
-            emitLocked(SessionState.Registered(connected.profile, autoConnectMac = null))
-        }
-
-        override fun onError(message: String) = ifCurrent(gen) {
-            teardownLocked()
-            emitLocked(SessionState.Failed(message))
-        }
-    }
-
-    private fun currentProfileLocked(): BluetoothGamepad.GamepadProfile? = when (val s = _state.value) {
-        is SessionState.Acquiring -> s.profile
-        is SessionState.Registered -> s.profile
-        is SessionState.Connected -> s.profile
-        else -> null
-    }
-
-    private inline fun ifCurrent(gen: Int, block: () -> Unit) {
+    private inline fun ifCurrent(
+        gen: Int,
+        block: () -> Unit,
+    ) {
         synchronized(lock) { if (gen == generation) block() }
     }
 }

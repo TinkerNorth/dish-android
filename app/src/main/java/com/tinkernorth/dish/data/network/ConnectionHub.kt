@@ -47,120 +47,148 @@ data class ConnectionSummary(
  * the bindings so at most one slot owns any given connection.
  */
 @Singleton
-class ConnectionHub @Inject constructor(
-    private val wifi: WifiConnectionManager,
-    private val bt: BluetoothGamepadRegistry,
-    private val store: ConnectionStore,
-    private val scope: CoroutineScope,
-) {
-    /** slotId -> connectionId of the connection currently routing that slot. */
-    private val _bindings = MutableStateFlow<Map<String, String>>(emptyMap())
-    val bindings: StateFlow<Map<String, String>> = _bindings.asStateFlow()
+class ConnectionHub
+    @Inject
+    constructor(
+        private val wifi: WifiConnectionManager,
+        private val bt: BluetoothGamepadRegistry,
+        private val store: ConnectionStore,
+        private val scope: CoroutineScope,
+    ) {
+        /** slotId -> connectionId of the connection currently routing that slot. */
+        private val _bindings = MutableStateFlow<Map<String, String>>(emptyMap())
+        val bindings: StateFlow<Map<String, String>> = _bindings.asStateFlow()
 
-    private val _connections = MutableStateFlow<List<ConnectionSummary>>(emptyList())
-    val connections: StateFlow<List<ConnectionSummary>> = _connections.asStateFlow()
+        private val _connections = MutableStateFlow<List<ConnectionSummary>>(emptyList())
+        val connections: StateFlow<List<ConnectionSummary>> = _connections.asStateFlow()
 
-    init {
-        combine(
-            wifi.connections,
-            bt.states,
-        ) { wifiMap, btStates -> buildSummaries(wifiMap, btStates) }
-            .onEach { _connections.value = it }
-            .launchIn(scope)
-    }
+        init {
+            combine(
+                wifi.connections,
+                bt.states,
+            ) { wifiMap, btStates -> buildSummaries(wifiMap, btStates) }
+                .onEach { _connections.value = it }
+                .launchIn(scope)
+        }
 
-    private fun buildSummaries(
-        wifiMap: Map<String, WifiConnection>,
-        btStates: Map<String, BluetoothGamepadRegistry.SlotState>,
-    ): List<ConnectionSummary> {
-        val bindingBySlot = _bindings.value
-        val result = mutableListOf<ConnectionSummary>()
+        private fun buildSummaries(
+            wifiMap: Map<String, WifiConnection>,
+            btStates: Map<String, BluetoothGamepadRegistry.SlotState>,
+        ): List<ConnectionSummary> {
+            val bindingBySlot = _bindings.value
+            val result = mutableListOf<ConnectionSummary>()
 
-        // WiFi: remembered + any live not-yet-remembered (discovery hits).
-        val remembered = store.remembered().associateBy { it.id }
-        val wifiIds = (remembered.keys + wifiMap.keys).toSet()
-        for (id in wifiIds) {
-            val conn = wifiMap[id]
-            val server = conn?.server?.value ?: remembered[id]?.toDiscovered() ?: continue
-            val live = when (conn?.state?.value) {
-                WifiState.CONNECTED -> ConnectionLive.CONNECTED
-                WifiState.CONNECTING -> ConnectionLive.CONNECTING
-                else -> ConnectionLive.IDLE
+            // WiFi: remembered + any live not-yet-remembered (discovery hits).
+            val remembered = store.remembered().associateBy { it.id }
+            val wifiIds = (remembered.keys + wifiMap.keys).toSet()
+            for (id in wifiIds) {
+                val conn = wifiMap[id]
+                val server = conn?.server?.value ?: remembered[id]?.toDiscovered() ?: continue
+                val live =
+                    when (conn?.state?.value) {
+                        WifiState.CONNECTED -> ConnectionLive.CONNECTED
+                        WifiState.CONNECTING -> ConnectionLive.CONNECTING
+                        else -> ConnectionLive.IDLE
+                    }
+                val bound = bindingBySlot.entries.firstOrNull { it.value == id }?.key
+                result +=
+                    ConnectionSummary(
+                        id = id,
+                        kind = ConnectionKind.WIFI,
+                        label = server.name.ifEmpty { server.ip },
+                        detail = "${server.ip} • UDP ${server.udpPort}",
+                        live = live,
+                        boundSlotId = bound,
+                    )
             }
-            val bound = bindingBySlot.entries.firstOrNull { it.value == id }?.key
-            result += ConnectionSummary(
-                id = id, kind = ConnectionKind.WIFI,
-                label = server.name.ifEmpty { server.ip },
-                detail = "${server.ip} • UDP ${server.udpPort}",
-                live = live, boundSlotId = bound,
-            )
-        }
 
-        // Bluetooth: one summary per remembered host; live state from registry.
-        for (entry in store.rememberedBt()) {
-            val bound = bindingBySlot.entries.firstOrNull { it.value == entry.id }?.key
-            val state = btStates[entry.id]
-            val live = when {
-                state?.connected == true -> ConnectionLive.CONNECTED
-                state?.registered == true || state?.autoReconnecting == true -> ConnectionLive.CONNECTING
-                else -> ConnectionLive.IDLE
+            // Bluetooth: one summary per remembered host; live state from registry.
+            for (entry in store.rememberedBt()) {
+                val bound = bindingBySlot.entries.firstOrNull { it.value == entry.id }?.key
+                val state = btStates[entry.id]
+                val live =
+                    when {
+                        state?.connected == true -> ConnectionLive.CONNECTED
+                        state?.registered == true || state?.autoReconnecting == true -> ConnectionLive.CONNECTING
+                        else -> ConnectionLive.IDLE
+                    }
+                result +=
+                    ConnectionSummary(
+                        id = entry.id,
+                        kind = ConnectionKind.BLUETOOTH,
+                        label = entry.name.ifEmpty { entry.mac },
+                        detail = "${entry.profileName} • ${entry.mac}",
+                        live = live,
+                        boundSlotId = bound,
+                        btProfile = entry.profileName,
+                    )
             }
-            result += ConnectionSummary(
-                id = entry.id, kind = ConnectionKind.BLUETOOTH,
-                label = entry.name.ifEmpty { entry.mac },
-                detail = "${entry.profileName} • ${entry.mac}",
-                live = live, boundSlotId = bound, btProfile = entry.profileName,
-            )
+            return result
         }
-        return result
-    }
 
-    fun summary(id: String): ConnectionSummary? = _connections.value.firstOrNull { it.id == id }
+        fun summary(id: String): ConnectionSummary? = _connections.value.firstOrNull { it.id == id }
 
-    /** Bind [slotId] to [connectionId]. Evicts any prior binding on either side. */
-    fun bind(slotId: String, connectionId: String) {
-        val current = _bindings.value.toMutableMap()
-        // Another slot already holds this connection? Release it.
-        current.entries.firstOrNull { it.value == connectionId }?.key?.let { current.remove(it) }
-        current[slotId] = connectionId
-        _bindings.value = current
-        // Re-emit connections so boundSlotId refreshes.
-        _connections.value = buildSummaries(wifi.connections.value, bt.states.value)
-        // For WiFi: attach the controller slot on the server side.
-        wifi.get(connectionId)?.let { conn ->
-            scope.launch { conn.attachSlot(slotId, controllerType = 0) }
-        }
-    }
-
-    fun unbind(slotId: String) {
-        val current = _bindings.value.toMutableMap()
-        val connId = current.remove(slotId) ?: return
-        _bindings.value = current
-        wifi.get(connId)?.detachSlot()
-        _connections.value = buildSummaries(wifi.connections.value, bt.states.value)
-    }
-
-    fun boundConnection(slotId: String): ConnectionSummary? =
-        _bindings.value[slotId]?.let { id -> _connections.value.firstOrNull { it.id == id } }
-
-    /**
-     * Kick off a reconnect for every remembered WiFi server that isn't live
-     * yet, plus the first remembered Bluetooth host (Android's HID Device
-     * profile only supports one active host per app).
-     *
-     * Safe to call on every `MainActivity.onCreate` — both underlying managers
-     * are idempotent when a session is already live.
-     */
-    fun autoReconnectAll() {
-        for (remembered in store.remembered()) {
-            val existing = wifi.get(remembered.id)
-            if (existing?.state?.value != WifiState.CONNECTED) {
-                wifi.connect(remembered.toDiscovered())
+        /** Bind [slotId] to [connectionId]. Evicts any prior binding on either side. */
+        fun bind(
+            slotId: String,
+            connectionId: String,
+        ) {
+            val current = _bindings.value.toMutableMap()
+            // Another slot already holds this connection? Release it and
+            // tell the native session so the server sees a clean
+            // CONTROLLER_REMOVE before the new slot's CONTROLLER_ADD.
+            val priorSlot = current.entries.firstOrNull { it.value == connectionId }?.key
+            if (priorSlot != null && priorSlot != slotId) {
+                current.remove(priorSlot)
+                wifi.get(connectionId)?.detachSlot()
+            }
+            current[slotId] = connectionId
+            _bindings.value = current
+            // Re-emit connections so boundSlotId refreshes.
+            _connections.value = buildSummaries(wifi.connections.value, bt.states.value)
+            // For WiFi: attach the controller slot on the server side.
+            wifi.get(connectionId)?.let { conn ->
+                scope.launch { conn.attachSlot(slotId, controllerType = 0) }
             }
         }
-        val btHosts = store.rememberedBt()
-        if (btHosts.none { bt.state(it.id).connected || bt.state(it.id).registered }) {
-            btHosts.firstOrNull()?.let { bt.tryAutoReconnect(it.id) }
+
+        fun unbind(slotId: String) {
+            val current = _bindings.value.toMutableMap()
+            val connId = current.remove(slotId) ?: return
+            _bindings.value = current
+            wifi.get(connId)?.detachSlot()
+            _connections.value = buildSummaries(wifi.connections.value, bt.states.value)
+        }
+
+        fun boundConnection(slotId: String): ConnectionSummary? =
+            _bindings.value[slotId]?.let { id -> _connections.value.firstOrNull { it.id == id } }
+
+        /**
+         * Kick off a reconnect for every remembered WiFi server that isn't live
+         * yet, plus the first remembered Bluetooth host (Android's HID Device
+         * profile only supports one active host per app).
+         *
+         * Safe to call on every `MainActivity.onCreate` — both underlying managers
+         * are idempotent when a session is already live.
+         */
+        fun autoReconnectAll() {
+            for (remembered in store.remembered()) {
+                val existing = wifi.get(remembered.id)
+                if (existing?.state?.value != WifiState.CONNECTED) {
+                    wifi.connect(remembered.toDiscovered())
+                }
+            }
+            val btHosts = store.rememberedBt()
+            // Include `autoReconnecting` so an in-flight acquire (triggered by an
+            // earlier foreground kick) isn't torn down and restarted by the next
+            // one — the registry is internally idempotent, but we still want to
+            // avoid bouncing the SessionState machine.
+            if (btHosts.none {
+                    val s = bt.state(it.id)
+                    s.connected || s.registered || s.autoReconnecting
+                }
+            ) {
+                btHosts.firstOrNull()?.let { bt.tryAutoReconnect(it.id) }
+            }
         }
     }
-}

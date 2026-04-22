@@ -10,7 +10,6 @@ import org.junit.Test
  * Unit tests for [GamepadInputProcessor].
  */
 class GamepadInputProcessorTest {
-
     private lateinit var proc: GamepadInputProcessor
     private val sent = mutableListOf<List<Int>>()
 
@@ -18,9 +17,10 @@ class GamepadInputProcessorTest {
     fun setUp() {
         proc = GamepadInputProcessor()
         sent.clear()
-        proc.reportSender = GamepadInputProcessor.ReportSender { wButtons, bLT, bRT, sLX, sLY, sRX, sRY ->
-            sent.add(listOf(wButtons, bLT, bRT, sLX, sLY, sRX, sRY))
-        }
+        proc.reportSender =
+            GamepadInputProcessor.ReportSender { _, wButtons, bLT, bRT, sLX, sLY, sRX, sRY ->
+                sent.add(listOf(wButtons, bLT, bRT, sLX, sLY, sRX, sRY))
+            }
     }
 
     // ── scaleAxis ─────────────────────────────────────────────────────────
@@ -110,8 +110,8 @@ class GamepadInputProcessorTest {
 
     @Test
     fun `multiple buttons accumulate`() {
-        proc.handleKeyDown(android.view.KeyEvent.KEYCODE_BUTTON_A)  // 0x1000
-        proc.handleKeyDown(android.view.KeyEvent.KEYCODE_BUTTON_B)  // 0x2000
+        proc.handleKeyDown(android.view.KeyEvent.KEYCODE_BUTTON_A) // 0x1000
+        proc.handleKeyDown(android.view.KeyEvent.KEYCODE_BUTTON_B) // 0x2000
         assertEquals(0x3000, proc.wButtons)
     }
 

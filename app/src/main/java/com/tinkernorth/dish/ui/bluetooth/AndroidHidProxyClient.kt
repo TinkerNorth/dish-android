@@ -25,7 +25,6 @@ import androidx.annotation.RequiresApi
 class AndroidHidProxyClient(
     private val context: Context,
 ) : HidProxyClient {
-
     private var events: HidProxyClient.Events? = null
     private var hidDevice: BluetoothHidDevice? = null
     private var connectedDevice: BluetoothDevice? = null
@@ -50,18 +49,23 @@ class AndroidHidProxyClient(
     override fun registerApp(profile: BluetoothGamepad.GamepadProfile) {
         val hid = hidDevice ?: return
         currentProfile = profile
-        val sdp = BluetoothHidDeviceAppSdpSettings(
-            profile.sdpName,
-            profile.sdpDescription,
-            profile.sdpProvider,
-            BluetoothHidDevice.SUBCLASS2_GAMEPAD,
-            buildHidDescriptor(),
-        )
-        val qos = BluetoothHidDeviceAppQosSettings(
-            BluetoothHidDeviceAppQosSettings.SERVICE_GUARANTEED,
-            TOKEN_RATE, BluetoothHidDeviceAppQosSettings.MAX, BluetoothHidDeviceAppQosSettings.MAX,
-            BT_SLOT_US, JITTER_US,
-        )
+        val sdp =
+            BluetoothHidDeviceAppSdpSettings(
+                profile.sdpName,
+                profile.sdpDescription,
+                profile.sdpProvider,
+                BluetoothHidDevice.SUBCLASS2_GAMEPAD,
+                buildHidDescriptor(),
+            )
+        val qos =
+            BluetoothHidDeviceAppQosSettings(
+                BluetoothHidDeviceAppQosSettings.SERVICE_GUARANTEED,
+                TOKEN_RATE,
+                BluetoothHidDeviceAppQosSettings.MAX,
+                BluetoothHidDeviceAppQosSettings.MAX,
+                BT_SLOT_US,
+                JITTER_US,
+            )
         hid.registerApp(sdp, null, qos, { it.run() }, hidCallback)
     }
 
@@ -81,7 +85,8 @@ class AndroidHidProxyClient(
     override fun findOsConnectedHost(mac: String): String? {
         val hid = hidDevice ?: return null
         return runCatching {
-            hid.getDevicesMatchingConnectionStates(intArrayOf(BluetoothProfile.STATE_CONNECTED))
+            hid
+                .getDevicesMatchingConnectionStates(intArrayOf(BluetoothProfile.STATE_CONNECTED))
                 .firstOrNull { it.address.equals(mac, ignoreCase = true) }
                 ?.let { it.name ?: it.address }
         }.getOrNull()
@@ -111,37 +116,50 @@ class AndroidHidProxyClient(
 
     // ── Framework callbacks ──────────────────────────────────────────────
 
-    private val profileListener = object : BluetoothProfile.ServiceListener {
-        override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
-            if (profile != BluetoothProfile.HID_DEVICE) return
-            hidDevice = proxy as BluetoothHidDevice
-            events?.onAcquired()
-        }
-        override fun onServiceDisconnected(profile: Int) {
-            if (profile != BluetoothProfile.HID_DEVICE) return
-            hidDevice = null
-            connectedDevice = null
-            events?.onReleased()
-        }
-    }
+    private val profileListener =
+        object : BluetoothProfile.ServiceListener {
+            override fun onServiceConnected(
+                profile: Int,
+                proxy: BluetoothProfile,
+            ) {
+                if (profile != BluetoothProfile.HID_DEVICE) return
+                hidDevice = proxy as BluetoothHidDevice
+                events?.onAcquired()
+            }
 
-    private val hidCallback = object : BluetoothHidDevice.Callback() {
-        override fun onAppStatusChanged(pluggedDevice: BluetoothDevice?, registered: Boolean) {
-            if (registered) events?.onAppRegistered() else events?.onAppUnregistered()
+            override fun onServiceDisconnected(profile: Int) {
+                if (profile != BluetoothProfile.HID_DEVICE) return
+                hidDevice = null
+                connectedDevice = null
+                events?.onReleased()
+            }
         }
-        override fun onConnectionStateChanged(device: BluetoothDevice, state: Int) {
-            when (state) {
-                BluetoothProfile.STATE_CONNECTED -> {
-                    connectedDevice = device
-                    events?.onHostConnected(device.address, device.name)
-                }
-                BluetoothProfile.STATE_DISCONNECTED -> {
-                    if (connectedDevice?.address == device.address) connectedDevice = null
-                    events?.onHostDisconnected(device.address)
+
+    private val hidCallback =
+        object : BluetoothHidDevice.Callback() {
+            override fun onAppStatusChanged(
+                pluggedDevice: BluetoothDevice?,
+                registered: Boolean,
+            ) {
+                if (registered) events?.onAppRegistered() else events?.onAppUnregistered()
+            }
+
+            override fun onConnectionStateChanged(
+                device: BluetoothDevice,
+                state: Int,
+            ) {
+                when (state) {
+                    BluetoothProfile.STATE_CONNECTED -> {
+                        connectedDevice = device
+                        events?.onHostConnected(device.address, device.name)
+                    }
+                    BluetoothProfile.STATE_DISCONNECTED -> {
+                        if (connectedDevice?.address == device.address) connectedDevice = null
+                        events?.onHostDisconnected(device.address)
+                    }
                 }
             }
         }
-    }
 
     private companion object {
         const val TOKEN_RATE = 3200

@@ -10,9 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
 import android.widget.EditText
-import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,6 +22,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.data.network.ConnectionEvent
+import com.tinkernorth.dish.data.network.ConnectionHub
 import com.tinkernorth.dish.data.network.ConnectionKind
 import com.tinkernorth.dish.data.network.ConnectionLive
 import com.tinkernorth.dish.data.network.ConnectionSummary
@@ -32,10 +31,9 @@ import com.tinkernorth.dish.data.network.WifiConnectionManager
 import com.tinkernorth.dish.databinding.ActivityConnectionsBinding
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepad
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
-import com.tinkernorth.dish.data.network.ConnectionHub
 import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 /**
  * Dedicated screen for managing the pool of WiFi servers and Bluetooth hosts.
@@ -45,28 +43,35 @@ import kotlinx.coroutines.launch
  */
 @AndroidEntryPoint
 class ConnectionsActivity : AppCompatActivity() {
-
     @Inject lateinit var wifi: WifiConnectionManager
+
     @Inject lateinit var btRegistry: BluetoothGamepadRegistry
+
     @Inject lateinit var hub: ConnectionHub
+
     @Inject lateinit var store: com.tinkernorth.dish.data.network.ConnectionStore
 
     private lateinit var binding: ActivityConnectionsBinding
 
-    private val btPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { results ->
-        if (results.values.all { it }) showProfilePicker()
-        else Toast.makeText(this, "Bluetooth permissions denied", Toast.LENGTH_SHORT).show()
-    }
-
-    private val btDiscoverableLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_CANCELED) {
-            Toast.makeText(this, "Discoverability denied", Toast.LENGTH_SHORT).show()
+    private val btPermissionLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions(),
+        ) { results ->
+            if (results.values.all { it }) {
+                showProfilePicker()
+            } else {
+                Toast.makeText(this, "Bluetooth permissions denied", Toast.LENGTH_SHORT).show()
+            }
         }
-    }
+
+    private val btDiscoverableLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult(),
+        ) { result ->
+            if (result.resultCode == Activity.RESULT_CANCELED) {
+                Toast.makeText(this, "Discoverability denied", Toast.LENGTH_SHORT).show()
+            }
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -137,9 +142,13 @@ class ConnectionsActivity : AppCompatActivity() {
         val btnSecondary = v.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnRowSecondary)
         when (c.live) {
             ConnectionLive.CONNECTED -> {
-                btn.text = "Disconnect"; btn.setOnClickListener { wifi.disconnect(c.id) }
+                btn.text = "Disconnect"
+                btn.setOnClickListener { wifi.disconnect(c.id) }
             }
-            ConnectionLive.CONNECTING -> { btn.text = "Connecting…"; btn.isEnabled = false }
+            ConnectionLive.CONNECTING -> {
+                btn.text = "Connecting…"
+                btn.isEnabled = false
+            }
             ConnectionLive.IDLE -> {
                 btn.text = "Connect"
                 btn.setOnClickListener {
@@ -167,8 +176,14 @@ class ConnectionsActivity : AppCompatActivity() {
         val btn = v.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnRowAction)
         val btnSecondary = v.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnRowSecondary)
         when (c.live) {
-            ConnectionLive.CONNECTED -> { btn.text = "Disconnect"; btn.setOnClickListener { btRegistry.stop(c.id) } }
-            ConnectionLive.CONNECTING -> { btn.text = "Waiting…"; btn.isEnabled = false }
+            ConnectionLive.CONNECTED -> {
+                btn.text = "Disconnect"
+                btn.setOnClickListener { btRegistry.stop(c.id) }
+            }
+            ConnectionLive.CONNECTING -> {
+                btn.text = "Waiting…"
+                btn.isEnabled = false
+            }
             ConnectionLive.IDLE -> {
                 btn.text = "Reconnect"
                 btn.setOnClickListener {
@@ -186,24 +201,30 @@ class ConnectionsActivity : AppCompatActivity() {
         return v
     }
 
-    private fun statusText(c: ConnectionSummary): String = when (c.live) {
-        ConnectionLive.CONNECTED -> "Connected"
-        ConnectionLive.CONNECTING -> "Connecting"
-        ConnectionLive.IDLE -> "Idle"
-    }
+    private fun statusText(c: ConnectionSummary): String =
+        when (c.live) {
+            ConnectionLive.CONNECTED -> "Connected"
+            ConnectionLive.CONNECTING -> "Connecting"
+            ConnectionLive.IDLE -> "Idle"
+        }
 
-    private fun inflateRow(title: String, detail: String, status: String): View {
+    private fun inflateRow(
+        title: String,
+        detail: String,
+        status: String,
+    ): View {
         val v = LayoutInflater.from(this).inflate(R.layout.row_connection, binding.llWifiList, false)
         v.findViewById<TextView>(R.id.tvRowTitle).text = title
         v.findViewById<TextView>(R.id.tvRowDetail).text = detail
         v.findViewById<TextView>(R.id.tvRowStatus).text = status
         val dot = v.findViewById<View>(R.id.dotRow)
         dot.background = GradientDrawable().apply { shape = GradientDrawable.OVAL }
-        val color = when {
-            status == "Connected" -> R.color.colorSuccess
-            status == "Connecting" -> R.color.colorPrimary
-            else -> R.color.colorMuted
-        }
+        val color =
+            when {
+                status == "Connected" -> R.color.colorSuccess
+                status == "Connecting" -> R.color.colorPrimary
+                else -> R.color.colorMuted
+            }
         (dot.background as GradientDrawable).setColor(getColor(color))
         return v
     }
@@ -212,14 +233,19 @@ class ConnectionsActivity : AppCompatActivity() {
 
     private fun requestBtPermissions() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
-            Toast.makeText(this, "Bluetooth HID requires Android 9+", Toast.LENGTH_SHORT).show(); return
+            Toast.makeText(this, "Bluetooth HID requires Android 9+", Toast.LENGTH_SHORT).show()
+            return
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val needed = arrayOf(
-                Manifest.permission.BLUETOOTH_CONNECT,
-                Manifest.permission.BLUETOOTH_ADVERTISE,
-            ).filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
-            if (needed.isNotEmpty()) { btPermissionLauncher.launch(needed.toTypedArray()); return }
+            val needed =
+                arrayOf(
+                    Manifest.permission.BLUETOOTH_CONNECT,
+                    Manifest.permission.BLUETOOTH_ADVERTISE,
+                ).filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
+            if (needed.isNotEmpty()) {
+                btPermissionLauncher.launch(needed.toTypedArray())
+                return
+            }
         }
         showProfilePicker()
     }
@@ -241,26 +267,31 @@ class ConnectionsActivity : AppCompatActivity() {
         val tempId = "bt-pending-${System.currentTimeMillis()}"
         btRegistry.start(tempId, profile)
         // Ask the OS for discoverability so the host can see + pair with us.
-        val intent = Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).apply {
-            putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 120)
-        }
+        val intent =
+            Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).apply {
+                putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 120)
+            }
         btDiscoverableLauncher.launch(intent)
     }
 
-    private fun showPairingDialog(ip: String, pairPort: Int) {
+    private fun showPairingDialog(
+        ip: String,
+        pairPort: Int,
+    ) {
         val v = layoutInflater.inflate(R.layout.dialog_pairing, null)
         val etPin = v.findViewById<EditText>(R.id.et_pin)
         MaterialAlertDialogBuilder(this)
             .setView(v)
             .setPositiveButton("Connect") { _, _ ->
                 val pin = etPin.text.toString().ifEmpty { "0000" }
-                val server = com.tinkernorth.dish.data.model.DiscoveredServer(
-                    name = "", ip = ip, pairPort = pairPort,
-                )
+                val server =
+                    com.tinkernorth.dish.data.model.DiscoveredServer(
+                        name = "",
+                        ip = ip,
+                        pairPort = pairPort,
+                    )
                 wifi.pairWithPin(server, pin)
-            }
-            .setNegativeButton("Cancel", null)
+            }.setNegativeButton("Cancel", null)
             .show()
     }
 }
-

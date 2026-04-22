@@ -64,7 +64,10 @@ object SatelliteNative {
     )
 
     /** Send 0x0005 Controller Remove message on [handle]. */
-    external fun controllerRemove(handle: Int, controllerIndex: Int)
+    external fun controllerRemove(
+        handle: Int,
+        controllerIndex: Int,
+    )
 
     /** Send 0x0008 Controller Type message on [handle]. */
     external fun sendControllerType(
