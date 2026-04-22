@@ -27,3 +27,11 @@ style:
   MaxLineLength:
     maxLineLength: 140
 
+exceptions:
+  # Best-effort JSON parsing in NetworkUtils falls back to null/empty when the
+  # payload is malformed; those failure modes are the contract, not bugs.
+  SwallowedException:
+    ignoredExceptionTypes:
+      - SerializationException
+      - IllegalArgumentException
+

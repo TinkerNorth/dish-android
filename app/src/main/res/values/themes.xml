@@ -13,5 +13,33 @@
         <item name="android:windowBackground">@color/colorBackground</item>
         <item name="android:statusBarColor">@color/colorBackground</item>
         <item name="android:navigationBarColor">@color/colorBackground</item>
+        <!-- Default MaterialButton style for the entire app -->
+        <item name="materialButtonStyle">@style/Widget.Dish.Button</item>
+    </style>
+
+    <!-- Filled button: dark-amber background, light text, full-width friendly -->
+    <style name="Widget.Dish.Button" parent="Widget.MaterialComponents.Button">
+        <item name="backgroundTint">@color/colorPrimaryDark</item>
+        <item name="android:textColor">@color/colorOnSurface</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:letterSpacing">0.04</item>
+        <item name="cornerRadius">6dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="rippleColor">@color/colorPrimaryMid</item>
+    </style>
+
+    <!-- Outlined button: transparent bg, subtle border, light text -->
+    <style name="Widget.Dish.Button.Outlined" parent="Widget.MaterialComponents.Button.OutlinedButton">
+        <item name="backgroundTint">@android:color/transparent</item>
+        <item name="android:textColor">@color/colorOnSurface</item>
+        <item name="strokeColor">@color/colorOutline</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:letterSpacing">0.04</item>
+        <item name="cornerRadius">6dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="rippleColor">@color/colorPrimaryDark</item>
     </style>
 </resources>

@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Countdown banner (appears before low-power kicks in) -->
+    <LinearLayout
+        android:id="@+id/llCountdownBanner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:background="@color/colorSurface"
+        android:padding="12dp"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Low-power mode in "
+            android:textColor="@color/colorMuted"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/tvCountdownSeconds"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="30"
+            android:textColor="@color/colorWarning"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="s"
+            android:textColor="@color/colorMuted"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- Full-screen dim overlay when in low-power mode -->
+    <FrameLayout
+        android:id="@+id/flLowPowerOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#CC000000"
+        android:visibility="gone"
+        android:clickable="true"
+        android:focusable="true">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:orientation="vertical"
+            android:gravity="center">
+
+            <TextView
+                android:id="@+id/tvLowPowerTime"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="00:00"
+                android:textColor="@color/colorPrimary"
+                android:textSize="48sp"
+                android:fontFamily="monospace"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvLowPowerStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="LOW POWER — TAP TO WAKE"
+                android:textColor="@color/colorMuted"
+                android:textSize="12sp"
+                android:layout_marginTop="8dp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+    </FrameLayout>
+</merge>
