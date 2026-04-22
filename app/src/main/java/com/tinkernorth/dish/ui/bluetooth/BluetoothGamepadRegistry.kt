@@ -1,12 +1,7 @@
 package com.tinkernorth.dish.ui.bluetooth
 
-import android.bluetooth.BluetoothDevice
-import android.content.Context
-import android.os.Build
-import androidx.annotation.RequiresApi
 import com.tinkernorth.dish.data.network.ConnectionStore
 import com.tinkernorth.dish.data.network.RememberedBt
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,21 +10,23 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Process-scoped owner for [BluetoothGamepad] instances, keyed by connection
- * id (see [RememberedBt.id]). Android's HID Device profile only allows a
- * single active host per app, but the registry still tracks multiple
- * remembered hosts so the connection hub can expose them all; only one will
- * be [SlotState.registered]/[SlotState.connected] at any time.
+ * Projects the single [BluetoothHidSession] onto a per-connection-id slot
+ * view. Android's HID Device profile only allows one registered app per
+ * process, so at most one slot is ever live; the registry keeps the mapping
+ * from a caller-supplied id (transient `bt-pending-*` during discovery, or
+ * stable `bt:<MAC>` after persistence) to its current [SlotState].
+ *
+ * Re-keying: callers start a session with a transient id because the MAC is
+ * unknown until the host actually connects. When the session emits
+ * [SessionState.Connected] the registry swaps the transient id for
+ * [idFor] `<MAC>`, persists the host through [ConnectionStore.rememberBt],
+ * and drops the transient entry so the UI sees a single stable row.
  */
 @Singleton
 class BluetoothGamepadRegistry @Inject constructor(
-    @ApplicationContext private val appContext: Context,
     private val store: ConnectionStore,
+    private val session: BluetoothHidSession,
 ) {
-    private val gamepads = mutableMapOf<String, BluetoothGamepad>()
-    private val listeners = mutableMapOf<String, MutableList<BluetoothGamepad.Listener>>()
-    private val autoReconnecting = mutableSetOf<String>()
-
     data class SlotState(
         val registered: Boolean = false,
         val connected: Boolean = false,
@@ -38,70 +35,78 @@ class BluetoothGamepadRegistry @Inject constructor(
         val autoReconnecting: Boolean = false,
     )
 
+    private val lock = Any()
+    private var activeConnId: String? = null
+
     private val _states = MutableStateFlow<Map<String, SlotState>>(emptyMap())
     val states: StateFlow<Map<String, SlotState>> = _states.asStateFlow()
 
+    init {
+        session.addListener(::onSessionState)
+    }
+
     fun state(connId: String): SlotState = _states.value[connId] ?: SlotState()
     fun isConnected(connId: String): Boolean = state(connId).connected
-    fun isActive(connId: String): Boolean = gamepads.containsKey(connId)
-
-    fun addListener(connId: String, l: BluetoothGamepad.Listener) {
-        listeners.getOrPut(connId) { mutableListOf() }.add(l)
-    }
-
-    fun removeListener(connId: String, l: BluetoothGamepad.Listener) {
-        listeners[connId]?.remove(l)
-    }
+    fun isActive(connId: String): Boolean = synchronized(lock) { activeConnId == connId }
+    fun isAutoReconnecting(connId: String): Boolean = state(connId).autoReconnecting
 
     /**
      * Start a fresh HID registration for [connId] with [profile]. If a
-     * different connection is currently active it is torn down first (Android
-     * only allows one active HID registration per app).
+     * different connection is currently active it is evicted first — the
+     * session tears down its proxy internally, so only the registry's
+     * bookkeeping needs to catch up.
      */
-    @RequiresApi(Build.VERSION_CODES.P)
     fun start(
         connId: String,
         profile: BluetoothGamepad.GamepadProfile,
         autoConnectMac: String? = null,
     ) {
-        val previouslyActive = gamepads.keys.filter { it != connId }.toList()
-        previouslyActive.forEach { stop(it) }
-        gamepads[connId]?.stop()
-        if (autoConnectMac != null) autoReconnecting.add(connId) else autoReconnecting.remove(connId)
-        updateState(connId) {
-            it.copy(
-                profileName = profile.profileName,
-                autoReconnecting = autoConnectMac != null,
-                registered = false,
-                connected = false,
-            )
+        synchronized(lock) {
+            activeConnId?.takeIf { it != connId }?.let { prior -> _states.update { it - prior } }
+            activeConnId = connId
+            _states.update { map ->
+                map + (connId to SlotState(
+                    profileName = profile.profileName,
+                    autoReconnecting = autoConnectMac != null,
+                ))
+            }
         }
-        val gp = BluetoothGamepad(appContext, dispatchingListener(connId, profile))
-        gp.start(profile, autoConnectMac)
-        gamepads[connId] = gp
+        session.start(profile, autoConnectMac)
     }
 
     fun stop(connId: String) {
-        gamepads.remove(connId)?.stop()
-        autoReconnecting.remove(connId)
-        _states.update { it - connId }
+        val wasActive = synchronized(lock) {
+            val active = activeConnId == connId
+            if (active) activeConnId = null
+            _states.update { it - connId }
+            active
+        }
+        if (wasActive) session.stop()
     }
 
     fun stopAll() {
-        gamepads.values.forEach { it.stop() }
-        gamepads.clear()
-        autoReconnecting.clear()
-        _states.value = emptyMap()
+        synchronized(lock) {
+            activeConnId = null
+            _states.value = emptyMap()
+        }
+        session.stop()
     }
 
     fun sendReport(connId: String, report: ByteArray) {
-        gamepads[connId]?.sendReport(report)
+        val active = synchronized(lock) { activeConnId == connId }
+        if (!active) return
+        if (!state(connId).connected) return
+        session.sendReport(report)
     }
 
     fun buildReport(
         connId: String,
         buttons: Int, hat: Int, lx: Short, ly: Short, rx: Short, ry: Short, lt: Int, rt: Int,
-    ): ByteArray? = gamepads[connId]?.buildReport(buttons, hat, lx, ly, rx, ry, lt, rt)
+    ): ByteArray? {
+        val active = synchronized(lock) { activeConnId == connId }
+        if (!active || !state(connId).connected) return null
+        return buildHidReport(buttons, hat, lx, ly, rx, ry, lt, rt)
+    }
 
     /**
      * If [connId] matches a remembered host, register the HID with its saved
@@ -110,12 +115,10 @@ class BluetoothGamepadRegistry @Inject constructor(
      *
      * Idempotent: if the slot is already registered/connected we leave the
      * live session alone instead of tearing it down. This matters because
-     * [MainActivity] invokes us on every `onCreate`, including configuration
-     * changes and re-entry from the gamepad overlay. Also no-ops on API
-     * levels below 28 where Bluetooth HID Device is unavailable.
+     * the foreground observer and MainActivity both call us on every return
+     * to the foreground.
      */
     fun tryAutoReconnect(connId: String): BluetoothGamepad.GamepadProfile? {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null
         val entry = store.rememberedBt().firstOrNull { it.id == connId } ?: return null
         val profile = BluetoothGamepad.GamepadProfile.entries
             .firstOrNull { it.name == entry.profileName } ?: return null
@@ -125,45 +128,46 @@ class BluetoothGamepadRegistry @Inject constructor(
         return profile
     }
 
-    fun isAutoReconnecting(connId: String): Boolean = autoReconnecting.contains(connId)
+    // ── Session projection ────────────────────────────────────────────────
 
-    private fun dispatchingListener(
-        connId: String,
-        profile: BluetoothGamepad.GamepadProfile,
-    ) = object : BluetoothGamepad.Listener {
-        override fun onRegistered() {
-            updateState(connId) { it.copy(registered = true) }
-            listeners[connId]?.toList()?.forEach { it.onRegistered() }
-        }
-        override fun onUnregistered() {
-            autoReconnecting.remove(connId)
-            updateState(connId) { it.copy(registered = false, connected = false, autoReconnecting = false) }
-            listeners[connId]?.toList()?.forEach { it.onUnregistered() }
-        }
-        override fun onConnected(device: BluetoothDevice) {
-            autoReconnecting.remove(connId)
-            val name = device.name ?: device.address
-            store.rememberBt(RememberedBt(
-                id = connId, name = name, mac = device.address, profileName = profile.name,
-            ))
-            updateState(connId) { it.copy(connected = true, connectedName = name, autoReconnecting = false) }
-            listeners[connId]?.toList()?.forEach { it.onConnected(device) }
-        }
-        override fun onDisconnected(device: BluetoothDevice) {
-            updateState(connId) { it.copy(connected = false, connectedName = null, autoReconnecting = false) }
-            listeners[connId]?.toList()?.forEach { it.onDisconnected(device) }
-        }
-        override fun onError(message: String) {
-            autoReconnecting.remove(connId)
-            updateState(connId) { it.copy(autoReconnecting = false) }
-            listeners[connId]?.toList()?.forEach { it.onError(message) }
+    private fun onSessionState(state: SessionState) {
+        val connId = synchronized(lock) { activeConnId } ?: return
+        when (state) {
+            is SessionState.Idle,
+            is SessionState.Failed -> _states.update { map ->
+                val cur = map[connId] ?: return@update map
+                map + (connId to cur.copy(
+                    registered = false, connected = false,
+                    connectedName = null, autoReconnecting = false,
+                ))
+            }
+            is SessionState.Acquiring -> Unit // seeded by start()
+            is SessionState.Registered -> _states.update { map ->
+                val cur = map[connId] ?: SlotState()
+                map + (connId to cur.copy(
+                    registered = true, connected = false, connectedName = null,
+                ))
+            }
+            is SessionState.Connected -> onConnected(connId, state)
         }
     }
 
-    private fun updateState(connId: String, transform: (SlotState) -> SlotState) {
-        _states.update { map ->
-            val cur = map[connId] ?: SlotState()
-            map + (connId to transform(cur))
+    private fun onConnected(currentId: String, state: SessionState.Connected) {
+        val stableId = idFor(state.mac)
+        val name = state.name ?: state.mac
+        store.rememberBt(RememberedBt(
+            id = stableId, name = name, mac = state.mac, profileName = state.profile.name,
+        ))
+        synchronized(lock) {
+            if (currentId != stableId) activeConnId = stableId
+            _states.update { map ->
+                val prior = map[currentId] ?: SlotState()
+                val next = prior.copy(
+                    registered = true, connected = true, connectedName = name,
+                    profileName = state.profile.profileName, autoReconnecting = false,
+                )
+                (map - currentId) + (stableId to next)
+            }
         }
     }
 

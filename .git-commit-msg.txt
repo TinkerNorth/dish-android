@@ -1,0 +1,44 @@
+Fix BT HID reconnect after backgrounding: FSM + stable IDs + foreground observer
+
+Root cause
+- On background/return the app's view of the HID connection drifted from
+  the OS state: temporary connection IDs (bt-pending-*) were never
+  re-keyed to MAC-based IDs, and the HID proxy registration could be
+  left stale with no recovery path, so reconnect attempts no-op'd.
+
+Fix
+- Introduce BluetoothHidSession, a process-scoped FSM that owns the
+  HID proxy lifecycle (Idle → Acquiring → Registered → Connected →
+  Disconnected → Recovering) and serialises transitions through a
+  single dispatcher. Illegal transitions are rejected instead of
+  silently leaving stale state behind.
+- Add HidProxyClient seam with AndroidHidProxyClient (real) and
+  FakeHidProxyClient (tests) so the FSM can be exercised without a
+  Bluetooth adapter.
+- Refactor BluetoothGamepadRegistry to delegate to the session and
+  re-key bt-pending-<ts> → bt:<MAC> in both in-memory state and
+  ConnectionStore on onHostConnected, de-duping store entries by MAC.
+- Add BluetoothForegroundObserver bound to ProcessLifecycleOwner;
+  ON_START triggers ConnectionHub.autoReconnectAll so returning to
+  the foreground rehydrates any slots whose OS-level connection is
+  still live.
+- Trim BluetoothGamepad.kt to pure helpers (GamepadProfile,
+  descriptor, buildHidReport); drop the dead Listener API.
+
+Wiring
+- AppModule provides BluetoothHidSession as a singleton and a
+  @JvmSuppressWildcards Function0<HidProxyClient> factory for Hilt.
+- DishApplication registers BluetoothForegroundObserver on startup.
+- androidx.lifecycle-process added via version catalog.
+
+Tests (all green, 158 cases total)
+- BluetoothHidSessionTest: FSM transitions and illegal-transition
+  rejection.
+- BluetoothHidSessionRecoveryTest: onServiceDisconnected →
+  Recovering → re-acquire path.
+- BluetoothHidSessionReportTest: report forwarding only in Connected.
+- BluetoothGamepadRegistryTest: id re-keying, store de-dup by MAC,
+  SlotState emissions, cross-slot eviction.
+- BluetoothForegroundObserverTest: ON_START triggers reconnect,
+  ON_STOP does not tear down (uses InstantTaskExecutorRule to avoid
+  unmocked Looper).
