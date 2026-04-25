@@ -1,5 +1,7 @@
-# TinkerNorth — shared clang-format configuration
-# Used by both Satellite (dev/) and Dish JNI (Dish/app/src/main/cpp/).
+# TinkerNorth — canonical clang-format configuration.
+# This exact file is shared by satellite, dish-android (JNI), dish-linux,
+# and dish-mac (any C/C++ source). Pinned to clang-format 22.1.4 in CI;
+# older versions may produce small diffs on braced-init lists.
 # Run:  clang-format -i <files>
 
 BasedOnStyle: LLVM
@@ -58,4 +60,3 @@ MaxEmptyLinesToKeep: 1
 ReflowComments: true
 SpaceBeforeCpp11BracedList: false
 Standard: c++17
-

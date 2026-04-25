@@ -1,0 +1,29 @@
+#!/bin/bash
+# Dish Android pre-commit hook: runs clang-format (autofix) on staged JNI
+# C/C++ files. Kotlin formatting is enforced by ktlint at the CI stage —
+# pre-commit stays fast by skipping a Gradle warmup.
+#
+# Gracefully skips if clang-format is missing so devs who haven't run
+# setup-hooks.sh or installed the tool yet aren't blocked — CI enforces the
+# same check in --Werror mode.
+set -euo pipefail
+
+# Collect staged JNI sources (added / copied / modified), NUL-separated to
+# handle paths with spaces.
+staged=$(git diff --cached --name-only --diff-filter=ACM -z \
+    -- 'app/src/main/cpp/*.cpp' 'app/src/main/cpp/*.h' 'app/src/main/cpp/*.c' \
+    | tr '\0' '\n' | sed '/^$/d')
+if [ -z "$staged" ]; then
+    exit 0
+fi
+
+# ── clang-format ─────────────────────────────────────────────────────────
+if command -v clang-format >/dev/null 2>&1; then
+    echo "▶ clang-format (staged JNI files)"
+    echo "$staged" | while IFS= read -r file; do
+        clang-format -i "$file"
+        git add "$file"
+    done
+else
+    echo "⚠  clang-format not installed — skipping (install clang-format)"
+fi

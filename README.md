@@ -127,4 +127,6 @@ Please use the provided PR and issue templates.
 
 ## License
 
-Copyright © TinkerNorth. All rights reserved.
+Distributed under the terms of the **GNU Lesser General Public License v3.0
+or later**. See [`LICENSE`](LICENSE) (LGPL) and [`COPYING.GPL3`](COPYING.GPL3)
+(the GPL v3 the LGPL incorporates by reference).

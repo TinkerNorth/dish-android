@@ -26,6 +26,23 @@ android {
         }
     }
 
+    // Reads from environment variables set by the release CI workflow. When
+    // any var is missing, the release build is unsigned (debuggable=false) so
+    // local `./gradlew assembleRelease` still works without provisioning a
+    // keystore — the resulting APK is just not installable on a device until
+    // it's signed manually.
+    signingConfigs {
+        val keystoreFile = System.getenv("DISH_KEYSTORE_FILE")?.takeIf { it.isNotBlank() }
+        if (keystoreFile != null) {
+            create("release") {
+                storeFile = file(keystoreFile)
+                storePassword = System.getenv("DISH_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("DISH_KEY_ALIAS")
+                keyPassword = System.getenv("DISH_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -33,6 +50,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            // Apply the release signing config only when it was registered above
+            // (i.e. DISH_KEYSTORE_FILE was set in the environment).
+            signingConfig = signingConfigs.findByName("release")
         }
     }
     kotlin {

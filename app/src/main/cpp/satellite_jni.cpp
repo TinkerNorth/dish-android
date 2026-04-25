@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+// Copyright (C) 2026 Dish contributors.
+
 /*
  * satellite_jni.cpp — Native bridge for the Dish Android client.
  * GameActivity provides the native thread (android_main) for lifecycle.
@@ -46,8 +49,6 @@ static constexpr uint16_t MSG_CONTROLLER_REMOVE = 0x0005;
 static constexpr uint16_t MSG_CONTROLLER_ACK = 0x0006;
 static constexpr uint16_t MSG_SERVER_STATUS = 0x0007;
 static constexpr uint16_t MSG_CONTROLLER_TYPE = 0x0008;
-
-
 
 #pragma pack(push, 1)
 struct XUSB_REPORT {
@@ -116,7 +117,8 @@ static void putBE32(uint8_t* dst, uint32_t v) {
 }
 
 /* ── Encrypt and send a message over the UDP channel ───────────────────────── */
-static bool sendEncrypted(Session* s, uint16_t msgType, const uint8_t* payload, uint16_t payloadLen) {
+static bool sendEncrypted(Session* s, uint16_t msgType, const uint8_t* payload,
+                          uint16_t payloadLen) {
     if (!s || s->udpSock < 0) return false;
 
     // Inner message: type(2) + length(2) + payload
@@ -208,9 +210,8 @@ static void ensureSodiumInit() {
 
 /* ── UDP Socket ────────────────────────────────────────────────────────────── */
 
-JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_openSocket(JNIEnv* env,
-                                                                                jobject, jstring ip,
-                                                                                jint port) {
+JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_openSocket(
+    JNIEnv* env, jobject, jstring ip, jint port) {
     ensureSodiumInit();
     int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (sock < 0) {
@@ -246,7 +247,8 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_op
     return handle;
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_closeSocket(JNIEnv*, jobject, jint handle) {
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_data_network_SatelliteNative_closeSocket(JNIEnv*, jobject, jint handle) {
     std::shared_ptr<Session> s;
     {
         std::lock_guard<std::mutex> lock(g_sessionsMtx);
@@ -280,15 +282,15 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_se
     s->connectionAlive.store(true);
     env->ReleaseByteArrayElements(tokenArr, tokenBytes, JNI_ABORT);
     env->ReleaseByteArrayElements(keyArr, keyBytes, JNI_ABORT);
-    LOGI("Session %d params set (token=%02x%02x%02x%02x)", handle, s->token[0], s->token[1], s->token[2],
-         s->token[3]);
+    LOGI("Session %d params set (token=%02x%02x%02x%02x)", handle, s->token[0], s->token[1],
+         s->token[2], s->token[3]);
 }
 
 /* ── Encrypted gamepad data ────────────────────────────────────────────────── */
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_sendReport(
-    JNIEnv*, jobject, jint handle, jint controllerIndex, jint wB, jint bLT, jint bRT, jint sLX, jint sLY,
-    jint sRX, jint sRY) {
+    JNIEnv*, jobject, jint handle, jint controllerIndex, jint wB, jint bLT, jint bRT, jint sLX,
+    jint sLY, jint sRX, jint sRY) {
     auto s = getSession(handle);
     if (!s) return;
     // Payload: controller_index(1B) + XUSB_REPORT(12B) = 13 bytes
@@ -307,21 +309,20 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_se
 
 /* ── Controller add/remove ─────────────────────────────────────────────────── */
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_controllerAdd(JNIEnv*, jobject,
-                                                                               jint handle,
-                                                                               jint controllerIndex,
-                                                                               jint capabilities) {
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_controllerAdd(
+    JNIEnv*, jobject, jint handle, jint controllerIndex, jint capabilities) {
     auto s = getSession(handle);
     if (!s) return;
     uint8_t payload[3];
     payload[0] = (uint8_t)(controllerIndex & 0xFF);
     putBE16(payload + 1, (uint16_t)(capabilities & 0xFFFF));
     sendEncrypted(s.get(), MSG_CONTROLLER_ADD, payload, 3);
-    LOGI("Session %d: sent controller add idx=%d caps=0x%04X", handle, controllerIndex, capabilities);
+    LOGI("Session %d: sent controller add idx=%d caps=0x%04X", handle, controllerIndex,
+         capabilities);
 }
 
-JNIEXPORT void JNICALL
-Java_com_tinkernorth_dish_data_network_SatelliteNative_controllerRemove(JNIEnv*, jobject, jint handle, jint controllerIndex) {
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_controllerRemove(
+    JNIEnv*, jobject, jint handle, jint controllerIndex) {
     auto s = getSession(handle);
     if (!s) return;
     uint8_t payload[1] = {(uint8_t)(controllerIndex & 0xFF)};
@@ -337,12 +338,14 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_se
     payload[0] = (uint8_t)(controllerIndex & 0xFF);
     payload[1] = (uint8_t)(controllerType & 0xFF);
     sendEncrypted(s.get(), MSG_CONTROLLER_TYPE, payload, 2);
-    LOGI("Session %d: sent controller type idx=%d type=%d", handle, controllerIndex, controllerType);
+    LOGI("Session %d: sent controller type idx=%d type=%d", handle, controllerIndex,
+         controllerType);
 }
 
 /* ── Heartbeat start/stop ──────────────────────────────────────────────────── */
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_startHeartbeat(JNIEnv*, jobject, jint handle) {
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_startHeartbeat(
+    JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return;
     if (s->heartbeatRunning.load()) return;
@@ -352,43 +355,45 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_st
     s->heartbeatThread = std::thread(heartbeatLoop, s);
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_stopHeartbeat(JNIEnv*, jobject, jint handle) {
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_stopHeartbeat(
+    JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return;
     s->heartbeatRunning.store(false);
     if (s->heartbeatThread.joinable()) s->heartbeatThread.join();
 }
 
-JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_isConnectionAlive(JNIEnv*,
-                                                                                       jobject, jint handle) {
+JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_isConnectionAlive(
+    JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return JNI_FALSE;
     return s->connectionAlive.load() ? JNI_TRUE : JNI_FALSE;
 }
 
-JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_getLastControllerAck(JNIEnv*,
-                                                                                      jobject, jint handle) {
+JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_getLastControllerAck(
+    JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return -1;
     return s->lastControllerAck.load(std::memory_order_acquire);
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_resetControllerAck(JNIEnv*,
-                                                                                    jobject, jint handle) {
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_resetControllerAck(
+    JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return;
     s->lastControllerAck.store(-1, std::memory_order_release);
 }
 
-JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_getVigemAvailable(JNIEnv*,
-                                                                                   jobject, jint handle) {
+JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_getVigemAvailable(
+    JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return -1;
     return (jint)s->vigemAvailable.load(std::memory_order_acquire);
 }
 
-JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_getActiveControllerCount(JNIEnv*,
-                                                                                          jobject, jint handle) {
+JNIEXPORT jint JNICALL
+Java_com_tinkernorth_dish_data_network_SatelliteNative_getActiveControllerCount(JNIEnv*, jobject,
+                                                                                jint handle) {
     auto s = getSession(handle);
     if (!s) return -1;
     return (jint)s->activeControllerCount.load(std::memory_order_acquire);
@@ -396,7 +401,8 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_ge
 
 /* ── Receive ACK (called from a background thread) ────────────────────────── */
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_receiveAck(JNIEnv*, jobject, jint handle) {
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_data_network_SatelliteNative_receiveAck(JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s || s->udpSock < 0) return;
     uint8_t buf[128];
@@ -416,10 +422,8 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_re
     uint8_t decrypted[64];
     unsigned long long decLen = 0;
     size_t cipherLen = (size_t)n - 8;
-    if (crypto_aead_chacha20poly1305_ietf_decrypt(decrypted, &decLen,
-                                                  nullptr,
-                                                  buf + 8, cipherLen, s->token, 4,
-                                                  nonce, s->key) != 0) {
+    if (crypto_aead_chacha20poly1305_ietf_decrypt(decrypted, &decLen, nullptr, buf + 8, cipherLen,
+                                                  s->token, 4, nonce, s->key) != 0) {
         return;
     }
 
@@ -436,7 +440,8 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_re
         uint8_t result = decrypted[7];
         int32_t packed = ((int32_t)reqType << 16) | ((int32_t)ctrlIdx << 8) | (int32_t)result;
         s->lastControllerAck.store(packed, std::memory_order_release);
-        LOGI("Session %d controller ACK: reqType=0x%04X idx=%d result=0x%02X", handle, reqType, ctrlIdx, result);
+        LOGI("Session %d controller ACK: reqType=0x%04X idx=%d result=0x%02X", handle, reqType,
+             ctrlIdx, result);
     } else if (msgType == MSG_SERVER_STATUS && msgLen >= 2 && decLen >= 6) {
         uint8_t vigem = decrypted[4];
         uint8_t count = decrypted[5];
@@ -445,7 +450,8 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_re
         int8_t prevCount =
             s->activeControllerCount.exchange((int8_t)count, std::memory_order_release);
         if (prevVigem != (int8_t)(vigem ? 1 : 0) || prevCount != (int8_t)count) {
-            LOGI("Session %d server status: vigemAvailable=%d activeControllers=%d", handle, vigem, count);
+            LOGI("Session %d server status: vigemAvailable=%d activeControllers=%d", handle, vigem,
+                 count);
         }
     }
 }
@@ -508,11 +514,9 @@ JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative
 
 /* ── TCP Pairing ──────────────────────────────────────────────────────────── */
 
-JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_pair(JNIEnv* env, jobject,
-                                                                         jstring ip, jint pairPort,
-                                                                         jstring deviceId,
-                                                                         jstring deviceName,
-                                                                         jstring pin) {
+JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_pair(
+    JNIEnv* env, jobject, jstring ip, jint pairPort, jstring deviceId, jstring deviceName,
+    jstring pin) {
     const char* ipStr = env->GetStringUTFChars(ip, nullptr);
     const char* idStr = env->GetStringUTFChars(deviceId, nullptr);
     const char* nameStr = env->GetStringUTFChars(deviceName, nullptr);
@@ -657,10 +661,8 @@ static std::string httpRequest(const char* method, const char* ip, int port, con
 
 /* ── POST /api/connections ─────────────────────────────────────────────────── */
 
-JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_httpConnect(JNIEnv* env,
-                                                                                jobject, jstring ip,
-                                                                                jint httpPort,
-                                                                                jstring deviceId) {
+JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_httpConnect(
+    JNIEnv* env, jobject, jstring ip, jint httpPort, jstring deviceId) {
     const char* ipStr = env->GetStringUTFChars(ip, nullptr);
     const char* idStr = env->GetStringUTFChars(deviceId, nullptr);
 
