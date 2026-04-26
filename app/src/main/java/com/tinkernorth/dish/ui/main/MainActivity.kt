@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+// Copyright (C) 2026 Dish contributors.
+
 package com.tinkernorth.dish.ui.main
 
 import android.content.Context
@@ -336,5 +339,4 @@ class MainActivity :
                 KeyEvent.KEYCODE_BUTTON_SELECT,
             ).any { it }
     }
-
 }

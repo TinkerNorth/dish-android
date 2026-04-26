@@ -2,9 +2,9 @@ name: Android CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -16,19 +16,42 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
+          java-version: "17"
+          distribution: temurin
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Pinned to match satellite + dish-linux + dish-mac so all four repos
+      # share one canonical clang-format ruleset and tool version.
+      - name: Install clang-format (pinned 22.1.4)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'clang-format==22.1.4'
+
+      - name: clang-format (JNI, check only)
+        run: |
+          FILES=$(find app/src/main/cpp -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.c' \))
+          [ -z "$FILES" ] || echo "$FILES" | xargs clang-format --dry-run --Werror
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
+
+      - name: ktlint check
+        run: ./gradlew ktlintCheck
+
+      - name: detekt
+        run: ./gradlew detekt
 
       - name: Lint check
         run: ./gradlew lint
@@ -40,7 +63,7 @@ jobs:
         run: ./gradlew assembleDebug
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: debug-apk
           path: app/build/outputs/apk/debug/*.apk
@@ -48,7 +71,7 @@ jobs:
 
       - name: Upload lint results
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: lint-results
           path: app/build/reports/lint-results-debug.html
@@ -56,7 +79,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: test-results
           path: app/build/reports/tests/

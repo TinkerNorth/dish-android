@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (must already exist)"
+        required: true
+
+# Required secrets (optional — workflow falls back to unsigned artifacts):
+#   KEYSTORE_BASE64       base64 of the .jks/.keystore signing keystore
+#   KEYSTORE_PASSWORD     keystore password
+#   KEY_ALIAS             alias of the signing key
+#   KEY_PASSWORD          password of the signing key
+#
+# When all four are present, the AAB and APK are signed; otherwise they are
+# uploaded unsigned and tagged with `-unsigned` in the filename so a human
+# downloading them from the Releases page knows they need to sign manually.
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: temurin
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Decode keystore (if present)
+        id: keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "${KEYSTORE_BASE64}" ]; then
+            echo "${KEYSTORE_BASE64}" | base64 -d > "${RUNNER_TEMP}/release.keystore"
+            echo "path=${RUNNER_TEMP}/release.keystore" >> "$GITHUB_OUTPUT"
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::KEYSTORE_BASE64 not set — release artifacts will be unsigned."
+          fi
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build release APK + AAB
+        env:
+          DISH_KEYSTORE_FILE: ${{ steps.keystore.outputs.path }}
+          DISH_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          DISH_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          DISH_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease bundleRelease
+
+      - name: Stage artifacts
+        id: stage
+        run: |
+          mkdir -p dist
+          suffix=""
+          if [ "${{ steps.keystore.outputs.present }}" != "true" ]; then
+            suffix="-unsigned"
+          fi
+          tag="${GITHUB_REF_NAME:-${{ inputs.tag }}}"
+
+          # APK
+          apk=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
+          [ -n "$apk" ] && cp "$apk" "dist/dish-${tag}${suffix}.apk"
+          # AAB
+          aab=$(find app/build/outputs/bundle/release -name '*.aab' | head -1)
+          [ -n "$aab" ] && cp "$aab" "dist/dish-${tag}${suffix}.aab"
+          ls -l dist/
+
+      - name: Upload to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: |
+            dist/*.apk
+            dist/*.aab

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+// Copyright (C) 2026 Dish contributors.
+
 package com.tinkernorth.dish.ui.bluetooth
 
 /**
@@ -13,9 +16,9 @@ package com.tinkernorth.dish.ui.bluetooth
  * Each producer emits bits in its native dialect. The matching consumer is
  * identity; the off-diagonal consumers must translate. Keep these helpers
  * pure (no Android, no state) so they stay JVM-unit-testable.
+ *
+ * The block below is the XUSB `wButtons` bitfield as defined by XInput.
  */
-
-// ── XUSB wButtons bitfield (XInput) ──────────────────────────────────────
 private const val XUSB_DPAD_UP = 0x0001
 private const val XUSB_DPAD_DOWN = 0x0002
 private const val XUSB_DPAD_LEFT = 0x0004
@@ -87,7 +90,10 @@ fun xusbToHid(wButtons: Int): Pair<Int, Int> {
  * `GamepadTouchView` into an XUSB `wButtons` value the Wi-Fi path can hand
  * verbatim to `SatelliteNative.sendReport`.
  */
-fun hidToXusb(hidButtons: Int, hat: Int): Int {
+fun hidToXusb(
+    hidButtons: Int,
+    hat: Int,
+): Int {
     var w = hatToDpadBits(hat)
     if (hidButtons and HID_START != 0) w = w or XUSB_START
     if (hidButtons and HID_SELECT != 0) w = w or XUSB_BACK
@@ -121,14 +127,15 @@ private fun dpadBitsToHat(dpadBits: Int): Int {
     }
 }
 
-private fun hatToDpadBits(hat: Int): Int = when (hat) {
-    HAT_N -> XUSB_DPAD_UP
-    HAT_NE -> XUSB_DPAD_UP or XUSB_DPAD_RIGHT
-    HAT_E -> XUSB_DPAD_RIGHT
-    HAT_SE -> XUSB_DPAD_RIGHT or XUSB_DPAD_DOWN
-    HAT_S -> XUSB_DPAD_DOWN
-    HAT_SW -> XUSB_DPAD_DOWN or XUSB_DPAD_LEFT
-    HAT_W -> XUSB_DPAD_LEFT
-    HAT_NW -> XUSB_DPAD_LEFT or XUSB_DPAD_UP
-    else -> 0
-}
+private fun hatToDpadBits(hat: Int): Int =
+    when (hat) {
+        HAT_N -> XUSB_DPAD_UP
+        HAT_NE -> XUSB_DPAD_UP or XUSB_DPAD_RIGHT
+        HAT_E -> XUSB_DPAD_RIGHT
+        HAT_SE -> XUSB_DPAD_RIGHT or XUSB_DPAD_DOWN
+        HAT_S -> XUSB_DPAD_DOWN
+        HAT_SW -> XUSB_DPAD_DOWN or XUSB_DPAD_LEFT
+        HAT_W -> XUSB_DPAD_LEFT
+        HAT_NW -> XUSB_DPAD_LEFT or XUSB_DPAD_UP
+        else -> 0
+    }
