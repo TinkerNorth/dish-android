@@ -339,5 +339,4 @@ class MainActivity :
                 KeyEvent.KEYCODE_BUTTON_SELECT,
             ).any { it }
     }
-
 }

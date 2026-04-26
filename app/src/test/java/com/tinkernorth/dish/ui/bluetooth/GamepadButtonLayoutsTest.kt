@@ -64,8 +64,9 @@ class GamepadButtonLayoutsTest {
     @Test
     fun `xusb with A plus B plus X plus Y sets all four HID face bits`() {
         val (hid, hat) = xusbToHid(0x1000 or 0x2000 or 0x4000 or 0x8000)
-        val expected = GamepadTouchView.BTN_A or GamepadTouchView.BTN_B or
-            GamepadTouchView.BTN_X or GamepadTouchView.BTN_Y
+        val expected =
+            GamepadTouchView.BTN_A or GamepadTouchView.BTN_B or
+                GamepadTouchView.BTN_X or GamepadTouchView.BTN_Y
         assertEquals(expected, hid)
         assertEquals(GamepadTouchView.HAT_NONE, hat)
     }
@@ -132,12 +133,24 @@ class GamepadButtonLayoutsTest {
 
     @Test
     fun `xusbToHid then hidToXusb is identity for every canonical bit`() {
-        val xusbBits = intArrayOf(
-            0x0001, 0x0002, 0x0004, 0x0008, // d-pad
-            0x0010, 0x0020, 0x0040, 0x0080, // start / back / thumbs
-            0x0100, 0x0200, 0x0400,         // shoulders / guide
-            0x1000, 0x2000, 0x4000, 0x8000, // A / B / X / Y
-        )
+        val xusbBits =
+            intArrayOf(
+                0x0001,
+                0x0002,
+                0x0004,
+                0x0008, // d-pad
+                0x0010,
+                0x0020,
+                0x0040,
+                0x0080, // start / back / thumbs
+                0x0100,
+                0x0200,
+                0x0400, // shoulders / guide
+                0x1000,
+                0x2000,
+                0x4000,
+                0x8000, // A / B / X / Y
+            )
         for (bit in xusbBits) {
             val (hid, hat) = xusbToHid(bit)
             assertEquals("bit=0x${bit.toString(16)}", bit, hidToXusb(hid, hat))
@@ -146,13 +159,21 @@ class GamepadButtonLayoutsTest {
 
     // ── Helpers ───────────────────────────────────────────────────────────
 
-    private fun assertHid(wButtons: Int, expectedHid: Int, expectedHat: Int) {
+    private fun assertHid(
+        wButtons: Int,
+        expectedHid: Int,
+        expectedHat: Int,
+    ) {
         val (hid, hat) = xusbToHid(wButtons)
         assertEquals("hid bits for wButtons=0x${wButtons.toString(16)}", expectedHid, hid)
         assertEquals("hat for wButtons=0x${wButtons.toString(16)}", expectedHat, hat)
     }
 
-    private fun assertXusb(hidButtons: Int, hat: Int, expected: Int) {
+    private fun assertXusb(
+        hidButtons: Int,
+        hat: Int,
+        expected: Int,
+    ) {
         assertEquals(expected, hidToXusb(hidButtons, hat))
     }
 }
