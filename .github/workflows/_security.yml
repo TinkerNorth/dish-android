@@ -30,7 +30,7 @@ name: _security (reusable)
 # Pin map (owner/repo @ tag → 40-char SHA), verify on update:
 #   actions/checkout                         @ v4.2.2  → 11bd71901bbe5b1630ceea73d27597364c9af683
 #   actions/dependency-review-action         @ v4.4.0  → 4081bf99e2866ebe428fc0477b69eb4fcda7220a
-#   gitleaks/gitleaks-action                 @ v2.3.7  → ff98106e4c7b2bc287b24eaf42907196329070c7
+#   gitleaks/gitleaks-action                 @ v2.3.7  → 83373cf2f8c4db6e24b41c1a9b086bb9619e9cd3
 #   actions/setup-python                     @ v5.3.0  → 0b93645e9fea7318ecaed2b359559ac225c90a2b
 #
 # OSV-Scanner is installed directly from upstream release binaries (see
@@ -196,10 +196,10 @@ jobs:
           # release. Update in lockstep with OSV_SCANNER_VERSION; verify
           # with `gh release view --json assets v<version> -R
           # google/osv-scanner`.
-          OSV_SCANNER_SHA256: "TODO_REPLACE_WITH_UPSTREAM_SHA256"
+          OSV_SCANNER_SHA256: "d9c1deedc23372a25049458e1e2f2bb9ad4098e2e2038118b9fec42f28f93ffb" # osv-scanner_linux_amd64 v1.9.0
         run: |
           set -euo pipefail
-          url="https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_${OSV_SCANNER_VERSION}_linux_amd64"
+          url="https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"
           curl -fsSL -o /tmp/osv-scanner "$url"
           # If the upstream SHA-256 is configured, verify; otherwise warn.
           if [ "${OSV_SCANNER_SHA256}" != "TODO_REPLACE_WITH_UPSTREAM_SHA256" ]; then
@@ -259,7 +259,7 @@ jobs:
           fetch-depth: 0
 
       - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.7
+        uses: gitleaks/gitleaks-action@83373cf2f8c4db6e24b41c1a9b086bb9619e9cd3 # v2.3.7
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}

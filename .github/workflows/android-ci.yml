@@ -5,7 +5,7 @@ name: Android CI
 #   actions/setup-java            @ v4.5.0 → 8df1039502a15bceb9433410b1a100fbe190c53b
 #   actions/setup-python          @ v5.3.0 → 0b93645e9fea7318ecaed2b359559ac225c90a2b
 #   actions/upload-artifact       @ v4.4.3 → b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
-#   gradle/actions/setup-gradle   @ v4.1.0 → cd5fcae1b41d7d6da8f0ea59fc8c1adc0ac75df3
+#   gradle/actions/setup-gradle   @ v4.1.0 → d156388eb19639ec20ade50009f3d199ce1e2808
 
 on:
   push:
@@ -32,7 +32,7 @@ jobs:
           distribution: temurin
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@cd5fcae1b41d7d6da8f0ea59fc8c1adc0ac75df3 # v4.1.0
+        uses: gradle/actions/setup-gradle@d156388eb19639ec20ade50009f3d199ce1e2808 # v4.1.0
 
       - name: Set up Python
         uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0

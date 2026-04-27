@@ -26,13 +26,13 @@ on:
 #   actions/setup-java              @ v4.5.0  → 8df1039502a15bceb9433410b1a100fbe190c53b
 #   actions/upload-artifact         @ v4.4.3  → b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
 #   actions/download-artifact       @ v4.1.8  → fa0a91b85d4f404e444e00e005971372dc801d16
-#   gradle/actions/setup-gradle     @ v4.1.0  → cd5fcae1b41d7d6da8f0ea59fc8c1adc0ac75df3
-#   anchore/sbom-action             @ v0.17.4 → e8d2a6937ecead383dfe75190d104edd1f9c5751
-#   anchore/scan-action             @ v3.6.4  → 869c549e657a088dc0441b08ce4fc0ecdac2bb65
+#   gradle/actions/setup-gradle     @ v4.1.0  → d156388eb19639ec20ade50009f3d199ce1e2808
+#   anchore/sbom-action             @ v0.17.4 → 8d0a6505bf28ced3e85154d13dc6af83299e13f1
+#   anchore/scan-action             @ v3.6.4  → 3343887d815d7b07465f6fdcd395bd66508d486a
 #   github/codeql-action/upload-sarif @ v3.27.0 → 662472033e021d55d94146f66f6058822b0b39fd
 #   softprops/action-gh-release     @ v2.0.8  → c062e08bd532815e2082a85e87e3ef29c3e6d191
 #   slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml
-#                                   @ v2.0.0  → 3714a2a4682fcd7180c7c24a8d0c47e5929a6a38
+#                                   @ v2.0.0  → 5a775b367a56d5bd118a224a811bba288150a563
 #
 # cosign is installed directly from upstream (see harden job).
 
@@ -103,7 +103,7 @@ jobs:
           distribution: temurin
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@cd5fcae1b41d7d6da8f0ea59fc8c1adc0ac75df3 # v4.1.0
+        uses: gradle/actions/setup-gradle@d156388eb19639ec20ade50009f3d199ce1e2808 # v4.1.0
 
       - name: Decode keystore (if present)
         id: keystore
@@ -166,7 +166,7 @@ jobs:
           path: release
 
       - name: Vulnerability scan (Grype)
-        uses: anchore/scan-action@869c549e657a088dc0441b08ce4fc0ecdac2bb65 # v3.6.4
+        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a # v3.6.4
         id: grype
         with:
           path: release/
@@ -184,7 +184,7 @@ jobs:
           category: release-grype
 
       - name: Generate SBOM (SPDX)
-        uses: anchore/sbom-action@e8d2a6937ecead383dfe75190d104edd1f9c5751 # v0.17.4
+        uses: anchore/sbom-action@8d0a6505bf28ced3e85154d13dc6af83299e13f1 # v0.17.4
         with:
           path: release/
           format: spdx-json
@@ -193,7 +193,7 @@ jobs:
           upload-release-assets: false
 
       - name: Generate SBOM (CycloneDX)
-        uses: anchore/sbom-action@e8d2a6937ecead383dfe75190d104edd1f9c5751 # v0.17.4
+        uses: anchore/sbom-action@8d0a6505bf28ced3e85154d13dc6af83299e13f1 # v0.17.4
         with:
           path: release/
           format: cyclonedx-json
@@ -205,7 +205,7 @@ jobs:
         shell: bash
         env:
           COSIGN_VERSION: "2.4.1"
-          COSIGN_SHA256: "TODO_REPLACE_WITH_UPSTREAM_SHA256"
+          COSIGN_SHA256: "8b24b946dd5809c6bd93de08033bcf6bc0ed7d336b7785787c080f574b89249b" # cosign-linux-amd64 v2.4.1
         run: |
           set -euo pipefail
           curl -fsSL -o /tmp/cosign \
@@ -274,7 +274,7 @@ jobs:
       id-token: write
       contents: write
       actions: read
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@3714a2a4682fcd7180c7c24a8d0c47e5929a6a38 # v2.0.0
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@5a775b367a56d5bd118a224a811bba288150a563 # v2.0.0
     with:
       base64-subjects: ${{ needs.harden.outputs.hashes }}
       provenance-name: dish-android.intoto.jsonl

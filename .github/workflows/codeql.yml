@@ -8,7 +8,7 @@ name: CodeQL
 # Pin map (verify with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`):
 #   actions/checkout              @ v4.2.2  → 11bd71901bbe5b1630ceea73d27597364c9af683
 #   actions/setup-java            @ v4.5.0  → 8df1039502a15bceb9433410b1a100fbe190c53b
-#   gradle/actions/setup-gradle   @ v4.1.0  → cd5fcae1b41d7d6da8f0ea59fc8c1adc0ac75df3
+#   gradle/actions/setup-gradle   @ v4.1.0  → d156388eb19639ec20ade50009f3d199ce1e2808
 #   github/codeql-action/*        @ v3.27.0 → 662472033e021d55d94146f66f6058822b0b39fd
 
 on:
@@ -49,7 +49,7 @@ jobs:
           distribution: temurin
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@cd5fcae1b41d7d6da8f0ea59fc8c1adc0ac75df3 # v4.1.0
+        uses: gradle/actions/setup-gradle@d156388eb19639ec20ade50009f3d199ce1e2808 # v4.1.0
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@662472033e021d55d94146f66f6058822b0b39fd # v3.27.0
