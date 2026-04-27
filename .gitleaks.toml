@@ -1,0 +1,24 @@
+# gitleaks configuration for dish-android.
+
+title = "dish-android gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allowlist for known non-secret strings in dish-android."
+paths = [
+    '''COPYING\.GPL3''',
+    '''LICENSE''',
+    # Gradle wrapper SHA-256 in gradle-wrapper.properties is a content
+    # hash, not a secret.
+    '''gradle/wrapper/gradle-wrapper\.properties''',
+    # The verification metadata file is intentionally a list of pinned
+    # JAR digests.
+    '''gradle/verification-metadata\.xml''',
+]
+
+regexes = [
+    # Wire-protocol port numbers documented in CONTRIBUTING.md.
+    '''9876|9877|9878|9879''',
+]
