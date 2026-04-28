@@ -11,9 +11,11 @@ name: Security
 #
 # Pin map (verify with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`):
 #   actions/checkout              @ v4.2.2 → 11bd71901bbe5b1630ceea73d27597364c9af683
+#   actions/cache                 @ v5.0.5 → 27d5ce7f107fe9357f9df03efb73ab90386fccae
 #   actions/setup-java            @ v4.5.0 → 8df1039502a15bceb9433410b1a100fbe190c53b
 #   actions/upload-artifact       @ v4.4.3 → b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
 #   gradle/actions/setup-gradle   @ v4.1.0 → d156388eb19639ec20ade50009f3d199ce1e2808
+#   github/codeql-action/upload-sarif @ v3.27.0 → 662472033e021d55d94146f66f6058822b0b39fd
 
 on:
   push:
@@ -62,7 +64,7 @@ jobs:
         uses: gradle/actions/setup-gradle@d156388eb19639ec20ade50009f3d199ce1e2808 # v4.1.0
 
       - name: Cache OWASP Dependency-Check NVD database
-        uses: actions/cache@6849a6489940f00c2f30c0fb92c6274307ccb58a # v4.1.2
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           # Speeds up re-runs by reusing the local NVD mirror across builds.
           path: ~/.gradle/dependency-check-data
@@ -86,7 +88,10 @@ jobs:
           retention-days: 14
 
       - name: Upload Dependency-Check SARIF to code scanning
+        # Code scanning ingest requires GitHub Advanced Security on private
+        # repos; tolerate failure until GHAS is enabled (HANDOFF.md item 5).
         if: ${{ always() && hashFiles('build/reports/dependency-check-report.sarif') != '' }}
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@662472033e021d55d94146f66f6058822b0b39fd # v3.27.0
         with:
           sarif_file: build/reports/dependency-check-report.sarif
