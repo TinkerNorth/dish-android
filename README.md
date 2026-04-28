@@ -125,6 +125,26 @@ clang-format -i Dish/app/src/main/cpp/satellite_jni.cpp
 
 Please use the provided PR and issue templates.
 
+CI runs build + style (`android-ci.yml`) and security gates
+(`security.yml`, `codeql.yml`) on every PR. The security workflow
+includes the OWASP Dependency-Check Gradle plugin
+(`./gradlew dependencyCheckAnalyze` — fails on CVSS >= 7.0), OSV-Scanner,
+gitleaks, action-pin lint, and CodeQL `java-kotlin` + `cpp` analysis.
+
+> **Note on branch protection.** GitHub's branch-protection and repository-
+> ruleset features are not available for private repositories on the free
+> org plan this repo lives under, so direct pushes to `main` are not
+> blocked at the platform level. Treat the PR-based flow as a convention
+> and rely on the CI workflows as the quality gate.
+
+## Security
+
+Vulnerability disclosure: [`SECURITY.md`](SECURITY.md). Every
+release ships cosign keyless signatures, SHA256SUMS, SBOMs (SPDX +
+CycloneDX), and SLSA L3 provenance — see
+[`CONTRIBUTING.md#security`](CONTRIBUTING.md#security) for the
+verification recipe.
+
 ## License
 
 Distributed under the terms of the **GNU Lesser General Public License v3.0

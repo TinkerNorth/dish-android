@@ -9,40 +9,101 @@ on:
         description: "Tag to release (must already exist)"
         required: true
 
-# Required secrets (optional — workflow falls back to unsigned artifacts):
+# Required secrets (optional — workflow falls back to unsigned artifacts
+# for workflow_dispatch on feature branches; tagged releases on main are
+# blocked by `required-secrets` if any are missing):
+#
 #   KEYSTORE_BASE64       base64 of the .jks/.keystore signing keystore
 #   KEYSTORE_PASSWORD     keystore password
 #   KEY_ALIAS             alias of the signing key
 #   KEY_PASSWORD          password of the signing key
 #
 # When all four are present, the AAB and APK are signed; otherwise they are
-# uploaded unsigned and tagged with `-unsigned` in the filename so a human
-# downloading them from the Releases page knows they need to sign manually.
+# uploaded unsigned and tagged with `-unsigned` in the filename.
+#
+# Pin map (verify with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`):
+#   actions/checkout                @ v4.2.2  → 11bd71901bbe5b1630ceea73d27597364c9af683
+#   actions/setup-java              @ v4.5.0  → 8df1039502a15bceb9433410b1a100fbe190c53b
+#   actions/upload-artifact         @ v4.4.3  → b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
+#   actions/download-artifact       @ v4.1.8  → fa0a91b85d4f404e444e00e005971372dc801d16
+#   gradle/actions/setup-gradle     @ v4.1.0  → d156388eb19639ec20ade50009f3d199ce1e2808
+#   anchore/sbom-action             @ v0.17.4 → 8d0a6505bf28ced3e85154d13dc6af83299e13f1
+#   anchore/scan-action             @ v3.6.4  → 3343887d815d7b07465f6fdcd395bd66508d486a
+#   github/codeql-action/upload-sarif @ v3.27.0 → 662472033e021d55d94146f66f6058822b0b39fd
+#   softprops/action-gh-release     @ v2.0.8  → c062e08bd532815e2082a85e87e3ef29c3e6d191
+#   slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml
+#                                   @ v2.0.0  → 5a775b367a56d5bd118a224a811bba288150a563
+#
+# cosign is installed directly from upstream (see harden job).
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  gates:
+    name: PR-time gates against tag
+    uses: ./.github/workflows/_security.yml
+    with:
+      osv_scan_paths: |
+        .
+      gitleaks_enabled: true
+      dependency_review_enabled: false
+      action_pin_lint_enabled: true
+      allowlist_expiry_enabled: true
+
+  required-secrets:
+    name: Required release secrets gate
+    needs: [gates]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify keystore secrets are present for tagged releases
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.ref_type }}" != "tag" ] || [ "${{ startsWith(github.ref, 'refs/tags/v') }}" != "true" ]; then
+            echo "::notice::Non-tag release run — unsigned fallback permitted."
+            exit 0
+          fi
+          missing=()
+          [ -z "${KEYSTORE_BASE64:-}" ] && missing+=("KEYSTORE_BASE64")
+          [ -z "${KEYSTORE_PASSWORD:-}" ] && missing+=("KEYSTORE_PASSWORD")
+          [ -z "${KEY_ALIAS:-}" ] && missing+=("KEY_ALIAS")
+          [ -z "${KEY_PASSWORD:-}" ] && missing+=("KEY_PASSWORD")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Tagged release on $GITHUB_REF requires keystore secrets, but the following are missing: ${missing[*]}"
+            echo "::error::Add the missing repository secrets and retry the release. Unsigned -unsigned artifacts are NOT permitted for tags."
+            exit 1
+          fi
+
   release:
+    name: Build + sign APK/AAB
+    needs: [gates, required-secrets]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@8df1039502a15bceb9433410b1a100fbe190c53b # v4.5.0
         with:
           java-version: "17"
           distribution: temurin
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@d156388eb19639ec20ade50009f3d199ce1e2808 # v4.1.0
 
       - name: Decode keystore (if present)
         id: keystore
@@ -80,19 +141,168 @@ jobs:
           fi
           tag="${GITHUB_REF_NAME:-${{ inputs.tag }}}"
 
-          # APK
           apk=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
           [ -n "$apk" ] && cp "$apk" "dist/dish-${tag}${suffix}.apk"
-          # AAB
           aab=$(find app/build/outputs/bundle/release -name '*.aab' | head -1)
           [ -n "$aab" ] && cp "$aab" "dist/dish-${tag}${suffix}.aab"
           ls -l dist/
 
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: android
+          path: dist/
+
+  harden:
+    name: Harden artifacts (scan, SBOM, sign)
+    needs: [release]
+    runs-on: ubuntu-24.04
+    outputs:
+      hashes: ${{ steps.hashes.outputs.hashes }}
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: android
+          path: release
+
+      - name: Vulnerability scan (Grype)
+        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a # v3.6.4
+        id: grype
+        with:
+          path: release/
+          severity-cutoff: high
+          fail-build: true
+          only-fixed: false
+          add-cpes-if-none: true
+          output-format: sarif
+
+      - name: Upload Grype SARIF to code scanning
+        if: ${{ always() && steps.grype.outputs.sarif != '' }}
+        uses: github/codeql-action/upload-sarif@662472033e021d55d94146f66f6058822b0b39fd # v3.27.0
+        with:
+          sarif_file: ${{ steps.grype.outputs.sarif }}
+          category: release-grype
+
+      - name: Generate SBOM (SPDX)
+        uses: anchore/sbom-action@8d0a6505bf28ced3e85154d13dc6af83299e13f1 # v0.17.4
+        with:
+          path: release/
+          format: spdx-json
+          output-file: release/dish-android.sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Generate SBOM (CycloneDX)
+        uses: anchore/sbom-action@8d0a6505bf28ced3e85154d13dc6af83299e13f1 # v0.17.4
+        with:
+          path: release/
+          format: cyclonedx-json
+          output-file: release/dish-android.sbom.cdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Install cosign (upstream binary)
+        shell: bash
+        env:
+          COSIGN_VERSION: "2.4.1"
+          COSIGN_SHA256: "8b24b946dd5809c6bd93de08033bcf6bc0ed7d336b7785787c080f574b89249b" # cosign-linux-amd64 v2.4.1
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/cosign \
+            "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64"
+          if [ "${COSIGN_SHA256}" != "TODO_REPLACE_WITH_UPSTREAM_SHA256" ]; then
+            echo "${COSIGN_SHA256}  /tmp/cosign" | sha256sum -c -
+          else
+            echo "::warning::COSIGN_SHA256 is unset — replace with the upstream SHA-256 to enforce binary integrity."
+          fi
+          chmod +x /tmp/cosign
+          sudo mv /tmp/cosign /usr/local/bin/cosign
+          cosign version
+
+      - name: Generate SHA256SUMS
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release
+          find . -maxdepth 1 -type f ! -name 'SHA256SUMS*' -printf '%f\n' \
+            | LC_ALL=C sort \
+            | xargs -d '\n' sha256sum --binary > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Cosign-sign each artifact + SHA256SUMS (keyless)
+        shell: bash
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          set -euo pipefail
+          cd release
+          for f in *; do
+            case "$f" in
+              *.sig|*.crt|SHA256SUMS.sig|SHA256SUMS.crt) continue ;;
+            esac
+            cosign sign-blob --yes \
+              --output-signature "${f}.sig" \
+              --output-certificate "${f}.crt" \
+              "$f"
+          done
+          ls -l
+
+      - name: Compute base64 SHA256 hashes for SLSA provenance
+        id: hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release
+          h=$(find . -maxdepth 1 -type f ! -name '*.sig' ! -name '*.crt' \
+                  -printf '%f\n' \
+                | LC_ALL=C sort \
+                | xargs -d '\n' sha256sum \
+                | base64 -w0)
+          echo "hashes=${h}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload hardened bundle
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: release-bundle
+          path: release/
+          retention-days: 14
+
+  provenance:
+    name: SLSA L3 provenance
+    needs: [harden]
+    permissions:
+      id-token: write
+      contents: write
+      actions: read
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@5a775b367a56d5bd118a224a811bba288150a563 # v2.0.0
+    with:
+      base64-subjects: ${{ needs.harden.outputs.hashes }}
+      provenance-name: dish-android.intoto.jsonl
+      upload-assets: false
+
+  publish:
+    name: Publish to GitHub Releases
+    needs: [harden, provenance]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download hardened bundle
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: release-bundle
+          path: release
+
+      - name: Download SLSA provenance
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: ${{ needs.provenance.outputs.provenance-name }}
+          path: release
+
+      - name: Show what we're about to publish
+        run: find release -type f -printf '%p\n'
+
       - name: Upload to GitHub Releases
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191 # v2.0.8
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
           generate_release_notes: true
-          files: |
-            dist/*.apk
-            dist/*.aab
+          files: release/**/*

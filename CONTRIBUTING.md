@@ -61,16 +61,109 @@ license — the project is LGPL-3.0-or-later end-to-end (`LICENSE`,
 
 ## What CI runs
 
-`.github/workflows/android-ci.yml` runs on every PR:
+Build + style:
 
-1. `clang-format --dry-run --Werror` over `app/src/main/cpp/`.
-2. `./gradlew ktlintCheck`.
-3. `./gradlew detekt`.
-4. `./gradlew lint` (Android Lint).
-5. `./gradlew testDebugUnitTest` (JUnit + MockK + Turbine).
-6. `./gradlew assembleDebug`, uploads the APK as a CI artifact.
+- `android-ci.yml`: `clang-format` over `app/src/main/cpp/`,
+  `./gradlew ktlintCheck`, `./gradlew detekt`, `./gradlew lint`,
+  `./gradlew testDebugUnitTest`, `./gradlew assembleDebug` (uploads the
+  APK as a CI artifact).
+
+Security gates (also blocking):
+
+- `security.yml`: action-pin lint, vulnerability allowlist expiry,
+  OSV-Scanner, gitleaks secret scan, GitHub `dependency-review-action`
+  (consumes the Gradle dependency graph), and the OWASP Dependency-Check
+  Gradle plugin (`./gradlew dependencyCheckAnalyze` — fails on
+  CVSS >= 7.0).
+- `codeql.yml`: CodeQL `java-kotlin` and `cpp` analysis
+  (security-extended + security-and-quality query packs).
 
 If any step fails, the PR is blocked.
+
+## Security
+
+### Adding a vulnerability allowlist entry
+
+Open a PR that adds an entry to [`.security/allowlist.yaml`](.security/allowlist.yaml)
+(see the schema in the file). Required fields: `cve`, `reason`, `owner`,
+`expires`. CI rejects the PR if any field is missing or `expires` is in
+the past.
+
+If the same finding is raised by OWASP Dependency-Check, mirror the
+entry in [`.security/dependency-check-suppressions.xml`](.security/dependency-check-suppressions.xml)
+using the [official suppression schema](https://jeremylong.github.io/DependencyCheck/general/suppression.html).
+
+### Running security checks locally
+
+```bash
+# OWASP Dependency-Check (the same task CI runs)
+./gradlew dependencyCheckAnalyze
+
+# Gradle dependency verification — recompute checksums into
+# gradle/verification-metadata.xml after a deliberate dep bump
+./gradlew --write-verification-metadata sha256 help
+
+# Action-pin lint
+grep -REn '^\s*uses:' .github/workflows/ \
+  | grep -vE '@[0-9a-f]{40}\b' \
+  || echo "all pinned"
+
+# Allowlist expiry
+python3 - <<'PY'
+import datetime, yaml, sys
+data = yaml.safe_load(open('.security/allowlist.yaml').read()) or {}
+for e in data.get('exceptions', []) or []:
+    if datetime.date.fromisoformat(str(e['expires'])) < datetime.date.today():
+        print('EXPIRED:', e); sys.exit(1)
+PY
+
+# OSV-Scanner
+osv-scanner --recursive --skip-git .
+
+# Gitleaks
+gitleaks detect --no-banner --redact --source .
+```
+
+### Gradle dependency verification (`gradle/verification-metadata.xml`)
+
+When you intentionally add or upgrade a dependency, regenerate the
+verification metadata so transitive jar tampering fails resolution:
+
+```bash
+./gradlew --write-verification-metadata sha256 \
+  assembleDebug bundleRelease testDebugUnitTest dependencyCheckAnalyze
+```
+
+Commit the regenerated `gradle/verification-metadata.xml` in the same
+PR as the dep bump. Reviewers should sanity-check the diff: a single
+new dep should add ~1 line per transitive jar; a change to many
+unrelated jars suggests something is off.
+
+### Verifying a release artifact
+
+Each GitHub Release ships the signed `dish-vX.Y.Z.apk` + `.aab`,
+`*.sig`/`*.crt` (cosign keyless), `SHA256SUMS` + `SHA256SUMS.sig`/`*.crt`,
+the SPDX + CycloneDX SBOMs, and `dish-android.intoto.jsonl` (SLSA L3).
+
+```bash
+sha256sum -c SHA256SUMS
+
+cosign verify-blob \
+  --certificate SHA256SUMS.crt \
+  --signature   SHA256SUMS.sig \
+  --certificate-identity-regexp '^https://github\.com/TinkerNorth/dish-android/\.github/workflows/release\.yml@refs/tags/v.*$' \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+  SHA256SUMS
+
+slsa-verifier verify-artifact \
+  --provenance-path dish-android.intoto.jsonl \
+  --source-uri      github.com/TinkerNorth/dish-android \
+  --source-tag      vX.Y.Z \
+  dish-vX.Y.Z.apk
+```
+
+The full cross-repo verification recipe lives in
+[`SECURITY.md`](SECURITY.md).
 
 ## Touching the hot path
 
