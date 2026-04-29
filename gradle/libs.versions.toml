@@ -18,7 +18,7 @@ detekt = "1.23.8"
 dependency-check = "10.0.4"
 mockk = "1.13.12"
 turbine = "1.1.0"
-kotlinx-coroutines-test = "1.8.1"
+kotlinx-coroutines-test = "1.10.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
