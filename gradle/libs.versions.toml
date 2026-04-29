@@ -1,7 +1,7 @@
 [versions]
 activity = "1.10.0"
 agp = "8.7.2"
-kotlin = "2.0.21"
+kotlin = "2.3.21"
 serialization = "1.7.3"
 hilt = "2.51.1"
 coreKtx = "1.13.1"
