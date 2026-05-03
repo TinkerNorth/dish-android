@@ -50,7 +50,7 @@ class MainActivity :
 
     @Inject lateinit var hub: ConnectionHub
 
-    private val inputProcessor = GamepadInputProcessor()
+    @Inject lateinit var inputProcessor: GamepadInputProcessor
     private lateinit var wakeLockManager: WakeLockManager
     private lateinit var lowPowerManager: LowPowerManager
     private lateinit var telemetryTracker: TelemetryTracker
@@ -289,6 +289,11 @@ class MainActivity :
         lowPowerManager.cancel()
         telemetryTracker.stop()
         wakeLockManager.release()
+        // The reportSender lambda captures `this` (via viewModel/wifi/btRegistry
+        // member access). The processor is a singleton, so without this clear
+        // the destroyed Activity would be pinned for the process lifetime.
+        // The next Activity's setupManagers() reinstalls a fresh sender.
+        inputProcessor.reportSender = null
     }
 
     override fun onInputDeviceAdded(deviceId: Int) {

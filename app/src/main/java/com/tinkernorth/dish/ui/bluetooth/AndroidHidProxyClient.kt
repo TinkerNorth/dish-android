@@ -46,7 +46,15 @@ class AndroidHidProxyClient(
             events.onError("Bluetooth is not available or not enabled")
             return
         }
-        adapter.getProfileProxy(context, profileListener, BluetoothProfile.HID_DEVICE)
+        // BLUETOOTH_CONNECT may be revoked between sessions on API 31+. The
+        // foreground observer's auto-reconnect path bypasses ConnectionsActivity's
+        // permission flow, so a denial here surfaces as SecurityException unless
+        // we route it through the events channel as a clean Failed state.
+        try {
+            adapter.getProfileProxy(context, profileListener, BluetoothProfile.HID_DEVICE)
+        } catch (e: SecurityException) {
+            events.onError("Bluetooth permission denied: ${e.message ?: "BLUETOOTH_CONNECT not granted"}")
+        }
     }
 
     override fun registerApp(profile: BluetoothGamepad.GamepadProfile) {
@@ -69,7 +77,11 @@ class AndroidHidProxyClient(
                 BT_SLOT_US,
                 JITTER_US,
             )
-        hid.registerApp(sdp, null, qos, { it.run() }, hidCallback)
+        try {
+            hid.registerApp(sdp, null, qos, { it.run() }, hidCallback)
+        } catch (e: SecurityException) {
+            events?.onError("Bluetooth permission denied: ${e.message ?: "BLUETOOTH_CONNECT not granted"}")
+        }
     }
 
     override fun connectToHost(mac: String) {
@@ -77,7 +89,15 @@ class AndroidHidProxyClient(
         val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
         val adapter = manager?.adapter ?: return
         runCatching { hid.connect(adapter.getRemoteDevice(mac)) }
-            .onFailure { events?.onError("Invalid host address: $mac") }
+            .onFailure { e ->
+                val msg =
+                    when (e) {
+                        is SecurityException ->
+                            "Bluetooth permission denied: ${e.message ?: "BLUETOOTH_CONNECT not granted"}"
+                        else -> "Invalid host address: $mac"
+                    }
+                events?.onError(msg)
+            }
     }
 
     override fun disconnectCurrentHost() {
