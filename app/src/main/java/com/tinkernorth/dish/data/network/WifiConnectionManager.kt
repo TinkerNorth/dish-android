@@ -199,7 +199,20 @@ class WifiConnectionManager
             }
             controllerRepo.setConnectionParams(handle, token, key)
             store.rememberWifi(server)
-            conn.markConnected(handle, connId) { disconnect(conn.id) }
+            conn.markConnected(
+                handle,
+                connId,
+                onDead = { disconnect(conn.id) },
+                onRegistrationFailed = {
+                    scope.launch {
+                        _events.emit(
+                            ConnectionEvent.Error(
+                                "Couldn't register controller with ${server.name} — try reconnecting",
+                            ),
+                        )
+                    }
+                },
+            )
         }
 
         fun disconnect(id: String) {

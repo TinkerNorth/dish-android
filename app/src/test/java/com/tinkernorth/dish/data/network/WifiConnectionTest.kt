@@ -119,16 +119,36 @@ class WifiConnectionTest {
     }
 
     @Test
-    fun `sendReport forwards to repository when CONNECTED`() {
+    fun `sendReport forwards to repository when CONNECTED and controller is registered`() =
+        runTest {
+            every { repo.resetControllerAck(any()) } just Runs
+            every { repo.startHeartbeat(any()) } just Runs
+            every { repo.isConnectionAlive(any()) } returns false
+            every { repo.getLastControllerAck(any()) } returns 1
+            conn.markConnecting()
+            conn.markConnected(handle = 9, connectionId = "c") {}
+            // Registration sets controllerAdded=true; sendReport gates on it
+            // so reports during the addController ACK window don't leak.
+            conn.attachSlot(slotId = "slot-1", controllerType = 0)
+
+            conn.sendReport(buttons = 0x42, lt = 10, rt = 20, lx = 30, ly = -40, rx = 50, ry = -60)
+
+            verify { repo.sendReport(9, 0, 0x42, 10, 20, 30, -40, 50, -60) }
+        }
+
+    @Test
+    fun `sendReport is dropped while controller registration is still pending`() {
         every { repo.resetControllerAck(any()) } just Runs
         every { repo.startHeartbeat(any()) } just Runs
         every { repo.isConnectionAlive(any()) } returns true
         conn.markConnecting()
         conn.markConnected(handle = 9, connectionId = "c") {}
+        // No attachSlot → no registerController → controllerAdded stays false.
+        conn.sendReport(buttons = 0x42, lt = 0, rt = 0, lx = 0, ly = 0, rx = 0, ry = 0)
 
-        conn.sendReport(buttons = 0x42, lt = 10, rt = 20, lx = 30, ly = -40, rx = 50, ry = -60)
-
-        verify { repo.sendReport(9, 0, 0x42, 10, 20, 30, -40, 50, -60) }
+        verify(exactly = 0) {
+            repo.sendReport(any(), any(), any(), any(), any(), any(), any(), any(), any())
+        }
     }
 
     @Test

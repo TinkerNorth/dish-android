@@ -63,8 +63,10 @@ class WifiConnection(
 
     private var ackJob: Job? = null
     private var aliveJob: Job? = null
-    private var controllerAdded = false
+
+    @Volatile private var controllerAdded = false
     private var pendingControllerType: Int = DEFAULT_CONTROLLER_TYPE
+    private var onRegistrationFailed: (() -> Unit)? = null
 
     fun updateServer(server: DiscoveredServer) {
         _server.value = server
@@ -98,6 +100,7 @@ class WifiConnection(
     internal fun markConnected(
         handle: Int,
         connectionId: String,
+        onRegistrationFailed: (() -> Unit)? = null,
         onDead: () -> Unit,
     ) {
         if (_state.value != WifiState.CONNECTING) return
@@ -106,6 +109,7 @@ class WifiConnection(
         // null/-1 tuple.
         live = Live(handle, connectionId)
         _state.value = WifiState.CONNECTED
+        this.onRegistrationFailed = onRegistrationFailed
         controllerRepo.resetControllerAck(handle)
         ackJob =
             scope.launch(Dispatchers.IO) {
@@ -150,6 +154,7 @@ class WifiConnection(
             controllerRepo.closeSocket(snap.handle)
         }
         controllerAdded = false
+        onRegistrationFailed = null
         _state.value = WifiState.IDLE
     }
 
@@ -183,6 +188,11 @@ class WifiConnection(
             if (ack != -1) {
                 controllerRepo.sendControllerType(handle, DEFAULT_CTRL_INDEX, controllerType)
                 controllerAdded = true
+            } else {
+                // Server never ACKed addController; don't silently feed reports
+                // into a connection it will reject. Surface so the user sees
+                // "couldn't register controller" instead of an inert UI.
+                onRegistrationFailed?.invoke()
             }
         }
 
@@ -205,6 +215,11 @@ class WifiConnection(
         ry: Int,
     ) {
         val snap = live ?: return
+        // Gate on controllerAdded so reports during the registerController()
+        // ACK window (up to 2s after markConnected) aren't silently dropped
+        // server-side as "unknown controller". Slot-bind → connect ordering
+        // makes this window unavoidable on auto-reconnect.
+        if (!controllerAdded) return
         controllerRepo.sendReport(snap.handle, DEFAULT_CTRL_INDEX, buttons, lt, rt, lx, ly, rx, ry)
     }
 
