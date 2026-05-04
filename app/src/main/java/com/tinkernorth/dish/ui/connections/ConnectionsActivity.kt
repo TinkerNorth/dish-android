@@ -11,10 +11,8 @@ import android.content.pm.PackageManager
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
-import android.view.LayoutInflater
 import android.view.View
-import android.widget.EditText
-import android.widget.TextView
+import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -32,6 +30,8 @@ import com.tinkernorth.dish.data.network.ConnectionSummary
 import com.tinkernorth.dish.data.network.WifiConnection
 import com.tinkernorth.dish.data.network.WifiConnectionManager
 import com.tinkernorth.dish.databinding.ActivityConnectionsBinding
+import com.tinkernorth.dish.databinding.DialogPairingBinding
+import com.tinkernorth.dish.databinding.RowConnectionBinding
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepad
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
 import dagger.hilt.android.AndroidEntryPoint
@@ -140,68 +140,63 @@ class ConnectionsActivity : AppCompatActivity() {
     }
 
     private fun wifiRow(c: ConnectionSummary): View {
-        val v = inflateRow(c.label, c.detail, statusText(c))
-        val btn = v.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnRowAction)
-        val btnSecondary = v.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnRowSecondary)
+        val rb = inflateRow(binding.llWifiList, c.label, c.detail, statusText(c))
         when (c.live) {
             ConnectionLive.CONNECTED -> {
-                btn.text = "Disconnect"
-                btn.setOnClickListener { wifi.disconnect(c.id) }
+                rb.btnRowAction.text = "Disconnect"
+                rb.btnRowAction.setOnClickListener { wifi.disconnect(c.id) }
             }
             ConnectionLive.CONNECTING -> {
-                btn.text = "Connecting…"
-                btn.isEnabled = false
+                rb.btnRowAction.text = "Connecting…"
+                rb.btnRowAction.isEnabled = false
             }
             ConnectionLive.IDLE -> {
-                btn.text = "Connect"
-                btn.setOnClickListener {
+                rb.btnRowAction.text = "Connect"
+                rb.btnRowAction.setOnClickListener {
                     val remembered = wifi.remembered().firstOrNull { it.id == c.id } ?: return@setOnClickListener
                     wifi.connect(remembered.toDiscovered())
                 }
             }
         }
-        btnSecondary.visibility = View.VISIBLE
-        btnSecondary.text = "Forget"
-        btnSecondary.setOnClickListener { wifi.forget(c.id) }
-        return v
+        rb.btnRowSecondary.visibility = View.VISIBLE
+        rb.btnRowSecondary.text = "Forget"
+        rb.btnRowSecondary.setOnClickListener { wifi.forget(c.id) }
+        return rb.root
     }
 
     private fun discoveredWifiRow(s: com.tinkernorth.dish.data.model.DiscoveredServer): View {
-        val v = inflateRow(s.name.ifEmpty { s.ip }, "${s.ip} • UDP ${s.udpPort}", "Discovered")
-        val btn = v.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnRowAction)
-        btn.text = "Connect"
-        btn.setOnClickListener { wifi.connect(s) }
-        return v
+        val rb = inflateRow(binding.llWifiList, s.name.ifEmpty { s.ip }, "${s.ip} • UDP ${s.udpPort}", "Discovered")
+        rb.btnRowAction.text = "Connect"
+        rb.btnRowAction.setOnClickListener { wifi.connect(s) }
+        return rb.root
     }
 
     private fun btRow(c: ConnectionSummary): View {
-        val v = inflateRow(c.label, c.detail, statusText(c))
-        val btn = v.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnRowAction)
-        val btnSecondary = v.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnRowSecondary)
+        val rb = inflateRow(binding.llBtList, c.label, c.detail, statusText(c))
         when (c.live) {
             ConnectionLive.CONNECTED -> {
-                btn.text = "Disconnect"
-                btn.setOnClickListener { btRegistry.stop(c.id) }
+                rb.btnRowAction.text = "Disconnect"
+                rb.btnRowAction.setOnClickListener { btRegistry.stop(c.id) }
             }
             ConnectionLive.CONNECTING -> {
-                btn.text = "Waiting…"
-                btn.isEnabled = false
+                rb.btnRowAction.text = "Waiting…"
+                rb.btnRowAction.isEnabled = false
             }
             ConnectionLive.IDLE -> {
-                btn.text = "Reconnect"
-                btn.setOnClickListener {
+                rb.btnRowAction.text = "Reconnect"
+                rb.btnRowAction.setOnClickListener {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) btRegistry.tryAutoReconnect(c.id)
                 }
             }
         }
-        btnSecondary.visibility = View.VISIBLE
-        btnSecondary.text = "Forget"
-        btnSecondary.setOnClickListener {
+        rb.btnRowSecondary.visibility = View.VISIBLE
+        rb.btnRowSecondary.text = "Forget"
+        rb.btnRowSecondary.setOnClickListener {
             btRegistry.stop(c.id)
             store.forgetBt(c.id)
             render(hub.connections.value)
         }
-        return v
+        return rb.root
     }
 
     private fun statusText(c: ConnectionSummary): String =
@@ -212,24 +207,24 @@ class ConnectionsActivity : AppCompatActivity() {
         }
 
     private fun inflateRow(
+        parent: ViewGroup,
         title: String,
         detail: String,
         status: String,
-    ): View {
-        val v = LayoutInflater.from(this).inflate(R.layout.row_connection, binding.llWifiList, false)
-        v.findViewById<TextView>(R.id.tvRowTitle).text = title
-        v.findViewById<TextView>(R.id.tvRowDetail).text = detail
-        v.findViewById<TextView>(R.id.tvRowStatus).text = status
-        val dot = v.findViewById<View>(R.id.dotRow)
-        dot.background = GradientDrawable().apply { shape = GradientDrawable.OVAL }
+    ): RowConnectionBinding {
+        val rb = RowConnectionBinding.inflate(layoutInflater, parent, false)
+        rb.tvRowTitle.text = title
+        rb.tvRowDetail.text = detail
+        rb.tvRowStatus.text = status
+        rb.dotRow.background = GradientDrawable().apply { shape = GradientDrawable.OVAL }
         val color =
-            when {
-                status == "Connected" -> R.color.colorSuccess
-                status == "Connecting" -> R.color.colorPrimary
+            when (status) {
+                "Connected" -> R.color.colorSuccess
+                "Connecting" -> R.color.colorPrimary
                 else -> R.color.colorMuted
             }
-        (dot.background as GradientDrawable).setColor(getColor(color))
-        return v
+        (rb.dotRow.background as GradientDrawable).setColor(getColor(color))
+        return rb
     }
 
     // ── Bluetooth add flow ────────────────────────────────────────────────
@@ -281,12 +276,14 @@ class ConnectionsActivity : AppCompatActivity() {
         ip: String,
         pairPort: Int,
     ) {
-        val v = layoutInflater.inflate(R.layout.dialog_pairing, null)
-        val etPin = v.findViewById<EditText>(R.id.et_pin)
+        val db = DialogPairingBinding.inflate(layoutInflater)
         MaterialAlertDialogBuilder(this)
-            .setView(v)
+            .setView(db.root)
             .setPositiveButton("Connect") { _, _ ->
-                val pin = etPin.text.toString().ifEmpty { "0000" }
+                val pin =
+                    db.etPin.text
+                        .toString()
+                        .ifEmpty { "0000" }
                 val server =
                     com.tinkernorth.dish.data.model.DiscoveredServer(
                         name = "",
