@@ -24,6 +24,7 @@ import com.tinkernorth.dish.data.network.ConnectionKind
 import com.tinkernorth.dish.data.network.ConnectionLive
 import com.tinkernorth.dish.data.network.WifiConnectionManager
 import com.tinkernorth.dish.databinding.ActivityMainBinding
+import com.tinkernorth.dish.databinding.OverlayLowPowerBinding
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.ui.bluetooth.xusbToHid
 import com.tinkernorth.dish.ui.connections.ConnectionsActivity
@@ -40,6 +41,7 @@ class MainActivity :
     InputManager.InputDeviceListener,
     SlotActionListener {
     private lateinit var binding: ActivityMainBinding
+    private lateinit var lowPowerBinding: OverlayLowPowerBinding
     private val viewModel: MainViewModel by viewModels()
     private lateinit var controllerAdapter: ControllerAdapter
     private lateinit var inputManager: InputManager
@@ -59,6 +61,10 @@ class MainActivity :
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        // Low-power overlay is a <merge> include in activity_main.xml, so its
+        // IDs aren't surfaced on ActivityMainBinding — bind() pulls them off
+        // the already-inflated tree.
+        lowPowerBinding = OverlayLowPowerBinding.bind(binding.root)
         inputManager = getSystemService(Context.INPUT_SERVICE) as InputManager
         controllerAdapter = ControllerAdapter(this)
         setupUI()
@@ -143,11 +149,11 @@ class MainActivity :
         lowPowerManager = LowPowerManager(window)
         lowPowerManager.views =
             LowPowerManager.Views(
-                llCountdownBanner = findViewById(R.id.llCountdownBanner),
-                tvCountdownSeconds = findViewById(R.id.tvCountdownSeconds),
-                flLowPowerOverlay = findViewById(R.id.flLowPowerOverlay),
-                tvLowPowerTime = findViewById(R.id.tvLowPowerTime),
-                tvLowPowerStatus = findViewById(R.id.tvLowPowerStatus),
+                llCountdownBanner = lowPowerBinding.llCountdownBanner,
+                tvCountdownSeconds = lowPowerBinding.tvCountdownSeconds,
+                flLowPowerOverlay = lowPowerBinding.flLowPowerOverlay,
+                tvLowPowerTime = lowPowerBinding.tvLowPowerTime,
+                tvLowPowerStatus = lowPowerBinding.tvLowPowerStatus,
             )
         lowPowerManager.activeControllerCount = {
             viewModel.uiState.value.connections
