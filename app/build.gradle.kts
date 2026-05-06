@@ -1,8 +1,7 @@
 plugins {
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.kotlin.kapt)
+    alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ktlint)
     alias(libs.plugins.detekt)
@@ -45,7 +44,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -55,17 +55,14 @@ android {
             signingConfig = signingConfigs.findByName("release")
         }
     }
-    kotlin {
-        jvmToolchain(11)
-    }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     kotlin {
         compilerOptions {
-            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         }
     }
     buildFeatures {
@@ -83,16 +80,6 @@ android {
             version = "3.22.1"
         }
     }
-    lint {
-        // NonNullableMutableLiveDataDetector crashes under the K2 analysis API
-        // (IncompatibleClassChangeError) with the current AGP/Kotlin pairing.
-        // The detector's own crash message suggests disabling it as the workaround.
-        disable += "NullSafeMutableLiveData"
-    }
-}
-
-kotlin {
-    jvmToolchain(11)
 }
 
 dependencies {
@@ -107,7 +94,7 @@ dependencies {
     implementation(libs.androidx.games.activity)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.hilt.android)
-    kapt(libs.hilt.compiler)
+    ksp(libs.hilt.compiler)
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.turbine)
