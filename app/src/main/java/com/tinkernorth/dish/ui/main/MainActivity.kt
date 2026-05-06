@@ -30,7 +30,6 @@ import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.ui.bluetooth.xusbToHid
 import com.tinkernorth.dish.ui.connections.ConnectionsActivity
 import com.tinkernorth.dish.util.LowPowerManager
-import com.tinkernorth.dish.util.TelemetryTracker
 import com.tinkernorth.dish.util.WakeLockManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -54,8 +53,6 @@ class MainActivity :
     @Inject lateinit var hub: ConnectionHub
 
     @Inject lateinit var inputProcessor: GamepadInputProcessor
-
-    @Inject lateinit var telemetryTracker: TelemetryTracker
     private lateinit var wakeLockManager: WakeLockManager
     private lateinit var lowPowerManager: LowPowerManager
 
@@ -63,6 +60,17 @@ class MainActivity :
         get() =
             viewModel.uiState.value.physicalSlots
                 .any { it.boundStatus?.live == ConnectionLive.CONNECTED }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  LIFECYCLE
+    //
+    //  onCreate / [implicit destroy]   construction + view tree
+    //  onStart  / onStop               every active behavior pairs here
+    //
+    //  Anything that posts to a Handler, holds a wake lock, mutates a
+    //  singleton, or registers a system listener belongs in onStart/onStop —
+    //  not onCreate/onDestroy — so it stops while the user can't see us.
+    // ═══════════════════════════════════════════════════════════════════════
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -75,13 +83,32 @@ class MainActivity :
         inputManager = getSystemService(Context.INPUT_SERVICE) as InputManager
         controllerAdapter = ControllerAdapter(this)
         setupUI()
-        wireReportSender()
         setupPower()
-        telemetryTracker.start()
         observeViewModel()
         // Auto-reconnect is driven exclusively by ConnectionForegroundObserver
         // (ProcessLifecycleOwner) so the cold-start and return-to-foreground
         // paths share one entry point.
+    }
+
+    override fun onStart() {
+        super.onStart()
+        inputProcessor.reportSender = GamepadInputProcessor.ReportSender(::sendReport)
+        inputManager.registerInputDeviceListener(this, null)
+        syncControllers()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Mirrors onStart: every listener registered there is torn down here.
+        // The reportSender method reference captures `this`; nulling it on
+        // stop releases the singleton's hold so a backgrounded Activity can
+        // be GC'd. The next onStart reinstalls a fresh sender.
+        inputProcessor.reportSender = null
+        inputManager.unregisterInputDeviceListener(this)
+        wakeLockManager.release()
+        lowPowerManager.cancel()
+        // wake/low-power state re-engages on the next onStart via the
+        // StateFlow collector's repeatOnLifecycle(STARTED) replay.
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -94,10 +121,6 @@ class MainActivity :
         binding.btnManageConnections.setOnClickListener {
             startActivity(Intent(this, ConnectionsActivity::class.java))
         }
-    }
-
-    private fun wireReportSender() {
-        inputProcessor.reportSender = GamepadInputProcessor.ReportSender(::sendReport)
     }
 
     private fun sendReport(
@@ -269,29 +292,6 @@ class MainActivity :
     //  INPUT DEVICE LISTENER
     // ═══════════════════════════════════════════════════════════════════════
 
-    override fun onResume() {
-        super.onResume()
-        inputManager.registerInputDeviceListener(this, null)
-        syncControllers()
-    }
-
-    override fun onPause() {
-        super.onPause()
-        inputManager.unregisterInputDeviceListener(this)
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        lowPowerManager.cancel()
-        telemetryTracker.stop()
-        wakeLockManager.release()
-        // The reportSender method reference captures `this`. The processor is a
-        // singleton, so without this clear the destroyed Activity would be
-        // pinned for the process lifetime. The next Activity's onCreate
-        // reinstalls a fresh sender.
-        inputProcessor.reportSender = null
-    }
-
     override fun onInputDeviceAdded(deviceId: Int) {
         val dev = InputDevice.getDevice(deviceId) ?: return
         if (isGamepad(dev)) viewModel.onControllerConnected(deviceId, dev.name)
@@ -312,8 +312,8 @@ class MainActivity :
             liveIds += id
             viewModel.onControllerConnected(id, dev.name)
         }
-        // Prune slots for devices that went away while we were paused — the
-        // InputManager listener is unregistered during onPause, so without
+        // Prune slots for devices that went away while we were stopped — the
+        // InputManager listener is unregistered during onStop, so without
         // this any controller unplugged in the background would stay in the
         // UI forever.
         for (slot in viewModel.uiState.value.physicalSlots) {
