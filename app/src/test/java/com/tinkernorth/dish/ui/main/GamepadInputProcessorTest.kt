@@ -172,31 +172,6 @@ class GamepadInputProcessorTest {
         assertEquals(0x1000, last[0]) // wButtons
     }
 
-    @Test
-    fun `trySend increments telemetry counters`() {
-        val before = proc.telTotalSent
-        proc.trySend()
-        assertEquals(before + 1, proc.telTotalSent)
-    }
-
-    // ── Telemetry drain ───────────────────────────────────────────────────
-
-    @Test
-    fun `drainTelemetry returns and resets counters`() {
-        proc.telEventCount = 5
-        proc.telSampleCount = 10
-        proc.telSendCount = 3
-
-        val snap = proc.drainTelemetry()
-        assertEquals(5, snap.events)
-        assertEquals(10, snap.samples)
-        assertEquals(3, snap.sends)
-
-        assertEquals(0, proc.telEventCount)
-        assertEquals(0, proc.telSampleCount)
-        assertEquals(0, proc.telSendCount)
-    }
-
     // ── BUTTON_MAP completeness ───────────────────────────────────────────
 
     @Test

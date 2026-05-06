@@ -55,33 +55,17 @@ class GamepadInputProcessor {
 
     private val states = HashMap<Int, DeviceState>()
 
-    // ── Last-sent snapshot (read by TelemetryTracker) ─────────────────────
-    var wButtons = 0
-        internal set
-    var bLT = 0
-        internal set
-    var bRT = 0
-        internal set
-    var sLX = 0
-        internal set
-    var sLY = 0
-        internal set
-    var sRX = 0
-        internal set
-    var sRY = 0
-        internal set
-
-    // ── Telemetry counters (drained by TelemetryTracker) ──────────────────
-    var telEventCount = 0
-        internal set
-    var telSampleCount = 0
-        internal set
-    var telSendCount = 0
-        internal set
-    var telTotalSent = 0L
-        internal set
-    var telLastEventMs = 0L
-        internal set
+    // ── Currently-publishing snapshot ─────────────────────────────────────
+    // publishFrom() copies a DeviceState into these fields immediately before
+    // trySend() reads them; this is the actual report payload, not a debug
+    // mirror.
+    internal var wButtons = 0
+    internal var bLT = 0
+    internal var bRT = 0
+    internal var sLX = 0
+    internal var sLY = 0
+    internal var sRX = 0
+    internal var sRY = 0
 
     companion object {
         private const val AXIS_MAX = 32767f
@@ -146,8 +130,6 @@ class GamepadInputProcessor {
                 true
             }
             MotionEvent.ACTION_MOVE -> {
-                telEventCount++
-                telLastEventMs = android.os.SystemClock.elapsedRealtime()
                 val s = states.getOrPut(event.deviceId) { DeviceState() }
                 for (i in 0 until event.historySize) processJoystickInput(event, s, event.deviceId, i)
                 processJoystickInput(event, s, event.deviceId, -1)
@@ -190,25 +172,7 @@ class GamepadInputProcessor {
 
     fun trySend() {
         reportSender?.send(lastDeviceId, wButtons, bLT, bRT, sLX, sLY, sRX, sRY)
-        telSendCount++
-        telTotalSent++
     }
-
-    /** Reset per-second telemetry counters and return their values. */
-    fun drainTelemetry(): TelemetrySnapshot {
-        val snap = TelemetrySnapshot(telEventCount, telSampleCount, telSendCount, telTotalSent)
-        telEventCount = 0
-        telSampleCount = 0
-        telSendCount = 0
-        return snap
-    }
-
-    data class TelemetrySnapshot(
-        val events: Int,
-        val samples: Int,
-        val sends: Int,
-        val totalSent: Long,
-    )
 
     // ── Internal ──────────────────────────────────────────────────────────
 
@@ -343,7 +307,6 @@ class GamepadInputProcessor {
         if (hy < -0.5f) s.wButtons = s.wButtons or 0x0001
         if (hy > 0.5f) s.wButtons = s.wButtons or 0x0002
         publishFrom(deviceId, s)
-        telSampleCount++
         trySend()
     }
 }
