@@ -52,6 +52,7 @@ class ControllerAdapter(
 
     fun toggleExpanded(slotId: String) {
         if (!expandedIds.add(slotId)) expandedIds.remove(slotId)
+        submitList(currentList.map { it.copy(expanded = expandedIds.contains(it.slot.id)) })
     }
 
     inner class VH(

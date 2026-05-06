@@ -7,6 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import android.widget.TextView
 import com.tinkernorth.dish.ui.main.GamepadInputProcessor
+import javax.inject.Inject
 
 /**
  * Periodically drains telemetry counters from [GamepadInputProcessor] and
@@ -15,9 +16,11 @@ import com.tinkernorth.dish.ui.main.GamepadInputProcessor
  * Owns no mutable state beyond the timer; all data comes from the input
  * processor's [GamepadInputProcessor.drainTelemetry] snapshot.
  */
-class TelemetryTracker(
-    private val input: GamepadInputProcessor,
-) {
+class TelemetryTracker
+    @Inject
+    constructor(
+        private val input: GamepadInputProcessor,
+    ) {
     /** Views to update — set once after inflation. */
     data class Views(
         val tvEventRate: TextView,
