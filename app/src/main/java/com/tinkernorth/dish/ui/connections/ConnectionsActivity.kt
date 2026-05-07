@@ -368,20 +368,22 @@ class ConnectionsActivity : AppCompatActivity() {
         // Forget button one tap away. The intent action is stable across OEM
         // surfaces; the EXTRA key is documented as "device_address" since
         // ACTION_BLUETOOTH_DEVICE_DETAILS itself isn't part of the public
-        // androidx Settings constants.
+        // androidx Settings constants. We don't pre-check resolveActivity()
+        // because that would trigger QueryPermissionsNeeded on API 30+ and
+        // settings is a system app — we just attempt and fall back on
+        // ActivityNotFoundException.
+        val fallback = Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            startActivity(fallback)
+            return
+        }
         val deepLink =
             Intent("android.settings.BLUETOOTH_DEVICE_DETAILS_SETTINGS").apply {
                 putExtra("device_address", mac)
                 data = Uri.parse("bt-mac:$mac")
             }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
-            deepLink.resolveActivity(packageManager) != null
-        ) {
-            runCatching { startActivity(deepLink) }
-                .onFailure { startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
-        } else {
-            startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-        }
+        runCatching { startActivity(deepLink) }
+            .onFailure { startActivity(fallback) }
     }
 
     private fun requestBondedPermission() {

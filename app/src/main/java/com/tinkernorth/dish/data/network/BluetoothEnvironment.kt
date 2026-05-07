@@ -4,6 +4,7 @@
 package com.tinkernorth.dish.data.network
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
@@ -30,6 +31,7 @@ interface BluetoothEnvironment {
 }
 
 @Singleton
+@SuppressLint("MissingPermission") // every framework call is gated by hasConnectPermission().
 class AndroidBluetoothEnvironment
     @Inject
     constructor(
