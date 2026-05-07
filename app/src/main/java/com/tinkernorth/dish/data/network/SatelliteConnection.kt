@@ -156,7 +156,11 @@ class SatelliteConnection(
                     }
                 }
             }
-        val pending = _slots.value.filterValues { !it.registered }.keys.toList()
+        val pending =
+            _slots.value
+                .filterValues { !it.registered }
+                .keys
+                .toList()
         if (pending.isNotEmpty()) {
             scope.launch {
                 for (slotId in pending) registerController(slotId)

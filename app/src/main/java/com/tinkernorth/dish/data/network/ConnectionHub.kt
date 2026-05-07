@@ -84,6 +84,7 @@ class ConnectionHub
          * Bluetooth's type is fixed by the remembered host so it doesn't live here.
          */
         private val _satTypes = MutableStateFlow<Map<Pair<String, String>, Int>>(emptyMap())
+        val satTypes: StateFlow<Map<Pair<String, String>, Int>> = _satTypes.asStateFlow()
 
         private val _connections = MutableStateFlow<List<ConnectionSummary>>(emptyList())
         val connections: StateFlow<List<ConnectionSummary>> = _connections.asStateFlow()
@@ -118,11 +119,7 @@ class ConnectionHub
                         else -> ConnectionLive.IDLE
                     }
                 val bound = bindings.entries.filter { it.value == id }.map { it.key }
-                val typesForConn =
-                    bound.mapNotNull { slotId ->
-                        val key = id to slotId
-                        satTypes[key]?.let { slotId to it }
-                    }.toMap()
+                val typesForConn = buildSlotTypes(id, bound, satTypes)
                 result +=
                     ConnectionSummary(
                         id = id,
@@ -193,6 +190,19 @@ class ConnectionHub
                     )
             }
             return result
+        }
+
+        private fun buildSlotTypes(
+            connId: String,
+            boundSlotIds: List<String>,
+            satTypes: Map<Pair<String, String>, Int>,
+        ): Map<String, Int> {
+            val out = mutableMapOf<String, Int>()
+            for (slotId in boundSlotIds) {
+                val type = satTypes[connId to slotId] ?: continue
+                out[slotId] = type
+            }
+            return out
         }
 
         fun summary(id: String): ConnectionSummary? = _connections.value.firstOrNull { it.id == id }

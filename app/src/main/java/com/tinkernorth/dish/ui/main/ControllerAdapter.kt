@@ -236,10 +236,11 @@ class ControllerAdapter(
                 LinearLayout(ctx).apply {
                     orientation = LinearLayout.HORIZONTAL
                     layoutParams =
-                        LinearLayout.LayoutParams(
-                            LinearLayout.LayoutParams.MATCH_PARENT,
-                            LinearLayout.LayoutParams.WRAP_CONTENT,
-                        ).apply { topMargin = (8 * dp).toInt() }
+                        LinearLayout
+                            .LayoutParams(
+                                LinearLayout.LayoutParams.MATCH_PARENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT,
+                            ).apply { topMargin = (8 * dp).toInt() }
                 }
             container.addView(
                 TextView(ctx).apply {
@@ -248,13 +249,14 @@ class ControllerAdapter(
                     textSize = 11f
                     typeface = Typeface.MONOSPACE
                     layoutParams =
-                        LinearLayout.LayoutParams(
-                            LinearLayout.LayoutParams.WRAP_CONTENT,
-                            LinearLayout.LayoutParams.WRAP_CONTENT,
-                        ).apply {
-                            gravity = android.view.Gravity.CENTER_VERTICAL
-                            marginEnd = (10 * dp).toInt()
-                        }
+                        LinearLayout
+                            .LayoutParams(
+                                LinearLayout.LayoutParams.WRAP_CONTENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT,
+                            ).apply {
+                                gravity = android.view.Gravity.CENTER_VERTICAL
+                                marginEnd = (10 * dp).toInt()
+                            }
                 },
             )
             container.addView(
@@ -303,10 +305,11 @@ class ControllerAdapter(
                         setStroke((1 * dp).toInt(), ctx.getColor(R.color.colorOutline))
                     }
                 layoutParams =
-                    LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                    ).apply { marginEnd = (6 * dp).toInt() }
+                    LinearLayout
+                        .LayoutParams(
+                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                        ).apply { marginEnd = (6 * dp).toInt() }
                 isClickable = !selected
                 if (!selected) setOnClickListener { onClick() }
             }
