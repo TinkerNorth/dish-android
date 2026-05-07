@@ -12,17 +12,27 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
  * A single live or potential session to one Satellite server (the host PC the
  * device routes input to over LAN).
  *
+ * Multi-slot: a satellite session can host more than one controller. Each
+ * attached slot is allocated a server-visible [SlotBinding.controllerIndex]
+ * (0..N) so per-slot reports, type changes and removals can be addressed
+ * independently. Bluetooth's single-host constraint is enforced one layer up
+ * in [ConnectionHub.bind].
+ *
  * The [id] is stable across app restarts (derived from server IP+port) so the
- * hub can persist a list of remembered connections and reclaim the same slot
- * binding after a relaunch. [handle] is the native session handle returned by
+ * hub can persist a list of remembered connections and reclaim slot bindings
+ * after a relaunch. [handle] is the native session handle returned by
  * [ControllerRepository.openSocket] and is only valid while [state] is
  * [SatelliteState.CONNECTED]; once the session is torn down it is reset to -1
  * and a fresh handle is allocated on reconnect.
@@ -58,15 +68,32 @@ class SatelliteConnection(
     /** Native socket handle for the live session, or -1 when idle. */
     val handle: Int get() = live?.handle ?: -1
 
-    /** Which slot id (if any) currently routes its input to this connection. */
-    private val _boundSlotId = MutableStateFlow<String?>(null)
-    val boundSlotId: StateFlow<String?> = _boundSlotId.asStateFlow()
+    /**
+     * State of a single slot bound to this connection. [controllerIndex] is the
+     * server-visible 0..N index used in `addController`/`sendReport` etc.
+     * [registered] flips true once `addController` has been ACKed and the type
+     * has been pushed; reports for this slot are dropped until then so we don't
+     * silently feed packets the server will reject as "unknown controller".
+     */
+    data class SlotBinding(
+        val controllerIndex: Int,
+        val controllerType: Int,
+        val registered: Boolean,
+    )
+
+    private val _slots = MutableStateFlow<Map<String, SlotBinding>>(emptyMap())
+    val slots: StateFlow<Map<String, SlotBinding>> = _slots.asStateFlow()
 
     private var ackJob: Job? = null
     private var aliveJob: Job? = null
 
-    @Volatile private var controllerAdded = false
-    private var pendingControllerType: Int = DEFAULT_CONTROLLER_TYPE
+    /**
+     * Serializes [registerController] runs. The native ACK channel
+     * (`getLastControllerAck`) is per-handle, not per-controller-index, so two
+     * concurrent registrations would race on `resetControllerAck` and steal
+     * each other's ACKs.
+     */
+    private val registrationMutex = Mutex()
     private var onRegistrationFailed: (() -> Unit)? = null
 
     fun updateServer(server: DiscoveredServer) {
@@ -94,9 +121,9 @@ class SatelliteConnection(
      * rebind. Calls from IDLE are likewise rejected — the pair/auth path must
      * go through [markConnecting].
      *
-     * If a slot was bound before the session was online (common right after an
-     * app relaunch/auto-reconnect) the server-side `addController` handshake
-     * is run now so subsequent [sendReport] packets are accepted.
+     * Any slots attached before the session was online (common right after an
+     * app relaunch/auto-reconnect) get their `addController` handshake run now,
+     * sequentially, so subsequent [sendReport] packets are accepted.
      */
     internal fun markConnected(
         handle: Int,
@@ -129,8 +156,11 @@ class SatelliteConnection(
                     }
                 }
             }
-        if (_boundSlotId.value != null && !controllerAdded) {
-            scope.launch { registerController(pendingControllerType) }
+        val pending = _slots.value.filterValues { !it.registered }.keys.toList()
+        if (pending.isNotEmpty()) {
+            scope.launch {
+                for (slotId in pending) registerController(slotId)
+            }
         }
     }
 
@@ -138,6 +168,9 @@ class SatelliteConnection(
      * Tear the session down. Idempotent: a second call from IDLE is a no-op
      * so callers (alive-poll, manager.disconnect, forget, foreground kicks)
      * can invoke it freely without needing to check state first.
+     *
+     * Slot attachments are preserved (only the `registered` flag is cleared)
+     * so the next [markConnected] re-registers them automatically.
      */
     internal fun markDisconnected() {
         val snap = live
@@ -154,59 +187,110 @@ class SatelliteConnection(
             controllerRepo.stopHeartbeat(snap.handle)
             controllerRepo.closeSocket(snap.handle)
         }
-        controllerAdded = false
+        _slots.update { map -> map.mapValues { (_, v) -> v.copy(registered = false) } }
         onRegistrationFailed = null
         _state.value = SatelliteState.IDLE
     }
 
     /**
-     * Record this slot as the owner of this connection. If the native session
-     * is already live the server is notified immediately; otherwise the
-     * registration is deferred to [markConnected].
+     * Record [slotId] as bound to this connection at [controllerType]. If the
+     * slot is already attached this is a no-op (use [setControllerType] to
+     * change the type of an attached slot). When the native session is live
+     * the server is notified immediately; otherwise the registration is
+     * deferred to [markConnected].
      */
     suspend fun attachSlot(
         slotId: String,
         controllerType: Int,
-    ) = withContext(Dispatchers.IO) {
-        _boundSlotId.value = slotId
-        pendingControllerType = controllerType
-        if (_state.value == SatelliteState.CONNECTED && handle >= 0 && !controllerAdded) {
-            registerController(controllerType)
+    ) {
+        val updated =
+            _slots.updateAndGet { map ->
+                if (map.containsKey(slotId)) return@updateAndGet map
+                val index = lowestFreeIndex(map.values.map { it.controllerIndex })
+                map + (slotId to SlotBinding(index, controllerType, registered = false))
+            }
+        // No-op if this slot was already present.
+        val info = updated[slotId] ?: return
+        if (info.registered) return
+        if (_state.value == SatelliteState.CONNECTED && handle >= 0) {
+            registerController(slotId)
         }
     }
 
-    private suspend fun registerController(controllerType: Int) =
-        withContext(Dispatchers.IO) {
-            if (handle < 0) return@withContext
-            controllerRepo.resetControllerAck(handle)
-            controllerRepo.addController(handle, DEFAULT_CTRL_INDEX, DEFAULT_CAPABILITIES)
-            var ack = -1
-            repeat(ACK_WAIT_ATTEMPTS) {
-                ack = controllerRepo.getLastControllerAck(handle)
-                if (ack != -1) return@repeat
-                delay(ACK_WAIT_INTERVAL_MS)
+    /**
+     * Update the controller type for an already-attached [slotId] (Xbox/PS
+     * etc.). If the slot is registered with the server, the change is pushed
+     * immediately; otherwise it sticks in [SlotBinding.controllerType] and is
+     * sent at registration time.
+     */
+    suspend fun setControllerType(
+        slotId: String,
+        controllerType: Int,
+    ) {
+        var info: SlotBinding? = null
+        _slots.update { map ->
+            val cur = map[slotId] ?: return@update map
+            if (cur.controllerType == controllerType) {
+                info = null
+                return@update map
             }
-            if (ack != -1) {
-                controllerRepo.sendControllerType(handle, DEFAULT_CTRL_INDEX, controllerType)
-                controllerAdded = true
-            } else {
-                // Server never ACKed addController; don't silently feed reports
-                // into a connection it will reject. Surface so the user sees
-                // "couldn't register controller" instead of an inert UI.
-                onRegistrationFailed?.invoke()
+            val next = cur.copy(controllerType = controllerType)
+            info = next
+            map + (slotId to next)
+        }
+        val snap = info ?: return
+        if (snap.registered && handle >= 0) {
+            withContext(Dispatchers.IO) {
+                controllerRepo.sendControllerType(handle, snap.controllerIndex, controllerType)
+            }
+        }
+    }
+
+    private suspend fun registerController(slotId: String) =
+        registrationMutex.withLock {
+            withContext(Dispatchers.IO) {
+                val info = _slots.value[slotId] ?: return@withContext
+                if (info.registered) return@withContext
+                if (handle < 0) return@withContext
+                controllerRepo.resetControllerAck(handle)
+                controllerRepo.addController(handle, info.controllerIndex, DEFAULT_CAPABILITIES)
+                var ack = -1
+                repeat(ACK_WAIT_ATTEMPTS) {
+                    ack = controllerRepo.getLastControllerAck(handle)
+                    if (ack != -1) return@repeat
+                    delay(ACK_WAIT_INTERVAL_MS)
+                }
+                if (ack != -1) {
+                    controllerRepo.sendControllerType(handle, info.controllerIndex, info.controllerType)
+                    _slots.update { map ->
+                        val cur = map[slotId] ?: return@update map
+                        map + (slotId to cur.copy(registered = true))
+                    }
+                } else {
+                    // Server never ACKed addController; don't silently feed
+                    // reports into a connection it will reject. Surface so the
+                    // user sees "couldn't register controller" instead of an
+                    // inert UI.
+                    onRegistrationFailed?.invoke()
+                }
             }
         }
 
-    fun detachSlot() {
-        if (_boundSlotId.value == null) return
-        _boundSlotId.value = null
-        if (handle >= 0 && controllerAdded) {
-            controllerRepo.removeController(handle, DEFAULT_CTRL_INDEX)
+    fun detachSlot(slotId: String) {
+        var removed: SlotBinding? = null
+        _slots.update { map ->
+            val cur = map[slotId] ?: return@update map
+            removed = cur
+            map - slotId
         }
-        controllerAdded = false
+        val info = removed ?: return
+        if (handle >= 0 && info.registered) {
+            controllerRepo.removeController(handle, info.controllerIndex)
+        }
     }
 
     fun sendReport(
+        slotId: String,
         buttons: Int,
         lt: Int,
         rt: Int,
@@ -216,23 +300,29 @@ class SatelliteConnection(
         ry: Int,
     ) {
         val snap = live ?: return
-        // Gate on controllerAdded so reports during the registerController()
-        // ACK window (up to 2s after markConnected) aren't silently dropped
+        val info = _slots.value[slotId] ?: return
+        // Gate on registered so reports during the registerController() ACK
+        // window (up to 2s after markConnected) aren't silently dropped
         // server-side as "unknown controller". Slot-bind → connect ordering
         // makes this window unavoidable on auto-reconnect.
-        if (!controllerAdded) return
-        controllerRepo.sendReport(snap.handle, DEFAULT_CTRL_INDEX, buttons, lt, rt, lx, ly, rx, ry)
+        if (!info.registered) return
+        controllerRepo.sendReport(snap.handle, info.controllerIndex, buttons, lt, rt, lx, ly, rx, ry)
     }
 
     companion object {
         private const val ALIVE_POLL_MS = 1000L
         private const val ACK_WAIT_ATTEMPTS = 20
         private const val ACK_WAIT_INTERVAL_MS = 100L
-        private const val DEFAULT_CTRL_INDEX = 0
         private const val DEFAULT_CAPABILITIES = 0x0003
-        private const val DEFAULT_CONTROLLER_TYPE = 0
 
         fun idFor(server: DiscoveredServer): String = "satellite:${server.ip}:${server.udpPort}"
+
+        private fun lowestFreeIndex(taken: List<Int>): Int {
+            val set = taken.toHashSet()
+            var i = 0
+            while (i in set) i++
+            return i
+        }
     }
 }
 

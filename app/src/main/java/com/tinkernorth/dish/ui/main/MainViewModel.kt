@@ -82,6 +82,19 @@ class MainViewModel
             hub.unbind(slotId)
         }
 
+        /**
+         * Switch the controller type (Xbox/PS) for a slot bound to a satellite.
+         * No-op for Bluetooth bindings — BT type is fixed by the remembered
+         * host's HID profile.
+         */
+        fun setSatelliteControllerType(
+            connectionId: String,
+            slotId: String,
+            type: Int,
+        ) {
+            hub.setSatelliteControllerType(connectionId, slotId, type)
+        }
+
         // ── Physical controller lifecycle ─────────────────────────────────────
 
         fun onControllerConnected(

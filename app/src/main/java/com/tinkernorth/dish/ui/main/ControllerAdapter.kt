@@ -14,6 +14,8 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.data.network.CONTROLLER_TYPE_PLAYSTATION
+import com.tinkernorth.dish.data.network.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.data.network.ConnectionKind
 import com.tinkernorth.dish.data.network.ConnectionLive
 import com.tinkernorth.dish.data.network.ConnectionSummary
@@ -30,6 +32,13 @@ interface SlotActionListener {
     fun onUnbind(slotId: String)
 
     fun onOpenGamepad()
+
+    /** User picked a new controller type (Xbox/PS) for a satellite-bound slot. */
+    fun onChangeDeviceType(
+        slotId: String,
+        connectionId: String,
+        type: Int,
+    )
 }
 
 class ControllerAdapter(
@@ -126,7 +135,14 @@ class ControllerAdapter(
         ) {
             val ctx = parent.context
             val bound = slot.boundConnectionId == c.id
-            val ownedByOther = c.boundSlotId != null && c.boundSlotId != slot.id
+            // Bluetooth is single-host: another slot already bound to this BT
+            // connection blocks this slot from claiming it. Satellites accept
+            // multiple slots side-by-side so we never disable for sat.
+            val ownedByOther =
+                when (c.kind) {
+                    ConnectionKind.BLUETOOTH -> c.boundSlotIds.any { it != slot.id }
+                    ConnectionKind.SATELLITE -> false
+                }
             val row =
                 LinearLayout(ctx).apply {
                     orientation = LinearLayout.VERTICAL
@@ -189,8 +205,100 @@ class ControllerAdapter(
                     typeface = Typeface.MONOSPACE
                 },
             )
+            // Per-slot Xbox/PS toggle for the satellite this slot is bound to.
+            // Bluetooth's controller type is fixed by the remembered host so
+            // we don't render a switcher there.
+            if (bound && c.kind == ConnectionKind.SATELLITE) {
+                row.addView(buildTypeToggle(ctx, dp, slot, c))
+            }
             parent.addView(row)
         }
+
+        private fun buildTypeToggle(
+            ctx: android.content.Context,
+            dp: Float,
+            slot: ControllerSlot,
+            c: ConnectionSummary,
+        ): View {
+            val current = c.satelliteControllerTypes[slot.id] ?: CONTROLLER_TYPE_XBOX
+            val container =
+                LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    layoutParams =
+                        LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                        ).apply { topMargin = (8 * dp).toInt() }
+                }
+            container.addView(
+                TextView(ctx).apply {
+                    text = "Type"
+                    setTextColor(ctx.getColor(R.color.colorMuted))
+                    textSize = 11f
+                    typeface = Typeface.MONOSPACE
+                    layoutParams =
+                        LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                        ).apply {
+                            gravity = android.view.Gravity.CENTER_VERTICAL
+                            marginEnd = (10 * dp).toInt()
+                        }
+                },
+            )
+            container.addView(
+                typeChip(
+                    ctx,
+                    dp,
+                    label = "Xbox",
+                    selected = current == CONTROLLER_TYPE_XBOX,
+                ) { listener.onChangeDeviceType(slot.id, c.id, CONTROLLER_TYPE_XBOX) },
+            )
+            container.addView(
+                typeChip(
+                    ctx,
+                    dp,
+                    label = "PlayStation",
+                    selected = current == CONTROLLER_TYPE_PLAYSTATION,
+                ) { listener.onChangeDeviceType(slot.id, c.id, CONTROLLER_TYPE_PLAYSTATION) },
+            )
+            return container
+        }
+
+        private fun typeChip(
+            ctx: android.content.Context,
+            dp: Float,
+            label: String,
+            selected: Boolean,
+            onClick: () -> Unit,
+        ): TextView =
+            TextView(ctx).apply {
+                text = label
+                textSize = 12f
+                setTextColor(
+                    ctx.getColor(if (selected) R.color.colorOnPrimary else R.color.colorOnSurface),
+                )
+                val padH = (10 * dp).toInt()
+                val padV = (4 * dp).toInt()
+                setPadding(padH, padV, padH, padV)
+                background =
+                    GradientDrawable().apply {
+                        setColor(
+                            ctx.getColor(
+                                if (selected) R.color.colorPrimary else R.color.colorBackground,
+                            ),
+                        )
+                        cornerRadius = 4 * dp
+                        setStroke((1 * dp).toInt(), ctx.getColor(R.color.colorOutline))
+                    }
+                layoutParams =
+                    LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                    ).apply { marginEnd = (6 * dp).toInt() }
+                isClickable = !selected
+                if (!selected) setOnClickListener { onClick() }
+            }
 
         private fun slotStatusText(s: ControllerSlot) =
             when {

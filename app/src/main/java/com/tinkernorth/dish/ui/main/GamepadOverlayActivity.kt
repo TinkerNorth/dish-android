@@ -111,6 +111,7 @@ class GamepadOverlayActivity :
                 // wButtons with the d-pad folded back into the low nibble.
                 val wButtons = hidToXusb(state.buttons, state.hatSwitch)
                 satellite.get(connectionId)?.sendReport(
+                    VIRTUAL_SLOT_ID,
                     wButtons,
                     state.leftTrigger,
                     state.rightTrigger,

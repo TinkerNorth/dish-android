@@ -121,6 +121,12 @@ class MainViewModelTest {
     }
 
     @Test
+    fun `setSatelliteControllerType delegates to hub`() {
+        vm.setSatelliteControllerType(connectionId = "s:1", slotId = "slot-X", type = 1)
+        verify { hub.setSatelliteControllerType("s:1", "slot-X", 1) }
+    }
+
+    @Test
     fun `hub bindings are reflected as boundConnectionId on slots`() =
         runTest(dispatcher) {
             val summary =
@@ -130,7 +136,7 @@ class MainViewModelTest {
                     label = "PC",
                     detail = "1.1.1.1",
                     live = ConnectionLive.CONNECTED,
-                    boundSlotId = VIRTUAL_SLOT_ID,
+                    boundSlotIds = listOf(VIRTUAL_SLOT_ID),
                 )
             connectionsFlow.value = listOf(summary)
             bindingsFlow.value = mapOf(VIRTUAL_SLOT_ID to "s:1")
