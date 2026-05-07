@@ -12,8 +12,8 @@ import org.junit.Test
 
 /**
  * The observer is the process-wide answer to the original bug: when the app
- * returns to the foreground, any stale BT/WiFi session needs to be rebuilt
- * so input keeps flowing. We drive the observer directly against a
+ * returns to the foreground, any stale BT/satellite session needs to be
+ * rebuilt so input keeps flowing. We drive the observer directly against a
  * [LifecycleRegistry] via [LifecycleRegistry.createUnsafe] so the test is
  * not tied to a Looper.
  */

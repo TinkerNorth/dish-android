@@ -17,16 +17,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * A single live or potential WiFi session to one Satellite server.
+ * A single live or potential session to one Satellite server (the host PC the
+ * device routes input to over LAN).
  *
  * The [id] is stable across app restarts (derived from server IP+port) so the
  * hub can persist a list of remembered connections and reclaim the same slot
  * binding after a relaunch. [handle] is the native session handle returned by
  * [ControllerRepository.openSocket] and is only valid while [state] is
- * [WifiState.CONNECTED]; once the session is torn down it is reset to -1 and
- * a fresh handle is allocated on reconnect.
+ * [SatelliteState.CONNECTED]; once the session is torn down it is reset to -1
+ * and a fresh handle is allocated on reconnect.
  */
-class WifiConnection(
+class SatelliteConnection(
     val id: String,
     server: DiscoveredServer,
     private val scope: CoroutineScope,
@@ -35,8 +36,8 @@ class WifiConnection(
     private val _server = MutableStateFlow(server)
     val server: StateFlow<DiscoveredServer> = _server.asStateFlow()
 
-    private val _state = MutableStateFlow(WifiState.IDLE)
-    val state: StateFlow<WifiState> = _state.asStateFlow()
+    private val _state = MutableStateFlow(SatelliteState.IDLE)
+    val state: StateFlow<SatelliteState> = _state.asStateFlow()
 
     /**
      * Immutable tuple of the live-session handle + connection id. Held in a
@@ -78,8 +79,8 @@ class WifiConnection(
      * session's state back to CONNECTING without an intervening disconnect.
      */
     internal fun markConnecting() {
-        if (_state.value == WifiState.CONNECTED) return
-        _state.value = WifiState.CONNECTING
+        if (_state.value == SatelliteState.CONNECTED) return
+        _state.value = SatelliteState.CONNECTING
     }
 
     /**
@@ -103,12 +104,12 @@ class WifiConnection(
         onRegistrationFailed: (() -> Unit)? = null,
         onDead: () -> Unit,
     ) {
-        if (_state.value != WifiState.CONNECTING) return
+        if (_state.value != SatelliteState.CONNECTING) return
         // Publish the (handle, connectionId) pair before flipping state so
         // any concurrent sendReport that observes CONNECTED cannot see a
         // null/-1 tuple.
         live = Live(handle, connectionId)
-        _state.value = WifiState.CONNECTED
+        _state.value = SatelliteState.CONNECTED
         this.onRegistrationFailed = onRegistrationFailed
         controllerRepo.resetControllerAck(handle)
         ackJob =
@@ -140,7 +141,7 @@ class WifiConnection(
      */
     internal fun markDisconnected() {
         val snap = live
-        if (_state.value == WifiState.IDLE && snap == null) return
+        if (_state.value == SatelliteState.IDLE && snap == null) return
         aliveJob?.cancel()
         aliveJob = null
         ackJob?.cancel()
@@ -155,7 +156,7 @@ class WifiConnection(
         }
         controllerAdded = false
         onRegistrationFailed = null
-        _state.value = WifiState.IDLE
+        _state.value = SatelliteState.IDLE
     }
 
     /**
@@ -169,7 +170,7 @@ class WifiConnection(
     ) = withContext(Dispatchers.IO) {
         _boundSlotId.value = slotId
         pendingControllerType = controllerType
-        if (_state.value == WifiState.CONNECTED && handle >= 0 && !controllerAdded) {
+        if (_state.value == SatelliteState.CONNECTED && handle >= 0 && !controllerAdded) {
             registerController(controllerType)
         }
     }
@@ -231,8 +232,8 @@ class WifiConnection(
         private const val DEFAULT_CAPABILITIES = 0x0003
         private const val DEFAULT_CONTROLLER_TYPE = 0
 
-        fun idFor(server: DiscoveredServer): String = "wifi:${server.ip}:${server.udpPort}"
+        fun idFor(server: DiscoveredServer): String = "satellite:${server.ip}:${server.udpPort}"
     }
 }
 
-enum class WifiState { IDLE, CONNECTING, CONNECTED }
+enum class SatelliteState { IDLE, CONNECTING, CONNECTED }

@@ -27,8 +27,8 @@ import com.tinkernorth.dish.data.network.ConnectionHub
 import com.tinkernorth.dish.data.network.ConnectionKind
 import com.tinkernorth.dish.data.network.ConnectionLive
 import com.tinkernorth.dish.data.network.ConnectionSummary
-import com.tinkernorth.dish.data.network.WifiConnection
-import com.tinkernorth.dish.data.network.WifiConnectionManager
+import com.tinkernorth.dish.data.network.SatelliteConnection
+import com.tinkernorth.dish.data.network.SatelliteConnectionManager
 import com.tinkernorth.dish.databinding.ActivityConnectionsBinding
 import com.tinkernorth.dish.databinding.DialogPairingBinding
 import com.tinkernorth.dish.databinding.RowConnectionBinding
@@ -39,14 +39,14 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * Dedicated screen for managing the pool of WiFi servers and Bluetooth hosts.
+ * Dedicated screen for managing the pool of satellites and Bluetooth hosts.
  * Two sections, both living on top of [ConnectionHub]:
- *   - WiFi: scan → pair (if needed) → connect; remembered entries auto-reconnect
+ *   - Satellites: scan → pair (if needed) → connect; remembered entries auto-reconnect
  *   - Bluetooth: pick profile → register HID → pair from the target host
  */
 @AndroidEntryPoint
 class ConnectionsActivity : AppCompatActivity() {
-    @Inject lateinit var wifi: WifiConnectionManager
+    @Inject lateinit var satellite: SatelliteConnectionManager
 
     @Inject lateinit var btRegistry: BluetoothGamepadRegistry
 
@@ -83,7 +83,7 @@ class ConnectionsActivity : AppCompatActivity() {
         setSupportActionBar(binding.toolbar)
         binding.toolbar.setNavigationOnClickListener { finish() }
 
-        binding.btnWifiScan.setOnClickListener { wifi.startDiscovery() }
+        binding.btnSatelliteScan.setOnClickListener { satellite.startDiscovery() }
         binding.btnBtAdd.setOnClickListener { requestBtPermissions() }
 
         lifecycleScope.launch {
@@ -93,20 +93,20 @@ class ConnectionsActivity : AppCompatActivity() {
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                wifi.discoveredServers.collect { render(hub.connections.value) }
+                satellite.discoveredServers.collect { render(hub.connections.value) }
             }
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                wifi.isScanning.collect { scanning ->
-                    binding.btnWifiScan.isEnabled = !scanning
-                    binding.btnWifiScan.text = if (scanning) "Scanning…" else "Scan"
+                satellite.isScanning.collect { scanning ->
+                    binding.btnSatelliteScan.isEnabled = !scanning
+                    binding.btnSatelliteScan.text = if (scanning) "Scanning…" else "Scan"
                 }
             }
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                wifi.events.collect { ev ->
+                satellite.events.collect { ev ->
                     when (ev) {
                         is ConnectionEvent.Error -> Toast.makeText(this@ConnectionsActivity, ev.message, Toast.LENGTH_SHORT).show()
                         is ConnectionEvent.PairingRequired -> showPairingDialog(ev.server.ip, ev.server.pairPort)
@@ -116,20 +116,20 @@ class ConnectionsActivity : AppCompatActivity() {
         }
     }
 
-    // ── WiFi rendering ────────────────────────────────────────────────────
+    // ── Satellite rendering ───────────────────────────────────────────────
 
     private fun render(conns: List<ConnectionSummary>) {
-        val wifiConns = conns.filter { it.kind == ConnectionKind.WIFI }
-        val discovered = wifi.discoveredServers.value
-        val knownIds = wifiConns.map { it.id }.toSet()
-        val list = binding.llWifiList
+        val satConns = conns.filter { it.kind == ConnectionKind.SATELLITE }
+        val discovered = satellite.discoveredServers.value
+        val knownIds = satConns.map { it.id }.toSet()
+        val list = binding.llSatelliteList
         list.removeAllViews()
-        wifiConns.forEach { list.addView(wifiRow(it)) }
+        satConns.forEach { list.addView(satelliteRow(it)) }
         for (s in discovered) {
-            val id = WifiConnection.idFor(s)
-            if (id !in knownIds) list.addView(discoveredWifiRow(s))
+            val id = SatelliteConnection.idFor(s)
+            if (id !in knownIds) list.addView(discoveredSatelliteRow(s))
         }
-        binding.tvWifiEmpty.visibility =
+        binding.tvSatelliteEmpty.visibility =
             if (list.childCount == 0) View.VISIBLE else View.GONE
 
         val btConns = conns.filter { it.kind == ConnectionKind.BLUETOOTH }
@@ -139,12 +139,12 @@ class ConnectionsActivity : AppCompatActivity() {
             if (btConns.isEmpty()) View.VISIBLE else View.GONE
     }
 
-    private fun wifiRow(c: ConnectionSummary): View {
-        val rb = inflateRow(binding.llWifiList, c.label, c.detail, statusText(c))
+    private fun satelliteRow(c: ConnectionSummary): View {
+        val rb = inflateRow(binding.llSatelliteList, c.label, c.detail, statusText(c))
         when (c.live) {
             ConnectionLive.CONNECTED -> {
                 rb.btnRowAction.text = "Disconnect"
-                rb.btnRowAction.setOnClickListener { wifi.disconnect(c.id) }
+                rb.btnRowAction.setOnClickListener { satellite.disconnect(c.id) }
             }
             ConnectionLive.CONNECTING -> {
                 rb.btnRowAction.text = "Connecting…"
@@ -153,21 +153,21 @@ class ConnectionsActivity : AppCompatActivity() {
             ConnectionLive.IDLE -> {
                 rb.btnRowAction.text = "Connect"
                 rb.btnRowAction.setOnClickListener {
-                    val remembered = wifi.remembered().firstOrNull { it.id == c.id } ?: return@setOnClickListener
-                    wifi.connect(remembered.toDiscovered())
+                    val remembered = satellite.remembered().firstOrNull { it.id == c.id } ?: return@setOnClickListener
+                    satellite.connect(remembered.toDiscovered())
                 }
             }
         }
         rb.btnRowSecondary.visibility = View.VISIBLE
         rb.btnRowSecondary.text = "Forget"
-        rb.btnRowSecondary.setOnClickListener { wifi.forget(c.id) }
+        rb.btnRowSecondary.setOnClickListener { satellite.forget(c.id) }
         return rb.root
     }
 
-    private fun discoveredWifiRow(s: com.tinkernorth.dish.data.model.DiscoveredServer): View {
-        val rb = inflateRow(binding.llWifiList, s.name.ifEmpty { s.ip }, "${s.ip} • UDP ${s.udpPort}", "Discovered")
+    private fun discoveredSatelliteRow(s: com.tinkernorth.dish.data.model.DiscoveredServer): View {
+        val rb = inflateRow(binding.llSatelliteList, s.name.ifEmpty { s.ip }, "${s.ip} • UDP ${s.udpPort}", "Discovered")
         rb.btnRowAction.text = "Connect"
-        rb.btnRowAction.setOnClickListener { wifi.connect(s) }
+        rb.btnRowAction.setOnClickListener { satellite.connect(s) }
         return rb.root
     }
 
@@ -290,7 +290,7 @@ class ConnectionsActivity : AppCompatActivity() {
                         ip = ip,
                         pairPort = pairPort,
                     )
-                wifi.pairWithPin(server, pin)
+                satellite.pairWithPin(server, pin)
             }.setNegativeButton("Cancel", null)
             .show()
     }
