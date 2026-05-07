@@ -301,7 +301,7 @@ jobs:
         run: find release -type f -printf '%p\n'
 
       - name: Upload to GitHub Releases
-        uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191 # v2.0.8
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
           generate_release_notes: true
