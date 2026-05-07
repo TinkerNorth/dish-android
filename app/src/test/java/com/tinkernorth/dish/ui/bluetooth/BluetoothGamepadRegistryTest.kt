@@ -140,31 +140,33 @@ class BluetoothGamepadRegistryTest {
     // ── errors flow ───────────────────────────────────────────────────────
 
     @Test
-    fun `errors flow emits the message on Failed`() = runBlocking {
-        registry.start("bt-pending-1", GamepadProfile.XBOX)
+    fun `errors flow emits the message on Failed`() =
+        runBlocking {
+            registry.start("bt-pending-1", GamepadProfile.XBOX)
 
-        val first = async { registry.errors.first() }
-        // Yield so the collector subscribes before we emit; SharedFlow with a
-        // 1-event extra buffer also covers the race, but the explicit yield
-        // keeps intent obvious.
-        kotlinx.coroutines.yield()
-        fake.fireError("adapter disabled")
+            val first = async { registry.errors.first() }
+            // Yield so the collector subscribes before we emit; SharedFlow with a
+            // 1-event extra buffer also covers the race, but the explicit yield
+            // keeps intent obvious.
+            kotlinx.coroutines.yield()
+            fake.fireError("adapter disabled")
 
-        assertEquals("adapter disabled", first.await())
-    }
+            assertEquals("adapter disabled", first.await())
+        }
 
     @Test
-    fun `errors flow does not emit on framework release`() = runBlocking {
-        registry.start("bt-pending-1", GamepadProfile.XBOX)
-        var emitted: String? = null
-        val job = launch { registry.errors.collect { emitted = it } }
+    fun `errors flow does not emit on framework release`() =
+        runBlocking {
+            registry.start("bt-pending-1", GamepadProfile.XBOX)
+            var emitted: String? = null
+            val job = launch { registry.errors.collect { emitted = it } }
 
-        fake.fireReleased()
-        kotlinx.coroutines.yield()
+            fake.fireReleased()
+            kotlinx.coroutines.yield()
 
-        assertEquals(null, emitted)
-        job.cancel()
-    }
+            assertEquals(null, emitted)
+            job.cancel()
+        }
 
     @Test
     fun `start with autoConnectMac marks the slot autoReconnecting`() {

@@ -5,6 +5,8 @@ package com.tinkernorth.dish.di
 
 import android.content.Context
 import android.os.Build
+import com.tinkernorth.dish.data.network.AndroidBluetoothEnvironment
+import com.tinkernorth.dish.data.network.BluetoothEnvironment
 import com.tinkernorth.dish.ui.bluetooth.AndroidHidProxyClient
 import com.tinkernorth.dish.ui.bluetooth.BluetoothHidSession
 import com.tinkernorth.dish.ui.bluetooth.HidProxyClient
@@ -69,6 +71,10 @@ object AppModule {
     @Provides
     @Singleton
     fun provideGamepadInputProcessor(): GamepadInputProcessor = GamepadInputProcessor()
+
+    @Provides
+    @Singleton
+    fun provideBluetoothEnvironment(impl: AndroidBluetoothEnvironment): BluetoothEnvironment = impl
 }
 
 private object UnavailableHidProxyClient : HidProxyClient {
