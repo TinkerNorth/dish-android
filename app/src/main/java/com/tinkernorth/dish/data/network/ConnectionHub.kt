@@ -26,9 +26,16 @@ enum class ConnectionKind { SATELLITE, BLUETOOTH }
 
 enum class ConnectionLive { IDLE, CONNECTING, CONNECTED }
 
+/** Server-visible controller type. The native protocol carries the raw int. */
+const val CONTROLLER_TYPE_XBOX = 0
+const val CONTROLLER_TYPE_PLAYSTATION = 1
+
 /**
  * Snapshot of a single remembered or live connection, used by the UI to render
  * the connections list and the bind-to-connection picker on each slot.
+ *
+ * [boundSlotIds] is a list because a satellite session can host multiple
+ * controllers; for Bluetooth the hub enforces at most one entry.
  */
 data class ConnectionSummary(
     val id: String,
@@ -36,9 +43,15 @@ data class ConnectionSummary(
     val label: String,
     val detail: String,
     val live: ConnectionLive,
-    val boundSlotId: String?,
+    val boundSlotIds: List<String>,
     /** For BT only: name of the remembered [BluetoothGamepad.GamepadProfile]. */
     val btProfile: String? = null,
+    /**
+     * For SATELLITE only: per-slot controller type (Xbox / PlayStation /…).
+     * Empty for Bluetooth since BT type is fixed by the remembered host's
+     * HID profile.
+     */
+    val satelliteControllerTypes: Map<String, Int> = emptyMap(),
 )
 
 /**
@@ -47,7 +60,9 @@ data class ConnectionSummary(
  *
  * Binding a slot to a connection is a UI-level concept (which slot routes its
  * input where) — the actual wiring lives in the managers; the hub just tracks
- * the bindings so at most one slot owns any given connection.
+ * the bindings. Eviction is per-kind: Bluetooth is capped at one slot per
+ * connection (HID Device profile only supports a single host) but satellites
+ * can host as many slots as the server allows.
  */
 @Singleton
 class ConnectionHub
@@ -61,6 +76,14 @@ class ConnectionHub
         /** slotId -> connectionId of the connection currently routing that slot. */
         private val _bindings = MutableStateFlow<Map<String, String>>(emptyMap())
         val bindings: StateFlow<Map<String, String>> = _bindings.asStateFlow()
+
+        /**
+         * (connectionId, slotId) -> controller type for satellite bindings.
+         * Source of truth for the UI's per-slot Xbox/PS toggle; the actual
+         * push to the native session goes through [SatelliteConnection.setControllerType].
+         * Bluetooth's type is fixed by the remembered host so it doesn't live here.
+         */
+        private val _satTypes = MutableStateFlow<Map<Pair<String, String>, Int>>(emptyMap())
 
         private val _connections = MutableStateFlow<List<ConnectionSummary>>(emptyList())
         val connections: StateFlow<List<ConnectionSummary>> = _connections.asStateFlow()
@@ -78,7 +101,8 @@ class ConnectionHub
             satMap: Map<String, SatelliteConnection>,
             btStates: Map<String, BluetoothGamepadRegistry.SlotState>,
         ): List<ConnectionSummary> {
-            val bindingBySlot = _bindings.value
+            val bindings = _bindings.value
+            val satTypes = _satTypes.value
             val result = mutableListOf<ConnectionSummary>()
 
             // Satellites: remembered + any live not-yet-remembered (discovery hits).
@@ -93,7 +117,12 @@ class ConnectionHub
                         SatelliteState.CONNECTING -> ConnectionLive.CONNECTING
                         else -> ConnectionLive.IDLE
                     }
-                val bound = bindingBySlot.entries.firstOrNull { it.value == id }?.key
+                val bound = bindings.entries.filter { it.value == id }.map { it.key }
+                val typesForConn =
+                    bound.mapNotNull { slotId ->
+                        val key = id to slotId
+                        satTypes[key]?.let { slotId to it }
+                    }.toMap()
                 result +=
                     ConnectionSummary(
                         id = id,
@@ -101,13 +130,14 @@ class ConnectionHub
                         label = server.name.ifEmpty { server.ip },
                         detail = "${server.ip} • UDP ${server.udpPort}",
                         live = live,
-                        boundSlotId = bound,
+                        boundSlotIds = bound,
+                        satelliteControllerTypes = typesForConn,
                     )
             }
 
             // Bluetooth: one summary per remembered host; live state from registry.
             for (entry in store.rememberedBt()) {
-                val bound = bindingBySlot.entries.firstOrNull { it.value == entry.id }?.key
+                val bound = bindings.entries.filter { it.value == entry.id }.map { it.key }
                 val state = btStates[entry.id]
                 val live =
                     when {
@@ -122,7 +152,7 @@ class ConnectionHub
                         label = entry.name.ifEmpty { entry.mac },
                         detail = "${entry.profileName} • ${entry.mac}",
                         live = live,
-                        boundSlotId = bound,
+                        boundSlotIds = bound,
                         btProfile = entry.profileName,
                     )
             }
@@ -131,27 +161,57 @@ class ConnectionHub
 
         fun summary(id: String): ConnectionSummary? = _connections.value.firstOrNull { it.id == id }
 
-        /** Bind [slotId] to [connectionId]. Evicts any prior binding on either side. */
+        /**
+         * Bind [slotId] to [connectionId]. Eviction depends on the connection
+         * kind: Bluetooth releases any prior slot on the same host (single-host
+         * HID Device profile constraint), but satellites accept multiple slots
+         * side-by-side. If the slot was previously bound elsewhere, that prior
+         * binding is detached first regardless of kind.
+         */
         fun bind(
             slotId: String,
             connectionId: String,
         ) {
             val current = _bindings.value.toMutableMap()
-            // Another slot already holds this connection? Release it and
-            // tell the native session so the server sees a clean
-            // CONTROLLER_REMOVE before the new slot's CONTROLLER_ADD.
-            val priorSlot = current.entries.firstOrNull { it.value == connectionId }?.key
-            if (priorSlot != null && priorSlot != slotId) {
-                current.remove(priorSlot)
-                satellite.get(connectionId)?.detachSlot()
+
+            // Slot was previously bound to a different connection: release it
+            // there before claiming the new one. Without this the old satellite
+            // session would keep treating this slot as its owner and reports
+            // for it would still be addressed to the old controller index.
+            val priorConnId = current[slotId]
+            if (priorConnId != null && priorConnId != connectionId) {
+                satellite.get(priorConnId)?.detachSlot(slotId)
+                _satTypes.value = _satTypes.value - (priorConnId to slotId)
             }
+
+            // Bluetooth-only: another slot already holds this connection?
+            // Release it and tell the native session so the server sees a
+            // clean CONTROLLER_REMOVE before the new slot's CONTROLLER_ADD.
+            // Satellites are multi-slot so we leave existing bindings alone.
+            val isBt = store.rememberedBt().any { it.id == connectionId }
+            if (isBt) {
+                val priorSlot = current.entries.firstOrNull { it.value == connectionId && it.key != slotId }?.key
+                if (priorSlot != null) {
+                    current.remove(priorSlot)
+                    satellite.get(connectionId)?.detachSlot(priorSlot)
+                }
+            }
+
             current[slotId] = connectionId
             _bindings.value = current
-            // Re-emit connections so boundSlotId refreshes.
+
+            // Stash a default type for new satellite bindings so the UI's
+            // per-slot toggle has something to render before the user picks.
+            val type = _satTypes.value[connectionId to slotId] ?: CONTROLLER_TYPE_XBOX
+            if (!isBt) {
+                _satTypes.value = _satTypes.value + ((connectionId to slotId) to type)
+            }
+
+            // Re-emit connections so boundSlotIds refreshes.
             _connections.value = buildSummaries(satellite.connections.value, bt.states.value)
             // For satellite: attach the controller slot on the server side.
             satellite.get(connectionId)?.let { conn ->
-                scope.launch { conn.attachSlot(slotId, controllerType = 0) }
+                scope.launch { conn.attachSlot(slotId, controllerType = type) }
             }
         }
 
@@ -159,7 +219,29 @@ class ConnectionHub
             val current = _bindings.value.toMutableMap()
             val connId = current.remove(slotId) ?: return
             _bindings.value = current
-            satellite.get(connId)?.detachSlot()
+            satellite.get(connId)?.detachSlot(slotId)
+            _satTypes.value = _satTypes.value - (connId to slotId)
+            _connections.value = buildSummaries(satellite.connections.value, bt.states.value)
+        }
+
+        /**
+         * Change the controller type (Xbox/PS/…) for a satellite-bound slot.
+         * Pushes the change to the native session if it's live; otherwise
+         * stashes the new value so it's used at the next registration.
+         * No-op for Bluetooth bindings since BT type is fixed by the
+         * remembered host's HID profile.
+         */
+        fun setSatelliteControllerType(
+            connectionId: String,
+            slotId: String,
+            type: Int,
+        ) {
+            val key = connectionId to slotId
+            if (_satTypes.value[key] == type) return
+            _satTypes.value = _satTypes.value + (key to type)
+            satellite.get(connectionId)?.let { conn ->
+                scope.launch { conn.setControllerType(slotId, type) }
+            }
             _connections.value = buildSummaries(satellite.connections.value, bt.states.value)
         }
 
