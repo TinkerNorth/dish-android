@@ -111,22 +111,48 @@ class SatelliteConnectionManager
                 }
             conn.updateServer(server)
             conn.markConnecting()
-            scope.launch { pairAndConnect(conn, server) }
+            scope.launch {
+                // If we already have a pair-derived shared key for this server,
+                // skip the pairing handshake entirely. This shaves a network
+                // round-trip off every auto-reconnect and — more importantly —
+                // means a server that's silently moved networks fails fast in
+                // openSession with a clean "unreachable" error, instead of
+                // bouncing the user back to a pin dialog they can never satisfy
+                // (the dialog would re-pair against the dead IP).
+                if (store.satelliteSharedKey(id) != null) {
+                    openSession(conn, server)
+                } else {
+                    pairAndConnect(conn, server)
+                }
+            }
         }
 
         private suspend fun pairAndConnect(
             conn: SatelliteConnection,
             server: DiscoveredServer,
         ) {
+            val raw = runCatching { discoveryRepo.pair(server.ip, server.pairPort, deviceId, deviceName, "") }
+            val rawText = raw.getOrNull()
+            if (raw.isFailure || rawText.isNullOrBlank()) {
+                // Empty/exception from native pair() means we couldn't reach the
+                // server at all (DNS/connect failure on the LAN). This is the
+                // network-move case — surface it clearly instead of routing the
+                // user through a pin dialog that will fail against the dead IP.
+                conn.markDisconnected()
+                _events.emit(ConnectionEvent.Error(SERVER_UNREACHABLE_MSG))
+                return
+            }
             val pair =
-                runCatching {
-                    json.decodeFromString(
-                        PairResponse.serializer(),
-                        discoveryRepo.pair(server.ip, server.pairPort, deviceId, deviceName, ""),
-                    )
-                }.getOrElse { PairResponse(error = "Malformed pair response") }
-
+                runCatching { json.decodeFromString(PairResponse.serializer(), rawText) }
+                    .getOrNull()
+            if (pair == null) {
+                conn.markDisconnected()
+                _events.emit(ConnectionEvent.Error(SERVER_UNREACHABLE_MSG))
+                return
+            }
             if (!pair.ok || pair.sharedKey == null) {
+                // Server reachable but refused the empty PIN — first-time pair
+                // or credentials rotated server-side. Prompt for a PIN.
                 conn.markDisconnected()
                 _events.emit(ConnectionEvent.PairingRequired(server))
                 return
@@ -146,13 +172,21 @@ class SatelliteConnectionManager
                 }
             conn.markConnecting()
             scope.launch {
+                val raw = runCatching { discoveryRepo.pair(server.ip, server.pairPort, deviceId, deviceName, pin) }
+                val rawText = raw.getOrNull()
+                if (raw.isFailure || rawText.isNullOrBlank()) {
+                    conn.markDisconnected()
+                    _events.emit(ConnectionEvent.Error(SERVER_UNREACHABLE_MSG))
+                    return@launch
+                }
                 val pair =
-                    runCatching {
-                        json.decodeFromString(
-                            PairResponse.serializer(),
-                            discoveryRepo.pair(server.ip, server.pairPort, deviceId, deviceName, pin),
-                        )
-                    }.getOrElse { PairResponse(error = "Malformed pair response") }
+                    runCatching { json.decodeFromString(PairResponse.serializer(), rawText) }
+                        .getOrNull()
+                if (pair == null) {
+                    conn.markDisconnected()
+                    _events.emit(ConnectionEvent.Error(SERVER_UNREACHABLE_MSG))
+                    return@launch
+                }
                 if (!pair.ok || pair.sharedKey == null) {
                     conn.markDisconnected()
                     _events.emit(ConnectionEvent.Error(pair.error ?: "Pairing failed"))
@@ -174,13 +208,21 @@ class SatelliteConnectionManager
                 return@withContext
             }
             val key = hexToBytes(keyHex)
+            val rawConn = runCatching { discoveryRepo.connect(server.ip, server.httpPort, deviceId) }
+            val rawConnText = rawConn.getOrNull()
+            if (rawConn.isFailure || rawConnText.isNullOrBlank()) {
+                conn.markDisconnected()
+                _events.emit(ConnectionEvent.Error(SERVER_UNREACHABLE_MSG))
+                return@withContext
+            }
             val resp =
-                runCatching {
-                    json.decodeFromString(
-                        ConnectResponse.serializer(),
-                        discoveryRepo.connect(server.ip, server.httpPort, deviceId),
-                    )
-                }.getOrElse { ConnectResponse(error = "Malformed connect response") }
+                runCatching { json.decodeFromString(ConnectResponse.serializer(), rawConnText) }
+                    .getOrNull()
+            if (resp == null) {
+                conn.markDisconnected()
+                _events.emit(ConnectionEvent.Error(SERVER_UNREACHABLE_MSG))
+                return@withContext
+            }
             val connId = resp.connectionId
             val tokenHex = resp.token
             if (connId == null || tokenHex == null) {
@@ -267,5 +309,7 @@ class SatelliteConnectionManager
             private const val DISC_TIMEOUT_MS = 4000
             private const val LEGACY_PREFS = "satellite"
             private const val LEGACY_KEY_SHARED = "sharedKey"
+            internal const val SERVER_UNREACHABLE_MSG =
+                "Server unreachable — has it moved networks? Forget and re-add."
         }
     }
