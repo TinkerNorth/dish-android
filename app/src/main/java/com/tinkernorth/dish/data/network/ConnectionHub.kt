@@ -6,10 +6,14 @@ package com.tinkernorth.dish.data.network
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepad
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -89,11 +93,29 @@ class ConnectionHub
         private val _connections = MutableStateFlow<List<ConnectionSummary>>(emptyList())
         val connections: StateFlow<List<ConnectionSummary>> = _connections.asStateFlow()
 
+        @OptIn(ExperimentalCoroutinesApi::class)
+        private val flatSatConnections: Flow<Map<String, SatelliteConnection>> =
+            satellite.connections
+                .flatMapLatest { satMap ->
+                    // The outer Map<String, SatelliteConnection> only re-emits when
+                    // a session is added/removed — *not* when an existing session's
+                    // state flips IDLE → CONNECTING → CONNECTED. Without flattening
+                    // into each session's `state` flow, the connections-list UI would
+                    // show stale "Connecting…" until the screen is reopened.
+                    if (satMap.isEmpty()) {
+                        flowOf(satMap)
+                    } else {
+                        combine(satMap.values.map { it.state }) { satMap }
+                    }
+                }
+
         init {
             combine(
-                satellite.connections,
+                flatSatConnections,
                 bt.states,
-            ) { satMap, btStates -> buildSummaries(satMap, btStates) }
+                _bindings,
+                _satTypes,
+            ) { satMap, btStates, _, _ -> buildSummaries(satMap, btStates) }
                 .onEach { _connections.value = it }
                 .launchIn(scope)
         }

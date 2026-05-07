@@ -415,6 +415,99 @@ class ConnectionHubTest {
         verify(exactly = 0) { bt.tryAutoReconnect("bt:B") }
     }
 
+    /**
+     * Regression: previously the hub combined only on the outer
+     * `Map<String, SatelliteConnection>` identity, so a session flipping
+     * CONNECTING → CONNECTED inside the same map left the connections list
+     * stuck on "Connecting…" until the screen was reopened.
+     */
+    @Test
+    fun `connections re-emits when an inner SatelliteConnection state transitions`() {
+        every { store.remembered() } returns
+            listOf(
+                RememberedSatellite(
+                    id = "satellite:1.1.1.1:9876",
+                    name = "Pc",
+                    ip = "1.1.1.1",
+                    udpPort = 9876,
+                    pairPort = 9878,
+                    httpPort = 9877,
+                ),
+            )
+        val state = MutableStateFlow(SatelliteState.CONNECTING)
+        val conn =
+            mockk<SatelliteConnection>(relaxed = true) {
+                every { id } returns "satellite:1.1.1.1:9876"
+                every { this@mockk.state } returns state
+                every { server } returns
+                    MutableStateFlow(
+                        com.tinkernorth.dish.data.model
+                            .DiscoveredServer(name = "Pc", ip = "1.1.1.1", udpPort = 9876, pairPort = 9878, httpPort = 9877),
+                    )
+                every { slots } returns MutableStateFlow(emptyMap())
+            }
+        satConnsFlow.value = mapOf("satellite:1.1.1.1:9876" to conn)
+        val hub = buildHub()
+
+        // First snapshot: still CONNECTING.
+        assertEquals(
+            ConnectionLive.CONNECTING,
+            hub.connections.value
+                .first { it.id == "satellite:1.1.1.1:9876" }
+                .live,
+        )
+
+        // Inner state flips to CONNECTED — hub must re-emit even though the
+        // outer satellite.connections map is unchanged.
+        state.value = SatelliteState.CONNECTED
+        scope.testScheduler.runCurrent()
+
+        assertEquals(
+            ConnectionLive.CONNECTED,
+            hub.connections.value
+                .first { it.id == "satellite:1.1.1.1:9876" }
+                .live,
+        )
+    }
+
+    @Test
+    fun `connections re-emits when an inner SatelliteConnection drops back to IDLE`() {
+        every { store.remembered() } returns
+            listOf(
+                RememberedSatellite(
+                    id = "satellite:1.1.1.1:9876",
+                    name = "Pc",
+                    ip = "1.1.1.1",
+                    udpPort = 9876,
+                    pairPort = 9878,
+                    httpPort = 9877,
+                ),
+            )
+        val state = MutableStateFlow(SatelliteState.CONNECTED)
+        val conn =
+            mockk<SatelliteConnection>(relaxed = true) {
+                every { id } returns "satellite:1.1.1.1:9876"
+                every { this@mockk.state } returns state
+                every { server } returns
+                    MutableStateFlow(
+                        com.tinkernorth.dish.data.model
+                            .DiscoveredServer(name = "Pc", ip = "1.1.1.1", udpPort = 9876, pairPort = 9878, httpPort = 9877),
+                    )
+                every { slots } returns MutableStateFlow(emptyMap())
+            }
+        satConnsFlow.value = mapOf("satellite:1.1.1.1:9876" to conn)
+        val hub = buildHub()
+        state.value = SatelliteState.IDLE
+        scope.testScheduler.runCurrent()
+
+        assertEquals(
+            ConnectionLive.IDLE,
+            hub.connections.value
+                .first { it.id == "satellite:1.1.1.1:9876" }
+                .live,
+        )
+    }
+
     @Test
     fun `autoReconnectAll skips bt when a remembered host is already registered`() {
         every { store.rememberedBt() } returns
