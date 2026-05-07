@@ -150,36 +150,58 @@ class ControllerAdapter(
             // connection blocks this slot from claiming it. Satellites accept
             // multiple slots side-by-side so we never disable for sat.
             val ownedByOther =
-                when (c.kind) {
-                    ConnectionKind.BLUETOOTH -> c.boundSlotIds.any { it != slot.id }
-                    ConnectionKind.SATELLITE -> false
-                }
+                c.kind == ConnectionKind.BLUETOOTH && c.boundSlotIds.any { it != slot.id }
+
             val row =
-                LinearLayout(ctx).apply {
-                    orientation = LinearLayout.VERTICAL
-                    val pad = (10 * dp).toInt()
-                    setPadding(pad, pad, pad, pad)
-                    background =
-                        GradientDrawable().apply {
-                            setColor(ctx.getColor(R.color.colorBackground))
-                            cornerRadius = 6 * dp
-                            setStroke(
-                                (1 * dp).toInt(),
-                                ctx.getColor(
-                                    if (bound) R.color.colorPrimary else R.color.colorOutline,
-                                ),
-                            )
-                        }
-                    layoutParams =
-                        LinearLayout
-                            .LayoutParams(
-                                LinearLayout.LayoutParams.MATCH_PARENT,
-                                LinearLayout.LayoutParams.WRAP_CONTENT,
-                            ).apply { topMargin = (6 * dp).toInt() }
-                    alpha = if (ownedByOther) 0.5f else 1f
-                    isClickable = !ownedByOther
-                    if (!ownedByOther) setOnClickListener { listener.onBind(slot.id, c.id) }
+                buildConnectionRowContainer(ctx, dp, bound, ownedByOther) {
+                    if (!ownedByOther) listener.onBind(slot.id, c.id)
                 }
+            row.addView(buildConnectionTitle(ctx, c))
+            row.addView(buildConnectionDetail(ctx, c, bound, ownedByOther))
+            // Per-slot Xbox/PS toggle for the satellite this slot is bound to.
+            // Bluetooth's controller type is fixed by the remembered host so
+            // we don't render a switcher there.
+            if (bound && c.kind == ConnectionKind.SATELLITE) {
+                row.addView(buildTypeToggle(ctx, dp, slot, c))
+            }
+            parent.addView(row)
+        }
+
+        private fun buildConnectionRowContainer(
+            ctx: android.content.Context,
+            dp: Float,
+            bound: Boolean,
+            ownedByOther: Boolean,
+            onClick: () -> Unit,
+        ): LinearLayout =
+            LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                val pad = (10 * dp).toInt()
+                setPadding(pad, pad, pad, pad)
+                background =
+                    GradientDrawable().apply {
+                        setColor(ctx.getColor(R.color.colorBackground))
+                        cornerRadius = 6 * dp
+                        setStroke(
+                            (1 * dp).toInt(),
+                            ctx.getColor(if (bound) R.color.colorPrimary else R.color.colorOutline),
+                        )
+                    }
+                layoutParams =
+                    LinearLayout
+                        .LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                        ).apply { topMargin = (6 * dp).toInt() }
+                alpha = if (ownedByOther) 0.5f else 1f
+                isClickable = !ownedByOther
+                if (!ownedByOther) setOnClickListener { onClick() }
+            }
+
+        private fun buildConnectionTitle(
+            ctx: android.content.Context,
+            c: ConnectionSummary,
+        ): TextView {
             val prefix =
                 when (c.kind) {
                     ConnectionKind.SATELLITE -> "📡 "
@@ -191,38 +213,34 @@ class ControllerAdapter(
                     ConnectionLive.CONNECTING -> " • connecting…"
                     ConnectionLive.IDLE -> ""
                 }
-            row.addView(
-                TextView(ctx).apply {
-                    text = "$prefix${c.label}$statusSuffix"
-                    setTextColor(ctx.getColor(R.color.colorOnSurface))
-                    textSize = 14f
-                    typeface = Typeface.DEFAULT_BOLD
-                },
-            )
+            return TextView(ctx).apply {
+                text = "$prefix${c.label}$statusSuffix"
+                setTextColor(ctx.getColor(R.color.colorOnSurface))
+                textSize = 14f
+                typeface = Typeface.DEFAULT_BOLD
+            }
+        }
+
+        private fun buildConnectionDetail(
+            ctx: android.content.Context,
+            c: ConnectionSummary,
+            bound: Boolean,
+            ownedByOther: Boolean,
+        ): TextView {
             val detail =
                 buildString {
                     append(c.detail)
-                    if (bound) {
-                        append(" • bound here")
-                    } else if (ownedByOther) {
-                        append(" • in use")
+                    when {
+                        bound -> append(" • bound here")
+                        ownedByOther -> append(" • in use")
                     }
                 }
-            row.addView(
-                TextView(ctx).apply {
-                    text = detail
-                    setTextColor(ctx.getColor(R.color.colorMuted))
-                    textSize = 11f
-                    typeface = Typeface.MONOSPACE
-                },
-            )
-            // Per-slot Xbox/PS toggle for the satellite this slot is bound to.
-            // Bluetooth's controller type is fixed by the remembered host so
-            // we don't render a switcher there.
-            if (bound && c.kind == ConnectionKind.SATELLITE) {
-                row.addView(buildTypeToggle(ctx, dp, slot, c))
+            return TextView(ctx).apply {
+                text = detail
+                setTextColor(ctx.getColor(R.color.colorMuted))
+                textSize = 11f
+                typeface = Typeface.MONOSPACE
             }
-            parent.addView(row)
         }
 
         private fun buildTypeToggle(
@@ -236,10 +254,11 @@ class ControllerAdapter(
                 LinearLayout(ctx).apply {
                     orientation = LinearLayout.HORIZONTAL
                     layoutParams =
-                        LinearLayout.LayoutParams(
-                            LinearLayout.LayoutParams.MATCH_PARENT,
-                            LinearLayout.LayoutParams.WRAP_CONTENT,
-                        ).apply { topMargin = (8 * dp).toInt() }
+                        LinearLayout
+                            .LayoutParams(
+                                LinearLayout.LayoutParams.MATCH_PARENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT,
+                            ).apply { topMargin = (8 * dp).toInt() }
                 }
             container.addView(
                 TextView(ctx).apply {
@@ -248,13 +267,14 @@ class ControllerAdapter(
                     textSize = 11f
                     typeface = Typeface.MONOSPACE
                     layoutParams =
-                        LinearLayout.LayoutParams(
-                            LinearLayout.LayoutParams.WRAP_CONTENT,
-                            LinearLayout.LayoutParams.WRAP_CONTENT,
-                        ).apply {
-                            gravity = android.view.Gravity.CENTER_VERTICAL
-                            marginEnd = (10 * dp).toInt()
-                        }
+                        LinearLayout
+                            .LayoutParams(
+                                LinearLayout.LayoutParams.WRAP_CONTENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT,
+                            ).apply {
+                                gravity = android.view.Gravity.CENTER_VERTICAL
+                                marginEnd = (10 * dp).toInt()
+                            }
                 },
             )
             container.addView(
@@ -303,10 +323,11 @@ class ControllerAdapter(
                         setStroke((1 * dp).toInt(), ctx.getColor(R.color.colorOutline))
                     }
                 layoutParams =
-                    LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                    ).apply { marginEnd = (6 * dp).toInt() }
+                    LinearLayout
+                        .LayoutParams(
+                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                        ).apply { marginEnd = (6 * dp).toInt() }
                 isClickable = !selected
                 if (!selected) setOnClickListener { onClick() }
             }

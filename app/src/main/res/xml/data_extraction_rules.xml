@@ -1,19 +1,16 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Auto-backup rules (API 31+). The ConnectionStore SharedPrefs file holds the
+    libsodium-derived satellite shared keys alongside the BT/satellite lists,
+    so we exclude the whole file from cloud backup and device transfer rather
+    than risk the keys leaving the device. Users will re-pair on a new device,
+    which is the right answer for credential material.
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <exclude domain="sharedpref" path="connection_store.xml" />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <exclude domain="sharedpref" path="connection_store.xml" />
     </device-transfer>
-    -->
 </data-extraction-rules>

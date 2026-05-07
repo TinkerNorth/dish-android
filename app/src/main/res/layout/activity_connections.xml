@@ -118,6 +118,87 @@
                 android:textColor="@color/colorMuted"
                 android:textSize="12sp"
                 android:paddingVertical="12dp" />
+
+            <!-- ── Paired-on-this-phone subtier ── -->
+            <LinearLayout
+                android:id="@+id/llBondedHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="16dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="PAIRED ON THIS PHONE"
+                    android:textColor="@color/colorMuted"
+                    android:textSize="11sp"
+                    android:fontFamily="monospace"
+                    android:letterSpacing="0.12" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnBondedShowAll"
+                    style="@style/Widget.Dish.Button.Outlined"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Show all"
+                    android:textAllCaps="false" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/llBondedList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingTop="8dp" />
+
+            <TextView
+                android:id="@+id/tvBondedEmpty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="No additional paired devices on this phone"
+                android:textColor="@color/colorMuted"
+                android:textSize="12sp"
+                android:paddingVertical="12dp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/tvBondedHint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Most devices here aren't gamepad hosts — try Claim only if you're sure."
+                android:textColor="@color/colorMuted"
+                android:textSize="11sp"
+                android:paddingVertical="4dp"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/llBondedPermission"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:visibility="gone"
+                android:paddingVertical="8dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Allow Bluetooth permission to see paired hosts"
+                    android:textColor="@color/colorMuted"
+                    android:textSize="12sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnBondedGrant"
+                    style="@style/Widget.Dish.Button.Outlined"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Grant"
+                    android:textAllCaps="false" />
+            </LinearLayout>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </LinearLayout>

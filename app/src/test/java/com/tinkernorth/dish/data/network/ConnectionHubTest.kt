@@ -170,7 +170,10 @@ class ConnectionHubTest {
                     ),
             )
         val hub = buildHub()
-        val acquiringDetail = hub.connections.value.first { it.id == "bt-pending-1" }.detail
+        val acquiringDetail =
+            hub.connections.value
+                .first { it.id == "bt-pending-1" }
+                .detail
 
         // Once Acquired → Registered, the pending entry's status should change
         // to "Ready to pair" so the user knows to look at their host's BT menu.
@@ -183,7 +186,10 @@ class ConnectionHubTest {
                     ),
             )
         scope.testScheduler.runCurrent()
-        val readyDetail = hub.connections.value.first { it.id == "bt-pending-1" }.detail
+        val readyDetail =
+            hub.connections.value
+                .first { it.id == "bt-pending-1" }
+                .detail
 
         assert(acquiringDetail.contains("Acquiring", ignoreCase = true)) {
             "expected 'Acquiring…' tone, got: $acquiringDetail"
