@@ -41,6 +41,23 @@ data class MainUiState(
     val virtualSlot get() = slots.first { it.id == VIRTUAL_SLOT_ID }
     val physicalSlots get() = slots.filter { it.inputType == SlotInputType.PHYSICAL }
     val anyConnected get() = connections.any { it.live == com.tinkernorth.dish.data.network.ConnectionLive.CONNECTED }
+
+    /**
+     * Slots that can route input to a live connection right now: bound to a
+     * CONNECTED connection, not currently tearing down, and either virtual
+     * (always has an input source — the on-screen overlay) or physical with
+     * a real device attached. This is the "Streaming · N controllers" count
+     * — distinct from `connections.count { CONNECTED }` which would inflate
+     * when a remembered connection is live but nothing is plugged in to feed
+     * it.
+     */
+    val streamingSlotCount: Int get() =
+        slots.count {
+            !it.isDisconnecting &&
+                it.boundConnectionId != null &&
+                it.boundStatus?.live == com.tinkernorth.dish.data.network.ConnectionLive.CONNECTED &&
+                (it.inputType == SlotInputType.VIRTUAL || it.physicalDeviceId >= 0)
+        }
 }
 
 const val VIRTUAL_SLOT_ID = "virtual"
