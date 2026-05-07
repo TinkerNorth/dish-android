@@ -28,7 +28,7 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- ── WiFi section ── -->
+            <!-- ── Satellite section ── -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -39,14 +39,14 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="WIFI SERVERS"
+                    android:text="SATELLITES"
                     android:textColor="@color/colorPrimary"
                     android:textSize="11sp"
                     android:fontFamily="monospace"
                     android:letterSpacing="0.12" />
 
                 <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnWifiScan"
+                    android:id="@+id/btnSatelliteScan"
                     style="@style/Widget.Dish.Button.Outlined"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -55,17 +55,17 @@
             </LinearLayout>
 
             <LinearLayout
-                android:id="@+id/llWifiList"
+                android:id="@+id/llSatelliteList"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:paddingTop="8dp" />
 
             <TextView
-                android:id="@+id/tvWifiEmpty"
+                android:id="@+id/tvSatelliteEmpty"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Tap Scan to find servers on your network"
+                android:text="Tap Scan to find satellites on your network"
                 android:textColor="@color/colorMuted"
                 android:textSize="12sp"
                 android:paddingVertical="12dp"

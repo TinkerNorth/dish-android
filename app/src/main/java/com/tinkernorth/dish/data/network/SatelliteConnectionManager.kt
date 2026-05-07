@@ -35,13 +35,14 @@ sealed class ConnectionEvent {
 }
 
 /**
- * Owns the pool of live + remembered WiFi sessions. Each session runs its own
- * native handle, heartbeat and ACK loop so multiple servers can be active in
- * parallel. Slots bind to a specific connection via the hub and their input is
- * routed through the bound connection's [WifiConnection.sendReport].
+ * Owns the pool of live + remembered satellite sessions. Each session runs its
+ * own native handle, heartbeat and ACK loop so multiple satellites can be
+ * active in parallel. Slots bind to a specific connection via the hub and
+ * their input is routed through the bound connection's
+ * [SatelliteConnection.sendReport].
  */
 @Singleton
-class WifiConnectionManager
+class SatelliteConnectionManager
     @Inject
     constructor(
         @ApplicationContext private val context: Context,
@@ -51,8 +52,8 @@ class WifiConnectionManager
         private val store: ConnectionStore,
         private val json: Json,
     ) {
-        private val _connections = MutableStateFlow<Map<String, WifiConnection>>(emptyMap())
-        val connections: StateFlow<Map<String, WifiConnection>> = _connections.asStateFlow()
+        private val _connections = MutableStateFlow<Map<String, SatelliteConnection>>(emptyMap())
+        val connections: StateFlow<Map<String, SatelliteConnection>> = _connections.asStateFlow()
 
         private val _discoveredServers = MutableStateFlow<List<DiscoveredServer>>(emptyList())
         val discoveredServers: StateFlow<List<DiscoveredServer>> = _discoveredServers.asStateFlow()
@@ -66,9 +67,9 @@ class WifiConnectionManager
         private val deviceId by lazy { getOrCreateDeviceId() }
         private val deviceName by lazy { android.os.Build.MODEL ?: "Android" }
 
-        fun get(id: String): WifiConnection? = _connections.value[id]
+        fun get(id: String): SatelliteConnection? = _connections.value[id]
 
-        fun remembered(): List<RememberedWifi> = store.remembered()
+        fun remembered(): List<RememberedSatellite> = store.remembered()
 
         // ── Discovery ─────────────────────────────────────────────────────────
 
@@ -79,14 +80,14 @@ class WifiConnectionManager
                 val servers = discoveryRepo.discoverServers(DISC_PORT, DISC_TIMEOUT_MS)
                 _discoveredServers.value = servers
                 _isScanning.value = false
-                if (servers.isEmpty()) _events.emit(ConnectionEvent.Error("No servers found — check your network"))
+                if (servers.isEmpty()) _events.emit(ConnectionEvent.Error("No satellites found — check your network"))
             }
         }
 
         // ── Connect / Disconnect ──────────────────────────────────────────────
 
         fun connect(server: DiscoveredServer) {
-            val id = WifiConnection.idFor(server)
+            val id = SatelliteConnection.idFor(server)
             val existing = _connections.value[id]
             // Idempotent on live / in-flight sessions: the foreground observer
             // and MainActivity both kick auto-reconnect on every return, so
@@ -95,17 +96,17 @@ class WifiConnectionManager
             // server.
             if (existing != null) {
                 when (existing.state.value) {
-                    WifiState.CONNECTED,
-                    WifiState.CONNECTING,
+                    SatelliteState.CONNECTED,
+                    SatelliteState.CONNECTING,
                     -> {
                         existing.updateServer(server)
                         return
                     }
-                    WifiState.IDLE -> Unit
+                    SatelliteState.IDLE -> Unit
                 }
             }
             val conn =
-                existing ?: WifiConnection(id, server, scope, controllerRepo).also {
+                existing ?: SatelliteConnection(id, server, scope, controllerRepo).also {
                     _connections.value = _connections.value + (id to it)
                 }
             conn.updateServer(server)
@@ -114,7 +115,7 @@ class WifiConnectionManager
         }
 
         private suspend fun pairAndConnect(
-            conn: WifiConnection,
+            conn: SatelliteConnection,
             server: DiscoveredServer,
         ) {
             val pair =
@@ -130,7 +131,7 @@ class WifiConnectionManager
                 _events.emit(ConnectionEvent.PairingRequired(server))
                 return
             }
-            store.setWifiSharedKey(WifiConnection.idFor(server), pair.sharedKey)
+            store.setSatelliteSharedKey(SatelliteConnection.idFor(server), pair.sharedKey)
             openSession(conn, server)
         }
 
@@ -138,9 +139,9 @@ class WifiConnectionManager
             server: DiscoveredServer,
             pin: String,
         ) {
-            val id = WifiConnection.idFor(server)
+            val id = SatelliteConnection.idFor(server)
             val conn =
-                _connections.value[id] ?: WifiConnection(id, server, scope, controllerRepo).also {
+                _connections.value[id] ?: SatelliteConnection(id, server, scope, controllerRepo).also {
                     _connections.value = _connections.value + (id to it)
                 }
             conn.markConnecting()
@@ -157,13 +158,13 @@ class WifiConnectionManager
                     _events.emit(ConnectionEvent.Error(pair.error ?: "Pairing failed"))
                     return@launch
                 }
-                store.setWifiSharedKey(WifiConnection.idFor(server), pair.sharedKey)
+                store.setSatelliteSharedKey(SatelliteConnection.idFor(server), pair.sharedKey)
                 openSession(conn, server)
             }
         }
 
         private suspend fun openSession(
-            conn: WifiConnection,
+            conn: SatelliteConnection,
             server: DiscoveredServer,
         ) = withContext(Dispatchers.IO) {
             val keyHex = sharedKeyFor(server) ?: ""
@@ -198,7 +199,7 @@ class WifiConnectionManager
                 return@withContext
             }
             controllerRepo.setConnectionParams(handle, token, key)
-            store.rememberWifi(server)
+            store.rememberSatellite(server)
             conn.markConnected(
                 handle,
                 connId,
@@ -229,7 +230,7 @@ class WifiConnectionManager
 
         fun forget(id: String) {
             disconnect(id)
-            store.forgetWifi(id)
+            store.forgetSatellite(id)
             _connections.value = _connections.value - id
         }
 
@@ -252,11 +253,11 @@ class WifiConnectionManager
          * no other server can inherit it later. Returns null if no key is known.
          */
         private fun sharedKeyFor(server: DiscoveredServer): String? {
-            val id = WifiConnection.idFor(server)
-            store.wifiSharedKey(id)?.let { return it }
+            val id = SatelliteConnection.idFor(server)
+            store.satelliteSharedKey(id)?.let { return it }
             val legacyPrefs = context.getSharedPreferences(LEGACY_PREFS, Context.MODE_PRIVATE)
             val legacy = legacyPrefs.getString(LEGACY_KEY_SHARED, null) ?: return null
-            store.setWifiSharedKey(id, legacy)
+            store.setSatelliteSharedKey(id, legacy)
             legacyPrefs.edit().remove(LEGACY_KEY_SHARED).apply()
             return legacy
         }

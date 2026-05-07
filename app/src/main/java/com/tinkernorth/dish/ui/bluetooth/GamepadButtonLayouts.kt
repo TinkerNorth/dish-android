@@ -8,7 +8,7 @@ package com.tinkernorth.dish.ui.bluetooth
  *
  *   - **XUSB** (`wButtons`): the XInput-compatible layout produced by the
  *     physical-controller path ([com.tinkernorth.dish.ui.main.GamepadInputProcessor])
- *     and consumed by the Wi-Fi path (see `XUSB_REPORT` in satellite_jni.cpp).
+ *     and consumed by the satellite path (see `XUSB_REPORT` in satellite_jni.cpp).
  *   - **HID**: the 14-button + 4-bit hat-switch layout used by the on-screen
  *     gamepad ([com.tinkernorth.dish.ui.common.GamepadTouchView]) and the
  *     Bluetooth HID descriptor ([buildHidDescriptor] / [buildHidReport]).
@@ -87,7 +87,7 @@ fun xusbToHid(wButtons: Int): Pair<Int, Int> {
 
 /**
  * Inverse of [xusbToHid]: translate the HID `(buttons, hat)` pair emitted by
- * `GamepadTouchView` into an XUSB `wButtons` value the Wi-Fi path can hand
+ * `GamepadTouchView` into an XUSB `wButtons` value the satellite path can hand
  * verbatim to `SatelliteNative.sendReport`.
  */
 fun hidToXusb(

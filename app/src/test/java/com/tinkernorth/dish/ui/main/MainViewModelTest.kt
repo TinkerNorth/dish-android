@@ -8,7 +8,7 @@ import com.tinkernorth.dish.data.network.ConnectionHub
 import com.tinkernorth.dish.data.network.ConnectionKind
 import com.tinkernorth.dish.data.network.ConnectionLive
 import com.tinkernorth.dish.data.network.ConnectionSummary
-import com.tinkernorth.dish.data.network.WifiConnectionManager
+import com.tinkernorth.dish.data.network.SatelliteConnectionManager
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -29,30 +29,30 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * Unit tests for [MainViewModel]. The hub and wifi manager are stubbed so the
- * VM is exercised in isolation; only the slot lifecycle + bind/unbind
+ * Unit tests for [MainViewModel]. The hub and satellite manager are stubbed
+ * so the VM is exercised in isolation; only the slot lifecycle + bind/unbind
  * forwarding is under test here.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModelTest {
     private val dispatcher: TestDispatcher = StandardTestDispatcher()
     private lateinit var hub: ConnectionHub
-    private lateinit var wifi: WifiConnectionManager
+    private lateinit var satellite: SatelliteConnectionManager
     private lateinit var vm: MainViewModel
 
     private val connectionsFlow = MutableStateFlow<List<ConnectionSummary>>(emptyList())
     private val bindingsFlow = MutableStateFlow<Map<String, String>>(emptyMap())
-    private val wifiEvents = MutableSharedFlow<ConnectionEvent>(extraBufferCapacity = 8)
+    private val satelliteEvents = MutableSharedFlow<ConnectionEvent>(extraBufferCapacity = 8)
 
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
         hub = mockk(relaxed = true)
-        wifi = mockk(relaxed = true)
+        satellite = mockk(relaxed = true)
         every { hub.connections } returns connectionsFlow
         every { hub.bindings } returns bindingsFlow
-        every { wifi.events } returns wifiEvents
-        vm = MainViewModel(wifi, hub)
+        every { satellite.events } returns satelliteEvents
+        vm = MainViewModel(satellite, hub)
     }
 
     @After
@@ -110,8 +110,8 @@ class MainViewModelTest {
 
     @Test
     fun `bindSlot delegates to hub`() {
-        vm.bindSlot(slotId = "slot-X", connectionId = "w:1")
-        verify { hub.bind("slot-X", "w:1") }
+        vm.bindSlot(slotId = "slot-X", connectionId = "s:1")
+        verify { hub.bind("slot-X", "s:1") }
     }
 
     @Test
@@ -125,21 +125,21 @@ class MainViewModelTest {
         runTest(dispatcher) {
             val summary =
                 ConnectionSummary(
-                    id = "w:1",
-                    kind = ConnectionKind.WIFI,
+                    id = "s:1",
+                    kind = ConnectionKind.SATELLITE,
                     label = "PC",
                     detail = "1.1.1.1",
                     live = ConnectionLive.CONNECTED,
                     boundSlotId = VIRTUAL_SLOT_ID,
                 )
             connectionsFlow.value = listOf(summary)
-            bindingsFlow.value = mapOf(VIRTUAL_SLOT_ID to "w:1")
+            bindingsFlow.value = mapOf(VIRTUAL_SLOT_ID to "s:1")
             dispatcher.scheduler.runCurrent()
 
             val virtual =
                 vm.uiState.value.slots
                     .first { it.id == VIRTUAL_SLOT_ID }
-            assertEquals("w:1", virtual.boundConnectionId)
+            assertEquals("s:1", virtual.boundConnectionId)
             assertEquals(summary, virtual.boundStatus)
         }
 

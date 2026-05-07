@@ -22,7 +22,7 @@ import javax.inject.Singleton
  * hosts and exposes them as separate [ConnectionSummary] entries so the user
  * can switch between them.
  */
-enum class ConnectionKind { WIFI, BLUETOOTH }
+enum class ConnectionKind { SATELLITE, BLUETOOTH }
 
 enum class ConnectionLive { IDLE, CONNECTING, CONNECTED }
 
@@ -42,7 +42,7 @@ data class ConnectionSummary(
 )
 
 /**
- * Single place every slot talks to. Aggregates [WifiConnectionManager] and
+ * Single place every slot talks to. Aggregates [SatelliteConnectionManager] and
  * [BluetoothGamepadRegistry] into one stream of [ConnectionSummary] entries.
  *
  * Binding a slot to a connection is a UI-level concept (which slot routes its
@@ -53,7 +53,7 @@ data class ConnectionSummary(
 class ConnectionHub
     @Inject
     constructor(
-        private val wifi: WifiConnectionManager,
+        private val satellite: SatelliteConnectionManager,
         private val bt: BluetoothGamepadRegistry,
         private val store: ConnectionStore,
         private val scope: CoroutineScope,
@@ -67,37 +67,37 @@ class ConnectionHub
 
         init {
             combine(
-                wifi.connections,
+                satellite.connections,
                 bt.states,
-            ) { wifiMap, btStates -> buildSummaries(wifiMap, btStates) }
+            ) { satMap, btStates -> buildSummaries(satMap, btStates) }
                 .onEach { _connections.value = it }
                 .launchIn(scope)
         }
 
         private fun buildSummaries(
-            wifiMap: Map<String, WifiConnection>,
+            satMap: Map<String, SatelliteConnection>,
             btStates: Map<String, BluetoothGamepadRegistry.SlotState>,
         ): List<ConnectionSummary> {
             val bindingBySlot = _bindings.value
             val result = mutableListOf<ConnectionSummary>()
 
-            // WiFi: remembered + any live not-yet-remembered (discovery hits).
+            // Satellites: remembered + any live not-yet-remembered (discovery hits).
             val remembered = store.remembered().associateBy { it.id }
-            val wifiIds = (remembered.keys + wifiMap.keys).toSet()
-            for (id in wifiIds) {
-                val conn = wifiMap[id]
+            val satIds = (remembered.keys + satMap.keys).toSet()
+            for (id in satIds) {
+                val conn = satMap[id]
                 val server = conn?.server?.value ?: remembered[id]?.toDiscovered() ?: continue
                 val live =
                     when (conn?.state?.value) {
-                        WifiState.CONNECTED -> ConnectionLive.CONNECTED
-                        WifiState.CONNECTING -> ConnectionLive.CONNECTING
+                        SatelliteState.CONNECTED -> ConnectionLive.CONNECTED
+                        SatelliteState.CONNECTING -> ConnectionLive.CONNECTING
                         else -> ConnectionLive.IDLE
                     }
                 val bound = bindingBySlot.entries.firstOrNull { it.value == id }?.key
                 result +=
                     ConnectionSummary(
                         id = id,
-                        kind = ConnectionKind.WIFI,
+                        kind = ConnectionKind.SATELLITE,
                         label = server.name.ifEmpty { server.ip },
                         detail = "${server.ip} • UDP ${server.udpPort}",
                         live = live,
@@ -143,14 +143,14 @@ class ConnectionHub
             val priorSlot = current.entries.firstOrNull { it.value == connectionId }?.key
             if (priorSlot != null && priorSlot != slotId) {
                 current.remove(priorSlot)
-                wifi.get(connectionId)?.detachSlot()
+                satellite.get(connectionId)?.detachSlot()
             }
             current[slotId] = connectionId
             _bindings.value = current
             // Re-emit connections so boundSlotId refreshes.
-            _connections.value = buildSummaries(wifi.connections.value, bt.states.value)
-            // For WiFi: attach the controller slot on the server side.
-            wifi.get(connectionId)?.let { conn ->
+            _connections.value = buildSummaries(satellite.connections.value, bt.states.value)
+            // For satellite: attach the controller slot on the server side.
+            satellite.get(connectionId)?.let { conn ->
                 scope.launch { conn.attachSlot(slotId, controllerType = 0) }
             }
         }
@@ -159,15 +159,15 @@ class ConnectionHub
             val current = _bindings.value.toMutableMap()
             val connId = current.remove(slotId) ?: return
             _bindings.value = current
-            wifi.get(connId)?.detachSlot()
-            _connections.value = buildSummaries(wifi.connections.value, bt.states.value)
+            satellite.get(connId)?.detachSlot()
+            _connections.value = buildSummaries(satellite.connections.value, bt.states.value)
         }
 
         fun boundConnection(slotId: String): ConnectionSummary? =
             _bindings.value[slotId]?.let { id -> _connections.value.firstOrNull { it.id == id } }
 
         /**
-         * Kick off a reconnect for every remembered WiFi server that isn't live
+         * Kick off a reconnect for every remembered satellite that isn't live
          * yet, plus the first remembered Bluetooth host (Android's HID Device
          * profile only supports one active host per app).
          *
@@ -176,9 +176,9 @@ class ConnectionHub
          */
         fun autoReconnectAll() {
             for (remembered in store.remembered()) {
-                val existing = wifi.get(remembered.id)
-                if (existing?.state?.value != WifiState.CONNECTED) {
-                    wifi.connect(remembered.toDiscovered())
+                val existing = satellite.get(remembered.id)
+                if (existing?.state?.value != SatelliteState.CONNECTED) {
+                    satellite.connect(remembered.toDiscovered())
                 }
             }
             val btHosts = store.rememberedBt()

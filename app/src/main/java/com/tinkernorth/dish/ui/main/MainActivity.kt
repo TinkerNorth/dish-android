@@ -23,7 +23,7 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.data.network.ConnectionHub
 import com.tinkernorth.dish.data.network.ConnectionKind
 import com.tinkernorth.dish.data.network.ConnectionLive
-import com.tinkernorth.dish.data.network.WifiConnectionManager
+import com.tinkernorth.dish.data.network.SatelliteConnectionManager
 import com.tinkernorth.dish.databinding.ActivityMainBinding
 import com.tinkernorth.dish.databinding.OverlayLowPowerBinding
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
@@ -48,7 +48,7 @@ class MainActivity :
 
     @Inject lateinit var btRegistry: BluetoothGamepadRegistry
 
-    @Inject lateinit var wifi: WifiConnectionManager
+    @Inject lateinit var satellite: SatelliteConnectionManager
 
     @Inject lateinit var hub: ConnectionHub
 
@@ -143,8 +143,8 @@ class MainActivity :
         val summary = slot.boundStatus ?: return
         if (summary.live != ConnectionLive.CONNECTED) return
         when (summary.kind) {
-            ConnectionKind.WIFI ->
-                wifi.get(cid)?.sendReport(wButtons, bLT, bRT, sLX, sLY, sRX, sRY)
+            ConnectionKind.SATELLITE ->
+                satellite.get(cid)?.sendReport(wButtons, bLT, bRT, sLX, sLY, sRX, sRY)
             ConnectionKind.BLUETOOTH -> {
                 // Physical controllers emit an XUSB-layout wButtons; the BT HID
                 // descriptor expects a different bit layout plus a hat-switch

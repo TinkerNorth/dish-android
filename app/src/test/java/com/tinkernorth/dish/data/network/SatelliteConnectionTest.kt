@@ -22,11 +22,11 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * Unit tests for [WifiConnection] state transitions and gating of
- * [WifiConnection.sendReport] on connection state.
+ * Unit tests for [SatelliteConnection] state transitions and gating of
+ * [SatelliteConnection.sendReport] on connection state.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-class WifiConnectionTest {
+class SatelliteConnectionTest {
     private val server =
         DiscoveredServer(
             name = "Pc",
@@ -37,15 +37,15 @@ class WifiConnectionTest {
         )
     private lateinit var repo: ControllerRepository
     private lateinit var scope: TestScope
-    private lateinit var conn: WifiConnection
+    private lateinit var conn: SatelliteConnection
 
     @Before
     fun setUp() {
         repo = mockk(relaxed = true)
         scope = TestScope(StandardTestDispatcher())
         conn =
-            WifiConnection(
-                id = WifiConnection.idFor(server),
+            SatelliteConnection(
+                id = SatelliteConnection.idFor(server),
                 server = server,
                 scope = scope,
                 controllerRepo = repo,
@@ -60,12 +60,12 @@ class WifiConnectionTest {
 
     @Test
     fun `idFor derives stable id from ip and udp port`() {
-        assertEquals("wifi:10.0.0.5:9876", WifiConnection.idFor(server))
+        assertEquals("satellite:10.0.0.5:9876", SatelliteConnection.idFor(server))
     }
 
     @Test
     fun `initial state is IDLE with no handle or connectionId`() {
-        assertEquals(WifiState.IDLE, conn.state.value)
+        assertEquals(SatelliteState.IDLE, conn.state.value)
         assertEquals(-1, conn.handle)
         assertNull(conn.connectionId)
     }
@@ -73,7 +73,7 @@ class WifiConnectionTest {
     @Test
     fun `markConnecting advances state to CONNECTING`() {
         conn.markConnecting()
-        assertEquals(WifiState.CONNECTING, conn.state.value)
+        assertEquals(SatelliteState.CONNECTING, conn.state.value)
     }
 
     @Test
@@ -86,7 +86,7 @@ class WifiConnectionTest {
             conn.markConnecting()
             conn.markConnected(handle = 7, connectionId = "conn-abc") {}
 
-            assertEquals(WifiState.CONNECTED, conn.state.value)
+            assertEquals(SatelliteState.CONNECTED, conn.state.value)
             assertEquals(7, conn.handle)
             assertEquals("conn-abc", conn.connectionId)
             verify { repo.resetControllerAck(7) }
@@ -105,7 +105,7 @@ class WifiConnectionTest {
         conn.markConnected(handle = 3, connectionId = "c") {}
         conn.markDisconnected()
 
-        assertEquals(WifiState.IDLE, conn.state.value)
+        assertEquals(SatelliteState.IDLE, conn.state.value)
         assertEquals(-1, conn.handle)
         assertNull(conn.connectionId)
         verify { repo.stopHeartbeat(3) }
@@ -211,7 +211,7 @@ class WifiConnectionTest {
     fun `markConnected from IDLE is rejected and leaves state IDLE`() {
         conn.markConnected(handle = 11, connectionId = "c") {}
 
-        assertEquals(WifiState.IDLE, conn.state.value)
+        assertEquals(SatelliteState.IDLE, conn.state.value)
         assertEquals(-1, conn.handle)
         assertNull(conn.connectionId)
         verify(exactly = 0) { repo.resetControllerAck(any()) }
@@ -230,7 +230,7 @@ class WifiConnectionTest {
         // so we don't leak the first session's native handle.
         conn.markConnected(handle = 2, connectionId = "second") {}
 
-        assertEquals(WifiState.CONNECTED, conn.state.value)
+        assertEquals(SatelliteState.CONNECTED, conn.state.value)
         assertEquals(1, conn.handle)
         assertEquals("first", conn.connectionId)
         verify(exactly = 1) { repo.resetControllerAck(any()) }
@@ -247,7 +247,7 @@ class WifiConnectionTest {
         conn.markConnected(handle = 4, connectionId = "c") {}
         conn.markConnecting()
 
-        assertEquals(WifiState.CONNECTED, conn.state.value)
+        assertEquals(SatelliteState.CONNECTED, conn.state.value)
         assertEquals(4, conn.handle)
     }
 
@@ -255,7 +255,7 @@ class WifiConnectionTest {
     fun `markDisconnected from IDLE is a no-op and touches no native handles`() {
         conn.markDisconnected()
 
-        assertEquals(WifiState.IDLE, conn.state.value)
+        assertEquals(SatelliteState.IDLE, conn.state.value)
         verify(exactly = 0) { repo.stopHeartbeat(any()) }
         verify(exactly = 0) { repo.closeSocket(any()) }
     }

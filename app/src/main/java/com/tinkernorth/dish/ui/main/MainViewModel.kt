@@ -7,7 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tinkernorth.dish.data.network.ConnectionEvent
 import com.tinkernorth.dish.data.network.ConnectionHub
-import com.tinkernorth.dish.data.network.WifiConnectionManager
+import com.tinkernorth.dish.data.network.SatelliteConnectionManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,15 +23,15 @@ import javax.inject.Inject
 
 /**
  * Dashboard view-model. The heavy lifting (connection sessions, persistence,
- * heartbeat) lives in [WifiConnectionManager] and [ConnectionHub] — this just
- * adapts their state for rendering and relays bind/unbind actions from slot
- * rows.
+ * heartbeat) lives in [SatelliteConnectionManager] and [ConnectionHub] — this
+ * just adapts their state for rendering and relays bind/unbind actions from
+ * slot rows.
  */
 @HiltViewModel
 class MainViewModel
     @Inject
     constructor(
-        val wifi: WifiConnectionManager,
+        val satellite: SatelliteConnectionManager,
         val hub: ConnectionHub,
     ) : ViewModel() {
         private val _uiState = MutableStateFlow(MainUiState())
@@ -54,13 +54,13 @@ class MainViewModel
                 prev.copy(slots = newSlots, connections = conns)
             }.onEach { _uiState.value = it }.launchIn(viewModelScope)
 
-            wifi.events
+            satellite.events
                 .onEach { event ->
                     when (event) {
                         is ConnectionEvent.PairingRequired ->
                             _events.emit(
                                 MainEvent.ShowPairingDialog(
-                                    com.tinkernorth.dish.data.network.WifiConnection
+                                    com.tinkernorth.dish.data.network.SatelliteConnection
                                         .idFor(event.server),
                                 ),
                             )

@@ -16,7 +16,7 @@ object SatelliteNative {
 
     // ── UDP Session (handle-based) ──────────────────────────────────────────
     // openSocket returns a positive session handle, or -1 on failure. All other
-    // session-scoped calls take that handle so multiple WiFi servers can run
+    // session-scoped calls take that handle so multiple satellites can run
     // side-by-side with independent sockets, tokens, counters and heartbeat
     // threads.
 

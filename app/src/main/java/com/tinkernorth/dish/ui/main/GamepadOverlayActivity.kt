@@ -17,7 +17,7 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.data.network.ConnectionHub
 import com.tinkernorth.dish.data.network.ConnectionKind
 import com.tinkernorth.dish.data.network.ConnectionLive
-import com.tinkernorth.dish.data.network.WifiConnectionManager
+import com.tinkernorth.dish.data.network.SatelliteConnectionManager
 import com.tinkernorth.dish.databinding.ActivityGamepadOverlayBinding
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.ui.bluetooth.hidToXusb
@@ -31,9 +31,9 @@ import javax.inject.Inject
  *
  * Bound to a single connection id passed via [EXTRA_CONNECTION_ID]; reports
  * are routed to that connection through either the [BluetoothGamepadRegistry]
- * or the matching [com.tinkernorth.dish.data.network.WifiConnection] in the
- * [WifiConnectionManager]. Both owners outlive the host activity so the same
- * session is reused on re-entry.
+ * or the matching [com.tinkernorth.dish.data.network.SatelliteConnection] in
+ * the [SatelliteConnectionManager]. Both owners outlive the host activity so
+ * the same session is reused on re-entry.
  */
 @AndroidEntryPoint
 class GamepadOverlayActivity :
@@ -41,7 +41,7 @@ class GamepadOverlayActivity :
     GamepadTouchView.Listener {
     @Inject lateinit var btRegistry: BluetoothGamepadRegistry
 
-    @Inject lateinit var wifi: WifiConnectionManager
+    @Inject lateinit var satellite: SatelliteConnectionManager
 
     @Inject lateinit var hub: ConnectionHub
 
@@ -105,12 +105,12 @@ class GamepadOverlayActivity :
                     ) ?: return
                 btRegistry.sendReport(connectionId, report)
             }
-            ConnectionKind.WIFI -> {
+            ConnectionKind.SATELLITE -> {
                 // The touch view emits HID-layout button bits plus a
-                // separate hat-switch; the Wi-Fi path wants an XUSB
+                // separate hat-switch; the satellite path wants an XUSB
                 // wButtons with the d-pad folded back into the low nibble.
                 val wButtons = hidToXusb(state.buttons, state.hatSwitch)
-                wifi.get(connectionId)?.sendReport(
+                satellite.get(connectionId)?.sendReport(
                     wButtons,
                     state.leftTrigger,
                     state.rightTrigger,
