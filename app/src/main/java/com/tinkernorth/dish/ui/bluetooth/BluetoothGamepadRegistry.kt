@@ -5,8 +5,12 @@ package com.tinkernorth.dish.ui.bluetooth
 
 import com.tinkernorth.dish.data.network.ConnectionStore
 import com.tinkernorth.dish.data.network.RememberedBt
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import javax.inject.Inject
@@ -38,6 +42,7 @@ class BluetoothGamepadRegistry
             val connectedName: String? = null,
             val profileName: String? = null,
             val autoReconnecting: Boolean = false,
+            val acquiring: Boolean = false,
         )
 
         private val lock = Any()
@@ -45,6 +50,10 @@ class BluetoothGamepadRegistry
 
         private val _states = MutableStateFlow<Map<String, SlotState>>(emptyMap())
         val states: StateFlow<Map<String, SlotState>> = _states.asStateFlow()
+
+        private val _errors =
+            MutableSharedFlow<String>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+        val errors: SharedFlow<String> = _errors.asSharedFlow()
 
         init {
             session.addListener(::onSessionState)
@@ -78,6 +87,7 @@ class BluetoothGamepadRegistry
                             SlotState(
                                 profileName = profile.profileName,
                                 autoReconnecting = autoConnectMac != null,
+                                acquiring = true,
                             )
                     )
                 }
@@ -144,7 +154,8 @@ class BluetoothGamepadRegistry
             val entry = store.rememberedBt().firstOrNull { it.id == connId } ?: return null
             val profile =
                 BluetoothGamepad.GamepadProfile.entries
-                    .firstOrNull { it.name == entry.profileName } ?: return null
+                    .firstOrNull { it.profileName == entry.profileName || it.name == entry.profileName }
+                    ?: return null
             val current = _states.value[connId]
             // Also short-circuit while an acquire is already in flight, otherwise
             // the second foreground kick would restart start() mid-handshake.
@@ -175,6 +186,7 @@ class BluetoothGamepadRegistry
                                     connected = false,
                                     connectedName = null,
                                     autoReconnecting = false,
+                                    acquiring = false,
                                 )
                         )
                     }
@@ -188,11 +200,13 @@ class BluetoothGamepadRegistry
                                     registered = true,
                                     connected = false,
                                     connectedName = null,
+                                    acquiring = false,
                                 )
                         )
                     }
                 is SessionState.Connected -> onConnected(connId, state)
             }
+            if (state is SessionState.Failed) _errors.tryEmit(state.message)
         }
 
         private fun onConnected(
@@ -206,7 +220,7 @@ class BluetoothGamepadRegistry
                     id = stableId,
                     name = name,
                     mac = state.mac,
-                    profileName = state.profile.name,
+                    profileName = state.profile.profileName,
                 ),
             )
             synchronized(lock) {
@@ -220,6 +234,7 @@ class BluetoothGamepadRegistry
                             connectedName = name,
                             profileName = state.profile.profileName,
                             autoReconnecting = false,
+                            acquiring = false,
                         )
                     (map - currentId) + (stableId to next)
                 }

@@ -136,13 +136,17 @@ class ConnectionHub
             }
 
             // Bluetooth: one summary per remembered host; live state from registry.
+            val rememberedBtIds = mutableSetOf<String>()
             for (entry in store.rememberedBt()) {
+                rememberedBtIds += entry.id
                 val bound = bindings.entries.filter { it.value == entry.id }.map { it.key }
                 val state = btStates[entry.id]
                 val live =
                     when {
                         state?.connected == true -> ConnectionLive.CONNECTED
-                        state?.registered == true || state?.autoReconnecting == true -> ConnectionLive.CONNECTING
+                        state?.registered == true ||
+                            state?.autoReconnecting == true ||
+                            state?.acquiring == true -> ConnectionLive.CONNECTING
                         else -> ConnectionLive.IDLE
                     }
                 result +=
@@ -154,6 +158,38 @@ class ConnectionHub
                         live = live,
                         boundSlotIds = bound,
                         btProfile = entry.profileName,
+                    )
+            }
+
+            // Transient BT slots: a registration that hasn't completed yet, so
+            // the host MAC is unknown and the entry isn't in rememberedBt yet.
+            // Surface them so the user sees progress between "tap profile" and
+            // "host paired". On success the registry re-keys to bt:<MAC> and
+            // the next emission collapses this row into the remembered one.
+            for ((id, state) in btStates) {
+                if (id in rememberedBtIds) continue
+                val live =
+                    when {
+                        state.connected -> ConnectionLive.CONNECTED
+                        state.registered || state.autoReconnecting || state.acquiring -> ConnectionLive.CONNECTING
+                        else -> ConnectionLive.IDLE
+                    }
+                val detail =
+                    when {
+                        state.connected -> state.connectedName.orEmpty()
+                        state.registered -> "Ready to pair — find this device on your host"
+                        state.acquiring || state.autoReconnecting -> "Acquiring HID profile…"
+                        else -> "Idle"
+                    }
+                result +=
+                    ConnectionSummary(
+                        id = id,
+                        kind = ConnectionKind.BLUETOOTH,
+                        label = state.profileName ?: "Bluetooth gamepad",
+                        detail = detail,
+                        live = live,
+                        boundSlotIds = bindings.entries.filter { it.value == id }.map { it.key },
+                        btProfile = state.profileName,
                     )
             }
             return result

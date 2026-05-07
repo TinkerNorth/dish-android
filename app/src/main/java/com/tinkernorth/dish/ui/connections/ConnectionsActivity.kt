@@ -114,6 +114,13 @@ class ConnectionsActivity : AppCompatActivity() {
                 }
             }
         }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                btRegistry.errors.collect { msg ->
+                    Toast.makeText(this@ConnectionsActivity, "Bluetooth: $msg", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 
     // ── Satellite rendering ───────────────────────────────────────────────
@@ -179,7 +186,13 @@ class ConnectionsActivity : AppCompatActivity() {
                 rb.btnRowAction.setOnClickListener { btRegistry.stop(c.id) }
             }
             ConnectionLive.CONNECTING -> {
-                rb.btnRowAction.text = "Waiting…"
+                val state = btRegistry.state(c.id)
+                rb.btnRowAction.text =
+                    when {
+                        state.registered -> "Pair from host"
+                        state.acquiring -> "Acquiring…"
+                        else -> "Waiting…"
+                    }
                 rb.btnRowAction.isEnabled = false
             }
             ConnectionLive.IDLE -> {
@@ -190,10 +203,13 @@ class ConnectionsActivity : AppCompatActivity() {
             }
         }
         rb.btnRowSecondary.visibility = View.VISIBLE
-        rb.btnRowSecondary.text = "Forget"
+        // Transient rows (registration in flight, MAC not yet known) aren't in
+        // rememberedBt yet — Forget there means "cancel" rather than "forget".
+        val isRemembered = store.rememberedBt().any { it.id == c.id }
+        rb.btnRowSecondary.text = if (isRemembered) "Forget" else "Cancel"
         rb.btnRowSecondary.setOnClickListener {
             btRegistry.stop(c.id)
-            store.forgetBt(c.id)
+            if (isRemembered) store.forgetBt(c.id)
             render(hub.connections.value)
         }
         return rb.root
