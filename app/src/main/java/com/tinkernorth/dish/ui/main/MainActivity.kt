@@ -144,7 +144,7 @@ class MainActivity :
         if (summary.live != ConnectionLive.CONNECTED) return
         when (summary.kind) {
             ConnectionKind.SATELLITE ->
-                satellite.get(cid)?.sendReport(wButtons, bLT, bRT, sLX, sLY, sRX, sRY)
+                satellite.get(cid)?.sendReport(slot.id, wButtons, bLT, bRT, sLX, sLY, sRX, sRY)
             ConnectionKind.BLUETOOTH -> {
                 // Physical controllers emit an XUSB-layout wButtons; the BT HID
                 // descriptor expects a different bit layout plus a hat-switch
@@ -246,6 +246,12 @@ class MainActivity :
 
     override fun onUnbind(slotId: String) = viewModel.unbindSlot(slotId)
 
+    override fun onChangeDeviceType(
+        slotId: String,
+        connectionId: String,
+        type: Int,
+    ) = viewModel.setSatelliteControllerType(connectionId, slotId, type)
+
     override fun onOpenGamepad() {
         val v = viewModel.uiState.value.virtualSlot
         val cid =
@@ -254,10 +260,17 @@ class MainActivity :
                 return
             }
         val summary = v.boundStatus
+        // BT carries its profile in summary.btProfile; satellites carry a per-slot
+        // controller type the user can flip from the dashboard. Either signals
+        // "use PS layout" to the overlay.
+        val usePs =
+            summary?.btProfile == "PlayStation" ||
+                summary?.satelliteControllerTypes?.get(VIRTUAL_SLOT_ID) ==
+                com.tinkernorth.dish.data.network.CONTROLLER_TYPE_PLAYSTATION
         val intent =
             Intent(this, GamepadOverlayActivity::class.java).apply {
                 putExtra(GamepadOverlayActivity.EXTRA_CONNECTION_ID, cid)
-                putExtra(GamepadOverlayActivity.EXTRA_USE_PS_LAYOUT, summary?.btProfile == "PlayStation")
+                putExtra(GamepadOverlayActivity.EXTRA_USE_PS_LAYOUT, usePs)
             }
         startActivity(intent)
     }

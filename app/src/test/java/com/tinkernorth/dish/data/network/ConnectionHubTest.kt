@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -84,6 +85,7 @@ class ConnectionHubTest {
         assertEquals(ConnectionKind.SATELLITE, summaries[0].kind)
         assertEquals(ConnectionLive.IDLE, summaries[0].live)
         assertEquals("satellite:10.0.0.1:9876", summaries[0].id)
+        assertTrue(summaries[0].boundSlotIds.isEmpty())
     }
 
     @Test
@@ -128,15 +130,17 @@ class ConnectionHubTest {
 
         assertEquals(mapOf("slot-A" to "s:1"), hub.bindings.value)
         assertEquals(
-            "slot-A",
+            listOf("slot-A"),
             hub.connections.value
                 .first()
-                .boundSlotId,
+                .boundSlotIds,
         )
     }
 
     @Test
-    fun `bind evicts a prior slot holding the same connection`() {
+    fun `binding two slots to the same satellite keeps both attached`() {
+        val satConn = mockk<SatelliteConnection>(relaxed = true)
+        every { satellite.get("s:1") } returns satConn
         every { store.remembered() } returns
             listOf(
                 RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
@@ -146,11 +150,53 @@ class ConnectionHubTest {
         hub.bind("slot-A", "s:1")
         hub.bind("slot-B", "s:1")
 
-        assertEquals(mapOf("slot-B" to "s:1"), hub.bindings.value)
+        assertEquals(
+            mapOf("slot-A" to "s:1", "slot-B" to "s:1"),
+            hub.bindings.value,
+        )
+        // Both slots show as bound on the satellite summary; nothing was detached.
+        val summary = hub.connections.value.first { it.id == "s:1" }
+        assertEquals(setOf("slot-A", "slot-B"), summary.boundSlotIds.toSet())
+        verify(exactly = 0) { satConn.detachSlot(any()) }
     }
 
     @Test
-    fun `unbind removes the binding and detaches the satellite slot`() {
+    fun `bind evicts the prior slot for a bluetooth host`() {
+        every { store.rememberedBt() } returns
+            listOf(
+                RememberedBt(id = "bt:X", name = "Xbox", mac = "X", profileName = "XBOX"),
+            )
+        val hub = buildHub()
+
+        hub.bind("slot-A", "bt:X")
+        hub.bind("slot-B", "bt:X")
+
+        // BT is single-host: the earlier slot is released so the new one owns it.
+        assertEquals(mapOf("slot-B" to "bt:X"), hub.bindings.value)
+    }
+
+    @Test
+    fun `binding a slot to a new satellite detaches it from the prior one`() {
+        val sat1 = mockk<SatelliteConnection>(relaxed = true)
+        val sat2 = mockk<SatelliteConnection>(relaxed = true)
+        every { satellite.get("s:1") } returns sat1
+        every { satellite.get("s:2") } returns sat2
+        every { store.remembered() } returns
+            listOf(
+                RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
+                RememberedSatellite(id = "s:2", name = "B", ip = "2", udpPort = 4, pairPort = 5, httpPort = 6),
+            )
+        val hub = buildHub()
+
+        hub.bind("slot-A", "s:1")
+        hub.bind("slot-A", "s:2")
+
+        assertEquals(mapOf("slot-A" to "s:2"), hub.bindings.value)
+        verify { sat1.detachSlot("slot-A") }
+    }
+
+    @Test
+    fun `unbind removes the binding and detaches the satellite slot by id`() {
         val satConn = mockk<SatelliteConnection>(relaxed = true)
         every { satellite.get("s:1") } returns satConn
         every { store.remembered() } returns
@@ -163,7 +209,39 @@ class ConnectionHubTest {
         hub.unbind("slot-A")
 
         assertNull(hub.bindings.value["slot-A"])
-        verify { satConn.detachSlot() }
+        verify { satConn.detachSlot("slot-A") }
+    }
+
+    @Test
+    fun `bind seeds a default Xbox controller type for new satellite slots`() {
+        every { store.remembered() } returns
+            listOf(
+                RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
+            )
+        val hub = buildHub()
+
+        hub.bind("slot-A", "s:1")
+
+        val summary = hub.connections.value.first { it.id == "s:1" }
+        assertEquals(CONTROLLER_TYPE_XBOX, summary.satelliteControllerTypes["slot-A"])
+    }
+
+    @Test
+    fun `setSatelliteControllerType updates the summary and pushes to the connection`() {
+        val satConn = mockk<SatelliteConnection>(relaxed = true)
+        every { satellite.get("s:1") } returns satConn
+        every { store.remembered() } returns
+            listOf(
+                RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
+            )
+        val hub = buildHub()
+
+        hub.bind("slot-A", "s:1")
+        hub.setSatelliteControllerType("s:1", "slot-A", CONTROLLER_TYPE_PLAYSTATION)
+        scope.testScheduler.runCurrent()
+
+        val summary = hub.connections.value.first { it.id == "s:1" }
+        assertEquals(CONTROLLER_TYPE_PLAYSTATION, summary.satelliteControllerTypes["slot-A"])
     }
 
     @Test
