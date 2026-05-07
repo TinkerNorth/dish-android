@@ -9,8 +9,10 @@ import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
@@ -22,11 +24,14 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.data.network.BondedHost
+import com.tinkernorth.dish.data.network.BondedHostsRepo
 import com.tinkernorth.dish.data.network.ConnectionEvent
 import com.tinkernorth.dish.data.network.ConnectionHub
 import com.tinkernorth.dish.data.network.ConnectionKind
 import com.tinkernorth.dish.data.network.ConnectionLive
 import com.tinkernorth.dish.data.network.ConnectionSummary
+import com.tinkernorth.dish.data.network.RememberedBt
 import com.tinkernorth.dish.data.network.SatelliteConnection
 import com.tinkernorth.dish.data.network.SatelliteConnectionManager
 import com.tinkernorth.dish.databinding.ActivityConnectionsBinding
@@ -35,6 +40,7 @@ import com.tinkernorth.dish.databinding.RowConnectionBinding
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepad
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -54,6 +60,16 @@ class ConnectionsActivity : AppCompatActivity() {
 
     @Inject lateinit var store: com.tinkernorth.dish.data.network.ConnectionStore
 
+    @Inject lateinit var bondedHosts: BondedHostsRepo
+
+    /**
+     * Pending Claim: a bonded host the user tapped Claim on, parked here while
+     * the profile picker is open. We could pass it through the dialog, but
+     * MaterialAlertDialogBuilder's setItems lambda doesn't take state and an
+     * activity-scoped field is the simplest seam.
+     */
+    private var pendingClaim: BondedHost? = null
+
     private lateinit var binding: ActivityConnectionsBinding
 
     private val btPermissionLauncher =
@@ -67,6 +83,11 @@ class ConnectionsActivity : AppCompatActivity() {
             }
         }
 
+    private val bondedPermissionLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions(),
+        ) { _ -> bondedHosts.refresh() }
+
     private val btDiscoverableLauncher =
         registerForActivityResult(
             ActivityResultContracts.StartActivityForResult(),
@@ -75,6 +96,14 @@ class ConnectionsActivity : AppCompatActivity() {
                 Toast.makeText(this, "Discoverability denied", Toast.LENGTH_SHORT).show()
             }
         }
+
+    override fun onResume() {
+        super.onResume()
+        // The bonded set isn't observable; refresh on resume so devices the
+        // user (un)paired in system settings, or new bonds created elsewhere,
+        // show up without requiring a screen reopen.
+        bondedHosts.refresh()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -85,15 +114,21 @@ class ConnectionsActivity : AppCompatActivity() {
 
         binding.btnSatelliteScan.setOnClickListener { satellite.startDiscovery() }
         binding.btnBtAdd.setOnClickListener { requestBtPermissions() }
+        binding.btnBondedShowAll.setOnClickListener {
+            val current = bondedHosts.state.value.showAll
+            bondedHosts.setShowAll(!current)
+        }
+        binding.btnBondedGrant.setOnClickListener { requestBondedPermission() }
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                hub.connections.collect { render(it) }
+                combine(hub.connections, bondedHosts.state) { conns, bonded -> conns to bonded }
+                    .collect { (conns, bonded) -> render(conns, bonded) }
             }
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                satellite.discoveredServers.collect { render(hub.connections.value) }
+                satellite.discoveredServers.collect { render(hub.connections.value, bondedHosts.state.value) }
             }
         }
         lifecycleScope.launch {
@@ -125,7 +160,10 @@ class ConnectionsActivity : AppCompatActivity() {
 
     // ── Satellite rendering ───────────────────────────────────────────────
 
-    private fun render(conns: List<ConnectionSummary>) {
+    private fun render(
+        conns: List<ConnectionSummary>,
+        bonded: BondedHostsRepo.State,
+    ) {
         val satConns = conns.filter { it.kind == ConnectionKind.SATELLITE }
         val discovered = satellite.discoveredServers.value
         val knownIds = satConns.map { it.id }.toSet()
@@ -144,6 +182,34 @@ class ConnectionsActivity : AppCompatActivity() {
         btConns.forEach { binding.llBtList.addView(btRow(it)) }
         binding.tvBtEmpty.visibility =
             if (btConns.isEmpty()) View.VISIBLE else View.GONE
+
+        renderBonded(bonded)
+    }
+
+    private fun renderBonded(state: BondedHostsRepo.State) {
+        val list = binding.llBondedList
+        list.removeAllViews()
+
+        when (state.permission) {
+            BondedHostsRepo.Permission.DENIED -> {
+                binding.llBondedPermission.visibility = View.VISIBLE
+                binding.btnBondedShowAll.visibility = View.GONE
+                binding.tvBondedEmpty.visibility = View.GONE
+                binding.tvBondedHint.visibility = View.GONE
+                return
+            }
+            BondedHostsRepo.Permission.GRANTED -> {
+                binding.llBondedPermission.visibility = View.GONE
+                binding.btnBondedShowAll.visibility = View.VISIBLE
+            }
+        }
+
+        binding.btnBondedShowAll.text = if (state.showAll) "Show likely" else "Show all"
+        binding.tvBondedHint.visibility = if (state.showAll) View.VISIBLE else View.GONE
+
+        val visible = state.visible
+        visible.forEach { list.addView(bondedRow(it)) }
+        binding.tvBondedEmpty.visibility = if (visible.isEmpty()) View.VISIBLE else View.GONE
     }
 
     private fun satelliteRow(c: ConnectionSummary): View {
@@ -205,14 +271,132 @@ class ConnectionsActivity : AppCompatActivity() {
         rb.btnRowSecondary.visibility = View.VISIBLE
         // Transient rows (registration in flight, MAC not yet known) aren't in
         // rememberedBt yet — Forget there means "cancel" rather than "forget".
-        val isRemembered = store.rememberedBt().any { it.id == c.id }
+        val rememberedEntry = store.rememberedBt().firstOrNull { it.id == c.id }
+        val isRemembered = rememberedEntry != null
         rb.btnRowSecondary.text = if (isRemembered) "Forget" else "Cancel"
         rb.btnRowSecondary.setOnClickListener {
             btRegistry.stop(c.id)
-            if (isRemembered) store.forgetBt(c.id)
-            render(hub.connections.value)
+            if (isRemembered) {
+                store.forgetBt(c.id)
+                bondedHosts.refresh()
+                offerSystemUnpair(rememberedEntry)
+            }
+            render(hub.connections.value, bondedHosts.state.value)
         }
         return rb.root
+    }
+
+    private fun bondedRow(host: BondedHost): View {
+        val rb =
+            inflateRow(
+                binding.llBondedList,
+                host.name,
+                "${host.mac} • ${host.kind.label}",
+                "Paired",
+            )
+        rb.btnRowAction.text = "Claim"
+        rb.btnRowAction.setOnClickListener { claimBondedHost(host) }
+        rb.btnRowSecondary.visibility = View.VISIBLE
+        rb.btnRowSecondary.text = "Unpair…"
+        rb.btnRowSecondary.setOnClickListener {
+            MaterialAlertDialogBuilder(this)
+                .setTitle("Unpair ${host.name}?")
+                .setMessage(
+                    "Dish can't remove the system-level pairing directly. " +
+                        "We'll open Bluetooth settings so you can tap Forget there.",
+                ).setPositiveButton("Open settings") { _, _ -> openBluetoothDeviceDetails(host.mac) }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+        return rb.root
+    }
+
+    private fun claimBondedHost(host: BondedHost) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+            Toast.makeText(this, "Bluetooth HID requires Android 9+", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val needed =
+                arrayOf(
+                    Manifest.permission.BLUETOOTH_CONNECT,
+                    Manifest.permission.BLUETOOTH_ADVERTISE,
+                ).filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
+            if (needed.isNotEmpty()) {
+                pendingClaim = host
+                btPermissionLauncher.launch(needed.toTypedArray())
+                return
+            }
+        }
+        pendingClaim = host
+        showProfilePicker()
+    }
+
+    private fun completeClaim(
+        host: BondedHost,
+        profile: BluetoothGamepad.GamepadProfile,
+    ) {
+        val id = BluetoothGamepadRegistry.idFor(host.mac)
+        store.rememberBt(
+            RememberedBt(
+                id = id,
+                name = host.name,
+                mac = host.mac,
+                profileName = profile.profileName,
+            ),
+        )
+        bondedHosts.refresh()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            btRegistry.tryAutoReconnect(id)
+        }
+        Toast.makeText(this, "Reconnecting to ${host.name}…", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun offerSystemUnpair(entry: RememberedBt) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Also remove from system Bluetooth?")
+            .setMessage(
+                "Dish forgot ${entry.name}, but the phone still has a pairing record. " +
+                    "Open Bluetooth settings to fully unpair.",
+            ).setPositiveButton("Open settings") { _, _ -> openBluetoothDeviceDetails(entry.mac) }
+            .setNegativeButton("Not now", null)
+            .show()
+    }
+
+    private fun openBluetoothDeviceDetails(mac: String) {
+        // Android 11+ exposes a dedicated per-device details screen with the
+        // Forget button one tap away. The intent action is stable across OEM
+        // surfaces; the EXTRA key is documented as "device_address" since
+        // ACTION_BLUETOOTH_DEVICE_DETAILS itself isn't part of the public
+        // androidx Settings constants.
+        val deepLink =
+            Intent("android.settings.BLUETOOTH_DEVICE_DETAILS_SETTINGS").apply {
+                putExtra("device_address", mac)
+                data = Uri.parse("bt-mac:$mac")
+            }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+            deepLink.resolveActivity(packageManager) != null
+        ) {
+            runCatching { startActivity(deepLink) }
+                .onFailure { startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
+        } else {
+            startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+        }
+    }
+
+    private fun requestBondedPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            bondedHosts.refresh()
+            return
+        }
+        val needed =
+            arrayOf(Manifest.permission.BLUETOOTH_CONNECT)
+                .filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
+        if (needed.isEmpty()) {
+            bondedHosts.refresh()
+        } else {
+            bondedPermissionLauncher.launch(needed.toTypedArray())
+        }
     }
 
     private fun statusText(c: ConnectionSummary): String =
@@ -267,10 +451,19 @@ class ConnectionsActivity : AppCompatActivity() {
     private fun showProfilePicker() {
         val profiles = BluetoothGamepad.GamepadProfile.entries
         val names = profiles.map { it.profileName }.toTypedArray()
+        val claim = pendingClaim
         MaterialAlertDialogBuilder(this)
-            .setTitle("Controller Profile")
-            .setItems(names) { _, which -> startBtRegistration(profiles[which]) }
-            .setNegativeButton("Cancel", null)
+            .setTitle(if (claim != null) "Controller profile for ${claim.name}" else "Controller Profile")
+            .setItems(names) { _, which ->
+                val profile = profiles[which]
+                if (claim != null) {
+                    pendingClaim = null
+                    completeClaim(claim, profile)
+                } else {
+                    startBtRegistration(profile)
+                }
+            }.setNegativeButton("Cancel") { _, _ -> pendingClaim = null }
+            .setOnCancelListener { pendingClaim = null }
             .show()
     }
 
