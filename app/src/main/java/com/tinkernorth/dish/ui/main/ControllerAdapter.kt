@@ -155,7 +155,7 @@ class ControllerAdapter(
                 }
             val prefix =
                 when (c.kind) {
-                    ConnectionKind.WIFI -> "📡 "
+                    ConnectionKind.SATELLITE -> "📡 "
                     ConnectionKind.BLUETOOTH -> "🔗 "
                 }
             val statusSuffix =
