@@ -23,14 +23,14 @@ on:
 #
 # Pin map (verify with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`):
 #   actions/checkout                @ v4.2.2  → 11bd71901bbe5b1630ceea73d27597364c9af683
-#   actions/setup-java              @ v4.5.0  → 8df1039502a15bceb9433410b1a100fbe190c53b
+#   actions/setup-java              @ v5.2.0  → be666c2fcd27ec809703dec50e508c2fdc7f6654
 #   actions/upload-artifact         @ v4.4.3  → b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882
 #   actions/download-artifact       @ v4.1.8  → fa0a91b85d4f404e444e00e005971372dc801d16
 #   gradle/actions/setup-gradle     @ v4.1.0  → d156388eb19639ec20ade50009f3d199ce1e2808
 #   anchore/sbom-action             @ v0.17.4 → 8d0a6505bf28ced3e85154d13dc6af83299e13f1
-#   anchore/scan-action             @ v3.6.4  → 3343887d815d7b07465f6fdcd395bd66508d486a
-#   github/codeql-action/upload-sarif @ v3.27.0 → 662472033e021d55d94146f66f6058822b0b39fd
-#   softprops/action-gh-release     @ v2.0.8  → c062e08bd532815e2082a85e87e3ef29c3e6d191
+#   anchore/scan-action             @ v7.4.0  → e1165082ffb1fe366ebaf02d8526e7c4989ea9d2
+#   github/codeql-action/upload-sarif @ v4.35.2 → 95e58e9a2cdfd71adc6e0353d5c52f41a045d225
+#   softprops/action-gh-release     @ v3.0.0  → b4309332981a82ec1c5618f44dd2e27cc8bfbfda
 #   slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml
 #                                   @ v2.0.0  → 5a775b367a56d5bd118a224a811bba288150a563
 #
