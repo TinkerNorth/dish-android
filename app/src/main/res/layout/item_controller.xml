@@ -28,7 +28,7 @@
                 android:id="@+id/ivControllerType"
                 android:layout_width="36dp"
                 android:layout_height="36dp"
-                android:src="@drawable/ctrl_xbox"
+                android:src="@drawable/ic_gamepad"
                 app:tint="@color/colorPrimary" />
 
             <LinearLayout
@@ -57,7 +57,30 @@
             <View
                 android:id="@+id/dotStatus"
                 android:layout_width="8dp"
-                android:layout_height="8dp" />
+                android:layout_height="8dp"
+                android:layout_marginEnd="12dp" />
+
+            <ImageView
+                android:id="@+id/ivOpenGamepadQuick"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:padding="2dp"
+                android:src="@drawable/ic_open_gamepad"
+                android:contentDescription="Open gamepad"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true"
+                android:visibility="gone"
+                app:tint="@color/colorPrimary" />
+
+            <ImageView
+                android:id="@+id/ivChevron"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_marginStart="6dp"
+                android:src="@drawable/ic_chevron_down"
+                android:contentDescription="Expand"
+                app:tint="@color/colorMuted" />
         </LinearLayout>
 
         <!-- ── Expandable body: bind-to-connection picker + actions ── -->
@@ -98,12 +121,15 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnOpenGamepad"
-                style="@style/Widget.Dish.Button.Outlined"
+                style="@style/Widget.Dish.Button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="Open Gamepad"
                 android:textAllCaps="false"
+                app:icon="@drawable/ic_open_gamepad"
+                app:iconGravity="textStart"
+                app:iconTint="@color/colorOnSurface"
                 android:visibility="gone" />
         </LinearLayout>
     </LinearLayout>

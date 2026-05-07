@@ -7,8 +7,6 @@ import android.content.Context
 import android.os.PowerManager
 import android.view.Window
 import android.view.WindowManager
-import android.widget.TextView
-import com.tinkernorth.dish.R
 
 /**
  * Manages FLAG_KEEP_SCREEN_ON and a partial wake lock.
@@ -21,14 +19,6 @@ class WakeLockManager(
     private val context: Context,
     private val window: Window,
 ) {
-    /** Views to write lock indicators into. */
-    data class Views(
-        val tvScreenLock: TextView,
-        val tvWakeLock: TextView,
-    )
-
-    var views: Views? = null
-
     /** Called whenever the combined lock state changes (both active or not). */
     var onLockStateChanged: ((active: Boolean) -> Unit)? = null
 
@@ -58,7 +48,6 @@ class WakeLockManager(
             wakeLock = null
             wakeLockActive = false
         }
-        updateIndicators()
         if (wasActive) onLockStateChanged?.invoke(false)
     }
 
@@ -78,19 +67,6 @@ class WakeLockManager(
                     ).apply { acquire() }
             wakeLockActive = true
         }
-        updateIndicators()
         if (!wasActive && isActive) onLockStateChanged?.invoke(true)
-    }
-
-    private fun updateIndicators() {
-        val v = views ?: return
-        v.tvScreenLock.text = if (screenLockActive) "ON" else "OFF"
-        v.tvScreenLock.setTextColor(
-            context.getColor(if (screenLockActive) R.color.colorSuccess else R.color.colorMuted),
-        )
-        v.tvWakeLock.text = if (wakeLockActive) "ON" else "OFF"
-        v.tvWakeLock.setTextColor(
-            context.getColor(if (wakeLockActive) R.color.colorSuccess else R.color.colorMuted),
-        )
     }
 }

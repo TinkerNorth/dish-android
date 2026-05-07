@@ -118,6 +118,125 @@ class ConnectionHubTest {
         assertEquals(ConnectionLive.CONNECTED, summary.live)
     }
 
+    // ── BT progress surfacing (acquiring / registered / transient slot) ───
+
+    @Test
+    fun `acquiring on a remembered bt host shows CONNECTING`() {
+        // Without acquiring being treated as CONNECTING, the row would briefly
+        // flicker through IDLE between start() and onAppRegistered, which the
+        // user reads as "nothing happened".
+        every { store.rememberedBt() } returns
+            listOf(
+                RememberedBt(id = "bt:X", name = "Xbox", mac = "X", profileName = "Xbox"),
+            )
+        btStatesFlow.value =
+            mapOf("bt:X" to BluetoothGamepadRegistry.SlotState(acquiring = true))
+        val hub = buildHub()
+
+        val summary = hub.connections.value.first { it.kind == ConnectionKind.BLUETOOTH }
+        assertEquals(ConnectionLive.CONNECTING, summary.live)
+    }
+
+    @Test
+    fun `transient bt-pending slot surfaces with profile label even before remembered`() {
+        // Until the host actually connects, RememberedBt has no entry for the
+        // session. The hub still emits a transient summary keyed by the
+        // pending id so the user sees something happen.
+        btStatesFlow.value =
+            mapOf(
+                "bt-pending-42" to
+                    BluetoothGamepadRegistry.SlotState(
+                        profileName = "PlayStation",
+                        acquiring = true,
+                    ),
+            )
+        val hub = buildHub()
+
+        val transient = hub.connections.value.firstOrNull { it.id == "bt-pending-42" }
+        assertEquals(ConnectionKind.BLUETOOTH, transient?.kind)
+        assertEquals("PlayStation", transient?.label)
+        assertEquals(ConnectionLive.CONNECTING, transient?.live)
+        assertEquals("PlayStation", transient?.btProfile)
+    }
+
+    @Test
+    fun `transient bt-pending detail differentiates acquiring vs registered`() {
+        btStatesFlow.value =
+            mapOf(
+                "bt-pending-1" to
+                    BluetoothGamepadRegistry.SlotState(
+                        profileName = "Xbox",
+                        acquiring = true,
+                    ),
+            )
+        val hub = buildHub()
+        val acquiringDetail = hub.connections.value.first { it.id == "bt-pending-1" }.detail
+
+        // Once Acquired → Registered, the pending entry's status should change
+        // to "Ready to pair" so the user knows to look at their host's BT menu.
+        btStatesFlow.value =
+            mapOf(
+                "bt-pending-1" to
+                    BluetoothGamepadRegistry.SlotState(
+                        profileName = "Xbox",
+                        registered = true,
+                    ),
+            )
+        scope.testScheduler.runCurrent()
+        val readyDetail = hub.connections.value.first { it.id == "bt-pending-1" }.detail
+
+        assert(acquiringDetail.contains("Acquiring", ignoreCase = true)) {
+            "expected 'Acquiring…' tone, got: $acquiringDetail"
+        }
+        assert(readyDetail.contains("pair", ignoreCase = true)) {
+            "expected 'Ready to pair' tone, got: $readyDetail"
+        }
+    }
+
+    @Test
+    fun `transient slot disappears once registry re-keys to bt-mac and host is remembered`() {
+        // Simulates the hand-off: registry's onConnected re-keys "bt-pending-X"
+        // to "bt:<MAC>", store.rememberBt() inserts the entry, the next
+        // emission collapses both into a single row.
+        every { store.rememberedBt() } returns
+            listOf(
+                RememberedBt(id = "bt:AA:BB", name = "PS5", mac = "AA:BB", profileName = "PlayStation"),
+            )
+        btStatesFlow.value =
+            mapOf(
+                "bt:AA:BB" to
+                    BluetoothGamepadRegistry.SlotState(
+                        profileName = "PlayStation",
+                        registered = true,
+                        connected = true,
+                        connectedName = "PS5",
+                    ),
+            )
+        val hub = buildHub()
+
+        val btSummaries = hub.connections.value.filter { it.kind == ConnectionKind.BLUETOOTH }
+        assertEquals(1, btSummaries.size)
+        assertEquals("bt:AA:BB", btSummaries[0].id)
+        assertEquals(ConnectionLive.CONNECTED, btSummaries[0].live)
+        // Detail uses the persisted (friendly) profileName, not the enum name.
+        assert(btSummaries[0].detail.startsWith("PlayStation")) {
+            "expected friendly profile in detail, got: ${btSummaries[0].detail}"
+        }
+    }
+
+    @Test
+    fun `idle remembered bt host with no registry state stays IDLE`() {
+        every { store.rememberedBt() } returns
+            listOf(
+                RememberedBt(id = "bt:Z", name = "Pad", mac = "Z", profileName = "Xbox"),
+            )
+        btStatesFlow.value = emptyMap()
+        val hub = buildHub()
+
+        val summary = hub.connections.value.first { it.kind == ConnectionKind.BLUETOOTH }
+        assertEquals(ConnectionLive.IDLE, summary.live)
+    }
+
     @Test
     fun `bind sets slot to connection and binding is reflected in summary`() {
         every { store.remembered() } returns

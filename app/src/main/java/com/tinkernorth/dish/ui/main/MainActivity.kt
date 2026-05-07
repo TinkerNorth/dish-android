@@ -5,16 +5,13 @@ package com.tinkernorth.dish.ui.main
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.drawable.GradientDrawable
 import android.hardware.input.InputManager
 import android.os.Bundle
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
-import android.view.View
 import android.widget.Toast
 import androidx.activity.viewModels
-import androidx.annotation.ColorRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -30,6 +27,7 @@ import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.ui.bluetooth.xusbToHid
 import com.tinkernorth.dish.ui.connections.ConnectionsActivity
 import com.tinkernorth.dish.util.LowPowerManager
+import com.tinkernorth.dish.util.LowPowerTouchGate
 import com.tinkernorth.dish.util.WakeLockManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -55,6 +53,7 @@ class MainActivity :
     @Inject lateinit var inputProcessor: GamepadInputProcessor
     private lateinit var wakeLockManager: WakeLockManager
     private lateinit var lowPowerManager: LowPowerManager
+    private val lowPowerTouchGate = LowPowerTouchGate()
 
     private val hasLivePhysical: Boolean
         get() =
@@ -117,7 +116,6 @@ class MainActivity :
 
     private fun setupUI() {
         binding.rvControllers.adapter = controllerAdapter
-        binding.dotServer.initDot(R.color.colorMuted)
         binding.btnManageConnections.setOnClickListener {
             startActivity(Intent(this, ConnectionsActivity::class.java))
         }
@@ -169,11 +167,6 @@ class MainActivity :
 
     private fun setupPower() {
         wakeLockManager = WakeLockManager(this, window)
-        wakeLockManager.views =
-            WakeLockManager.Views(
-                tvScreenLock = binding.tvScreenLock,
-                tvWakeLock = binding.tvWakeLock,
-            )
         lowPowerManager = LowPowerManager(window)
         lowPowerManager.views =
             LowPowerManager.Views(
@@ -184,8 +177,7 @@ class MainActivity :
                 tvLowPowerStatus = lowPowerBinding.tvLowPowerStatus,
             )
         lowPowerManager.activeControllerCount = {
-            viewModel.uiState.value.connections
-                .count { it.live == ConnectionLive.CONNECTED }
+            viewModel.uiState.value.streamingSlotCount
         }
         wakeLockManager.onLockStateChanged = { lowPowerManager.onLockStateChanged(it) }
     }
@@ -202,17 +194,6 @@ class MainActivity :
     private fun updateUI(s: MainUiState) {
         val liveCount = s.connections.count { it.live == ConnectionLive.CONNECTED }
         val totalCount = s.connections.size
-        binding.dotServer.setDotColor(if (liveCount > 0) R.color.colorSuccess else R.color.colorMuted)
-        binding.tvServerStatus.text =
-            when {
-                liveCount > 1 -> getString(R.string.status_active_connections, liveCount)
-                liveCount == 1 -> s.connections.first { it.live == ConnectionLive.CONNECTED }.label
-                totalCount > 0 -> getString(R.string.status_remembered, totalCount)
-                else -> getString(R.string.status_no_connections)
-            }
-        binding.tvServerStatus.setTextColor(
-            getColor(if (liveCount > 0) R.color.colorSuccess else R.color.colorMuted),
-        )
         binding.tvConnectionsSummary.text =
             when {
                 liveCount == 0 && totalCount == 0 -> getString(R.string.status_tap_manage)
@@ -290,8 +271,15 @@ class MainActivity :
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        if (ev.action == MotionEvent.ACTION_DOWN && wakeLockManager.isActive) lowPowerManager.onUserInteraction()
-        return super.dispatchTouchEvent(ev)
+        // Order matters: read overlayActive *before* notifying the manager so a
+        // DOWN that dismisses the overlay still wins the gate (and consumes the
+        // rest of the gesture so the underlying button doesn't get a click).
+        val overlayActive = lowPowerManager.state == LowPowerManager.State.ACTIVE
+        val consume = lowPowerTouchGate.onDispatch(ev.action, overlayActive)
+        if (ev.action == MotionEvent.ACTION_DOWN && wakeLockManager.isActive) {
+            lowPowerManager.onUserInteraction()
+        }
+        return if (consume) true else super.dispatchTouchEvent(ev)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -355,18 +343,3 @@ class MainActivity :
     }
 }
 
-private fun View.initDot(
-    @ColorRes colorRes: Int,
-) {
-    background =
-        GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            setColor(context.getColor(colorRes))
-        }
-}
-
-private fun View.setDotColor(
-    @ColorRes colorRes: Int,
-) {
-    (background as? GradientDrawable)?.setColor(context.getColor(colorRes))
-}

@@ -2,9 +2,7 @@
     <string name="app_name">Dish</string>
 
     <!-- MainActivity dashboard -->
-    <string name="status_active_connections">%1$d active connections</string>
     <string name="status_remembered">%1$d remembered</string>
-    <string name="status_no_connections">No connections yet</string>
     <string name="status_tap_manage">Tap Manage to add one</string>
     <string name="status_connected_of">%1$d of %2$d connected</string>
     <string name="toast_pairing_needed">Pairing needed — open Connections</string>

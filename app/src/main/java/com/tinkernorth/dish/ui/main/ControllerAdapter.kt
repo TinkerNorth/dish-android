@@ -74,7 +74,7 @@ class ControllerAdapter(
             val isVirtual = slot.inputType == SlotInputType.VIRTUAL
 
             b.ivControllerType.setImageResource(
-                if (isVirtual) android.R.drawable.ic_menu_compass else R.drawable.ctrl_xbox,
+                if (isVirtual) R.drawable.ic_gamepad_virtual else R.drawable.ic_gamepad,
             )
             b.tvControllerName.text = slot.name
             b.tvSlotStatus.text = slotStatusText(slot)
@@ -96,6 +96,17 @@ class ControllerAdapter(
                     if (row.expanded) R.color.colorPrimary else R.color.colorCardStroke,
                 )
             b.root.setOnClickListener { listener.onSlotTapped(slot.id) }
+
+            b.ivChevron.rotation = if (row.expanded) 180f else 0f
+
+            // Quick-launch button surfaces only on the collapsed virtual card
+            // when a connection is live, so the user can jump straight into
+            // the overlay without expanding.
+            val canOpenGamepad =
+                isVirtual && slot.boundStatus?.live == ConnectionLive.CONNECTED
+            b.ivOpenGamepadQuick.visibility =
+                if (canOpenGamepad && !row.expanded) View.VISIBLE else View.GONE
+            b.ivOpenGamepadQuick.setOnClickListener { listener.onOpenGamepad() }
 
             b.llBody.visibility = if (row.expanded) View.VISIBLE else View.GONE
             if (!row.expanded) return

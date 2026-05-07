@@ -10,6 +10,10 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -79,6 +83,89 @@ class BluetoothGamepadRegistryTest {
         assertFalse(s.autoReconnecting)
     }
 
+    // ── acquiring flag lifecycle ──────────────────────────────────────────
+
+    @Test
+    fun `start sets acquiring=true so the UI can show progress before Registered fires`() {
+        // Prior to this flag the slot showed IDLE during the Acquiring phase
+        // and the Connections row offered no feedback between profile-pick and
+        // the host actually connecting.
+        registry.start("bt-pending-1", GamepadProfile.XBOX)
+
+        assertTrue(registry.state("bt-pending-1").acquiring)
+    }
+
+    @Test
+    fun `onAppRegistered clears acquiring`() {
+        registry.start("bt-pending-1", GamepadProfile.XBOX)
+        fake.fireAcquired()
+        fake.fireAppRegistered()
+
+        assertFalse(registry.state("bt-pending-1").acquiring)
+        assertTrue(registry.state("bt-pending-1").registered)
+    }
+
+    @Test
+    fun `Connected clears acquiring on the re-keyed slot`() {
+        registry.start("bt-pending-1", GamepadProfile.XBOX)
+        fake.fireAcquired()
+        // Skip Registered to confirm acquiring is cleared even on a direct
+        // Connected (e.g. host already paired path).
+        fake.fireHostConnected("AA:BB", "Xbox")
+
+        assertFalse(registry.state("bt:AA:BB").acquiring)
+    }
+
+    @Test
+    fun `Failed clears acquiring on the active slot`() {
+        registry.start("bt-pending-1", GamepadProfile.XBOX)
+
+        fake.fireError("HID profile unavailable")
+
+        val s = registry.state("bt-pending-1")
+        assertFalse(s.acquiring)
+        assertFalse(s.registered)
+        assertFalse(s.connected)
+    }
+
+    @Test
+    fun `framework release clears acquiring along with the live flags`() {
+        registry.start("bt-pending-1", GamepadProfile.XBOX)
+
+        fake.fireReleased()
+
+        assertFalse(registry.state("bt-pending-1").acquiring)
+    }
+
+    // ── errors flow ───────────────────────────────────────────────────────
+
+    @Test
+    fun `errors flow emits the message on Failed`() = runBlocking {
+        registry.start("bt-pending-1", GamepadProfile.XBOX)
+
+        val first = async { registry.errors.first() }
+        // Yield so the collector subscribes before we emit; SharedFlow with a
+        // 1-event extra buffer also covers the race, but the explicit yield
+        // keeps intent obvious.
+        kotlinx.coroutines.yield()
+        fake.fireError("adapter disabled")
+
+        assertEquals("adapter disabled", first.await())
+    }
+
+    @Test
+    fun `errors flow does not emit on framework release`() = runBlocking {
+        registry.start("bt-pending-1", GamepadProfile.XBOX)
+        var emitted: String? = null
+        val job = launch { registry.errors.collect { emitted = it } }
+
+        fake.fireReleased()
+        kotlinx.coroutines.yield()
+
+        assertEquals(null, emitted)
+        job.cancel()
+    }
+
     @Test
     fun `start with autoConnectMac marks the slot autoReconnecting`() {
         registry.start("bt:AA", GamepadProfile.XBOX, autoConnectMac = "AA")
@@ -130,7 +217,7 @@ class BluetoothGamepadRegistryTest {
         assertEquals("bt:11:22:33", captured.captured.id)
         assertEquals("PS5", captured.captured.name)
         assertEquals("11:22:33", captured.captured.mac)
-        assertEquals(GamepadProfile.PLAYSTATION.name, captured.captured.profileName)
+        assertEquals(GamepadProfile.PLAYSTATION.profileName, captured.captured.profileName)
     }
 
     @Test
@@ -294,7 +381,7 @@ class BluetoothGamepadRegistryTest {
     fun `tryAutoReconnect starts the session with the remembered profile and mac`() {
         every { store.rememberedBt() } returns
             listOf(
-                RememberedBt(id = "bt:AA", name = "Xbox", mac = "AA", profileName = "XBOX"),
+                RememberedBt(id = "bt:AA", name = "Xbox", mac = "AA", profileName = "Xbox"),
             )
 
         val profile = registry.tryAutoReconnect("bt:AA")
@@ -302,6 +389,22 @@ class BluetoothGamepadRegistryTest {
         assertEquals(GamepadProfile.XBOX, profile)
         assertTrue(registry.state("bt:AA").autoReconnecting)
         assertTrue(fake.calls.any { it is FakeHidProxyClient.Call.Acquire })
+    }
+
+    @Test
+    fun `tryAutoReconnect accepts the legacy enum-name persisted by older builds`() {
+        // Builds before the fix stored "XBOX" / "PLAYSTATION" (enum names) in
+        // RememberedBt.profileName. Tests guard the migration so an existing
+        // remembered host on a user's device still auto-reconnects after the
+        // upgrade without forcing a re-pair.
+        every { store.rememberedBt() } returns
+            listOf(
+                RememberedBt(id = "bt:AA", name = "Xbox", mac = "AA", profileName = "XBOX"),
+            )
+
+        val profile = registry.tryAutoReconnect("bt:AA")
+
+        assertEquals(GamepadProfile.XBOX, profile)
     }
 
     @Test
