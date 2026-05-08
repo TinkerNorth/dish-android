@@ -12,30 +12,33 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.widget.Toast
 import androidx.activity.viewModels
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.google.androidgamesdk.GameActivity
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.data.network.ConnectionHub
 import com.tinkernorth.dish.data.network.ConnectionKind
 import com.tinkernorth.dish.data.network.ConnectionLive
 import com.tinkernorth.dish.data.network.SatelliteConnectionManager
+import com.tinkernorth.dish.data.network.SatelliteNative
 import com.tinkernorth.dish.databinding.ActivityMainBinding
 import com.tinkernorth.dish.databinding.OverlayLowPowerBinding
-import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
-import com.tinkernorth.dish.ui.bluetooth.xusbToHid
 import com.tinkernorth.dish.ui.connections.ConnectionsActivity
 import com.tinkernorth.dish.util.LowPowerManager
 import com.tinkernorth.dish.util.LowPowerTouchGate
 import com.tinkernorth.dish.util.WakeLockManager
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity :
-    AppCompatActivity(),
+    GameActivity(),
     InputManager.InputDeviceListener,
     SlotActionListener {
     private lateinit var binding: ActivityMainBinding
@@ -44,21 +47,12 @@ class MainActivity :
     private lateinit var controllerAdapter: ControllerAdapter
     private lateinit var inputManager: InputManager
 
-    @Inject lateinit var btRegistry: BluetoothGamepadRegistry
-
     @Inject lateinit var satellite: SatelliteConnectionManager
 
     @Inject lateinit var hub: ConnectionHub
-
-    @Inject lateinit var inputProcessor: GamepadInputProcessor
     private lateinit var wakeLockManager: WakeLockManager
     private lateinit var lowPowerManager: LowPowerManager
     private val lowPowerTouchGate = LowPowerTouchGate()
-
-    private val hasLivePhysical: Boolean
-        get() =
-            viewModel.uiState.value.physicalSlots
-                .any { it.boundStatus?.live == ConnectionLive.CONNECTED }
 
     // ═══════════════════════════════════════════════════════════════════════
     //  LIFECYCLE
@@ -91,7 +85,6 @@ class MainActivity :
 
     override fun onStart() {
         super.onStart()
-        inputProcessor.reportSender = GamepadInputProcessor.ReportSender(::sendReport)
         inputManager.registerInputDeviceListener(this, null)
         syncControllers()
     }
@@ -99,10 +92,9 @@ class MainActivity :
     override fun onStop() {
         super.onStop()
         // Mirrors onStart: every listener registered there is torn down here.
-        // The reportSender method reference captures `this`; nulling it on
-        // stop releases the singleton's hold so a backgrounded Activity can
-        // be GC'd. The next onStart reinstalls a fresh sender.
-        inputProcessor.reportSender = null
+        // Drop every native slot binding; the next onStart will re-derive them
+        // from the bindings observer (uiState × satellite slot states).
+        SatelliteNative.clearAllPhysicalSlots()
         inputManager.unregisterInputDeviceListener(this)
         wakeLockManager.release()
         lowPowerManager.cancel()
@@ -118,50 +110,6 @@ class MainActivity :
         binding.rvControllers.adapter = controllerAdapter
         binding.btnManageConnections.setOnClickListener {
             startActivity(Intent(this, ConnectionsActivity::class.java))
-        }
-    }
-
-    private fun sendReport(
-        deviceId: Int,
-        wButtons: Int,
-        bLT: Int,
-        bRT: Int,
-        sLX: Int,
-        sLY: Int,
-        sRX: Int,
-        sRY: Int,
-    ) {
-        // Exactly one physical slot (at most) owns this device id, so skip the
-        // loop and look it up directly — without this a second controller's
-        // reports would be broadcast to every physical slot's connection.
-        val slot =
-            viewModel.uiState.value.physicalSlots
-                .firstOrNull { it.physicalDeviceId == deviceId } ?: return
-        val cid = slot.boundConnectionId ?: return
-        val summary = slot.boundStatus ?: return
-        if (summary.live != ConnectionLive.CONNECTED) return
-        when (summary.kind) {
-            ConnectionKind.SATELLITE ->
-                satellite.get(cid)?.sendReport(slot.id, wButtons, bLT, bRT, sLX, sLY, sRX, sRY)
-            ConnectionKind.BLUETOOTH -> {
-                // Physical controllers emit an XUSB-layout wButtons; the BT HID
-                // descriptor expects a different bit layout plus a hat-switch
-                // d-pad. See xusbToHid.
-                val (hidButtons, hat) = xusbToHid(wButtons)
-                val report =
-                    btRegistry.buildReport(
-                        cid,
-                        hidButtons,
-                        hat,
-                        sLX.toShort(),
-                        sLY.toShort(),
-                        sRX.toShort(),
-                        sRY.toShort(),
-                        bLT,
-                        bRT,
-                    ) ?: return
-                btRegistry.sendReport(cid, report)
-            }
         }
     }
 
@@ -188,6 +136,61 @@ class MainActivity :
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) { viewModel.events.collect { handleEvent(it) } }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) { observeNativeBindings() }
+        }
+    }
+
+    /**
+     * Push physical-slot bindings into the native input pipeline whenever the
+     * derived state changes. Sources:
+     *   - [MainViewModel.uiState] for slot ↔ connection bindings and live state
+     *   - each [com.tinkernorth.dish.data.network.SatelliteConnection.slots]
+     *     flow for the per-slot `registered` flag and `controllerIndex`
+     *
+     * When a satellite slot isn't registered yet (the brief window between
+     * `markConnected` and the addController ACK), we leave the binding cleared
+     * so reports don't leak to the server as "unknown controller".
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private suspend fun observeNativeBindings() {
+        satellite.connections
+            .flatMapLatest { conns ->
+                val slotFlows = conns.values.map { it.slots }
+                val triggers =
+                    if (slotFlows.isEmpty()) {
+                        flowOf(Unit)
+                    } else {
+                        combine(slotFlows) { Unit }
+                    }
+                combine(viewModel.uiState, triggers) { ui, _ -> ui }
+            }.collect { ui -> pushPhysicalSlotBindings(ui) }
+    }
+
+    private fun pushPhysicalSlotBindings(ui: MainUiState) {
+        for (slot in ui.physicalSlots) {
+            val deviceId = slot.physicalDeviceId
+            if (deviceId < 0) continue
+            val cid = slot.boundConnectionId
+            val summary = slot.boundStatus
+            if (cid == null || summary == null || summary.live != ConnectionLive.CONNECTED) {
+                SatelliteNative.unbindPhysicalSlot(deviceId)
+                continue
+            }
+            when (summary.kind) {
+                ConnectionKind.SATELLITE -> {
+                    val sat = satellite.get(cid)
+                    val info = sat?.slots?.value?.get(slot.id)
+                    if (sat == null || sat.handle < 0 || info == null || !info.registered) {
+                        SatelliteNative.unbindPhysicalSlot(deviceId)
+                    } else {
+                        SatelliteNative.bindPhysicalSlotSatellite(deviceId, sat.handle, info.controllerIndex)
+                    }
+                }
+                ConnectionKind.BLUETOOTH ->
+                    SatelliteNative.bindPhysicalSlotBluetooth(deviceId, cid)
+            }
         }
     }
 
@@ -257,18 +260,13 @@ class MainActivity :
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    //  INPUT DISPATCH (physical gamepads)
+    //  INPUT DISPATCH
+    //
+    //  Physical gamepad / keyboard events are intercepted by the native
+    //  GameActivity input filter (see android_main in satellite_jni.cpp) and
+    //  never reach the Java dispatch path. Touch events fall through to the
+    //  View hierarchy normally — only the low-power gate runs here.
     // ═══════════════════════════════════════════════════════════════════════
-
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (hasLivePhysical) inputProcessor.handleKeyEvent(event)?.let { return it }
-        return super.dispatchKeyEvent(event)
-    }
-
-    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
-        if (hasLivePhysical) inputProcessor.handleMotionEvent(event)?.let { return it }
-        return super.dispatchGenericMotionEvent(event)
-    }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         // Order matters: read overlayActive *before* notifying the manager so a
@@ -284,9 +282,9 @@ class MainActivity :
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        // Emit a release-all report per active device so no button stays held
+        // Emit a release-all report per bound device so no button stays held
         // server-side across focus loss.
-        if (!hasFocus) inputProcessor.zeroAndSendAll()
+        if (!hasFocus) SatelliteNative.releaseAllPhysicalReports()
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -295,14 +293,22 @@ class MainActivity :
 
     override fun onInputDeviceAdded(deviceId: Int) {
         val dev = InputDevice.getDevice(deviceId) ?: return
-        if (isGamepad(dev)) viewModel.onControllerConnected(deviceId, dev.name)
+        if (!isGamepad(dev)) return
+        pushDeadzones(dev)
+        viewModel.onControllerConnected(deviceId, dev.name)
     }
 
-    override fun onInputDeviceRemoved(deviceId: Int) = viewModel.onControllerDisconnected(deviceId)
+    override fun onInputDeviceRemoved(deviceId: Int) {
+        SatelliteNative.unbindPhysicalSlot(deviceId)
+        viewModel.onControllerDisconnected(deviceId)
+    }
 
     override fun onInputDeviceChanged(deviceId: Int) {
         val dev = InputDevice.getDevice(deviceId)
-        if (dev == null || !isGamepad(dev)) viewModel.onControllerDisconnected(deviceId)
+        if (dev == null || !isGamepad(dev)) {
+            SatelliteNative.unbindPhysicalSlot(deviceId)
+            viewModel.onControllerDisconnected(deviceId)
+        }
     }
 
     private fun syncControllers() {
@@ -311,6 +317,7 @@ class MainActivity :
             val dev = InputDevice.getDevice(id) ?: continue
             if (!isGamepad(dev)) continue
             liveIds += id
+            pushDeadzones(dev)
             viewModel.onControllerConnected(id, dev.name)
         }
         // Prune slots for devices that went away while we were stopped — the
@@ -319,9 +326,27 @@ class MainActivity :
         // UI forever.
         for (slot in viewModel.uiState.value.physicalSlots) {
             if (slot.physicalDeviceId !in liveIds) {
+                SatelliteNative.unbindPhysicalSlot(slot.physicalDeviceId)
                 viewModel.onControllerDisconnected(slot.physicalDeviceId)
             }
         }
+    }
+
+    /**
+     * Query the device's per-axis flat (deadzone) values once and push them
+     * into the native processor, which uses them in its inline deadzone gate.
+     * Pushed at device-add time so the native input thread never has to cross
+     * back into Java per event to look them up.
+     */
+    private fun pushDeadzones(dev: InputDevice) {
+        val src = InputDevice.SOURCE_JOYSTICK
+        SatelliteNative.setDeviceDeadzones(
+            dev.id,
+            dev.getMotionRange(MotionEvent.AXIS_X, src)?.flat ?: 0f,
+            dev.getMotionRange(MotionEvent.AXIS_Y, src)?.flat ?: 0f,
+            dev.getMotionRange(MotionEvent.AXIS_Z, src)?.flat ?: 0f,
+            dev.getMotionRange(MotionEvent.AXIS_RZ, src)?.flat ?: 0f,
+        )
     }
 
     private fun isGamepad(d: InputDevice): Boolean {
