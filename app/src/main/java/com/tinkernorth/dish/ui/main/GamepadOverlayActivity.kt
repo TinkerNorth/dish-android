@@ -96,6 +96,13 @@ class GamepadOverlayActivity :
                 wakeState.shouldKeepScreenOn.collect(::applyScreenOn)
             }
         }
+        // Keep the dim-overlay's count line reactive to bind/unbind — see
+        // MainActivity for the same pattern.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                wakeState.streamingSlotCount.collect { lowPowerManager.refreshStatus() }
+            }
+        }
     }
 
     override fun onStop() {

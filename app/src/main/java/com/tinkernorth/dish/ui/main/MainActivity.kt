@@ -133,6 +133,14 @@ class MainActivity :
                 wakeState.shouldKeepScreenOn.collect(::applyScreenOn)
             }
         }
+        // Keep the dim-overlay's "Bound · N controllers" line in sync with
+        // bind/unbind while the dim is up. Without this, the line only
+        // refreshes on the 15-second clock tick.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                wakeState.streamingSlotCount.collect { lowPowerManager.refreshStatus() }
+            }
+        }
     }
 
     private fun applyScreenOn(active: Boolean) {
