@@ -237,7 +237,15 @@ object SatelliteNative {
         keyCode: Int,
     ): Boolean
 
-    /** Process a gamepad MOTION event at the Activity dispatch level. */
+    /**
+     * Process a gamepad MOTION event at the Activity dispatch level.
+     *
+     * Parameter count is dictated by the JNI signature — each axis must be a
+     * primitive Float on the wire (packing into an Axes data class would
+     * allocate on every motion event, undoing the inline-dispatch latency
+     * win).
+     */
+    @Suppress("LongParameterList")
     external fun processGamepadMotionEvent(
         deviceId: Int,
         source: Int,
