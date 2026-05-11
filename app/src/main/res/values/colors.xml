@@ -17,6 +17,8 @@
     <color name="colorCardStroke">#1FFFC107</color>
     <!-- Subtle surface variant for empty states -->
     <color name="colorSurfaceDim">#111417</color>
+    <!-- Full-screen dim overlay (e.g. low-power mode) — black @ ~80% alpha -->
+    <color name="colorOverlayScrim">#CC000000</color>
     <!-- Keep these for any legacy references -->
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
