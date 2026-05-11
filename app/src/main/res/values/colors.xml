@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Dish marketing palette (cyan / deep-space) — mirrors dish-website
-         tokens (--tn-ink, --tn-night, --tn-deep, --tn-signal, etc.). -->
+    <!-- Dish marketing palette (cyan / deep-space). Mirrors dish-website's
+         deep-space tokens (tn-ink, tn-night, tn-deep, tn-signal, etc.). -->
     <color name="colorBackground">#060818</color>
     <color name="colorSurface">#0C1027</color>
     <color name="colorPrimary">#4FE3FF</color>
@@ -18,7 +18,7 @@
     <color name="colorWarning">#F59E0B</color>
     <!-- Primary at ~12% alpha for card stroke -->
     <color name="colorCardStroke">#1F4FE3FF</color>
-    <!-- Subtle surface variant for empty states (mirrors --tn-deep). -->
+    <!-- Subtle surface variant for empty states (mirrors tn-deep). -->
     <color name="colorSurfaceDim">#131A3A</color>
     <!-- Full-screen dim overlay (e.g. low-power mode) — black @ ~80% alpha -->
     <color name="colorOverlayScrim">#CC000000</color>
