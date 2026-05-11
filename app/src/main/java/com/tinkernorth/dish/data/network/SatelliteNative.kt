@@ -8,7 +8,12 @@ package com.tinkernorth.dish.data.network
  * Controller input is handled via direct JNI calls from Kotlin for lowest latency.
  * Network-blocking functions (discoverServers, pair, httpConnect, httpDisconnect)
  * must be called from a background coroutine (Dispatchers.IO).
+ *
+ * The function count is naturally large because this is the *entire* native
+ * surface for the satellite path; splitting it would just spread the JNI
+ * coupling across multiple files.
  */
+@Suppress("TooManyFunctions")
 object SatelliteNative {
     init {
         System.loadLibrary("satellite")
@@ -163,4 +168,99 @@ object SatelliteNative {
         deviceName: String,
         pin: String,
     ): String
+
+    // ── Physical-slot bindings for the native input pipeline ────────────────
+    // The GameActivity native input thread owns per-device gamepad state and
+    // routes reports based on these bindings. Push them whenever a slot's
+    // reachability changes (slot bound/unbound, satellite connection
+    // CONNECTED/disconnected, controller registered, BT host connected).
+
+    /**
+     * Bind [deviceId] to a SATELLITE slot identified by ([sessionHandle],
+     * [controllerIndex]). Subsequent gamepad events from this device are
+     * encrypted and sent inline by the native input thread.
+     */
+    external fun bindPhysicalSlotSatellite(
+        deviceId: Int,
+        sessionHandle: Int,
+        controllerIndex: Int,
+    )
+
+    /**
+     * Bind [deviceId] to a BLUETOOTH slot identified by [connectionId]. The
+     * native input thread calls back into [BluetoothGamepadBridge] for each
+     * report so the Java BT HID layer (Binder IPC) can do the actual send.
+     */
+    external fun bindPhysicalSlotBluetooth(
+        deviceId: Int,
+        connectionId: String,
+    )
+
+    /** Drop the binding for [deviceId]; subsequent events for it are ignored. */
+    external fun unbindPhysicalSlot(deviceId: Int)
+
+    /** Drop every physical-slot binding (used on shutdown / activity stop). */
+    external fun clearAllPhysicalSlots()
+
+    /**
+     * Push the device's per-axis flat (deadzone) values, queried once from
+     * [android.view.InputDevice.getMotionRange] when the device first appears.
+     * Without this, axes near rest stream tiny non-zero values to the server.
+     */
+    external fun setDeviceDeadzones(
+        deviceId: Int,
+        flatX: Float,
+        flatY: Float,
+        flatZ: Float,
+        flatRZ: Float,
+    )
+
+    /**
+     * Force every bound device to release-all (zero buttons/axes/triggers) and
+     * emit one report apiece. Used on window-focus-lost so no button stays
+     * held server-side across focus loss.
+     */
+    external fun releaseAllPhysicalReports()
+
+    // ── Activity-level dispatch entry points ────────────────────────────────
+    // Called from MainActivity.dispatchKeyEvent / dispatchGenericMotionEvent
+    // to intercept gamepad events *before* Android's input system can
+    // synthesize fallback DPAD key presses from unconsumed joystick MOVEs.
+    // Both functions return true if the event was a recognised gamepad
+    // input; the caller should consume the event in that case.
+
+    /** Process a gamepad KEY event at the Activity dispatch level. */
+    external fun processGamepadKeyEvent(
+        deviceId: Int,
+        source: Int,
+        action: Int,
+        keyCode: Int,
+    ): Boolean
+
+    /**
+     * Process a gamepad MOTION event at the Activity dispatch level.
+     *
+     * Parameter count is dictated by the JNI signature — each axis must be a
+     * primitive Float on the wire (packing into an Axes data class would
+     * allocate on every motion event, undoing the inline-dispatch latency
+     * win).
+     */
+    @Suppress("LongParameterList")
+    external fun processGamepadMotionEvent(
+        deviceId: Int,
+        source: Int,
+        action: Int,
+        x: Float,
+        y: Float,
+        z: Float,
+        rz: Float,
+        rx: Float,
+        ry: Float,
+        hatX: Float,
+        hatY: Float,
+        ltrigger: Float,
+        rtrigger: Float,
+        brake: Float,
+        gas: Float,
+    ): Boolean
 }

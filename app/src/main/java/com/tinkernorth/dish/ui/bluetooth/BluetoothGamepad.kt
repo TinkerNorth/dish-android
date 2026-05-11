@@ -175,7 +175,8 @@ internal const val REPORT_SIZE = 14
  * Wire layout (all little-endian; byte indices are zero-based):
  *
  *   [0]      report id (always [REPORT_ID] = 1)
- *   [1..2]   buttons — u16 bitfield (see [GamepadInputProcessor.BUTTON_MAP])
+ *   [1..2]   buttons — u16 bitfield (HID layout; see `xusbToHid` for the
+ *            mapping from the native input thread's XUSB `wButtons`)
  *   [3]      hat switch — u8, low nibble: 0=neutral, 1=N, 2=NE, 3=E, 4=SE,
  *            5=S, 6=SW, 7=W, 8=NW
  *   [4..5]   left stick X  — i16, +32767 = right,  -32767 = left
@@ -187,8 +188,8 @@ internal const val REPORT_SIZE = 14
  *
  * Callers are responsible for delivering axis values in the Xbox/XInput
  * "stick up = positive Y" convention; this function performs no sign
- * inversion. See `GamepadInputProcessor.processJoystickInput` (physical
- * path) and `computeStickAxes` (virtual path) for the producers.
+ * inversion. See `processNativeMotionEvent` in `satellite_jni.cpp`
+ * (physical path) and `computeStickAxes` (virtual path) for the producers.
  *
  * Button and trigger ints are masked to their on-wire width; hat to low
  * nibble. Axis shorts are stored as-is.

@@ -113,3 +113,56 @@ detekt {
     buildUponDefaultConfig = true
     allRules = false
 }
+
+// ── Host-build native unit tests ────────────────────────────────────────────
+// The pure gamepad-input layer (app/src/main/cpp/gamepad_input.{h,cpp}) is
+// tested via googletest from app/src/test/cpp. We drive cmake/make/ctest
+// directly rather than going through the AGP NDK build because the latter
+// only knows how to cross-compile for Android targets.
+val nativeTestBuildDir = layout.buildDirectory.dir("native-test")
+val nativeTestSrcDir = layout.projectDirectory.dir("src/test/cpp")
+
+val nativeTestConfigure =
+    tasks.register<Exec>("nativeTestConfigure") {
+        group = "verification"
+        description = "Configure the host CMake build for the native unit tests."
+        inputs.file(nativeTestSrcDir.file("CMakeLists.txt"))
+        inputs.file(nativeTestSrcDir.file("gamepad_input_test.cpp"))
+        inputs.file(layout.projectDirectory.file("src/main/cpp/gamepad_input.h"))
+        inputs.file(layout.projectDirectory.file("src/main/cpp/gamepad_input.cpp"))
+        outputs.dir(nativeTestBuildDir)
+        commandLine(
+            "cmake",
+            "-S",
+            nativeTestSrcDir.asFile.absolutePath,
+            "-B",
+            nativeTestBuildDir.get().asFile.absolutePath,
+            "-G",
+            "Unix Makefiles",
+        )
+    }
+
+val nativeTestBuild =
+    tasks.register<Exec>("nativeTestBuild") {
+        group = "verification"
+        description = "Compile the native unit-test executable."
+        dependsOn(nativeTestConfigure)
+        commandLine(
+            "cmake",
+            "--build",
+            nativeTestBuildDir.get().asFile.absolutePath,
+            "--parallel",
+        )
+    }
+
+tasks.register<Exec>("nativeTest") {
+    group = "verification"
+    description = "Run host unit tests for the pure gamepad-input layer."
+    dependsOn(nativeTestBuild)
+    workingDir = nativeTestBuildDir.get().asFile
+    commandLine("ctest", "--output-on-failure")
+}
+
+tasks.named("check") {
+    dependsOn("nativeTest")
+}

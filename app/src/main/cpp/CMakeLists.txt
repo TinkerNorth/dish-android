@@ -58,7 +58,7 @@ target_compile_definitions(sodium_static PRIVATE
 target_compile_options(sodium_static PRIVATE -O2 -fvisibility=hidden -Wno-unused-function -Wno-unused-variable)
 
 # ── Main satellite library ──────────────────────────────────────────────────
-add_library(satellite SHARED satellite_jni.cpp)
+add_library(satellite SHARED satellite_jni.cpp gamepad_input.cpp)
 
 target_compile_options(satellite PRIVATE -O2 -Wall -Wextra -Wpedantic)
 target_link_options(satellite PRIVATE "-Wl,-z,max-page-size=16384")
