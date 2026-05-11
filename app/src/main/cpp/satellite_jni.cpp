@@ -127,7 +127,6 @@ static std::shared_ptr<Session> getSession(int handle) {
 // Forward-declare — defined further down with the rest of the wire helpers.
 static bool sendEncrypted(Session* s, uint16_t msgType, const uint8_t* payload,
                           uint16_t payloadLen);
-static uint64_t nowMs();
 
 // Pure XUSB constants, DeviceState, and the keycode/axes/state helpers live
 // in gamepad_input.h so they can be exercised by the host-build googletest
@@ -318,10 +317,6 @@ static bool gamepadKeyFilter(const GameActivityKeyEvent* ev) {
     return true; // consumed — do not propagate to View dispatch
 }
 
-// Per-device throttle for the diagnostic axis dump (DEBUG_GAMEPAD). Holds
-// the last log timestamp keyed by deviceId. Accessed under g_devicesMtx.
-static std::unordered_map<int32_t, uint64_t> g_axisLogLastMs;
-
 static bool gamepadMotionFilter(const GameActivityMotionEvent* ev) {
     if ((ev->source & AINPUT_SOURCE_JOYSTICK) != AINPUT_SOURCE_JOYSTICK) return false;
     int32_t action = ev->action & AMOTION_EVENT_ACTION_MASK;
@@ -339,44 +334,22 @@ static bool gamepadMotionFilter(const GameActivityMotionEvent* ev) {
 
     // "Latest sample wins" — historical samples are intermediate states the
     // next apply would overwrite anyway. Faster *and* fewer wire packets.
-    float x = axisCur(ev, AMOTION_EVENT_AXIS_X);
-    float y = axisCur(ev, AMOTION_EVENT_AXIS_Y);
     float z = axisCur(ev, AMOTION_EVENT_AXIS_Z);
     float rz = axisCur(ev, AMOTION_EVENT_AXIS_RZ);
     float rx = axisCur(ev, AMOTION_EVENT_AXIS_RX);
     float ry = axisCur(ev, AMOTION_EVENT_AXIS_RY);
-    float hatX = axisCur(ev, AMOTION_EVENT_AXIS_HAT_X);
-    float hatY = axisCur(ev, AMOTION_EVENT_AXIS_HAT_Y);
-    float ltAxis = axisCur(ev, AMOTION_EVENT_AXIS_LTRIGGER);
-    float rtAxis = axisCur(ev, AMOTION_EVENT_AXIS_RTRIGGER);
-    float brake = axisCur(ev, AMOTION_EVENT_AXIS_BRAKE);
-    float gas = axisCur(ev, AMOTION_EVENT_AXIS_GAS);
-
     // Right-stick axis varies by controller: most use Z/RZ (Xbox-style), but
     // some Bluetooth/HID gamepads use RX/RY. Take whichever pair has larger
     // magnitude so we work for both without per-device config.
     float rightX = std::fabs(z) >= std::fabs(rx) ? z : rx;
     float rightY = std::fabs(rz) >= std::fabs(ry) ? rz : ry;
-    float lt = std::max(ltAxis, brake);
-    float rt = std::max(rtAxis, gas);
-
-    // Throttled diagnostic dump: once every 250 ms per device, only when at
-    // least one axis is off-rest. Lets us see exactly what each physical
-    // controller delivers without spamming logcat at idle.
-    uint64_t now = nowMs();
-    uint64_t& last = g_axisLogLastMs[deviceId];
-    bool anyActive = std::fabs(x) > 0.05f || std::fabs(y) > 0.05f || std::fabs(z) > 0.05f ||
-                     std::fabs(rz) > 0.05f || std::fabs(rx) > 0.05f || std::fabs(ry) > 0.05f ||
-                     std::fabs(hatX) > 0.5f || std::fabs(hatY) > 0.5f || lt > 0.05f || rt > 0.05f;
-    if (anyActive && now - last >= 250) {
-        last = now;
-        LOGI("AXES dev=%d src=0x%x X=%.2f Y=%.2f Z=%.2f RZ=%.2f RX=%.2f RY=%.2f "
-             "HAT=(%.2f,%.2f) LT=%.2f(L=%.2f,B=%.2f) RT=%.2f(R=%.2f,G=%.2f)",
-             deviceId, ev->source, x, y, z, rz, rx, ry, hatX, hatY, lt, ltAxis, brake, rt, rtAxis,
-             gas);
-    }
-
-    gamepad::applyAxes(state, x, y, rightX, rightY, lt, rt, hatX, hatY);
+    float lt =
+        std::max(axisCur(ev, AMOTION_EVENT_AXIS_LTRIGGER), axisCur(ev, AMOTION_EVENT_AXIS_BRAKE));
+    float rt =
+        std::max(axisCur(ev, AMOTION_EVENT_AXIS_RTRIGGER), axisCur(ev, AMOTION_EVENT_AXIS_GAS));
+    gamepad::applyAxes(state, axisCur(ev, AMOTION_EVENT_AXIS_X), axisCur(ev, AMOTION_EVENT_AXIS_Y),
+                       rightX, rightY, lt, rt, axisCur(ev, AMOTION_EVENT_AXIS_HAT_X),
+                       axisCur(ev, AMOTION_EVENT_AXIS_HAT_Y));
     publishIfChanged(deviceId, state);
     return true;
 }
@@ -1063,6 +1036,71 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_se
     s.flatY = flatY;
     s.flatZ = flatZ;
     s.flatRZ = flatRZ;
+}
+
+/* ── Activity-level dispatch entry points ────────────────────────────────
+ *
+ * GameActivity routes generic motion events through its SurfaceView's
+ * OnGenericMotionListener, which sits deep enough in Android's input
+ * dispatch chain that for some controllers (notably the Nintendo Switch
+ * Pro Controller via USB on Pixel devices) the input system synthesizes
+ * DPAD key events from stick movement *before* the event ever reaches the
+ * SurfaceView. The result is left-stick movement arriving as
+ * DPAD_UP/DOWN/LEFT/RIGHT keycodes and the right stick going dead.
+ *
+ * Intercepting at the Activity dispatch level (the path the pre-refactor
+ * Kotlin code used) and consuming the event there prevents that fallback
+ * synthesis from running. These entry points reuse the same g_devices
+ * state, applyKey/applyAxes pipeline, and publishIfChanged gate as the
+ * GameActivity filter callbacks, so they share locking and the
+ * send-on-change behaviour.
+ *
+ * Returns JNI_TRUE if the event was a gamepad input we recognised. The
+ * caller should treat that as "consumed" and not fall through to super.
+ */
+JNIEXPORT jboolean JNICALL
+Java_com_tinkernorth_dish_data_network_SatelliteNative_processGamepadKeyEvent(
+    JNIEnv*, jobject, jint deviceId, jint source, jint action, jint keyCode) {
+    bool isGame = (source & AINPUT_SOURCE_GAMEPAD) == AINPUT_SOURCE_GAMEPAD ||
+                  (source & AINPUT_SOURCE_JOYSTICK) == AINPUT_SOURCE_JOYSTICK;
+    if (!isGame) return JNI_FALSE;
+    bool isMappedKey = (keyCode == AKEYCODE_BUTTON_L2 || keyCode == AKEYCODE_BUTTON_R2) ||
+                       gamepad::keycodeToXusb(keyCode) != 0;
+    if (!isMappedKey) return JNI_FALSE;
+    if (action != AKEY_EVENT_ACTION_DOWN && action != AKEY_EVENT_ACTION_UP) return JNI_FALSE;
+    std::lock_guard<std::mutex> lock(g_devicesMtx);
+    auto& state = g_devices[deviceId];
+    if (gamepad::applyKey(state, keyCode, action == AKEY_EVENT_ACTION_DOWN)) {
+        publishIfChanged(deviceId, state);
+    }
+    return JNI_TRUE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_tinkernorth_dish_data_network_SatelliteNative_processGamepadMotionEvent(
+    JNIEnv*, jobject, jint deviceId, jint source, jint action, jfloat x, jfloat y, jfloat z,
+    jfloat rz, jfloat rx, jfloat ry, jfloat hatX, jfloat hatY, jfloat lTrigger, jfloat rTrigger,
+    jfloat brake, jfloat gas) {
+    if ((source & AINPUT_SOURCE_JOYSTICK) != AINPUT_SOURCE_JOYSTICK) return JNI_FALSE;
+    int32_t maskedAction = action & AMOTION_EVENT_ACTION_MASK;
+    std::lock_guard<std::mutex> lock(g_devicesMtx);
+    auto& state = g_devices[deviceId];
+    if (maskedAction == AMOTION_EVENT_ACTION_CANCEL) {
+        gamepad::resetState(state);
+        publishIfChanged(deviceId, state);
+        return JNI_TRUE;
+    }
+    if (maskedAction != AMOTION_EVENT_ACTION_MOVE) return JNI_TRUE;
+    // Right-stick axis varies by controller: most use Z/RZ (Xbox-style), some
+    // use RX/RY. Pick whichever pair has larger magnitude so both layouts work
+    // without per-device config.
+    float rightX = std::fabs(z) >= std::fabs(rx) ? z : rx;
+    float rightY = std::fabs(rz) >= std::fabs(ry) ? rz : ry;
+    float lt = std::max(lTrigger, brake);
+    float rt = std::max(rTrigger, gas);
+    gamepad::applyAxes(state, x, y, rightX, rightY, lt, rt, hatX, hatY);
+    publishIfChanged(deviceId, state);
+    return JNI_TRUE;
 }
 
 // Force-zero every device that's bound to a slot and emit a release-all

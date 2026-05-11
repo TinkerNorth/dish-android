@@ -263,11 +263,58 @@ class MainActivity :
     // ═══════════════════════════════════════════════════════════════════════
     //  INPUT DISPATCH
     //
-    //  Physical gamepad / keyboard events are intercepted by the native
-    //  GameActivity input filter (see android_main in satellite_jni.cpp) and
-    //  never reach the Java dispatch path. Touch events fall through to the
-    //  View hierarchy normally — only the low-power gate runs here.
+    //  Physical gamepad key + motion events are intercepted at the Activity
+    //  dispatch level and forwarded to the native pipeline via JNI. Doing it
+    //  here (instead of relying on the GameActivity filter callbacks alone)
+    //  prevents Android's input system from synthesizing fallback DPAD key
+    //  presses for stick movements whose joystick MOVE events otherwise
+    //  reach no consuming view. The GameActivity filters in
+    //  satellite_jni.cpp remain wired as a safety net for events that
+    //  somehow bypass Activity dispatch.
+    //
+    //  Touch events fall through to the View hierarchy normally — only the
+    //  low-power gate runs here.
     // ═══════════════════════════════════════════════════════════════════════
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (isGamepadSource(event.source) &&
+            SatelliteNative.processGamepadKeyEvent(
+                event.deviceId, event.source, event.action, event.keyCode,
+            )
+        ) {
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        if ((event.source and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK &&
+            SatelliteNative.processGamepadMotionEvent(
+                event.deviceId,
+                event.source,
+                event.action,
+                event.getAxisValue(MotionEvent.AXIS_X),
+                event.getAxisValue(MotionEvent.AXIS_Y),
+                event.getAxisValue(MotionEvent.AXIS_Z),
+                event.getAxisValue(MotionEvent.AXIS_RZ),
+                event.getAxisValue(MotionEvent.AXIS_RX),
+                event.getAxisValue(MotionEvent.AXIS_RY),
+                event.getAxisValue(MotionEvent.AXIS_HAT_X),
+                event.getAxisValue(MotionEvent.AXIS_HAT_Y),
+                event.getAxisValue(MotionEvent.AXIS_LTRIGGER),
+                event.getAxisValue(MotionEvent.AXIS_RTRIGGER),
+                event.getAxisValue(MotionEvent.AXIS_BRAKE),
+                event.getAxisValue(MotionEvent.AXIS_GAS),
+            )
+        ) {
+            return true
+        }
+        return super.dispatchGenericMotionEvent(event)
+    }
+
+    private fun isGamepadSource(source: Int): Boolean =
+        (source and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
+            (source and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         // Order matters: read overlayActive *before* notifying the manager so a

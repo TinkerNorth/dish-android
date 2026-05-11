@@ -221,4 +221,38 @@ object SatelliteNative {
      * held server-side across focus loss.
      */
     external fun releaseAllPhysicalReports()
+
+    // ── Activity-level dispatch entry points ────────────────────────────────
+    // Called from MainActivity.dispatchKeyEvent / dispatchGenericMotionEvent
+    // to intercept gamepad events *before* Android's input system can
+    // synthesize fallback DPAD key presses from unconsumed joystick MOVEs.
+    // Both functions return true if the event was a recognised gamepad
+    // input; the caller should consume the event in that case.
+
+    /** Process a gamepad KEY event at the Activity dispatch level. */
+    external fun processGamepadKeyEvent(
+        deviceId: Int,
+        source: Int,
+        action: Int,
+        keyCode: Int,
+    ): Boolean
+
+    /** Process a gamepad MOTION event at the Activity dispatch level. */
+    external fun processGamepadMotionEvent(
+        deviceId: Int,
+        source: Int,
+        action: Int,
+        x: Float,
+        y: Float,
+        z: Float,
+        rz: Float,
+        rx: Float,
+        ry: Float,
+        hatX: Float,
+        hatY: Float,
+        ltrigger: Float,
+        rtrigger: Float,
+        brake: Float,
+        gas: Float,
+    ): Boolean
 }
