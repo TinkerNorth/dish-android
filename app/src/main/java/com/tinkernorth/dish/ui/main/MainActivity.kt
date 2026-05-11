@@ -279,7 +279,10 @@ class MainActivity :
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (isGamepadSource(event.source) &&
             SatelliteNative.processGamepadKeyEvent(
-                event.deviceId, event.source, event.action, event.keyCode,
+                event.deviceId,
+                event.source,
+                event.action,
+                event.keyCode,
             )
         ) {
             return true
@@ -403,30 +406,60 @@ class MainActivity :
     // the device actually advertises (Z/RZ vs RX/RY for right stick, hat
     // axes vs DPAD keycodes, etc.).
     private fun logDeviceCapabilities(dev: InputDevice) {
-        val axes = intArrayOf(
-            MotionEvent.AXIS_X, MotionEvent.AXIS_Y,
-            MotionEvent.AXIS_Z, MotionEvent.AXIS_RZ,
-            MotionEvent.AXIS_RX, MotionEvent.AXIS_RY,
-            MotionEvent.AXIS_HAT_X, MotionEvent.AXIS_HAT_Y,
-            MotionEvent.AXIS_LTRIGGER, MotionEvent.AXIS_RTRIGGER,
-            MotionEvent.AXIS_BRAKE, MotionEvent.AXIS_GAS,
-        )
-        val names = arrayOf(
-            "X", "Y", "Z", "RZ", "RX", "RY", "HX", "HY", "LT", "RT", "BR", "GS",
-        )
+        val axes =
+            intArrayOf(
+                MotionEvent.AXIS_X,
+                MotionEvent.AXIS_Y,
+                MotionEvent.AXIS_Z,
+                MotionEvent.AXIS_RZ,
+                MotionEvent.AXIS_RX,
+                MotionEvent.AXIS_RY,
+                MotionEvent.AXIS_HAT_X,
+                MotionEvent.AXIS_HAT_Y,
+                MotionEvent.AXIS_LTRIGGER,
+                MotionEvent.AXIS_RTRIGGER,
+                MotionEvent.AXIS_BRAKE,
+                MotionEvent.AXIS_GAS,
+            )
+        val names =
+            arrayOf(
+                "X",
+                "Y",
+                "Z",
+                "RZ",
+                "RX",
+                "RY",
+                "HX",
+                "HY",
+                "LT",
+                "RT",
+                "BR",
+                "GS",
+            )
         val sb = StringBuilder()
-        sb.append("DEVCAPS id=").append(dev.id)
-            .append(" name=\"").append(dev.name).append('"')
-            .append(" sources=0x").append(Integer.toHexString(dev.sources))
+        sb
+            .append("DEVCAPS id=")
+            .append(dev.id)
+            .append(" name=\"")
+            .append(dev.name)
+            .append('"')
+            .append(" sources=0x")
+            .append(Integer.toHexString(dev.sources))
             .append(" ranges=[")
         var first = true
         for (i in axes.indices) {
             val r = dev.getMotionRange(axes[i], InputDevice.SOURCE_JOYSTICK) ?: continue
             if (!first) sb.append(',')
             first = false
-            sb.append(names[i])
-                .append('(').append(r.min).append("..").append(r.max)
-                .append(",flat=").append(r.flat).append(')')
+            sb
+                .append(names[i])
+                .append('(')
+                .append(r.min)
+                .append("..")
+                .append(r.max)
+                .append(",flat=")
+                .append(r.flat)
+                .append(')')
         }
         sb.append(']')
         Log.i("SatelliteJNI", sb.toString())
