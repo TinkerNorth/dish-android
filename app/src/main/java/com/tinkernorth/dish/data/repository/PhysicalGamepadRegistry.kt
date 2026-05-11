@@ -7,7 +7,6 @@ import android.content.Context
 import android.hardware.input.InputManager
 import android.util.Log
 import android.view.InputDevice
-import android.view.KeyEvent
 import android.view.MotionEvent
 import com.tinkernorth.dish.data.network.SatelliteNative
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -165,21 +164,31 @@ class PhysicalGamepadRegistry
             Log.i("SatelliteJNI", sb.toString())
         }
 
-        private fun isGamepad(d: InputDevice): Boolean {
-            if (d.keyboardType == InputDevice.KEYBOARD_TYPE_ALPHABETIC) return false
-            val s = d.sources
-            val isGame =
-                (s and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
-                    (s and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
-            if (!isGame) return false
-            return d
-                .hasKeys(
-                    KeyEvent.KEYCODE_BUTTON_A,
-                    KeyEvent.KEYCODE_BUTTON_B,
-                    KeyEvent.KEYCODE_BUTTON_X,
-                    KeyEvent.KEYCODE_BUTTON_Y,
-                    KeyEvent.KEYCODE_BUTTON_START,
-                    KeyEvent.KEYCODE_BUTTON_SELECT,
-                ).any { it }
-        }
+        /**
+         * "Looks like a controller" — non-alphabetic-keyboard + carries a
+         * GAMEPAD or JOYSTICK source bit. We deliberately don't gate on
+         * [InputDevice.hasKeys] for the standard A/B/X/Y/Start/Select
+         * keycodes: generic HID joysticks (e.g. cheap USB adapters) expose
+         * their buttons as KEYCODE_BUTTON_1..16 because no OEM key-layout
+         * file relabels them, and rejecting those left the device invisible
+         * to the slot list entirely. Buttons whose keycodes don't translate
+         * still fall out cleanly at `keycodeToXusb` in the native pipeline.
+         */
+        private fun isGamepad(d: InputDevice): Boolean = isGamepadDeviceFromCapabilities(d.sources, d.keyboardType)
     }
+
+/**
+ * Pure-function variant of [PhysicalGamepadRegistry.isGamepad] that takes the
+ * raw capability bits instead of an [InputDevice]. Lifted out so the
+ * classifier can be exercised in JVM unit tests without mocking
+ * [InputDevice] — that's a final class with many `native` methods, which
+ * trips the test-worker JVM through mockk's bytecode rewriter.
+ */
+internal fun isGamepadDeviceFromCapabilities(
+    sources: Int,
+    keyboardType: Int,
+): Boolean {
+    if (keyboardType == InputDevice.KEYBOARD_TYPE_ALPHABETIC) return false
+    return (sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
+        (sources and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+}

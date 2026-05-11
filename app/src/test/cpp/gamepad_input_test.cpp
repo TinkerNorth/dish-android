@@ -115,6 +115,126 @@ TEST(KeycodeToXusb, UnknownKeycodeReturnsZero) {
     EXPECT_EQ(0, keycodeToXusb(/* AKEYCODE_BACK */ 4));
 }
 
+// ── Numeric BUTTON_1..16 fallback (cheap HID joystick adapters) ─────────────
+// These adapters don't ship a key-layout file that relabels their buttons to
+// the named BUTTON_A/B/X/Y/Start/Select set, so their buttons surface as
+// BUTTON_1..16 instead. The mapping follows the DirectInput numbering most
+// adapters use: 1-4 face, 5-6 shoulders, 7-8 triggers (handled in applyKey),
+// 9-10 Back/Start, 11-12 stick clicks, 13-16 unmapped.
+
+TEST(KeycodeToXusb, ButtonNumeric1Through4MapToFace) {
+    EXPECT_EQ(XUSB_A, keycodeToXusb(KC_BUTTON_1));
+    EXPECT_EQ(XUSB_B, keycodeToXusb(KC_BUTTON_2));
+    EXPECT_EQ(XUSB_X, keycodeToXusb(KC_BUTTON_3));
+    EXPECT_EQ(XUSB_Y, keycodeToXusb(KC_BUTTON_4));
+}
+
+TEST(KeycodeToXusb, ButtonNumeric5And6MapToShoulders) {
+    EXPECT_EQ(XUSB_LB, keycodeToXusb(KC_BUTTON_5));
+    EXPECT_EQ(XUSB_RB, keycodeToXusb(KC_BUTTON_6));
+}
+
+TEST(KeycodeToXusb, ButtonNumeric7And8AreNotInButtonMap) {
+    // BUTTON_7/8 are routed via the trigger-via-key path (applyKey) — same
+    // as L2/R2 — so they intentionally return 0 here. Test that contract so
+    // a future "just complete the table" PR doesn't accidentally double-fire
+    // a trigger as both a wButtons bit and a trigger axis.
+    EXPECT_EQ(0, keycodeToXusb(KC_BUTTON_7));
+    EXPECT_EQ(0, keycodeToXusb(KC_BUTTON_8));
+}
+
+TEST(KeycodeToXusb, ButtonNumeric9And10MapToBackStart) {
+    EXPECT_EQ(XUSB_BACK, keycodeToXusb(KC_BUTTON_9));
+    EXPECT_EQ(XUSB_START, keycodeToXusb(KC_BUTTON_10));
+}
+
+TEST(KeycodeToXusb, ButtonNumeric11And12MapToStickClicks) {
+    EXPECT_EQ(XUSB_THUMB_L, keycodeToXusb(KC_BUTTON_11));
+    EXPECT_EQ(XUSB_THUMB_R, keycodeToXusb(KC_BUTTON_12));
+}
+
+TEST(KeycodeToXusb, ButtonNumeric13Through16AreUnmapped) {
+    // Physical assignment varies too much between devices to guess at;
+    // these stay zero so the activity-side dispatch can still consume them
+    // (preventing Android's fallback DPAD_CENTER hijack) without claiming
+    // they're a particular logical button.
+    EXPECT_EQ(0, keycodeToXusb(KC_BUTTON_13));
+    EXPECT_EQ(0, keycodeToXusb(KC_BUTTON_14));
+    EXPECT_EQ(0, keycodeToXusb(KC_BUTTON_15));
+    EXPECT_EQ(0, keycodeToXusb(KC_BUTTON_16));
+}
+
+// ── applyKey for BUTTON_7/8 trigger-via-key path ────────────────────────────
+
+TEST(ApplyKey, Button7DownSetsLtTriggerLikeL2) {
+    DeviceState s;
+    EXPECT_TRUE(applyKey(s, KC_BUTTON_7, true));
+    EXPECT_EQ(255, s.bLT);
+    EXPECT_TRUE(s.ltFromKey);
+    EXPECT_EQ(0, s.wButtons); // must NOT touch wButtons
+}
+
+TEST(ApplyKey, Button7UpClearsLtTrigger) {
+    DeviceState s;
+    applyKey(s, KC_BUTTON_7, true);
+    applyKey(s, KC_BUTTON_7, false);
+    EXPECT_EQ(0, s.bLT);
+    EXPECT_FALSE(s.ltFromKey);
+}
+
+TEST(ApplyKey, Button8DownSetsRtTriggerLikeR2) {
+    DeviceState s;
+    EXPECT_TRUE(applyKey(s, KC_BUTTON_8, true));
+    EXPECT_EQ(255, s.bRT);
+    EXPECT_TRUE(s.rtFromKey);
+    EXPECT_EQ(0, s.wButtons);
+}
+
+TEST(ApplyKey, Button8UpClearsRtTrigger) {
+    DeviceState s;
+    applyKey(s, KC_BUTTON_8, true);
+    applyKey(s, KC_BUTTON_8, false);
+    EXPECT_EQ(0, s.bRT);
+    EXPECT_FALSE(s.rtFromKey);
+}
+
+TEST(ApplyKey, Button7AndL2BothSetLt) {
+    // Some hybrid devices fire BOTH the named L2 and the numeric BUTTON_7 on
+    // the same press. Both paths must agree — last-action wins, no leakage.
+    DeviceState s;
+    applyKey(s, KC_BUTTON_L2, true);
+    applyKey(s, KC_BUTTON_7, true);
+    EXPECT_EQ(255, s.bLT);
+    EXPECT_TRUE(s.ltFromKey);
+    applyKey(s, KC_BUTTON_7, false);
+    EXPECT_EQ(0, s.bLT);
+    EXPECT_FALSE(s.ltFromKey);
+}
+
+TEST(ApplyKey, NumericButtonFollowsKeycodeToXusbMapping) {
+    // Spot-check that the numeric buttons walk through applyKey end-to-end
+    // (not just keycodeToXusb in isolation).
+    DeviceState s;
+    applyKey(s, KC_BUTTON_1, true);
+    EXPECT_EQ(XUSB_A, s.wButtons);
+    applyKey(s, KC_BUTTON_4, true);
+    EXPECT_EQ(XUSB_A | XUSB_Y, s.wButtons);
+    applyKey(s, KC_BUTTON_9, true);
+    EXPECT_EQ(XUSB_A | XUSB_Y | XUSB_BACK, s.wButtons);
+    applyKey(s, KC_BUTTON_10, true);
+    EXPECT_EQ(XUSB_A | XUSB_Y | XUSB_BACK | XUSB_START, s.wButtons);
+    applyKey(s, KC_BUTTON_11, true);
+    EXPECT_EQ(XUSB_A | XUSB_Y | XUSB_BACK | XUSB_START | XUSB_THUMB_L, s.wButtons);
+}
+
+TEST(ApplyKey, NumericButton13ThroughIs16ReturnsFalseAndNoStateChange) {
+    DeviceState s;
+    s.wButtons = XUSB_A;
+    EXPECT_FALSE(applyKey(s, KC_BUTTON_13, true));
+    EXPECT_FALSE(applyKey(s, KC_BUTTON_16, true));
+    EXPECT_EQ(XUSB_A, s.wButtons);
+}
+
 // ── applyKey ────────────────────────────────────────────────────────────────
 
 TEST(ApplyKey, FaceButtonDownSetsBitUpClearsBit) {

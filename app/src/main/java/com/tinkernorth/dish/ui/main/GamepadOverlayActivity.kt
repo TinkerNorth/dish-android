@@ -24,6 +24,7 @@ import com.tinkernorth.dish.data.network.ConnectionLive
 import com.tinkernorth.dish.data.network.SatelliteConnectionManager
 import com.tinkernorth.dish.data.network.SatelliteNative
 import com.tinkernorth.dish.data.network.WakeStateController
+import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
 import com.tinkernorth.dish.databinding.ActivityGamepadOverlayBinding
 import com.tinkernorth.dish.databinding.OverlayLowPowerBinding
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
@@ -55,6 +56,8 @@ class GamepadOverlayActivity :
     @Inject lateinit var hub: ConnectionHub
 
     @Inject lateinit var wakeState: WakeStateController
+
+    @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
 
     private lateinit var binding: ActivityGamepadOverlayBinding
     private lateinit var lowPowerBinding: OverlayLowPowerBinding
@@ -207,21 +210,30 @@ class GamepadOverlayActivity :
     // ═══════════════════════════════════════════════════════════════════════
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (isGamepadSource(event.source) &&
+        // Same shape as MainActivity: trust the device, not the event source.
+        // Generic HID joystick adapters fire button events with
+        // src=SOURCE_KEYBOARD even though the device has SOURCE_JOYSTICK; we
+        // consume every key event from a known gamepad device so Android's
+        // fallback-action pipeline can't synthesise KEYCODE_DPAD_CENTER and
+        // click views out from under the overlay.
+        val isKnownGamepad = event.deviceId in gamepadRegistry.devices.value
+        if (isGamepadSource(event.source) || isKnownGamepad) {
             SatelliteNative.processGamepadKeyEvent(
                 event.deviceId,
                 event.source,
                 event.action,
                 event.keyCode,
             )
-        ) {
             return true
         }
         return super.dispatchKeyEvent(event)
     }
 
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
-        if ((event.source and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK &&
+        val isJoy =
+            (event.source and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK ||
+                event.deviceId in gamepadRegistry.devices.value
+        if (isJoy &&
             SatelliteNative.processGamepadMotionEvent(
                 event.deviceId,
                 event.source,
