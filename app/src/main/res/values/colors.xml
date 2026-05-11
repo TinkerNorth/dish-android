@@ -1,22 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Satellite web-app color palette -->
-    <color name="colorBackground">#0D0F12</color>
-    <color name="colorSurface">#161A1F</color>
-    <color name="colorPrimary">#FFC107</color>
-    <color name="colorPrimaryDark">#A65F1E</color>
-    <color name="colorPrimaryMid">#C27A2C</color>
-    <color name="colorOnPrimary">#0D0F12</color>
-    <color name="colorOnSurface">#EAEAEA</color>
-    <color name="colorMuted">#6B7280</color>
-    <color name="colorOutline">#222831</color>
+    <!-- Dish marketing palette (cyan / deep-space). Mirrors dish-website's
+         deep-space tokens (tn-ink, tn-night, tn-deep, tn-signal, etc.). -->
+    <color name="colorBackground">#060818</color>
+    <color name="colorSurface">#0C1027</color>
+    <color name="colorPrimary">#4FE3FF</color>
+    <color name="colorPrimaryDark">#2C93AD</color>
+    <color name="colorPrimaryMid">#2C93AD</color>
+    <color name="colorOnPrimary">#060818</color>
+    <color name="colorOnSurface">#E6ECFF</color>
+    <color name="colorMuted">#93A0C8</color>
+    <!-- Web uses rgba(79,227,255,0.18) for the outline; ARGB equivalent is
+         signal cyan at ~12% alpha rounded to nearest byte (0.18*255≈46=0x2E). -->
+    <color name="colorOutline">#2E4FE3FF</color>
     <color name="colorSuccess">#22C55E</color>
     <color name="colorError">#E74C3C</color>
     <color name="colorWarning">#F59E0B</color>
-    <!-- FFC107 at ~12% alpha for card stroke -->
-    <color name="colorCardStroke">#1FFFC107</color>
-    <!-- Subtle surface variant for empty states -->
-    <color name="colorSurfaceDim">#111417</color>
+    <!-- Primary at ~12% alpha for card stroke -->
+    <color name="colorCardStroke">#1F4FE3FF</color>
+    <!-- Subtle surface variant for empty states (mirrors tn-deep). -->
+    <color name="colorSurfaceDim">#131A3A</color>
+    <!-- Full-screen dim overlay (e.g. low-power mode) — black @ ~80% alpha -->
+    <color name="colorOverlayScrim">#CC000000</color>
     <!-- Keep these for any legacy references -->
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
