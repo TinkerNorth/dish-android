@@ -434,6 +434,21 @@ static void heartbeatLoop(std::shared_ptr<Session> s) {
  */
 void android_main(struct android_app* app) {
     LOGI("android_main started (filter-inline input mode)");
+
+    // GameActivity populates only AXIS_X and AXIS_Y in pointers[].axisValues
+    // by default; every other axis reads 0 until explicitly enabled. The
+    // filter below reads right stick (Z/RZ), triggers (LT/RT + BRAKE/GAS),
+    // and hat (HAT_X/HAT_Y) — opt them in here. If you ever read a new axis
+    // in gamepadMotionFilter, add a matching enableAxis call.
+    GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_Z);
+    GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_RZ);
+    GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_LTRIGGER);
+    GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_RTRIGGER);
+    GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_BRAKE);
+    GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_GAS);
+    GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_HAT_X);
+    GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_HAT_Y);
+
     app->keyEventFilter = gamepadKeyFilter;
     app->motionEventFilter = gamepadMotionFilter;
 
