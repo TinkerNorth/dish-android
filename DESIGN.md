@@ -10,23 +10,27 @@ Satellite local web UI.
 
 ## Available color tokens
 
-| Token | Semantic role |
-|---|---|
-| `@color/colorBackground` | Body / window background |
-| `@color/colorSurface` | Card / raised panel |
-| `@color/colorSurfaceDim` | Recessed / empty state |
-| `@color/colorPrimary` | Main accent (amber) |
-| `@color/colorPrimaryMid` | Mid-amber for secondary states |
-| `@color/colorPrimaryDark` | Pressed / disabled primary |
-| `@color/colorOnPrimary` | Text/icon on top of primary |
-| `@color/colorOnSurface` | Body text on surface |
-| `@color/colorMuted` | Secondary text |
-| `@color/colorOutline` | Borders / dividers |
-| `@color/colorCardStroke` | Primary @ ~12% alpha for card borders |
-| `@color/colorSuccess` | Status — success |
-| `@color/colorError` | Status — error |
-| `@color/colorWarning` | Status — warning |
-| `@color/colorOverlayScrim` | Black @ ~80% alpha for full-screen dim overlays |
+| Token | Value | Semantic role |
+|---|---|---|
+| `@color/colorBackground` | `#060818` | Body / window background (`--tn-ink`) |
+| `@color/colorSurface` | `#0C1027` | Card / raised panel (`--tn-night`) |
+| `@color/colorSurfaceDim` | `#131A3A` | Recessed / empty state (`--tn-deep`) |
+| `@color/colorPrimary` | `#4FE3FF` | Main accent — cyan (`--tn-signal`) |
+| `@color/colorPrimaryMid` | `#2C93AD` | Aliased to PrimaryDark — web has no mid |
+| `@color/colorPrimaryDark` | `#2C93AD` | Pressed / disabled primary (`--tn-signal-dim`) |
+| `@color/colorOnPrimary` | `#060818` | Text/icon on top of primary |
+| `@color/colorOnSurface` | `#E6ECFF` | Body text on surface (`--body-color`) |
+| `@color/colorMuted` | `#93A0C8` | Secondary text (`--muted`) |
+| `@color/colorOutline` | `#2E4FE3FF` | Borders — cyan @ ~18% alpha |
+| `@color/colorCardStroke` | `#1F4FE3FF` | Primary @ ~12% alpha for card borders |
+| `@color/colorSuccess` | `#22C55E` | Status — success |
+| `@color/colorError` | `#E74C3C` | Status — error |
+| `@color/colorWarning` | `#F59E0B` | Status — warning |
+| `@color/colorOverlayScrim` | `#CC000000` | Black @ ~80% alpha for full-screen dim overlays |
+
+Palette: **cyan / deep-space** — mirrors dish-website. Status colors
+(`Success` / `Error` / `Warning`) are deliberately the same across both
+the cyan (marketing/Dish) and amber (legacy Satellite) palettes.
 
 `@color/black` and `@color/white` exist for legacy references only — prefer
 the semantic tokens above.
