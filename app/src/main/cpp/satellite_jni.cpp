@@ -3,15 +3,25 @@
 
 /*
  * satellite_jni.cpp — Native bridge for the Dish Android client.
- * GameActivity provides the native thread (android_main) for lifecycle.
- * Controller input is handled via direct JNI calls from Kotlin for
- * lowest latency (Java dispatchGenericMotionEvent → JNI sendReport → sendto).
- * Also handles LAN discovery, TCP pairing, HTTP connection API, and
- * encrypted UDP streaming (ChaCha20-Poly1305) via JNI.
+ *
+ * Physical-gamepad input is handled inline in the GameActivity input filter
+ * callbacks (UI thread), which is the lowest-latency path Android exposes:
+ * Android InputDispatcher → GameActivity dispatch → filter callback → encrypted
+ * UDP sendto, all on the same thread with no queue/looper hop. For Bluetooth-
+ * bound slots the filter pushes the report onto an internal queue drained by
+ * a dedicated worker thread (BluetoothHidDevice.sendReport is Binder IPC and
+ * would jank the UI thread otherwise).
+ *
+ * Also handles LAN discovery, TCP pairing, HTTP connection API, and the
+ * heartbeat/ACK loops for the encrypted UDP wire (ChaCha20-Poly1305).
  */
 #include <jni.h>
 #include <android/log.h>
+#include <android/input.h>
+#include <android/keycodes.h>
+#include <android/looper.h>
 #include <game-activity/GameActivity.h>
+#include <game-activity/GameActivityEvents.h>
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 #include <sys/socket.h>
 #include <sys/select.h>
@@ -24,14 +34,19 @@
 #include <string.h>
 #include <time.h>
 #include <stdint.h>
-#include <string>
-#include <vector>
-#include <thread>
+#include <algorithm>
 #include <atomic>
-#include <mutex>
+#include <condition_variable>
+#include <deque>
 #include <memory>
+#include <mutex>
+#include <string>
+#include <thread>
 #include <unordered_map>
+#include <vector>
 #include <sodium.h>
+
+#include "gamepad_input.h"
 
 #define TAG "SatelliteJNI"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
@@ -96,6 +111,247 @@ static std::shared_ptr<Session> getSession(int handle) {
     std::lock_guard<std::mutex> lock(g_sessionsMtx);
     auto it = g_sessions.find(handle);
     return it == g_sessions.end() ? nullptr : it->second;
+}
+
+/* ── Native gamepad input processor ────────────────────────────────────────
+ *
+ * Per-physical-device state and slot bindings live entirely in C++. Events
+ * are processed inline in gamepadKeyFilter / gamepadMotionFilter (UI thread)
+ * — see the filter callbacks further down. For satellite-bound slots the
+ * resulting XUSB report is encrypted and sent inline. For Bluetooth-bound
+ * slots the filter pushes the report onto a queue drained by btDispatchLoop
+ * (BluetoothHidDevice.sendReport is Binder IPC; doing it inline would block
+ * the UI thread).
+ */
+
+// Forward-declare — defined further down with the rest of the wire helpers.
+static bool sendEncrypted(Session* s, uint16_t msgType, const uint8_t* payload,
+                          uint16_t payloadLen);
+
+// Pure XUSB constants, DeviceState, and the keycode/axes/state helpers live
+// in gamepad_input.h so they can be exercised by the host-build googletest
+// target (app/src/test/cpp). The JNI glue below converts GameActivity events
+// into primitive args and delegates to that pure layer.
+using gamepad::DeviceState;
+
+enum SlotKind : uint8_t { SLOT_NONE = 0, SLOT_SATELLITE = 1, SLOT_BLUETOOTH = 2 };
+
+struct SlotBinding {
+    SlotKind kind = SLOT_NONE;
+    int sessionHandle = -1;     // SATELLITE only
+    int controllerIndex = -1;   // SATELLITE only
+    std::string btConnectionId; // BLUETOOTH only (UTF-8). Empty otherwise.
+};
+
+static std::mutex g_devicesMtx;
+static std::unordered_map<int32_t, DeviceState> g_devices;
+
+static std::mutex g_slotsMtx;
+static std::unordered_map<int32_t, SlotBinding> g_slots;
+
+// JVM bridge for Bluetooth callback path. The bridge class + method id are
+// resolved once via BluetoothGamepadBridge.nativeInstall (see below).
+static JavaVM* g_jvm = nullptr;
+static jclass g_btBridgeClass = nullptr; // global ref, set once
+static jmethodID g_btDispatchMethod = nullptr;
+
+/* ── BT dispatch queue ───────────────────────────────────────────────────
+ *
+ * Filter callbacks run on the UI thread for lowest input-to-wire latency.
+ * The satellite path (encrypted UDP send) is fast enough to do inline. The
+ * Bluetooth HID path is not — BluetoothHidDevice.sendReport is Binder IPC
+ * and can block for hundreds of µs to several ms, which would jank the UI.
+ *
+ * So BT reports are pushed onto this queue from the filter and drained by
+ * a dedicated worker thread that owns the JNI dispatch into Kotlin.
+ *
+ * Queue depth is bounded; if the BT thread can't keep up we drop the oldest
+ * report (latest-wins semantics — old reports are stale anyway).
+ */
+struct BtReport {
+    std::string connectionId;
+    uint16_t wButtons;
+    uint8_t bLT, bRT;
+    int16_t sLX, sLY, sRX, sRY;
+};
+
+static std::mutex g_btQueueMtx;
+static std::condition_variable g_btQueueCv;
+static std::deque<BtReport> g_btQueue;
+static std::thread g_btDispatchThread;
+static std::atomic<bool> g_btDispatchRunning{false};
+static constexpr size_t BT_QUEUE_MAX = 64;
+
+static void enqueueBtReport(BtReport&& r) {
+    {
+        std::lock_guard<std::mutex> lock(g_btQueueMtx);
+        if (g_btQueue.size() >= BT_QUEUE_MAX) g_btQueue.pop_front();
+        g_btQueue.push_back(std::move(r));
+    }
+    g_btQueueCv.notify_one();
+}
+
+static void btDispatchLoop() {
+    JNIEnv* env = nullptr;
+    if (!g_jvm || g_jvm->AttachCurrentThread(&env, nullptr) != JNI_OK || env == nullptr) {
+        LOGE("btDispatchLoop: AttachCurrentThread failed");
+        return;
+    }
+    LOGI("BT dispatch thread started");
+    while (g_btDispatchRunning.load(std::memory_order_relaxed)) {
+        BtReport r;
+        {
+            std::unique_lock<std::mutex> lock(g_btQueueMtx);
+            g_btQueueCv.wait(lock, [] {
+                return !g_btDispatchRunning.load(std::memory_order_relaxed) || !g_btQueue.empty();
+            });
+            if (!g_btDispatchRunning.load(std::memory_order_relaxed) && g_btQueue.empty()) break;
+            r = std::move(g_btQueue.front());
+            g_btQueue.pop_front();
+        }
+        if (g_btBridgeClass == nullptr || g_btDispatchMethod == nullptr) continue;
+        jstring connId = env->NewStringUTF(r.connectionId.c_str());
+        env->CallStaticVoidMethod(g_btBridgeClass, g_btDispatchMethod, connId, (jint)r.wButtons,
+                                  (jint)r.bLT, (jint)r.bRT, (jint)r.sLX, (jint)r.sLY, (jint)r.sRX,
+                                  (jint)r.sRY);
+        env->DeleteLocalRef(connId);
+        if (env->ExceptionCheck()) env->ExceptionClear();
+    }
+    g_jvm->DetachCurrentThread();
+    LOGI("BT dispatch thread stopped");
+}
+
+static void startBtDispatchThread() {
+    bool was = g_btDispatchRunning.exchange(true, std::memory_order_relaxed);
+    if (was) return;
+    g_btDispatchThread = std::thread(btDispatchLoop);
+}
+
+// Read the primary pointer's current value for the given axis. We only deal
+// with physical gamepads here, which always present pointer 0.
+static inline float axisCur(const GameActivityMotionEvent* ev, int axis) {
+    if (ev->pointerCount == 0) return 0.f;
+    return ev->pointers[0].axisValues[axis];
+}
+
+// Look up the slot binding for a device and dispatch the report if state
+// changed since the last publish. Holds g_slotsMtx briefly. Lock order:
+// devices < slots < (sessions | btQueue).
+//
+// Satellite slots: encrypt + sendto inline. ChaCha20-Poly1305 of 16 bytes
+// plus a non-blocking sendto is ~30 µs total — fine on the UI thread.
+//
+// Bluetooth slots: enqueue a copy of the report; a dedicated worker thread
+// owns the Binder IPC. We don't hold any JVM ref across threads — the
+// connection-id string is copied into the queue entry and a fresh local
+// jstring is built on the dispatch side.
+static void publishIfChanged(int32_t deviceId, DeviceState& s) {
+    if (!gamepad::consumePublishIfChanged(s)) return;
+
+    std::lock_guard<std::mutex> lock(g_slotsMtx);
+    auto it = g_slots.find(deviceId);
+    if (it == g_slots.end()) return;
+    const SlotBinding& binding = it->second;
+
+    if (binding.kind == SLOT_SATELLITE) {
+        auto session = getSession(binding.sessionHandle);
+        if (!session) return;
+        uint8_t payload[1 + sizeof(XUSB_REPORT)];
+        payload[0] = (uint8_t)(binding.controllerIndex & 0xFF);
+        XUSB_REPORT* r = (XUSB_REPORT*)(payload + 1);
+        r->wButtons = s.wButtons;
+        r->bLeftTrigger = s.bLT;
+        r->bRightTrigger = s.bRT;
+        r->sThumbLX = s.sLX;
+        r->sThumbLY = s.sLY;
+        r->sThumbRX = s.sRX;
+        r->sThumbRY = s.sRY;
+        sendEncrypted(session.get(), MSG_GAMEPAD_DATA, payload, sizeof(payload));
+    } else if (binding.kind == SLOT_BLUETOOTH) {
+        if (binding.btConnectionId.empty()) return;
+        enqueueBtReport(BtReport{
+            binding.btConnectionId,
+            s.wButtons,
+            s.bLT,
+            s.bRT,
+            s.sLX,
+            s.sLY,
+            s.sRX,
+            s.sRY,
+        });
+    }
+}
+
+/* ── Filter callbacks (UI thread) ────────────────────────────────────────
+ *
+ * Process events inline rather than just predicating + queueing. This is
+ * the lowest-latency path Android exposes for gamepad input — the native
+ * input buffer + android_main looper-wake are skipped entirely, so the
+ * encrypted UDP packet leaves the device on the same thread that received
+ * the event.
+ *
+ * Both filters return true on every gamepad/joystick event — this consumes
+ * the event so it doesn't bubble back into the View hierarchy and trigger
+ * incidental focus navigation. android_main still drains-and-clears the
+ * native input buffer to keep memory bounded; it just doesn't re-process.
+ */
+static bool gamepadKeyFilter(const GameActivityKeyEvent* ev) {
+    int32_t source = ev->source;
+    bool isGame = (source & AINPUT_SOURCE_GAMEPAD) == AINPUT_SOURCE_GAMEPAD ||
+                  (source & AINPUT_SOURCE_JOYSTICK) == AINPUT_SOURCE_JOYSTICK;
+    if (!isGame) return false;
+    int32_t kc = ev->keyCode;
+    bool isMappedKey =
+        (kc == AKEYCODE_BUTTON_L2 || kc == AKEYCODE_BUTTON_R2) || gamepad::keycodeToXusb(kc) != 0;
+    if (!isMappedKey) return false;
+
+    int32_t action = ev->action;
+    if (action == AKEY_EVENT_ACTION_DOWN || action == AKEY_EVENT_ACTION_UP) {
+        int32_t deviceId = ev->deviceId;
+        std::lock_guard<std::mutex> lock(g_devicesMtx);
+        auto& state = g_devices[deviceId];
+        if (gamepad::applyKey(state, kc, action == AKEY_EVENT_ACTION_DOWN)) {
+            publishIfChanged(deviceId, state);
+        }
+    }
+    return true; // consumed — do not propagate to View dispatch
+}
+
+static bool gamepadMotionFilter(const GameActivityMotionEvent* ev) {
+    if ((ev->source & AINPUT_SOURCE_JOYSTICK) != AINPUT_SOURCE_JOYSTICK) return false;
+    int32_t action = ev->action & AMOTION_EVENT_ACTION_MASK;
+    int32_t deviceId = ev->deviceId;
+
+    std::lock_guard<std::mutex> lock(g_devicesMtx);
+    auto& state = g_devices[deviceId];
+
+    if (action == AMOTION_EVENT_ACTION_CANCEL) {
+        gamepad::resetState(state);
+        publishIfChanged(deviceId, state);
+        return true;
+    }
+    if (action != AMOTION_EVENT_ACTION_MOVE) return true;
+
+    // "Latest sample wins" — historical samples are intermediate states the
+    // next apply would overwrite anyway. Faster *and* fewer wire packets.
+    float z = axisCur(ev, AMOTION_EVENT_AXIS_Z);
+    float rz = axisCur(ev, AMOTION_EVENT_AXIS_RZ);
+    float rx = axisCur(ev, AMOTION_EVENT_AXIS_RX);
+    float ry = axisCur(ev, AMOTION_EVENT_AXIS_RY);
+    // Right-stick axis varies by controller: most use Z/RZ (Xbox-style), but
+    // some Bluetooth/HID gamepads use RX/RY. Take whichever pair has larger
+    // magnitude so we work for both without per-device config.
+    float rightX = std::fabs(z) >= std::fabs(rx) ? z : rx;
+    float rightY = std::fabs(rz) >= std::fabs(ry) ? rz : ry;
+    float lt =
+        std::max(axisCur(ev, AMOTION_EVENT_AXIS_LTRIGGER), axisCur(ev, AMOTION_EVENT_AXIS_BRAKE));
+    float rt =
+        std::max(axisCur(ev, AMOTION_EVENT_AXIS_RTRIGGER), axisCur(ev, AMOTION_EVENT_AXIS_GAS));
+    gamepad::applyAxes(state, axisCur(ev, AMOTION_EVENT_AXIS_X), axisCur(ev, AMOTION_EVENT_AXIS_Y),
+                       rightX, rightY, lt, rt, axisCur(ev, AMOTION_EVENT_AXIS_HAT_X),
+                       axisCur(ev, AMOTION_EVENT_AXIS_HAT_Y));
+    publishIfChanged(deviceId, state);
+    return true;
 }
 
 static uint64_t nowMs() {
@@ -175,24 +431,54 @@ static void heartbeatLoop(std::shared_ptr<Session> s) {
     }
     LOGI("Heartbeat thread stopped");
 }
-/* ── android_main — GameActivity native entry point (lifecycle only) ───── */
+/* ── android_main — GameActivity native entry point ──────────────────────
+ *
+ * Input is processed inline by gamepadKeyFilter / gamepadMotionFilter on
+ * the UI thread (lowest possible latency — see Filter callbacks above).
+ * This loop is therefore lifecycle-only: it drives source->process for
+ * onStart/onStop/onDestroy and drains the native input buffer so it doesn't
+ * grow unbounded. The events themselves were already processed in the
+ * filter; we just clear them here.
+ */
 void android_main(struct android_app* app) {
-    LOGI("android_main started (lifecycle-only mode)");
+    LOGI("android_main started (filter-inline input mode)");
 
-    // Minimal lifecycle loop — input is handled via direct JNI calls from Kotlin
-    while (true) {
+    // GameActivity populates only AXIS_X and AXIS_Y in pointers[].axisValues
+    // by default; every other axis reads 0 until explicitly enabled. The
+    // filter below reads right stick (Z/RZ), triggers (LT/RT + BRAKE/GAS),
+    // and hat (HAT_X/HAT_Y) — opt them in here. If you ever read a new axis
+    // in gamepadMotionFilter, add a matching enableAxis call.
+    GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_Z);
+    GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_RZ);
+    GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_RX);
+    GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_RY);
+    GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_LTRIGGER);
+    GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_RTRIGGER);
+    GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_BRAKE);
+    GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_GAS);
+    GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_HAT_X);
+    GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_HAT_Y);
+
+    app->keyEventFilter = gamepadKeyFilter;
+    app->motionEventFilter = gamepadMotionFilter;
+
+    while (!app->destroyRequested) {
         int events;
-        struct android_poll_source* source;
-
-        // Block indefinitely waiting for lifecycle events
-        while (ALooper_pollOnce(-1, nullptr, &events, (void**)&source) >= 0) {
-            if (source != nullptr) { source->process(source->app, source); }
-            if (app->destroyRequested) {
-                LOGI("android_main: destroy requested");
-                return;
-            }
+        struct android_poll_source* source = nullptr;
+        int result = ALooper_pollOnce(-1, nullptr, &events, (void**)&source);
+        if (result == ALOOPER_POLL_ERROR) {
+            LOGE("ALooper_pollOnce returned ALOOPER_POLL_ERROR");
+            break;
         }
+        if (source != nullptr) source->process(source->app, source);
+        if (app->destroyRequested) break;
+
+        struct android_input_buffer* ib = android_app_swap_input_buffers(app);
+        if (ib == nullptr) continue;
+        if (ib->motionEventsCount > 0) android_app_clear_motion_events(ib);
+        if (ib->keyEventsCount > 0) android_app_clear_key_events(ib);
     }
+    LOGI("android_main: destroy requested, exiting");
 }
 
 extern "C" {
@@ -703,4 +989,157 @@ JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative
     return env->NewStringUTF(result.c_str());
 }
 
+/* ── Physical-slot bindings (driven from MainActivity) ─────────────────── */
+
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_data_network_SatelliteNative_bindPhysicalSlotSatellite(
+    JNIEnv*, jobject, jint deviceId, jint sessionHandle, jint controllerIndex) {
+    std::lock_guard<std::mutex> lock(g_slotsMtx);
+    auto& b = g_slots[deviceId];
+    b.kind = SLOT_SATELLITE;
+    b.sessionHandle = sessionHandle;
+    b.controllerIndex = controllerIndex;
+    b.btConnectionId.clear();
+}
+
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_data_network_SatelliteNative_bindPhysicalSlotBluetooth(
+    JNIEnv* env, jobject, jint deviceId, jstring connectionId) {
+    const char* cstr = env->GetStringUTFChars(connectionId, nullptr);
+    std::string copy = cstr ? std::string(cstr) : std::string();
+    if (cstr) env->ReleaseStringUTFChars(connectionId, cstr);
+    std::lock_guard<std::mutex> lock(g_slotsMtx);
+    auto& b = g_slots[deviceId];
+    b.kind = SLOT_BLUETOOTH;
+    b.sessionHandle = -1;
+    b.controllerIndex = -1;
+    b.btConnectionId = std::move(copy);
+}
+
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_unbindPhysicalSlot(
+    JNIEnv*, jobject, jint deviceId) {
+    std::lock_guard<std::mutex> lock(g_slotsMtx);
+    g_slots.erase(deviceId);
+}
+
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_data_network_SatelliteNative_clearAllPhysicalSlots(JNIEnv*, jobject) {
+    std::lock_guard<std::mutex> lock(g_slotsMtx);
+    g_slots.clear();
+}
+
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_setDeviceDeadzones(
+    JNIEnv*, jobject, jint deviceId, jfloat flatX, jfloat flatY, jfloat flatZ, jfloat flatRZ) {
+    std::lock_guard<std::mutex> lock(g_devicesMtx);
+    auto& s = g_devices[deviceId];
+    s.flatX = flatX;
+    s.flatY = flatY;
+    s.flatZ = flatZ;
+    s.flatRZ = flatRZ;
+}
+
+/* ── Activity-level dispatch entry points ────────────────────────────────
+ *
+ * GameActivity routes generic motion events through its SurfaceView's
+ * OnGenericMotionListener, which sits deep enough in Android's input
+ * dispatch chain that for some controllers (notably the Nintendo Switch
+ * Pro Controller via USB on Pixel devices) the input system synthesizes
+ * DPAD key events from stick movement *before* the event ever reaches the
+ * SurfaceView. The result is left-stick movement arriving as
+ * DPAD_UP/DOWN/LEFT/RIGHT keycodes and the right stick going dead.
+ *
+ * Intercepting at the Activity dispatch level (the path the pre-refactor
+ * Kotlin code used) and consuming the event there prevents that fallback
+ * synthesis from running. These entry points reuse the same g_devices
+ * state, applyKey/applyAxes pipeline, and publishIfChanged gate as the
+ * GameActivity filter callbacks, so they share locking and the
+ * send-on-change behaviour.
+ *
+ * Returns JNI_TRUE if the event was a gamepad input we recognised. The
+ * caller should treat that as "consumed" and not fall through to super.
+ */
+JNIEXPORT jboolean JNICALL
+Java_com_tinkernorth_dish_data_network_SatelliteNative_processGamepadKeyEvent(
+    JNIEnv*, jobject, jint deviceId, jint source, jint action, jint keyCode) {
+    bool isGame = (source & AINPUT_SOURCE_GAMEPAD) == AINPUT_SOURCE_GAMEPAD ||
+                  (source & AINPUT_SOURCE_JOYSTICK) == AINPUT_SOURCE_JOYSTICK;
+    if (!isGame) return JNI_FALSE;
+    bool isMappedKey = (keyCode == AKEYCODE_BUTTON_L2 || keyCode == AKEYCODE_BUTTON_R2) ||
+                       gamepad::keycodeToXusb(keyCode) != 0;
+    if (!isMappedKey) return JNI_FALSE;
+    if (action != AKEY_EVENT_ACTION_DOWN && action != AKEY_EVENT_ACTION_UP) return JNI_FALSE;
+    std::lock_guard<std::mutex> lock(g_devicesMtx);
+    auto& state = g_devices[deviceId];
+    if (gamepad::applyKey(state, keyCode, action == AKEY_EVENT_ACTION_DOWN)) {
+        publishIfChanged(deviceId, state);
+    }
+    return JNI_TRUE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_tinkernorth_dish_data_network_SatelliteNative_processGamepadMotionEvent(
+    JNIEnv*, jobject, jint deviceId, jint source, jint action, jfloat x, jfloat y, jfloat z,
+    jfloat rz, jfloat rx, jfloat ry, jfloat hatX, jfloat hatY, jfloat lTrigger, jfloat rTrigger,
+    jfloat brake, jfloat gas) {
+    if ((source & AINPUT_SOURCE_JOYSTICK) != AINPUT_SOURCE_JOYSTICK) return JNI_FALSE;
+    int32_t maskedAction = action & AMOTION_EVENT_ACTION_MASK;
+    std::lock_guard<std::mutex> lock(g_devicesMtx);
+    auto& state = g_devices[deviceId];
+    if (maskedAction == AMOTION_EVENT_ACTION_CANCEL) {
+        gamepad::resetState(state);
+        publishIfChanged(deviceId, state);
+        return JNI_TRUE;
+    }
+    if (maskedAction != AMOTION_EVENT_ACTION_MOVE) return JNI_TRUE;
+    // Right-stick axis varies by controller: most use Z/RZ (Xbox-style), some
+    // use RX/RY. Pick whichever pair has larger magnitude so both layouts work
+    // without per-device config.
+    float rightX = std::fabs(z) >= std::fabs(rx) ? z : rx;
+    float rightY = std::fabs(rz) >= std::fabs(ry) ? rz : ry;
+    float lt = std::max(lTrigger, brake);
+    float rt = std::max(rTrigger, gas);
+    gamepad::applyAxes(state, x, y, rightX, rightY, lt, rt, hatX, hatY);
+    publishIfChanged(deviceId, state);
+    return JNI_TRUE;
+}
+
+// Force-zero every device that's bound to a slot and emit a release-all
+// report. Used on focus loss so no button stays held server-side.
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_data_network_SatelliteNative_releaseAllPhysicalReports(JNIEnv*, jobject) {
+    std::lock_guard<std::mutex> lock(g_devicesMtx);
+    for (auto& kv : g_devices) {
+        gamepad::resetState(kv.second);
+        publishIfChanged(kv.first, kv.second);
+    }
+}
+
+/* ── Bluetooth bridge wiring ──────────────────────────────────────────── */
+// Called once from BluetoothGamepadBridge.install(). We register the bridge
+// class here, not in JNI_OnLoad, because FindClass() in JNI_OnLoad uses the
+// system classloader (which doesn't see app classes); from a regular JNI
+// call the app classloader is on the call stack so the lookup succeeds.
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_BluetoothGamepadBridge_nativeInstall(
+    JNIEnv* env, jclass bridgeCls) {
+    if (g_btBridgeClass == nullptr) { g_btBridgeClass = (jclass)env->NewGlobalRef(bridgeCls); }
+    if (g_btDispatchMethod == nullptr) {
+        g_btDispatchMethod = env->GetStaticMethodID(g_btBridgeClass, "dispatchReport",
+                                                    "(Ljava/lang/String;IIIIIII)V");
+        if (g_btDispatchMethod == nullptr) {
+            LOGE("BluetoothGamepadBridge.dispatchReport not found");
+            env->ExceptionClear();
+        }
+    }
+    // The BT worker thread takes Binder-IPC reports off the lock-free queue
+    // populated by gamepadKeyFilter / gamepadMotionFilter on the UI thread.
+    // Idempotent — safe if install() is ever called twice.
+    startBtDispatchThread();
+}
+
 } // extern "C"
+
+/* ── JNI_OnLoad: cache JavaVM only ────────────────────────────────────── */
+JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*) {
+    g_jvm = vm;
+    return JNI_VERSION_1_6;
+}

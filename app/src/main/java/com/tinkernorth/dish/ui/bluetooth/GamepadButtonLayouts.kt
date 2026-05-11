@@ -7,8 +7,9 @@ package com.tinkernorth.dish.ui.bluetooth
  * Pure translators between the two button-bit dialects used in the app:
  *
  *   - **XUSB** (`wButtons`): the XInput-compatible layout produced by the
- *     physical-controller path ([com.tinkernorth.dish.ui.main.GamepadInputProcessor])
- *     and consumed by the satellite path (see `XUSB_REPORT` in satellite_jni.cpp).
+ *     physical-controller path (`processNativeKeyEvent` /
+ *     `processNativeMotionEvent` in `satellite_jni.cpp`) and consumed by the
+ *     satellite path (see `XUSB_REPORT` in the same file).
  *   - **HID**: the 14-button + 4-bit hat-switch layout used by the on-screen
  *     gamepad ([com.tinkernorth.dish.ui.common.GamepadTouchView]) and the
  *     Bluetooth HID descriptor ([buildHidDescriptor] / [buildHidReport]).
@@ -62,7 +63,7 @@ private const val HAT_W = 7
 private const val HAT_NW = 8
 
 /**
- * Translate an XUSB `wButtons` value (as produced by `GamepadInputProcessor`)
+ * Translate an XUSB `wButtons` value (as produced by the native input thread)
  * into the `(hidButtons, hatSwitch)` pair expected by [buildHidReport].
  *
  * The low-nibble XUSB d-pad bits are folded into the hat; the remaining XUSB

@@ -474,8 +474,8 @@ internal data class StickAxes(
  *    ±Short.MAX_VALUE in that direction).
  *  - Android view coordinates are y-down, but the Xbox/XInput wire format
  *    expects "stick up = positive Y". This function returns
- *    `axisY = -dy * Short.MAX_VALUE`, matching the `-AXIS_MAX` scaling used
- *    in the physical path ([GamepadInputProcessor.processJoystickInput]).
+ *    `axisY = -dy * Short.MAX_VALUE`, matching the `-32767` scaling used
+ *    in the physical path (`processNativeMotionEvent` in `satellite_jni.cpp`).
  *  - A neutral input (0, 0) returns an all-zero result.
  *
  * This is the single source of truth for virtual-stick axis math; all four

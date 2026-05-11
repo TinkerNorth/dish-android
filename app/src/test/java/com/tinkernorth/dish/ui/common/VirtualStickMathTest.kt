@@ -3,7 +3,6 @@
 
 package com.tinkernorth.dish.ui.common
 
-import com.tinkernorth.dish.ui.main.scaleAxis
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -78,17 +77,13 @@ class VirtualStickMathTest {
 
     @Test
     fun `virtual up matches physical up — both yield positive axisY`() {
-        // Physical path (GamepadInputProcessor.processJoystickInput) scales
-        // raw AXIS_Y with -AXIS_MAX; Android's AXIS_Y = -1.0 for "stick up",
-        // so the physical path emits +32767 for stick up. The virtual path
-        // must produce the same sign for the analogous gesture (finger at
-        // top of stick well, view dy = -1).
-        val physicalLY = scaleAxis(-1f, -32767f) // see GamepadInputProcessor
+        // Physical path (satellite_jni.cpp processNativeMotionEvent) scales
+        // AMOTION_EVENT_AXIS_Y with -32767, and Android reports AXIS_Y = -1.0
+        // for "stick up" — so the wire sees +32767 for stick up. The virtual
+        // path must produce the same sign for the analogous gesture (finger
+        // at the top of the stick well, view dy = -1).
         val virtualLY = computeStickAxes(0f, -1f).axisY.toInt()
-        assertTrue(
-            "physical=$physicalLY virtual=$virtualLY — both must be positive for stick-up",
-            physicalLY > 0 && virtualLY > 0,
-        )
+        assertTrue("virtual=$virtualLY must be positive for stick-up", virtualLY > 0)
     }
 
     // ── Magnitude clamping ────────────────────────────────────────────────

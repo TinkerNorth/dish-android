@@ -8,7 +8,6 @@ import android.os.Build
 import com.tinkernorth.dish.ui.bluetooth.AndroidHidProxyClient
 import com.tinkernorth.dish.ui.bluetooth.BluetoothHidSession
 import com.tinkernorth.dish.ui.bluetooth.HidProxyClient
-import com.tinkernorth.dish.ui.main.GamepadInputProcessor
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -59,16 +58,6 @@ object AppModule {
     @Provides
     @Singleton
     fun provideBluetoothHidSession(factory: @JvmSuppressWildcards () -> HidProxyClient): BluetoothHidSession = BluetoothHidSession(factory)
-
-    /**
-     * Process-scoped so per-device button/axis state survives Activity
-     * recreation. If this were Activity-scoped, rotating the device while a
-     * button was held would clear the state map and leave the button "stuck"
-     * on the server until the next event arrives for the same device id.
-     */
-    @Provides
-    @Singleton
-    fun provideGamepadInputProcessor(): GamepadInputProcessor = GamepadInputProcessor()
 }
 
 private object UnavailableHidProxyClient : HidProxyClient {
