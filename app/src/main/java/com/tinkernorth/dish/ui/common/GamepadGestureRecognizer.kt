@@ -233,13 +233,14 @@ internal class GamepadGestureRecognizer {
         // Triggers are binary — no move-modulation. The DOWN/UP handlers
         // set the value; MOVE is a no-op for trigger pointers.
 
-        // Live D-Pad tracking — only for the pointer that started on the d-pad.
+        // Live D-Pad tracking — once a pointer claims the d-pad, the angle
+        // from the d-pad center drives the hat for the rest of the gesture,
+        // even when the finger has dragged outside the d-pad's visible rect.
+        // Mirrors the analog sticks: drag past the well and direction stays
+        // registered (and re-resolves to whichever octant the finger now
+        // sits in). Cleared on UP/CANCEL.
         if (pid == dpadPointerId) {
-            if (l.dpadRect.contains(x, y)) {
-                updateDpad(x, y, l)
-            } else {
-                state.hatSwitch = GamepadTouchView.HAT_NONE
-            }
+            updateDpad(x, y, l)
         }
     }
 

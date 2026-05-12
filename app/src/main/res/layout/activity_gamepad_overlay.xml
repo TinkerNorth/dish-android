@@ -47,4 +47,9 @@
         android:text="BACK"
         android:textSize="11sp"
         android:minWidth="64dp" />
+
+    <!-- Low-power overlays (countdown banner + dim screen). Included last so
+         the dim FrameLayout sits on top of the gamepad and consumes the
+         wake-tap, identical to activity_main.xml. -->
+    <include layout="@layout/overlay_low_power" />
 </FrameLayout>

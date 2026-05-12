@@ -137,14 +137,27 @@ class LowPowerManager(
         savedBrightness = -1f
     }
 
+    /**
+     * Re-evaluate the status line if the dim overlay is currently up. Called by
+     * the host activity whenever the wake-state controller's bound-slot count
+     * changes, so the line keeps up with bind/unbind mid-dim instead of
+     * waiting for the next 15-second clock tick.
+     */
+    fun refreshStatus() {
+        if (state == State.ACTIVE) updateStatus()
+    }
+
     private fun updateStatus() {
         val v = views ?: return
         val active = activeControllerCount()
         v.tvLowPowerStatus.text =
             if (active > 0) {
-                "Streaming · $active controller${if (active > 1) "s" else ""}"
+                // "Bound" mirrors the bind/unbind concept on the dashboard;
+                // we previously said "Streaming" which conflated the routing
+                // state with the on-the-wire transmission state.
+                "Bound · $active controller${if (active > 1) "s" else ""}"
             } else {
-                "Connected"
+                "Idle"
             }
     }
 

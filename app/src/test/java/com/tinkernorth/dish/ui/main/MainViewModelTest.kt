@@ -9,6 +9,7 @@ import com.tinkernorth.dish.data.network.ConnectionKind
 import com.tinkernorth.dish.data.network.ConnectionLive
 import com.tinkernorth.dish.data.network.ConnectionSummary
 import com.tinkernorth.dish.data.network.SatelliteConnectionManager
+import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -29,19 +30,21 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * Unit tests for [MainViewModel]. The hub and satellite manager are stubbed
- * so the VM is exercised in isolation; only the slot lifecycle + bind/unbind
- * forwarding is under test here.
+ * Unit tests for [MainViewModel]. The hub, satellite manager, and physical
+ * gamepad registry are stubbed so the VM is exercised in isolation; only the
+ * slot derivation + bind/unbind forwarding is under test here.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModelTest {
     private val dispatcher: TestDispatcher = StandardTestDispatcher()
     private lateinit var hub: ConnectionHub
     private lateinit var satellite: SatelliteConnectionManager
+    private lateinit var gamepadRegistry: PhysicalGamepadRegistry
     private lateinit var vm: MainViewModel
 
     private val connectionsFlow = MutableStateFlow<List<ConnectionSummary>>(emptyList())
     private val bindingsFlow = MutableStateFlow<Map<String, String>>(emptyMap())
+    private val devicesFlow = MutableStateFlow<Map<Int, PhysicalGamepadRegistry.Device>>(emptyMap())
     private val satelliteEvents = MutableSharedFlow<ConnectionEvent>(extraBufferCapacity = 8)
 
     @Before
@@ -49,10 +52,12 @@ class MainViewModelTest {
         Dispatchers.setMain(dispatcher)
         hub = mockk(relaxed = true)
         satellite = mockk(relaxed = true)
+        gamepadRegistry = mockk(relaxed = true)
         every { hub.connections } returns connectionsFlow
         every { hub.bindings } returns bindingsFlow
+        every { gamepadRegistry.devices } returns devicesFlow
         every { satellite.events } returns satelliteEvents
-        vm = MainViewModel(satellite, hub)
+        vm = MainViewModel(satellite, hub, gamepadRegistry)
     }
 
     @After
@@ -72,9 +77,10 @@ class MainViewModelTest {
         }
 
     @Test
-    fun `onControllerConnected appends a physical slot with the device id`() =
+    fun `registry device appears as a physical slot keyed by device id`() =
         runTest(dispatcher) {
-            vm.onControllerConnected(id = 42, name = "Xbox Wireless Controller")
+            devicesFlow.value =
+                mapOf(42 to PhysicalGamepadRegistry.Device(42, "Xbox Wireless Controller"))
             dispatcher.scheduler.runCurrent()
 
             val slots = vm.uiState.value.slots
@@ -86,26 +92,27 @@ class MainViewModelTest {
         }
 
     @Test
-    fun `onControllerConnected is idempotent for the same device id`() =
+    fun `re-emitting the same device id does not duplicate the slot`() =
         runTest(dispatcher) {
-            vm.onControllerConnected(id = 7, name = "A")
-            vm.onControllerConnected(id = 7, name = "A")
+            val pad = PhysicalGamepadRegistry.Device(7, "A")
+            devicesFlow.value = mapOf(7 to pad)
+            devicesFlow.value = mapOf(7 to pad)
             dispatcher.scheduler.runCurrent()
 
             assertEquals(2, vm.uiState.value.slots.size) // virtual + one physical
         }
 
     @Test
-    fun `onControllerDisconnected drops the slot and unbinds the hub`() =
+    fun `dropping a device id removes the matching slot`() =
         runTest(dispatcher) {
-            vm.onControllerConnected(id = 3, name = "Pad")
-            vm.onControllerDisconnected(id = 3)
+            devicesFlow.value = mapOf(3 to PhysicalGamepadRegistry.Device(3, "Pad"))
+            dispatcher.scheduler.runCurrent()
+            devicesFlow.value = emptyMap()
             dispatcher.scheduler.runCurrent()
 
             val slots = vm.uiState.value.slots
             assertEquals(1, slots.size)
             assertEquals(VIRTUAL_SLOT_ID, slots.first().id)
-            verify { hub.unbind("3") }
         }
 
     @Test
