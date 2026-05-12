@@ -5,10 +5,8 @@ package com.tinkernorth.dish.ui.main
 
 import android.content.Intent
 import android.os.Bundle
-import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
-import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.lifecycle.Lifecycle
@@ -19,14 +17,11 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.data.network.ConnectionHub
 import com.tinkernorth.dish.data.network.ConnectionLive
 import com.tinkernorth.dish.data.network.SatelliteConnectionManager
-import com.tinkernorth.dish.data.network.SatelliteNative
 import com.tinkernorth.dish.data.network.WakeStateController
 import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
 import com.tinkernorth.dish.databinding.ActivityMainBinding
-import com.tinkernorth.dish.databinding.OverlayLowPowerBinding
 import com.tinkernorth.dish.ui.connections.ConnectionsActivity
-import com.tinkernorth.dish.util.LowPowerManager
-import com.tinkernorth.dish.util.LowPowerTouchGate
+import com.tinkernorth.dish.util.GamepadActivityHost
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -36,7 +31,6 @@ class MainActivity :
     GameActivity(),
     SlotActionListener {
     private lateinit var binding: ActivityMainBinding
-    private lateinit var lowPowerBinding: OverlayLowPowerBinding
     private val viewModel: MainViewModel by viewModels()
     private lateinit var controllerAdapter: ControllerAdapter
 
@@ -47,37 +41,27 @@ class MainActivity :
     @Inject lateinit var wakeState: WakeStateController
 
     @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
-    private lateinit var lowPowerManager: LowPowerManager
-    private val lowPowerTouchGate = LowPowerTouchGate()
+
+    private lateinit var gamepadHost: GamepadActivityHost
 
     // ═══════════════════════════════════════════════════════════════════════
     //  LIFECYCLE
     //
-    //  onCreate / [implicit destroy]   construction + view tree
-    //  onStart  / onStop               every active behavior pairs here
-    //
-    //  Anything that posts to a Handler, holds a wake lock, mutates a
-    //  singleton, or registers a system listener belongs in onStart/onStop —
-    //  not onCreate/onDestroy — so it stops while the user can't see us.
-    //
-    //  Physical-gamepad tracking, native-slot bindings, and the partial wake
-    //  lock are all owned by process-scoped singletons in DishApplication so
-    //  they survive the MainActivity → GamepadOverlayActivity hand-off. The
-    //  per-window `FLAG_KEEP_SCREEN_ON` is still toggled here because the
-    //  flag is window-scoped, but it's driven off the same shared signal.
+    //  Wake-lock state, the dim-after-idle overlay, and physical-gamepad
+    //  pass-through are owned by GamepadActivityHost so the wiring matches
+    //  every other Dish activity. Anything specific to the dashboard
+    //  (viewmodel observation, controller adapter) lives here.
     // ═══════════════════════════════════════════════════════════════════════
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        // Low-power overlay is a <merge> include in activity_main.xml, so its
-        // IDs aren't surfaced on ActivityMainBinding — bind() pulls them off
-        // the already-inflated tree.
-        lowPowerBinding = OverlayLowPowerBinding.bind(binding.root)
+        gamepadHost =
+            GamepadActivityHost(this, binding.root, wakeState, gamepadRegistry)
+                .also { it.install() }
         controllerAdapter = ControllerAdapter(this)
         setupUI()
-        setupPower()
         observeViewModel()
         // Auto-reconnect is driven exclusively by ConnectionForegroundObserver
         // (ProcessLifecycleOwner) so the cold-start and return-to-foreground
@@ -86,10 +70,7 @@ class MainActivity :
 
     override fun onStop() {
         super.onStop()
-        // The window flag is harmless while we're hidden, but the dim-screen
-        // state machine has its own timers — kill them so the next onStart
-        // re-derives the state cleanly.
-        lowPowerManager.cancel()
+        gamepadHost.cancelDimOnStop()
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -103,19 +84,6 @@ class MainActivity :
         }
     }
 
-    private fun setupPower() {
-        lowPowerManager = LowPowerManager(window)
-        lowPowerManager.views =
-            LowPowerManager.Views(
-                llCountdownBanner = lowPowerBinding.llCountdownBanner,
-                tvCountdownSeconds = lowPowerBinding.tvCountdownSeconds,
-                flLowPowerOverlay = lowPowerBinding.flLowPowerOverlay,
-                tvLowPowerTime = lowPowerBinding.tvLowPowerTime,
-                tvLowPowerStatus = lowPowerBinding.tvLowPowerStatus,
-            )
-        lowPowerManager.activeControllerCount = { wakeState.streamingSlotCount.value }
-    }
-
     private fun observeViewModel() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) { viewModel.uiState.collect { updateUI(it) } }
@@ -123,33 +91,6 @@ class MainActivity :
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) { viewModel.events.collect { handleEvent(it) } }
         }
-        // shouldKeepScreenOn is process-scoped; we just mirror it onto this
-        // window's FLAG_KEEP_SCREEN_ON and forward it to the local dim-screen
-        // state machine. On every STARTED entry the collector replays the
-        // current value, so re-resuming after the gamepad overlay closes
-        // restores the right state immediately.
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                wakeState.shouldKeepScreenOn.collect(::applyScreenOn)
-            }
-        }
-        // Keep the dim-overlay's "Bound · N controllers" line in sync with
-        // bind/unbind while the dim is up. Without this, the line only
-        // refreshes on the 15-second clock tick.
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                wakeState.streamingSlotCount.collect { lowPowerManager.refreshStatus() }
-            }
-        }
-    }
-
-    private fun applyScreenOn(active: Boolean) {
-        if (active) {
-            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        } else {
-            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        }
-        lowPowerManager.onLockStateChanged(active)
     }
 
     private fun updateUI(s: MainUiState) {
@@ -217,90 +158,18 @@ class MainActivity :
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    //  INPUT DISPATCH
-    //
-    //  Physical gamepad key + motion events are intercepted at the Activity
-    //  dispatch level and forwarded to the native pipeline via JNI. Doing it
-    //  here (instead of relying on the GameActivity filter callbacks alone)
-    //  prevents Android's input system from synthesizing fallback DPAD key
-    //  presses for stick movements whose joystick MOVE events otherwise
-    //  reach no consuming view. The GameActivity filters in
-    //  satellite_jni.cpp remain wired as a safety net for events that
-    //  somehow bypass Activity dispatch.
-    //
-    //  Touch events fall through to the View hierarchy normally — only the
-    //  low-power gate runs here.
+    //  INPUT DISPATCH — forwarded to GamepadActivityHost
     // ═══════════════════════════════════════════════════════════════════════
 
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        // Trust the device, not the event's source bits. Generic HID joystick
-        // adapters dispatch button events with src=SOURCE_KEYBOARD even when
-        // the device itself exposes SOURCE_JOYSTICK — letting those fall
-        // through to super lets Android's "fallback action" pipeline turn
-        // them into KEYCODE_DPAD_CENTER and click whatever button is focused,
-        // sending the user off the screen. Consume every key event from a
-        // known gamepad device, mapped or not.
-        val isKnownGamepad = event.deviceId in gamepadRegistry.devices.value
-        if (isGamepadSource(event.source) || isKnownGamepad) {
-            SatelliteNative.processGamepadKeyEvent(
-                event.deviceId,
-                event.source,
-                event.action,
-                event.keyCode,
-            )
-            return true
-        }
-        return super.dispatchKeyEvent(event)
-    }
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean = gamepadHost.dispatchKeyEvent(event) || super.dispatchKeyEvent(event)
 
-    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
-        val isJoy =
-            (event.source and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK ||
-                event.deviceId in gamepadRegistry.devices.value
-        if (isJoy &&
-            SatelliteNative.processGamepadMotionEvent(
-                event.deviceId,
-                event.source,
-                event.action,
-                event.getAxisValue(MotionEvent.AXIS_X),
-                event.getAxisValue(MotionEvent.AXIS_Y),
-                event.getAxisValue(MotionEvent.AXIS_Z),
-                event.getAxisValue(MotionEvent.AXIS_RZ),
-                event.getAxisValue(MotionEvent.AXIS_RX),
-                event.getAxisValue(MotionEvent.AXIS_RY),
-                event.getAxisValue(MotionEvent.AXIS_HAT_X),
-                event.getAxisValue(MotionEvent.AXIS_HAT_Y),
-                event.getAxisValue(MotionEvent.AXIS_LTRIGGER),
-                event.getAxisValue(MotionEvent.AXIS_RTRIGGER),
-                event.getAxisValue(MotionEvent.AXIS_BRAKE),
-                event.getAxisValue(MotionEvent.AXIS_GAS),
-            )
-        ) {
-            return true
-        }
-        return super.dispatchGenericMotionEvent(event)
-    }
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean =
+        gamepadHost.dispatchGenericMotionEvent(event) || super.dispatchGenericMotionEvent(event)
 
-    private fun isGamepadSource(source: Int): Boolean =
-        (source and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
-            (source and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
-
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        // Order matters: read overlayActive *before* notifying the manager so a
-        // DOWN that dismisses the overlay still wins the gate (and consumes the
-        // rest of the gesture so the underlying button doesn't get a click).
-        val overlayActive = lowPowerManager.state == LowPowerManager.State.ACTIVE
-        val consume = lowPowerTouchGate.onDispatch(ev.action, overlayActive)
-        if (ev.action == MotionEvent.ACTION_DOWN && wakeState.shouldKeepScreenOn.value) {
-            lowPowerManager.onUserInteraction()
-        }
-        return if (consume) true else super.dispatchTouchEvent(ev)
-    }
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean = gamepadHost.dispatchTouchEvent(ev) || super.dispatchTouchEvent(ev)
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        // Emit a release-all report per bound device so no button stays held
-        // server-side across focus loss.
-        if (!hasFocus) SatelliteNative.releaseAllPhysicalReports()
+        gamepadHost.onWindowFocusChanged(hasFocus)
     }
 }
