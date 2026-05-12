@@ -58,6 +58,31 @@ constexpr int32_t KC_BUTTON_THUMBR = 107;
 constexpr int32_t KC_BUTTON_START = 108;
 constexpr int32_t KC_BUTTON_SELECT = 109;
 
+// Generic HID joystick keycodes. Cheap USB adapters don't ship with an
+// Android key-layout file that relabels their buttons to the named A/B/X/Y/
+// L1/R1/etc. set above, so their buttons surface as BUTTON_1..16 instead.
+// [keycodeToXusb] gives BUTTON_1..6, 9..12 a default XUSB mapping that
+// matches the DirectInput numbering most of these adapters use; BUTTON_7/8
+// are routed through the trigger-via-key path in [applyKey] (same as L2/R2).
+// BUTTON_13..16 are left unmapped because their physical assignment varies
+// too much between devices to guess at.
+constexpr int32_t KC_BUTTON_1 = 188;
+constexpr int32_t KC_BUTTON_2 = 189;
+constexpr int32_t KC_BUTTON_3 = 190;
+constexpr int32_t KC_BUTTON_4 = 191;
+constexpr int32_t KC_BUTTON_5 = 192;
+constexpr int32_t KC_BUTTON_6 = 193;
+constexpr int32_t KC_BUTTON_7 = 194;
+constexpr int32_t KC_BUTTON_8 = 195;
+constexpr int32_t KC_BUTTON_9 = 196;
+constexpr int32_t KC_BUTTON_10 = 197;
+constexpr int32_t KC_BUTTON_11 = 198;
+constexpr int32_t KC_BUTTON_12 = 199;
+constexpr int32_t KC_BUTTON_13 = 200;
+constexpr int32_t KC_BUTTON_14 = 201;
+constexpr int32_t KC_BUTTON_15 = 202;
+constexpr int32_t KC_BUTTON_16 = 203;
+
 // ── Per-device input state ─────────────────────────────────────────────────
 // One DeviceState per physical InputDevice id. The JNI layer keys these by
 // device id in an unordered_map so two physical controllers don't bleed

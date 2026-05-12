@@ -1,124 +1,137 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Root is FrameLayout so the dim-screen overlay can sit on top of the
+     existing content. The previous LinearLayout root only allowed vertical
+     stacking; with overlay_low_power included, the dim FrameLayout (which
+     is match_parent) needs to render above everything else. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
     android:background="@color/colorBackground"
     android:fitsSystemWindows="true">
 
-    <com.google.android.material.appbar.MaterialToolbar
-        android:id="@+id/toolbar"
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
-        android:background="@color/colorBackground"
-        app:title="Connections"
-        app:titleTextColor="@color/colorOnSurface"
-        app:navigationIcon="@android:drawable/ic_menu_revert" />
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
-    <androidx.core.widget.NestedScrollView
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:paddingHorizontal="20dp"
-        android:paddingVertical="16dp">
-
-        <LinearLayout
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical">
+            android:layout_height="?attr/actionBarSize"
+            android:background="@color/colorBackground"
+            app:title="Connections"
+            app:titleTextColor="@color/colorOnSurface"
+            app:navigationIcon="@android:drawable/ic_menu_revert" />
 
-            <!-- ── Satellite section ── -->
+        <androidx.core.widget.NestedScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:paddingHorizontal="20dp"
+            android:paddingVertical="16dp">
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
+                android:orientation="vertical">
+
+                <!-- ── Satellite section ── -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="SATELLITES"
+                        android:textColor="@color/colorPrimary"
+                        android:textSize="11sp"
+                        android:fontFamily="monospace"
+                        android:letterSpacing="0.12" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSatelliteScan"
+                        style="@style/Widget.Dish.Button.Outlined"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Scan"
+                        android:textAllCaps="false" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/llSatelliteList"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingTop="8dp" />
 
                 <TextView
-                    android:layout_width="0dp"
+                    android:id="@+id/tvSatelliteEmpty"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="SATELLITES"
-                    android:textColor="@color/colorPrimary"
-                    android:textSize="11sp"
-                    android:fontFamily="monospace"
-                    android:letterSpacing="0.12" />
+                    android:text="Tap Scan to find satellites on your network"
+                    android:textColor="@color/colorMuted"
+                    android:textSize="12sp"
+                    android:paddingVertical="12dp"
+                    android:visibility="gone" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnSatelliteScan"
-                    style="@style/Widget.Dish.Button.Outlined"
-                    android:layout_width="wrap_content"
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginVertical="20dp"
+                    android:background="@color/colorOutline" />
+
+                <!-- ── Bluetooth section ── -->
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Scan"
-                    android:textAllCaps="false" />
-            </LinearLayout>
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
 
-            <LinearLayout
-                android:id="@+id/llSatelliteList"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingTop="8dp" />
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="BLUETOOTH HOSTS"
+                        android:textColor="@color/colorPrimary"
+                        android:textSize="11sp"
+                        android:fontFamily="monospace"
+                        android:letterSpacing="0.12" />
 
-            <TextView
-                android:id="@+id/tvSatelliteEmpty"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Tap Scan to find satellites on your network"
-                android:textColor="@color/colorMuted"
-                android:textSize="12sp"
-                android:paddingVertical="12dp"
-                android:visibility="gone" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnBtAdd"
+                        style="@style/Widget.Dish.Button.Outlined"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Add"
+                        android:textAllCaps="false" />
+                </LinearLayout>
 
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:layout_marginVertical="20dp"
-                android:background="@color/colorOutline" />
-
-            <!-- ── Bluetooth section ── -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
+                <LinearLayout
+                    android:id="@+id/llBtList"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingTop="8dp" />
 
                 <TextView
-                    android:layout_width="0dp"
+                    android:id="@+id/tvBtEmpty"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="BLUETOOTH HOSTS"
-                    android:textColor="@color/colorPrimary"
-                    android:textSize="11sp"
-                    android:fontFamily="monospace"
-                    android:letterSpacing="0.12" />
+                    android:text="No remembered hosts — tap Add to register a new one"
+                    android:textColor="@color/colorMuted"
+                    android:textSize="12sp"
+                    android:paddingVertical="12dp" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnBtAdd"
-                    style="@style/Widget.Dish.Button.Outlined"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Add"
-                    android:textAllCaps="false" />
             </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+    </LinearLayout>
 
-            <LinearLayout
-                android:id="@+id/llBtList"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingTop="8dp" />
-
-            <TextView
-                android:id="@+id/tvBtEmpty"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="No remembered hosts — tap Add to register a new one"
-                android:textColor="@color/colorMuted"
-                android:textSize="12sp"
-                android:paddingVertical="12dp" />
-
-        </LinearLayout>
-    </androidx.core.widget.NestedScrollView>
-</LinearLayout>
+    <!-- Low-power overlays (countdown banner + dim screen). Included last so
+         the dim FrameLayout sits on top, identical to activity_main.xml. -->
+    <include layout="@layout/overlay_low_power" />
+</FrameLayout>

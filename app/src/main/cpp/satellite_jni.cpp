@@ -1060,12 +1060,20 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_se
  */
 JNIEXPORT jboolean JNICALL
 Java_com_tinkernorth_dish_data_network_SatelliteNative_processGamepadKeyEvent(
-    JNIEnv*, jobject, jint deviceId, jint source, jint action, jint keyCode) {
-    bool isGame = (source & AINPUT_SOURCE_GAMEPAD) == AINPUT_SOURCE_GAMEPAD ||
-                  (source & AINPUT_SOURCE_JOYSTICK) == AINPUT_SOURCE_JOYSTICK;
-    if (!isGame) return JNI_FALSE;
-    bool isMappedKey = (keyCode == AKEYCODE_BUTTON_L2 || keyCode == AKEYCODE_BUTTON_R2) ||
-                       gamepad::keycodeToXusb(keyCode) != 0;
+    JNIEnv*, jobject, jint deviceId, jint /*source*/, jint action, jint keyCode) {
+    // The event's source bits are unreliable as a "is this a gamepad event"
+    // discriminator: generic HID joystick adapters dispatch button events
+    // with src=AINPUT_SOURCE_KEYBOARD even though the device itself exposes
+    // AINPUT_SOURCE_JOYSTICK. The mapped-keycode check below is the real
+    // gate — if the keycode resolves to an XUSB button (or one of the
+    // four trigger-via-key keycodes), this is a gamepad event regardless of
+    // which source flag Android tagged it with. Caller (Activity dispatch)
+    // is responsible for not handing us events from devices that aren't
+    // gamepads in the first place.
+    bool isMappedKey =
+        (keyCode == AKEYCODE_BUTTON_L2 || keyCode == AKEYCODE_BUTTON_R2 ||
+         keyCode == AKEYCODE_BUTTON_7 || keyCode == AKEYCODE_BUTTON_8) ||
+        gamepad::keycodeToXusb(keyCode) != 0;
     if (!isMappedKey) return JNI_FALSE;
     if (action != AKEY_EVENT_ACTION_DOWN && action != AKEY_EVENT_ACTION_UP) return JNI_FALSE;
     std::lock_guard<std::mutex> lock(g_devicesMtx);

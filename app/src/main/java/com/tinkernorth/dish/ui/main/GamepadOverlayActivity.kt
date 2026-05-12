@@ -6,6 +6,8 @@ package com.tinkernorth.dish.ui.main
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
+import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -18,10 +20,13 @@ import com.tinkernorth.dish.data.network.ConnectionHub
 import com.tinkernorth.dish.data.network.ConnectionKind
 import com.tinkernorth.dish.data.network.ConnectionLive
 import com.tinkernorth.dish.data.network.SatelliteConnectionManager
+import com.tinkernorth.dish.data.network.WakeStateController
+import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
 import com.tinkernorth.dish.databinding.ActivityGamepadOverlayBinding
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.ui.bluetooth.hidToXusb
 import com.tinkernorth.dish.ui.common.GamepadTouchView
+import com.tinkernorth.dish.util.GamepadActivityHost
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -34,6 +39,10 @@ import javax.inject.Inject
  * or the matching [com.tinkernorth.dish.data.network.SatelliteConnection] in
  * the [SatelliteConnectionManager]. Both owners outlive the host activity so
  * the same session is reused on re-entry.
+ *
+ * Wake-lock state, dim-after-idle, and physical-gamepad pass-through all
+ * live in [GamepadActivityHost] — this activity only owns the on-screen
+ * touch gamepad and the status pill at the top of the overlay.
  */
 @AndroidEntryPoint
 class GamepadOverlayActivity :
@@ -45,13 +54,21 @@ class GamepadOverlayActivity :
 
     @Inject lateinit var hub: ConnectionHub
 
+    @Inject lateinit var wakeState: WakeStateController
+
+    @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
+
     private lateinit var binding: ActivityGamepadOverlayBinding
+    private lateinit var gamepadHost: GamepadActivityHost
     private var connectionId: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityGamepadOverlayBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        gamepadHost =
+            GamepadActivityHost(this, binding.root, wakeState, gamepadRegistry)
+                .also { it.install() }
         hideSystemBars()
 
         connectionId = intent.getStringExtra(EXTRA_CONNECTION_ID).orEmpty()
@@ -69,6 +86,11 @@ class GamepadOverlayActivity :
                 hub.connections.collect { refreshStatus() }
             }
         }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        gamepadHost.cancelDimOnStop()
     }
 
     private fun refreshStatus() {
@@ -138,6 +160,22 @@ class GamepadOverlayActivity :
                     or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
             )
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  INPUT DISPATCH — forwarded to GamepadActivityHost
+    // ═══════════════════════════════════════════════════════════════════════
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean = gamepadHost.dispatchKeyEvent(event) || super.dispatchKeyEvent(event)
+
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean =
+        gamepadHost.dispatchGenericMotionEvent(event) || super.dispatchGenericMotionEvent(event)
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean = gamepadHost.dispatchTouchEvent(ev) || super.dispatchTouchEvent(ev)
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        gamepadHost.onWindowFocusChanged(hasFocus)
     }
 
     companion object {

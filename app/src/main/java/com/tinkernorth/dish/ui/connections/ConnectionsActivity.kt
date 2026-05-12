@@ -13,6 +13,8 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
@@ -32,11 +34,14 @@ import com.tinkernorth.dish.data.network.ConnectionSummary
 import com.tinkernorth.dish.data.network.RememberedBt
 import com.tinkernorth.dish.data.network.SatelliteConnection
 import com.tinkernorth.dish.data.network.SatelliteConnectionManager
+import com.tinkernorth.dish.data.network.WakeStateController
+import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
 import com.tinkernorth.dish.databinding.ActivityConnectionsBinding
 import com.tinkernorth.dish.databinding.DialogPairingBinding
 import com.tinkernorth.dish.databinding.RowConnectionBinding
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepad
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
+import com.tinkernorth.dish.util.GamepadActivityHost
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -46,6 +51,10 @@ import javax.inject.Inject
  * Two sections, both living on top of [ConnectionHub]:
  *   - Satellites: scan → pair (if needed) → connect; remembered entries auto-reconnect
  *   - Bluetooth: pick profile → register HID → pair from the target host
+ *
+ * Wake-lock state, dim-after-idle, and physical-gamepad pass-through all
+ * live in [GamepadActivityHost] — this activity only owns the
+ * connection-management UI.
  */
 @AndroidEntryPoint
 class ConnectionsActivity : AppCompatActivity() {
@@ -57,7 +66,12 @@ class ConnectionsActivity : AppCompatActivity() {
 
     @Inject lateinit var store: com.tinkernorth.dish.data.network.ConnectionStore
 
+    @Inject lateinit var wakeState: WakeStateController
+
+    @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
+
     private lateinit var binding: ActivityConnectionsBinding
+    private lateinit var gamepadHost: GamepadActivityHost
 
     private val btPermissionLauncher =
         registerForActivityResult(
@@ -83,6 +97,9 @@ class ConnectionsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityConnectionsBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        gamepadHost =
+            GamepadActivityHost(this, binding.root, wakeState, gamepadRegistry)
+                .also { it.install() }
         setSupportActionBar(binding.toolbar)
         binding.toolbar.setNavigationOnClickListener { finish() }
 
@@ -124,6 +141,11 @@ class ConnectionsActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        gamepadHost.cancelDimOnStop()
     }
 
     // ── Rendering ─────────────────────────────────────────────────────────
@@ -369,5 +391,21 @@ class ConnectionsActivity : AppCompatActivity() {
                 satellite.pairWithPin(server, pin)
             }.setNegativeButton("Cancel", null)
             .show()
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  INPUT DISPATCH — forwarded to GamepadActivityHost
+    // ═══════════════════════════════════════════════════════════════════════
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean = gamepadHost.dispatchKeyEvent(event) || super.dispatchKeyEvent(event)
+
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean =
+        gamepadHost.dispatchGenericMotionEvent(event) || super.dispatchGenericMotionEvent(event)
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean = gamepadHost.dispatchTouchEvent(ev) || super.dispatchTouchEvent(ev)
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        gamepadHost.onWindowFocusChanged(hasFocus)
     }
 }
