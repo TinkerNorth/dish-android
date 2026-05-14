@@ -13,6 +13,7 @@ Dish is an Android app that turns your phone into a wireless gamepad. It discove
 - **GameActivity Integration** — uses AndroidX GameActivity for the native loop while overlaying a Kotlin/View-based UI
 - **Live Telemetry** — real-time display of event rate, sample rate, send rate, axis values, and button state
 - **Gamepad Hot-Plug** — detects controller connect/disconnect events at runtime
+- **Rumble** — game-side haptic events from the satellite (`MSG_RUMBLE`) drive the phone's `VibratorManager` / `Vibrator` for an in-hand buzz; see [Rumble](#rumble) below
 
 ## Architecture
 
@@ -25,8 +26,55 @@ Kotlin UI (MainActivity)
               └── satellite_jni.cpp
                     ├── UDP socket (sendReport → sendto)
                     ├── LAN discovery (discoverServers)
-                    └── TCP pairing (pair)
+                    ├── TCP pairing (pair)
+                    └── receiveAck → RumbleBridge.dispatchRumble (return path)
 ```
+
+## Rumble
+
+Rumble flows the opposite direction to the input hot path. A game on the
+satellite host writes to the virtual controller's vibration channel, the
+satellite forwards a `MSG_RUMBLE = 0x0009` packet back over the encrypted
+UDP socket, and the dish actuates **the phone itself** via the system
+vibrator service.
+
+```
+SatelliteNative.receiveAck (Kotlin Dispatchers.IO)
+  └── satellite_jni.cpp::receiveAck
+        ├── decrypt + parse MSG_RUMBLE
+        └── env->CallStaticVoidMethod(RumbleBridge.dispatchRumble, ...)
+              └── RumbleBridge.dispatchRumble
+                    ├── API 31+ → VibratorManager.vibrate(CombinedVibration)
+                    │              (strong → vibrator id 0,
+                    │               weak   → vibrator id 1 if present)
+                    └── legacy   → Vibrator.vibrate(VibrationEffect.createOneShot)
+```
+
+The wire format is documented in
+[`satellite/README.md`](https://github.com/TinkerNorth/satellite#rumble-return-path).
+Design notes specific to dish-android:
+
+* **Phone, not pad.** All rumble is routed to the device's own vibrator(s)
+  — there is no fallback path that tries to drive a connected physical
+  gamepad's actuator. Letting the virtual on-screen pad / phone body
+  handle every rumble keeps actuation single-rooted and avoids the
+  "which device should buzz?" decision a player paired with a physical
+  pad would otherwise have to make. This is intentional, not a TODO.
+* **No dispatcher thread.** Unlike the Bluetooth bridge, rumble dispatch
+  is synchronous on the JNI caller — `receiveAck` already runs on Kotlin
+  `Dispatchers.IO`, which is JVM-attached, so we just call into Java
+  directly with no queue or `AttachCurrentThread` ceremony.
+* **Safety clamps.** Wire-format magnitudes (0..65535) map to
+  `VibrationEffect`'s 1..255 amplitude with rounding-up so any non-zero
+  request produces a perceptible buzz. Wire-format `durationMs` is
+  clamped to `[1, 1500]` to bound the worst-case stranded buzz from a
+  hung satellite.
+* **Permission.** The manifest declares
+  `<uses-permission android:name="android.permission.VIBRATE" />`; no
+  runtime prompt — VIBRATE is a normal-protection permission.
+
+The pure helpers (`rumbleMagnitudeTo255`, `rumbleSafeDurationMs`) are
+covered by `app/src/test/java/.../RumbleBridgeHelpersTest.kt`.
 
 ## Requirements
 
