@@ -17,7 +17,6 @@ import org.junit.Test
  * experience — the rest is plumbing.
  */
 class RumbleBridgeHelpersTest {
-
     // ── rumbleMagnitudeTo255 ──────────────────────────────────────────────
 
     @Test

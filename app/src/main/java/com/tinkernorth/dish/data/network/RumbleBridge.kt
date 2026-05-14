@@ -117,7 +117,11 @@ object RumbleBridge {
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
-    private fun dispatchApi31(strongMagnitude: Int, weakMagnitude: Int, durationMs: Long) {
+    private fun dispatchApi31(
+        strongMagnitude: Int,
+        weakMagnitude: Int,
+        durationMs: Long,
+    ) {
         val mgr = vibratorManager ?: return
         val ids = mgr.vibratorIds
         if (ids.isEmpty()) {
@@ -154,7 +158,11 @@ object RumbleBridge {
         }
     }
 
-    private fun dispatchLegacy(strongMagnitude: Int, weakMagnitude: Int, durationMs: Long) {
+    private fun dispatchLegacy(
+        strongMagnitude: Int,
+        weakMagnitude: Int,
+        durationMs: Long,
+    ) {
         val v = vibrator ?: return
         // Pre-API-31 has only one actuator and one magnitude. Use the peak
         // of the two motors so the player feels the louder of the two.
