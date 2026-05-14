@@ -64,6 +64,7 @@ static constexpr uint16_t MSG_CONTROLLER_REMOVE = 0x0005;
 static constexpr uint16_t MSG_CONTROLLER_ACK = 0x0006;
 static constexpr uint16_t MSG_SERVER_STATUS = 0x0007;
 static constexpr uint16_t MSG_CONTROLLER_TYPE = 0x0008;
+static constexpr uint16_t MSG_RUMBLE = 0x0009;
 
 #pragma pack(push, 1)
 struct XUSB_REPORT {
@@ -154,6 +155,13 @@ static std::unordered_map<int32_t, SlotBinding> g_slots;
 static JavaVM* g_jvm = nullptr;
 static jclass g_btBridgeClass = nullptr; // global ref, set once
 static jmethodID g_btDispatchMethod = nullptr;
+
+// JVM bridge for the rumble return path. Resolved once via
+// RumbleBridge.nativeInstall. Unlike the BT bridge there is no dedicated
+// dispatcher thread — receiveAck() already runs on a JVM-attached thread
+// (Kotlin Dispatchers.IO), so we can call into Java directly from there.
+static jclass g_rumbleBridgeClass = nullptr; // global ref, set once
+static jmethodID g_rumbleDispatchMethod = nullptr;
 
 /* ── BT dispatch queue ───────────────────────────────────────────────────
  *
@@ -687,8 +695,8 @@ Java_com_tinkernorth_dish_data_network_SatelliteNative_getActiveControllerCount(
 
 /* ── Receive ACK (called from a background thread) ────────────────────────── */
 
-JNIEXPORT void JNICALL
-Java_com_tinkernorth_dish_data_network_SatelliteNative_receiveAck(JNIEnv*, jobject, jint handle) {
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_receiveAck(
+    JNIEnv* env, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s || s->udpSock < 0) return;
     uint8_t buf[128];
@@ -739,6 +747,25 @@ Java_com_tinkernorth_dish_data_network_SatelliteNative_receiveAck(JNIEnv*, jobje
             LOGI("Session %d server status: vigemAvailable=%d activeControllers=%d", handle, vigem,
                  count);
         }
+    } else if (msgType == MSG_RUMBLE && msgLen >= 8 && decLen >= 12) {
+        // Wire layout (BE16 magnitudes/duration, U8 flags + optional R/G/B):
+        //   ctrlIdx(1) strong(2) weak(2) durMs(2) flags(1) [R(1) G(1) B(1)]
+        if (g_rumbleBridgeClass == nullptr || g_rumbleDispatchMethod == nullptr) return;
+        const jint ctrlIdx = (jint)decrypted[4];
+        const jint strong = ((jint)decrypted[5] << 8) | (jint)decrypted[6];
+        const jint weakMag = ((jint)decrypted[7] << 8) | (jint)decrypted[8];
+        const jint durMs = ((jint)decrypted[9] << 8) | (jint)decrypted[10];
+        const uint8_t flags = decrypted[11];
+        const jboolean hasLightbar = (flags & 0x01) != 0 ? JNI_TRUE : JNI_FALSE;
+        jint r = 0, g = 0, b = 0;
+        if (hasLightbar && msgLen >= 11 && decLen >= 15) {
+            r = (jint)decrypted[12];
+            g = (jint)decrypted[13];
+            b = (jint)decrypted[14];
+        }
+        env->CallStaticVoidMethod(g_rumbleBridgeClass, g_rumbleDispatchMethod, handle, ctrlIdx,
+                                  strong, weakMag, durMs, hasLightbar, r, g, b);
+        if (env->ExceptionCheck()) env->ExceptionClear();
     }
 }
 
@@ -1070,10 +1097,9 @@ Java_com_tinkernorth_dish_data_network_SatelliteNative_processGamepadKeyEvent(
     // which source flag Android tagged it with. Caller (Activity dispatch)
     // is responsible for not handing us events from devices that aren't
     // gamepads in the first place.
-    bool isMappedKey =
-        (keyCode == AKEYCODE_BUTTON_L2 || keyCode == AKEYCODE_BUTTON_R2 ||
-         keyCode == AKEYCODE_BUTTON_7 || keyCode == AKEYCODE_BUTTON_8) ||
-        gamepad::keycodeToXusb(keyCode) != 0;
+    bool isMappedKey = (keyCode == AKEYCODE_BUTTON_L2 || keyCode == AKEYCODE_BUTTON_R2 ||
+                        keyCode == AKEYCODE_BUTTON_7 || keyCode == AKEYCODE_BUTTON_8) ||
+                       gamepad::keycodeToXusb(keyCode) != 0;
     if (!isMappedKey) return JNI_FALSE;
     if (action != AKEY_EVENT_ACTION_DOWN && action != AKEY_EVENT_ACTION_UP) return JNI_FALSE;
     std::lock_guard<std::mutex> lock(g_devicesMtx);
@@ -1142,6 +1168,25 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_BluetoothGamepadBr
     // populated by gamepadKeyFilter / gamepadMotionFilter on the UI thread.
     // Idempotent — safe if install() is ever called twice.
     startBtDispatchThread();
+}
+
+// Mirror of the BT bridge install path, but for the rumble return path. We
+// only need the class + method ids — receiveAck() is already invoked from a
+// JVM-attached thread (Kotlin Dispatchers.IO), so there's no separate
+// dispatcher thread to spawn here.
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_data_network_RumbleBridge_nativeInstall(JNIEnv* env, jclass bridgeCls) {
+    if (g_rumbleBridgeClass == nullptr) {
+        g_rumbleBridgeClass = (jclass)env->NewGlobalRef(bridgeCls);
+    }
+    if (g_rumbleDispatchMethod == nullptr) {
+        g_rumbleDispatchMethod =
+            env->GetStaticMethodID(g_rumbleBridgeClass, "dispatchRumble", "(IIIIIZIII)V");
+        if (g_rumbleDispatchMethod == nullptr) {
+            LOGE("RumbleBridge.dispatchRumble not found");
+            env->ExceptionClear();
+        }
+    }
 }
 
 } // extern "C"

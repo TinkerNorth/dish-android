@@ -8,6 +8,10 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Rumble: routed to the phone's Vibrator / VibratorManager when a
+         satellite forwards game-side haptic events (MSG_RUMBLE 0x0009). -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <!-- Bluetooth HID gamepad -->
     <uses-permission android:name="android.permission.BLUETOOTH"
         android:maxSdkVersion="30" />
