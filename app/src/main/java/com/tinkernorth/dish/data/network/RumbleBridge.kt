@@ -86,8 +86,8 @@ object RumbleBridge {
      */
     @JvmStatic
     fun dispatchRumble(
-        sessionHandle: Int,
-        controllerIndex: Int,
+        @Suppress("UNUSED_PARAMETER") sessionHandle: Int,
+        @Suppress("UNUSED_PARAMETER") controllerIndex: Int,
         strongMagnitude: Int,
         weakMagnitude: Int,
         durationMs: Int,
