@@ -8,6 +8,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import com.tinkernorth.dish.data.network.BluetoothGamepadBridge
 import com.tinkernorth.dish.data.network.ConnectionForegroundObserver
 import com.tinkernorth.dish.data.network.PhysicalSlotBindingObserver
+import com.tinkernorth.dish.data.network.RumbleBridge
 import com.tinkernorth.dish.data.network.WakeStateController
 import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
@@ -46,5 +47,11 @@ class DishApplication : Application() {
         // physical-gamepad reports routed to a BT slot; install the registry
         // here (process-scoped) so it's ready before any input arrives.
         BluetoothGamepadBridge.install(btRegistry)
+        // Rumble flows back from the satellite (game → virtual pad → wire).
+        // RumbleBridge owns the phone's VibratorManager / Vibrator and is the
+        // single dispatch target for satellite_jni.cpp::receiveAck. Routed
+        // unconditionally to the device — no physical-controller fallback,
+        // intentionally — see RumbleBridge.kt for the design rationale.
+        RumbleBridge.install(this)
     }
 }
