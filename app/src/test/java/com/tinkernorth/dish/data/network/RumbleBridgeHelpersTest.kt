@@ -31,9 +31,11 @@ class RumbleBridgeHelpersTest {
 
     @Test
     fun `magnitude midpoint maps to ~128`() {
-        // 32767 → ~128 with rounding ((32767*255 + 32767)/65535 = 128).
-        assertEquals(128, rumbleMagnitudeTo255(32767))
-        // 32768 → ~128 too (one above the exact midpoint).
+        // The exact midpoint of u16 is 32767.5, so 32767 sits just below
+        // and rounds down to 127: (32767*255 + 32767)/65535 = 8388352/65535 = 127.
+        assertEquals(127, rumbleMagnitudeTo255(32767))
+        // 32768 is just above the midpoint and rounds up to 128:
+        // (32768*255 + 32767)/65535 = 8388607/65535 = 128.
         assertEquals(128, rumbleMagnitudeTo255(32768))
     }
 
