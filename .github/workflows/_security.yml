@@ -238,7 +238,7 @@ jobs:
       # until then this step is best-effort and surfaces as a warning.
       - name: Review changed dependencies
         continue-on-error: true
-        uses: actions/dependency-review-action@4081bf99e2866ebe428fc0477b69eb4fcda7220a # v4.4.0
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
           comment-summary-in-pr: on-failure
