@@ -3,7 +3,9 @@
 
 package com.tinkernorth.dish.ui.main
 
+import android.content.Context
 import android.graphics.drawable.GradientDrawable
+import android.hardware.SensorManager
 import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
@@ -19,6 +21,8 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.data.network.ConnectionHub
 import com.tinkernorth.dish.data.network.ConnectionKind
 import com.tinkernorth.dish.data.network.ConnectionLive
+import com.tinkernorth.dish.data.network.PhoneBatterySource
+import com.tinkernorth.dish.data.network.PhoneMotionSource
 import com.tinkernorth.dish.data.network.SatelliteConnectionManager
 import com.tinkernorth.dish.data.network.WakeStateController
 import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
@@ -62,6 +66,15 @@ class GamepadOverlayActivity :
     private lateinit var gamepadHost: GamepadActivityHost
     private var connectionId: String = ""
 
+    /**
+     * Phone IMU + battery sources for the on-screen touch controller. Created
+     * in [onCreate], streamed only while the activity is resumed (gyro
+     * listeners are a measurable battery cost). `motionSource` is a no-op on
+     * phones without a gyroscope.
+     */
+    private lateinit var motionSource: PhoneMotionSource
+    private lateinit var batterySource: PhoneBatterySource
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityGamepadOverlayBinding.inflate(layoutInflater)
@@ -81,11 +94,40 @@ class GamepadOverlayActivity :
             }
         binding.btnExitGamepad.setOnClickListener { finish() }
 
+        val sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        motionSource = PhoneMotionSource(sensorManager)
+        batterySource = PhoneBatterySource(applicationContext)
+
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 hub.connections.collect { refreshStatus() }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Stream the phone's gyro/accel + battery to the bound satellite
+        // session. `satellite.get(...)` is null for Bluetooth-HID connections,
+        // so these emits naturally no-op there — motion forwarding is a
+        // satellite-path feature.
+        motionSource.start { sample, deltaUs ->
+            satellite.get(connectionId)?.sendMotion(
+                VIRTUAL_SLOT_ID,
+                sample.gyroX, sample.gyroY, sample.gyroZ,
+                sample.accelX, sample.accelY, sample.accelZ,
+                deltaUs,
+            )
+        }
+        batterySource.start(lifecycleScope) { level, status ->
+            satellite.get(connectionId)?.sendBattery(VIRTUAL_SLOT_ID, level, status)
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        motionSource.stop()
+        batterySource.stop()
     }
 
     override fun onStop() {

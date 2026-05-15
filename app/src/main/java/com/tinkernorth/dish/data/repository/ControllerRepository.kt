@@ -77,6 +77,38 @@ class ControllerRepository
             SatelliteNative.sendControllerType(handle, index, type)
         }
 
+        /**
+         * Forward an IMU sample (0x000A). Axes are pre-scaled to the wire
+         * int16 form and rate-limited by the caller (see [PhoneMotionSource]
+         * / [com.tinkernorth.dish.data.network.MotionRateLimiter]).
+         */
+        @Suppress("LongParameterList")
+        fun sendMotion(
+            handle: Int,
+            index: Int,
+            gyroX: Short,
+            gyroY: Short,
+            gyroZ: Short,
+            accelX: Short,
+            accelY: Short,
+            accelZ: Short,
+            timestampDeltaUs: Int,
+        ) {
+            SatelliteNative.sendMotion(
+                handle, index, gyroX, gyroY, gyroZ, accelX, accelY, accelZ, timestampDeltaUs,
+            )
+        }
+
+        /** Forward a battery snapshot (0x000B). Deduped by the caller. */
+        fun sendBattery(
+            handle: Int,
+            index: Int,
+            level: Int,
+            status: Int,
+        ) {
+            SatelliteNative.sendBattery(handle, index, level, status)
+        }
+
         fun resetControllerAck(handle: Int) {
             SatelliteNative.resetControllerAck(handle)
         }

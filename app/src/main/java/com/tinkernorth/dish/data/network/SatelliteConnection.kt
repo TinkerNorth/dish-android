@@ -313,6 +313,47 @@ class SatelliteConnection(
         controllerRepo.sendReport(snap.handle, info.controllerIndex, buttons, lt, rt, lx, ly, rx, ry)
     }
 
+    /**
+     * Forward an IMU sample for [slotId]. Axes are pre-scaled to the wire
+     * int16 form by the caller; rate-limiting is the caller's job too (see
+     * [com.tinkernorth.dish.data.network.MotionRateLimiter]). Same
+     * registered-gate + atomic [live] snapshot discipline as [sendReport].
+     */
+    @Suppress("LongParameterList")
+    fun sendMotion(
+        slotId: String,
+        gyroX: Short,
+        gyroY: Short,
+        gyroZ: Short,
+        accelX: Short,
+        accelY: Short,
+        accelZ: Short,
+        timestampDeltaUs: Int,
+    ) {
+        val snap = live ?: return
+        val info = _slots.value[slotId] ?: return
+        if (!info.registered) return
+        controllerRepo.sendMotion(
+            snap.handle, info.controllerIndex,
+            gyroX, gyroY, gyroZ, accelX, accelY, accelZ, timestampDeltaUs,
+        )
+    }
+
+    /**
+     * Forward a battery snapshot for [slotId]. Deduping is the caller's job
+     * ([com.tinkernorth.dish.data.network.BatteryCoalescer]).
+     */
+    fun sendBattery(
+        slotId: String,
+        level: Int,
+        status: Int,
+    ) {
+        val snap = live ?: return
+        val info = _slots.value[slotId] ?: return
+        if (!info.registered) return
+        controllerRepo.sendBattery(snap.handle, info.controllerIndex, level, status)
+    }
+
     companion object {
         private const val ALIVE_POLL_MS = 1000L
         private const val ACK_WAIT_ATTEMPTS = 20
