@@ -47,6 +47,7 @@
 #include <sodium.h>
 
 #include "gamepad_input.h"
+#include "wire_encoders.h"
 
 #define TAG "SatelliteJNI"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
@@ -65,6 +66,8 @@ static constexpr uint16_t MSG_CONTROLLER_ACK = 0x0006;
 static constexpr uint16_t MSG_SERVER_STATUS = 0x0007;
 static constexpr uint16_t MSG_CONTROLLER_TYPE = 0x0008;
 static constexpr uint16_t MSG_RUMBLE = 0x0009;
+static constexpr uint16_t MSG_MOTION = 0x000A;
+static constexpr uint16_t MSG_BATTERY = 0x000B;
 
 #pragma pack(push, 1)
 struct XUSB_REPORT {
@@ -380,6 +383,9 @@ static void putBE32(uint8_t* dst, uint32_t v) {
     dst[3] = (uint8_t)(v);
 }
 
+// dish_wire::encodeMotionPayload / encodeBatteryPayload live in wire_encoders.h
+// so app/src/test/cpp/ can include them without dragging in JNI headers.
+
 /* ── Encrypt and send a message over the UDP channel ───────────────────────── */
 static bool sendEncrypted(Session* s, uint16_t msgType, const uint8_t* payload,
                           uint16_t payloadLen) {
@@ -634,6 +640,41 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_se
     sendEncrypted(s.get(), MSG_CONTROLLER_TYPE, payload, 2);
     LOGI("Session %d: sent controller type idx=%d type=%d", handle, controllerIndex,
          controllerType);
+}
+
+/* ── Motion (gyro + accel) ────────────────────────────────────────────────── */
+//
+// Hot path. Caller is expected to have already scaled gyro to deg/s × 16383.5
+// (LSB = 2000/32767 deg/s) and accel to g × 8191.75 (LSB = 4/32767 g) — the
+// satellite docs §0x000A is the canonical spec. Caller is also responsible
+// for any per-controller rate-limiting (MotionRateLimiter.kt) before reaching
+// this method.
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_sendMotion(
+    JNIEnv*, jobject, jint handle, jint controllerIndex, jshort gyroX, jshort gyroY, jshort gyroZ,
+    jshort accelX, jshort accelY, jshort accelZ, jint timestampDeltaUs) {
+    auto s = getSession(handle);
+    if (!s) return;
+    uint8_t payload[17];
+    dish_wire::encodeMotionPayload(payload, (uint8_t)(controllerIndex & 0xFF), (int16_t)gyroX,
+                                   (int16_t)gyroY, (int16_t)gyroZ, (int16_t)accelX,
+                                   (int16_t)accelY, (int16_t)accelZ, (uint32_t)timestampDeltaUs);
+    sendEncrypted(s.get(), MSG_MOTION, payload, sizeof(payload));
+}
+
+/* ── Battery (level + status) ─────────────────────────────────────────────── */
+//
+// Low-rate (30 s cadence) — see BatteryCoalescer.kt for the dedup before the
+// Kotlin → JNI call. `level` is 0..100 inclusive, or 0xFF for unknown.
+// `status` is one of the BATTERY_STATUS_* constants documented in
+// satellite/docs/protocol.md §0x000B.
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_sendBattery(
+    JNIEnv*, jobject, jint handle, jint controllerIndex, jint level, jint status) {
+    auto s = getSession(handle);
+    if (!s) return;
+    uint8_t payload[3];
+    dish_wire::encodeBatteryPayload(payload, (uint8_t)(controllerIndex & 0xFF),
+                                    (uint8_t)(level & 0xFF), (uint8_t)(status & 0xFF));
+    sendEncrypted(s.get(), MSG_BATTERY, payload, sizeof(payload));
 }
 
 /* ── Heartbeat start/stop ──────────────────────────────────────────────────── */

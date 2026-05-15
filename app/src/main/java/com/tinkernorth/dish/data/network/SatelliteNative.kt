@@ -84,6 +84,44 @@ object SatelliteNative {
         controllerType: Int,
     )
 
+    // ── Motion + battery (0x000A, 0x000B) ───────────────────────────────────
+
+    /**
+     * Send 0x000A Motion (IMU) message on [handle]. Axes follow the
+     * Cemuhook DSU convention (right-handed; +X right, +Y up, +Z toward
+     * player). Scale: gyro LSB = `2000/32767` deg/s; accel LSB = `4/32767` g.
+     *
+     * Rate-limiting (≤ 250 Hz default) and unit scaling are the caller's
+     * responsibility — see [MotionRateLimiter] for the per-device gate.
+     * `timestampDeltaUs` is microseconds since the previous emitted motion
+     * packet for the same controller. 0 on the first packet.
+     */
+    @Suppress("LongParameterList")
+    external fun sendMotion(
+        handle: Int,
+        controllerIndex: Int,
+        gyroX: Short,
+        gyroY: Short,
+        gyroZ: Short,
+        accelX: Short,
+        accelY: Short,
+        accelZ: Short,
+        timestampDeltaUs: Int,
+    )
+
+    /**
+     * Send 0x000B Battery message on [handle]. `level` is 0..100 inclusive
+     * or `0xFF` (unknown). `status` is one of the `BATTERY_STATUS_*`
+     * constants in [BatteryCoalescer]. Coalescing identical (level, status)
+     * tuples is the caller's responsibility.
+     */
+    external fun sendBattery(
+        handle: Int,
+        controllerIndex: Int,
+        level: Int,
+        status: Int,
+    )
+
     // ── Heartbeat ───────────────────────────────────────────────────────────
 
     /** Start the heartbeat sender thread for [handle] (sends 0x0002 every 2s). */
