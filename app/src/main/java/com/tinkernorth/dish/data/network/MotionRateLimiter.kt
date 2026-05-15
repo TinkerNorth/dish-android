@@ -38,7 +38,11 @@ class MotionRateLimiter(
         fun emit(sample: MotionSample, timestampDeltaUs: Int)
     }
 
-    private class State(var lastEmitUs: Long = 0L)
+    // `hasEmitted` is a distinct flag rather than a `lastEmitUs == 0`
+    // sentinel: a monotonic clock can legitimately read 0 on the very first
+    // sample (and test clocks routinely start there), which would otherwise
+    // make the second sample look like another "first sample".
+    private class State(var lastEmitUs: Long = 0L, var hasEmitted: Boolean = false)
 
     private val states = ConcurrentHashMap<Int, State>()
 
@@ -50,18 +54,18 @@ class MotionRateLimiter(
         val state = states.computeIfAbsent(controllerIndex) { State() }
         synchronized(state) {
             val now = nowUs()
-            val prev = state.lastEmitUs
-            if (prev != 0L && now - prev < MIN_INTERVAL_US) {
+            if (state.hasEmitted && now - state.lastEmitUs < MIN_INTERVAL_US) {
                 return false
             }
             val deltaUs =
-                if (prev == 0L) {
+                if (!state.hasEmitted) {
                     0
                 } else {
-                    val d = now - prev
+                    val d = now - state.lastEmitUs
                     if (d > UINT32_MAX) UINT32_MAX.toInt() else d.toInt()
                 }
             state.lastEmitUs = now
+            state.hasEmitted = true
             emit.emit(sample, deltaUs)
             return true
         }
