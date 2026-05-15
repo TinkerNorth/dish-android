@@ -656,8 +656,8 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_se
     if (!s) return;
     uint8_t payload[17];
     dish_wire::encodeMotionPayload(payload, (uint8_t)(controllerIndex & 0xFF), (int16_t)gyroX,
-                                   (int16_t)gyroY, (int16_t)gyroZ, (int16_t)accelX,
-                                   (int16_t)accelY, (int16_t)accelZ, (uint32_t)timestampDeltaUs);
+                                   (int16_t)gyroY, (int16_t)gyroZ, (int16_t)accelX, (int16_t)accelY,
+                                   (int16_t)accelZ, (uint32_t)timestampDeltaUs);
     sendEncrypted(s.get(), MSG_MOTION, payload, sizeof(payload));
 }
 

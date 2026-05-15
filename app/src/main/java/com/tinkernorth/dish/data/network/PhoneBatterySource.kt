@@ -31,13 +31,19 @@ class PhoneBatterySource(
 ) {
     /** Invoked with a wire-ready (level, status) pair when the value changes. */
     fun interface Emit {
-        fun emit(level: Int, status: Int)
+        fun emit(
+            level: Int,
+            status: Int,
+        )
     }
 
     private var job: Job? = null
 
     /** Begin the 30 s poll loop on [scope]. Safe to call twice (re-arms). */
-    fun start(scope: CoroutineScope, emit: Emit) {
+    fun start(
+        scope: CoroutineScope,
+        emit: Emit,
+    ) {
         stop()
         job =
             scope.launch {

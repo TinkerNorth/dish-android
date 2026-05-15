@@ -32,7 +32,10 @@ class PhoneMotionSource(
 ) {
     /** Invoked when a fused sample passes the rate-limit gate. */
     fun interface Emit {
-        fun emit(sample: MotionRateLimiter.MotionSample, timestampDeltaUs: Int)
+        fun emit(
+            sample: MotionRateLimiter.MotionSample,
+            timestampDeltaUs: Int,
+        )
     }
 
     private val gyro: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
@@ -64,7 +67,10 @@ class PhoneMotionSource(
                 }
             }
 
-            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+            override fun onAccuracyChanged(
+                sensor: Sensor?,
+                accuracy: Int,
+            ) = Unit
         }
 
     /**

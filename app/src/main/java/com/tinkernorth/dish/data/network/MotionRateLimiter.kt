@@ -35,14 +35,20 @@ class MotionRateLimiter(
 
     /** Invoked when a sample passes the gate. `timestampDeltaUs` is 0 on first emit. */
     fun interface Emit {
-        fun emit(sample: MotionSample, timestampDeltaUs: Int)
+        fun emit(
+            sample: MotionSample,
+            timestampDeltaUs: Int,
+        )
     }
 
     // `hasEmitted` is a distinct flag rather than a `lastEmitUs == 0`
     // sentinel: a monotonic clock can legitimately read 0 on the very first
     // sample (and test clocks routinely start there), which would otherwise
     // make the second sample look like another "first sample".
-    private class State(var lastEmitUs: Long = 0L, var hasEmitted: Boolean = false)
+    private class State(
+        var lastEmitUs: Long = 0L,
+        var hasEmitted: Boolean = false,
+    )
 
     private val states = ConcurrentHashMap<Int, State>()
 
@@ -50,7 +56,11 @@ class MotionRateLimiter(
      * Attempt to emit [sample] for [controllerIndex]. Returns true if the
      * sample was forwarded to [emit]; false if the rate-limit gate dropped it.
      */
-    fun publish(controllerIndex: Int, sample: MotionSample, emit: Emit): Boolean {
+    fun publish(
+        controllerIndex: Int,
+        sample: MotionSample,
+        emit: Emit,
+    ): Boolean {
         val state = states.computeIfAbsent(controllerIndex) { State() }
         synchronized(state) {
             val now = nowUs()

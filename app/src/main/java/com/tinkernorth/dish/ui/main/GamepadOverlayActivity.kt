@@ -114,8 +114,12 @@ class GamepadOverlayActivity :
         motionSource.start { sample, deltaUs ->
             satellite.get(connectionId)?.sendMotion(
                 VIRTUAL_SLOT_ID,
-                sample.gyroX, sample.gyroY, sample.gyroZ,
-                sample.accelX, sample.accelY, sample.accelZ,
+                sample.gyroX,
+                sample.gyroY,
+                sample.gyroZ,
+                sample.accelX,
+                sample.accelY,
+                sample.accelZ,
                 deltaUs,
             )
         }

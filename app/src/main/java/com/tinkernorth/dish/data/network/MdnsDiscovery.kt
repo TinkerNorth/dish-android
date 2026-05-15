@@ -82,23 +82,37 @@ class MdnsDiscovery
                 }
 
                 override fun onServiceLost(serviceInfo: NsdServiceInfo) = Unit
+
                 override fun onDiscoveryStarted(serviceType: String) = Unit
+
                 override fun onDiscoveryStopped(serviceType: String) = Unit
 
-                override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
+                override fun onStartDiscoveryFailed(
+                    serviceType: String,
+                    errorCode: Int,
+                ) {
                     Log.w(TAG, "discovery start failed: $errorCode")
                     found.close()
                 }
 
-                override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) = Unit
+                override fun onStopDiscoveryFailed(
+                    serviceType: String,
+                    errorCode: Int,
+                ) = Unit
             }
 
         /** Resolve one found service to a [DiscoveredServer], or null on failure. */
-        private suspend fun resolveOne(nsd: NsdManager, info: NsdServiceInfo): DiscoveredServer? =
+        private suspend fun resolveOne(
+            nsd: NsdManager,
+            info: NsdServiceInfo,
+        ): DiscoveredServer? =
             suspendCancellableCoroutine { cont ->
                 val listener =
                     object : NsdManager.ResolveListener {
-                        override fun onResolveFailed(si: NsdServiceInfo, errorCode: Int) {
+                        override fun onResolveFailed(
+                            si: NsdServiceInfo,
+                            errorCode: Int,
+                        ) {
                             if (cont.isActive) cont.resume(null)
                         }
 
@@ -122,8 +136,8 @@ class MdnsDiscovery
             // Prefer the TXT ports (canonical); fall back to the SRV port for
             // udp, and to the protocol defaults for pair / http.
             val txt = info.attributes.orEmpty()
-            fun txtInt(key: String): Int? =
-                txt[key]?.let { String(it).trim().toIntOrNull() }
+
+            fun txtInt(key: String): Int? = txt[key]?.let { String(it).trim().toIntOrNull() }
             return DiscoveredServer(
                 name = info.serviceName.ifEmpty { ip },
                 ip = ip,

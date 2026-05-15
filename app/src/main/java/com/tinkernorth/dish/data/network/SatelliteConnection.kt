@@ -334,8 +334,15 @@ class SatelliteConnection(
         val info = _slots.value[slotId] ?: return
         if (!info.registered) return
         controllerRepo.sendMotion(
-            snap.handle, info.controllerIndex,
-            gyroX, gyroY, gyroZ, accelX, accelY, accelZ, timestampDeltaUs,
+            snap.handle,
+            info.controllerIndex,
+            gyroX,
+            gyroY,
+            gyroZ,
+            accelX,
+            accelY,
+            accelZ,
+            timestampDeltaUs,
         )
     }
 

@@ -19,7 +19,6 @@ import kotlin.math.roundToInt
  * senders' `scaleGyro` / `scaleAccel`.
  */
 object MotionScaling {
-
     /** Standard gravity, m/s² — divisor to convert accelerometer to g. */
     const val GRAVITY_MSS = 9.80665
 
@@ -57,6 +56,9 @@ object MotionScaling {
      * screenZ = deviceZ. The result is already in the DSU frame (+X right,
      * +Y up, +Z toward player), so the receiver does no further rotation.
      */
-    fun remapLandscape(deviceX: Float, deviceY: Float, deviceZ: Float): FloatArray =
-        floatArrayOf(deviceY, -deviceX, deviceZ)
+    fun remapLandscape(
+        deviceX: Float,
+        deviceY: Float,
+        deviceZ: Float,
+    ): FloatArray = floatArrayOf(deviceY, -deviceX, deviceZ)
 }

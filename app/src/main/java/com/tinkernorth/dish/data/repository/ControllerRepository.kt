@@ -95,7 +95,15 @@ class ControllerRepository
             timestampDeltaUs: Int,
         ) {
             SatelliteNative.sendMotion(
-                handle, index, gyroX, gyroY, gyroZ, accelX, accelY, accelZ, timestampDeltaUs,
+                handle,
+                index,
+                gyroX,
+                gyroY,
+                gyroZ,
+                accelX,
+                accelY,
+                accelZ,
+                timestampDeltaUs,
             )
         }
 

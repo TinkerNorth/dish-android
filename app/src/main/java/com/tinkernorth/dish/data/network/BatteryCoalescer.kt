@@ -34,7 +34,11 @@ class BatteryCoalescer {
      * sample differed from the last emitted one (and was forwarded to [emit]);
      * false if it was coalesced.
      */
-    fun publish(controllerIndex: Int, sample: BatterySample, emit: Emit): Boolean {
+    fun publish(
+        controllerIndex: Int,
+        sample: BatterySample,
+        emit: Emit,
+    ): Boolean {
         // Reject obviously malformed values defensively. The receiver also
         // rejects these, but failing fast on the sender side keeps the wire
         // clean and surfaces sender bugs locally.

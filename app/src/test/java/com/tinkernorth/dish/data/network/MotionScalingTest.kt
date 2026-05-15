@@ -16,7 +16,6 @@ import org.junit.Test
  * a drift here desyncs both ends silently — these tests pin it.
  */
 class MotionScalingTest {
-
     // ── gyroRadToWire ───────────────────────────────────────────────────────
 
     @Test
