@@ -4,9 +4,12 @@
 package com.tinkernorth.dish.data.repository
 
 import com.tinkernorth.dish.data.model.DiscoveredServer
+import com.tinkernorth.dish.data.network.MdnsDiscovery
 import com.tinkernorth.dish.data.network.SatelliteNative
 import com.tinkernorth.dish.data.network.parseServers
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -19,17 +22,35 @@ import javax.inject.Singleton
 @Singleton
 class DiscoveryRepository
     @Inject
-    constructor() {
+    constructor(
+        private val mdns: MdnsDiscovery,
+    ) {
         private val mutex = Mutex()
 
+        /**
+         * Discover satellites via two paths in parallel and merge by
+         * `ip:udpPort`: the legacy UDP broadcast beacon (native
+         * [SatelliteNative.discoverServers]) and mDNS / Bonjour
+         * ([MdnsDiscovery]). mDNS reaches subnets that drop broadcast; the
+         * beacon stays as the fallback for satellites that predate the mDNS
+         * responder.
+         */
         suspend fun discoverServers(
             port: Int,
             timeoutMs: Int,
         ): List<DiscoveredServer> =
             withContext(Dispatchers.IO) {
                 mutex.withLock {
-                    val json = SatelliteNative.discoverServers(port, timeoutMs)
-                    parseServers(json)
+                    coroutineScope {
+                        val broadcast =
+                            async { parseServers(SatelliteNative.discoverServers(port, timeoutMs)) }
+                        val viaMdns = async { mdns.discover(timeoutMs) }
+                        val merged = LinkedHashMap<String, DiscoveredServer>()
+                        for (server in broadcast.await() + viaMdns.await()) {
+                            merged["${server.ip}:${server.udpPort}"] = server
+                        }
+                        merged.values.toList()
+                    }
                 }
             }
 
