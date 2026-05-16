@@ -3,19 +3,19 @@
 
 package com.tinkernorth.dish.data.network
 
-import java.util.concurrent.ConcurrentHashMap
-
 /**
- * Per-controller dedup for [SatelliteNative.sendBattery].
+ * Battery wire-format constants (mirroring `satellite/src/core/types.h`) plus
+ * the per-sample validation gate in front of [SatelliteNative.sendBattery].
  *
- * Battery is reported on a slow 30 s cadence plus state-change triggers; a
- * controller sitting at full charge would otherwise burn one packet every
- * poll cycle even though nothing changed. The coalescer remembers the last
- * forwarded `(level, status)` per controller and drops identical follow-ups.
+ * MSG_BATTERY is a fixed 30 s heartbeat plus an on-connect report: the
+ * receiver expects a packet every interval even when the value is unchanged,
+ * which is what lets a dropped UDP packet self-heal on the next tick. The
+ * 30 s cadence is owned by the poll loops in [PhysicalBatterySource] and
+ * [PhoneBatterySource] — [publish] forwards every well-formed sample and
+ * drops only malformed ones (it does not coalesce).
  *
- * Wire-format constants mirror `satellite/src/core/types.h`. The 0xFF level
- * sentinel means "controller exposes status but no percentage" — some
- * Bluetooth pads only report a charging state.
+ * The 0xFF level sentinel means "controller exposes status but no
+ * percentage" — some Bluetooth pads only report a charging state.
  */
 class BatteryCoalescer {
     data class BatterySample(
@@ -27,15 +27,16 @@ class BatteryCoalescer {
         fun emit(sample: BatterySample)
     }
 
-    private val last = ConcurrentHashMap<Int, BatterySample>()
-
     /**
-     * Attempt to emit [sample] for [controllerIndex]. Returns true if the
-     * sample differed from the last emitted one (and was forwarded to [emit]);
-     * false if it was coalesced.
+     * Validate [sample] and forward it via [emit]. Returns true when the
+     * sample was well-formed (and emitted), false when it was rejected as
+     * malformed.
+     *
+     * Every well-formed sample is forwarded — there is no dedup, because the
+     * receiver expects a fixed 30 s heartbeat (an unchanged value must still
+     * reach the wire so a dropped UDP packet self-heals).
      */
     fun publish(
-        controllerIndex: Int,
         sample: BatterySample,
         emit: Emit,
     ): Boolean {
@@ -45,19 +46,8 @@ class BatteryCoalescer {
         if (sample.level !in 0..100 && sample.level != LEVEL_UNKNOWN) return false
         if (sample.status !in STATUS_MIN..STATUS_MAX) return false
 
-        val prev = last[controllerIndex]
-        if (prev == sample) return false
-        last[controllerIndex] = sample
         emit.emit(sample)
         return true
-    }
-
-    fun clear(controllerIndex: Int) {
-        last.remove(controllerIndex)
-    }
-
-    fun clearAll() {
-        last.clear()
     }
 
     companion object {

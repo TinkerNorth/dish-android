@@ -30,9 +30,9 @@ import kotlinx.coroutines.launch
  *
  * The poll loop scrapes the sticky `ACTION_BATTERY_CHANGED` intent every
  * [BatteryCoalescer.REPORT_INTERVAL_SECONDS] (30 s, matching the receiver's
- * `BATTERY_REPORT_INTERVAL_SEC`) plus once immediately on [start]. The
- * [BatteryCoalescer] drops the 30 s heartbeat when nothing changed, so a
- * phone sitting at a steady charge costs ~one packet per state transition.
+ * `BATTERY_REPORT_INTERVAL_SEC`) plus once immediately on [start]. Every
+ * tick is forwarded — MSG_BATTERY is a fixed 30 s heartbeat, so an unchanged
+ * value still reaches the wire and a dropped UDP packet self-heals.
  */
 class PhoneBatterySource(
     private val context: Context,
@@ -62,7 +62,7 @@ class PhoneBatterySource(
             scope.launch {
                 while (isActive) {
                     readBattery()?.let { sample ->
-                        coalescer.publish(VIRTUAL_CONTROLLER, sample) { s ->
+                        coalescer.publish(sample) { s ->
                             statusStore?.put(slotId, s)
                             emit.emit(s.level, s.status)
                         }
@@ -76,7 +76,6 @@ class PhoneBatterySource(
     fun stop() {
         job?.cancel()
         job = null
-        coalescer.clearAll()
     }
 
     /**
@@ -117,6 +116,5 @@ class PhoneBatterySource(
 
     private companion object {
         const val TAG = "PhoneBatterySource"
-        const val VIRTUAL_CONTROLLER = 0
     }
 }

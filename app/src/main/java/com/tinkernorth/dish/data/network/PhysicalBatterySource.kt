@@ -46,8 +46,8 @@ import javax.inject.Singleton
  * [SatelliteConnection]'s slot table — so battery reporting survives the
  * MainActivity → GamepadOverlayActivity hand-off and starts the instant a pad
  * becomes reachable (send-on-connect). A single 30 s poll loop then iterates
- * every reachable physical pad, matching the overlay path's cadence; the
- * per-controller [BatteryCoalescer] drops unchanged heartbeats.
+ * every reachable physical pad, matching the overlay path's cadence; every
+ * tick is forwarded — MSG_BATTERY is a fixed 30 s heartbeat.
  *
  * Battery is a Bluetooth-HID non-feature: the BT HID Device profile carries
  * no `MSG_BATTERY` channel, so — exactly like [SatelliteConnection.sendMotion]
@@ -67,7 +67,7 @@ class PhysicalBatterySource
         /** Phone-battery fallback for USB-wired / batteryless pads. */
         private val phoneBattery = PhoneBatterySource(context)
 
-        /** Per-physical-slot dedup, same role as in [PhoneBatterySource]. */
+        /** Per-sample validation gate, same role as in [PhoneBatterySource]. */
         private val coalescer = BatteryCoalescer()
 
         private var bindingsJob: Job? = null
@@ -98,7 +98,6 @@ class PhysicalBatterySource
             pollJob = null
             reachable.keys.forEach(statusStore::clear)
             reachable = emptyMap()
-            coalescer.clearAll()
         }
 
         /**
@@ -164,11 +163,7 @@ class PhysicalBatterySource
          * 30 s for the next loop tick.
          */
         private fun onReachableChanged(next: Map<String, SatelliteConnection>) {
-            (reachable.keys - next.keys).forEach { gone ->
-                statusStore.clear(gone)
-                // The coalescer is keyed by the numeric device id (see pollOnce).
-                gone.toIntOrNull()?.let(coalescer::clear)
-            }
+            (reachable.keys - next.keys).forEach(statusStore::clear)
             reachable = next
             scope.launch { pollOnce() }
         }
@@ -178,7 +173,7 @@ class PhysicalBatterySource
             for ((slotId, conn) in reachable) {
                 val deviceId = slotId.toIntOrNull() ?: continue
                 val sample = sampleForDevice(deviceId)
-                coalescer.publish(deviceId, sample) { s ->
+                coalescer.publish(sample) { s ->
                     statusStore.put(slotId, s)
                     conn.sendBattery(slotId, s.level, s.status)
                 }

@@ -173,12 +173,10 @@ class PhysicalBatteryMappingTest {
                 Triple(true, 1.5f, PhysicalBatteryMapping.ANDROID_STATUS_CHARGING),
                 Triple(true, Float.NaN, PhysicalBatteryMapping.ANDROID_STATUS_CHARGING),
             )
-        var index = 0
         for ((present, cap, status) in cases) {
             val sample = PhysicalBatteryMapping.controllerSample(present, cap, status)!!
-            // Distinct controller index per case so coalescing never hides one.
             var emitted = false
-            coalescer.publish(index++, sample) { emitted = true }
+            coalescer.publish(sample) { emitted = true }
             org.junit.Assert.assertTrue(
                 "coalescer rejected mapped sample $sample",
                 emitted,
