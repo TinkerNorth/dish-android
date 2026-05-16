@@ -81,11 +81,14 @@ class MotionScalingTest {
     }
 
     // ── remapLandscape ──────────────────────────────────────────────────────
+    //
+    // rotation arguments are raw Surface.ROTATION_* int values:
+    //   ROTATION_0 = 0, ROTATION_90 = 1, ROTATION_180 = 2, ROTATION_270 = 3.
 
     @Test
     fun `landscape remap rotates device axes into the screen frame`() {
         // Device (x, y, z) → screen (y, -x, z) for ROTATION_90.
-        val out = MotionScaling.remapLandscape(1f, 2f, 3f)
+        val out = MotionScaling.remapLandscape(1f, 2f, 3f, ROTATION_90)
         assertEquals(2f, out[0], 0f) // screenX = deviceY
         assertEquals(-1f, out[1], 0f) // screenY = -deviceX
         assertEquals(3f, out[2], 0f) // screenZ = deviceZ
@@ -93,7 +96,60 @@ class MotionScalingTest {
 
     @Test
     fun `landscape remap leaves the z axis untouched`() {
-        val out = MotionScaling.remapLandscape(0f, 0f, 9.8f)
+        val out = MotionScaling.remapLandscape(0f, 0f, 9.8f, ROTATION_90)
         assertEquals(9.8f, out[2], 0f)
+    }
+
+    @Test
+    fun `ROTATION_270 inverts both X and Y - the half-fleet bug`() {
+        // The regression case: landscape that resolved to ROTATION_270 must
+        // map device (x, y, z) → screen (-y, x, z), i.e. 180° from ROTATION_90.
+        val out = MotionScaling.remapLandscape(1f, 2f, 3f, ROTATION_270)
+        assertEquals(-2f, out[0], 0f) // screenX = -deviceY
+        assertEquals(1f, out[1], 0f) // screenY = deviceX
+        assertEquals(3f, out[2], 0f) // screenZ = deviceZ
+    }
+
+    @Test
+    fun `ROTATION_270 is the exact negation of ROTATION_90 in X and Y`() {
+        val r90 = MotionScaling.remapLandscape(1.5f, -2.5f, 7f, ROTATION_90)
+        val r270 = MotionScaling.remapLandscape(1.5f, -2.5f, 7f, ROTATION_270)
+        assertEquals(-r90[0], r270[0], 0f)
+        assertEquals(-r90[1], r270[1], 0f)
+        assertEquals(r90[2], r270[2], 0f) // Z is shared, never inverted.
+    }
+
+    @Test
+    fun `ROTATION_0 is the identity remap`() {
+        val out = MotionScaling.remapLandscape(1f, 2f, 3f, ROTATION_0)
+        assertEquals(1f, out[0], 0f) // screenX = deviceX
+        assertEquals(2f, out[1], 0f) // screenY = deviceY
+        assertEquals(3f, out[2], 0f) // screenZ = deviceZ
+    }
+
+    @Test
+    fun `ROTATION_180 inverts X and Y but not Z`() {
+        val out = MotionScaling.remapLandscape(1f, 2f, 3f, ROTATION_180)
+        assertEquals(-1f, out[0], 0f) // screenX = -deviceX
+        assertEquals(-2f, out[1], 0f) // screenY = -deviceY
+        assertEquals(3f, out[2], 0f) // screenZ = deviceZ
+    }
+
+    @Test
+    fun `unknown rotation falls back to the ROTATION_90 landscape remap`() {
+        val fallback = MotionScaling.remapLandscape(1f, 2f, 3f, 99)
+        val r90 = MotionScaling.remapLandscape(1f, 2f, 3f, ROTATION_90)
+        assertEquals(r90[0], fallback[0], 0f)
+        assertEquals(r90[1], fallback[1], 0f)
+        assertEquals(r90[2], fallback[2], 0f)
+    }
+
+    private companion object {
+        // Mirror of android.view.Surface.ROTATION_* — kept literal so this
+        // test stays a pure JVM test with no Android framework dependency.
+        const val ROTATION_0 = 0
+        const val ROTATION_90 = 1
+        const val ROTATION_180 = 2
+        const val ROTATION_270 = 3
     }
 }

@@ -212,6 +212,26 @@ class SatelliteConnectionTest {
         }
 
     @Test
+    fun `controller add advertises the motion capability bit`() =
+        runTest {
+            every { repo.resetControllerAck(any()) } just Runs
+            every { repo.startHeartbeat(any()) } just Runs
+            every { repo.isConnectionAlive(any()) } returns false
+            every { repo.getLastControllerAck(any()) } returns 1
+
+            conn.markConnecting()
+            conn.markConnected(handle = 8, connectionId = "c") {}
+            conn.attachSlot(slotId = "slot-1", controllerType = 0)
+
+            // Post-Task-1.1 builds must set CAP_MOTION (0x0004) in the
+            // MSG_CONTROLLER_ADD capability word so the server knows to expect
+            // the MSG_MOTION IMU stream from this client.
+            coVerify {
+                repo.addController(8, 0, match { (it and 0x0004) != 0 })
+            }
+        }
+
+    @Test
     fun `markConnected preserves slot bindings recorded before connect`() =
         runTest {
             every { repo.resetControllerAck(any()) } just Runs

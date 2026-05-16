@@ -365,7 +365,14 @@ class SatelliteConnection(
         private const val ALIVE_POLL_MS = 1000L
         private const val ACK_WAIT_ATTEMPTS = 20
         private const val ACK_WAIT_INTERVAL_MS = 100L
-        private const val DEFAULT_CAPABILITIES = 0x0003
+        // MSG_CONTROLLER_ADD capability word (2-byte big-endian): bit 0x0001
+        // analog triggers, 0x0002 rumble, 0x0004 motion (this client emits the
+        // MSG_MOTION IMU stream — see PhoneMotionSource, Task 1.1).
+        private const val CAP_ANALOG_TRIGGERS = 0x0001
+        private const val CAP_RUMBLE = 0x0002
+        private const val CAP_MOTION = 0x0004
+        private const val DEFAULT_CAPABILITIES =
+            CAP_ANALOG_TRIGGERS or CAP_RUMBLE or CAP_MOTION
 
         fun idFor(server: DiscoveredServer): String = "satellite:${server.ip}:${server.udpPort}"
 

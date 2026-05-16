@@ -47,18 +47,44 @@ object MotionScaling {
     }
 
     /**
-     * Remap a device-frame sensor vector into the screen frame for a phone
-     * held in landscape (the `GamepadOverlayActivity` is locked landscape,
-     * `ROTATION_90` — rotated 90° counter-clockwise from portrait).
+     * Remap a device-frame sensor vector into the screen frame, given the
+     * live display [rotation] (a `Surface.ROTATION_*` value).
      *
-     * In that hold the device's +Y points to screen-right and the device's
-     * +X points to screen-down, so: screenX = deviceY, screenY = -deviceX,
-     * screenZ = deviceZ. The result is already in the DSU frame (+X right,
-     * +Y up, +Z toward player), so the receiver does no further rotation.
+     * `GamepadOverlayActivity` declares `screenOrientation="landscape"`, which
+     * Android resolves to `ROTATION_90` on most phones but `ROTATION_270` on
+     * others (and many tablets) — the two are 180° apart, so a fixed remap is
+     * sideways-flipped on half the fleet. The transform is therefore keyed off
+     * the rotation the windowing system actually reports:
+     *
+     *  - `ROTATION_0`   → ( deviceX,  deviceY, deviceZ)  — portrait, identity
+     *  - `ROTATION_90`  → ( deviceY, -deviceX, deviceZ)  — CCW landscape
+     *  - `ROTATION_180` → (-deviceX, -deviceY, deviceZ)  — upside-down portrait
+     *  - `ROTATION_270` → (-deviceY,  deviceX, deviceZ)  — CW landscape
+     *
+     * The result is already in the DSU frame (+X right, +Y up, +Z toward
+     * player), so the receiver does no further rotation. Pure (takes a plain
+     * `Int`, no `Display`/`Context`) so it stays unit-testable; the caller
+     * ([PhoneMotionSource]) is responsible for reading the live rotation.
+     *
+     * An unknown rotation falls back to the `ROTATION_90` landscape remap.
      */
     fun remapLandscape(
         deviceX: Float,
         deviceY: Float,
         deviceZ: Float,
-    ): FloatArray = floatArrayOf(deviceY, -deviceX, deviceZ)
+        rotation: Int,
+    ): FloatArray =
+        when (rotation) {
+            ROTATION_0 -> floatArrayOf(deviceX, deviceY, deviceZ)
+            ROTATION_180 -> floatArrayOf(-deviceX, -deviceY, deviceZ)
+            ROTATION_270 -> floatArrayOf(-deviceY, deviceX, deviceZ)
+            // ROTATION_90 and any unexpected value.
+            else -> floatArrayOf(deviceY, -deviceX, deviceZ)
+        }
+
+    // Mirror of android.view.Surface.ROTATION_* — duplicated as plain ints so
+    // remapLandscape has zero framework dependency and runs in a pure JVM test.
+    private const val ROTATION_0 = 0
+    private const val ROTATION_180 = 2
+    private const val ROTATION_270 = 3
 }

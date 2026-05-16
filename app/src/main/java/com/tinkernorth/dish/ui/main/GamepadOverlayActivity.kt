@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.Surface
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -92,15 +93,31 @@ class GamepadOverlayActivity :
                 shape = GradientDrawable.OVAL
                 setColor(getColor(R.color.colorMuted))
             }
+        binding.dotMotion.background =
+            GradientDrawable().apply { shape = GradientDrawable.OVAL }
         binding.btnExitGamepad.setOnClickListener { finish() }
 
         val sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        motionSource = PhoneMotionSource(sensorManager)
+        // The IMU axis remap depends on whether `screenOrientation=landscape`
+        // resolved to ROTATION_90 or ROTATION_270 on this device. Pass a
+        // supplier so PhoneMotionSource re-reads the live rotation each start()
+        // rather than baking in a value at onCreate() time.
+        motionSource = PhoneMotionSource(sensorManager, rotationSupplier = ::currentRotation)
         batterySource = PhoneBatterySource(applicationContext)
+        // Paint the motion pill once up front: on a phone with no gyroscope
+        // this is the only paint that ever runs (start/stop are no-ops), and
+        // the "no gyroscope" state must be visible without waiting for resume.
+        refreshMotionStatus()
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                hub.connections.collect { refreshStatus() }
+                hub.connections.collect {
+                    refreshStatus()
+                    // The motion pill depends on connection *kind* (Bluetooth
+                    // has no motion channel), so it must repaint when the
+                    // bound connection's summary first resolves or changes.
+                    refreshMotionStatus()
+                }
             }
         }
     }
@@ -126,12 +143,17 @@ class GamepadOverlayActivity :
         batterySource.start(lifecycleScope) { level, status ->
             satellite.get(connectionId)?.sendBattery(VIRTUAL_SLOT_ID, level, status)
         }
+        // motionSource is now started (or a no-op if there's no gyroscope) —
+        // repaint so the pill reads "streaming" rather than "paused".
+        refreshMotionStatus()
     }
 
     override fun onPause() {
         super.onPause()
         motionSource.stop()
         batterySource.stop()
+        // Source stopped to save battery; reflect "paused" (not "unavailable").
+        refreshMotionStatus()
     }
 
     override fun onStop() {
@@ -152,6 +174,41 @@ class GamepadOverlayActivity :
         (binding.dotOverlay.background as? GradientDrawable)?.setColor(
             getColor(if (connected) R.color.colorSuccess else R.color.colorMuted),
         )
+    }
+
+    /**
+     * Repaint the phone-motion pill. There is no motion on/off toggle in this
+     * slice, so the state is purely a function of three facts: whether the
+     * phone has a gyroscope ([PhoneMotionSource.isAvailable]), whether the
+     * source is currently started ([PhoneMotionSource.isStreaming]), and
+     * whether the bound connection kind can carry `MSG_MOTION` at all
+     * (satellite can, Bluetooth-HID cannot — so the overlay would otherwise
+     * falsely claim "streaming" on a Bluetooth connection). The two states
+     * that imply motion is *not* leaving the phone also show a one-line
+     * explanation, so a limitation is never mistaken for an off switch.
+     * See [MotionIndicatorState].
+     */
+    private fun refreshMotionStatus() {
+        // A null summary (connection not resolved yet) is treated as
+        // motion-capable: the pill then tracks the source's started state and
+        // self-corrects on the next refresh once the kind is known.
+        val carriesMotion = hub.summary(connectionId)?.kind != ConnectionKind.BLUETOOTH
+        val state =
+            MotionIndicatorState.of(
+                isAvailable = motionSource.isAvailable,
+                isStreaming = motionSource.isStreaming,
+                connectionCarriesMotion = carriesMotion,
+            )
+        binding.tvMotionStatus.setText(state.labelRes)
+        (binding.dotMotion.background as? GradientDrawable)?.setColor(getColor(state.dotColorRes))
+        binding.tvMotionDetail.visibility = if (state.hasDetail) View.VISIBLE else View.GONE
+        when (state) {
+            MotionIndicatorState.UNAVAILABLE ->
+                binding.tvMotionDetail.setText(R.string.motion_unavailable_detail)
+            MotionIndicatorState.NOT_FORWARDED ->
+                binding.tvMotionDetail.setText(R.string.motion_not_forwarded_detail)
+            else -> Unit
+        }
     }
 
     override fun onGamepadStateChanged(state: GamepadTouchView.GamepadState) {
@@ -191,6 +248,20 @@ class GamepadOverlayActivity :
             }
         }
     }
+
+    /**
+     * Live display rotation as a `Surface.ROTATION_*` value, for the IMU axis
+     * remap in [PhoneMotionSource]. `Activity.display` is the API 30+ path;
+     * `windowManager.defaultDisplay` is the deprecated fallback below R.
+     * Defaults to [Surface.ROTATION_0] if no display is attached.
+     */
+    private fun currentRotation(): Int =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            display?.rotation ?: Surface.ROTATION_0
+        } else {
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay?.rotation ?: Surface.ROTATION_0
+        }
 
     private fun hideSystemBars() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {

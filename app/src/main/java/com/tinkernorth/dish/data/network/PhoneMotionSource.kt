@@ -23,11 +23,23 @@ import android.util.Log
  *
  * The accelerometer and gyroscope arrive on separate callbacks; we cache the
  * latest accel triple and emit a fused sample on each gyro tick (gyro is the
- * higher-rate, latency-critical signal). Both listeners run on the same
- * sensor thread, so the cache needs no extra synchronisation.
+ * higher-rate, latency-critical signal). Both sensor callbacks run on the
+ * same `SensorManager` thread, so the accel cache itself needs no lock.
+ *
+ * Threading: the sensor callbacks run on the `SensorManager` thread while
+ * [start]/[stop] run on the caller's (main) thread. Fields touched by both —
+ * [emit], [started] and the [accelX]/[accelY]/[accelZ] cache that [stop]
+ * clears — are `@Volatile` so that cross-thread hand-off is visible. The
+ * accel cache being written *and* read on the sensor thread needs no
+ * synchronisation; the volatile is purely for the [stop]-side reset.
+ *
+ * [rotationSupplier] is read once per [start] (not per sample) so a device
+ * rotation between activity resumes is picked up on the next stream start
+ * without paying a `Display` query on every gyro tick.
  */
 class PhoneMotionSource(
     private val sensorManager: SensorManager,
+    private val rotationSupplier: () -> Int = { DEFAULT_ROTATION },
     private val rateLimiter: MotionRateLimiter = MotionRateLimiter(),
 ) {
     /** Invoked when a fused sample passes the rate-limit gate. */
@@ -49,14 +61,34 @@ class PhoneMotionSource(
      */
     val isAvailable: Boolean get() = gyro != null
 
-    private var emit: Emit? = null
-    private var started = false
+    /**
+     * True between [start] and [stop] — i.e. the sensor listeners are
+     * registered and gyro samples are being forwarded. The overlay reads this
+     * (alongside [isAvailable]) to tell "motion paused" apart from "no
+     * gyroscope" in its motion indicator. Always false when [isAvailable] is
+     * false, since [start] is then a no-op.
+     */
+    val isStreaming: Boolean get() = started
+
+    // emit/started are handed between the main thread (start/stop) and the
+    // sensor thread (callbacks); @Volatile makes that hand-off visible.
+    @Volatile private var emit: Emit? = null
+
+    @Volatile private var started = false
+
+    // Display rotation (a Surface.ROTATION_* value) for the axis remap. Read
+    // from rotationSupplier once per start() on the main thread, consumed on
+    // the sensor thread — @Volatile publishes the start()-side write.
+    @Volatile private var rotation: Int = DEFAULT_ROTATION
 
     // Latest accelerometer triple, pre-scaled to wire int16. Written on the
-    // accel callback, read on the gyro callback — same thread, no lock.
-    private var accelX: Short = 0
-    private var accelY: Short = 0
-    private var accelZ: Short = 0
+    // accel callback, read on the gyro callback — same (sensor) thread, so no
+    // lock; @Volatile is only here so stop()'s main-thread reset is visible.
+    @Volatile private var accelX: Short = 0
+
+    @Volatile private var accelY: Short = 0
+
+    @Volatile private var accelZ: Short = 0
 
     private val listener =
         object : SensorEventListener {
@@ -81,6 +113,9 @@ class PhoneMotionSource(
      */
     fun start(emit: Emit) {
         if (started || gyro == null) return
+        // Re-read the live display rotation on every (re)start so a rotation
+        // between activity resumes is reflected in the axis remap.
+        rotation = rotationSupplier()
         started = true
         this.emit = emit
         sensorManager.registerListener(listener, gyro, SensorManager.SENSOR_DELAY_GAME)
@@ -104,7 +139,7 @@ class PhoneMotionSource(
 
     private fun onAccel(values: FloatArray) {
         if (values.size < 3) return
-        val (x, y, z) = MotionScaling.remapLandscape(values[0], values[1], values[2])
+        val (x, y, z) = MotionScaling.remapLandscape(values[0], values[1], values[2], rotation)
         accelX = MotionScaling.accelMssToWire(x)
         accelY = MotionScaling.accelMssToWire(y)
         accelZ = MotionScaling.accelMssToWire(z)
@@ -113,7 +148,7 @@ class PhoneMotionSource(
     private fun onGyro(values: FloatArray) {
         if (values.size < 3) return
         val cb = emit ?: return
-        val (x, y, z) = MotionScaling.remapLandscape(values[0], values[1], values[2])
+        val (x, y, z) = MotionScaling.remapLandscape(values[0], values[1], values[2], rotation)
         val sample =
             MotionRateLimiter.MotionSample(
                 gyroX = MotionScaling.gyroRadToWire(x),
@@ -133,5 +168,9 @@ class PhoneMotionSource(
     private companion object {
         const val TAG = "PhoneMotionSource"
         const val SINGLE_VIRTUAL_CONTROLLER = 0
+
+        // Surface.ROTATION_0 — fallback when no rotation supplier is provided
+        // (e.g. in tests). Lands on the ROTATION_90 branch's sibling identity.
+        const val DEFAULT_ROTATION = 0
     }
 }

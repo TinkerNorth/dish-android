@@ -7,4 +7,17 @@
     <string name="status_connected_of">%1$d of %2$d connected</string>
     <string name="toast_pairing_needed">Pairing needed — open Connections</string>
     <string name="toast_bind_first">Bind a connection first</string>
+
+    <!-- Touch-overlay phone-motion (gyro/accel) indicator. States: streaming,
+         paused (overlay backgrounded), not-forwarded (Bluetooth connection
+         has no motion channel), and not-available (no gyroscope). -->
+    <string name="motion_streaming">Motion: streaming</string>
+    <string name="motion_paused">Motion: paused</string>
+    <string name="motion_not_forwarded">Motion: not sent</string>
+    <string name="motion_unavailable">Motion: no gyroscope</string>
+    <!-- Detail lines, shown only for the two states that need an explanation
+         so the user understands the limit rather than seeing a bare label. -->
+    <string name="motion_unavailable_detail">This phone has no gyroscope, so motion (gyro aim / tilt) is not sent.</string>
+    <string name="motion_not_forwarded_detail">This Bluetooth connection has no motion channel. Use a satellite connection to send gyro aim / tilt.</string>
+    <string name="motion_indicator_desc">Phone motion forwarding status</string>
 </resources>
