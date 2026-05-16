@@ -91,10 +91,6 @@ object RumbleBridge {
         strongMagnitude: Int,
         weakMagnitude: Int,
         durationMs: Int,
-        @Suppress("UNUSED_PARAMETER") hasLightbar: Boolean,
-        @Suppress("UNUSED_PARAMETER") lightbarR: Int,
-        @Suppress("UNUSED_PARAMETER") lightbarG: Int,
-        @Suppress("UNUSED_PARAMETER") lightbarB: Int,
     ) {
         // Stop / no-op packet: cancel any in-flight vibration so we don't
         // outlast the satellite-side game.

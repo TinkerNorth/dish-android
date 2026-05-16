@@ -72,6 +72,11 @@ Design notes specific to dish-android:
 * **Permission.** The manifest declares
   `<uses-permission android:name="android.permission.VIBRATE" />`; no
   runtime prompt — VIBRATE is a normal-protection permission.
+* **Lightbar is receive-and-log only.** Android exposes no controller-LED
+  API, so the dedicated host lightbar signal (`MSG_LIGHTBAR = 0x000D`) is
+  decoded and logged by the native receive loop, then dropped — there is
+  no LED to drive on Android. dish-android also does not advertise
+  `CAP_LIGHTBAR`, so a capability-aware satellite skips sending it.
 
 The pure helpers (`rumbleMagnitudeTo255`, `rumbleSafeDurationMs`) are
 covered by `app/src/test/java/.../RumbleBridgeHelpersTest.kt`.

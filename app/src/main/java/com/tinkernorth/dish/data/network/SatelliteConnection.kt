@@ -369,6 +369,13 @@ class SatelliteConnection(
         // MSG_CONTROLLER_ADD capability word (2-byte big-endian): bit 0x0001
         // analog triggers, 0x0002 rumble, 0x0004 motion (this client emits the
         // MSG_MOTION IMU stream — see PhoneMotionSource, Task 1.1).
+        //
+        // CAP_LIGHTBAR (0x0008) is intentionally NOT set: Android exposes no
+        // controller-LED API, so dish-android cannot drive a controller's RGB
+        // lightbar. Leaving the bit clear tells a capability-aware satellite
+        // not to waste packets sending MSG_LIGHTBAR (0x000D) to this client.
+        // Any 0x000D that does arrive is decoded, logged, and dropped by the
+        // native receive loop (satellite_jni.cpp::receiveAck).
         private const val CAP_ANALOG_TRIGGERS = 0x0001
         private const val CAP_RUMBLE = 0x0002
         private const val CAP_MOTION = 0x0004

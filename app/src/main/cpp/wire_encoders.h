@@ -64,4 +64,28 @@ inline void encodeBatteryPayload(uint8_t out[3], uint8_t ctrlIdx, uint8_t level,
     out[2] = status;
 }
 
+// MSG_LIGHTBAR (0x000D) inner payload — 4 bytes, satellite → sender.
+//
+//   [0] ctrlIdx (u8)
+//   [1] R (u8)
+//   [2] G (u8)
+//   [3] B (u8)
+//
+// This is the only satellite → sender message dish-android decodes for the
+// lightbar path. Android exposes no controller-LED API, so the JNI receive
+// loop logs the decoded value and drops it (see satellite_jni.cpp::receiveAck);
+// dish-android also does not advertise CAP_LIGHTBAR. The decoder is split out
+// here, with the encoders, purely so the byte layout can be pinned by the
+// host-side GoogleTest target without dragging in the JNI / Android headers.
+struct LightbarPayload {
+    uint8_t ctrlIdx;
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+};
+
+inline LightbarPayload decodeLightbarPayload(const uint8_t in[4]) {
+    return LightbarPayload{in[0], in[1], in[2], in[3]};
+}
+
 } // namespace dish_wire

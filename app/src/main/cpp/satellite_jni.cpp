@@ -68,6 +68,7 @@ static constexpr uint16_t MSG_CONTROLLER_TYPE = 0x0008;
 static constexpr uint16_t MSG_RUMBLE = 0x0009;
 static constexpr uint16_t MSG_MOTION = 0x000A;
 static constexpr uint16_t MSG_BATTERY = 0x000B;
+static constexpr uint16_t MSG_LIGHTBAR = 0x000D;
 
 #pragma pack(push, 1)
 struct XUSB_REPORT {
@@ -788,25 +789,27 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_re
             LOGI("Session %d server status: vigemAvailable=%d activeControllers=%d", handle, vigem,
                  count);
         }
-    } else if (msgType == MSG_RUMBLE && msgLen >= 8 && decLen >= 12) {
-        // Wire layout (BE16 magnitudes/duration, U8 flags + optional R/G/B):
-        //   ctrlIdx(1) strong(2) weak(2) durMs(2) flags(1) [R(1) G(1) B(1)]
+    } else if (msgType == MSG_RUMBLE && msgLen == 7 && decLen >= 11) {
+        // Wire layout (BE16 magnitudes/duration) — fixed 7-byte payload:
+        //   ctrlIdx(1) strong(2) weak(2) durMs(2)
         if (g_rumbleBridgeClass == nullptr || g_rumbleDispatchMethod == nullptr) return;
         const jint ctrlIdx = (jint)decrypted[4];
         const jint strong = ((jint)decrypted[5] << 8) | (jint)decrypted[6];
         const jint weakMag = ((jint)decrypted[7] << 8) | (jint)decrypted[8];
         const jint durMs = ((jint)decrypted[9] << 8) | (jint)decrypted[10];
-        const uint8_t flags = decrypted[11];
-        const jboolean hasLightbar = (flags & 0x01) != 0 ? JNI_TRUE : JNI_FALSE;
-        jint r = 0, g = 0, b = 0;
-        if (hasLightbar && msgLen >= 11 && decLen >= 15) {
-            r = (jint)decrypted[12];
-            g = (jint)decrypted[13];
-            b = (jint)decrypted[14];
-        }
         env->CallStaticVoidMethod(g_rumbleBridgeClass, g_rumbleDispatchMethod, handle, ctrlIdx,
-                                  strong, weakMag, durMs, hasLightbar, r, g, b);
+                                  strong, weakMag, durMs);
         if (env->ExceptionCheck()) env->ExceptionClear();
+    } else if (msgType == MSG_LIGHTBAR && msgLen >= 4 && decLen >= 8) {
+        // Dedicated controller-RGB-LED message (satellite → sender). Android
+        // exposes no controller-LED API, so dish-android cannot actuate this
+        // and intentionally does not advertise CAP_LIGHTBAR — a capability-
+        // aware satellite won't send 0x000D here. We still decode and log any
+        // that arrive so the return path is observable, then drop the packet.
+        // Wire layout: ctrlIdx(1) R(1) G(1) B(1).
+        const dish_wire::LightbarPayload lb = dish_wire::decodeLightbarPayload(decrypted + 4);
+        LOGI("Session %d lightbar (no LED API on Android, dropping): idx=%d rgb=%02X%02X%02X",
+             handle, lb.ctrlIdx, lb.r, lb.g, lb.b);
     }
 }
 
@@ -1222,7 +1225,7 @@ Java_com_tinkernorth_dish_data_network_RumbleBridge_nativeInstall(JNIEnv* env, j
     }
     if (g_rumbleDispatchMethod == nullptr) {
         g_rumbleDispatchMethod =
-            env->GetStaticMethodID(g_rumbleBridgeClass, "dispatchRumble", "(IIIIIZIII)V");
+            env->GetStaticMethodID(g_rumbleBridgeClass, "dispatchRumble", "(IIIII)V");
         if (g_rumbleDispatchMethod == nullptr) {
             LOGE("RumbleBridge.dispatchRumble not found");
             env->ExceptionClear();

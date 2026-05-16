@@ -101,3 +101,42 @@ TEST(EncodeBatteryPayload, PreservesUnknownLevelSentinel) {
     EXPECT_EQ(out[1], 0xFF);
     EXPECT_EQ(out[2], 0);
 }
+
+// ── decodeLightbarPayload ───────────────────────────────────────────────────
+//
+// MSG_LIGHTBAR (0x000D) is satellite → sender, so dish-android decodes (not
+// encodes) it. Android has no controller-LED API: receiveAck just logs the
+// decoded value and drops the packet. These tests pin the [ctrlIdx][R][G][B]
+// byte order the JNI dispatch branch relies on for that log line.
+
+TEST(DecodeLightbarPayload, CtrlIdxThenRgbInOrder) {
+    const uint8_t in[4] = {3, 0x11, 0x22, 0x33};
+    const dish_wire::LightbarPayload lb = dish_wire::decodeLightbarPayload(in);
+    EXPECT_EQ(lb.ctrlIdx, 3);
+    EXPECT_EQ(lb.r, 0x11);
+    EXPECT_EQ(lb.g, 0x22);
+    EXPECT_EQ(lb.b, 0x33);
+}
+
+TEST(DecodeLightbarPayload, FullByteRange) {
+    // 0x00 and 0xFF must survive the round-trip on every field — no field is
+    // sign-extended or masked.
+    const uint8_t in[4] = {0xFF, 0x00, 0xFF, 0x00};
+    const dish_wire::LightbarPayload lb = dish_wire::decodeLightbarPayload(in);
+    EXPECT_EQ(lb.ctrlIdx, 0xFF);
+    EXPECT_EQ(lb.r, 0x00);
+    EXPECT_EQ(lb.g, 0xFF);
+    EXPECT_EQ(lb.b, 0x00);
+}
+
+TEST(DecodeLightbarPayload, DistinctChannelsAreNotAliased) {
+    // Guards against a copy-paste bug reading the same offset for two
+    // channels — each of R/G/B must come from its own byte.
+    const uint8_t in[4] = {0, 1, 2, 3};
+    const dish_wire::LightbarPayload lb = dish_wire::decodeLightbarPayload(in);
+    EXPECT_EQ(lb.r, 1);
+    EXPECT_EQ(lb.g, 2);
+    EXPECT_EQ(lb.b, 3);
+    EXPECT_NE(lb.r, lb.g);
+    EXPECT_NE(lb.g, lb.b);
+}
