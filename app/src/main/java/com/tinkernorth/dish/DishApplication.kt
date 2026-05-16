@@ -7,6 +7,7 @@ import android.app.Application
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.tinkernorth.dish.data.network.BluetoothGamepadBridge
 import com.tinkernorth.dish.data.network.ConnectionForegroundObserver
+import com.tinkernorth.dish.data.network.PhysicalBatterySource
 import com.tinkernorth.dish.data.network.PhysicalSlotBindingObserver
 import com.tinkernorth.dish.data.network.RumbleBridge
 import com.tinkernorth.dish.data.network.WakeStateController
@@ -20,6 +21,8 @@ class DishApplication : Application() {
     @Inject lateinit var connectionForegroundObserver: ConnectionForegroundObserver
 
     @Inject lateinit var physicalSlotBindingObserver: PhysicalSlotBindingObserver
+
+    @Inject lateinit var physicalBatterySource: PhysicalBatterySource
 
     @Inject lateinit var physicalGamepadRegistry: PhysicalGamepadRegistry
 
@@ -37,6 +40,11 @@ class DishApplication : Application() {
         // arrive with every per-device binding already cleared).
         physicalGamepadRegistry.install()
         lifecycle.addObserver(physicalSlotBindingObserver)
+        // Physical-pad battery reporting (Task 1.2) is also process-scoped so
+        // it keeps polling across the dashboard → overlay hand-off, exactly
+        // like the slot bindings above. It reports a wireless pad's own
+        // battery, or the phone's battery for a USB-wired / batteryless pad.
+        lifecycle.addObserver(physicalBatterySource)
         // Same handoff hazard: the partial wake lock and the "keep the screen
         // on" decision used to live on MainActivity and got torn down the
         // moment the gamepad overlay covered it. Hoisting to process scope

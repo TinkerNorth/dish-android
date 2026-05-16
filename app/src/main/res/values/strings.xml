@@ -20,4 +20,11 @@
     <string name="motion_unavailable_detail">This phone has no gyroscope, so motion (gyro aim / tilt) is not sent.</string>
     <string name="motion_not_forwarded_detail">This Bluetooth connection has no motion channel. Use a satellite connection to send gyro aim / tilt.</string>
     <string name="motion_indicator_desc">Phone motion forwarding status</string>
+
+    <!-- Per-slot battery indicator on the controller list (Task 1.2). -->
+    <string name="battery_indicator_desc">Controller battery level</string>
+    <!-- Battery percentage, e.g. "84%". -->
+    <string name="battery_percent">%1$d%%</string>
+    <!-- Shown when the controller reports a charging state but no percentage. -->
+    <string name="battery_unknown_level">--</string>
 </resources>

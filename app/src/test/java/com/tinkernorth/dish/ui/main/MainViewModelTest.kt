@@ -3,6 +3,8 @@
 
 package com.tinkernorth.dish.ui.main
 
+import com.tinkernorth.dish.data.network.BatteryCoalescer.BatterySample
+import com.tinkernorth.dish.data.network.BatteryStatusStore
 import com.tinkernorth.dish.data.network.ConnectionEvent
 import com.tinkernorth.dish.data.network.ConnectionHub
 import com.tinkernorth.dish.data.network.ConnectionKind
@@ -40,6 +42,7 @@ class MainViewModelTest {
     private lateinit var hub: ConnectionHub
     private lateinit var satellite: SatelliteConnectionManager
     private lateinit var gamepadRegistry: PhysicalGamepadRegistry
+    private lateinit var batteryStore: BatteryStatusStore
     private lateinit var vm: MainViewModel
 
     private val connectionsFlow = MutableStateFlow<List<ConnectionSummary>>(emptyList())
@@ -53,11 +56,14 @@ class MainViewModelTest {
         hub = mockk(relaxed = true)
         satellite = mockk(relaxed = true)
         gamepadRegistry = mockk(relaxed = true)
+        // BatteryStatusStore is a pure JVM holder (no Android deps) — use the
+        // real thing so battery samples really thread through to the slots.
+        batteryStore = BatteryStatusStore()
         every { hub.connections } returns connectionsFlow
         every { hub.bindings } returns bindingsFlow
         every { gamepadRegistry.devices } returns devicesFlow
         every { satellite.events } returns satelliteEvents
-        vm = MainViewModel(satellite, hub, gamepadRegistry)
+        vm = MainViewModel(satellite, hub, gamepadRegistry, batteryStore)
     }
 
     @After
@@ -154,6 +160,36 @@ class MainViewModelTest {
                     .first { it.id == VIRTUAL_SLOT_ID }
             assertEquals("s:1", virtual.boundConnectionId)
             assertEquals(summary, virtual.boundStatus)
+        }
+
+    @Test
+    fun `battery store sample is surfaced onto the matching slot`() =
+        runTest(dispatcher) {
+            devicesFlow.value = mapOf(9 to PhysicalGamepadRegistry.Device(9, "Pad"))
+            batteryStore.put(
+                "9",
+                BatterySample(72, com.tinkernorth.dish.data.network.BatteryCoalescer.STATUS_DISCHARGING),
+            )
+            dispatcher.scheduler.runCurrent()
+
+            val pad =
+                vm.uiState.value.slots
+                    .first { it.id == "9" }
+            assertEquals(72, pad.battery?.level)
+            assertEquals(false, pad.battery?.charging)
+        }
+
+    @Test
+    fun `slot with no reported battery has a null battery field`() =
+        runTest(dispatcher) {
+            devicesFlow.value = mapOf(9 to PhysicalGamepadRegistry.Device(9, "Pad"))
+            dispatcher.scheduler.runCurrent()
+
+            assertNull(
+                vm.uiState.value.slots
+                    .first { it.id == "9" }
+                    .battery,
+            )
         }
 
     @Test

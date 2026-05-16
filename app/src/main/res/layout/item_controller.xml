@@ -54,6 +54,33 @@
                     android:textSize="12sp" />
             </LinearLayout>
 
+            <!-- ── Battery indicator (Task 1.2): icon + percentage ── -->
+            <LinearLayout
+                android:id="@+id/llBattery"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="10dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/ivBattery"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:contentDescription="@string/battery_indicator_desc"
+                    android:src="@drawable/ic_battery"
+                    app:tint="@color/colorMuted" />
+
+                <TextView
+                    android:id="@+id/tvBattery"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="3dp"
+                    android:textColor="@color/colorMuted"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
             <View
                 android:id="@+id/dotStatus"
                 android:layout_width="8dp"

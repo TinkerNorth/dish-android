@@ -78,6 +78,7 @@ class ControllerAdapter(
             )
             b.tvControllerName.text = slot.name
             b.tvSlotStatus.text = slotStatusText(slot)
+            bindBattery(slot.battery)
 
             initDot(b.dotStatus)
             setDot(
@@ -331,6 +332,34 @@ class ControllerAdapter(
                 isClickable = !selected
                 if (!selected) setOnClickListener { onClick() }
             }
+
+        /**
+         * Paint the per-slot battery indicator (Task 1.2). Hidden entirely
+         * when [battery] is null (nothing reported yet). A low, non-charging
+         * battery turns the icon + text red; a charging battery swaps in the
+         * bolt icon. A pad that reports a status but no percentage shows the
+         * "--" placeholder so the user still sees the charging state.
+         */
+        private fun bindBattery(battery: BatteryUi?) {
+            val ctx = b.root.context
+            if (battery == null) {
+                b.llBattery.visibility = View.GONE
+                return
+            }
+            b.llBattery.visibility = View.VISIBLE
+            b.ivBattery.setImageResource(
+                if (battery.charging) R.drawable.ic_battery_charging else R.drawable.ic_battery,
+            )
+            b.tvBattery.text =
+                battery.level?.let { ctx.getString(R.string.battery_percent, it) }
+                    ?: ctx.getString(R.string.battery_unknown_level)
+            val colorRes = if (battery.isLow) R.color.colorError else R.color.colorMuted
+            val color = ctx.getColor(colorRes)
+            b.tvBattery.setTextColor(color)
+            b.ivBattery.imageTintList =
+                android.content.res.ColorStateList
+                    .valueOf(color)
+        }
 
         private fun slotStatusText(s: ControllerSlot) =
             when {

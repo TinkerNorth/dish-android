@@ -3,10 +3,14 @@
 
 package com.tinkernorth.dish.ui.main
 
+import com.tinkernorth.dish.data.network.BatteryCoalescer
 import com.tinkernorth.dish.data.network.ConnectionKind
 import com.tinkernorth.dish.data.network.ConnectionLive
 import com.tinkernorth.dish.data.network.ConnectionSummary
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -225,6 +229,57 @@ class MainUiStateTest {
             )
 
         assertEquals(0, state.streamingSlotCount)
+    }
+
+    // ── BatteryUi.fromWire (Task 1.2 battery indicator) ─────────────────────
+
+    @Test
+    fun `fromWire keeps a known level and discharging status`() {
+        val ui = BatteryUi.fromWire(64, BatteryCoalescer.STATUS_DISCHARGING)
+        assertEquals(64, ui?.level)
+        assertFalse(ui!!.charging)
+    }
+
+    @Test
+    fun `fromWire marks charging full and wired states as charging`() {
+        assertTrue(BatteryUi.fromWire(50, BatteryCoalescer.STATUS_CHARGING)!!.charging)
+        assertTrue(BatteryUi.fromWire(100, BatteryCoalescer.STATUS_FULL)!!.charging)
+        assertTrue(BatteryUi.fromWire(100, BatteryCoalescer.STATUS_WIRED)!!.charging)
+    }
+
+    @Test
+    fun `fromWire collapses the unknown-level unknown-status pair to null`() {
+        // A 0xFF level with an unknown status carries no information at all —
+        // there is nothing to render, so the indicator stays hidden.
+        assertNull(
+            BatteryUi.fromWire(BatteryCoalescer.LEVEL_UNKNOWN, BatteryCoalescer.STATUS_UNKNOWN),
+        )
+    }
+
+    @Test
+    fun `fromWire keeps an unknown level when the status is known`() {
+        // A pad that exposes a charging state but no percentage still renders
+        // (as a charging icon with no number) — level is null, not the row.
+        val ui = BatteryUi.fromWire(BatteryCoalescer.LEVEL_UNKNOWN, BatteryCoalescer.STATUS_CHARGING)
+        assertNull(ui?.level)
+        assertTrue(ui!!.charging)
+    }
+
+    @Test
+    fun `isLow is true only for a low non-charging battery`() {
+        assertTrue(BatteryUi.fromWire(10, BatteryCoalescer.STATUS_DISCHARGING)!!.isLow)
+        assertTrue(
+            "the threshold itself counts as low",
+            BatteryUi.fromWire(BatteryUi.LOW_THRESHOLD, BatteryCoalescer.STATUS_DISCHARGING)!!.isLow,
+        )
+        // Above the threshold: not low.
+        assertFalse(BatteryUi.fromWire(50, BatteryCoalescer.STATUS_DISCHARGING)!!.isLow)
+        // Low but charging: not flagged — it is recovering, not a problem.
+        assertFalse(BatteryUi.fromWire(5, BatteryCoalescer.STATUS_CHARGING)!!.isLow)
+        // No percentage: cannot be "low".
+        assertFalse(
+            BatteryUi.fromWire(BatteryCoalescer.LEVEL_UNKNOWN, BatteryCoalescer.STATUS_DISCHARGING)!!.isLow,
+        )
     }
 
     @Test

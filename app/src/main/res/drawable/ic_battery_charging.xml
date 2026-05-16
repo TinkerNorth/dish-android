@@ -1,0 +1,18 @@
+<!-- Battery outline with a charging bolt. Shown by ControllerAdapter when the
+     reported battery status is charging / full / wired. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3.5"
+        android:pathData="M8,24 L46,24 A4,4 0 0 1 50,28 L50,36 A4,4 0 0 1 46,40 L8,40 A4,4 0 0 1 4,36 L4,28 A4,4 0 0 1 8,24 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,29 L56,29 A2,2 0 0 1 58,31 L58,33 A2,2 0 0 1 56,35 L54,35 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M28,26 L20,33.5 L26,33.5 L24,40 L34,31.5 L28,31.5 Z" />
+</vector>

@@ -8,6 +8,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
 import android.util.Log
+import com.tinkernorth.dish.data.network.BatteryCoalescer.BatterySample
+import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -15,11 +17,18 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Reports the phone's own battery as the "controller battery" while it acts
- * as an on-screen touch controller. Closes the Android half of roadmap
- * Task 1.2.
+ * Reports the phone's own battery as the "controller battery". Closes the
+ * Android half of roadmap Task 1.2.
  *
- * Polls the sticky `ACTION_BATTERY_CHANGED` intent every
+ * Two callers share this:
+ *  - the touch overlay ([com.tinkernorth.dish.ui.main.GamepadOverlayActivity])
+ *    runs the 30 s poll loop ([start] / [stop]) so the *virtual* controller
+ *    reports the phone battery — the phone is the controller there;
+ *  - [PhysicalBatterySource] reads [readBattery] one-shot as the *fallback*
+ *    for a USB-wired physical pad (the phone is the host, so its battery is
+ *    the meaningful one).
+ *
+ * The poll loop scrapes the sticky `ACTION_BATTERY_CHANGED` intent every
  * [BatteryCoalescer.REPORT_INTERVAL_SECONDS] (30 s, matching the receiver's
  * `BATTERY_REPORT_INTERVAL_SEC`) plus once immediately on [start]. The
  * [BatteryCoalescer] drops the 30 s heartbeat when nothing changed, so a
@@ -28,6 +37,10 @@ import kotlinx.coroutines.launch
 class PhoneBatterySource(
     private val context: Context,
     private val coalescer: BatteryCoalescer = BatteryCoalescer(),
+    /** Slot id this source reports under — the virtual controller by default. */
+    private val slotId: String = VIRTUAL_SLOT_ID,
+    /** Optional UI cache; the latest sample is mirrored here for the dashboard. */
+    private val statusStore: BatteryStatusStore? = null,
 ) {
     /** Invoked with a wire-ready (level, status) pair when the value changes. */
     fun interface Emit {
@@ -50,6 +63,7 @@ class PhoneBatterySource(
                 while (isActive) {
                     readBattery()?.let { sample ->
                         coalescer.publish(VIRTUAL_CONTROLLER, sample) { s ->
+                            statusStore?.put(slotId, s)
                             emit.emit(s.level, s.status)
                         }
                     }
@@ -65,8 +79,12 @@ class PhoneBatterySource(
         coalescer.clearAll()
     }
 
-    /** Read the current battery level + charging state, or null if unavailable. */
-    private fun readBattery(): BatteryCoalescer.BatterySample? {
+    /**
+     * Read the current phone battery level + charging state, or null if
+     * unavailable. Exposed (not private) so [PhysicalBatterySource] can reuse
+     * it as the fallback for a physical pad with no battery of its own.
+     */
+    fun readBattery(): BatterySample? {
         val intent: Intent =
             context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
                 ?: return null
@@ -94,7 +112,7 @@ class PhoneBatterySource(
             }
 
         Log.d(TAG, "battery level=$level status=$status")
-        return BatteryCoalescer.BatterySample(level, status)
+        return BatterySample(level, status)
     }
 
     private companion object {

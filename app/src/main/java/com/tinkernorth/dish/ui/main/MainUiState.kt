@@ -3,11 +3,55 @@
 
 package com.tinkernorth.dish.ui.main
 
+import com.tinkernorth.dish.data.network.BatteryCoalescer
 import com.tinkernorth.dish.data.network.ConnectionSummary
 
 // ── Per-slot types ───────────────────────────────────────────────────────
 
 enum class SlotInputType { VIRTUAL, PHYSICAL }
+
+/**
+ * Battery state of a controller slot, rendered by [ControllerAdapter] as a
+ * percentage + icon on the slot row. Built from the latest wire
+ * `(level, status)` reported for the slot (see
+ * [com.tinkernorth.dish.data.network.BatteryStatusStore]).
+ *
+ * [level] is 0..100, or null when the source reported the
+ * [BatteryCoalescer.LEVEL_UNKNOWN] sentinel (a pad that exposes a charging
+ * status but no percentage). [charging] is true while on mains or full.
+ */
+data class BatteryUi(
+    val level: Int?,
+    val charging: Boolean,
+) {
+    /** True for a level the user should be warned about (low battery). */
+    val isLow: Boolean get() = level != null && !charging && level <= LOW_THRESHOLD
+
+    companion object {
+        /** Below this percent (and not charging) the indicator turns red. */
+        const val LOW_THRESHOLD = 15
+
+        /**
+         * Build a [BatteryUi] from a wire `(level, status)` pair, or null when
+         * there is nothing meaningful to show. A [BatteryCoalescer.LEVEL_UNKNOWN]
+         * level with an unknown status carries no information, so it collapses
+         * to null; a known status with an unknown level still renders (as a
+         * charging/discharging icon with no percentage).
+         */
+        fun fromWire(
+            level: Int,
+            status: Int,
+        ): BatteryUi? {
+            val charging =
+                status == BatteryCoalescer.STATUS_CHARGING ||
+                    status == BatteryCoalescer.STATUS_FULL ||
+                    status == BatteryCoalescer.STATUS_WIRED
+            val pct = if (level == BatteryCoalescer.LEVEL_UNKNOWN) null else level
+            if (pct == null && status == BatteryCoalescer.STATUS_UNKNOWN) return null
+            return BatteryUi(level = pct, charging = charging)
+        }
+    }
+}
 
 /**
  * One controller slot. The virtual controller is always present (id = [VIRTUAL_SLOT_ID]).
@@ -24,6 +68,8 @@ data class ControllerSlot(
     val boundConnectionId: String? = null,
     /** Cached live status of the bound connection (for rendering status dot). */
     val boundStatus: ConnectionSummary? = null,
+    /** Latest reported battery for this slot, or null if none reported yet. */
+    val battery: BatteryUi? = null,
     // Disconnecting state for physical controllers that were unplugged.
     val isDisconnecting: Boolean = false,
     val disconnectTimeLeft: Int = 0,

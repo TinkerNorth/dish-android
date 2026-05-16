@@ -365,6 +365,7 @@ class SatelliteConnection(
         private const val ALIVE_POLL_MS = 1000L
         private const val ACK_WAIT_ATTEMPTS = 20
         private const val ACK_WAIT_INTERVAL_MS = 100L
+
         // MSG_CONTROLLER_ADD capability word (2-byte big-endian): bit 0x0001
         // analog triggers, 0x0002 rumble, 0x0004 motion (this client emits the
         // MSG_MOTION IMU stream — see PhoneMotionSource, Task 1.1).

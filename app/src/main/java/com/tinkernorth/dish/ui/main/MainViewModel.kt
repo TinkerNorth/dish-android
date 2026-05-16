@@ -5,6 +5,7 @@ package com.tinkernorth.dish.ui.main
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tinkernorth.dish.data.network.BatteryStatusStore
 import com.tinkernorth.dish.data.network.ConnectionEvent
 import com.tinkernorth.dish.data.network.ConnectionHub
 import com.tinkernorth.dish.data.network.SatelliteConnectionManager
@@ -38,6 +39,7 @@ class MainViewModel
         val satellite: SatelliteConnectionManager,
         val hub: ConnectionHub,
         private val gamepadRegistry: PhysicalGamepadRegistry,
+        private val batteryStatusStore: BatteryStatusStore,
     ) : ViewModel() {
         private val _uiState = MutableStateFlow(MainUiState())
         val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
@@ -50,7 +52,8 @@ class MainViewModel
                 hub.connections,
                 hub.bindings,
                 gamepadRegistry.devices,
-            ) { conns, bindings, devices ->
+                batteryStatusStore.samples,
+            ) { conns, bindings, devices, batteries ->
                 val virtual =
                     ControllerSlot(
                         id = VIRTUAL_SLOT_ID,
@@ -72,6 +75,10 @@ class MainViewModel
                         slot.copy(
                             boundConnectionId = cid,
                             boundStatus = cid?.let { id -> conns.firstOrNull { it.id == id } },
+                            battery =
+                                batteries[slot.id]?.let { s ->
+                                    BatteryUi.fromWire(s.level, s.status)
+                                },
                         )
                     }
                 MainUiState(slots = slots, connections = conns)
