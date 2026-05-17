@@ -3,8 +3,8 @@
 
 package com.tinkernorth.dish.ui.main
 
-import android.content.res.ColorStateList
 import android.graphics.Typeface
+import android.graphics.drawable.Animatable
 import android.graphics.drawable.GradientDrawable
 import android.view.LayoutInflater
 import android.view.View
@@ -338,11 +338,10 @@ class ControllerAdapter(
          * Paint the per-slot battery indicator (Task 1.2). Hidden entirely
          * when [battery] is null (nothing reported yet).
          *
-         * The three states are kept distinguishable **without relying on
-         * colour** (WCAG 1.4.1): charging swaps in the bolt icon, a low
-         * non-charging battery swaps in the alert icon, and only then is the
-         * red tint added on top. The icon shape — not the tint — is the
-         * primary signal.
+         * The icon is a rung of the v6 charge ladder picked by [batteryIcon]:
+         * the fill width — and the "!" on the critical glyph — convey the level
+         * **without relying on colour** (WCAG 1.4.1), so the icon keeps its own
+         * two-tone teal and only the percentage text takes the low-battery red.
          *
          * The icon's `contentDescription` is built dynamically from the level
          * and charging state so a screen reader announces the actual value
@@ -356,21 +355,38 @@ class ControllerAdapter(
                 return
             }
             b.llBattery.visibility = View.VISIBLE
-            b.ivBattery.setImageResource(
-                when {
-                    battery.charging -> R.drawable.ic_battery_charging
-                    battery.isLow -> R.drawable.ic_battery_alert
-                    else -> R.drawable.ic_battery
-                },
-            )
+            b.ivBattery.setImageResource(batteryIcon(battery))
+            // ic_battery_charging is an AnimatedVectorDrawable — kick off its
+            // fill-ramp / bolt-pulse loop. The other rungs are static, so for
+            // them this is a harmless no-op.
+            (b.ivBattery.drawable as? Animatable)?.start()
             b.tvBattery.text =
                 battery.level?.let { ctx.getString(R.string.battery_percent, it) }
                     ?: ctx.getString(R.string.battery_unknown_level)
+            // Only the percentage text carries the low-battery red; the icon is
+            // left its own teal (a flat tint would collapse the white overlay).
             val colorRes = if (battery.isLow) R.color.colorError else R.color.colorMuted
-            val color = ctx.getColor(colorRes)
-            b.tvBattery.setTextColor(color)
-            b.ivBattery.imageTintList = ColorStateList.valueOf(color)
+            b.tvBattery.setTextColor(ctx.getColor(colorRes))
             b.ivBattery.contentDescription = batteryDescription(ctx, battery)
+        }
+
+        /**
+         * Pick the charge-ladder drawable for [battery]. Charging selects the
+         * animated bolt icon; otherwise the level picks a rung, mirroring the
+         * percent → file table the battery icon assets ship with. A null level
+         * (a status-only pad) falls back to the generic glyph.
+         */
+        private fun batteryIcon(battery: BatteryUi): Int {
+            if (battery.charging) return R.drawable.ic_battery_charging
+            val level = battery.level ?: return R.drawable.ic_battery
+            return when {
+                level <= 0 -> R.drawable.ic_battery_empty
+                level >= 90 -> R.drawable.ic_battery_full
+                level >= 60 -> R.drawable.ic_battery_high
+                level >= 35 -> R.drawable.ic_battery_mid
+                level >= 15 -> R.drawable.ic_battery_low
+                else -> R.drawable.ic_battery_critical
+            }
         }
 
         /**

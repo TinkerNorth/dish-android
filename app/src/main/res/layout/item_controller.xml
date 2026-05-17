@@ -68,12 +68,14 @@
                 <!-- contentDescription is set dynamically in ControllerAdapter
                      (level + charging state) so screen readers announce the
                      actual value; tools:ignore silences the static-text lint. -->
+                <!-- No tint: the battery glyphs are intentionally two-tone
+                     (teal hull + white overlay). bindBattery() swaps in the
+                     charge-ladder rung; only the percentage text goes red. -->
                 <ImageView
                     android:id="@+id/ivBattery"
                     android:layout_width="20dp"
                     android:layout_height="20dp"
                     android:src="@drawable/ic_battery"
-                    app:tint="@color/colorMuted"
                     tools:ignore="ContentDescription" />
 
                 <TextView
