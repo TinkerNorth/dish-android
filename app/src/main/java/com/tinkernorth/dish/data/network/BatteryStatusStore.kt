@@ -14,18 +14,21 @@ import javax.inject.Singleton
  * Process-scoped cache of the latest battery [BatterySample] per controller
  * slot, purely for the dashboard's per-slot battery indicator.
  *
- * The actual `MSG_BATTERY` wire send is owned by the two battery sources
- * ([PhoneBatterySource] for the touch overlay's virtual controller,
- * [PhysicalBatterySource] for physical pads); each also calls [put] here with
- * the same sample so [com.tinkernorth.dish.ui.main.MainViewModel] can render
- * it without re-reading the battery. Keyed by slot id — `VIRTUAL_SLOT_ID` for
- * the virtual controller, the `InputDevice` id (as a string) for a physical
- * pad — matching [com.tinkernorth.dish.ui.main.ControllerSlot.id].
+ * Two process-scoped sources keep it fresh — each a `ProcessLifecycleOwner`
+ * observer installed in DishApplication, so both poll on every screen:
+ * [VirtualBatterySource] writes `VIRTUAL_SLOT_ID` (the phone battery — the
+ * virtual controller), and [PhysicalBatterySource] writes one entry per
+ * physical pad keyed by its `InputDevice` id as a string. The keys match
+ * [com.tinkernorth.dish.ui.main.ControllerSlot.id] so
+ * [com.tinkernorth.dish.ui.main.MainViewModel] can render the level without
+ * re-reading the battery.
  *
- * Lives at process scope so it survives the MainActivity →
- * GamepadOverlayActivity hand-off: the overlay's [PhoneBatterySource] keeps
- * writing here while the overlay is foreground, and the value is still warm
- * when the dashboard comes back.
+ * The `MSG_BATTERY` wire send is a separate concern: [PhysicalBatterySource]
+ * forwards it for physical pads, and GamepadOverlayActivity forwards the
+ * virtual controller's while the touch overlay is the active input device.
+ *
+ * Process scope means an entry stays warm across the MainActivity →
+ * GamepadOverlayActivity hand-off and across an app background/foreground.
  */
 @Singleton
 class BatteryStatusStore

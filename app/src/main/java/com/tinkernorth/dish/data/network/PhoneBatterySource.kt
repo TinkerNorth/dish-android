@@ -21,10 +21,13 @@ import kotlinx.coroutines.launch
  * Reports the phone's own battery as the "controller battery". Closes the
  * Android half of roadmap Task 1.2.
  *
- * Two callers share this:
+ * Three callers share this:
+ *  - [VirtualBatterySource] runs the [start] / [stop] poll loop at process
+ *    scope, mirroring the phone battery into [BatteryStatusStore] so the
+ *    dashboard's virtual-controller indicator stays live on every screen;
  *  - the touch overlay ([com.tinkernorth.dish.ui.main.GamepadOverlayActivity])
- *    runs the 30 s poll loop ([start] / [stop]) so the *virtual* controller
- *    reports the phone battery — the phone is the controller there;
+ *    runs its own [start] / [stop] loop while resumed, to push the *virtual*
+ *    controller's `MSG_BATTERY` to the wire — the phone is the controller there;
  *  - [PhysicalBatterySource] reads [readBattery] one-shot as the *fallback*
  *    for a USB-wired physical pad (the phone is the host, so its battery is
  *    the meaningful one).

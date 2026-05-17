@@ -19,7 +19,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.data.network.BatteryStatusStore
 import com.tinkernorth.dish.data.network.ConnectionHub
 import com.tinkernorth.dish.data.network.ConnectionKind
 import com.tinkernorth.dish.data.network.ConnectionLive
@@ -64,8 +63,6 @@ class GamepadOverlayActivity :
 
     @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
 
-    @Inject lateinit var batteryStatusStore: BatteryStatusStore
-
     private lateinit var binding: ActivityGamepadOverlayBinding
     private lateinit var gamepadHost: GamepadActivityHost
     private var connectionId: String = ""
@@ -106,9 +103,11 @@ class GamepadOverlayActivity :
         // supplier so PhoneMotionSource re-reads the live rotation each start()
         // rather than baking in a value at onCreate() time.
         motionSource = PhoneMotionSource(sensorManager, rotationSupplier = ::currentRotation)
-        // Mirror each forwarded sample into the shared store so the dashboard's
-        // per-slot battery indicator can render the virtual controller too.
-        batterySource = PhoneBatterySource(applicationContext, statusStore = batteryStatusStore)
+        // Wire-send only: pushes the virtual controller's MSG_BATTERY to the
+        // bound satellite while the overlay is the active input device. The
+        // dashboard indicator is fed separately, at process scope, by
+        // VirtualBatterySource — so no statusStore is passed here.
+        batterySource = PhoneBatterySource(applicationContext)
         // Paint the motion pill once up front: on a phone with no gyroscope
         // this is the only paint that ever runs (start/stop are no-ops), and
         // the "no gyroscope" state must be visible without waiting for resume.

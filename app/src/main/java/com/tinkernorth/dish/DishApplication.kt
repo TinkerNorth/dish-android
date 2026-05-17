@@ -11,6 +11,7 @@ import com.tinkernorth.dish.data.network.PhysicalBatterySource
 import com.tinkernorth.dish.data.network.PhysicalMotionSource
 import com.tinkernorth.dish.data.network.PhysicalSlotBindingObserver
 import com.tinkernorth.dish.data.network.RumbleBridge
+import com.tinkernorth.dish.data.network.VirtualBatterySource
 import com.tinkernorth.dish.data.network.WakeStateController
 import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
@@ -24,6 +25,8 @@ class DishApplication : Application() {
     @Inject lateinit var physicalSlotBindingObserver: PhysicalSlotBindingObserver
 
     @Inject lateinit var physicalBatterySource: PhysicalBatterySource
+
+    @Inject lateinit var virtualBatterySource: VirtualBatterySource
 
     @Inject lateinit var physicalMotionSource: PhysicalMotionSource
 
@@ -48,6 +51,12 @@ class DishApplication : Application() {
         // like the slot bindings above. It reports a wireless pad's own
         // battery, or the phone's battery for a USB-wired / batteryless pad.
         lifecycle.addObserver(physicalBatterySource)
+        // The virtual controller's battery — the phone's own — needs the same
+        // process-scoped feed. VIRTUAL_SLOT_ID in BatteryStatusStore used to be
+        // written only by the gamepad overlay, so the dashboard indicator froze
+        // the moment you left the overlay. VirtualBatterySource polls it for the
+        // dashboard on every screen; the overlay still owns the wire send.
+        lifecycle.addObserver(virtualBatterySource)
         // Physical-pad IMU forwarding (Task 1.1, step 2) — process-scoped for
         // the same hand-off reason. Registers per-pad gyro/accel listeners via
         // InputDevice.getSensorManager() (API 31+) for every physical pad
