@@ -348,7 +348,7 @@ class SatelliteConnection(
 
     /**
      * Forward a battery snapshot for [slotId]. Deduping is the caller's job
-     * ([com.tinkernorth.dish.data.network.BatteryCoalescer]).
+     * ([com.tinkernorth.dish.data.network.BatteryValidator]).
      */
     fun sendBattery(
         slotId: String,

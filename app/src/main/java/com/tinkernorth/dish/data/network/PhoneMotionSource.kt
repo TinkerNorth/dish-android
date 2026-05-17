@@ -33,9 +33,14 @@ import android.util.Log
  * accel cache being written *and* read on the sensor thread needs no
  * synchronisation; the volatile is purely for the [stop]-side reset.
  *
- * [rotationSupplier] is read once per [start] (not per sample) so a device
- * rotation between activity resumes is picked up on the next stream start
- * without paying a `Display` query on every gyro tick.
+ * [rotationSupplier] is queried **per sample** (cheaply cached for the gyro +
+ * accel ticks of one fused frame). `GamepadOverlayActivity` declares
+ * `configChanges="orientation|screenSize"`, so flipping the phone end-over-end
+ * (ROTATION_90 ↔ ROTATION_270) does NOT recreate the activity and would never
+ * reach a once-per-`start()` read — the IMU axes would be left 180° sideways
+ * for the rest of the session. Re-reading per sample keeps the axis remap
+ * correct through a live landscape flip; `Display.getRotation()` is a cheap
+ * local read, not an IPC, so this costs nothing measurable on the hot path.
  */
 class PhoneMotionSource(
     private val sensorManager: SensorManager,
@@ -76,11 +81,6 @@ class PhoneMotionSource(
 
     @Volatile private var started = false
 
-    // Display rotation (a Surface.ROTATION_* value) for the axis remap. Read
-    // from rotationSupplier once per start() on the main thread, consumed on
-    // the sensor thread — @Volatile publishes the start()-side write.
-    @Volatile private var rotation: Int = DEFAULT_ROTATION
-
     // Latest accelerometer triple, pre-scaled to wire int16. Written on the
     // accel callback, read on the gyro callback — same (sensor) thread, so no
     // lock; @Volatile is only here so stop()'s main-thread reset is visible.
@@ -113,9 +113,6 @@ class PhoneMotionSource(
      */
     fun start(emit: Emit) {
         if (started || gyro == null) return
-        // Re-read the live display rotation on every (re)start so a rotation
-        // between activity resumes is reflected in the axis remap.
-        rotation = rotationSupplier()
         started = true
         this.emit = emit
         sensorManager.registerListener(listener, gyro, SensorManager.SENSOR_DELAY_GAME)
@@ -139,7 +136,11 @@ class PhoneMotionSource(
 
     private fun onAccel(values: FloatArray) {
         if (values.size < 3) return
-        val (x, y, z) = MotionScaling.remapLandscape(values[0], values[1], values[2], rotation)
+        // Re-read the live rotation per sample: a runtime landscape flip is
+        // swallowed by the activity's configChanges, so a once-per-start read
+        // would leave the remap stale (see the class KDoc).
+        val (x, y, z) =
+            MotionScaling.remapLandscape(values[0], values[1], values[2], rotationSupplier())
         accelX = MotionScaling.accelMssToWire(x)
         accelY = MotionScaling.accelMssToWire(y)
         accelZ = MotionScaling.accelMssToWire(z)
@@ -148,7 +149,8 @@ class PhoneMotionSource(
     private fun onGyro(values: FloatArray) {
         if (values.size < 3) return
         val cb = emit ?: return
-        val (x, y, z) = MotionScaling.remapLandscape(values[0], values[1], values[2], rotation)
+        val (x, y, z) =
+            MotionScaling.remapLandscape(values[0], values[1], values[2], rotationSupplier())
         val sample =
             MotionRateLimiter.MotionSample(
                 gyroX = MotionScaling.gyroRadToWire(x),
@@ -170,7 +172,7 @@ class PhoneMotionSource(
         const val SINGLE_VIRTUAL_CONTROLLER = 0
 
         // Surface.ROTATION_0 — fallback when no rotation supplier is provided
-        // (e.g. in tests). Lands on the ROTATION_90 branch's sibling identity.
+        // (e.g. in tests); the identity remap in MotionScaling.remapLandscape.
         const val DEFAULT_ROTATION = 0
     }
 }

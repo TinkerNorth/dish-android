@@ -3,8 +3,8 @@
 
 package com.tinkernorth.dish.ui.main
 
-import com.tinkernorth.dish.data.network.BatteryCoalescer.BatterySample
 import com.tinkernorth.dish.data.network.BatteryStatusStore
+import com.tinkernorth.dish.data.network.BatteryValidator.BatterySample
 import com.tinkernorth.dish.data.network.ConnectionEvent
 import com.tinkernorth.dish.data.network.ConnectionHub
 import com.tinkernorth.dish.data.network.ConnectionKind
@@ -168,7 +168,7 @@ class MainViewModelTest {
             devicesFlow.value = mapOf(9 to PhysicalGamepadRegistry.Device(9, "Pad"))
             batteryStore.put(
                 "9",
-                BatterySample(72, com.tinkernorth.dish.data.network.BatteryCoalescer.STATUS_DISCHARGING),
+                BatterySample(72, com.tinkernorth.dish.data.network.BatteryValidator.STATUS_DISCHARGING),
             )
             dispatcher.scheduler.runCurrent()
 

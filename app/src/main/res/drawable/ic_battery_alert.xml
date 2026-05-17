@@ -1,0 +1,25 @@
+<!-- Battery outline with an exclamation mark. Shown by ControllerAdapter for a
+     low, non-charging battery. The distinct glyph (not just the red tint) is
+     what makes the low-battery state perceivable without relying on colour —
+     WCAG 1.4.1 Use of Color. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3.5"
+        android:pathData="M8,24 L46,24 A4,4 0 0 1 50,28 L50,36 A4,4 0 0 1 46,40 L8,40 A4,4 0 0 1 4,36 L4,28 A4,4 0 0 1 8,24 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,29 L56,29 A2,2 0 0 1 58,31 L58,33 A2,2 0 0 1 56,35 L54,35 Z" />
+    <!-- Exclamation stem. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M25,28 L29,28 L28.4,34 L25.6,34 Z" />
+    <!-- Exclamation dot. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M27,36 m-1.6,0 a1.6,1.6 0 1 0 3.2,0 a1.6,1.6 0 1 0 -3.2,0" />
+</vector>

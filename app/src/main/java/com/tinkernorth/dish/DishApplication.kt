@@ -8,6 +8,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import com.tinkernorth.dish.data.network.BluetoothGamepadBridge
 import com.tinkernorth.dish.data.network.ConnectionForegroundObserver
 import com.tinkernorth.dish.data.network.PhysicalBatterySource
+import com.tinkernorth.dish.data.network.PhysicalMotionSource
 import com.tinkernorth.dish.data.network.PhysicalSlotBindingObserver
 import com.tinkernorth.dish.data.network.RumbleBridge
 import com.tinkernorth.dish.data.network.WakeStateController
@@ -23,6 +24,8 @@ class DishApplication : Application() {
     @Inject lateinit var physicalSlotBindingObserver: PhysicalSlotBindingObserver
 
     @Inject lateinit var physicalBatterySource: PhysicalBatterySource
+
+    @Inject lateinit var physicalMotionSource: PhysicalMotionSource
 
     @Inject lateinit var physicalGamepadRegistry: PhysicalGamepadRegistry
 
@@ -45,6 +48,12 @@ class DishApplication : Application() {
         // like the slot bindings above. It reports a wireless pad's own
         // battery, or the phone's battery for a USB-wired / batteryless pad.
         lifecycle.addObserver(physicalBatterySource)
+        // Physical-pad IMU forwarding (Task 1.1, step 2) — process-scoped for
+        // the same hand-off reason. Registers per-pad gyro/accel listeners via
+        // InputDevice.getSensorManager() (API 31+) for every physical pad
+        // routed to a satellite, and forwards MSG_MOTION. Listeners are scoped
+        // to the bound-pad lifecycle so none leaks.
+        lifecycle.addObserver(physicalMotionSource)
         // Same handoff hazard: the partial wake lock and the "keep the screen
         // on" decision used to live on MainActivity and got torn down the
         // moment the gamepad overlay covered it. Hoisting to process scope

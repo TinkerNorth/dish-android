@@ -7,17 +7,18 @@ package com.tinkernorth.dish.data.network
  * Battery wire-format constants (mirroring `satellite/src/core/types.h`) plus
  * the per-sample validation gate in front of [SatelliteNative.sendBattery].
  *
- * MSG_BATTERY is a fixed 30 s heartbeat plus an on-connect report: the
- * receiver expects a packet every interval even when the value is unchanged,
- * which is what lets a dropped UDP packet self-heal on the next tick. The
- * 30 s cadence is owned by the poll loops in [PhysicalBatterySource] and
- * [PhoneBatterySource] — [publish] forwards every well-formed sample and
- * drops only malformed ones (it does not coalesce).
+ * Despite an earlier `BatteryCoalescer` name, this class **validates only — it
+ * does not coalesce**. MSG_BATTERY is a fixed 30 s heartbeat plus an on-connect
+ * report: the receiver expects a packet every interval even when the value is
+ * unchanged, which is what lets a dropped UDP packet self-heal on the next
+ * tick. The 30 s cadence is owned by the poll loops in [PhysicalBatterySource]
+ * and [PhoneBatterySource]; [publish] forwards every well-formed sample and
+ * drops only malformed ones.
  *
  * The 0xFF level sentinel means "controller exposes status but no
  * percentage" — some Bluetooth pads only report a charging state.
  */
-class BatteryCoalescer {
+class BatteryValidator {
     data class BatterySample(
         val level: Int,
         val status: Int,

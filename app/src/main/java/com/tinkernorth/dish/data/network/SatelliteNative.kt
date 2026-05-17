@@ -112,8 +112,9 @@ object SatelliteNative {
     /**
      * Send 0x000B Battery message on [handle]. `level` is 0..100 inclusive
      * or `0xFF` (unknown). `status` is one of the `BATTERY_STATUS_*`
-     * constants in [BatteryCoalescer]. Coalescing identical (level, status)
-     * tuples is the caller's responsibility.
+     * constants in [BatteryValidator]. The caller validates the tuple
+     * ([BatteryValidator.publish]) before this call; identical samples are
+     * **not** deduped because MSG_BATTERY is a fixed 30 s heartbeat.
      */
     external fun sendBattery(
         handle: Int,

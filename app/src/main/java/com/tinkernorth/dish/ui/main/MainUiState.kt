@@ -3,7 +3,7 @@
 
 package com.tinkernorth.dish.ui.main
 
-import com.tinkernorth.dish.data.network.BatteryCoalescer
+import com.tinkernorth.dish.data.network.BatteryValidator
 import com.tinkernorth.dish.data.network.ConnectionSummary
 
 // ── Per-slot types ───────────────────────────────────────────────────────
@@ -17,7 +17,7 @@ enum class SlotInputType { VIRTUAL, PHYSICAL }
  * [com.tinkernorth.dish.data.network.BatteryStatusStore]).
  *
  * [level] is 0..100, or null when the source reported the
- * [BatteryCoalescer.LEVEL_UNKNOWN] sentinel (a pad that exposes a charging
+ * [BatteryValidator.LEVEL_UNKNOWN] sentinel (a pad that exposes a charging
  * status but no percentage). [charging] is true while on mains or full.
  */
 data class BatteryUi(
@@ -33,7 +33,7 @@ data class BatteryUi(
 
         /**
          * Build a [BatteryUi] from a wire `(level, status)` pair, or null when
-         * there is nothing meaningful to show. A [BatteryCoalescer.LEVEL_UNKNOWN]
+         * there is nothing meaningful to show. A [BatteryValidator.LEVEL_UNKNOWN]
          * level with an unknown status carries no information, so it collapses
          * to null; a known status with an unknown level still renders (as a
          * charging/discharging icon with no percentage).
@@ -43,11 +43,11 @@ data class BatteryUi(
             status: Int,
         ): BatteryUi? {
             val charging =
-                status == BatteryCoalescer.STATUS_CHARGING ||
-                    status == BatteryCoalescer.STATUS_FULL ||
-                    status == BatteryCoalescer.STATUS_WIRED
-            val pct = if (level == BatteryCoalescer.LEVEL_UNKNOWN) null else level
-            if (pct == null && status == BatteryCoalescer.STATUS_UNKNOWN) return null
+                status == BatteryValidator.STATUS_CHARGING ||
+                    status == BatteryValidator.STATUS_FULL ||
+                    status == BatteryValidator.STATUS_WIRED
+            val pct = if (level == BatteryValidator.LEVEL_UNKNOWN) null else level
+            if (pct == null && status == BatteryValidator.STATUS_UNKNOWN) return null
             return BatteryUi(level = pct, charging = charging)
         }
     }

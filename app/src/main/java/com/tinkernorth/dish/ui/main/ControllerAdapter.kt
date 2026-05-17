@@ -3,6 +3,7 @@
 
 package com.tinkernorth.dish.ui.main
 
+import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.LayoutInflater
@@ -335,10 +336,18 @@ class ControllerAdapter(
 
         /**
          * Paint the per-slot battery indicator (Task 1.2). Hidden entirely
-         * when [battery] is null (nothing reported yet). A low, non-charging
-         * battery turns the icon + text red; a charging battery swaps in the
-         * bolt icon. A pad that reports a status but no percentage shows the
-         * "--" placeholder so the user still sees the charging state.
+         * when [battery] is null (nothing reported yet).
+         *
+         * The three states are kept distinguishable **without relying on
+         * colour** (WCAG 1.4.1): charging swaps in the bolt icon, a low
+         * non-charging battery swaps in the alert icon, and only then is the
+         * red tint added on top. The icon shape — not the tint — is the
+         * primary signal.
+         *
+         * The icon's `contentDescription` is built dynamically from the level
+         * and charging state so a screen reader announces the actual value
+         * ("Controller battery 12%, low, not charging") rather than a static
+         * "battery level" label that conveys nothing.
          */
         private fun bindBattery(battery: BatteryUi?) {
             val ctx = b.root.context
@@ -348,7 +357,11 @@ class ControllerAdapter(
             }
             b.llBattery.visibility = View.VISIBLE
             b.ivBattery.setImageResource(
-                if (battery.charging) R.drawable.ic_battery_charging else R.drawable.ic_battery,
+                when {
+                    battery.charging -> R.drawable.ic_battery_charging
+                    battery.isLow -> R.drawable.ic_battery_alert
+                    else -> R.drawable.ic_battery
+                },
             )
             b.tvBattery.text =
                 battery.level?.let { ctx.getString(R.string.battery_percent, it) }
@@ -356,9 +369,30 @@ class ControllerAdapter(
             val colorRes = if (battery.isLow) R.color.colorError else R.color.colorMuted
             val color = ctx.getColor(colorRes)
             b.tvBattery.setTextColor(color)
-            b.ivBattery.imageTintList =
-                android.content.res.ColorStateList
-                    .valueOf(color)
+            b.ivBattery.imageTintList = ColorStateList.valueOf(color)
+            b.ivBattery.contentDescription = batteryDescription(ctx, battery)
+        }
+
+        /**
+         * Build the dynamic battery `contentDescription` for screen readers:
+         * the level (a percentage, or "level unknown" for a status-only pad)
+         * plus a charging-state phrase. Kept off the static layout string so
+         * the announced value tracks the live battery.
+         */
+        private fun batteryDescription(
+            ctx: android.content.Context,
+            battery: BatteryUi,
+        ): String {
+            val levelText =
+                battery.level?.let { ctx.getString(R.string.battery_percent, it) }
+                    ?: ctx.getString(R.string.battery_desc_level_unknown)
+            val stateRes =
+                when {
+                    battery.isLow -> R.string.battery_state_low
+                    battery.charging -> R.string.battery_state_charging
+                    else -> R.string.battery_state_discharging
+                }
+            return ctx.getString(R.string.battery_desc, levelText, ctx.getString(stateRes))
         }
 
         private fun slotStatusText(s: ControllerSlot) =

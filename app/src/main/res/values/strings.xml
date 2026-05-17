@@ -22,9 +22,18 @@
     <string name="motion_indicator_desc">Phone motion forwarding status</string>
 
     <!-- Per-slot battery indicator on the controller list (Task 1.2). -->
-    <string name="battery_indicator_desc">Controller battery level</string>
     <!-- Battery percentage, e.g. "84%". -->
     <string name="battery_percent">%1$d%%</string>
     <!-- Shown when the controller reports a charging state but no percentage. -->
     <string name="battery_unknown_level">--</string>
+
+    <!-- Dynamic battery contentDescription for screen readers — built from the
+         actual level + charging state so the icon is not announced as a static
+         "battery level" with no value. %1$s is a localised level (a percentage
+         or "unknown"); %2$s is a localised charging-state phrase below. -->
+    <string name="battery_desc">Controller battery %1$s, %2$s</string>
+    <string name="battery_desc_level_unknown">level unknown</string>
+    <string name="battery_state_charging">charging</string>
+    <string name="battery_state_low">low, not charging</string>
+    <string name="battery_state_discharging">on battery</string>
 </resources>

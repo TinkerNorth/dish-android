@@ -645,7 +645,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_se
 
 /* ── Motion (gyro + accel) ────────────────────────────────────────────────── */
 //
-// Hot path. Caller is expected to have already scaled gyro to deg/s × 16383.5
+// Hot path. Caller is expected to have already scaled gyro to deg/s × 16.3835
 // (LSB = 2000/32767 deg/s) and accel to g × 8191.75 (LSB = 4/32767 g) — the
 // satellite docs §0x000A is the canonical spec. Caller is also responsible
 // for any per-controller rate-limiting (MotionRateLimiter.kt) before reaching
@@ -664,10 +664,10 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_se
 
 /* ── Battery (level + status) ─────────────────────────────────────────────── */
 //
-// Low-rate (30 s cadence) — see BatteryCoalescer.kt for the dedup before the
-// Kotlin → JNI call. `level` is 0..100 inclusive, or 0xFF for unknown.
-// `status` is one of the BATTERY_STATUS_* constants documented in
-// satellite/docs/protocol.md §0x000B.
+// Low-rate (30 s cadence) — see BatteryValidator.kt for the per-sample
+// validation before the Kotlin → JNI call (it validates, it does not dedup).
+// `level` is 0..100 inclusive, or 0xFF for unknown. `status` is one of the
+// BATTERY_STATUS_* constants documented in satellite/docs/protocol.md §0x000B.
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_sendBattery(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jint level, jint status) {
     auto s = getSession(handle);
@@ -755,7 +755,13 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_re
     uint8_t nonce[12] = {};
     putBE32(nonce + 8, ctr);
 
-    uint8_t decrypted[64];
+    // Sized to match buf[128] so the decrypt destination can never be
+    // overflowed: plaintext is (cipherLen - 16) bytes and cipherLen <= n - 8
+    // <= 120, so the largest possible plaintext (~104 B) still fits. A 64-byte
+    // buffer here was a latent stack overflow — not currently reachable (no
+    // server→client message is that large and the Poly1305 tag must verify
+    // first), but the bound must hold structurally, not by message-set luck.
+    uint8_t decrypted[sizeof(buf)];
     unsigned long long decLen = 0;
     size_t cipherLen = (size_t)n - 8;
     if (crypto_aead_chacha20poly1305_ietf_decrypt(decrypted, &decLen, nullptr, buf + 8, cipherLen,
@@ -800,7 +806,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_re
         env->CallStaticVoidMethod(g_rumbleBridgeClass, g_rumbleDispatchMethod, handle, ctrlIdx,
                                   strong, weakMag, durMs);
         if (env->ExceptionCheck()) env->ExceptionClear();
-    } else if (msgType == MSG_LIGHTBAR && msgLen >= 4 && decLen >= 8) {
+    } else if (msgType == MSG_LIGHTBAR && msgLen == 4 && decLen >= 8) {
         // Dedicated controller-RGB-LED message (satellite → sender). Android
         // exposes no controller-LED API, so dish-android cannot actuate this
         // and intentionally does not advertise CAP_LIGHTBAR — a capability-

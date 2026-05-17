@@ -76,15 +76,19 @@ object MotionScaling {
     ): FloatArray =
         when (rotation) {
             ROTATION_0 -> floatArrayOf(deviceX, deviceY, deviceZ)
+            ROTATION_90 -> floatArrayOf(deviceY, -deviceX, deviceZ)
             ROTATION_180 -> floatArrayOf(-deviceX, -deviceY, deviceZ)
             ROTATION_270 -> floatArrayOf(-deviceY, deviceX, deviceZ)
-            // ROTATION_90 and any unexpected value.
+            // Any unexpected value falls back to the ROTATION_90 landscape remap.
             else -> floatArrayOf(deviceY, -deviceX, deviceZ)
         }
 
     // Mirror of android.view.Surface.ROTATION_* — duplicated as plain ints so
     // remapLandscape has zero framework dependency and runs in a pure JVM test.
+    // All four are spelled out (rather than letting ROTATION_90 fall into the
+    // `else`) so the mapping is exhaustive and self-documenting.
     private const val ROTATION_0 = 0
+    private const val ROTATION_90 = 1
     private const val ROTATION_180 = 2
     private const val ROTATION_270 = 3
 }

@@ -3,7 +3,7 @@
 
 package com.tinkernorth.dish.data.network
 
-import com.tinkernorth.dish.data.network.BatteryCoalescer.BatterySample
+import com.tinkernorth.dish.data.network.BatteryValidator.BatterySample
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

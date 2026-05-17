@@ -54,7 +54,7 @@ class PhysicalBatteryMappingTest {
                 status = PhysicalBatteryMapping.ANDROID_STATUS_DISCHARGING,
             )
         assertEquals(84, sample?.level)
-        assertEquals(BatteryCoalescer.STATUS_DISCHARGING, sample?.status)
+        assertEquals(BatteryValidator.STATUS_DISCHARGING, sample?.status)
     }
 
     @Test
@@ -76,7 +76,7 @@ class PhysicalBatteryMappingTest {
     @Test
     fun `capacity above 1 is clamped to 100`() {
         // Some HID descriptors report a slightly-over-1.0 capacity; clamp it
-        // rather than letting the coalescer reject a >100 level.
+        // rather than letting the validator reject a >100 level.
         assertEquals(
             100,
             PhysicalBatteryMapping
@@ -95,8 +95,8 @@ class PhysicalBatteryMappingTest {
                 capacity = Float.NaN,
                 status = PhysicalBatteryMapping.ANDROID_STATUS_CHARGING,
             )
-        assertEquals(BatteryCoalescer.LEVEL_UNKNOWN, sample?.level)
-        assertEquals(BatteryCoalescer.STATUS_CHARGING, sample?.status)
+        assertEquals(BatteryValidator.LEVEL_UNKNOWN, sample?.level)
+        assertEquals(BatteryValidator.STATUS_CHARGING, sample?.status)
     }
 
     @Test
@@ -107,7 +107,7 @@ class PhysicalBatteryMappingTest {
                 capacity = -1f,
                 status = PhysicalBatteryMapping.ANDROID_STATUS_DISCHARGING,
             )
-        assertEquals(BatteryCoalescer.LEVEL_UNKNOWN, sample?.level)
+        assertEquals(BatteryValidator.LEVEL_UNKNOWN, sample?.level)
     }
 
     // ── statusToWire ────────────────────────────────────────────────────────
@@ -115,7 +115,7 @@ class PhysicalBatteryMappingTest {
     @Test
     fun `charging status maps to the wire charging status`() {
         assertEquals(
-            BatteryCoalescer.STATUS_CHARGING,
+            BatteryValidator.STATUS_CHARGING,
             PhysicalBatteryMapping.statusToWire(PhysicalBatteryMapping.ANDROID_STATUS_CHARGING),
         )
     }
@@ -123,7 +123,7 @@ class PhysicalBatteryMappingTest {
     @Test
     fun `full status maps to the wire full status`() {
         assertEquals(
-            BatteryCoalescer.STATUS_FULL,
+            BatteryValidator.STATUS_FULL,
             PhysicalBatteryMapping.statusToWire(PhysicalBatteryMapping.ANDROID_STATUS_FULL),
         )
     }
@@ -131,7 +131,7 @@ class PhysicalBatteryMappingTest {
     @Test
     fun `discharging status maps to the wire discharging status`() {
         assertEquals(
-            BatteryCoalescer.STATUS_DISCHARGING,
+            BatteryValidator.STATUS_DISCHARGING,
             PhysicalBatteryMapping.statusToWire(PhysicalBatteryMapping.ANDROID_STATUS_DISCHARGING),
         )
     }
@@ -141,7 +141,7 @@ class PhysicalBatteryMappingTest {
         // Plugged in but held (charge limiter) — closest to discharging from
         // the player's point of view, matching the phone-battery choice.
         assertEquals(
-            BatteryCoalescer.STATUS_DISCHARGING,
+            BatteryValidator.STATUS_DISCHARGING,
             PhysicalBatteryMapping.statusToWire(PhysicalBatteryMapping.ANDROID_STATUS_NOT_CHARGING),
         )
     }
@@ -149,22 +149,22 @@ class PhysicalBatteryMappingTest {
     @Test
     fun `unknown status maps to the wire unknown status`() {
         assertEquals(
-            BatteryCoalescer.STATUS_UNKNOWN,
+            BatteryValidator.STATUS_UNKNOWN,
             PhysicalBatteryMapping.statusToWire(PhysicalBatteryMapping.ANDROID_STATUS_UNKNOWN),
         )
     }
 
     @Test
     fun `an out-of-range status falls back to unknown`() {
-        assertEquals(BatteryCoalescer.STATUS_UNKNOWN, PhysicalBatteryMapping.statusToWire(99))
-        assertEquals(BatteryCoalescer.STATUS_UNKNOWN, PhysicalBatteryMapping.statusToWire(-1))
+        assertEquals(BatteryValidator.STATUS_UNKNOWN, PhysicalBatteryMapping.statusToWire(99))
+        assertEquals(BatteryValidator.STATUS_UNKNOWN, PhysicalBatteryMapping.statusToWire(-1))
     }
 
     @Test
-    fun `every mapped sample is accepted by the coalescer`() {
-        // The mapping must never produce a (level, status) the coalescer would
+    fun `every mapped sample is accepted by the validator`() {
+        // The mapping must never produce a (level, status) the validator would
         // reject as malformed — that would silently drop a real battery report.
-        val coalescer = BatteryCoalescer()
+        val validator = BatteryValidator()
         val cases =
             listOf(
                 Triple(true, 0f, PhysicalBatteryMapping.ANDROID_STATUS_DISCHARGING),
@@ -176,9 +176,9 @@ class PhysicalBatteryMappingTest {
         for ((present, cap, status) in cases) {
             val sample = PhysicalBatteryMapping.controllerSample(present, cap, status)!!
             var emitted = false
-            coalescer.publish(sample) { emitted = true }
+            validator.publish(sample) { emitted = true }
             org.junit.Assert.assertTrue(
-                "coalescer rejected mapped sample $sample",
+                "validator rejected mapped sample $sample",
                 emitted,
             )
         }
