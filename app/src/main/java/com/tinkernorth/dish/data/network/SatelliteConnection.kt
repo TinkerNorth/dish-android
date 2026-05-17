@@ -94,7 +94,7 @@ class SatelliteConnection(
      * each other's ACKs.
      */
     private val registrationMutex = Mutex()
-    private var onRegistrationFailed: (() -> Unit)? = null
+    private var onRegistrationFailed: ((reason: String) -> Unit)? = null
 
     fun updateServer(server: DiscoveredServer) {
         _server.value = server
@@ -128,7 +128,7 @@ class SatelliteConnection(
     internal fun markConnected(
         handle: Int,
         connectionId: String,
-        onRegistrationFailed: (() -> Unit)? = null,
+        onRegistrationFailed: ((reason: String) -> Unit)? = null,
         onDead: () -> Unit,
     ) {
         if (_state.value != SatelliteState.CONNECTING) return
@@ -264,20 +264,42 @@ class SatelliteConnection(
                     if (ack != -1) return@repeat
                     delay(ACK_WAIT_INTERVAL_MS)
                 }
-                if (ack != -1) {
+                // ack == -1 → no ACK arrived at all. Otherwise the low byte is
+                // the MSG_CONTROLLER_ACK result code, and only ACK_OK means the
+                // controller is live server-side. An *error* ACK — e.g. a macOS
+                // satellite answering ACK_ERR_BACKEND_UNAVAIL because it has no
+                // virtual-gamepad backend — must NOT be mistaken for success,
+                // or sendReport() would stream input the server silently drops.
+                val result = if (ack == -1) null else ack and ACK_RESULT_MASK
+                if (result == ACK_OK) {
                     controllerRepo.sendControllerType(handle, info.controllerIndex, info.controllerType)
                     _slots.update { map ->
                         val cur = map[slotId] ?: return@update map
                         map + (slotId to cur.copy(registered = true))
                     }
                 } else {
-                    // Server never ACKed addController; don't silently feed
-                    // reports into a connection it will reject. Surface so the
-                    // user sees "couldn't register controller" instead of an
-                    // inert UI.
-                    onRegistrationFailed?.invoke()
+                    // Leave the slot unregistered so sendReport() stays gated,
+                    // and surface why — the user gets a real reason instead of
+                    // a UI that looks connected but silently does nothing.
+                    onRegistrationFailed?.invoke(registrationFailureReason(result))
                 }
             }
+        }
+
+    /**
+     * A short, human-readable reason a controller registration was rejected,
+     * passed to the [onRegistrationFailed] callback for display. [result] is
+     * the MSG_CONTROLLER_ACK result byte, or null when the satellite never
+     * answered at all. Phrased as a clause — the caller prefixes the server.
+     */
+    private fun registrationFailureReason(result: Int?): String =
+        when (result) {
+            null -> "it didn't respond"
+            ACK_ERR_BACKEND_UNAVAIL -> "it has no virtual-gamepad backend (e.g. a macOS satellite)"
+            ACK_ERR_NO_SLOTS -> "it has no free controller slots"
+            ACK_ERR_ALREADY_EXISTS -> "that controller slot is already in use"
+            ACK_ERR_PLUGIN_FAIL -> "it couldn't create the virtual controller"
+            else -> "it rejected the controller"
         }
 
     fun detachSlot(slotId: String) {
@@ -381,6 +403,16 @@ class SatelliteConnection(
         private const val CAP_MOTION = 0x0004
         private const val DEFAULT_CAPABILITIES =
             CAP_ANALOG_TRIGGERS or CAP_RUMBLE or CAP_MOTION
+
+        // MSG_CONTROLLER_ACK result codes — wire values mirror the satellite's
+        // core/types.h. getLastControllerAck() returns a packed word,
+        // (reqType shl 16) or (ctrlIdx shl 8) or result; the result is the low byte.
+        private const val ACK_RESULT_MASK = 0xFF
+        private const val ACK_OK = 0x00
+        private const val ACK_ERR_BACKEND_UNAVAIL = 0x01
+        private const val ACK_ERR_NO_SLOTS = 0x02
+        private const val ACK_ERR_ALREADY_EXISTS = 0x03
+        private const val ACK_ERR_PLUGIN_FAIL = 0x05
 
         fun idFor(server: DiscoveredServer): String = "satellite:${server.ip}:${server.udpPort}"
 

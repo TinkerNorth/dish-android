@@ -246,11 +246,11 @@ class SatelliteConnectionManager
                 handle,
                 connId,
                 onDead = { disconnect(conn.id) },
-                onRegistrationFailed = {
+                onRegistrationFailed = { reason ->
                     scope.launch {
                         _events.emit(
                             ConnectionEvent.Error(
-                                "Couldn't register controller with ${server.name} — try reconnecting",
+                                "Couldn't register controller with ${server.name} — $reason",
                             ),
                         )
                     }

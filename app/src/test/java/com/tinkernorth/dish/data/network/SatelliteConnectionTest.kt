@@ -103,7 +103,7 @@ class SatelliteConnectionTest {
             every { repo.stopHeartbeat(any()) } just Runs
             every { repo.closeSocket(any()) } just Runs
             every { repo.isConnectionAlive(any()) } returns true
-            every { repo.getLastControllerAck(any()) } returns 1
+            every { repo.getLastControllerAck(any()) } returns 0
 
             conn.markConnecting()
             conn.markConnected(handle = 3, connectionId = "c") {}
@@ -132,7 +132,7 @@ class SatelliteConnectionTest {
             every { repo.resetControllerAck(any()) } just Runs
             every { repo.startHeartbeat(any()) } just Runs
             every { repo.isConnectionAlive(any()) } returns false
-            every { repo.getLastControllerAck(any()) } returns 1
+            every { repo.getLastControllerAck(any()) } returns 0
             conn.markConnecting()
             conn.markConnected(handle = 9, connectionId = "c") {}
             // attachSlot triggers registerController which sets registered=true;
@@ -151,7 +151,7 @@ class SatelliteConnectionTest {
             every { repo.resetControllerAck(any()) } just Runs
             every { repo.startHeartbeat(any()) } just Runs
             every { repo.isConnectionAlive(any()) } returns false
-            every { repo.getLastControllerAck(any()) } returns 1
+            every { repo.getLastControllerAck(any()) } returns 0
             conn.markConnecting()
             conn.markConnected(handle = 9, connectionId = "c") {}
             conn.attachSlot(slotId = "slot-1", controllerType = 0)
@@ -200,7 +200,7 @@ class SatelliteConnectionTest {
             every { repo.resetControllerAck(any()) } just Runs
             every { repo.startHeartbeat(any()) } just Runs
             every { repo.isConnectionAlive(any()) } returns false
-            every { repo.getLastControllerAck(any()) } returns 1
+            every { repo.getLastControllerAck(any()) } returns 0
 
             conn.markConnecting()
             conn.markConnected(handle = 8, connectionId = "c") {}
@@ -212,12 +212,44 @@ class SatelliteConnectionTest {
         }
 
     @Test
+    fun `an error ACK fails registration so reports stay gated and the reason surfaces`() =
+        runTest {
+            every { repo.resetControllerAck(any()) } just Runs
+            every { repo.startHeartbeat(any()) } just Runs
+            every { repo.isConnectionAlive(any()) } returns false
+            // Low byte 0x01 = ACK_ERR_BACKEND_UNAVAIL — a satellite with no
+            // virtual-gamepad backend (e.g. macOS). The dish must treat this as
+            // a failed registration, not — as it once did — silently as success.
+            every { repo.getLastControllerAck(any()) } returns 1
+
+            var failureReason: String? = null
+            conn.markConnecting()
+            conn.markConnected(
+                handle = 9,
+                connectionId = "c",
+                onRegistrationFailed = { failureReason = it },
+            ) {}
+            conn.attachSlot(slotId = "slot-1", controllerType = 0)
+
+            // An error ACK must not register the slot, so sendReport() stays
+            // gated — no input is streamed to a controller the satellite
+            // rejected.
+            assertEquals(false, conn.slots.value["slot-1"]?.registered)
+            conn.sendReport("slot-1", buttons = 1, lt = 0, rt = 0, lx = 0, ly = 0, rx = 0, ry = 0)
+            verify(exactly = 0) {
+                repo.sendReport(any(), any(), any(), any(), any(), any(), any(), any(), any())
+            }
+            // ...and the rejection reason reaches the caller for display.
+            assertTrue(failureReason?.contains("backend", ignoreCase = true) == true)
+        }
+
+    @Test
     fun `controller add advertises the motion capability bit`() =
         runTest {
             every { repo.resetControllerAck(any()) } just Runs
             every { repo.startHeartbeat(any()) } just Runs
             every { repo.isConnectionAlive(any()) } returns false
-            every { repo.getLastControllerAck(any()) } returns 1
+            every { repo.getLastControllerAck(any()) } returns 0
 
             conn.markConnecting()
             conn.markConnected(handle = 8, connectionId = "c") {}
@@ -237,7 +269,7 @@ class SatelliteConnectionTest {
             every { repo.resetControllerAck(any()) } just Runs
             every { repo.startHeartbeat(any()) } just Runs
             every { repo.isConnectionAlive(any()) } returns false
-            every { repo.getLastControllerAck(any()) } returns 1
+            every { repo.getLastControllerAck(any()) } returns 0
 
             conn.attachSlot(slotId = "slot-1", controllerType = 0)
             assertTrue(conn.slots.value.containsKey("slot-1"))
@@ -260,7 +292,7 @@ class SatelliteConnectionTest {
             every { repo.resetControllerAck(any()) } just Runs
             every { repo.startHeartbeat(any()) } just Runs
             every { repo.isConnectionAlive(any()) } returns false
-            every { repo.getLastControllerAck(any()) } returns 1
+            every { repo.getLastControllerAck(any()) } returns 0
 
             conn.markConnecting()
             conn.markConnected(handle = 4, connectionId = "c") {}
@@ -279,7 +311,7 @@ class SatelliteConnectionTest {
             every { repo.resetControllerAck(any()) } just Runs
             every { repo.startHeartbeat(any()) } just Runs
             every { repo.isConnectionAlive(any()) } returns false
-            every { repo.getLastControllerAck(any()) } returns 1
+            every { repo.getLastControllerAck(any()) } returns 0
 
             conn.markConnecting()
             conn.markConnected(handle = 11, connectionId = "c") {}
@@ -297,7 +329,7 @@ class SatelliteConnectionTest {
             every { repo.resetControllerAck(any()) } just Runs
             every { repo.startHeartbeat(any()) } just Runs
             every { repo.isConnectionAlive(any()) } returns false
-            every { repo.getLastControllerAck(any()) } returns 1
+            every { repo.getLastControllerAck(any()) } returns 0
             every { repo.removeController(any(), any()) } just Runs
 
             conn.markConnecting()
@@ -320,7 +352,7 @@ class SatelliteConnectionTest {
             every { repo.resetControllerAck(any()) } just Runs
             every { repo.startHeartbeat(any()) } just Runs
             every { repo.isConnectionAlive(any()) } returns false
-            every { repo.getLastControllerAck(any()) } returns 1
+            every { repo.getLastControllerAck(any()) } returns 0
 
             conn.markConnecting()
             conn.markConnected(handle = 6, connectionId = "c") {}
@@ -358,7 +390,7 @@ class SatelliteConnectionTest {
             every { repo.resetControllerAck(any()) } just Runs
             every { repo.startHeartbeat(any()) } just Runs
             every { repo.isConnectionAlive(any()) } returns false
-            every { repo.getLastControllerAck(any()) } returns 1
+            every { repo.getLastControllerAck(any()) } returns 0
 
             conn.markConnecting()
             conn.markConnected(handle = 1, connectionId = "c") {}
