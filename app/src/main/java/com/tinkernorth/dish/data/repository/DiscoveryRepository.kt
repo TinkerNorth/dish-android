@@ -3,7 +3,9 @@
 
 package com.tinkernorth.dish.data.repository
 
+import android.util.Log
 import com.tinkernorth.dish.data.model.DiscoveredServer
+import com.tinkernorth.dish.data.model.DiscoverySource
 import com.tinkernorth.dish.data.network.MdnsDiscovery
 import com.tinkernorth.dish.data.network.SatelliteNative
 import com.tinkernorth.dish.data.network.parseServers
@@ -45,11 +47,15 @@ class DiscoveryRepository
                         val broadcast =
                             async { parseServers(SatelliteNative.discoverServers(port, timeoutMs)) }
                         val viaMdns = async { mdns.discover(timeoutMs) }
-                        val merged = LinkedHashMap<String, DiscoveredServer>()
-                        for (server in broadcast.await() + viaMdns.await()) {
-                            merged["${server.ip}:${server.udpPort}"] = server
-                        }
-                        merged.values.toList()
+                        val broadcastList = broadcast.await()
+                        val mdnsList = viaMdns.await()
+                        val merged = mergeDiscovered(broadcastList, mdnsList)
+                        Log.i(
+                            TAG,
+                            "discovery scan: broadcast=${broadcastList.size} " +
+                                "mdns=${mdnsList.size} merged=${merged.size}",
+                        )
+                        merged
                     }
                 }
             }
@@ -89,4 +95,33 @@ class DiscoveryRepository
                     SatelliteNative.httpDisconnect(ip, port, connectionId, deviceId)
                 }
             }
+
+        companion object {
+            private const val TAG = "DiscoveryRepository"
+
+            /**
+             * Merge the two discovery paths by `ip:udpPort`, tagging each
+             * server's [DiscoveredServer.source]. A server heard on both paths
+             * becomes [DiscoverySource.BOTH]; otherwise it carries the path
+             * that surfaced it. Result is name-sorted. Pure + internal so it
+             * can be unit-tested without sockets.
+             */
+            internal fun mergeDiscovered(
+                broadcast: List<DiscoveredServer>,
+                mdns: List<DiscoveredServer>,
+            ): List<DiscoveredServer> {
+                val byKey = LinkedHashMap<String, DiscoveredServer>()
+                for (server in broadcast) {
+                    byKey["${server.ip}:${server.udpPort}"] =
+                        server.copy(source = DiscoverySource.BROADCAST)
+                }
+                for (server in mdns) {
+                    val key = "${server.ip}:${server.udpPort}"
+                    val source =
+                        if (byKey.containsKey(key)) DiscoverySource.BOTH else DiscoverySource.MDNS
+                    byKey[key] = server.copy(source = source)
+                }
+                return byKey.values.sortedBy { it.name }
+            }
+        }
     }

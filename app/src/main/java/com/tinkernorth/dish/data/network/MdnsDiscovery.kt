@@ -8,6 +8,7 @@ import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.util.Log
 import com.tinkernorth.dish.data.model.DiscoveredServer
+import com.tinkernorth.dish.data.model.DiscoverySource
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -144,6 +145,7 @@ class MdnsDiscovery
                 udpPort = txtInt("udp") ?: info.port.takeIf { it > 0 } ?: DEFAULT_UDP,
                 pairPort = txtInt("pair") ?: DEFAULT_PAIR,
                 httpPort = txtInt("http") ?: DEFAULT_HTTP,
+                source = DiscoverySource.MDNS,
             )
         }
 

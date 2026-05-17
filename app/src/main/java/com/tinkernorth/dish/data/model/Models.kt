@@ -4,6 +4,18 @@
 package com.tinkernorth.dish.data.model
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
+
+/**
+ * Which discovery path surfaced a satellite. mDNS / Bonjour is the modern
+ * path; [BROADCAST] is the legacy UDP beacon; [BOTH] means it answered on
+ * each. Not a wire field — assigned client-side by the discovery merge.
+ */
+enum class DiscoverySource(val label: String) {
+    BROADCAST("UDP broadcast"),
+    MDNS("mDNS"),
+    BOTH("mDNS + broadcast"),
+}
 
 @Serializable
 data class DiscoveredServer(
@@ -12,6 +24,9 @@ data class DiscoveredServer(
     val udpPort: Int = 9876,
     val pairPort: Int = 9878,
     val httpPort: Int = 9877,
+    // Discovery path this server was heard on. @Transient → never on the
+    // wire; a decoded beacon keeps the BROADCAST default.
+    @Transient val source: DiscoverySource = DiscoverySource.BROADCAST,
 )
 
 @Serializable
