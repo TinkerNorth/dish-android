@@ -11,7 +11,9 @@ import kotlinx.serialization.Transient
  * path; [BROADCAST] is the legacy UDP beacon; [BOTH] means it answered on
  * each. Not a wire field — assigned client-side by the discovery merge.
  */
-enum class DiscoverySource(val label: String) {
+enum class DiscoverySource(
+    val label: String,
+) {
     BROADCAST("UDP broadcast"),
     MDNS("mDNS"),
     BOTH("mDNS + broadcast"),

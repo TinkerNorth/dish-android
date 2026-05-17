@@ -197,7 +197,13 @@ class ConnectionsActivity : AppCompatActivity() {
     }
 
     private fun discoveredSatelliteRow(s: com.tinkernorth.dish.data.model.DiscoveredServer): View {
-        val rb = inflateRow(binding.llSatelliteList, s.name.ifEmpty { s.ip }, "${s.ip} • UDP ${s.udpPort}", "Discovered · ${s.source.label}")
+        val rb =
+            inflateRow(
+                binding.llSatelliteList,
+                s.name.ifEmpty { s.ip },
+                "${s.ip} • UDP ${s.udpPort}",
+                "Discovered · ${s.source.label}",
+            )
         rb.btnRowAction.text = "Connect"
         rb.btnRowAction.setOnClickListener { satellite.connect(s) }
         return rb.root
