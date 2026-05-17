@@ -108,7 +108,16 @@ class MdnsDiscovery
                 ) = Unit
             }
 
-        /** Resolve one found service to a [DiscoveredServer], or null on failure. */
+        /**
+         * Resolve one found service to a [DiscoveredServer], or null on
+         * failure.
+         *
+         * `NsdManager.resolveService` is deprecated on API 34+ in favour of
+         * `registerServiceInfoCallback`, but that replacement is API 34-only
+         * and `minSdk` is 24 — so the deprecated call is still the correct
+         * path for API 24–33. The `@Suppress` is deliberate.
+         */
+        @Suppress("DEPRECATION")
         private suspend fun resolveOne(
             nsd: NsdManager,
             info: NsdServiceInfo,
@@ -144,7 +153,12 @@ class MdnsDiscovery
          * the TXT-record parsing, SRV-vs-TXT port fallback, and default-port
          * logic can be unit-tested without an [NsdServiceInfo] (a framework
          * class that cannot be constructed in a JVM test).
+         *
+         * `NsdServiceInfo.host` is deprecated on API 34+ (`getHostAddresses()`)
+         * but a single-address host is still correct for API 24–33; the
+         * `@Suppress` is deliberate.
          */
+        @Suppress("DEPRECATION")
         private fun toServer(info: NsdServiceInfo): DiscoveredServer? =
             mdnsServiceToServer(
                 serviceName = info.serviceName.orEmpty(),

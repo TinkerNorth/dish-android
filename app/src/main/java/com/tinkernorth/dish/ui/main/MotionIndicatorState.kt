@@ -17,13 +17,17 @@ import com.tinkernorth.dish.R
  *
  *  - [STREAMING]      the phone has a gyroscope, the overlay is resumed, and
  *                     the bound connection is a satellite connection (the
- *                     only kind that carries `MSG_MOTION`), so
+ *                     only kind that carries `MSG_MOTION`) that is actually
+ *                     CONNECTED — so
  *                     [com.tinkernorth.dish.data.network.PhoneMotionSource]
- *                     is started and samples are being forwarded.
- *  - [PAUSED]         the phone has a gyroscope but the source is stopped
- *                     (overlay backgrounded — gyro listeners are released to
- *                     save battery). Distinct from [UNAVAILABLE]: the hardware
- *                     is there, it is just idle right now.
+ *                     is started and samples are reaching the wire.
+ *  - [PAUSED]         the phone has a gyroscope but motion is not flowing
+ *                     right now: either the source is stopped (overlay
+ *                     backgrounded — gyro listeners released to save battery),
+ *                     or it is running but the satellite connection is not
+ *                     CONNECTED, so the samples are dropped before the wire.
+ *                     Distinct from [UNAVAILABLE]: the hardware is there, it
+ *                     is just idle right now.
  *  - [NOT_FORWARDED]  the phone has a gyroscope but the bound connection is a
  *                     Bluetooth-HID connection, which has no motion channel —
  *                     so motion is captured-but-dropped, never sent. Honest
@@ -52,8 +56,8 @@ enum class MotionIndicatorState(
 
     companion object {
         /**
-         * Pure mapping from the three facts the overlay knows to the
-         * indicator state:
+         * Pure mapping from the four facts the overlay knows to the indicator
+         * state:
          *
          *  - [isAvailable]   — whether the phone has a gyroscope
          *    ([com.tinkernorth.dish.data.network.PhoneMotionSource.isAvailable]).
@@ -62,21 +66,27 @@ enum class MotionIndicatorState(
          *  - [connectionCarriesMotion] — whether the bound connection kind
          *    has an `MSG_MOTION` channel (satellite does, Bluetooth-HID does
          *    not).
+         *  - [connectionConnected] — whether the bound connection is actually
+         *    CONNECTED. A satellite connection that is reconnecting or idle
+         *    has `sendMotion` drop every packet, so a "started" source over a
+         *    down connection is not really streaming.
          *
          * Precedence: no gyroscope wins outright ([UNAVAILABLE]); then a
          * connection that can't carry motion ([NOT_FORWARDED]) — the source
          * may be "started" but its emits are dropped, so this must not read
-         * as [STREAMING]; then the lifecycle [isStreaming] flag.
+         * as [STREAMING]; then [STREAMING] only when the source is started
+         * **and** the connection is up; otherwise [PAUSED].
          */
         fun of(
             isAvailable: Boolean,
             isStreaming: Boolean,
             connectionCarriesMotion: Boolean,
+            connectionConnected: Boolean,
         ): MotionIndicatorState =
             when {
                 !isAvailable -> UNAVAILABLE
                 !connectionCarriesMotion -> NOT_FORWARDED
-                isStreaming -> STREAMING
+                isStreaming && connectionConnected -> STREAMING
                 else -> PAUSED
             }
     }

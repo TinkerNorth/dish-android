@@ -63,11 +63,14 @@
                 android:layout_height="6dp"
                 android:layout_marginEnd="8dp" />
 
+            <!-- No contentDescription: a TextView is announced by its own
+                 text, so a screen reader reads the live "Motion: streaming /
+                 paused / no gyroscope" label set by refreshMotionStatus(). A
+                 static contentDescription would mask that live state. -->
             <TextView
                 android:id="@+id/tvMotionStatus"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:contentDescription="@string/motion_indicator_desc"
                 android:text="@string/motion_unavailable"
                 android:textColor="@color/colorOnSurface"
                 android:textSize="11sp"

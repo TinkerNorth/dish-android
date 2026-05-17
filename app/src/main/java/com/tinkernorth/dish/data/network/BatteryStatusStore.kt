@@ -7,6 +7,7 @@ import com.tinkernorth.dish.data.network.BatteryValidator.BatterySample
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -39,17 +40,26 @@ class BatteryStatusStore
         /** Latest battery sample per slot id; empty entries mean "not reported yet". */
         val samples: StateFlow<Map<String, BatterySample>> = _samples.asStateFlow()
 
-        /** Record the latest battery [sample] for [slotId]. */
+        /**
+         * Record the latest battery [sample] for [slotId].
+         *
+         * Uses [MutableStateFlow.update] — a compare-and-set loop — rather than
+         * a `value = value + entry` read-modify-write: two process-scoped
+         * sources write this store from different threads, and a plain R-M-W
+         * would let a concurrent write for another slot clobber this one.
+         */
         fun put(
             slotId: String,
             sample: BatterySample,
         ) {
-            _samples.value = _samples.value + (slotId to sample)
+            _samples.update { it + (slotId to sample) }
         }
 
-        /** Drop the cached sample for [slotId] (e.g. when its pad is unplugged). */
+        /**
+         * Drop the cached sample for [slotId] (e.g. when its pad is unplugged).
+         * Atomic for the same reason as [put].
+         */
         fun clear(slotId: String) {
-            if (slotId !in _samples.value) return
-            _samples.value = _samples.value - slotId
+            _samples.update { if (slotId in it) it - slotId else it }
         }
     }

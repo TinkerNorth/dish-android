@@ -67,6 +67,12 @@ class BluetoothBatteryReader(
         } catch (e: ReflectiveOperationException) {
             Log.d(TAG, "getBatteryLevel reflection failed: ${e.message}")
             null
+        } catch (e: IllegalArgumentException) {
+            // Method.invoke throws IllegalArgumentException (a RuntimeException,
+            // not a ReflectiveOperationException) for an arg/receiver mismatch
+            // — a hidden-API ROM quirk. Best-effort: swallow and fall back.
+            Log.d(TAG, "getBatteryLevel rejected the call: ${e.message}")
+            null
         } catch (e: SecurityException) {
             // BLUETOOTH / BLUETOOTH_CONNECT not granted, or hidden-API blocked.
             Log.d(TAG, "getBatteryLevel blocked: ${e.message}")

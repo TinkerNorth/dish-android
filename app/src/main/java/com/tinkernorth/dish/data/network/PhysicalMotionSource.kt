@@ -8,6 +8,7 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
+import android.os.Handler
 import android.util.Log
 import android.view.InputDevice
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -15,8 +16,6 @@ import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import javax.inject.Inject
@@ -97,12 +96,13 @@ class PhysicalMotionSource
             private val sensorManager: SensorManager,
             gyro: Sensor,
             private val accel: Sensor?,
+            handler: Handler,
         ) {
             private val rateLimiter = MotionRateLimiter()
 
             // Latest accelerometer triple, pre-scaled to wire int16. Written on
             // the accel callback, read on the gyro callback — both on the same
-            // (sensor) thread, so no lock is needed.
+            // dispatch thread, so no lock is needed.
             private var accelX: Short = 0
             private var accelY: Short = 0
             private var accelZ: Short = 0
@@ -123,9 +123,24 @@ class PhysicalMotionSource
                 }
 
             init {
-                sensorManager.registerListener(listener, gyro, SensorManager.SENSOR_DELAY_GAME)
+                // 4-arg registerListener with an explicit Handler keeps the
+                // callbacks — and the encrypt + UDP-send pipeline they drive —
+                // off the main thread, and makes this registration safe even
+                // though onReachableChanged runs on a Looper-less Dispatchers
+                // .Default thread. See [SensorDispatch].
+                sensorManager.registerListener(
+                    listener,
+                    gyro,
+                    SensorManager.SENSOR_DELAY_GAME,
+                    handler,
+                )
                 accel?.let {
-                    sensorManager.registerListener(listener, it, SensorManager.SENSOR_DELAY_GAME)
+                    sensorManager.registerListener(
+                        listener,
+                        it,
+                        SensorManager.SENSOR_DELAY_GAME,
+                        handler,
+                    )
                 }
             }
 
@@ -186,11 +201,27 @@ class PhysicalMotionSource
         private val listeners = HashMap<String, PadListener>()
         private val listenersLock = Any()
 
+        /**
+         * Dedicated thread every pad's gyro/accel callbacks are delivered on,
+         * so the encrypt + UDP-send pipeline never runs on the main thread.
+         * Acquired in [onStart], released in [onStop]. `@Volatile` because
+         * [startListening] reads it on the flow-collector thread.
+         */
+        private val sensorDispatch: SensorDispatch = HandlerThreadSensorDispatch("PhysicalPadSensor")
+
+        @Volatile private var sensorHandler: Handler? = null
+
         override fun onStart(owner: LifecycleOwner) {
             if (bindingsJob != null) return
+            sensorHandler = sensorDispatch.acquire()
             bindingsJob =
-                reachableSlots()
-                    .onEach(::onReachableChanged)
+                PhysicalReachability
+                    .reachableSlots(
+                        registry.devices,
+                        hub.bindings,
+                        hub.connections,
+                        satellite.connections,
+                    ).onEach(::onReachableChanged)
                     .launchIn(scope)
         }
 
@@ -204,55 +235,8 @@ class PhysicalMotionSource
                 listeners.clear()
             }
             reachable = emptyMap()
-        }
-
-        /**
-         * Stream of `slotId -> SatelliteConnection` for every physical pad
-         * bound to a CONNECTED satellite whose slot is registered — exactly the
-         * gate [SatelliteConnection.sendMotion] needs (it drops a report for an
-         * unregistered slot). Identical to [PhysicalBatterySource]'s reachability.
-         */
-        private fun reachableSlots(): Flow<Map<String, SatelliteConnection>> =
-            combine(
-                registry.devices,
-                hub.bindings,
-                hub.connections,
-            ) { devices, bindings, summaries ->
-                resolveReachable(devices.keys, bindings, summaries)
-            }
-
-        private fun resolveReachable(
-            deviceIds: Set<Int>,
-            bindings: Map<String, String>,
-            summaries: List<ConnectionSummary>,
-        ): Map<String, SatelliteConnection> {
-            val byId = summaries.associateBy { it.id }
-            return deviceIds
-                .associateBy { it.toString() }
-                .mapNotNull { (slotId, _) ->
-                    reachableConnection(slotId, bindings, byId)?.let { slotId to it }
-                }.toMap()
-        }
-
-        /**
-         * The [SatelliteConnection] the pad at [slotId] can stream motion to,
-         * or null when it isn't reachable: not bound, bound to Bluetooth (no
-         * motion channel), the satellite isn't CONNECTED, or the controller
-         * isn't registered yet.
-         */
-        private fun reachableConnection(
-            slotId: String,
-            bindings: Map<String, String>,
-            summariesById: Map<String, ConnectionSummary>,
-        ): SatelliteConnection? {
-            val cid = bindings[slotId] ?: return null
-            val summary = summariesById[cid] ?: return null
-            val onLiveSatellite =
-                summary.kind == ConnectionKind.SATELLITE &&
-                    summary.live == ConnectionLive.CONNECTED
-            if (!onLiveSatellite) return null
-            val conn = satellite.get(cid) ?: return null
-            return conn.takeIf { it.slots.value[slotId]?.registered == true }
+            sensorDispatch.release()
+            sensorHandler = null
         }
 
         /**
@@ -270,9 +254,13 @@ class PhysicalMotionSource
                     listeners.remove(slotId)?.release()
                     Log.d(TAG, "pad $slotId no longer reachable, motion listener released")
                 }
-                // Register listeners for newly-reachable pads.
-                for (slotId in next.keys - listeners.keys) {
-                    startListening(slotId)?.let { listeners[slotId] = it }
+                // Register listeners for newly-reachable pads. A null handler
+                // means onStop has torn the dispatch thread down already —
+                // skip; the next onStart re-derives the whole set.
+                sensorHandler?.let { handler ->
+                    for (slotId in next.keys - listeners.keys) {
+                        startListening(slotId, handler)?.let { listeners[slotId] = it }
+                    }
                 }
             }
         }
@@ -283,7 +271,10 @@ class PhysicalMotionSource
          * when motion can't be sourced: API < 31, the device is gone, or the
          * pad simply has no gyroscope.
          */
-        private fun startListening(slotId: String): PadListener? {
+        private fun startListening(
+            slotId: String,
+            handler: Handler,
+        ): PadListener? {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
             val deviceId = slotId.toIntOrNull() ?: return null
             val device = InputDevice.getDevice(deviceId) ?: return null
@@ -294,7 +285,7 @@ class PhysicalMotionSource
                 TAG,
                 "pad $slotId motion listener started (gyro=${gyro.name}, accel=${accel?.name})",
             )
-            return PadListener(deviceId, slotId, sensorManager, gyro, accel)
+            return PadListener(deviceId, slotId, sensorManager, gyro, accel, handler)
         }
 
         companion object {

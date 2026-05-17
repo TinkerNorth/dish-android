@@ -11,30 +11,33 @@ import org.junit.Test
 
 /**
  * Tests for [MotionIndicatorState.of] — the pure (isAvailable, isStreaming,
- * connectionCarriesMotion) → indicator-state mapping behind the touch-overlay's
- * phone-motion pill.
+ * connectionCarriesMotion, connectionConnected) → indicator-state mapping
+ * behind the touch-overlay's phone-motion pill.
  *
- * The contract that matters: the user must be able to tell apart three
- * different "motion is not going out" situations —
+ * The contract that matters: the user must be able to tell apart the
+ * "motion is not going out" situations —
  *
- *  - no gyroscope at all       → [MotionIndicatorState.UNAVAILABLE]
- *  - gyroscope, source paused  → [MotionIndicatorState.PAUSED]
+ *  - no gyroscope at all                 → [MotionIndicatorState.UNAVAILABLE]
+ *  - gyroscope, source paused, or the
+ *    satellite connection is not up      → [MotionIndicatorState.PAUSED]
  *  - gyroscope, but a Bluetooth connection with no motion channel
- *                              → [MotionIndicatorState.NOT_FORWARDED]
+ *                                        → [MotionIndicatorState.NOT_FORWARDED]
  *
- * — and never see a false [MotionIndicatorState.STREAMING]. A Bluetooth
- * connection in particular can have the source "started" yet drop every
- * sample, so `isStreaming` alone must not promote it to STREAMING.
+ * — and never see a false [MotionIndicatorState.STREAMING]. Two cases must
+ * not promote to STREAMING despite a "started" source: a Bluetooth connection
+ * (drops every sample), and a satellite connection that is not CONNECTED
+ * (`sendMotion` drops every packet).
  */
 class MotionIndicatorStateTest {
     @Test
-    fun `gyro present, streaming, satellite connection maps to STREAMING`() {
+    fun `gyro present, streaming, connected satellite maps to STREAMING`() {
         assertEquals(
             MotionIndicatorState.STREAMING,
             MotionIndicatorState.of(
                 isAvailable = true,
                 isStreaming = true,
                 connectionCarriesMotion = true,
+                connectionConnected = true,
             ),
         )
     }
@@ -49,21 +52,68 @@ class MotionIndicatorStateTest {
                 isAvailable = true,
                 isStreaming = false,
                 connectionCarriesMotion = true,
+                connectionConnected = true,
             ),
         )
+    }
+
+    @Test
+    fun `a streaming source over a disconnected satellite reads as PAUSED, not STREAMING`() {
+        // The honesty case this test was added for: PhoneMotionSource.start()
+        // ran and isStreaming is true, but the satellite connection is
+        // reconnecting / idle, so sendMotion drops every packet. The pill must
+        // say PAUSED — claiming "streaming" while nothing reaches the wire is
+        // the bug.
+        assertEquals(
+            MotionIndicatorState.PAUSED,
+            MotionIndicatorState.of(
+                isAvailable = true,
+                isStreaming = true,
+                connectionCarriesMotion = true,
+                connectionConnected = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `STREAMING requires both a started source and a connected connection`() {
+        // gyro present, a satellite connection that carries motion: STREAMING
+        // only when the source is started AND the connection is actually up.
+        for (streaming in listOf(true, false)) {
+            for (connected in listOf(true, false)) {
+                val expected =
+                    if (streaming && connected) {
+                        MotionIndicatorState.STREAMING
+                    } else {
+                        MotionIndicatorState.PAUSED
+                    }
+                assertEquals(
+                    "streaming=$streaming connected=$connected",
+                    expected,
+                    MotionIndicatorState.of(
+                        isAvailable = true,
+                        isStreaming = streaming,
+                        connectionCarriesMotion = true,
+                        connectionConnected = connected,
+                    ),
+                )
+            }
+        }
     }
 
     @Test
     fun `bluetooth connection never reads as STREAMING even while source is started`() {
         // The honesty case: PhoneMotionSource.start() runs and isStreaming is
         // true, but the satellite send is a no-op for Bluetooth, so the
-        // samples are dropped. The pill must say NOT_FORWARDED, not STREAMING.
+        // samples are dropped. The pill must say NOT_FORWARDED, not STREAMING —
+        // and that holds even though a Bluetooth connection reads "connected".
         assertEquals(
             MotionIndicatorState.NOT_FORWARDED,
             MotionIndicatorState.of(
                 isAvailable = true,
                 isStreaming = true,
                 connectionCarriesMotion = false,
+                connectionConnected = true,
             ),
         )
         // ...and the same when the source happens to be paused too.
@@ -73,6 +123,7 @@ class MotionIndicatorStateTest {
                 isAvailable = true,
                 isStreaming = false,
                 connectionCarriesMotion = false,
+                connectionConnected = true,
             ),
         )
     }
@@ -80,18 +131,21 @@ class MotionIndicatorStateTest {
     @Test
     fun `no gyro maps to UNAVAILABLE regardless of the other flags`() {
         // No gyroscope wins outright: start() is a no-op, so neither a stale
-        // streaming flag nor the connection kind can change the verdict.
+        // streaming flag, the connection kind, nor its liveness change it.
         for (streaming in listOf(true, false)) {
             for (carries in listOf(true, false)) {
-                assertEquals(
-                    "isAvailable=false must always be UNAVAILABLE",
-                    MotionIndicatorState.UNAVAILABLE,
-                    MotionIndicatorState.of(
-                        isAvailable = false,
-                        isStreaming = streaming,
-                        connectionCarriesMotion = carries,
-                    ),
-                )
+                for (connected in listOf(true, false)) {
+                    assertEquals(
+                        "isAvailable=false must always be UNAVAILABLE",
+                        MotionIndicatorState.UNAVAILABLE,
+                        MotionIndicatorState.of(
+                            isAvailable = false,
+                            isStreaming = streaming,
+                            connectionCarriesMotion = carries,
+                            connectionConnected = connected,
+                        ),
+                    )
+                }
             }
         }
     }

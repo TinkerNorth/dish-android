@@ -96,9 +96,16 @@ class DiscoveryRepositoryTest {
     }
 
     @Test
-    fun discoverySourceLabelsAreStable() {
-        assertEquals("UDP broadcast", DiscoverySource.BROADCAST.label)
-        assertEquals("mDNS", DiscoverySource.MDNS.label)
-        assertEquals("mDNS + broadcast", DiscoverySource.BOTH.label)
+    fun discoverySourceLabelResourcesAreSetAndDistinct() {
+        // Each path's connections-list label is a string resource; a 0 id is
+        // an unset/missing resource, and each path needs its own label.
+        val labels =
+            listOf(
+                DiscoverySource.BROADCAST.labelRes,
+                DiscoverySource.MDNS.labelRes,
+                DiscoverySource.BOTH.labelRes,
+            )
+        assertTrue("a discovery-source label resource is unset", labels.all { it != 0 })
+        assertEquals("each discovery source needs its own label", labels.size, labels.toSet().size)
     }
 }

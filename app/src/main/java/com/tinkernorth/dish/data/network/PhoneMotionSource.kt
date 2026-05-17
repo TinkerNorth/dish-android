@@ -23,15 +23,17 @@ import android.util.Log
  *
  * The accelerometer and gyroscope arrive on separate callbacks; we cache the
  * latest accel triple and emit a fused sample on each gyro tick (gyro is the
- * higher-rate, latency-critical signal). Both sensor callbacks run on the
- * same `SensorManager` thread, so the accel cache itself needs no lock.
+ * higher-rate, latency-critical signal). Both callbacks run on the same
+ * [SensorDispatch] thread, so the accel cache itself needs no lock.
  *
- * Threading: the sensor callbacks run on the `SensorManager` thread while
- * [start]/[stop] run on the caller's (main) thread. Fields touched by both —
- * [emit], [started] and the [accelX]/[accelY]/[accelZ] cache that [stop]
- * clears — are `@Volatile` so that cross-thread hand-off is visible. The
- * accel cache being written *and* read on the sensor thread needs no
- * synchronisation; the volatile is purely for the [stop]-side reset.
+ * Threading: `SensorManager`'s 3-arg `registerListener` delivers callbacks on
+ * the **main looper**, which would run the whole scale → rate-limit → encrypt
+ * → UDP-send pipeline on the UI thread at the sensor's native rate. So this
+ * source registers via the 4-arg overload with a [SensorDispatch] `Handler`
+ * (a dedicated background thread) instead. [start]/[stop] still run on the
+ * caller's (main) thread, so the fields touched by both — [emit], [started]
+ * and the [accelX]/[accelY]/[accelZ] cache that [stop] clears — are
+ * `@Volatile` for that cross-thread hand-off.
  *
  * [rotationSupplier] is queried **per sample** (cheaply cached for the gyro +
  * accel ticks of one fused frame). `GamepadOverlayActivity` declares
@@ -46,6 +48,7 @@ class PhoneMotionSource(
     private val sensorManager: SensorManager,
     private val rotationSupplier: () -> Int = { DEFAULT_ROTATION },
     private val rateLimiter: MotionRateLimiter = MotionRateLimiter(),
+    private val sensorDispatch: SensorDispatch = HandlerThreadSensorDispatch("PhoneMotionSensor"),
 ) {
     /** Invoked when a fused sample passes the rate-limit gate. */
     fun interface Emit {
@@ -76,13 +79,13 @@ class PhoneMotionSource(
     val isStreaming: Boolean get() = started
 
     // emit/started are handed between the main thread (start/stop) and the
-    // sensor thread (callbacks); @Volatile makes that hand-off visible.
+    // SensorDispatch thread (callbacks); @Volatile makes that hand-off visible.
     @Volatile private var emit: Emit? = null
 
     @Volatile private var started = false
 
     // Latest accelerometer triple, pre-scaled to wire int16. Written on the
-    // accel callback, read on the gyro callback — same (sensor) thread, so no
+    // accel callback, read on the gyro callback — same dispatch thread, so no
     // lock; @Volatile is only here so stop()'s main-thread reset is visible.
     @Volatile private var accelX: Short = 0
 
@@ -115,18 +118,23 @@ class PhoneMotionSource(
         if (started || gyro == null) return
         started = true
         this.emit = emit
-        sensorManager.registerListener(listener, gyro, SensorManager.SENSOR_DELAY_GAME)
+        // 4-arg registerListener with a dedicated-thread Handler. The 3-arg
+        // overload delivers callbacks on the main looper, which would put the
+        // encrypt + UDP-send pipeline on the UI thread (see the class KDoc).
+        val handler = sensorDispatch.acquire()
+        sensorManager.registerListener(listener, gyro, SensorManager.SENSOR_DELAY_GAME, handler)
         accel?.let {
-            sensorManager.registerListener(listener, it, SensorManager.SENSOR_DELAY_GAME)
+            sensorManager.registerListener(listener, it, SensorManager.SENSOR_DELAY_GAME, handler)
         }
         Log.i(TAG, "Phone motion source started (gyro=${gyro.name}, accel=${accel?.name})")
     }
 
-    /** Stop streaming and release the sensor listeners. Safe to call twice. */
+    /** Stop streaming and release the sensor listeners + dispatch thread. Safe to call twice. */
     fun stop() {
         if (!started) return
         started = false
         sensorManager.unregisterListener(listener)
+        sensorDispatch.release()
         emit = null
         rateLimiter.clearAll()
         accelX = 0

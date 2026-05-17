@@ -3,6 +3,8 @@
 
 package com.tinkernorth.dish.data.model
 
+import androidx.annotation.StringRes
+import com.tinkernorth.dish.R
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 
@@ -10,13 +12,16 @@ import kotlinx.serialization.Transient
  * Which discovery path surfaced a satellite. mDNS / Bonjour is the modern
  * path; [BROADCAST] is the legacy UDP beacon; [BOTH] means it answered on
  * each. Not a wire field — assigned client-side by the discovery merge.
+ *
+ * [labelRes] is a string resource (not a hardcoded literal) so the
+ * connections-list label is localisable.
  */
 enum class DiscoverySource(
-    val label: String,
+    @param:StringRes val labelRes: Int,
 ) {
-    BROADCAST("UDP broadcast"),
-    MDNS("mDNS"),
-    BOTH("mDNS + broadcast"),
+    BROADCAST(R.string.discovery_source_broadcast),
+    MDNS(R.string.discovery_source_mdns),
+    BOTH(R.string.discovery_source_both),
 }
 
 @Serializable

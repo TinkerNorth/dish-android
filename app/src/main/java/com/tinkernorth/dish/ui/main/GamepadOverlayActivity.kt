@@ -182,26 +182,29 @@ class GamepadOverlayActivity :
 
     /**
      * Repaint the phone-motion pill. There is no motion on/off toggle in this
-     * slice, so the state is purely a function of three facts: whether the
+     * slice, so the state is purely a function of four facts: whether the
      * phone has a gyroscope ([PhoneMotionSource.isAvailable]), whether the
-     * source is currently started ([PhoneMotionSource.isStreaming]), and
-     * whether the bound connection kind can carry `MSG_MOTION` at all
-     * (satellite can, Bluetooth-HID cannot — so the overlay would otherwise
-     * falsely claim "streaming" on a Bluetooth connection). The two states
-     * that imply motion is *not* leaving the phone also show a one-line
-     * explanation, so a limitation is never mistaken for an off switch.
-     * See [MotionIndicatorState].
+     * source is currently started ([PhoneMotionSource.isStreaming]), whether
+     * the bound connection kind can carry `MSG_MOTION` at all (satellite can,
+     * Bluetooth-HID cannot), and whether that connection is actually CONNECTED
+     * — a "started" source over a down connection is not really streaming, so
+     * the pill must not claim it is. The two states that imply motion is *not*
+     * leaving the phone also show a one-line explanation, so a limitation is
+     * never mistaken for an off switch. See [MotionIndicatorState].
      */
     private fun refreshMotionStatus() {
         // A null summary (connection not resolved yet) is treated as
-        // motion-capable: the pill then tracks the source's started state and
-        // self-corrects on the next refresh once the kind is known.
-        val carriesMotion = hub.summary(connectionId)?.kind != ConnectionKind.BLUETOOTH
+        // motion-capable but not-yet-connected: the pill reads "paused" until
+        // the kind + liveness resolve, then self-corrects on the next refresh.
+        val summary = hub.summary(connectionId)
+        val carriesMotion = summary?.kind != ConnectionKind.BLUETOOTH
+        val connected = summary?.live == ConnectionLive.CONNECTED
         val state =
             MotionIndicatorState.of(
                 isAvailable = motionSource.isAvailable,
                 isStreaming = motionSource.isStreaming,
                 connectionCarriesMotion = carriesMotion,
+                connectionConnected = connected,
             )
         binding.tvMotionStatus.setText(state.labelRes)
         (binding.dotMotion.background as? GradientDrawable)?.setColor(getColor(state.dotColorRes))

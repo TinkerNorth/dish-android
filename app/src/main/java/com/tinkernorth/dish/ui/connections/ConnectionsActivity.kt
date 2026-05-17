@@ -202,7 +202,7 @@ class ConnectionsActivity : AppCompatActivity() {
                 binding.llSatelliteList,
                 s.name.ifEmpty { s.ip },
                 "${s.ip} • UDP ${s.udpPort}",
-                "Discovered · ${s.source.label}",
+                "Discovered · ${getString(s.source.labelRes)}",
             )
         rb.btnRowAction.text = "Connect"
         rb.btnRowAction.setOnClickListener { satellite.connect(s) }

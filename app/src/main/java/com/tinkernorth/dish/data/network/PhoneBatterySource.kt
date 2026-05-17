@@ -113,10 +113,14 @@ class PhoneBatterySource(
                     forward(sample, emit)
                 }
             }
-        // registerReceiver returns the current sticky intent; the poll loop's
-        // immediate first read already covers the initial report, so only
-        // subsequent charging-state transitions are acted on here.
-        context.registerReceiver(receiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        // registerReceiver also re-delivers the current sticky intent to the
+        // receiver. Seed lastStatus from that sticky intent now — before the
+        // posted onReceive can run — so the replay is not mistaken for a
+        // charging-state transition and double-reported (the poll loop's
+        // immediate first read already covers the initial report). Only
+        // genuine later transitions are acted on.
+        val sticky = context.registerReceiver(receiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        sticky?.let { lastStatus = sampleFromIntent(it).status }
         chargingReceiver = receiver
     }
 

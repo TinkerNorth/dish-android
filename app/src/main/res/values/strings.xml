@@ -19,7 +19,6 @@
          so the user understands the limit rather than seeing a bare label. -->
     <string name="motion_unavailable_detail">This phone has no gyroscope, so motion (gyro aim / tilt) is not sent.</string>
     <string name="motion_not_forwarded_detail">This Bluetooth connection has no motion channel. Use a satellite connection to send gyro aim / tilt.</string>
-    <string name="motion_indicator_desc">Phone motion forwarding status</string>
 
     <!-- Per-slot battery indicator on the controller list (Task 1.2). -->
     <!-- Battery percentage, e.g. "84%". -->
@@ -36,4 +35,10 @@
     <string name="battery_state_charging">charging</string>
     <string name="battery_state_low">low, not charging</string>
     <string name="battery_state_discharging">on battery</string>
+
+    <!-- Connections list: how a discovered satellite was found. Shown in the
+         row subtitle after "Discovered · ". -->
+    <string name="discovery_source_broadcast">UDP broadcast</string>
+    <string name="discovery_source_mdns">mDNS</string>
+    <string name="discovery_source_both">mDNS + broadcast</string>
 </resources>

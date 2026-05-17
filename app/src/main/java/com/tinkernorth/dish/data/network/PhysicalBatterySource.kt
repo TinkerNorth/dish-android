@@ -18,8 +18,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
@@ -104,8 +102,13 @@ class PhysicalBatterySource
         override fun onStart(owner: LifecycleOwner) {
             if (bindingsJob != null) return
             bindingsJob =
-                reachableSlots()
-                    .onEach(::onReachableChanged)
+                PhysicalReachability
+                    .reachableSlots(
+                        registry.devices,
+                        hub.bindings,
+                        hub.connections,
+                        satellite.connections,
+                    ).onEach(::onReachableChanged)
                     .launchIn(scope)
             pollJob =
                 scope.launch {
@@ -153,62 +156,6 @@ class PhysicalBatterySource
                 }
             context.registerReceiver(receiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
             chargingReceiver = receiver
-        }
-
-        /**
-         * Stream of `slotId -> SatelliteConnection` for every physical pad
-         * currently bound to a CONNECTED satellite whose slot is registered.
-         * The same cross-product [PhysicalSlotBindingObserver] derives its
-         * native bindings from — battery can only flow once the controller is
-         * registered, so we gate on exactly what [SatelliteConnection.sendBattery]
-         * requires.
-         */
-        private fun reachableSlots(): Flow<Map<String, SatelliteConnection>> =
-            combine(
-                registry.devices,
-                hub.bindings,
-                hub.connections,
-            ) { devices, bindings, summaries ->
-                resolveReachable(devices.keys, bindings, summaries)
-            }
-
-        /**
-         * Resolve which physical slots can currently accept battery: bound to
-         * a CONNECTED satellite connection whose slot for this pad is
-         * registered. Bluetooth bindings are excluded (no battery channel).
-         */
-        private fun resolveReachable(
-            deviceIds: Set<Int>,
-            bindings: Map<String, String>,
-            summaries: List<ConnectionSummary>,
-        ): Map<String, SatelliteConnection> {
-            val byId = summaries.associateBy { it.id }
-            return deviceIds
-                .associateBy { it.toString() }
-                .mapNotNull { (slotId, _) ->
-                    reachableConnection(slotId, bindings, byId)?.let { slotId to it }
-                }.toMap()
-        }
-
-        /**
-         * The [SatelliteConnection] the pad at [slotId] can currently report
-         * battery to, or null when it isn't reachable: not bound, bound to
-         * Bluetooth (no battery channel), the satellite isn't CONNECTED, or
-         * the controller isn't registered yet (`sendBattery` would drop it).
-         */
-        private fun reachableConnection(
-            slotId: String,
-            bindings: Map<String, String>,
-            summariesById: Map<String, ConnectionSummary>,
-        ): SatelliteConnection? {
-            val cid = bindings[slotId] ?: return null
-            val summary = summariesById[cid] ?: return null
-            val onLiveSatellite =
-                summary.kind == ConnectionKind.SATELLITE &&
-                    summary.live == ConnectionLive.CONNECTED
-            if (!onLiveSatellite) return null
-            val conn = satellite.get(cid) ?: return null
-            return conn.takeIf { it.slots.value[slotId]?.registered == true }
         }
 
         /**
