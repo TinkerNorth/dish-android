@@ -6,8 +6,14 @@ package com.tinkernorth.dish.data.network
 /**
  * JNI bridge to satellite_jni.cpp.
  * Controller input is handled via direct JNI calls from Kotlin for lowest latency.
- * Network-blocking functions (discoverServers, pair, httpConnect, httpDisconnect)
- * must be called from a background coroutine (Dispatchers.IO).
+ * The network-blocking discovery function ([discoverServers]) must be called
+ * from a background coroutine (Dispatchers.IO).
+ *
+ * The satellite's client-facing HTTPS API (connection management and PIN
+ * pairing) is handled in pure Kotlin by [SatelliteHttpClient] — it speaks TLS,
+ * which is far simpler to do with [javax.net.ssl.HttpsURLConnection] than by
+ * adding an SSL library to the NDK build. The UDP gamepad wire and the LAN
+ * broadcast beacon stay native here.
  *
  * The function count is naturally large because this is the *entire* native
  * surface for the satellite path; splitting it would just spread the JNI
@@ -158,32 +164,10 @@ object SatelliteNative {
      */
     external fun receiveAck(handle: Int)
 
-    // ── HTTP Connection API ─────────────────────────────────────────────────
-
-    /**
-     * POST /api/connections — opens a new connection for this device.
-     * Returns the server's JSON response (connectionId, token, maxControllers, vigemAvailable).
-     * BLOCKING — call on Dispatchers.IO.
-     */
-    external fun httpConnect(
-        ip: String,
-        httpPort: Int,
-        deviceId: String,
-    ): String
-
-    /**
-     * DELETE /api/connections/:id — closes the connection and removes all controllers.
-     * Returns the server's JSON response.
-     * BLOCKING — call on Dispatchers.IO.
-     */
-    external fun httpDisconnect(
-        ip: String,
-        httpPort: Int,
-        connectionId: String,
-        deviceId: String,
-    ): String
-
-    // ── Discovery & Pairing ─────────────────────────────────────────────────
+    // ── Discovery ───────────────────────────────────────────────────────────
+    // The connection API (POST/DELETE /api/connections) and PIN pairing
+    // (POST /api/pair) are HTTPS now and handled in Kotlin by
+    // SatelliteHttpClient — they are no longer part of the JNI surface.
 
     /**
      * Listen on discPort for timeoutMs milliseconds, collecting Satellite beacon
@@ -193,19 +177,6 @@ object SatelliteNative {
     external fun discoverServers(
         discPort: Int,
         timeoutMs: Int,
-    ): String
-
-    /**
-     * Perform a TCP pairing handshake with the server.
-     * Returns the server's raw JSON response, e.g. {"ok":true,"message":"paired successfully"}.
-     * BLOCKING — call on Dispatchers.IO.
-     */
-    external fun pair(
-        ip: String,
-        pairPort: Int,
-        deviceId: String,
-        deviceName: String,
-        pin: String,
     ): String
 
     // ── Physical-slot bindings for the native input pipeline ────────────────

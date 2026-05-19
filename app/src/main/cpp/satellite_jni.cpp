@@ -12,8 +12,12 @@
  * a dedicated worker thread (BluetoothHidDevice.sendReport is Binder IPC and
  * would jank the UI thread otherwise).
  *
- * Also handles LAN discovery, TCP pairing, HTTP connection API, and the
- * heartbeat/ACK loops for the encrypted UDP wire (ChaCha20-Poly1305).
+ * Also handles the LAN broadcast discovery beacon and the heartbeat/ACK loops
+ * for the encrypted UDP wire (ChaCha20-Poly1305).
+ *
+ * The satellite's client-facing API (connection management and PIN pairing) is
+ * HTTPS/TLS now; that lives in Kotlin (SatelliteHttpClient) where TLS is a
+ * one-liner, rather than pulling an SSL library into this NDK build.
  */
 #include <jni.h>
 #include <android/log.h>
@@ -24,12 +28,10 @@
 #include <game-activity/GameActivityEvents.h>
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 #include <sys/socket.h>
-#include <sys/select.h>
 #include <sys/time.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include <fcntl.h>
 #include <errno.h>
 #include <string.h>
 #include <time.h>
@@ -875,196 +877,15 @@ JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative
     return env->NewStringUTF(result.c_str());
 }
 
-/* ── TCP Pairing ──────────────────────────────────────────────────────────── */
-
-JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_pair(
-    JNIEnv* env, jobject, jstring ip, jint pairPort, jstring deviceId, jstring deviceName,
-    jstring pin) {
-    const char* ipStr = env->GetStringUTFChars(ip, nullptr);
-    const char* idStr = env->GetStringUTFChars(deviceId, nullptr);
-    const char* nameStr = env->GetStringUTFChars(deviceName, nullptr);
-    const char* pinStr = env->GetStringUTFChars(pin, nullptr);
-    std::string result = "{\"ok\":false,\"error\":\"connection failed\"}";
-    int sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (sock >= 0) {
-        int flags = fcntl(sock, F_GETFL, 0);
-        fcntl(sock, F_SETFL, flags | O_NONBLOCK);
-        struct sockaddr_in addr = {};
-        addr.sin_family = AF_INET;
-        addr.sin_port = htons((uint16_t)pairPort);
-        inet_pton(AF_INET, ipStr, &addr.sin_addr);
-        int ret = connect(sock, (struct sockaddr*)&addr, sizeof(addr));
-        if (ret < 0 && errno == EINPROGRESS) {
-            struct timeval tv = {4, 0};
-            fd_set wset;
-            FD_ZERO(&wset);
-            FD_SET(sock, &wset);
-            ret = select(sock + 1, nullptr, &wset, nullptr, &tv);
-        }
-        if (ret > 0) {
-            fcntl(sock, F_SETFL, flags & ~O_NONBLOCK);
-            std::string msg = "{\"deviceId\":\"";
-            msg += idStr;
-            msg += "\",\"deviceName\":\"";
-            msg += nameStr;
-            msg += "\",\"pin\":\"";
-            msg += pinStr;
-            msg += "\"}";
-            LOGI("pair: sending %s", msg.c_str());
-            send(sock, msg.c_str(), (int)msg.size(), 0);
-            struct timeval rtv = {5, 0};
-            setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &rtv, sizeof(rtv));
-            char buf[512] = {};
-            int n = (int)recv(sock, buf, sizeof(buf) - 1, 0);
-            if (n > 0) {
-                buf[n] = '\0';
-                result = std::string(buf, (size_t)n);
-                LOGI("pair: received %d bytes: %s", n, buf);
-            } else {
-                LOGE("pair: recv failed (n=%d, errno=%d: %s)", n, errno, strerror(errno));
-                result = "{\"ok\":false,\"error\":\"no response\"}";
-            }
-        } else {
-            LOGE("pair: connect failed (ret=%d, errno=%d: %s)", ret, errno, strerror(errno));
-        }
-        close(sock);
-    }
-    env->ReleaseStringUTFChars(ip, ipStr);
-    env->ReleaseStringUTFChars(deviceId, idStr);
-    env->ReleaseStringUTFChars(deviceName, nameStr);
-    env->ReleaseStringUTFChars(pin, pinStr);
-    LOGI("pair: result = %s", result.c_str());
-    return env->NewStringUTF(result.c_str());
-}
-
-/* ── HTTP helpers (minimal, no external deps) ──────────────────────────────── */
-
-static std::string httpRequest(const char* method, const char* ip, int port, const char* path,
-                               const char* body) {
-    LOGI("httpRequest: %s %s:%d%s", method, ip, port, path);
-    int sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (sock < 0) {
-        LOGE("httpRequest: socket() failed: %s", strerror(errno));
-        return "{\"error\":\"socket failed\"}";
-    }
-
-    int flags = fcntl(sock, F_GETFL, 0);
-    fcntl(sock, F_SETFL, flags | O_NONBLOCK);
-    struct sockaddr_in addr = {};
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons((uint16_t)port);
-    inet_pton(AF_INET, ip, &addr.sin_addr);
-
-    int ret = connect(sock, (struct sockaddr*)&addr, sizeof(addr));
-    if (ret == 0) {
-        // Immediate success (rare but valid)
-    } else if (ret < 0 && errno == EINPROGRESS) {
-        struct timeval tv = {5, 0};
-        fd_set wset;
-        FD_ZERO(&wset);
-        FD_SET(sock, &wset);
-        ret = select(sock + 1, nullptr, &wset, nullptr, &tv);
-        if (ret <= 0) {
-            LOGE("httpRequest: select() timeout/error connecting to %s:%d", ip, port);
-            close(sock);
-            return "{\"error\":\"connect timeout\"}";
-        }
-        // Check if the connection actually succeeded
-        int sockerr = 0;
-        socklen_t sl = sizeof(sockerr);
-        getsockopt(sock, SOL_SOCKET, SO_ERROR, &sockerr, &sl);
-        if (sockerr != 0) {
-            LOGE("httpRequest: connect to %s:%d failed: %s", ip, port, strerror(sockerr));
-            close(sock);
-            return std::string("{\"error\":\"connect refused: ") + strerror(sockerr) + "\"}";
-        }
-    } else {
-        LOGE("httpRequest: connect() to %s:%d failed immediately: %s", ip, port, strerror(errno));
-        close(sock);
-        return std::string("{\"error\":\"connect failed: ") + strerror(errno) + "\"}";
-    }
-    fcntl(sock, F_SETFL, flags & ~O_NONBLOCK);
-
-    // Build HTTP request
-    std::string req = std::string(method) + " " + path + " HTTP/1.1\r\n";
-    req += "Host: ";
-    req += ip;
-    req += "\r\n";
-    req += "Content-Type: application/json\r\n";
-    req += "Connection: close\r\n";
-    if (body && strlen(body) > 0) {
-        req += "Content-Length: " + std::to_string(strlen(body)) + "\r\n";
-    } else {
-        req += "Content-Length: 0\r\n";
-    }
-    req += "\r\n";
-    if (body && strlen(body) > 0) req += body;
-
-    send(sock, req.c_str(), (int)req.size(), 0);
-
-    struct timeval rtv = {5, 0};
-    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &rtv, sizeof(rtv));
-
-    // Read response
-    std::string response;
-    char buf[2048];
-    while (true) {
-        int n = (int)recv(sock, buf, sizeof(buf) - 1, 0);
-        if (n <= 0) break;
-        buf[n] = '\0';
-        response += buf;
-    }
-    close(sock);
-
-    // Extract body (after \r\n\r\n)
-    size_t bodyStart = response.find("\r\n\r\n");
-    if (bodyStart != std::string::npos) { return response.substr(bodyStart + 4); }
-    return response;
-}
-
-/* ── POST /api/connections ─────────────────────────────────────────────────── */
-
-JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_httpConnect(
-    JNIEnv* env, jobject, jstring ip, jint httpPort, jstring deviceId) {
-    const char* ipStr = env->GetStringUTFChars(ip, nullptr);
-    const char* idStr = env->GetStringUTFChars(deviceId, nullptr);
-
-    std::string body = "{\"deviceId\":\"";
-    body += idStr;
-    body += "\"}";
-
-    std::string result =
-        httpRequest("POST", ipStr, (int)httpPort, "/api/connections", body.c_str());
-
-    env->ReleaseStringUTFChars(ip, ipStr);
-    env->ReleaseStringUTFChars(deviceId, idStr);
-    LOGI("POST /api/connections -> %s", result.c_str());
-    return env->NewStringUTF(result.c_str());
-}
-
-/* ── DELETE /api/connections/:id ───────────────────────────────────────────── */
-
-JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_httpDisconnect(
-    JNIEnv* env, jobject, jstring ip, jint httpPort, jstring connectionId, jstring deviceId) {
-    const char* ipStr = env->GetStringUTFChars(ip, nullptr);
-    const char* connStr = env->GetStringUTFChars(connectionId, nullptr);
-    const char* idStr = env->GetStringUTFChars(deviceId, nullptr);
-
-    std::string path = "/api/connections/";
-    path += connStr;
-
-    std::string body = "{\"deviceId\":\"";
-    body += idStr;
-    body += "\"}";
-
-    std::string result = httpRequest("DELETE", ipStr, (int)httpPort, path.c_str(), body.c_str());
-
-    env->ReleaseStringUTFChars(ip, ipStr);
-    env->ReleaseStringUTFChars(connectionId, connStr);
-    env->ReleaseStringUTFChars(deviceId, idStr);
-    LOGI("DELETE %s -> %s", path.c_str(), result.c_str());
-    return env->NewStringUTF(result.c_str());
-}
+/* ── Connection API + PIN pairing ──────────────────────────────────────────
+ *
+ * Both moved out of native code. The satellite's client-facing API is HTTPS
+ * (TLS) now — POST/DELETE /api/connections for connection management and
+ * POST /api/pair for PIN pairing (previously a bespoke raw-TCP line protocol).
+ * Doing TLS here would mean adding an SSL library to the NDK CMake build and
+ * driving a handshake by hand; in Kotlin it is a HttpsURLConnection with a
+ * trust-all SSLContext. See SatelliteHttpClient.kt.
+ */
 
 /* ── Physical-slot bindings (driven from MainActivity) ─────────────────── */
 

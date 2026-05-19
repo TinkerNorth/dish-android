@@ -7,6 +7,7 @@ import android.util.Log
 import com.tinkernorth.dish.data.model.DiscoveredServer
 import com.tinkernorth.dish.data.model.DiscoverySource
 import com.tinkernorth.dish.data.network.MdnsDiscovery
+import com.tinkernorth.dish.data.network.SatelliteHttpClient
 import com.tinkernorth.dish.data.network.SatelliteNative
 import com.tinkernorth.dish.data.network.parseServers
 import kotlinx.coroutines.Dispatchers
@@ -60,6 +61,11 @@ class DiscoveryRepository
                 }
             }
 
+        /**
+         * PIN-pairing handshake — POST /api/pair on the satellite's HTTPS
+         * client server (port 9443). The request/response JSON is unchanged
+         * from the old raw-TCP pairing protocol; only the transport differs.
+         */
         suspend fun pair(
             ip: String,
             port: Int,
@@ -69,10 +75,11 @@ class DiscoveryRepository
         ): String =
             withContext(Dispatchers.IO) {
                 mutex.withLock {
-                    SatelliteNative.pair(ip, port, deviceId, deviceName, pin)
+                    SatelliteHttpClient.pair(ip, port, deviceId, deviceName, pin)
                 }
             }
 
+        /** POST /api/connections over HTTPS. */
         suspend fun connect(
             ip: String,
             port: Int,
@@ -80,10 +87,11 @@ class DiscoveryRepository
         ): String =
             withContext(Dispatchers.IO) {
                 mutex.withLock {
-                    SatelliteNative.httpConnect(ip, port, deviceId)
+                    SatelliteHttpClient.connect(ip, port, deviceId)
                 }
             }
 
+        /** DELETE /api/connections/<id> over HTTPS. */
         suspend fun disconnect(
             ip: String,
             port: Int,
@@ -92,7 +100,7 @@ class DiscoveryRepository
         ): String =
             withContext(Dispatchers.IO) {
                 mutex.withLock {
-                    SatelliteNative.httpDisconnect(ip, port, connectionId, deviceId)
+                    SatelliteHttpClient.disconnect(ip, port, connectionId, deviceId)
                 }
             }
 

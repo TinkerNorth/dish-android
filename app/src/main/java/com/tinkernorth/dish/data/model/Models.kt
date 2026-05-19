@@ -29,8 +29,11 @@ data class DiscoveredServer(
     val name: String = "",
     val ip: String = "",
     val udpPort: Int = 9876,
-    val pairPort: Int = 9878,
-    val httpPort: Int = 9877,
+    // Pairing (POST /api/pair) and the connection API share the satellite's
+    // single HTTPS/TLS client server on 9443; these defaults apply when a
+    // discovery beacon omits the explicit port fields.
+    val pairPort: Int = 9443,
+    val httpPort: Int = 9443,
     // Discovery path this server was heard on. @Transient → never on the
     // wire; a decoded beacon keeps the BROADCAST default.
     @Transient val source: DiscoverySource = DiscoverySource.BROADCAST,

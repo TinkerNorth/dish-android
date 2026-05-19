@@ -124,11 +124,13 @@ class HelpersTest {
 
     @Test
     fun `parseServers uses default ports when missing`() {
+        // pairPort and httpPort default to the satellite's single HTTPS
+        // client-API port (9443); a beacon that omits them still resolves.
         val json = """[{"name":"X","ip":"3.3.3.3"}]"""
         val servers = parseServers(json)
         assertEquals(9876, servers[0].udpPort)
-        assertEquals(9878, servers[0].pairPort)
-        assertEquals(9877, servers[0].httpPort)
+        assertEquals(9443, servers[0].pairPort)
+        assertEquals(9443, servers[0].httpPort)
     }
 
     @Test

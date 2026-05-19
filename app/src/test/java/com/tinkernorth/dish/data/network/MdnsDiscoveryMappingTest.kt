@@ -164,8 +164,10 @@ class MdnsDiscoveryMappingTest {
             )
         assertEquals(MDNS_DEFAULT_PAIR, s!!.pairPort)
         assertEquals(MDNS_DEFAULT_HTTP, s.httpPort)
-        assertEquals(9878, s.pairPort)
-        assertEquals(9877, s.httpPort)
+        // Pairing + connection API share the satellite's single HTTPS client
+        // server on 9443; the legacy split 9877/9878 ports are gone.
+        assertEquals(9443, s.pairPort)
+        assertEquals(9443, s.httpPort)
     }
 
     @Test

@@ -22,9 +22,11 @@
 
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 
+    <!-- usesCleartextTraffic removed: the satellite client API is HTTPS now,
+         so no plaintext HTTP is sent. The encrypted UDP gamepad wire and the
+         LAN discovery beacon are raw sockets, which this flag never gated. -->
     <application
         android:name=".DishApplication"
-        android:usesCleartextTraffic="true"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"

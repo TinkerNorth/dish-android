@@ -180,11 +180,16 @@ class MdnsDiscovery
 /** Protocol default UDP port (`discPort` beacon advertises the real one). */
 internal const val MDNS_DEFAULT_UDP = 9876
 
-/** Protocol default TCP PIN-pairing port. */
-internal const val MDNS_DEFAULT_PAIR = 9878
+/**
+ * Protocol default client-API port. Pairing (POST /api/pair) and the
+ * connection API now share the satellite's single HTTPS/TLS client server on
+ * port 9443. The `pair` TXT key still exists for backwards compatibility and
+ * advertises this same port.
+ */
+internal const val MDNS_DEFAULT_PAIR = 9443
 
-/** Protocol default HTTP dashboard / API port. */
-internal const val MDNS_DEFAULT_HTTP = 9877
+/** Protocol default HTTPS client-API port (connection API + pairing). */
+internal const val MDNS_DEFAULT_HTTP = 9443
 
 /**
  * Pure mapping of a resolved mDNS service to a [DiscoveredServer], lifted out
