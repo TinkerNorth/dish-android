@@ -94,16 +94,23 @@ class SatelliteConnectionManager
         private val _lastScanAtMs = MutableStateFlow<Long?>(null)
         val lastScanAtMs: StateFlow<Long?> = _lastScanAtMs.asStateFlow()
 
-        // Buffered: events emitted while no activity is collecting (the user
-        // is in GamepadOverlayActivity, which doesn't observe events) survive
-        // the gap so the next activity sees them. Without the replay an
-        // alive-poll death mid-game would suspend the calling launch forever
-        // (default MutableSharedFlow has no buffer and emit() blocks until a
-        // subscriber acknowledges). DROP_OLDEST is fine — at most a stale
-        // error gets shadowed by a more recent one for the same satellite.
+        // Fire-and-forget broadcast: every emission is delivered to currently-
+        // active subscribers and then forgotten. replay=0 is critical — a
+        // subscriber that pauses and re-subscribes (every activity-switch
+        // does this via repeatOnLifecycle(STARTED)) must NOT receive a stale
+        // event from a prior session, or the same banner would re-fire on
+        // every navigation. All three Dish activities collect events while
+        // STARTED, so the only emissions that could be lost are those firing
+        // in the microsecond window between one activity stopping and the
+        // next starting — vanishingly small.
+        //
+        // extraBufferCapacity is kept so emit() never suspends: the
+        // SatelliteConnection callbacks (onDead, onRegistrationFailed) come
+        // from short-lived launches that shouldn't block on a missing
+        // subscriber.
         private val _events =
             MutableSharedFlow<ConnectionEvent>(
-                replay = 1,
+                replay = 0,
                 extraBufferCapacity = 8,
                 onBufferOverflow = BufferOverflow.DROP_OLDEST,
             )

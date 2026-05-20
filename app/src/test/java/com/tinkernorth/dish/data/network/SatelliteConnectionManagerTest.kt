@@ -362,4 +362,32 @@ class SatelliteConnectionManagerTest {
 
             assertTrue(serverId !in mgr.staleSatelliteIds.value)
         }
+
+    // ── Cross-subscription replay (one-shot semantics) ───────────────────
+
+    @Test
+    fun `events flow does not replay prior errors to a new subscriber`() =
+        runTest(scope.testScheduler) {
+            val mgr = manager()
+            // First subscriber receives an error fired during its lifetime.
+            coEvery { discoveryRepo.pair(any(), any(), any(), any(), any()) } returns ""
+            val firstEvents = mutableListOf<ConnectionEvent>()
+            val firstCollector = scope.launch { mgr.events.collect { firstEvents += it } }
+            mgr.connect(server, ConnectIntent.USER_INITIATED)
+            scope.testScheduler.advanceUntilIdle()
+            firstCollector.cancel()
+            assertTrue("first subscriber should have received the error", firstEvents.isNotEmpty())
+
+            // Second subscriber attaches AFTER the error has been emitted +
+            // consumed. The events flow must NOT replay it — this is the
+            // "banner re-fires on every activity switch" regression.
+            val secondEvents = mutableListOf<ConnectionEvent>()
+            val secondCollector = scope.launch { mgr.events.collect { secondEvents += it } }
+            scope.testScheduler.advanceUntilIdle()
+            secondCollector.cancel()
+            assertTrue(
+                "second subscriber must see no replayed events: $secondEvents",
+                secondEvents.isEmpty(),
+            )
+        }
 }
