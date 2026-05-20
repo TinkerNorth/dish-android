@@ -8,7 +8,7 @@ import com.tinkernorth.dish.data.network.BatteryValidator.BatterySample
 import com.tinkernorth.dish.data.network.ConnectionEvent
 import com.tinkernorth.dish.data.network.ConnectionHub
 import com.tinkernorth.dish.data.network.ConnectionKind
-import com.tinkernorth.dish.data.network.ConnectionLive
+import com.tinkernorth.dish.data.network.LinkState
 import com.tinkernorth.dish.data.network.ConnectionSummary
 import com.tinkernorth.dish.data.network.SatelliteConnectionManager
 import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
@@ -148,7 +148,7 @@ class MainViewModelTest {
                     kind = ConnectionKind.SATELLITE,
                     label = "PC",
                     detail = "1.1.1.1",
-                    live = ConnectionLive.CONNECTED,
+                    live = LinkState.Connected,
                     boundSlotIds = listOf(VIRTUAL_SLOT_ID),
                 )
             connectionsFlow.value = listOf(summary)

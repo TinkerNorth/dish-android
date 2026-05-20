@@ -36,7 +36,7 @@ class PhysicalReachabilityTest {
 
     private fun summary(
         id: String,
-        live: ConnectionLive = ConnectionLive.CONNECTED,
+        live: LinkState = LinkState.Connected,
         kind: ConnectionKind = ConnectionKind.SATELLITE,
     ) = ConnectionSummary(
         id = id,
@@ -104,7 +104,7 @@ class PhysicalReachabilityTest {
             PhysicalReachability.connectionFor(
                 slotId = "9",
                 bindings = mapOf("9" to "c"),
-                summariesById = mapOf("c" to summary("c", live = ConnectionLive.CONNECTING)),
+                summariesById = mapOf("c" to summary("c", live = LinkState.Connecting)),
                 connections = mapOf("c" to conn),
             ),
         )
@@ -196,7 +196,7 @@ class PhysicalReachabilityTest {
                 .reachableSlots(devices, bindings, summaries, connections)
                 .test {
                     assertEquals(mapOf("9" to conn), awaitItem())
-                    summaries.value = listOf(summary("c", live = ConnectionLive.CONNECTING))
+                    summaries.value = listOf(summary("c", live = LinkState.Connecting))
                     assertEquals(emptyMap<String, SatelliteConnection>(), awaitItem())
                     cancelAndIgnoreRemainingEvents()
                 }

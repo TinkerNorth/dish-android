@@ -34,7 +34,7 @@ import kotlinx.coroutines.withContext
  * hub can persist a list of remembered connections and reclaim slot bindings
  * after a relaunch. [handle] is the native session handle returned by
  * [ControllerRepository.openSocket] and is only valid while [state] is
- * [SatelliteState.CONNECTED]; once the session is torn down it is reset to -1
+ * [SessionState.Live]; once the session is torn down it is reset to -1
  * and a fresh handle is allocated on reconnect.
  */
 class SatelliteConnection(
@@ -46,8 +46,8 @@ class SatelliteConnection(
     private val _server = MutableStateFlow(server)
     val server: StateFlow<DiscoveredServer> = _server.asStateFlow()
 
-    private val _state = MutableStateFlow(SatelliteState.IDLE)
-    val state: StateFlow<SatelliteState> = _state.asStateFlow()
+    private val _state = MutableStateFlow(SessionState.Idle)
+    val state: StateFlow<SessionState> = _state.asStateFlow()
 
     /**
      * Immutable tuple of the live-session handle + connection id. Held in a
@@ -55,12 +55,12 @@ class SatelliteConnection(
      * sees the pair atomically — readers can never observe a fresh handle
      * with a stale connection id (or vice versa) mid-reconnect.
      */
-    private data class Live(
+    private data class LiveHandle(
         val handle: Int,
         val connectionId: String,
     )
 
-    @Volatile private var live: Live? = null
+    @Volatile private var live: LiveHandle? = null
 
     /** Server-issued connection id for the live session, or null when idle. */
     val connectionId: String? get() = live?.connectionId
@@ -101,13 +101,13 @@ class SatelliteConnection(
     }
 
     /**
-     * Advance to CONNECTING from IDLE or an already-in-flight CONNECTING.
-     * Rejected from CONNECTED so a caller can't accidentally wipe a live
-     * session's state back to CONNECTING without an intervening disconnect.
+     * Advance to Linking from Idle or an already-in-flight Linking.
+     * Rejected from Live so a caller can't accidentally wipe a live
+     * session's state back to Linking without an intervening disconnect.
      */
     internal fun markConnecting() {
-        if (_state.value == SatelliteState.CONNECTED) return
-        _state.value = SatelliteState.CONNECTING
+        if (_state.value == SessionState.Live) return
+        _state.value = SessionState.Linking
     }
 
     /**
@@ -115,10 +115,10 @@ class SatelliteConnection(
      * connectionId, start the ACK receive loop and heartbeat. Must be called
      * after [ControllerRepository.openSocket] and [setConnectionParams] succeed.
      *
-     * Strict guard: only valid from CONNECTING. A second [markConnected] while
-     * already CONNECTED would leak the previous native handle, so we reject
+     * Strict guard: only valid from Linking. A second [markConnected] while
+     * already Live would leak the previous native handle, so we reject
      * and let the caller run [markDisconnected] first if it really meant to
-     * rebind. Calls from IDLE are likewise rejected — the pair/auth path must
+     * rebind. Calls from Idle are likewise rejected — the pair/auth path must
      * go through [markConnecting].
      *
      * Any slots attached before the session was online (common right after an
@@ -131,12 +131,12 @@ class SatelliteConnection(
         onRegistrationFailed: ((reason: String) -> Unit)? = null,
         onDead: () -> Unit,
     ) {
-        if (_state.value != SatelliteState.CONNECTING) return
+        if (_state.value != SessionState.Linking) return
         // Publish the (handle, connectionId) pair before flipping state so
-        // any concurrent sendReport that observes CONNECTED cannot see a
+        // any concurrent sendReport that observes Live cannot see a
         // null/-1 tuple.
-        live = Live(handle, connectionId)
-        _state.value = SatelliteState.CONNECTED
+        live = LiveHandle(handle, connectionId)
+        _state.value = SessionState.Live
         this.onRegistrationFailed = onRegistrationFailed
         controllerRepo.resetControllerAck(handle)
         ackJob =
@@ -169,7 +169,7 @@ class SatelliteConnection(
     }
 
     /**
-     * Tear the session down. Idempotent: a second call from IDLE is a no-op
+     * Tear the session down. Idempotent: a second call from Idle is a no-op
      * so callers (alive-poll, manager.disconnect, forget, foreground kicks)
      * can invoke it freely without needing to check state first.
      *
@@ -178,7 +178,7 @@ class SatelliteConnection(
      */
     internal fun markDisconnected() {
         val snap = live
-        if (_state.value == SatelliteState.IDLE && snap == null) return
+        if (_state.value == SessionState.Idle && snap == null) return
         aliveJob?.cancel()
         aliveJob = null
         ackJob?.cancel()
@@ -193,7 +193,7 @@ class SatelliteConnection(
         }
         _slots.update { map -> map.mapValues { (_, v) -> v.copy(registered = false) } }
         onRegistrationFailed = null
-        _state.value = SatelliteState.IDLE
+        _state.value = SessionState.Idle
     }
 
     /**
@@ -216,7 +216,7 @@ class SatelliteConnection(
         // No-op if this slot was already present.
         val info = updated[slotId] ?: return
         if (info.registered) return
-        if (_state.value == SatelliteState.CONNECTED && handle >= 0) {
+        if (_state.value == SessionState.Live && handle >= 0) {
             registerController(slotId)
         }
     }
@@ -425,4 +425,22 @@ class SatelliteConnection(
     }
 }
 
-enum class SatelliteState { IDLE, CONNECTING, CONNECTED }
+/**
+ * Internal wire-level session state for one Satellite connection. This is the
+ * "Presence" axis (per the shared nomenclature): how far the live network link
+ * has progressed for *this* connection.
+ *
+ * Distinct from the UI-facing [LinkState] (in [ConnectionHub]), which folds
+ * pairing/discovery in on top of this.
+ *
+ * - [Idle] — no live session (paired or not).
+ * - [Linking] — pair+auth handshake / [SatelliteConnection.markConnecting]
+ *   is in flight; native socket not yet open. UI chip: "Connecting…".
+ * - [Live] — native socket open, heartbeat ACKs flowing. UI chip: "Online".
+ * - [Faltering] — Live, but the heartbeat-miss counter is non-zero and below
+ *   the death threshold. UI chip: "Unsteady". **Not yet entered** —
+ *   reaching it requires the native side to expose the consecutive-missed
+ *   count separately from the binary `isConnectionAlive()` boolean. Today
+ *   the alive-poll flips Live → Idle directly when misses hit the threshold.
+ */
+enum class SessionState { Idle, Linking, Live, Faltering }

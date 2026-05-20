@@ -18,7 +18,7 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.data.network.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.data.network.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.data.network.ConnectionKind
-import com.tinkernorth.dish.data.network.ConnectionLive
+import com.tinkernorth.dish.data.network.LinkState
 import com.tinkernorth.dish.data.network.ConnectionSummary
 import com.tinkernorth.dish.databinding.ItemControllerBinding
 
@@ -86,8 +86,8 @@ class ControllerAdapter(
                 b.dotStatus,
                 when {
                     slot.isDisconnecting -> R.color.colorWarning
-                    slot.boundStatus?.live == ConnectionLive.CONNECTED -> R.color.colorSuccess
-                    slot.boundStatus?.live == ConnectionLive.CONNECTING -> R.color.colorPrimary
+                    slot.boundStatus?.live == LinkState.Connected -> R.color.colorSuccess
+                    slot.boundStatus?.live == LinkState.Connecting -> R.color.colorPrimary
                     else -> R.color.colorMuted
                 },
             )
@@ -105,7 +105,7 @@ class ControllerAdapter(
             // when a connection is live, so the user can jump straight into
             // the overlay without expanding.
             val canOpenGamepad =
-                isVirtual && slot.boundStatus?.live == ConnectionLive.CONNECTED
+                isVirtual && slot.boundStatus?.live == LinkState.Connected
             b.ivOpenGamepadQuick.visibility =
                 if (canOpenGamepad && !row.expanded) View.VISIBLE else View.GONE
             b.ivOpenGamepadQuick.setOnClickListener { listener.onOpenGamepad() }
@@ -132,7 +132,7 @@ class ControllerAdapter(
             }
 
             // Virtual-only: open gamepad button
-            if (isVirtual && slot.boundStatus?.live == ConnectionLive.CONNECTED) {
+            if (isVirtual && slot.boundStatus?.live == LinkState.Connected) {
                 b.btnOpenGamepad.visibility = View.VISIBLE
                 b.btnOpenGamepad.setOnClickListener { listener.onOpenGamepad() }
             } else {
@@ -211,9 +211,9 @@ class ControllerAdapter(
                 }
             val statusSuffix =
                 when (c.live) {
-                    ConnectionLive.CONNECTED -> " • connected"
-                    ConnectionLive.CONNECTING -> " • connecting…"
-                    ConnectionLive.IDLE -> ""
+                    LinkState.Connected, LinkState.Unstable -> " • online"
+                    LinkState.Connecting -> " • connecting…"
+                    LinkState.Found, LinkState.Stale, LinkState.Saved, LinkState.Ready -> ""
                 }
             return TextView(ctx).apply {
                 text = "$prefix${c.label}$statusSuffix"
@@ -414,9 +414,9 @@ class ControllerAdapter(
         private fun slotStatusText(s: ControllerSlot) =
             when {
                 s.isDisconnecting -> "Disconnecting… ${s.disconnectTimeLeft}s"
-                s.boundStatus?.live == ConnectionLive.CONNECTED ->
+                s.boundStatus?.live == LinkState.Connected ->
                     "→ ${s.boundStatus.label}"
-                s.boundStatus?.live == ConnectionLive.CONNECTING -> "Connecting…"
+                s.boundStatus?.live == LinkState.Connecting -> "Connecting…"
                 s.boundConnectionId != null -> "Bound"
                 else -> "Tap to bind"
             }

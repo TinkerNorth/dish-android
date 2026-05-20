@@ -100,7 +100,7 @@ class PhysicalSlotBindingObserver
                 val slotId = id.toString()
                 val cid = state.bindings[slotId]
                 val summary = cid?.let { lookup -> state.summaries.firstOrNull { it.id == lookup } }
-                if (cid == null || summary == null || summary.live != ConnectionLive.CONNECTED) {
+                if (cid == null || summary == null || summary.live != LinkState.Connected) {
                     SatelliteNative.unbindPhysicalSlot(id)
                     continue
                 }

@@ -66,7 +66,7 @@ class SatelliteConnectionTest {
 
     @Test
     fun `initial state is IDLE with no handle, connectionId or slots`() {
-        assertEquals(SatelliteState.IDLE, conn.state.value)
+        assertEquals(SessionState.Idle, conn.state.value)
         assertEquals(-1, conn.handle)
         assertNull(conn.connectionId)
         assertTrue(conn.slots.value.isEmpty())
@@ -75,7 +75,7 @@ class SatelliteConnectionTest {
     @Test
     fun `markConnecting advances state to CONNECTING`() {
         conn.markConnecting()
-        assertEquals(SatelliteState.CONNECTING, conn.state.value)
+        assertEquals(SessionState.Linking, conn.state.value)
     }
 
     @Test
@@ -88,7 +88,7 @@ class SatelliteConnectionTest {
             conn.markConnecting()
             conn.markConnected(handle = 7, connectionId = "conn-abc") {}
 
-            assertEquals(SatelliteState.CONNECTED, conn.state.value)
+            assertEquals(SessionState.Live, conn.state.value)
             assertEquals(7, conn.handle)
             assertEquals("conn-abc", conn.connectionId)
             verify { repo.resetControllerAck(7) }
@@ -110,7 +110,7 @@ class SatelliteConnectionTest {
             conn.attachSlot(slotId = "slot-1", controllerType = 0)
             conn.markDisconnected()
 
-            assertEquals(SatelliteState.IDLE, conn.state.value)
+            assertEquals(SessionState.Idle, conn.state.value)
             assertEquals(-1, conn.handle)
             assertNull(conn.connectionId)
             verify { repo.stopHeartbeat(3) }
@@ -417,7 +417,7 @@ class SatelliteConnectionTest {
     fun `markConnected from IDLE is rejected and leaves state IDLE`() {
         conn.markConnected(handle = 11, connectionId = "c") {}
 
-        assertEquals(SatelliteState.IDLE, conn.state.value)
+        assertEquals(SessionState.Idle, conn.state.value)
         assertEquals(-1, conn.handle)
         assertNull(conn.connectionId)
         verify(exactly = 0) { repo.resetControllerAck(any()) }
@@ -436,7 +436,7 @@ class SatelliteConnectionTest {
         // so we don't leak the first session's native handle.
         conn.markConnected(handle = 2, connectionId = "second") {}
 
-        assertEquals(SatelliteState.CONNECTED, conn.state.value)
+        assertEquals(SessionState.Live, conn.state.value)
         assertEquals(1, conn.handle)
         assertEquals("first", conn.connectionId)
         verify(exactly = 1) { repo.resetControllerAck(any()) }
@@ -453,7 +453,7 @@ class SatelliteConnectionTest {
         conn.markConnected(handle = 4, connectionId = "c") {}
         conn.markConnecting()
 
-        assertEquals(SatelliteState.CONNECTED, conn.state.value)
+        assertEquals(SessionState.Live, conn.state.value)
         assertEquals(4, conn.handle)
     }
 
@@ -461,7 +461,7 @@ class SatelliteConnectionTest {
     fun `markDisconnected from IDLE is a no-op and touches no native handles`() {
         conn.markDisconnected()
 
-        assertEquals(SatelliteState.IDLE, conn.state.value)
+        assertEquals(SessionState.Idle, conn.state.value)
         verify(exactly = 0) { repo.stopHeartbeat(any()) }
         verify(exactly = 0) { repo.closeSocket(any()) }
     }

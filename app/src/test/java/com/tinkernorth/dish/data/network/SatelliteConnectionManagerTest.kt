@@ -110,7 +110,7 @@ class SatelliteConnectionManagerTest {
                 events.any { it is ConnectionEvent.Error && it.message.contains("unreachable", ignoreCase = true) },
             )
             assertTrue(events.none { it is ConnectionEvent.PairingRequired })
-            assertEquals(SatelliteState.IDLE, mgr.get(serverId)?.state?.value)
+            assertEquals(SessionState.Idle, mgr.get(serverId)?.state?.value)
         }
 
     @Test

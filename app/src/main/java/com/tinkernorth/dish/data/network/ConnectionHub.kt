@@ -28,7 +28,36 @@ import javax.inject.Singleton
  */
 enum class ConnectionKind { SATELLITE, BLUETOOTH }
 
-enum class ConnectionLive { IDLE, CONNECTING, CONNECTED }
+/**
+ * UI-facing link state for one connection (Satellite or Bluetooth host). This
+ * is the chip a row renders; combines the persistent "Pairing" axis (have we
+ * paired?) and the live "Presence" axis (do we see it / is the session up?).
+ *
+ * Internally a Satellite session also has [SessionState] (the wire-level
+ * presence axis only); [LinkState] is derived from that plus discovery /
+ * remembered presence in [ConnectionHub.buildSatelliteSummary].
+ *
+ * | LinkState   | Pairing axis    | Presence axis   | User-facing chip |
+ * |-------------|-----------------|-----------------|------------------|
+ * | [Found]     | unpaired        | seen            | "Found"          |
+ * | [Stale]     | broken (lost)   | any             | "Needs pairing"  |
+ * | [Saved]     | paired          | absent          | "Offline"        |
+ * | [Ready]     | paired          | seen, no session| "Ready"          |
+ * | [Connecting]| paired          | linking         | "Connecting…"    |
+ * | [Connected] | paired          | live            | "Online"         |
+ * | [Unstable]  | paired          | faltering       | "Unsteady"       |
+ *
+ * **[Stale]** is not yet entered: it requires the satellite to return a
+ * `PAIRING_UNKNOWN` error so the client can distinguish "peer forgot us"
+ * from a generic connect failure. Until that protocol change lands, a
+ * server-side forget surfaces as a generic disconnect.
+ *
+ * **[Unstable]** is not yet entered: it requires the native layer to expose
+ * the consecutive-missed-heartbeat count separately from the binary
+ * `isConnectionAlive()` predicate. Today the connection flips Connected →
+ * (Saved | Ready) directly when misses hit the death threshold.
+ */
+enum class LinkState { Found, Stale, Saved, Ready, Connecting, Connected, Unstable }
 
 /** Server-visible controller type. The native protocol carries the raw int. */
 const val CONTROLLER_TYPE_XBOX = 0
@@ -46,7 +75,7 @@ data class ConnectionSummary(
     val kind: ConnectionKind,
     val label: String,
     val detail: String,
-    val live: ConnectionLive,
+    val live: LinkState,
     val boundSlotIds: List<String>,
     /** For BT only: name of the remembered [BluetoothGamepad.GamepadProfile]. */
     val btProfile: String? = null,
@@ -113,16 +142,29 @@ class ConnectionHub
             combine(
                 flatSatConnections,
                 bt.states,
+                satellite.discoveredServers,
                 _bindings,
                 _satTypes,
-            ) { satMap, btStates, _, _ -> buildSummaries(satMap, btStates) }
+            ) { satMap, btStates, discovered, _, _ ->
+                buildSummaries(satMap, btStates, discoveredIdSet(discovered))
+            }
                 .onEach { _connections.value = it }
                 .launchIn(scope)
         }
 
+        /**
+         * Set of currently-discovered satellite ids. Used by
+         * [buildSatelliteSummary] to split an Idle paired entry into
+         * [LinkState.Ready] (we see it on the network) vs [LinkState.Saved]
+         * (we don't).
+         */
+        private fun discoveredIdSet(discovered: List<com.tinkernorth.dish.data.model.DiscoveredServer>): Set<String> =
+            discovered.mapTo(mutableSetOf()) { SatelliteConnection.idFor(it) }
+
         private fun buildSummaries(
             satMap: Map<String, SatelliteConnection>,
             btStates: Map<String, BluetoothGamepadRegistry.SlotState>,
+            discoveredIds: Set<String>,
         ): List<ConnectionSummary> {
             val bindings = _bindings.value
             val satTypes = _satTypes.value
@@ -131,7 +173,14 @@ class ConnectionHub
             val remembered = store.remembered().associateBy { it.id }
             val satIds = (remembered.keys + satMap.keys).toSet()
             for (id in satIds) {
-                buildSatelliteSummary(id, satMap[id], remembered[id], bindings, satTypes)?.let(result::add)
+                buildSatelliteSummary(
+                    id,
+                    satMap[id],
+                    remembered[id],
+                    bindings,
+                    satTypes,
+                    discoveredIds,
+                )?.let(result::add)
             }
 
             val rememberedBtIds = mutableSetOf<String>()
@@ -147,20 +196,41 @@ class ConnectionHub
             return result
         }
 
-        /** Satellites: remembered + any live not-yet-remembered (discovery hits). */
+        /**
+         * Satellites: remembered + any live not-yet-remembered (discovery hits).
+         *
+         * Derives [LinkState] from the wire-level [SessionState] plus whether
+         * [id] is currently in the discovery set:
+         * - SessionState.Live      → LinkState.Connected
+         * - SessionState.Linking   → LinkState.Connecting
+         * - SessionState.Faltering → LinkState.Unstable (not yet reachable;
+         *   native exposes only binary alive)
+         * - SessionState.Idle / null:
+         *     in discoveredIds     → LinkState.Ready
+         *     not in discoveredIds → LinkState.Saved
+         *
+         * TODO(Stale): a server-side forget should land us in [LinkState.Stale],
+         * but detecting that requires the server to return a `PAIRING_UNKNOWN`
+         * error so we can distinguish "peer forgot us" from a transient
+         * unreachability. Until that protocol bit lands, a forgotten device
+         * falls through to Saved/Ready and the user only sees connect failures.
+         */
         private fun buildSatelliteSummary(
             id: String,
             conn: SatelliteConnection?,
             remembered: RememberedSatellite?,
             bindings: Map<String, String>,
             satTypes: Map<Pair<String, String>, Int>,
+            discoveredIds: Set<String>,
         ): ConnectionSummary? {
             val server = conn?.server?.value ?: remembered?.toDiscovered() ?: return null
             val live =
                 when (conn?.state?.value) {
-                    SatelliteState.CONNECTED -> ConnectionLive.CONNECTED
-                    SatelliteState.CONNECTING -> ConnectionLive.CONNECTING
-                    else -> ConnectionLive.IDLE
+                    SessionState.Live -> LinkState.Connected
+                    SessionState.Linking -> LinkState.Connecting
+                    SessionState.Faltering -> LinkState.Unstable
+                    SessionState.Idle, null ->
+                        if (id in discoveredIds) LinkState.Ready else LinkState.Saved
                 }
             val bound = bindings.entries.filter { it.value == id }.map { it.key }
             return ConnectionSummary(
@@ -222,13 +292,20 @@ class ConnectionHub
             )
         }
 
-        private fun liveStateOf(state: BluetoothGamepadRegistry.SlotState?): ConnectionLive =
+        /**
+         * Bluetooth state → [LinkState]. Note that BT doesn't have the same
+         * "seen on network" vs "saved offline" distinction satellites do —
+         * a remembered BT host is just remembered, with no equivalent of an
+         * mDNS/broadcast presence ping. So idle remembered hosts collapse
+         * to [LinkState.Saved] (offline) regardless of physical proximity.
+         */
+        private fun liveStateOf(state: BluetoothGamepadRegistry.SlotState?): LinkState =
             when {
-                state?.connected == true -> ConnectionLive.CONNECTED
+                state?.connected == true -> LinkState.Connected
                 state?.registered == true ||
                     state?.autoReconnecting == true ||
-                    state?.acquiring == true -> ConnectionLive.CONNECTING
-                else -> ConnectionLive.IDLE
+                    state?.acquiring == true -> LinkState.Connecting
+                else -> LinkState.Saved
             }
 
         private fun buildSlotTypes(
@@ -293,7 +370,12 @@ class ConnectionHub
             }
 
             // Re-emit connections so boundSlotIds refreshes.
-            _connections.value = buildSummaries(satellite.connections.value, bt.states.value)
+            _connections.value =
+                buildSummaries(
+                    satellite.connections.value,
+                    bt.states.value,
+                    discoveredIdSet(satellite.discoveredServers.value),
+                )
             // For satellite: attach the controller slot on the server side.
             satellite.get(connectionId)?.let { conn ->
                 scope.launch { conn.attachSlot(slotId, controllerType = type) }
@@ -306,7 +388,12 @@ class ConnectionHub
             _bindings.value = current
             satellite.get(connId)?.detachSlot(slotId)
             _satTypes.value = _satTypes.value - (connId to slotId)
-            _connections.value = buildSummaries(satellite.connections.value, bt.states.value)
+            _connections.value =
+                buildSummaries(
+                    satellite.connections.value,
+                    bt.states.value,
+                    discoveredIdSet(satellite.discoveredServers.value),
+                )
         }
 
         /**
@@ -327,7 +414,12 @@ class ConnectionHub
             satellite.get(connectionId)?.let { conn ->
                 scope.launch { conn.setControllerType(slotId, type) }
             }
-            _connections.value = buildSummaries(satellite.connections.value, bt.states.value)
+            _connections.value =
+                buildSummaries(
+                    satellite.connections.value,
+                    bt.states.value,
+                    discoveredIdSet(satellite.discoveredServers.value),
+                )
         }
 
         fun boundConnection(slotId: String): ConnectionSummary? =
@@ -344,7 +436,7 @@ class ConnectionHub
         fun autoReconnectAll() {
             for (remembered in store.remembered()) {
                 val existing = satellite.get(remembered.id)
-                if (existing?.state?.value != SatelliteState.CONNECTED) {
+                if (existing?.state?.value != SessionState.Live) {
                     satellite.connect(remembered.toDiscovered())
                 }
             }

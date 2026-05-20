@@ -21,7 +21,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.data.network.ConnectionHub
 import com.tinkernorth.dish.data.network.ConnectionKind
-import com.tinkernorth.dish.data.network.ConnectionLive
+import com.tinkernorth.dish.data.network.LinkState
 import com.tinkernorth.dish.data.network.PhoneBatterySource
 import com.tinkernorth.dish.data.network.PhoneMotionSource
 import com.tinkernorth.dish.data.network.SatelliteConnectionManager
@@ -167,11 +167,11 @@ class GamepadOverlayActivity :
 
     private fun refreshStatus() {
         val summary = hub.summary(connectionId)
-        val connected = summary?.live == ConnectionLive.CONNECTED
+        val connected = summary?.live == LinkState.Connected
         binding.tvOverlayStatus.text =
             when {
                 connected -> summary?.label ?: "Streaming"
-                summary?.live == ConnectionLive.CONNECTING -> "Connecting…"
+                summary?.live == LinkState.Connecting -> "Connecting…"
                 summary == null -> "Unknown connection"
                 else -> "Not connected"
             }
@@ -198,7 +198,7 @@ class GamepadOverlayActivity :
         // the kind + liveness resolve, then self-corrects on the next refresh.
         val summary = hub.summary(connectionId)
         val carriesMotion = summary?.kind != ConnectionKind.BLUETOOTH
-        val connected = summary?.live == ConnectionLive.CONNECTED
+        val connected = summary?.live == LinkState.Connected
         val state =
             MotionIndicatorState.of(
                 isAvailable = motionSource.isAvailable,
@@ -220,7 +220,7 @@ class GamepadOverlayActivity :
 
     override fun onGamepadStateChanged(state: GamepadTouchView.GamepadState) {
         val summary = hub.summary(connectionId) ?: return
-        if (summary.live != ConnectionLive.CONNECTED) return
+        if (summary.live != LinkState.Connected) return
         when (summary.kind) {
             ConnectionKind.BLUETOOTH -> {
                 val report =

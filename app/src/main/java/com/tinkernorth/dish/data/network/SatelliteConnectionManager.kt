@@ -96,13 +96,14 @@ class SatelliteConnectionManager
             // server.
             if (existing != null) {
                 when (existing.state.value) {
-                    SatelliteState.CONNECTED,
-                    SatelliteState.CONNECTING,
+                    SessionState.Live,
+                    SessionState.Linking,
+                    SessionState.Faltering,
                     -> {
                         existing.updateServer(server)
                         return
                     }
-                    SatelliteState.IDLE -> Unit
+                    SessionState.Idle -> Unit
                 }
             }
             val conn =

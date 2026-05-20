@@ -15,7 +15,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.google.androidgamesdk.GameActivity
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.data.network.ConnectionHub
-import com.tinkernorth.dish.data.network.ConnectionLive
+import com.tinkernorth.dish.data.network.LinkState
 import com.tinkernorth.dish.data.network.SatelliteConnectionManager
 import com.tinkernorth.dish.data.network.WakeStateController
 import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
@@ -94,7 +94,7 @@ class MainActivity :
     }
 
     private fun updateUI(s: MainUiState) {
-        val liveCount = s.connections.count { it.live == ConnectionLive.CONNECTED }
+        val liveCount = s.connections.count { it.live == LinkState.Connected }
         val totalCount = s.connections.size
         binding.tvConnectionsSummary.text =
             when {

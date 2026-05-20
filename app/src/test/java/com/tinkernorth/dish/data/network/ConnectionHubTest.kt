@@ -34,12 +34,19 @@ class ConnectionHubTest {
     private val satConnsFlow = MutableStateFlow<Map<String, SatelliteConnection>>(emptyMap())
     private val btStatesFlow = MutableStateFlow<Map<String, BluetoothGamepadRegistry.SlotState>>(emptyMap())
 
+    // ConnectionHub now subscribes to discoveredServers to split paired-idle
+    // satellites into Ready (in scan) vs Saved (offline). Tests default to an
+    // empty scan; push an entry into this flow to assert the Ready path.
+    private val discoveredFlow =
+        MutableStateFlow<List<com.tinkernorth.dish.data.model.DiscoveredServer>>(emptyList())
+
     @Before
     fun setUp() {
         satellite = mockk(relaxed = true)
         bt = mockk(relaxed = true)
         store = mockk(relaxed = true)
         every { satellite.connections } returns satConnsFlow
+        every { satellite.discoveredServers } returns discoveredFlow
         every { bt.states } returns btStatesFlow
         every { store.remembered() } returns emptyList()
         every { store.rememberedBt() } returns emptyList()
@@ -83,7 +90,7 @@ class ConnectionHubTest {
         val summaries = hub.connections.value
         assertEquals(1, summaries.size)
         assertEquals(ConnectionKind.SATELLITE, summaries[0].kind)
-        assertEquals(ConnectionLive.IDLE, summaries[0].live)
+        assertEquals(LinkState.Saved, summaries[0].live)
         assertEquals("satellite:10.0.0.1:9876", summaries[0].id)
         assertTrue(summaries[0].boundSlotIds.isEmpty())
     }
@@ -99,7 +106,7 @@ class ConnectionHubTest {
         val summary = hub.connections.value.firstOrNull { it.kind == ConnectionKind.BLUETOOTH }
         assertEquals("bt:AA:BB", summary?.id)
         assertEquals("PLAYSTATION", summary?.btProfile)
-        assertEquals(ConnectionLive.IDLE, summary?.live)
+        assertEquals(LinkState.Saved, summary?.live)
     }
 
     @Test
@@ -115,7 +122,7 @@ class ConnectionHubTest {
         val hub = buildHub()
 
         val summary = hub.connections.value.first { it.kind == ConnectionKind.BLUETOOTH }
-        assertEquals(ConnectionLive.CONNECTED, summary.live)
+        assertEquals(LinkState.Connected, summary.live)
     }
 
     // ── BT progress surfacing (acquiring / registered / transient slot) ───
@@ -134,7 +141,7 @@ class ConnectionHubTest {
         val hub = buildHub()
 
         val summary = hub.connections.value.first { it.kind == ConnectionKind.BLUETOOTH }
-        assertEquals(ConnectionLive.CONNECTING, summary.live)
+        assertEquals(LinkState.Connecting, summary.live)
     }
 
     @Test
@@ -155,7 +162,7 @@ class ConnectionHubTest {
         val transient = hub.connections.value.firstOrNull { it.id == "bt-pending-42" }
         assertEquals(ConnectionKind.BLUETOOTH, transient?.kind)
         assertEquals("PlayStation", transient?.label)
-        assertEquals(ConnectionLive.CONNECTING, transient?.live)
+        assertEquals(LinkState.Connecting, transient?.live)
         assertEquals("PlayStation", transient?.btProfile)
     }
 
@@ -223,7 +230,7 @@ class ConnectionHubTest {
         val btSummaries = hub.connections.value.filter { it.kind == ConnectionKind.BLUETOOTH }
         assertEquals(1, btSummaries.size)
         assertEquals("bt:AA:BB", btSummaries[0].id)
-        assertEquals(ConnectionLive.CONNECTED, btSummaries[0].live)
+        assertEquals(LinkState.Connected, btSummaries[0].live)
         // Detail uses the persisted (friendly) profileName, not the enum name.
         assert(btSummaries[0].detail.startsWith("PlayStation")) {
             "expected friendly profile in detail, got: ${btSummaries[0].detail}"
@@ -240,7 +247,7 @@ class ConnectionHubTest {
         val hub = buildHub()
 
         val summary = hub.connections.value.first { it.kind == ConnectionKind.BLUETOOTH }
-        assertEquals(ConnectionLive.IDLE, summary.live)
+        assertEquals(LinkState.Saved, summary.live)
     }
 
     @Test
@@ -388,7 +395,7 @@ class ConnectionHubTest {
         every { store.remembered() } returns listOf(live, idle)
         val liveConn =
             mockk<SatelliteConnection>(relaxed = true) {
-                every { state } returns MutableStateFlow(SatelliteState.CONNECTED)
+                every { state } returns MutableStateFlow(SessionState.Live)
             }
         every { satellite.get("s:live") } returns liveConn
         every { satellite.get("s:idle") } returns null
@@ -434,7 +441,7 @@ class ConnectionHubTest {
                     httpPort = 9877,
                 ),
             )
-        val state = MutableStateFlow(SatelliteState.CONNECTING)
+        val state = MutableStateFlow(SessionState.Linking)
         val conn =
             mockk<SatelliteConnection>(relaxed = true) {
                 every { id } returns "satellite:1.1.1.1:9876"
@@ -451,7 +458,7 @@ class ConnectionHubTest {
 
         // First snapshot: still CONNECTING.
         assertEquals(
-            ConnectionLive.CONNECTING,
+            LinkState.Connecting,
             hub.connections.value
                 .first { it.id == "satellite:1.1.1.1:9876" }
                 .live,
@@ -459,11 +466,11 @@ class ConnectionHubTest {
 
         // Inner state flips to CONNECTED — hub must re-emit even though the
         // outer satellite.connections map is unchanged.
-        state.value = SatelliteState.CONNECTED
+        state.value = SessionState.Live
         scope.testScheduler.runCurrent()
 
         assertEquals(
-            ConnectionLive.CONNECTED,
+            LinkState.Connected,
             hub.connections.value
                 .first { it.id == "satellite:1.1.1.1:9876" }
                 .live,
@@ -483,7 +490,7 @@ class ConnectionHubTest {
                     httpPort = 9877,
                 ),
             )
-        val state = MutableStateFlow(SatelliteState.CONNECTED)
+        val state = MutableStateFlow(SessionState.Live)
         val conn =
             mockk<SatelliteConnection>(relaxed = true) {
                 every { id } returns "satellite:1.1.1.1:9876"
@@ -497,11 +504,11 @@ class ConnectionHubTest {
             }
         satConnsFlow.value = mapOf("satellite:1.1.1.1:9876" to conn)
         val hub = buildHub()
-        state.value = SatelliteState.IDLE
+        state.value = SessionState.Idle
         scope.testScheduler.runCurrent()
 
         assertEquals(
-            ConnectionLive.IDLE,
+            LinkState.Saved,
             hub.connections.value
                 .first { it.id == "satellite:1.1.1.1:9876" }
                 .live,

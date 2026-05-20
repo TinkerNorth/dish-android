@@ -86,7 +86,7 @@ data class MainUiState(
 ) {
     val virtualSlot get() = slots.first { it.id == VIRTUAL_SLOT_ID }
     val physicalSlots get() = slots.filter { it.inputType == SlotInputType.PHYSICAL }
-    val anyConnected get() = connections.any { it.live == com.tinkernorth.dish.data.network.ConnectionLive.CONNECTED }
+    val anyConnected get() = connections.any { it.live == com.tinkernorth.dish.data.network.LinkState.Connected }
 
     /**
      * Slots that can route input to a live connection right now: bound to a
@@ -101,7 +101,7 @@ data class MainUiState(
         slots.count {
             !it.isDisconnecting &&
                 it.boundConnectionId != null &&
-                it.boundStatus?.live == com.tinkernorth.dish.data.network.ConnectionLive.CONNECTED &&
+                it.boundStatus?.live == com.tinkernorth.dish.data.network.LinkState.Connected &&
                 (it.inputType == SlotInputType.VIRTUAL || it.physicalDeviceId >= 0)
         }
 }

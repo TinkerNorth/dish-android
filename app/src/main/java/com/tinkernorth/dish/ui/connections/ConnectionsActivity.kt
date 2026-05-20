@@ -29,7 +29,7 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.data.network.ConnectionEvent
 import com.tinkernorth.dish.data.network.ConnectionHub
 import com.tinkernorth.dish.data.network.ConnectionKind
-import com.tinkernorth.dish.data.network.ConnectionLive
+import com.tinkernorth.dish.data.network.LinkState
 import com.tinkernorth.dish.data.network.ConnectionSummary
 import com.tinkernorth.dish.data.network.RememberedBt
 import com.tinkernorth.dish.data.network.SatelliteConnection
@@ -41,6 +41,7 @@ import com.tinkernorth.dish.databinding.DialogPairingBinding
 import com.tinkernorth.dish.databinding.RowConnectionBinding
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepad
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
+import com.tinkernorth.dish.ui.common.setLoading
 import com.tinkernorth.dish.util.GamepadActivityHost
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -119,8 +120,17 @@ class ConnectionsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 satellite.isScanning.collect { scanning ->
-                    binding.btnSatelliteScan.isEnabled = !scanning
-                    binding.btnSatelliteScan.text = if (scanning) "Scanning…" else "Scan"
+                    // In-button loader: spinner accompanies the "Scanning…" label
+                    // and the button drops to 0.4 alpha while disabled, per the
+                    // design spec (ds-components.jsx Button) and dish-mac's
+                    // DishOutlinedButtonStyle. Mirrors the SwiftUI:
+                    //     Button { if isScanning { DishSpinner; Text("Scanning…") } else { Text("Scan") } }
+                    //       .disabled(isScanning)
+                    binding.btnSatelliteScan.setLoading(
+                        loading = scanning,
+                        loadingText = "Scanning…",
+                        restingText = "Scan",
+                    )
                 }
             }
         }
@@ -174,16 +184,29 @@ class ConnectionsActivity : AppCompatActivity() {
     private fun satelliteRow(c: ConnectionSummary): View {
         val rb = inflateRow(binding.llSatelliteList, c.label, c.detail, statusText(c))
         when (c.live) {
-            ConnectionLive.CONNECTED -> {
-                rb.btnRowAction.text = "Disconnect"
+            LinkState.Connected, LinkState.Unstable -> {
+                rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = "Disconnect")
                 rb.btnRowAction.setOnClickListener { satellite.disconnect(c.id) }
             }
-            ConnectionLive.CONNECTING -> {
-                rb.btnRowAction.text = "Connecting…"
-                rb.btnRowAction.isEnabled = false
+            LinkState.Connecting -> {
+                // In-button spinner accompanies the "Connecting…" label and
+                // the button drops to 0.4 alpha while disabled. LinkState.Connecting
+                // covers both pair phases (pairAndConnect → openSession) in the
+                // SatelliteConnectionManager, so a single state flip drives the
+                // whole in-flight visual — no separate pairingInFlight needed.
+                rb.btnRowAction.setLoading(
+                    loading = true,
+                    loadingText = "Connecting…",
+                    restingText = "Connect",
+                )
+                rb.btnRowAction.setOnClickListener(null)
             }
-            ConnectionLive.IDLE -> {
-                rb.btnRowAction.text = "Connect"
+            // All resting non-live states share the same primary action today
+            // (Connect attempts auto-pair → openSession). Splitting buttons by
+            // Saved/Ready/Found/Stale is a UX call, not just a nomenclature
+            // one — left intentionally collapsed here.
+            LinkState.Saved, LinkState.Ready, LinkState.Found, LinkState.Stale -> {
+                rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = "Connect")
                 rb.btnRowAction.setOnClickListener {
                     val remembered = satellite.remembered().firstOrNull { it.id == c.id } ?: return@setOnClickListener
                     satellite.connect(remembered.toDiscovered())
@@ -197,14 +220,22 @@ class ConnectionsActivity : AppCompatActivity() {
     }
 
     private fun discoveredSatelliteRow(s: com.tinkernorth.dish.data.model.DiscoveredServer): View {
+        // Unpaired-discovered (LinkState.Found) — these never sit in
+        // ConnectionSummary because the hub only tracks remembered + live
+        // entries; they're rendered directly from satellite.discoveredServers.
         val rb =
             inflateRow(
                 binding.llSatelliteList,
                 s.name.ifEmpty { s.ip },
                 "${s.ip} • UDP ${s.udpPort}",
-                "Discovered · ${getString(s.source.labelRes)}",
+                "Found · ${getString(s.source.labelRes)}",
             )
-        rb.btnRowAction.text = "Connect"
+        // Resting state by definition: as soon as the user taps Connect the
+        // SatelliteConnectionManager calls markConnecting(), which lands the
+        // row in `hub.connections` as LinkState.Connecting on the next emit,
+        // and the row re-renders as a satelliteRow with the in-button spinner.
+        // No need for a spinner here on the discovered-only branch.
+        rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = "Connect")
         rb.btnRowAction.setOnClickListener { satellite.connect(s) }
         return rb.root
     }
@@ -212,22 +243,38 @@ class ConnectionsActivity : AppCompatActivity() {
     private fun btRow(c: ConnectionSummary): View {
         val rb = inflateRow(binding.llBtList, c.label, c.detail, statusText(c))
         when (c.live) {
-            ConnectionLive.CONNECTED -> {
-                rb.btnRowAction.text = "Disconnect"
+            LinkState.Connected, LinkState.Unstable -> {
+                rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = "Disconnect")
                 rb.btnRowAction.setOnClickListener { btRegistry.stop(c.id) }
             }
-            ConnectionLive.CONNECTING -> {
+            LinkState.Connecting -> {
+                // Three sub-states inside Connecting, each with a label that
+                // says what we're waiting on. The spinner accompanies the
+                // label so it reads as one in-flight component — even for
+                // "Pair from host", where we can't shorten the wait, the
+                // spinner reassures the user that the surface is alive and
+                // still listening for the host. All three are disabled with
+                // 0.4 alpha per the design spec.
                 val state = btRegistry.state(c.id)
-                rb.btnRowAction.text =
+                val label =
                     when {
                         state.registered -> "Pair from host"
                         state.acquiring -> "Acquiring…"
                         else -> "Waiting…"
                     }
-                rb.btnRowAction.isEnabled = false
+                rb.btnRowAction.setLoading(
+                    loading = true,
+                    loadingText = label,
+                    restingText = "Connect",
+                )
+                rb.btnRowAction.setOnClickListener(null)
             }
-            ConnectionLive.IDLE -> {
-                rb.btnRowAction.text = "Reconnect"
+            LinkState.Saved, LinkState.Ready, LinkState.Found, LinkState.Stale -> {
+                // "Connect" matches the satellite row's verb; reconnection here
+                // still goes through tryAutoReconnect (BT can't be initiated
+                // by us alone — the host has to look), but the user-facing
+                // action word stays consistent with the rest of the page.
+                rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = "Connect")
                 rb.btnRowAction.setOnClickListener {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) btRegistry.tryAutoReconnect(c.id)
                 }
@@ -303,11 +350,20 @@ class ConnectionsActivity : AppCompatActivity() {
             .onFailure { startActivity(fallback) }
     }
 
+    // User-facing chip text per LinkState. The internal enum names (Live /
+    // Linking / Faltering) live one layer down in [SessionState]; this layer's
+    // job is to map every LinkState — including the discovery/pairing axis
+    // values the wire layer doesn't know about — to a noun (resting) or
+    // verb-with-ellipsis (transient) per the shared nomenclature.
     private fun statusText(c: ConnectionSummary): String =
         when (c.live) {
-            ConnectionLive.CONNECTED -> "Connected"
-            ConnectionLive.CONNECTING -> "Connecting"
-            ConnectionLive.IDLE -> "Idle"
+            LinkState.Found -> "Found"
+            LinkState.Stale -> "Needs pairing"
+            LinkState.Saved -> "Offline"
+            LinkState.Ready -> "Ready"
+            LinkState.Connecting -> "Connecting…"
+            LinkState.Connected -> "Online"
+            LinkState.Unstable -> "Unsteady"
         }
 
     private fun inflateRow(
@@ -321,10 +377,15 @@ class ConnectionsActivity : AppCompatActivity() {
         rb.tvRowDetail.text = detail
         rb.tvRowStatus.text = status
         rb.dotRow.background = GradientDrawable().apply { shape = GradientDrawable.OVAL }
+        // Color map keyed on the user-facing chip text (the only thing the
+        // inflater sees here). The "Unsteady" amber would ideally be a
+        // distinct color but we share colorPrimary with "Connecting…" until
+        // a real amber lands in colors.xml — both signal "transient, watch
+        // this row" so the conflation is acceptable.
         val color =
             when (status) {
-                "Connected" -> R.color.colorSuccess
-                "Connecting" -> R.color.colorPrimary
+                "Online" -> R.color.colorSuccess
+                "Connecting…", "Unsteady" -> R.color.colorPrimary
                 else -> R.color.colorMuted
             }
         (rb.dotRow.background as GradientDrawable).setColor(getColor(color))
@@ -381,6 +442,19 @@ class ConnectionsActivity : AppCompatActivity() {
         pairPort: Int,
     ) {
         val db = DialogPairingBinding.inflate(layoutInflater)
+        // TODO(in-button loader inside the PIN dialog): the design spec
+        // (dish-mac's PairingSheet.swift) keeps the Pair button visible with
+        // an in-button DishSpinner while POST /api/pair is in flight, and
+        // only dismisses on success. MaterialAlertDialogBuilder dismisses its
+        // positive-button dialog on click — surfacing the in-flight state
+        // inside the dialog would require swapping to a custom Dialog (or
+        // overriding the alert's positive-button after show()). The in-row
+        // loader on the satelliteRow already covers the openSession phase
+        // (LinkState.Connecting fires from markConnecting() as soon as
+        // pairWithPin starts), so the user sees a continuous in-flight
+        // state in the row immediately after the dialog dismisses. Keeping
+        // the simpler alert-builder pattern until UX confirms the dialog
+        // needs to linger through the pair → connect round-trip.
         MaterialAlertDialogBuilder(this)
             .setView(db.root)
             .setPositiveButton("Connect") { _, _ ->

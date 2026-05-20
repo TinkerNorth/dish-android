@@ -90,7 +90,7 @@ class WakeStateControllerTest {
 
     private fun summary(
         id: String,
-        live: ConnectionLive,
+        live: LinkState,
     ) = ConnectionSummary(
         id = id,
         kind = ConnectionKind.SATELLITE,
@@ -126,7 +126,7 @@ class WakeStateControllerTest {
         runTest(scope.testScheduler) {
             val (controller, _) = buildAndStart()
 
-            connectionsFlow.value = listOf(summary("s:1", ConnectionLive.CONNECTED))
+            connectionsFlow.value = listOf(summary("s:1", LinkState.Connected))
             bindingsFlow.value = mapOf("virtual" to "s:1")
             scope.testScheduler.runCurrent()
 
@@ -143,7 +143,7 @@ class WakeStateControllerTest {
         runTest(scope.testScheduler) {
             val (controller, _) = buildAndStart()
 
-            connectionsFlow.value = listOf(summary("s:1", ConnectionLive.CONNECTING))
+            connectionsFlow.value = listOf(summary("s:1", LinkState.Connecting))
             bindingsFlow.value = mapOf("virtual" to "s:1")
             scope.testScheduler.runCurrent()
 
@@ -171,7 +171,7 @@ class WakeStateControllerTest {
         runTest(scope.testScheduler) {
             val (controller, _) = buildAndStart()
 
-            connectionsFlow.value = listOf(summary("s:1", ConnectionLive.CONNECTED))
+            connectionsFlow.value = listOf(summary("s:1", LinkState.Connected))
             bindingsFlow.value = mapOf("virtual" to "s:1", "5" to "s:1")
             scope.testScheduler.runCurrent()
 
@@ -184,13 +184,13 @@ class WakeStateControllerTest {
         runTest(scope.testScheduler) {
             val (controller, _) = buildAndStart()
 
-            connectionsFlow.value = listOf(summary("s:1", ConnectionLive.CONNECTED))
+            connectionsFlow.value = listOf(summary("s:1", LinkState.Connected))
             bindingsFlow.value = mapOf("virtual" to "s:1")
             scope.testScheduler.runCurrent()
             assertTrue(controller.shouldKeepScreenOn.value)
 
             // Connection drops back to IDLE — the controller should release.
-            connectionsFlow.value = listOf(summary("s:1", ConnectionLive.IDLE))
+            connectionsFlow.value = listOf(summary("s:1", LinkState.Saved))
             scope.testScheduler.runCurrent()
 
             assertEquals(0, controller.streamingSlotCount.value)
@@ -203,7 +203,7 @@ class WakeStateControllerTest {
         runTest(scope.testScheduler) {
             val (controller, _) = buildAndStart()
 
-            connectionsFlow.value = listOf(summary("s:1", ConnectionLive.CONNECTED))
+            connectionsFlow.value = listOf(summary("s:1", LinkState.Connected))
             bindingsFlow.value = mapOf("virtual" to "s:1")
             scope.testScheduler.runCurrent()
 
@@ -225,7 +225,7 @@ class WakeStateControllerTest {
     fun `ON_STOP releases the wake lock and zeros both flows`() =
         runTest(scope.testScheduler) {
             val (controller, owner) = buildAndStart()
-            connectionsFlow.value = listOf(summary("s:1", ConnectionLive.CONNECTED))
+            connectionsFlow.value = listOf(summary("s:1", LinkState.Connected))
             bindingsFlow.value = mapOf("virtual" to "s:1")
             scope.testScheduler.runCurrent()
             assertTrue(controller.shouldKeepScreenOn.value)
@@ -242,7 +242,7 @@ class WakeStateControllerTest {
     fun `re-START after STOP starts a fresh collector and re-derives state`() =
         runTest(scope.testScheduler) {
             val (controller, owner) = buildAndStart()
-            connectionsFlow.value = listOf(summary("s:1", ConnectionLive.CONNECTED))
+            connectionsFlow.value = listOf(summary("s:1", LinkState.Connected))
             bindingsFlow.value = mapOf("virtual" to "s:1")
             scope.testScheduler.runCurrent()
 

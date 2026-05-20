@@ -88,7 +88,7 @@ internal object PhysicalReachability {
         val summary = summariesById[cid] ?: return null
         val onLiveSatellite =
             summary.kind == ConnectionKind.SATELLITE &&
-                summary.live == ConnectionLive.CONNECTED
+                summary.live == LinkState.Connected
         if (!onLiveSatellite) return null
         val conn = connections[cid] ?: return null
         return conn.takeIf { it.slots.value[slotId]?.registered == true }

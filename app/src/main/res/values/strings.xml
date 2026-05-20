@@ -1,10 +1,11 @@
 <resources>
     <string name="app_name">Dish</string>
 
-    <!-- MainActivity dashboard -->
-    <string name="status_remembered">%1$d remembered</string>
+    <!-- MainActivity dashboard. Vocabulary aligns with LinkState chips:
+         a remembered/paired entry is "paired"; a Connected entry is "online". -->
+    <string name="status_remembered">%1$d paired</string>
     <string name="status_tap_manage">Tap Manage to add one</string>
-    <string name="status_connected_of">%1$d of %2$d connected</string>
+    <string name="status_connected_of">%1$d of %2$d online</string>
     <string name="toast_pairing_needed">Pairing needed — open Connections</string>
     <string name="toast_bind_first">Bind a connection first</string>
 
@@ -37,7 +38,7 @@
     <string name="battery_state_discharging">on battery</string>
 
     <!-- Connections list: how a discovered satellite was found. Shown in the
-         row subtitle after "Discovered · ". -->
+         row subtitle after "Found · ". -->
     <string name="discovery_source_broadcast">UDP broadcast</string>
     <string name="discovery_source_mdns">mDNS</string>
     <string name="discovery_source_both">mDNS + broadcast</string>

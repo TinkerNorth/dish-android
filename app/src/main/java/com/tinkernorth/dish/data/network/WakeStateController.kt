@@ -69,7 +69,7 @@ class WakeStateController
             job =
                 combine(hub.bindings, hub.connections) { bindings, conns ->
                     val byId = conns.associateBy { it.id }
-                    bindings.values.count { cid -> byId[cid]?.live == ConnectionLive.CONNECTED }
+                    bindings.values.count { cid -> byId[cid]?.live == LinkState.Connected }
                 }.onEach { count ->
                     _streamingSlotCount.value = count
                     val keep = count > 0
