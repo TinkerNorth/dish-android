@@ -16,6 +16,7 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.tinkernorth.dish.R
@@ -118,30 +119,64 @@ class GamepadTouchView
 
         // ── Paints ───────────────────────────────────────────────────────────────
 
-        private val paintBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF1A1F25.toInt() }
-        private val paintStickBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF1E293B.toInt() }
-        private val paintPressed = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x403B82F6.toInt() }
+        // Chassis paints pull from the deep-space cyan palette in colors.xml so
+        // the on-screen gamepad reads as part of the app, not a separate skin.
+        // Face-button drawables (A/B/X/Y, cross/circle/square/triangle) keep
+        // their semantic controller colors — only the chassis around them
+        // re-skins.
+        private val paintBg =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = ContextCompat.getColor(context, R.color.colorSurface)
+            }
+        private val paintStickBg =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = ContextCompat.getColor(context, R.color.colorSurfaceDim)
+            }
+        private val paintPressed =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color =
+                    ColorUtils.setAlphaComponent(
+                        ContextCompat.getColor(context, R.color.colorPrimary),
+                        0x40,
+                    )
+            }
         private val paintStickRing =
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.STROKE
-                color = 0xFF475569.toInt()
+                color = ContextCompat.getColor(context, R.color.colorPrimaryDark)
             }
         private val paintStickDir =
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.STROKE
-                color = 0x80CBD5E1.toInt()
+                color =
+                    ColorUtils.setAlphaComponent(
+                        ContextCompat.getColor(context, R.color.colorPrimary),
+                        0x80,
+                    )
                 strokeCap = Paint.Cap.ROUND
             }
-        private val paintStickThumb = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFCBD5E1.toInt() }
-        private val paintStickThumbActive = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF60A5FA.toInt() }
+        private val paintStickThumb =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = ContextCompat.getColor(context, R.color.colorOnSurface)
+            }
+        private val paintStickThumbActive =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = ContextCompat.getColor(context, R.color.colorPrimary)
+            }
         private val paintStickLabel =
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = 0xFF0F172A.toInt()
+                color = ContextCompat.getColor(context, R.color.colorBackground)
                 textAlign = Paint.Align.CENTER
                 isFakeBoldText = true
             }
-        private val paintPillBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF293548.toInt() }
-        private val paintPillPressed = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF3B82F6.toInt() }
+        private val paintPillBg =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = ContextCompat.getColor(context, R.color.colorSurfaceDim)
+            }
+        private val paintPillPressed =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = ContextCompat.getColor(context, R.color.colorPrimary)
+            }
 
         // Per-channel min compositor for diagonal d-pad rendering — see [drawDpad].
         private val dpadDarkenPaint =
@@ -335,15 +370,16 @@ class GamepadTouchView
             if (second == null) return
 
             // Each cardinal arrow icon is a complete filled cross with one
-            // arm in red and the other three in white — so simply drawing a
-            // second icon on top would let its white overwrite the first
-            // icon's red active arm and the diagonal would look like a
-            // single direction. Composite the second arrow with DARKEN
+            // arm in colorPrimary and the other three in white — so simply
+            // drawing a second icon on top would let its white overwrite the
+            // first icon's accent active arm and the diagonal would look like
+            // a single direction. Composite the second arrow with DARKEN
             // (per-channel min): at any pixel inside the cross one icon has
-            // RED (#FFE73246) and the other has WHITE (#FFFFFFFF), so
-            // min(red, white) = red — both red arms survive and the rest
-            // stays white. Outside the cross the source is transparent and
-            // DARKEN leaves the destination untouched.
+            // the accent (e.g. #FF4FE3FF) and the other has WHITE (#FFFFFFFF),
+            // so min(accent, white) = accent (every channel of the accent is
+            // <= 255) — both accent arms survive and the rest stays white.
+            // Outside the cross the source is transparent and DARKEN leaves
+            // the destination untouched.
             val saveCount =
                 c.saveLayer(
                     l.dpadRect.left,
