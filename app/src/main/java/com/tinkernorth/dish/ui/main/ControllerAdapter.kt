@@ -44,6 +44,34 @@ interface SlotActionListener {
     )
 }
 
+/**
+ * Whether a connection in this state belongs in the slot's bind picker as a
+ * normal, claimable target. Saved (offline) and Stale (needs pairing) drop
+ * off because the user can't usefully route input to them right now — the
+ * picker stays focused on the targets they can actually pick. A slot that
+ * is *already* bound keeps its current connection visible regardless, see
+ * [connectionsVisibleInPicker].
+ */
+internal fun LinkState.isAvailableForPicker(): Boolean =
+    when (this) {
+        LinkState.Connected, LinkState.Unstable,
+        LinkState.Connecting,
+        LinkState.Ready, LinkState.Found,
+        -> true
+        LinkState.Saved, LinkState.Stale -> false
+    }
+
+/**
+ * Pure helper: the subset of [all] the per-slot picker should display.
+ * Includes every available connection plus the slot's currently-bound one
+ * (even when unreachable) so the user keeps a handle on what they're routing
+ * to until they unbind or the connection recovers.
+ */
+internal fun connectionsVisibleInPicker(
+    all: List<ConnectionSummary>,
+    boundConnectionId: String?,
+): List<ConnectionSummary> = all.filter { it.live.isAvailableForPicker() || it.id == boundConnectionId }
+
 class ControllerAdapter(
     private val listener: SlotActionListener,
 ) : ListAdapter<ControllerAdapter.Row, ControllerAdapter.VH>(Diff) {
@@ -136,14 +164,29 @@ class ControllerAdapter(
                 b.btnUnbind.visibility = View.GONE
             }
 
-            // Connection list
+            // Connection list. Filtered to "available now" plus the
+            // bound-but-unreachable holdover; see [connectionsVisibleInPicker].
             b.llConnectionList.removeAllViews()
-            if (row.connections.isEmpty()) {
-                addLabel(b.llConnectionList, dp, "No connections yet — tap Manage above", R.color.colorMuted)
-            } else {
-                row.connections.forEach { summary ->
-                    addConnectionRow(b.llConnectionList, dp, slot, summary)
-                }
+            val visible = connectionsVisibleInPicker(row.connections, slot.boundConnectionId)
+            when {
+                row.connections.isEmpty() ->
+                    addLabel(
+                        b.llConnectionList,
+                        dp,
+                        "No connections yet — tap Manage above",
+                        R.color.colorMuted,
+                    )
+                visible.isEmpty() ->
+                    addLabel(
+                        b.llConnectionList,
+                        dp,
+                        "No connections available right now",
+                        R.color.colorMuted,
+                    )
+                else ->
+                    visible.forEach { summary ->
+                        addConnectionRow(b.llConnectionList, dp, slot, summary)
+                    }
             }
 
             // Virtual-only: open gamepad button
@@ -168,10 +211,14 @@ class ControllerAdapter(
             // multiple slots side-by-side so we never disable for sat.
             val ownedByOther =
                 c.kind == ConnectionKind.BLUETOOTH && c.boundSlotIds.any { it != slot.id }
+            // Only reachable when [connectionsVisibleInPicker] kept it via the
+            // bound-holdover rule — those rows render dimmed and don't accept
+            // a click (the explicit Unbind button below is the action surface).
+            val unreachable = !c.live.isAvailableForPicker()
 
             val row =
-                buildConnectionRowContainer(ctx, dp, bound, ownedByOther) {
-                    if (!ownedByOther) listener.onBind(slot.id, c.id)
+                buildConnectionRowContainer(ctx, dp, bound, ownedByOther, unreachable) {
+                    if (!ownedByOther && !unreachable) listener.onBind(slot.id, c.id)
                 }
             // Leading v6 brand glyph + stacked title/detail column. Mirrors
             // ConnectionsActivity row_connection.xml and dish-mac SlotCard's
@@ -195,6 +242,7 @@ class ControllerAdapter(
             dp: Float,
             bound: Boolean,
             ownedByOther: Boolean,
+            unreachable: Boolean,
             onClick: () -> Unit,
         ): LinearLayout =
             LinearLayout(ctx).apply {
@@ -216,9 +264,15 @@ class ControllerAdapter(
                             LinearLayout.LayoutParams.MATCH_PARENT,
                             LinearLayout.LayoutParams.WRAP_CONTENT,
                         ).apply { topMargin = (6 * dp).toInt() }
-                alpha = if (ownedByOther) 0.5f else 1f
-                isClickable = !ownedByOther
-                if (!ownedByOther) setOnClickListener { onClick() }
+                alpha =
+                    when {
+                        ownedByOther -> 0.5f
+                        unreachable -> 0.6f
+                        else -> 1f
+                    }
+                val clickable = !ownedByOther && !unreachable
+                isClickable = clickable
+                if (clickable) setOnClickListener { onClick() }
             }
 
         /**
@@ -234,11 +288,16 @@ class ControllerAdapter(
             dp: Float,
             c: ConnectionSummary,
         ): LinearLayout {
+            // Saved/Stale only reach this picker when the slot is currently
+            // bound to that connection — surface "offline"/"needs pairing"
+            // so the bound row reads as disconnected rather than silent.
             val statusSuffix =
                 when (c.live) {
                     LinkState.Connected, LinkState.Unstable -> " • online"
                     LinkState.Connecting -> " • connecting…"
-                    LinkState.Found, LinkState.Stale, LinkState.Saved, LinkState.Ready -> ""
+                    LinkState.Saved -> " • offline"
+                    LinkState.Stale -> " • needs pairing"
+                    LinkState.Found, LinkState.Ready -> ""
                 }
             val title =
                 TextView(ctx).apply {
