@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- CoordinatorLayout root so Snackbar swipe-to-dismiss works while the
+     gamepad overlay is foreground. The full-screen landscape posture and
+     the touch-view stack are unchanged. -->
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/colorBackground">
@@ -106,6 +109,4 @@
          the dim FrameLayout sits on top of the gamepad and consumes the
          wake-tap, identical to activity_main.xml. -->
     <include layout="@layout/overlay_low_power" />
-
-    <include layout="@layout/overlay_notifications" />
-</FrameLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

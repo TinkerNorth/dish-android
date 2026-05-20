@@ -40,7 +40,6 @@ import com.tinkernorth.dish.databinding.RowConnectionBinding
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepad
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.ui.common.DishNotification
-import com.tinkernorth.dish.ui.common.DishNotificationHost
 import com.tinkernorth.dish.ui.common.DishNotificationQueue
 import com.tinkernorth.dish.ui.common.dotColorForState
 import com.tinkernorth.dish.ui.common.glyphForConnection

@@ -12,15 +12,15 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.tinkernorth.dish.R
 import com.tinkernorth.dish.data.network.SatelliteNative
 import com.tinkernorth.dish.data.network.WakeStateController
 import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
 import com.tinkernorth.dish.databinding.OverlayLowPowerBinding
-import com.tinkernorth.dish.ui.common.DishNotificationHost
 import com.tinkernorth.dish.ui.common.DishNotificationQueue
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import com.tinkernorth.dish.ui.common.DishSnackbarController
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 
 /**
@@ -89,33 +89,16 @@ class GamepadActivityHost(
     private val window = activity.window
     private val lowPowerTouchGate = LowPowerTouchGate()
     private val lowPowerManager: LowPowerManager
-
-    /**
-     * Extra bottom inset (px) that floating UI anchored to the bottom edge
-     * should add to clear the low-power countdown pill while it's visible.
-     * `DishNotificationHost` observes this so its banner stack docks just
-     * above the countdown banner when the dim-screen is about to engage,
-     * and snaps back to the screen edge otherwise.
-     */
-    val notificationBottomInset: Flow<Int>
-        get() =
-            lowPowerManager.stateFlow.map { state ->
-                if (state == LowPowerManager.State.COUNTDOWN) countdownPillPx() else 0
-            }
-
-    private fun countdownPillPx(): Int {
-        // The countdown pill is pinned at marginBottom=24dp with ~50dp of
-        // intrinsic height. 64dp inset lifts the notification stack so its
-        // bottom edge sits just above the pill's top edge.
-        val density = activity.resources.displayMetrics.density
-        return (64f * density).toInt()
-    }
+    private val countdownBannerView: View
+    private var snackbarController: DishSnackbarController? = null
+    private var snackbarAnchorJob: Job? = null
 
     init {
         // Construct LowPowerManager eagerly so `dispatchTouchEvent` and
         // `applyScreenOn` can read/poke its state immediately — the
         // collectors in `install()` are what push values into it.
         val bindings = OverlayLowPowerBinding.bind(rootView)
+        countdownBannerView = bindings.llCountdownBanner
         lowPowerManager =
             LowPowerManager(window).apply {
                 views =
@@ -131,21 +114,22 @@ class GamepadActivityHost(
     }
 
     /**
-     * Start the lifecycle-scoped collectors AND bind the optional themed
-     * notification host:
+     * Start the lifecycle-scoped collectors AND, when [notifications] is
+     * supplied, wire a Material [DishSnackbarController] against the
+     * activity's root view:
      *   - [WakeStateController.shouldKeepScreenOn] → toggle
      *     `FLAG_KEEP_SCREEN_ON` and forward to [LowPowerManager.onLockStateChanged].
      *   - [WakeStateController.streamingSlotCount] → call
      *     [LowPowerManager.refreshStatus] so the dim line tracks
      *     bind/unbind without waiting for the 15-second clock tick.
-     *   - If [DishNotificationHost] is present in the view tree, bind it
-     *     to [notifications] with [notificationBottomInset] for stack
-     *     coordination with the low-power countdown pill. Three activities
-     *     were running the same `findViewById(...).bindLifecycle(...)`
-     *     wiring; folding it here keeps the call site to a single
-     *     `gamepadHost.install()`.
+     *   - [DishSnackbarController] observes the queue + posts Snackbars,
+     *     anchored above the low-power countdown pill while it's visible
+     *     so the two pieces of floating chrome stack cleanly. All three
+     *     activities used to run a custom-host findViewById + bindLifecycle
+     *     dance; folding the controller construction in here keeps the
+     *     activity call site to a single `gamepadHost.install(...)`.
      *
-     * All collectors gate on `STARTED` so they only run while the host
+     * Collectors gate on `STARTED` so they only run while the host
      * activity is visible.
      */
     fun install(notifications: DishNotificationQueue? = null) {
@@ -160,19 +144,20 @@ class GamepadActivityHost(
             }
         }
         if (notifications != null) {
-            // findViewById is null-safe via tag lookup — activities that
-            // forget the <include layout="@layout/overlay_notifications" />
-            // line silently get no banners rather than a crash. The
-            // overlay is included by all three current activities; this
-            // guard is purely defensive for future activities that might
-            // not need a banner surface.
-            rootView
-                .findViewById<DishNotificationHost>(R.id.dishNotificationHost)
-                ?.bindLifecycle(
-                    owner = activity,
-                    queue = notifications,
-                    bottomInsetFlow = notificationBottomInset,
-                )
+            val controller = DishSnackbarController(rootView)
+            controller.bindLifecycle(activity, notifications)
+            // Re-anchor the Snackbar above the countdown pill while it's
+            // visible so a banner doesn't draw over the "Low power in Ns"
+            // text. The pill is GONE most of the time, so the Snackbar
+            // defaults to the bottom edge — anchoring kicks in only for
+            // the 5-second pre-dim window.
+            snackbarAnchorJob =
+                lowPowerManager.stateFlow
+                    .onEach { state ->
+                        controller.anchorView =
+                            if (state == LowPowerManager.State.COUNTDOWN) countdownBannerView else null
+                    }.launchIn(activity.lifecycleScope)
+            snackbarController = controller
         }
     }
 

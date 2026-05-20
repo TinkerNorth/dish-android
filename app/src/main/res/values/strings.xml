@@ -45,10 +45,6 @@
     <string name="discovery_source_mdns">mDNS</string>
     <string name="discovery_source_both">mDNS + broadcast</string>
 
-    <!-- DishNotification host. Sole TalkBack hook for the dismiss X — every
-         other label inside a banner is its own TextView. -->
-    <string name="notification_dismiss">Dismiss notification</string>
-
     <!-- DishNotification action labels. Short, imperative, allCaps + tracked
          to match the v6 Outlined Button label conventions. -->
     <string name="action_open_settings">SETTINGS</string>

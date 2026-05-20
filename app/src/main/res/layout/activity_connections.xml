@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Root is FrameLayout so the dim-screen overlay can sit on top of the
-     existing content. The previous LinearLayout root only allowed vertical
-     stacking; with overlay_low_power included, the dim FrameLayout (which
-     is match_parent) needs to render above everything else. -->
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- CoordinatorLayout root: required by Material Snackbar's swipe-to-dismiss,
+     and a drop-in replacement for the previous FrameLayout (every child uses
+     match_parent / wrap_content + optional layout_gravity). The dim-screen
+     overlay still sits on top of the existing content because it's included
+     last in document order. -->
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -151,6 +152,4 @@
     <!-- Low-power overlays (countdown banner + dim screen). Included last so
          the dim FrameLayout sits on top, identical to activity_main.xml. -->
     <include layout="@layout/overlay_low_power" />
-
-    <include layout="@layout/overlay_notifications" />
-</FrameLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

@@ -24,7 +24,7 @@ import org.junit.Test
  * load-bearing for the whole notification UX:
  *
  *  - `post()` assigns a monotonic id and emits onto `posts` so any
- *    foreground [DishNotificationHost] can render.
+ *    foreground [DishSnackbarController] can render.
  *  - `dismiss(id)` emits on `dismissals` so the host can animate the
  *    matching banner out.
  *  - Convenience builders ([info], [success], [warn], [error]) thread
