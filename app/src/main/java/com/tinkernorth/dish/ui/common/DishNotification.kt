@@ -80,17 +80,23 @@ data class DishNotification internal constructor(
 }
 
 /**
- * Process-scoped notification bus. Activities collect [stream] and emissions
- * appear as a banner on whichever activity is foreground. The default buffer
- * survives a one-activity transition so a notification emitted while
- * MainActivity stops on the way to ConnectionsActivity reaches the new
- * activity instead of being silently dropped.
+ * Process-scoped notification bus. Activities collect [posts] and emissions
+ * appear as a banner on whichever activity is foreground.
  *
- * Posters call [post] (or the convenience variants in [DishNotify]); the queue
- * stamps an id and a creation timestamp, then emits onto the SharedFlow. The
- * dismissal channel is a second SharedFlow so the host can react to programmatic
- * dismissals (replacing a same-key notification, manager.disconnect clearing a
- * pending pair banner, etc.) without re-emitting the original.
+ * **One-shot semantics — no replay.** A notification fires for whichever
+ * activity is collecting at emit time and is then gone. Activity-switch
+ * does NOT re-show it (the previous replay=1 behaviour ricocheted the same
+ * banner across every activity transition — exactly the bug the user
+ * flagged). Persistent state-driven UX (Bluetooth off, KEY_MISSING, etc.)
+ * is now driven by activity-side observers of the underlying StateFlows,
+ * so each new activity binds, observes the live state, and re-derives its
+ * own banner — same outcome the user sees, but the queue is no longer
+ * involved in cross-activity persistence.
+ *
+ * Posters call [post] (or the convenience variants); the queue stamps a
+ * monotonic id and emits onto the SharedFlow. The dismissal channel is a
+ * second SharedFlow so the controller can react to programmatic
+ * dismissals (same-key replacement, etc.) without re-emitting the original.
  */
 @Singleton
 class DishNotificationQueue
@@ -98,7 +104,7 @@ class DishNotificationQueue
     constructor() {
         private val _posts =
             MutableSharedFlow<DishNotification>(
-                replay = 1,
+                replay = 0,
                 extraBufferCapacity = 16,
                 onBufferOverflow = BufferOverflow.DROP_OLDEST,
             )
@@ -154,6 +160,15 @@ class DishNotificationQueue
             _dismissals.tryEmit(id)
         }
 
+        /**
+         * Severity-default duration. Every severity auto-dismisses by
+         * default; persistent banners are explicit opt-in via
+         * `durationMs = DURATION_PERSISTENT`. The previous default of
+         * "WARN/ERROR are persistent" caused transient failures like
+         * "satellite isn't responding" to stay on screen forever — wrong
+         * for one-shot errors, right only for state-stuck conditions
+         * (BT off, KEY_MISSING) which now opt in explicitly.
+         */
         private fun defaultDurationFor(severity: DishNotification.Severity): Long =
             when (severity) {
                 DishNotification.Severity.INFO,
@@ -161,7 +176,7 @@ class DishNotificationQueue
                 -> DishNotification.DURATION_SHORT
                 DishNotification.Severity.WARN,
                 DishNotification.Severity.ERROR,
-                -> DishNotification.DURATION_PERSISTENT
+                -> DishNotification.DURATION_LONG
             }
 
         // ── Convenience builders ──────────────────────────────────────────
@@ -171,13 +186,14 @@ class DishNotificationQueue
         // consistently. The full builder ([post]) is still available for the
         // rare case that needs to override `durationMs` or `glyph`.
 
-        /** Short transient banner. Auto-dismisses after [DishNotification.DURATION_SHORT]. */
+        /** Short transient banner. */
         fun info(
             title: String,
             body: String? = null,
             @DrawableRes glyph: Int? = null,
             action: DishNotification.Action? = null,
             key: String? = null,
+            durationMs: Long = DishNotification.DURATION_SHORT,
         ): Long =
             post(
                 severity = DishNotification.Severity.INFO,
@@ -186,15 +202,17 @@ class DishNotificationQueue
                 glyph = glyph,
                 action = action,
                 key = key,
+                durationMs = durationMs,
             )
 
-        /** Short transient success banner. Auto-dismisses after [DishNotification.DURATION_SHORT]. */
+        /** Short transient success banner. */
         fun success(
             title: String,
             body: String? = null,
             @DrawableRes glyph: Int? = null,
             action: DishNotification.Action? = null,
             key: String? = null,
+            durationMs: Long = DishNotification.DURATION_SHORT,
         ): Long =
             post(
                 severity = DishNotification.Severity.SUCCESS,
@@ -203,12 +221,13 @@ class DishNotificationQueue
                 glyph = glyph,
                 action = action,
                 key = key,
+                durationMs = durationMs,
             )
 
         /**
-         * Warning banner. Persistent by default — warnings usually carry
-         * actionable state ("BT is off", "pairing needed") that should stay
-         * up until the user acks or the state recovers.
+         * Warning banner. Auto-dismisses after [DishNotification.DURATION_LONG]
+         * by default; pass `durationMs = DishNotification.DURATION_PERSISTENT`
+         * for state-stuck conditions that should stay until acked.
          */
         fun warn(
             title: String,
@@ -216,6 +235,7 @@ class DishNotificationQueue
             @DrawableRes glyph: Int? = null,
             action: DishNotification.Action? = null,
             key: String? = null,
+            durationMs: Long = DishNotification.DURATION_LONG,
         ): Long =
             post(
                 severity = DishNotification.Severity.WARN,
@@ -224,15 +244,17 @@ class DishNotificationQueue
                 glyph = glyph,
                 action = action,
                 key = key,
+                durationMs = durationMs,
             )
 
-        /** Error banner. Persistent by default — same reasoning as [warn]. */
+        /** Error banner. Same duration semantics as [warn]. */
         fun error(
             title: String,
             body: String? = null,
             @DrawableRes glyph: Int? = null,
             action: DishNotification.Action? = null,
             key: String? = null,
+            durationMs: Long = DishNotification.DURATION_LONG,
         ): Long =
             post(
                 severity = DishNotification.Severity.ERROR,
@@ -241,5 +263,6 @@ class DishNotificationQueue
                 glyph = glyph,
                 action = action,
                 key = key,
+                durationMs = durationMs,
             )
     }

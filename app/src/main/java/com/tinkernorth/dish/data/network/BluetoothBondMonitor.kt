@@ -13,11 +13,8 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
-import com.tinkernorth.dish.R
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.ui.bluetooth.BtStaleReason
-import com.tinkernorth.dish.ui.common.DishNotification
-import com.tinkernorth.dish.ui.common.DishNotificationQueue
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -30,17 +27,16 @@ import javax.inject.Singleton
  * invisible to the HID profile callbacks, so without this monitor the app's
  * only visible symptom is "stuck on Registered, never reaches Connected."
  *
- * Two outputs from one event:
+ * Sole responsibility: translate the broadcast into a [BluetoothGamepadRegistry]
+ * stale marker. The user-facing banner is rendered by activity-side
+ * observers of [BluetoothGamepadRegistry.staleBtIds] — that way each
+ * activity binds, reads the current state, and surfaces its own Snackbar
+ * rather than the data layer trying to push a one-shot notification through
+ * a queue that has no idea which activity (if any) is foreground.
  *
- *   1. **State** — the host id is added to [BluetoothGamepadRegistry.staleBtIds]
- *      with a [BtStaleReason]. The hub lifts the row's [LinkState] to
- *      [LinkState.Stale], so the chip reads "Needs pairing" persistently.
- *      This is the always-on feedback the old toast couldn't give: a user who
- *      dismissed the message could never see it again.
- *   2. **Notification** — a one-shot [DishNotification] with a "SETTINGS"
- *      action that deep-links into the host's Bluetooth device-details
- *      screen. Same severity treatment + brand styling as every other banner
- *      in the app. Toasts are no longer used anywhere.
+ * This split (data layer marks state, UI layer renders) also fixes the
+ * "banner re-shows on every activity switch" bug that came from
+ * cross-activity replay of one-shot posts.
  */
 @Singleton
 class BluetoothBondMonitor
@@ -49,7 +45,6 @@ class BluetoothBondMonitor
         @ApplicationContext private val context: Context,
         private val store: ConnectionStore,
         private val btRegistry: BluetoothGamepadRegistry,
-        private val notifications: DishNotificationQueue,
     ) : DefaultLifecycleObserver {
         @Volatile private var registered: Boolean = false
 
@@ -92,20 +87,6 @@ class BluetoothBondMonitor
         private fun handleKeyMissing(remembered: RememberedBt) {
             Log.w(TAG, "KEY_MISSING for ${remembered.name} (${remembered.mac})")
             btRegistry.markStale(remembered.id, BtStaleReason.KEY_MISSING)
-            notifications.post(
-                severity = DishNotification.Severity.WARN,
-                glyph = R.drawable.ic_bluetooth_off,
-                title = context.getString(R.string.notif_bt_key_missing_title, remembered.name),
-                body = context.getString(R.string.notif_bt_key_missing_body),
-                action =
-                    DishNotification.Action(
-                        label = context.getString(R.string.action_open_settings),
-                    ) { openBluetoothDeviceDetails(remembered.mac) },
-                // Same-key replacement: a second KEY_MISSING for the same host
-                // shouldn't stack a second banner on top of the first.
-                key = "bt-stale:${remembered.id}",
-                durationMs = DishNotification.DURATION_PERSISTENT,
-            )
         }
 
         private fun handleBondStateChange(
@@ -117,43 +98,6 @@ class BluetoothBondMonitor
             Log.d(TAG, "BOND_STATE ${remembered.name} (${remembered.mac}): $prev -> $state")
             if (prev != BluetoothDevice.BOND_BONDED || state != BluetoothDevice.BOND_NONE) return
             btRegistry.markStale(remembered.id, BtStaleReason.BOND_REMOVED)
-            notifications.post(
-                severity = DishNotification.Severity.WARN,
-                glyph = R.drawable.ic_bluetooth_off,
-                title = context.getString(R.string.notif_bt_bond_removed_title, remembered.name),
-                body = context.getString(R.string.notif_bt_bond_removed_body),
-                action =
-                    DishNotification.Action(
-                        label = context.getString(R.string.action_open_settings),
-                    ) { openBluetoothDeviceDetails(remembered.mac) },
-                key = "bt-stale:${remembered.id}",
-                durationMs = DishNotification.DURATION_PERSISTENT,
-            )
-        }
-
-        /**
-         * Deep-link to the host's Bluetooth device-details screen on API 30+
-         * so the user lands one tap from the Forget button. Mirrors the
-         * intent in [com.tinkernorth.dish.ui.connections.ConnectionsActivity]'s
-         * forget flow.
-         */
-        private fun openBluetoothDeviceDetails(mac: String) {
-            val fallback =
-                Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-                runCatching { context.startActivity(fallback) }
-                return
-            }
-            val deepLink =
-                Intent("android.settings.BLUETOOTH_DEVICE_DETAILS_SETTINGS").apply {
-                    putExtra("device_address", mac)
-                    data = android.net.Uri.parse("bt-mac:$mac")
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-            runCatching { context.startActivity(deepLink) }
-                .onFailure { runCatching { context.startActivity(fallback) } }
         }
 
         @Suppress("DEPRECATION")

@@ -9,37 +9,30 @@ import android.content.Intent
 import android.util.Log
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.ui.bluetooth.BtStaleReason
-import com.tinkernorth.dish.ui.common.DishNotification
-import com.tinkernorth.dish.ui.common.DishNotificationQueue
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkAll
 import io.mockk.verify
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.runTest
 import org.junit.After
-import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 
 /**
  * Behavioural tests for [BluetoothBondMonitor]'s broadcast handling. The
- * receiver runs against the live [DishNotificationQueue] + [BluetoothGamepadRegistry]
- * so the full "broadcast → markStale + notification.post" chain is exercised
- * without instantiating an Android `BroadcastReceiver` (we invoke the
- * inner `onReceive` callback directly via reflection — simpler than wiring
- * a full system-context test).
+ * receiver is exercised via reflection — simpler than wiring a full
+ * system-context test.
+ *
+ * The monitor's sole responsibility is to mark hosts stale on the registry.
+ * Notification rendering is the activity layer's job (it observes
+ * [BluetoothGamepadRegistry.staleBtIds]) — the monitor itself never
+ * touches the notification queue, so the previous test that asserted "posts
+ * a WARN notification" is gone with the BondMonitor → queue coupling.
  */
-@OptIn(ExperimentalCoroutinesApi::class)
 class BluetoothBondMonitorTest {
     private lateinit var context: Context
     private lateinit var store: ConnectionStore
     private lateinit var registry: BluetoothGamepadRegistry
-    private lateinit var queue: DishNotificationQueue
     private lateinit var monitor: BluetoothBondMonitor
 
     private val remembered =
@@ -65,14 +58,8 @@ class BluetoothBondMonitorTest {
         context = mockk(relaxed = true)
         store = mockk(relaxed = true)
         registry = mockk(relaxed = true)
-        queue = DishNotificationQueue()
         every { store.rememberedBt() } returns listOf(remembered)
-        every { context.getString(any(), any<String>()) } answers {
-            val args = secondArg<Array<Any>>()
-            "msg(${firstArg<Int>()}:${args.joinToString(",")})"
-        }
-        every { context.getString(any()) } answers { "msg(${firstArg<Int>()})" }
-        monitor = BluetoothBondMonitor(context, store, registry, queue)
+        monitor = BluetoothBondMonitor(context, store, registry)
     }
 
     @After
@@ -136,26 +123,6 @@ class BluetoothBondMonitorTest {
 
         verify { registry.markStale(remembered.id, BtStaleReason.KEY_MISSING) }
     }
-
-    @Test
-    fun `KEY_MISSING on a remembered host posts a WARN notification with action`() =
-        runTest(TestScope(StandardTestDispatcher()).testScheduler) {
-            receive(keyMissingIntent("AA:BB:CC"))
-
-            val n = queue.posts.first()
-            assertEquals(DishNotification.Severity.WARN, n.severity)
-            assertEquals(DishNotification.DURATION_PERSISTENT, n.durationMs)
-            // Same-key dedup so multiple KEY_MISSING for the same host don't
-            // stack — the row chip carries the persistent narrative.
-            assertEquals("bt-stale:${remembered.id}", n.key)
-            // Action label is the localised "SETTINGS" string the receiver
-            // looks up. The mock returns a deterministic stub.
-            assertEquals(
-                "Action must offer a recovery path",
-                true,
-                n.action != null,
-            )
-        }
 
     @Test
     fun `KEY_MISSING for a MAC not in rememberedBt is ignored`() {

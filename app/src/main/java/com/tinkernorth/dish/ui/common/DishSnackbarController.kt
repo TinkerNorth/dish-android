@@ -3,12 +3,24 @@
 
 package com.tinkernorth.dish.ui.common
 
+import android.content.Context
+import android.graphics.Typeface
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.AbsoluteSizeSpan
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
+import android.text.style.TypefaceSpan
+import android.view.Gravity
 import android.view.View
+import android.widget.TextView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.google.android.material.snackbar.BaseTransientBottomBar
 import com.google.android.material.snackbar.Snackbar
 import com.tinkernorth.dish.R
 import kotlinx.coroutines.Job
@@ -23,19 +35,9 @@ import kotlinx.coroutines.launch
  * CoordinatorLayout the activity roots into), built-in queueing, single
  * source of accessibility behaviour.
  *
- * The custom DishNotificationHost this replaces had three real problems:
- *   1. Non-Android-idiomatic X button (Material guidelines say "swipe").
- *   2. Stacking multiple banners at once is overwhelming + non-standard.
- *   3. Hand-rolled animations and dismissal logic.
- *
- * Snackbar fixes all three by definition. Same-key replacement and
- * programmatic dismissal still flow through the queue, but the rendering,
- * timing, and animation are platform behaviour now.
- *
  * Threading: every method must be called on the main thread. The queue's
  * collectors are gated on `repeatOnLifecycle(STARTED)` so they only run while
- * the host activity is foreground — backgrounded posts replay into the next
- * foreground activity via the queue's replay=1 buffer.
+ * the host activity is foreground.
  */
 class DishSnackbarController(
     /** The view Snackbar.make() walks up from to find a CoordinatorLayout. */
@@ -78,17 +80,14 @@ class DishSnackbarController(
         // would queue multiple copies on each state re-emit.
         notification.key?.let { byKey[it]?.dismiss() }
 
+        val ctx = rootView.context
         val snackbar =
             Snackbar
-                .make(rootView, notification.titleAndBodyText(), durationFor(notification))
+                .make(rootView, buildStyledText(ctx, notification), durationFor(notification))
                 .applyDishTheme(notification.severity)
         anchorView?.let { snackbar.anchorView = it }
         notification.action?.let { action ->
-            snackbar.setAction(action.label) {
-                action.handler()
-                // Snackbar auto-dismisses on action tap (default behaviour),
-                // so we don't need to call dismiss() explicitly.
-            }
+            snackbar.setAction(action.label) { action.handler() }
         }
         snackbar.addCallback(
             object : Snackbar.Callback() {
@@ -120,26 +119,97 @@ class DishSnackbarController(
                 Snackbar.LENGTH_LONG
             else -> Snackbar.LENGTH_SHORT
         }
-
-    private fun DishNotification.titleAndBodyText(): CharSequence = if (body.isNullOrBlank()) title else "$title\n$body"
 }
 
 // ── Brand theming ───────────────────────────────────────────────────────────
 
 /**
- * Apply the v6 deep-space cyan theme to a Snackbar: dark surface background,
- * cream-white text, cyan action label. Severity tints the action label so
- * ERROR / WARN actions visually pop while INFO / SUCCESS stay brand cyan.
+ * Style the Snackbar's content text as a two-tier message:
+ *   - title in bold, full text color
+ *   - body in a smaller monospace, muted color
+ *
+ * Material's default snackbar renders raw text; without this the banner
+ * reads as a single-line grey blob with no visual hierarchy between the
+ * imperative title and the supporting detail.
+ */
+private fun buildStyledText(
+    ctx: Context,
+    notification: DishNotification,
+): CharSequence {
+    val builder = SpannableStringBuilder()
+    val titleStart = builder.length
+    builder.append(notification.title)
+    builder.setSpan(
+        StyleSpan(Typeface.BOLD),
+        titleStart,
+        builder.length,
+        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+    )
+    val body = notification.body
+    if (!body.isNullOrBlank()) {
+        builder.append("\n")
+        val bodyStart = builder.length
+        builder.append(body)
+        builder.setSpan(
+            ForegroundColorSpan(ctx.getColor(R.color.colorMuted)),
+            bodyStart,
+            builder.length,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+        )
+        builder.setSpan(
+            AbsoluteSizeSpan(spToPx(ctx, BODY_SP)),
+            bodyStart,
+            builder.length,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+        )
+        builder.setSpan(
+            TypefaceSpan("monospace"),
+            bodyStart,
+            builder.length,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+        )
+    }
+    return builder
+}
+
+/**
+ * Apply the v6 deep-space cyan theme to a Snackbar: dark pill surface with
+ * a severity-colored left rail (mirrors the leading-accent treatment from
+ * the original custom host while keeping platform-native dismiss/animation
+ * behaviour), monospace-leaning typography, cyan action label.
  *
  * Material 3's default Snackbar uses an "inverse surface" tint which would
- * read as a light pill on our dark theme — explicitly overriding keeps the
- * visual continuity with bg_pill, the dim overlay, and every other floating
- * chrome element in the app.
+ * read as a light pill on our dark theme — explicitly setting the
+ * background drawable keeps visual continuity with bg_pill, the dim
+ * overlay, and every other floating chrome element in the app.
  */
 private fun Snackbar.applyDishTheme(severity: DishNotification.Severity): Snackbar {
     val ctx = view.context
-    setBackgroundTint(ctx.getColor(R.color.colorSurface))
+    // Custom background: rounded surface + leading severity rail. Replaces
+    // Snackbar's default flat-tinted background.
+    view.background = buildBackground(ctx, severity)
+    // Material gives the Snackbar a default 6dp inset/elevation; keep that
+    // but lift the rail-bearing pill a hair so it visually separates from
+    // the content beneath.
+    view.elevation = dpToPx(ctx, ELEVATION_DP)
+    // Inset slightly from the edges so the rounded corners breathe and the
+    // pill doesn't sit flush against the screen edge.
+    val horizontalPad = dpToPxInt(ctx, HORIZONTAL_PAD_DP)
+    val verticalPad = dpToPxInt(ctx, VERTICAL_PAD_DP)
+    view.setPadding(horizontalPad, verticalPad, horizontalPad, verticalPad)
+    // Text typography: bold title (set via SpannableString), white-on-dark.
     setTextColor(ctx.getColor(R.color.colorOnSurface))
+    view.findViewById<TextView>(com.google.android.material.R.id.snackbar_text)?.apply {
+        maxLines = MAX_TEXT_LINES
+        textSize = TITLE_SP
+        // Title typeface is overridden by the SpannableString's StyleSpan;
+        // setting it here is a guard for the no-body case where the entire
+        // text is the title.
+        typeface = Typeface.DEFAULT_BOLD
+        // Indent text past the severity rail so the rail has space to read.
+        setPadding(dpToPxInt(ctx, TEXT_LEADING_INDENT_DP), 0, 0, 0)
+    }
+    // Action label: severity-tinted so ERROR / WARN actions visually pop.
     val actionColor =
         when (severity) {
             DishNotification.Severity.INFO,
@@ -149,15 +219,84 @@ private fun Snackbar.applyDishTheme(severity: DishNotification.Severity): Snackb
             DishNotification.Severity.ERROR -> R.color.colorError
         }
     setActionTextColor(ctx.getColor(actionColor))
-    // Two lines of body text need extra room — Material's default cap is 2,
-    // which is what we want, but multi-line snackbars still render fine.
-    val maxLines = if (view.findViewById<android.widget.TextView>(com.google.android.material.R.id.snackbar_text) != null) 3 else 2
-    view
-        .findViewById<android.widget.TextView>(com.google.android.material.R.id.snackbar_text)
-        ?.maxLines = maxLines
-    // BaseTransientBottomBar suppresses the animation if the view is not
-    // attached yet — Snackbar handles that internally, no work needed here.
-    @Suppress("UNUSED_VARIABLE")
-    val unused = BaseTransientBottomBar.LENGTH_INDEFINITE
+    view.findViewById<TextView>(com.google.android.material.R.id.snackbar_action)?.apply {
+        typeface = Typeface.DEFAULT_BOLD
+        textSize = ACTION_SP
+        letterSpacing = ACTION_LETTER_SPACING
+    }
     return this
 }
+
+/**
+ * The two-layer background drawable: a rounded surface pill (matches
+ * `bg_pill.xml`), with a 4dp wide rail of the severity color anchored to
+ * the leading edge. Drawn as a LayerDrawable so the rail floats on top of
+ * the pill without needing custom view inflation.
+ */
+private fun buildBackground(
+    ctx: Context,
+    severity: DishNotification.Severity,
+): Drawable {
+    val surface =
+        GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dpToPx(ctx, CORNER_RADIUS_DP)
+            setColor(ctx.getColor(R.color.colorSurface))
+            setStroke(dpToPxInt(ctx, 1f), ctx.getColor(R.color.colorOutline))
+        }
+    val railColorRes =
+        when (severity) {
+            DishNotification.Severity.INFO -> R.color.colorPrimary
+            DishNotification.Severity.SUCCESS -> R.color.colorSuccess
+            DishNotification.Severity.WARN -> R.color.colorWarning
+            DishNotification.Severity.ERROR -> R.color.colorError
+        }
+    val rail =
+        GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            setColor(ctx.getColor(railColorRes))
+            // Round only the leading corners so the rail follows the pill's
+            // curvature on the left edge.
+            val r = dpToPx(ctx, CORNER_RADIUS_DP)
+            cornerRadii = floatArrayOf(r, r, 0f, 0f, 0f, 0f, r, r)
+        }
+    val layers = LayerDrawable(arrayOf(surface, rail))
+    layers.setLayerWidth(1, dpToPxInt(ctx, RAIL_WIDTH_DP))
+    layers.setLayerGravity(1, Gravity.START or Gravity.FILL_VERTICAL)
+    return layers
+}
+
+private fun dpToPx(
+    ctx: Context,
+    dp: Float,
+): Float = dp * ctx.resources.displayMetrics.density
+
+private fun dpToPxInt(
+    ctx: Context,
+    dp: Float,
+): Int = dpToPx(ctx, dp).toInt()
+
+private fun spToPx(
+    ctx: Context,
+    sp: Float,
+): Int = (sp * ctx.resources.displayMetrics.scaledDensity).toInt()
+
+// ── Styling constants ──────────────────────────────────────────────────────
+//
+// Pulled out of the apply function so a designer can sweep here without
+// hunting through layout code. All numbers are dp / sp; conversion to px
+// happens at the call site via the helpers above.
+
+private const val CORNER_RADIUS_DP = 10f
+private const val RAIL_WIDTH_DP = 4f
+private const val ELEVATION_DP = 6f
+private const val HORIZONTAL_PAD_DP = 4f
+private const val VERTICAL_PAD_DP = 2f
+private const val TEXT_LEADING_INDENT_DP = 12f
+private const val TITLE_SP = 13f
+private const val BODY_SP = 11f
+private const val ACTION_SP = 12f
+private const val ACTION_LETTER_SPACING = 0.04f
+
+/** Title (1 line) + body (up to 2 lines) — Material default is 2 total. */
+private const val MAX_TEXT_LINES = 3

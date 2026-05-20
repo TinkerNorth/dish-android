@@ -95,6 +95,9 @@ class ConnectionsActivity : AppCompatActivity() {
     private var btPermissionBannerId: Long? = null
     private var networkBannerId: Long? = null
 
+    /** Per-host banner ids for KEY_MISSING / BOND_REMOVED, keyed by `bt:<MAC>`. */
+    private val btStaleBannerIds = HashMap<String, Long>()
+
     /** Pending registration awaiting the discoverability-granted result. */
     private var pendingBtRegistration: PendingBtRegistration? = null
 
@@ -219,6 +222,15 @@ class ConnectionsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 networkState.state.collect { state -> applyNetworkBanner(state) }
+            }
+        }
+        // KEY_MISSING / BOND_NONE on a remembered host. BluetoothBondMonitor
+        // marks the registry's staleBtIds; we render the banner here so it
+        // re-derives from live state on each activity bind instead of
+        // ricocheting through the queue's replay buffer.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                btRegistry.staleBtIds.collect { stale -> applyBtStaleBanners(stale) }
             }
         }
         lifecycleScope.launch {
@@ -648,10 +660,10 @@ class ConnectionsActivity : AppCompatActivity() {
     // ── System-state banners ──────────────────────────────────────────────
 
     private fun applyBtAdapterBanner(state: com.tinkernorth.dish.data.network.BluetoothAdapterState) {
-        // Always clear before re-posting so the dismissal animation fires
-        // when the state recovers. Same-key replacement on the queue side
-        // would also work, but the explicit dismiss keeps the user-visible
-        // animation aligned with the underlying state change.
+        // State-driven banner: persistent until the state recovers. Explicit
+        // dismiss before each re-post so the dismissal animation fires when
+        // the user toggles BT on, instead of relying on same-key replacement
+        // which has a brief overlap.
         btAdapterBannerId?.let { notifications.dismiss(it) }
         btAdapterBannerId =
             when (state) {
@@ -662,6 +674,7 @@ class ConnectionsActivity : AppCompatActivity() {
                         title = getString(R.string.notif_bt_unsupported_title),
                         body = getString(R.string.notif_bt_unsupported_body),
                         key = "bt-adapter-unsupported",
+                        durationMs = DishNotification.DURATION_PERSISTENT,
                     )
                 com.tinkernorth.dish.data.network.BluetoothAdapterState.OFF ->
                     notifications.warn(
@@ -673,6 +686,7 @@ class ConnectionsActivity : AppCompatActivity() {
                                 label = getString(R.string.action_turn_on),
                             ) { requestEnableBt() },
                         key = "bt-adapter-off",
+                        durationMs = DishNotification.DURATION_PERSISTENT,
                     )
             }
     }
@@ -690,10 +704,56 @@ class ConnectionsActivity : AppCompatActivity() {
                             label = getString(R.string.action_grant),
                         ) { requestBtPermissions() },
                     key = "bt-permission-denied",
+                    durationMs = DishNotification.DURATION_PERSISTENT,
                 )
             } else {
                 null
             }
+    }
+
+    /**
+     * Reconcile the live KEY_MISSING / BOND_REMOVED set against the
+     * Snackbar ids we have on screen. New entries get a persistent banner
+     * with a deep-link action; entries that disappeared (because the user
+     * re-paired and Connected restored) get dismissed.
+     */
+    private fun applyBtStaleBanners(stale: Map<String, com.tinkernorth.dish.ui.bluetooth.BtStaleReason>) {
+        // Dismiss banners whose host is no longer stale.
+        val gone = btStaleBannerIds.keys - stale.keys
+        for (id in gone) {
+            btStaleBannerIds.remove(id)?.let(notifications::dismiss)
+        }
+        // Post banners for newly-stale hosts.
+        for ((id, reason) in stale) {
+            if (id in btStaleBannerIds) continue
+            val entry = store.rememberedBt().firstOrNull { it.id == id } ?: continue
+            val titleRes =
+                when (reason) {
+                    com.tinkernorth.dish.ui.bluetooth.BtStaleReason.KEY_MISSING ->
+                        R.string.notif_bt_key_missing_title
+                    com.tinkernorth.dish.ui.bluetooth.BtStaleReason.BOND_REMOVED ->
+                        R.string.notif_bt_bond_removed_title
+                }
+            val bodyRes =
+                when (reason) {
+                    com.tinkernorth.dish.ui.bluetooth.BtStaleReason.KEY_MISSING ->
+                        R.string.notif_bt_key_missing_body
+                    com.tinkernorth.dish.ui.bluetooth.BtStaleReason.BOND_REMOVED ->
+                        R.string.notif_bt_bond_removed_body
+                }
+            btStaleBannerIds[id] =
+                notifications.warn(
+                    glyph = R.drawable.ic_bluetooth_off,
+                    title = getString(titleRes, entry.name),
+                    body = getString(bodyRes),
+                    action =
+                        DishNotification.Action(
+                            label = getString(R.string.action_open_settings),
+                        ) { openBluetoothDeviceDetails(entry.mac) },
+                    key = "bt-stale:$id",
+                    durationMs = DishNotification.DURATION_PERSISTENT,
+                )
+        }
     }
 
     private fun applyNetworkBanner(state: com.tinkernorth.dish.data.network.NetworkState) {
@@ -711,6 +771,7 @@ class ConnectionsActivity : AppCompatActivity() {
                                 label = getString(R.string.action_open_settings),
                             ) { openWifiSettings() },
                         key = "network-none",
+                        durationMs = DishNotification.DURATION_PERSISTENT,
                     )
                 com.tinkernorth.dish.data.network.NetworkState.CELLULAR ->
                     notifications.warn(
@@ -722,6 +783,7 @@ class ConnectionsActivity : AppCompatActivity() {
                                 label = getString(R.string.action_open_settings),
                             ) { openWifiSettings() },
                         key = "network-cellular",
+                        durationMs = DishNotification.DURATION_PERSISTENT,
                     )
             }
     }
