@@ -7,6 +7,8 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.drawable.Drawable
@@ -140,6 +142,10 @@ class GamepadTouchView
             }
         private val paintPillBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF293548.toInt() }
         private val paintPillPressed = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF3B82F6.toInt() }
+
+        // Per-channel min compositor for diagonal d-pad rendering — see [drawDpad].
+        private val dpadDarkenPaint =
+            Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.DARKEN) }
 
         // ── Safe-area insets (system bars + display cutouts) ─────────────────────
         private val safeInsets = Rect()
@@ -308,16 +314,46 @@ class GamepadTouchView
             val cx = l.dpadRect.centerX()
             val cy = l.dpadRect.centerY()
             val size = l.dpadRect.width()
-            val active =
-                when (s.hatSwitch) {
-                    HAT_N, HAT_NE, HAT_NW -> icDpadUp
-                    HAT_S, HAT_SE, HAT_SW -> icDpadDown
-                    HAT_W -> icDpadLeft
-                    HAT_E -> icDpadRight
-                    else -> null
-                }
             drawDrawable(c, icDpad, cx, cy, size)
-            if (active != null) drawDrawable(c, active, cx, cy, size)
+
+            val first: Drawable?
+            val second: Drawable?
+            when (s.hatSwitch) {
+                HAT_N -> { first = icDpadUp; second = null }
+                HAT_NE -> { first = icDpadUp; second = icDpadRight }
+                HAT_E -> { first = icDpadRight; second = null }
+                HAT_SE -> { first = icDpadDown; second = icDpadRight }
+                HAT_S -> { first = icDpadDown; second = null }
+                HAT_SW -> { first = icDpadDown; second = icDpadLeft }
+                HAT_W -> { first = icDpadLeft; second = null }
+                HAT_NW -> { first = icDpadUp; second = icDpadLeft }
+                else -> { first = null; second = null }
+            }
+
+            if (first == null) return
+            drawDrawable(c, first, cx, cy, size)
+            if (second == null) return
+
+            // Each cardinal arrow icon is a complete filled cross with one
+            // arm in red and the other three in white — so simply drawing a
+            // second icon on top would let its white overwrite the first
+            // icon's red active arm and the diagonal would look like a
+            // single direction. Composite the second arrow with DARKEN
+            // (per-channel min): at any pixel inside the cross one icon has
+            // RED (#FFE73246) and the other has WHITE (#FFFFFFFF), so
+            // min(red, white) = red — both red arms survive and the rest
+            // stays white. Outside the cross the source is transparent and
+            // DARKEN leaves the destination untouched.
+            val saveCount =
+                c.saveLayer(
+                    l.dpadRect.left,
+                    l.dpadRect.top,
+                    l.dpadRect.right,
+                    l.dpadRect.bottom,
+                    dpadDarkenPaint,
+                )
+            drawDrawable(c, second, cx, cy, size)
+            c.restoreToCount(saveCount)
         }
 
         private fun drawAbxy(
