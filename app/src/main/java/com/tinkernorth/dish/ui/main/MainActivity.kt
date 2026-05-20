@@ -7,7 +7,6 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.MotionEvent
-import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -20,6 +19,8 @@ import com.tinkernorth.dish.data.network.SatelliteConnectionManager
 import com.tinkernorth.dish.data.network.WakeStateController
 import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
 import com.tinkernorth.dish.databinding.ActivityMainBinding
+import com.tinkernorth.dish.ui.common.DishNotification
+import com.tinkernorth.dish.ui.common.DishNotificationQueue
 import com.tinkernorth.dish.ui.connections.ConnectionsActivity
 import com.tinkernorth.dish.util.GamepadActivityHost
 import dagger.hilt.android.AndroidEntryPoint
@@ -42,6 +43,8 @@ class MainActivity :
 
     @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
 
+    @Inject lateinit var notifications: DishNotificationQueue
+
     private lateinit var gamepadHost: GamepadActivityHost
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -55,11 +58,23 @@ class MainActivity :
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Native-library load failed in DishApplication.onCreate — route the
+        // user to the themed fallback screen instead of crashing the moment
+        // we touch any JNI surface (GameActivity itself loads native code).
+        if (com.tinkernorth.dish.DishApplication.nativeLoadFailed) {
+            startActivity(Intent(this, NativeUnavailableActivity::class.java))
+            finish()
+            return
+        }
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        // `install(notifications)` wires the wake-state collectors AND the
+        // themed notification host in one call — the manual findViewById +
+        // bindLifecycle dance lived in three activities before; folding it
+        // into the host eliminates the boilerplate.
         gamepadHost =
             GamepadActivityHost(this, binding.root, wakeState, gamepadRegistry)
-                .also { it.install() }
+                .also { it.install(notifications) }
         controllerAdapter = ControllerAdapter(this)
         setupUI()
         observeViewModel()
@@ -107,12 +122,38 @@ class MainActivity :
 
     private fun handleEvent(event: MainEvent) {
         when (event) {
-            is MainEvent.ShowToast -> Toast.makeText(this, event.message, Toast.LENGTH_SHORT).show()
+            // Server-supplied error strings from user-initiated paths —
+            // the user just acted, so a warning that explains the result
+            // is the right severity.
+            is MainEvent.ShowToast ->
+                notifications.warn(
+                    title = event.message,
+                    glyph = R.drawable.ic_satellite_off,
+                )
+            // Stale state on the row already says "Needs pairing"; the
+            // banner adds an OPEN action so the user can jump straight to
+            // the right satellite's PIN dialog. Same-key replacement so
+            // repeat pair-required events for the same id don't stack.
             is MainEvent.ShowPairingDialog ->
-                Toast
-                    .makeText(this, getString(R.string.toast_pairing_needed), Toast.LENGTH_LONG)
-                    .show()
+                notifications.warn(
+                    glyph = R.drawable.ic_satellite_off,
+                    title = getString(R.string.notif_pairing_needed_title),
+                    body = getString(R.string.notif_pairing_needed_body, event.connectionId),
+                    action =
+                        DishNotification.Action(
+                            label = getString(R.string.action_open),
+                        ) { openConnectionsForPairing(event.connectionId) },
+                    key = "pair-required:${event.connectionId}",
+                )
         }
+    }
+
+    private fun openConnectionsForPairing(connectionId: String) {
+        startActivity(
+            Intent(this, ConnectionsActivity::class.java).apply {
+                putExtra(ConnectionsActivity.EXTRA_PAIR_PROMPT_FOR_ID, connectionId)
+            },
+        )
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -138,7 +179,14 @@ class MainActivity :
         val v = viewModel.uiState.value.virtualSlot
         val cid =
             v.boundConnectionId ?: run {
-                Toast.makeText(this, getString(R.string.toast_bind_first), Toast.LENGTH_SHORT).show()
+                // No connection bound. The on-screen gamepad has nowhere to
+                // route input to, so a transient INFO banner explaining the
+                // next step is the right severity — auto-dismisses.
+                notifications.info(
+                    glyph = R.drawable.ic_gamepad,
+                    title = getString(R.string.notif_bind_first_title),
+                    key = "bind-first",
+                )
                 return
             }
         val summary = v.boundStatus

@@ -19,6 +19,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.data.network.ConnectionEvent
 import com.tinkernorth.dish.data.network.ConnectionHub
 import com.tinkernorth.dish.data.network.ConnectionKind
 import com.tinkernorth.dish.data.network.LinkState
@@ -30,6 +31,8 @@ import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
 import com.tinkernorth.dish.databinding.ActivityGamepadOverlayBinding
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.ui.bluetooth.hidToXusb
+import com.tinkernorth.dish.ui.common.DishNotification
+import com.tinkernorth.dish.ui.common.DishNotificationQueue
 import com.tinkernorth.dish.ui.common.GamepadTouchView
 import com.tinkernorth.dish.util.GamepadActivityHost
 import dagger.hilt.android.AndroidEntryPoint
@@ -63,6 +66,8 @@ class GamepadOverlayActivity :
 
     @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
 
+    @Inject lateinit var notifications: DishNotificationQueue
+
     private lateinit var binding: ActivityGamepadOverlayBinding
     private lateinit var gamepadHost: GamepadActivityHost
     private var connectionId: String = ""
@@ -82,7 +87,7 @@ class GamepadOverlayActivity :
         setContentView(binding.root)
         gamepadHost =
             GamepadActivityHost(this, binding.root, wakeState, gamepadRegistry)
-                .also { it.install() }
+                .also { it.install(notifications) }
         hideSystemBars()
 
         connectionId = intent.getStringExtra(EXTRA_CONNECTION_ID).orEmpty()
@@ -123,6 +128,47 @@ class GamepadOverlayActivity :
                     refreshMotionStatus()
                 }
             }
+        }
+        // Mid-game connection events: with the SatelliteConnectionManager's
+        // SharedFlow buffered, errors emitted from the alive-poll's onDead
+        // path can now reach this activity. Previously they were silently
+        // dropped because the overlay didn't collect.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                satellite.events.collect(::handleConnectionEvent)
+            }
+        }
+    }
+
+    /**
+     * Mid-game connection events: with [SatelliteConnectionManager]'s
+     * SharedFlow buffered, errors emitted from the alive-poll's onDead path
+     * can now reach this activity. Previously they were silently dropped —
+     * the overlay didn't collect events at all. We can't pop a PIN dialog
+     * here (full-screen landscape, no dialog host), so [PairingRequired]
+     * also routes through the banner with a "return to Connections" action.
+     */
+    private fun handleConnectionEvent(event: ConnectionEvent) {
+        when (event) {
+            is ConnectionEvent.Error ->
+                notifications.error(
+                    title = event.message,
+                    glyph = R.drawable.ic_satellite_off,
+                )
+            is ConnectionEvent.PairingRequired ->
+                notifications.warn(
+                    glyph = R.drawable.ic_satellite_off,
+                    title = getString(R.string.notif_pairing_needed_title),
+                    body =
+                        getString(
+                            R.string.notif_pairing_needed_body,
+                            event.server.name.ifEmpty { event.server.ip },
+                        ),
+                    action =
+                        DishNotification.Action(
+                            label = getString(R.string.action_open),
+                        ) { finish() },
+                )
         }
     }
 
@@ -205,6 +251,7 @@ class GamepadOverlayActivity :
                 isStreaming = motionSource.isStreaming,
                 connectionCarriesMotion = carriesMotion,
                 connectionConnected = connected,
+                isStalled = motionSource.isStalled,
             )
         binding.tvMotionStatus.setText(state.labelRes)
         (binding.dotMotion.background as? GradientDrawable)?.setColor(getColor(state.dotColorRes))
@@ -214,6 +261,8 @@ class GamepadOverlayActivity :
                 binding.tvMotionDetail.setText(R.string.motion_unavailable_detail)
             MotionIndicatorState.NOT_FORWARDED ->
                 binding.tvMotionDetail.setText(R.string.motion_not_forwarded_detail)
+            MotionIndicatorState.STALLED ->
+                binding.tvMotionDetail.setText(R.string.motion_stalled_detail)
             else -> Unit
         }
     }

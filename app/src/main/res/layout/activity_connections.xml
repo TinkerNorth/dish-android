@@ -151,4 +151,6 @@
     <!-- Low-power overlays (countdown banner + dim screen). Included last so
          the dim FrameLayout sits on top, identical to activity_main.xml. -->
     <include layout="@layout/overlay_low_power" />
+
+    <include layout="@layout/overlay_notifications" />
 </FrameLayout>

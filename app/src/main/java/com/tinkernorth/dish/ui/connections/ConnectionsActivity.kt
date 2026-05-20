@@ -17,7 +17,6 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -37,11 +36,16 @@ import com.tinkernorth.dish.data.network.SatelliteConnectionManager
 import com.tinkernorth.dish.data.network.WakeStateController
 import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
 import com.tinkernorth.dish.databinding.ActivityConnectionsBinding
-import com.tinkernorth.dish.databinding.DialogPairingBinding
 import com.tinkernorth.dish.databinding.RowConnectionBinding
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepad
 import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
+import com.tinkernorth.dish.ui.common.DishNotification
+import com.tinkernorth.dish.ui.common.DishNotificationHost
+import com.tinkernorth.dish.ui.common.DishNotificationQueue
+import com.tinkernorth.dish.ui.common.dotColorForState
+import com.tinkernorth.dish.ui.common.glyphForConnection
 import com.tinkernorth.dish.ui.common.setLoading
+import com.tinkernorth.dish.ui.common.statusChipText
 import com.tinkernorth.dish.util.GamepadActivityHost
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -56,6 +60,10 @@ import javax.inject.Inject
  * Wake-lock state, dim-after-idle, and physical-gamepad pass-through all
  * live in [GamepadActivityHost] — this activity only owns the
  * connection-management UI.
+ *
+ * Native [android.widget.Toast] is no longer used here; every feedback path
+ * routes through [DishNotificationQueue] and renders via the themed
+ * [DishNotificationHost] overlay.
  */
 @AndroidEntryPoint
 class ConnectionsActivity : AppCompatActivity() {
@@ -71,8 +79,34 @@ class ConnectionsActivity : AppCompatActivity() {
 
     @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
 
+    @Inject lateinit var notifications: DishNotificationQueue
+
+    @Inject lateinit var btAdapterState: com.tinkernorth.dish.data.network.BluetoothAdapterStateObserver
+
+    @Inject lateinit var btPermissionState: com.tinkernorth.dish.data.network.BluetoothPermissionStateObserver
+
+    @Inject lateinit var networkState: com.tinkernorth.dish.data.network.NetworkStateObserver
+
     private lateinit var binding: ActivityConnectionsBinding
     private lateinit var gamepadHost: GamepadActivityHost
+
+    // Stable ids for the system-state banners so each one replaces itself
+    // rather than stacking, and we can dismiss them on state recovery.
+    private var btAdapterBannerId: Long? = null
+    private var btPermissionBannerId: Long? = null
+    private var networkBannerId: Long? = null
+
+    /** Pending registration awaiting the discoverability-granted result. */
+    private var pendingBtRegistration: PendingBtRegistration? = null
+
+    /** Job that fires the "discoverability expired" notification. */
+    private var discoverabilityExpiryJob: kotlinx.coroutines.Job? = null
+
+    /** Live PIN dialog (if any) so we can drive its busy/error state from outside. */
+    private var pinDialog: PairPinDialog? = null
+
+    /** Server we're currently pairing with — drives the in-flight error wiring. */
+    private var pairingServer: com.tinkernorth.dish.data.model.DiscoveredServer? = null
 
     private val btPermissionLauncher =
         registerForActivityResult(
@@ -81,7 +115,7 @@ class ConnectionsActivity : AppCompatActivity() {
             if (results.values.all { it }) {
                 showProfilePicker()
             } else {
-                Toast.makeText(this, "Bluetooth permissions denied", Toast.LENGTH_SHORT).show()
+                notifyBtPermissionDenied()
             }
         }
 
@@ -89,9 +123,18 @@ class ConnectionsActivity : AppCompatActivity() {
         registerForActivityResult(
             ActivityResultContracts.StartActivityForResult(),
         ) { result ->
-            if (result.resultCode == Activity.RESULT_CANCELED) {
-                Toast.makeText(this, "Discoverability denied", Toast.LENGTH_SHORT).show()
+            val pending = pendingBtRegistration
+            pendingBtRegistration = null
+            if (result.resultCode == Activity.RESULT_CANCELED || pending == null) {
+                notifyDiscoverabilityDenied()
+                return@registerForActivityResult
             }
+            // Discoverability granted — NOW register the HID profile and arm
+            // the expiration timer. The system gives us DISCOVERABLE_SECONDS
+            // of host-visibility; if no host pairs in that window we surface
+            // a "discoverability expired" banner with a re-extend action.
+            btRegistry.start(pending.tempId, pending.profile)
+            armDiscoverabilityExpiryTimer(pending.tempId)
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -100,7 +143,7 @@ class ConnectionsActivity : AppCompatActivity() {
         setContentView(binding.root)
         gamepadHost =
             GamepadActivityHost(this, binding.root, wakeState, gamepadRegistry)
-                .also { it.install() }
+                .also { it.install(notifications) }
         setSupportActionBar(binding.toolbar)
         binding.toolbar.setNavigationOnClickListener { finish() }
 
@@ -109,7 +152,21 @@ class ConnectionsActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                hub.connections.collect { conns -> render(conns) }
+                hub.connections.collect { conns ->
+                    render(conns)
+                    // Dismiss the PIN dialog the moment the pairing server's
+                    // session flips to Connected — the success path doesn't
+                    // emit a ConnectionEvent (no failure means no banner) so
+                    // we observe the state directly.
+                    val pairing = pairingServer
+                    if (pairing != null) {
+                        val pid = SatelliteConnection.idFor(pairing)
+                        val summary = conns.firstOrNull { it.id == pid }
+                        if (summary?.live == LinkState.Connected) {
+                            pinDialog?.dismiss()
+                        }
+                    }
+                }
             }
         }
         lifecycleScope.launch {
@@ -120,12 +177,6 @@ class ConnectionsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 satellite.isScanning.collect { scanning ->
-                    // In-button loader: spinner accompanies the "Scanning…" label
-                    // and the button drops to 0.4 alpha while disabled, per the
-                    // design spec (ds-components.jsx Button) and dish-mac's
-                    // DishOutlinedButtonStyle. Mirrors the SwiftUI:
-                    //     Button { if isScanning { DishSpinner; Text("Scanning…") } else { Text("Scan") } }
-                    //       .disabled(isScanning)
                     binding.btnSatelliteScan.setLoading(
                         loading = scanning,
                         loadingText = "Scanning…",
@@ -136,21 +187,76 @@ class ConnectionsActivity : AppCompatActivity() {
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
+                satellite.lastScanAtMs.collect { _ -> renderEmptyState() }
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
                 satellite.events.collect { ev ->
                     when (ev) {
-                        is ConnectionEvent.Error -> Toast.makeText(this@ConnectionsActivity, ev.message, Toast.LENGTH_SHORT).show()
-                        is ConnectionEvent.PairingRequired -> showPairingDialog(ev.server.ip, ev.server.pairPort)
+                        is ConnectionEvent.Error -> onConnectionError(ev.message)
+                        is ConnectionEvent.PairingRequired -> showPairingDialog(ev.server)
                     }
                 }
+            }
+        }
+        // Bluetooth adapter on/off. The banner is persistent until the user
+        // toggles BT on, at which point we dismiss it.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                btAdapterState.state.collect { state -> applyBtAdapterBanner(state) }
+            }
+        }
+        // BT runtime permission. Refreshed by the observer on every foreground
+        // and after the permission launcher returns.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                btPermissionState.state.collect { state -> applyBtPermissionBanner(state) }
+            }
+        }
+        // Wi-Fi vs cellular vs none. Cellular-only is a guaranteed-failure
+        // mode for satellite discovery — flag it before the user wastes a
+        // scan and gets a no-results notification.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                networkState.state.collect { state -> applyNetworkBanner(state) }
             }
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 btRegistry.errors.collect { msg ->
-                    Toast.makeText(this@ConnectionsActivity, "Bluetooth: $msg", Toast.LENGTH_LONG).show()
+                    // No same-key — each BT error is distinct enough that the
+                    // user benefits from seeing the stack rather than the
+                    // newest silently replacing prior context.
+                    notifications.error(
+                        title = "Bluetooth",
+                        body = msg,
+                        glyph = R.drawable.ic_bluetooth_off,
+                        action =
+                            DishNotification.Action(
+                                label = getString(R.string.action_retry),
+                            ) { requestBtPermissions() },
+                    )
                 }
             }
         }
+
+        // Deep-link from MainActivity when an auto-reconnect lands on Stale:
+        // open the PIN dialog directly for that satellite so the user can
+        // re-enter their PIN without scrolling to find the row.
+        handlePairPromptIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handlePairPromptIntent(intent)
+    }
+
+    private fun handlePairPromptIntent(intent: Intent) {
+        val targetId = intent.getStringExtra(EXTRA_PAIR_PROMPT_FOR_ID) ?: return
+        val remembered = satellite.remembered().firstOrNull { it.id == targetId } ?: return
+        showPairingDialog(remembered.toDiscovered())
+        intent.removeExtra(EXTRA_PAIR_PROMPT_FOR_ID)
     }
 
     override fun onStop() {
@@ -171,8 +277,7 @@ class ConnectionsActivity : AppCompatActivity() {
             val id = SatelliteConnection.idFor(s)
             if (id !in knownIds) list.addView(discoveredSatelliteRow(s))
         }
-        binding.tvSatelliteEmpty.visibility =
-            if (list.childCount == 0) View.VISIBLE else View.GONE
+        renderEmptyState()
 
         val btConns = conns.filter { it.kind == ConnectionKind.BLUETOOTH }
         binding.llBtList.removeAllViews()
@@ -181,13 +286,49 @@ class ConnectionsActivity : AppCompatActivity() {
             if (btConns.isEmpty()) View.VISIBLE else View.GONE
     }
 
+    /**
+     * Empty-state copy for the satellites section. Three states:
+     *  - rows present → hidden.
+     *  - never scanned → "Tap Scan…" (initial).
+     *  - scanned, empty → "No satellites found at HH:MM — check…" with the
+     *    last-scan timestamp so the message is honest about whether the
+     *    feedback is current or stale.
+     */
+    private fun renderEmptyState() {
+        val hasRows = binding.llSatelliteList.childCount > 0
+        if (hasRows) {
+            binding.tvSatelliteEmpty.visibility = View.GONE
+            return
+        }
+        binding.tvSatelliteEmpty.visibility = View.VISIBLE
+        val lastScan = satellite.lastScanAtMs.value
+        binding.tvSatelliteEmpty.text =
+            if (lastScan == null) {
+                getString(R.string.discovery_empty_never_scanned)
+            } else {
+                val time = formatClock(lastScan)
+                getString(R.string.discovery_empty_no_results, time)
+            }
+    }
+
+    private fun formatClock(epochMs: Long): String {
+        val cal = java.util.Calendar.getInstance()
+        cal.timeInMillis = epochMs
+        return String.format(
+            java.util.Locale.ROOT,
+            "%02d:%02d",
+            cal.get(java.util.Calendar.HOUR_OF_DAY),
+            cal.get(java.util.Calendar.MINUTE),
+        )
+    }
+
     private fun satelliteRow(c: ConnectionSummary): View {
         val rb =
             inflateRow(
                 binding.llSatelliteList,
                 c.label,
                 c.detail,
-                statusText(c),
+                statusChipText(c.live),
                 kind = ConnectionKind.SATELLITE,
                 state = c.live,
             )
@@ -197,11 +338,6 @@ class ConnectionsActivity : AppCompatActivity() {
                 rb.btnRowAction.setOnClickListener { satellite.disconnect(c.id) }
             }
             LinkState.Connecting -> {
-                // In-button spinner accompanies the "Connecting…" label and
-                // the button drops to 0.4 alpha while disabled. LinkState.Connecting
-                // covers both pair phases (pairAndConnect → openSession) in the
-                // SatelliteConnectionManager, so a single state flip drives the
-                // whole in-flight visual — no separate pairingInFlight needed.
                 rb.btnRowAction.setLoading(
                     loading = true,
                     loadingText = "Connecting…",
@@ -209,11 +345,18 @@ class ConnectionsActivity : AppCompatActivity() {
                 )
                 rb.btnRowAction.setOnClickListener(null)
             }
-            // All resting non-live states share the same primary action today
-            // (Connect attempts auto-pair → openSession). Splitting buttons by
-            // Saved/Ready/Found/Stale is a UX call, not just a nomenclature
-            // one — left intentionally collapsed here.
-            LinkState.Saved, LinkState.Ready, LinkState.Found, LinkState.Stale -> {
+            LinkState.Stale -> {
+                // The auto-reconnect path discovered the server has forgotten
+                // us. Tapping the row offers a PIN entry directly rather than
+                // an opaque "Connect" that would re-run the same dead pair.
+                rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = "Re-pair")
+                rb.btnRowAction.setOnClickListener {
+                    val remembered =
+                        satellite.remembered().firstOrNull { it.id == c.id } ?: return@setOnClickListener
+                    showPairingDialog(remembered.toDiscovered())
+                }
+            }
+            LinkState.Saved, LinkState.Ready, LinkState.Found -> {
                 rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = "Connect")
                 rb.btnRowAction.setOnClickListener {
                     val remembered = satellite.remembered().firstOrNull { it.id == c.id } ?: return@setOnClickListener
@@ -228,9 +371,6 @@ class ConnectionsActivity : AppCompatActivity() {
     }
 
     private fun discoveredSatelliteRow(s: com.tinkernorth.dish.data.model.DiscoveredServer): View {
-        // Unpaired-discovered (LinkState.Found) — these never sit in
-        // ConnectionSummary because the hub only tracks remembered + live
-        // entries; they're rendered directly from satellite.discoveredServers.
         val rb =
             inflateRow(
                 binding.llSatelliteList,
@@ -240,11 +380,6 @@ class ConnectionsActivity : AppCompatActivity() {
                 kind = ConnectionKind.SATELLITE,
                 state = LinkState.Found,
             )
-        // Resting state by definition: as soon as the user taps Connect the
-        // SatelliteConnectionManager calls markConnecting(), which lands the
-        // row in `hub.connections` as LinkState.Connecting on the next emit,
-        // and the row re-renders as a satelliteRow with the in-button spinner.
-        // No need for a spinner here on the discovered-only branch.
         rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = "Connect")
         rb.btnRowAction.setOnClickListener { satellite.connect(s) }
         return rb.root
@@ -256,7 +391,7 @@ class ConnectionsActivity : AppCompatActivity() {
                 binding.llBtList,
                 c.label,
                 c.detail,
-                statusText(c),
+                statusChipText(c.live),
                 kind = ConnectionKind.BLUETOOTH,
                 state = c.live,
             )
@@ -266,13 +401,6 @@ class ConnectionsActivity : AppCompatActivity() {
                 rb.btnRowAction.setOnClickListener { btRegistry.stop(c.id) }
             }
             LinkState.Connecting -> {
-                // Three sub-states inside Connecting, each with a label that
-                // says what we're waiting on. The spinner accompanies the
-                // label so it reads as one in-flight component — even for
-                // "Pair from host", where we can't shorten the wait, the
-                // spinner reassures the user that the surface is alive and
-                // still listening for the host. All three are disabled with
-                // 0.4 alpha per the design spec.
                 val state = btRegistry.state(c.id)
                 val label =
                     when {
@@ -287,11 +415,17 @@ class ConnectionsActivity : AppCompatActivity() {
                 )
                 rb.btnRowAction.setOnClickListener(null)
             }
-            LinkState.Saved, LinkState.Ready, LinkState.Found, LinkState.Stale -> {
-                // "Connect" matches the satellite row's verb; reconnection here
-                // still goes through tryAutoReconnect (BT can't be initiated
-                // by us alone — the host has to look), but the user-facing
-                // action word stays consistent with the rest of the page.
+            LinkState.Stale -> {
+                // KEY_MISSING or BOND_NONE on this host. Action deep-links to
+                // the OS device-details screen where the user can Forget on
+                // the OS side and re-pair from there.
+                rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = "Re-pair")
+                rb.btnRowAction.setOnClickListener {
+                    val entry = store.rememberedBt().firstOrNull { it.id == c.id } ?: return@setOnClickListener
+                    openBluetoothDeviceDetails(entry.mac)
+                }
+            }
+            LinkState.Saved, LinkState.Ready, LinkState.Found -> {
                 rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = "Connect")
                 rb.btnRowAction.setOnClickListener {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) btRegistry.tryAutoReconnect(c.id)
@@ -299,8 +433,6 @@ class ConnectionsActivity : AppCompatActivity() {
             }
         }
         rb.btnRowSecondary.visibility = View.VISIBLE
-        // Transient rows (registration in flight, MAC not yet known) aren't in
-        // rememberedBt yet — Forget there means "cancel" rather than "forget".
         val rememberedEntry = store.rememberedBt().firstOrNull { it.id == c.id }
         val isRemembered = rememberedEntry != null
         rb.btnRowSecondary.text = if (isRemembered) "Forget" else "Cancel"
@@ -315,12 +447,6 @@ class ConnectionsActivity : AppCompatActivity() {
         return rb.root
     }
 
-    /**
-     * Three-way confirmation when forgetting a remembered BT host: the system
-     * pairing survives our app-level Forget, so we let the user opt to also
-     * deep-link into Bluetooth settings, defer that decision, or back out
-     * entirely. Forget commits only on the two non-Cancel paths.
-     */
     private fun confirmForgetBt(
         id: String,
         entry: RememberedBt,
@@ -346,14 +472,6 @@ class ConnectionsActivity : AppCompatActivity() {
     }
 
     private fun openBluetoothDeviceDetails(mac: String) {
-        // Android 11+ exposes a dedicated per-device details screen with the
-        // Forget button one tap away. The intent action is stable across OEM
-        // surfaces; the EXTRA key is documented as "device_address" since
-        // ACTION_BLUETOOTH_DEVICE_DETAILS itself isn't part of the public
-        // androidx Settings constants. We don't pre-check resolveActivity()
-        // because that would trigger QueryPermissionsNeeded on API 30+ and
-        // settings is a system app — we just attempt and fall back on
-        // ActivityNotFoundException.
         val fallback = Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             startActivity(fallback)
@@ -368,22 +486,6 @@ class ConnectionsActivity : AppCompatActivity() {
             .onFailure { startActivity(fallback) }
     }
 
-    // User-facing chip text per LinkState. The internal enum names (Live /
-    // Linking / Faltering) live one layer down in [SessionState]; this layer's
-    // job is to map every LinkState — including the discovery/pairing axis
-    // values the wire layer doesn't know about — to a noun (resting) or
-    // verb-with-ellipsis (transient) per the shared nomenclature.
-    private fun statusText(c: ConnectionSummary): String =
-        when (c.live) {
-            LinkState.Found -> "Found"
-            LinkState.Stale -> "Needs pairing"
-            LinkState.Saved -> "Offline"
-            LinkState.Ready -> "Ready"
-            LinkState.Connecting -> "Connecting…"
-            LinkState.Connected -> "Online"
-            LinkState.Unstable -> "Unsteady"
-        }
-
     private fun inflateRow(
         parent: ViewGroup,
         title: String,
@@ -397,58 +499,16 @@ class ConnectionsActivity : AppCompatActivity() {
         rb.tvRowDetail.text = detail
         rb.tvRowStatus.text = status
         rb.dotRow.background = GradientDrawable().apply { shape = GradientDrawable.OVAL }
-        // Color map keyed on the user-facing chip text (the only thing the
-        // inflater sees here). The "Unsteady" amber would ideally be a
-        // distinct color but we share colorPrimary with "Connecting…" until
-        // a real amber lands in colors.xml — both signal "transient, watch
-        // this row" so the conflation is acceptable.
-        val color =
-            when (status) {
-                "Online" -> R.color.colorSuccess
-                "Connecting…", "Unsteady" -> R.color.colorPrimary
-                else -> R.color.colorMuted
-            }
-        (rb.dotRow.background as GradientDrawable).setColor(getColor(color))
-        rb.ivRowGlyph.setImageResource(rowGlyphRes(kind, state))
+        (rb.dotRow.background as GradientDrawable).setColor(getColor(dotColorForState(state)))
+        rb.ivRowGlyph.setImageResource(glyphForConnection(kind, state))
         return rb
     }
-
-    /**
-     * Pick the v6 brand glyph for a row based on the connection kind and its
-     * current LinkState. The icon family lives in res/drawable/ic_{dish,
-     * satellite,bluetooth}{,_connected,_off}.xml — same shapes shipped to the
-     * other Dish clients and the satellite/web dashboard.
-     *
-     * Satellite rows use the satellite glyph (the row IS a satellite server
-     * the phone is reaching out to). Bluetooth rows use the Berkana rune.
-     * The same icon family carries through item_controller.xml so a slot
-     * bound to one of these rows reads visually identically to its source.
-     */
-    private fun rowGlyphRes(
-        kind: ConnectionKind,
-        state: LinkState,
-    ): Int =
-        when (kind) {
-            ConnectionKind.SATELLITE ->
-                when (state) {
-                    LinkState.Connected -> R.drawable.ic_satellite_connected
-                    LinkState.Saved, LinkState.Stale -> R.drawable.ic_satellite_off
-                    else -> R.drawable.ic_satellite
-                }
-            ConnectionKind.BLUETOOTH ->
-                when (state) {
-                    LinkState.Connected -> R.drawable.ic_bluetooth_connected
-                    LinkState.Connecting -> R.drawable.ic_bluetooth_searching
-                    LinkState.Saved, LinkState.Stale -> R.drawable.ic_bluetooth_off
-                    else -> R.drawable.ic_bluetooth
-                }
-        }
 
     // ── Bluetooth add flow ────────────────────────────────────────────────
 
     private fun requestBtPermissions() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
-            Toast.makeText(this, "Bluetooth HID requires Android 9+", Toast.LENGTH_SHORT).show()
+            notifyBtUnsupported()
             return
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -477,52 +537,261 @@ class ConnectionsActivity : AppCompatActivity() {
 
     private fun startBtRegistration(profile: BluetoothGamepad.GamepadProfile) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
-        // Use a transient id; the registry will replace it with bt:<MAC> once
-        // the host actually connects and calls ConnectionStore.rememberBt().
         val tempId = "bt-pending-${System.currentTimeMillis()}"
-        btRegistry.start(tempId, profile)
-        // Ask the OS for discoverability so the host can see + pair with us.
+        // Defer the HID registration until the user actually grants
+        // discoverability — see btDiscoverableLauncher. If we registered
+        // upfront and the user denied, the HID would sit "Acquiring…"
+        // until they manually tapped Cancel. The pending id is stashed so
+        // the deferred start can use it.
+        pendingBtRegistration = PendingBtRegistration(tempId, profile)
         val intent =
             Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).apply {
-                putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 120)
+                putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, DISCOVERABLE_SECONDS)
             }
         btDiscoverableLauncher.launch(intent)
     }
 
-    private fun showPairingDialog(
-        ip: String,
-        pairPort: Int,
-    ) {
-        val db = DialogPairingBinding.inflate(layoutInflater)
-        // TODO(in-button loader inside the PIN dialog): the design spec
-        // (dish-mac's PairingSheet.swift) keeps the Pair button visible with
-        // an in-button DishSpinner while POST /api/pair is in flight, and
-        // only dismisses on success. MaterialAlertDialogBuilder dismisses its
-        // positive-button dialog on click — surfacing the in-flight state
-        // inside the dialog would require swapping to a custom Dialog (or
-        // overriding the alert's positive-button after show()). The in-row
-        // loader on the satelliteRow already covers the openSession phase
-        // (LinkState.Connecting fires from markConnecting() as soon as
-        // pairWithPin starts), so the user sees a continuous in-flight
-        // state in the row immediately after the dialog dismisses. Keeping
-        // the simpler alert-builder pattern until UX confirms the dialog
-        // needs to linger through the pair → connect round-trip.
-        MaterialAlertDialogBuilder(this)
-            .setView(db.root)
-            .setPositiveButton("Connect") { _, _ ->
-                val pin =
-                    db.etPin.text
-                        .toString()
-                        .ifEmpty { "0000" }
-                val server =
-                    com.tinkernorth.dish.data.model.DiscoveredServer(
-                        name = "",
-                        ip = ip,
-                        pairPort = pairPort,
-                    )
+    private data class PendingBtRegistration(
+        val tempId: String,
+        val profile: BluetoothGamepad.GamepadProfile,
+    )
+
+    /**
+     * Show the themed PIN dialog for [server]. The dialog stays up across
+     * round-trips, surfacing an inline error from [onConnectionError] if the
+     * server rejects the PIN — the old behaviour reset the user's typed PIN
+     * on every failure.
+     */
+    private fun showPairingDialog(server: com.tinkernorth.dish.data.model.DiscoveredServer) {
+        // Replace any prior dialog (e.g. user dismissed and re-tapped) to keep
+        // there at most one in-flight pair operation.
+        pinDialog?.dismiss()
+        pairingServer = server
+        val dialog =
+            PairPinDialog(this) { pin ->
+                pinDialog?.setBusy(true)
+                pinDialog?.showError(null)
                 satellite.pairWithPin(server, pin)
-            }.setNegativeButton("Cancel", null)
-            .show()
+            }.apply {
+                dishTitle = getString(R.string.pair_dialog_title)
+                dishSubtitle =
+                    if (server.name.isNotEmpty()) {
+                        "Enter the PIN shown on ${server.name}."
+                    } else {
+                        getString(R.string.pair_dialog_subtitle)
+                    }
+                setOnDismissListener {
+                    if (pinDialog === this) {
+                        pinDialog = null
+                        pairingServer = null
+                    }
+                }
+            }
+        pinDialog = dialog
+        dialog.show()
+    }
+
+    /**
+     * Funnel for [ConnectionEvent.Error]. When the PIN dialog is open and the
+     * error is about pairing, surface it inline (keep the user's PIN typing);
+     * otherwise post a themed banner.
+     */
+    private fun onConnectionError(message: String) {
+        val dialog = pinDialog
+        val pairing = pairingServer
+        if (dialog != null && pairing != null) {
+            // The dialog is busy from a pair submit — paper over the in-flight
+            // state and surface the error inline.
+            dialog.setBusy(false)
+            dialog.showError(message)
+            return
+        }
+        notifications.error(
+            glyph = R.drawable.ic_satellite_off,
+            title = getString(R.string.notif_server_unreachable_title, pairing?.name ?: "satellite"),
+            body = message,
+        )
+    }
+
+    private fun notifyBtPermissionDenied() {
+        // Refresh the permission observer so the persistent banner from
+        // applyBtPermissionBanner fires straight away (it normally only
+        // refreshes on foreground entry).
+        btPermissionState.refresh()
+    }
+
+    private fun notifyDiscoverabilityDenied() {
+        // The HID registration was started before the discoverability dialog
+        // was answered, so we have a dangling registration. Tear it down so
+        // the row doesn't sit in "Acquiring…" forever, and tell the user.
+        btRegistry.stopAll()
+        notifications.warn(
+            glyph = R.drawable.ic_bluetooth_off,
+            title = getString(R.string.notif_bt_discoverability_denied_title),
+            body = getString(R.string.notif_bt_discoverability_denied_body),
+            action =
+                DishNotification.Action(
+                    label = getString(R.string.action_retry),
+                ) { requestBtPermissions() },
+            key = "bt-discoverability-denied",
+        )
+    }
+
+    private fun notifyBtUnsupported() {
+        notifications.info(
+            glyph = R.drawable.ic_bluetooth_off,
+            title = getString(R.string.notif_bt_unsupported_title),
+            body = getString(R.string.notif_bt_unsupported_body),
+            key = "bt-unsupported",
+        )
+    }
+
+    // ── System-state banners ──────────────────────────────────────────────
+
+    private fun applyBtAdapterBanner(state: com.tinkernorth.dish.data.network.BluetoothAdapterState) {
+        // Always clear before re-posting so the dismissal animation fires
+        // when the state recovers. Same-key replacement on the queue side
+        // would also work, but the explicit dismiss keeps the user-visible
+        // animation aligned with the underlying state change.
+        btAdapterBannerId?.let { notifications.dismiss(it) }
+        btAdapterBannerId =
+            when (state) {
+                com.tinkernorth.dish.data.network.BluetoothAdapterState.ON -> null
+                com.tinkernorth.dish.data.network.BluetoothAdapterState.UNSUPPORTED ->
+                    notifications.info(
+                        glyph = R.drawable.ic_bluetooth_off,
+                        title = getString(R.string.notif_bt_unsupported_title),
+                        body = getString(R.string.notif_bt_unsupported_body),
+                        key = "bt-adapter-unsupported",
+                    )
+                com.tinkernorth.dish.data.network.BluetoothAdapterState.OFF ->
+                    notifications.warn(
+                        glyph = R.drawable.ic_bluetooth_off,
+                        title = getString(R.string.notif_bt_adapter_off_title),
+                        body = getString(R.string.notif_bt_adapter_off_body),
+                        action =
+                            DishNotification.Action(
+                                label = getString(R.string.action_turn_on),
+                            ) { requestEnableBt() },
+                        key = "bt-adapter-off",
+                    )
+            }
+    }
+
+    private fun applyBtPermissionBanner(state: com.tinkernorth.dish.data.network.BluetoothPermissionState) {
+        btPermissionBannerId?.let { notifications.dismiss(it) }
+        btPermissionBannerId =
+            if (state == com.tinkernorth.dish.data.network.BluetoothPermissionState.DENIED) {
+                notifications.warn(
+                    glyph = R.drawable.ic_bluetooth_off,
+                    title = getString(R.string.notif_bt_permission_title),
+                    body = getString(R.string.notif_bt_permission_body),
+                    action =
+                        DishNotification.Action(
+                            label = getString(R.string.action_grant),
+                        ) { requestBtPermissions() },
+                    key = "bt-permission-denied",
+                )
+            } else {
+                null
+            }
+    }
+
+    private fun applyNetworkBanner(state: com.tinkernorth.dish.data.network.NetworkState) {
+        networkBannerId?.let { notifications.dismiss(it) }
+        networkBannerId =
+            when (state) {
+                com.tinkernorth.dish.data.network.NetworkState.WIFI -> null
+                com.tinkernorth.dish.data.network.NetworkState.NONE ->
+                    notifications.error(
+                        glyph = R.drawable.ic_satellite_off,
+                        title = getString(R.string.notif_no_network_title),
+                        body = getString(R.string.notif_no_network_body),
+                        action =
+                            DishNotification.Action(
+                                label = getString(R.string.action_open_settings),
+                            ) { openWifiSettings() },
+                        key = "network-none",
+                    )
+                com.tinkernorth.dish.data.network.NetworkState.CELLULAR ->
+                    notifications.warn(
+                        glyph = R.drawable.ic_satellite_off,
+                        title = getString(R.string.notif_cellular_only_title),
+                        body = getString(R.string.notif_cellular_only_body),
+                        action =
+                            DishNotification.Action(
+                                label = getString(R.string.action_open_settings),
+                            ) { openWifiSettings() },
+                        key = "network-cellular",
+                    )
+            }
+    }
+
+    /**
+     * Schedule a one-shot timer that fires the moment the OS-granted
+     * discoverability window expires. If the slot is still in a not-yet-
+     * Connected state by then, the host never paired; surface that with an
+     * actionable banner so the user can re-extend without remembering the
+     * 120-second number themselves. Cancels itself on activity stop +
+     * on successful pair (checked when the timer fires).
+     */
+    private fun armDiscoverabilityExpiryTimer(connId: String) {
+        discoverabilityExpiryJob?.cancel()
+        discoverabilityExpiryJob =
+            lifecycleScope.launch {
+                kotlinx.coroutines.delay(DISCOVERABLE_SECONDS * 1000L)
+                val state = btRegistry.state(connId)
+                if (state.connected) return@launch
+                notifications.warn(
+                    glyph = R.drawable.ic_bluetooth_off,
+                    title = "Discoverability expired",
+                    body = "No host paired in time. Re-extend to keep trying.",
+                    action =
+                        DishNotification.Action(
+                            label = "Re-extend",
+                        ) {
+                            relaunchDiscoverabilityFor(connId)
+                        },
+                    key = "bt-discoverability-expired:$connId",
+                )
+            }
+    }
+
+    private fun relaunchDiscoverabilityFor(connId: String) {
+        val intent =
+            Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).apply {
+                putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, DISCOVERABLE_SECONDS)
+            }
+        btDiscoverableLauncher.launch(intent)
+        // Preserve the profile so the deferred btRegistry.start() in the
+        // result-callback hands the host the same controller signature it
+        // had before the expiry.
+        val resolvedProfile =
+            btRegistry
+                .state(connId)
+                .profileName
+                ?.let { name -> BluetoothGamepad.GamepadProfile.entries.firstOrNull { it.profileName == name } }
+                ?: BluetoothGamepad.GamepadProfile.XBOX
+        pendingBtRegistration = PendingBtRegistration(connId, resolvedProfile)
+    }
+
+    /**
+     * Fire `ACTION_REQUEST_ENABLE` to ask the user to turn Bluetooth on.
+     * The intent itself doesn't require permission to launch, but Android
+     * lint reports the BluetoothAdapter constant access requires
+     * BLUETOOTH_CONNECT on API 31+ — `@RequiresPermission` propagates from
+     * the field. We already gate the banner on the adapter being available
+     * + ask the user for permission before this path is reachable; the
+     * lint suppression captures that this is the intended user-driven flow.
+     */
+    @android.annotation.SuppressLint("MissingPermission")
+    private fun requestEnableBt() {
+        runCatching { startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) }
+            .onFailure { runCatching { startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) } }
+    }
+
+    private fun openWifiSettings() {
+        runCatching { startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)) }
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -539,5 +808,22 @@ class ConnectionsActivity : AppCompatActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         gamepadHost.onWindowFocusChanged(hasFocus)
+    }
+
+    companion object {
+        /**
+         * Intent extra: when present, opens the PIN dialog directly for the
+         * given satellite id. Used by MainActivity's Pairing-Needed banner
+         * "OPEN" action so the user lands one tap from re-entering their PIN.
+         */
+        const val EXTRA_PAIR_PROMPT_FOR_ID = "extra_pair_prompt_for_id"
+
+        /**
+         * How long the OS makes us discoverable for new BT hosts. Mirrors the
+         * value passed in [BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION], and
+         * drives the matching timer that surfaces an expired-discoverability
+         * banner if no host pairs in this window.
+         */
+        private const val DISCOVERABLE_SECONDS = 120
     }
 }

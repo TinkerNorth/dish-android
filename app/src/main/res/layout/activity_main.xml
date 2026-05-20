@@ -99,4 +99,9 @@
     <!-- Low-power overlays -->
     <include layout="@layout/overlay_low_power" />
 
+    <!-- Theme-styled banner notifications. Drawn on top of everything except
+         the dim-screen overlay so error banners never paint over the dim
+         affordance. -->
+    <include layout="@layout/overlay_notifications" />
+
 </FrameLayout>

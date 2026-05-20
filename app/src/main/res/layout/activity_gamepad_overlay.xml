@@ -106,4 +106,6 @@
          the dim FrameLayout sits on top of the gamepad and consumes the
          wake-tap, identical to activity_main.xml. -->
     <include layout="@layout/overlay_low_power" />
+
+    <include layout="@layout/overlay_notifications" />
 </FrameLayout>

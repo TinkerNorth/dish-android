@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Custom PIN dialog. Replaces the MaterialAlertDialogBuilder pattern so the
+     Pair button can host an in-flight DishSpinner and the dialog doesn't
+     auto-dismiss on submit (the old behaviour reset the user's PIN typing on
+     every retry). Surface is bg_pill — matches every other floating banner /
+     dim-overlay pill in the v6 theme — and the title/subtitle/error labels
+     all follow the monospace + letter-spaced chrome convention. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_pill"
+    android:paddingHorizontal="24dp"
+    android:paddingVertical="22dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="PAIR"
+        android:textColor="@color/colorPrimary"
+        android:textSize="11sp"
+        android:fontFamily="monospace"
+        android:letterSpacing="0.18" />
+
+    <TextView
+        android:id="@+id/tvPairTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="@string/pair_dialog_title"
+        android:textColor="@color/colorOnSurface"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tvPairSubtitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="@string/pair_dialog_subtitle"
+        android:textColor="@color/colorMuted"
+        android:textSize="12sp" />
+
+    <EditText
+        android:id="@+id/etPin"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:hint="@string/pair_dialog_pin_hint"
+        android:inputType="number"
+        android:maxLength="8"
+        android:gravity="center"
+        android:textSize="22sp"
+        android:textColor="@color/colorOnSurface"
+        android:textColorHint="@color/colorMuted"
+        android:letterSpacing="0.30"
+        android:fontFamily="monospace"
+        android:background="@drawable/bg_pair_pin_field"
+        android:padding="14dp"
+        android:autofillHints="@null"
+        android:importantForAutofill="no" />
+
+    <!-- Inline error surface: hidden until the server rejects the PIN, then
+         shown under the field with the same error red used elsewhere. -->
+    <TextView
+        android:id="@+id/tvPairError"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textColor="@color/colorError"
+        android:textSize="12sp"
+        android:fontFamily="monospace"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnPairCancel"
+            style="@style/Widget.Dish.Button.Outlined"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/pair_dialog_cancel"
+            android:textAllCaps="true" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnPairSubmit"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="10dp"
+            android:text="@string/pair_dialog_submit"
+            android:textAllCaps="true" />
+    </LinearLayout>
+</LinearLayout>

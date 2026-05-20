@@ -12,10 +12,15 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.tinkernorth.dish.R
 import com.tinkernorth.dish.data.network.SatelliteNative
 import com.tinkernorth.dish.data.network.WakeStateController
 import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
 import com.tinkernorth.dish.databinding.OverlayLowPowerBinding
+import com.tinkernorth.dish.ui.common.DishNotificationHost
+import com.tinkernorth.dish.ui.common.DishNotificationQueue
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -77,13 +82,34 @@ import kotlinx.coroutines.launch
  */
 class GamepadActivityHost(
     private val activity: AppCompatActivity,
-    rootView: View,
+    private val rootView: View,
     private val wakeState: WakeStateController,
     private val gamepadRegistry: PhysicalGamepadRegistry,
 ) {
     private val window = activity.window
     private val lowPowerTouchGate = LowPowerTouchGate()
     private val lowPowerManager: LowPowerManager
+
+    /**
+     * Extra bottom inset (px) that floating UI anchored to the bottom edge
+     * should add to clear the low-power countdown pill while it's visible.
+     * `DishNotificationHost` observes this so its banner stack docks just
+     * above the countdown banner when the dim-screen is about to engage,
+     * and snaps back to the screen edge otherwise.
+     */
+    val notificationBottomInset: Flow<Int>
+        get() =
+            lowPowerManager.stateFlow.map { state ->
+                if (state == LowPowerManager.State.COUNTDOWN) countdownPillPx() else 0
+            }
+
+    private fun countdownPillPx(): Int {
+        // The countdown pill is pinned at marginBottom=24dp with ~50dp of
+        // intrinsic height. 64dp inset lifts the notification stack so its
+        // bottom edge sits just above the pill's top edge.
+        val density = activity.resources.displayMetrics.density
+        return (64f * density).toInt()
+    }
 
     init {
         // Construct LowPowerManager eagerly so `dispatchTouchEvent` and
@@ -105,17 +131,24 @@ class GamepadActivityHost(
     }
 
     /**
-     * Start the two lifecycle-scoped collectors:
+     * Start the lifecycle-scoped collectors AND bind the optional themed
+     * notification host:
      *   - [WakeStateController.shouldKeepScreenOn] → toggle
      *     `FLAG_KEEP_SCREEN_ON` and forward to [LowPowerManager.onLockStateChanged].
      *   - [WakeStateController.streamingSlotCount] → call
      *     [LowPowerManager.refreshStatus] so the dim line tracks
      *     bind/unbind without waiting for the 15-second clock tick.
+     *   - If [DishNotificationHost] is present in the view tree, bind it
+     *     to [notifications] with [notificationBottomInset] for stack
+     *     coordination with the low-power countdown pill. Three activities
+     *     were running the same `findViewById(...).bindLifecycle(...)`
+     *     wiring; folding it here keeps the call site to a single
+     *     `gamepadHost.install()`.
      *
-     * Both gates on `STARTED` so the collectors only run while the host
+     * All collectors gate on `STARTED` so they only run while the host
      * activity is visible.
      */
-    fun install() {
+    fun install(notifications: DishNotificationQueue? = null) {
         activity.lifecycleScope.launch {
             activity.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 wakeState.shouldKeepScreenOn.collect(::applyScreenOn)
@@ -125,6 +158,21 @@ class GamepadActivityHost(
             activity.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 wakeState.streamingSlotCount.collect { lowPowerManager.refreshStatus() }
             }
+        }
+        if (notifications != null) {
+            // findViewById is null-safe via tag lookup — activities that
+            // forget the <include layout="@layout/overlay_notifications" />
+            // line silently get no banners rather than a crash. The
+            // overlay is included by all three current activities; this
+            // guard is purely defensive for future activities that might
+            // not need a banner surface.
+            rootView
+                .findViewById<DishNotificationHost>(R.id.dishNotificationHost)
+                ?.bindLifecycle(
+                    owner = activity,
+                    queue = notifications,
+                    bottomInsetFlow = notificationBottomInset,
+                )
         }
     }
 

@@ -22,6 +22,7 @@ import com.tinkernorth.dish.data.network.ConnectionKind
 import com.tinkernorth.dish.data.network.ConnectionSummary
 import com.tinkernorth.dish.data.network.LinkState
 import com.tinkernorth.dish.databinding.ItemControllerBinding
+import com.tinkernorth.dish.ui.common.glyphForConnection
 
 interface SlotActionListener {
     fun onSlotTapped(slotId: String)
@@ -103,7 +104,7 @@ class ControllerAdapter(
                 b.ivBoundKind.visibility = View.GONE
             } else {
                 b.ivBoundKind.visibility = View.VISIBLE
-                b.ivBoundKind.setImageResource(boundKindGlyph(bound.kind, bound.live))
+                b.ivBoundKind.setImageResource(glyphForConnection(bound.kind, bound.live))
             }
             b.root.alpha = if (slot.isDisconnecting) 0.5f else 1f
 
@@ -255,7 +256,7 @@ class ControllerAdapter(
                 }
             val glyph =
                 ImageView(ctx).apply {
-                    setImageResource(boundKindGlyph(c.kind, c.live))
+                    setImageResource(glyphForConnection(c.kind, c.live))
                     layoutParams =
                         LinearLayout
                             .LayoutParams((22 * dp).toInt(), (22 * dp).toInt())
@@ -379,32 +380,6 @@ class ControllerAdapter(
                         ).apply { marginEnd = (6 * dp).toInt() }
                 isClickable = !selected
                 if (!selected) setOnClickListener { onClick() }
-            }
-
-        /**
-         * v6 brand glyph that names the connection this slot is bound to.
-         * Mirrors ConnectionsActivity.rowGlyphRes() so a slot's silhouette
-         * matches the source row's silhouette at a glance. Satellite rows
-         * carry the satellite glyph; Bluetooth rows carry the Berkana rune.
-         */
-        private fun boundKindGlyph(
-            kind: ConnectionKind,
-            state: LinkState,
-        ): Int =
-            when (kind) {
-                ConnectionKind.SATELLITE ->
-                    when (state) {
-                        LinkState.Connected -> R.drawable.ic_satellite_connected
-                        LinkState.Saved, LinkState.Stale -> R.drawable.ic_satellite_off
-                        else -> R.drawable.ic_satellite
-                    }
-                ConnectionKind.BLUETOOTH ->
-                    when (state) {
-                        LinkState.Connected -> R.drawable.ic_bluetooth_connected
-                        LinkState.Connecting -> R.drawable.ic_bluetooth_searching
-                        LinkState.Saved, LinkState.Stale -> R.drawable.ic_bluetooth_off
-                        else -> R.drawable.ic_bluetooth
-                    }
             }
 
         private fun bindBattery(battery: BatteryUi?) {
