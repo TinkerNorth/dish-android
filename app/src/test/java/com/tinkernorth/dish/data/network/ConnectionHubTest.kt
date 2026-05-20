@@ -40,6 +40,13 @@ class ConnectionHubTest {
     private val discoveredFlow =
         MutableStateFlow<List<com.tinkernorth.dish.data.model.DiscoveredServer>>(emptyList())
 
+    // Client-side Stale markers: per-satellite (set on auto-reconnect's
+    // pairing-rejected branch) and per-BT (set on KEY_MISSING / BOND_NONE
+    // by BluetoothBondMonitor). Default empty; push an id to assert the
+    // Stale-chip lift in buildSummaries.
+    private val staleSatFlow = MutableStateFlow<Set<String>>(emptySet())
+    private val staleBtFlow = MutableStateFlow<Map<String, com.tinkernorth.dish.ui.bluetooth.BtStaleReason>>(emptyMap())
+
     @Before
     fun setUp() {
         satellite = mockk(relaxed = true)
@@ -47,7 +54,9 @@ class ConnectionHubTest {
         store = mockk(relaxed = true)
         every { satellite.connections } returns satConnsFlow
         every { satellite.discoveredServers } returns discoveredFlow
+        every { satellite.staleSatelliteIds } returns staleSatFlow
         every { bt.states } returns btStatesFlow
+        every { bt.staleBtIds } returns staleBtFlow
         every { store.remembered() } returns emptyList()
         every { store.rememberedBt() } returns emptyList()
         scope = TestScope(StandardTestDispatcher())
@@ -403,8 +412,15 @@ class ConnectionHubTest {
 
         hub.autoReconnectAll()
 
-        verify(exactly = 0) { satellite.connect(match { it.ip == "1.1.1.1" }) }
-        verify { satellite.connect(match { it.ip == "2.2.2.2" }) }
+        // connect() now takes a ConnectIntent. autoReconnectAll passes
+        // AUTO_RECONNECT (so error events stay silent); the test only cares
+        // that connect was/wasn't called for the right server.
+        verify(exactly = 0) {
+            satellite.connect(match { it.ip == "1.1.1.1" }, ConnectIntent.AUTO_RECONNECT)
+        }
+        verify {
+            satellite.connect(match { it.ip == "2.2.2.2" }, ConnectIntent.AUTO_RECONNECT)
+        }
     }
 
     @Test
@@ -527,5 +543,115 @@ class ConnectionHubTest {
         hub.autoReconnectAll()
 
         verify(exactly = 0) { bt.tryAutoReconnect(any()) }
+    }
+
+    // ── LinkState.Stale lifting from upstream marker sets ─────────────────
+
+    @Test
+    fun `stale satellite id lifts an idle remembered satellite to LinkState Stale`() {
+        every { store.remembered() } returns
+            listOf(
+                RememberedSatellite(
+                    id = "satellite:10.0.0.1:9876",
+                    name = "A",
+                    ip = "10.0.0.1",
+                    udpPort = 9876,
+                    pairPort = 9878,
+                    httpPort = 9877,
+                ),
+            )
+        staleSatFlow.value = setOf("satellite:10.0.0.1:9876")
+        val hub = buildHub()
+
+        // Stale wins over Saved/Ready — the row chip reads "Needs pairing".
+        assertEquals(
+            LinkState.Stale,
+            hub.connections.value
+                .first { it.id == "satellite:10.0.0.1:9876" }
+                .live,
+        )
+    }
+
+    @Test
+    fun `stale satellite marker does NOT override a live session`() {
+        // A satellite that's somehow both live AND in the Stale set (race
+        // between markStale and reconnect) should render Connected — the
+        // wire-level session takes precedence. The Stale set is for IDLE
+        // rows that need to surface "Needs pairing".
+        val state = MutableStateFlow(SessionState.Live)
+        val conn =
+            mockk<SatelliteConnection>(relaxed = true) {
+                every { id } returns "satellite:10.0.0.1:9876"
+                every { this@mockk.state } returns state
+                every { server } returns
+                    MutableStateFlow(
+                        com.tinkernorth.dish.data.model.DiscoveredServer(
+                            name = "A",
+                            ip = "10.0.0.1",
+                            udpPort = 9876,
+                            pairPort = 9878,
+                            httpPort = 9877,
+                        ),
+                    )
+                every { slots } returns MutableStateFlow(emptyMap())
+            }
+        satConnsFlow.value = mapOf("satellite:10.0.0.1:9876" to conn)
+        staleSatFlow.value = setOf("satellite:10.0.0.1:9876")
+        val hub = buildHub()
+
+        assertEquals(
+            LinkState.Connected,
+            hub.connections.value
+                .first { it.id == "satellite:10.0.0.1:9876" }
+                .live,
+        )
+    }
+
+    @Test
+    fun `stale bt id lifts an idle remembered host to LinkState Stale`() {
+        every { store.rememberedBt() } returns
+            listOf(RememberedBt(id = "bt:AA", name = "Xbox", mac = "AA", profileName = "Xbox"))
+        every { bt.state(any()) } returns BluetoothGamepadRegistry.SlotState()
+        staleBtFlow.value = mapOf("bt:AA" to com.tinkernorth.dish.ui.bluetooth.BtStaleReason.KEY_MISSING)
+        val hub = buildHub()
+
+        assertEquals(
+            LinkState.Stale,
+            hub.connections.value
+                .first { it.id == "bt:AA" }
+                .live,
+        )
+    }
+
+    @Test
+    fun `stale bt marker does not override a connected bt host`() {
+        // Connected wins over the stale marker — if the host reconnects
+        // before the registry's clearStale runs, the chip stays Online.
+        every { store.rememberedBt() } returns
+            listOf(RememberedBt(id = "bt:AA", name = "Xbox", mac = "AA", profileName = "Xbox"))
+        every { bt.state(any()) } returns
+            BluetoothGamepadRegistry.SlotState(
+                registered = true,
+                connected = true,
+                connectedName = "Xbox",
+            )
+        btStatesFlow.value =
+            mapOf(
+                "bt:AA" to
+                    BluetoothGamepadRegistry.SlotState(
+                        registered = true,
+                        connected = true,
+                        connectedName = "Xbox",
+                    ),
+            )
+        staleBtFlow.value = mapOf("bt:AA" to com.tinkernorth.dish.ui.bluetooth.BtStaleReason.KEY_MISSING)
+        val hub = buildHub()
+
+        assertEquals(
+            LinkState.Connected,
+            hub.connections.value
+                .first { it.id == "bt:AA" }
+                .live,
+        )
     }
 }

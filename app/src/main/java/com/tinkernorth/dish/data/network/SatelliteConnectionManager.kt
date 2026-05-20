@@ -12,17 +12,41 @@ import com.tinkernorth.dish.data.repository.DiscoveryRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/**
+ * Why a [connect] attempt was initiated. The same connect path is shared
+ * between three callers with very different user-feedback expectations:
+ *
+ *  - [USER_INITIATED] — user tapped Connect / discovered satellite row.
+ *    Failure SHOULD surface a notification (the user just took an action
+ *    that's about to silently fail otherwise).
+ *  - [AUTO_RECONNECT] — fired on app foreground / cold start by
+ *    [ConnectionHub.autoReconnectAll], or after a network-changed event.
+ *    Failure MUST be silent: the row chip's natural Connecting → Saved/Stale
+ *    flip is the feedback. A toast / banner here would fire on every cold
+ *    start the satellite is down — pure noise the user didn't ask for.
+ *  - [RETRY_AFTER_DEATH] — fired by the alive-poll's onDead callback after a
+ *    short backoff. Same silence policy as [AUTO_RECONNECT]: the chip flips
+ *    to "Connecting…" and either recovers or lands on Saved/Stale, both of
+ *    which the row renders without a separate notification.
+ *
+ * The intent is threaded through [pairAndConnect] / [openSession]; every
+ * `_events.emit(ConnectionEvent.Error(...))` is gated on it.
+ */
+enum class ConnectIntent { USER_INITIATED, AUTO_RECONNECT, RETRY_AFTER_DEATH }
 
 sealed class ConnectionEvent {
     data class PairingRequired(
@@ -61,8 +85,38 @@ class SatelliteConnectionManager
         private val _isScanning = MutableStateFlow(false)
         val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
 
-        private val _events = MutableSharedFlow<ConnectionEvent>()
+        /**
+         * Wall-clock timestamp of the most recently completed discovery scan,
+         * or null if no scan has run yet this process. Drives the dynamic
+         * empty-state copy on Connections so the row never reads the same as
+         * "never scanned" + "scanned, found nothing".
+         */
+        private val _lastScanAtMs = MutableStateFlow<Long?>(null)
+        val lastScanAtMs: StateFlow<Long?> = _lastScanAtMs.asStateFlow()
+
+        // Buffered: events emitted while no activity is collecting (the user
+        // is in GamepadOverlayActivity, which doesn't observe events) survive
+        // the gap so the next activity sees them. Without the replay an
+        // alive-poll death mid-game would suspend the calling launch forever
+        // (default MutableSharedFlow has no buffer and emit() blocks until a
+        // subscriber acknowledges). DROP_OLDEST is fine — at most a stale
+        // error gets shadowed by a more recent one for the same satellite.
+        private val _events =
+            MutableSharedFlow<ConnectionEvent>(
+                replay = 1,
+                extraBufferCapacity = 8,
+                onBufferOverflow = BufferOverflow.DROP_OLDEST,
+            )
         val events: SharedFlow<ConnectionEvent> = _events.asSharedFlow()
+
+        // Client-side "Stale" markers. Set when an auto-reconnect's pair
+        // handshake comes back with ok=false (server forgot the pairing /
+        // rotated keys) — we can't bother the user with a dialog because the
+        // attempt wasn't user-initiated, but the row chip needs to read
+        // "Needs pairing" rather than "Offline" so the user knows tapping it
+        // will prompt for a fresh PIN. Cleared the moment a session opens.
+        private val _staleSatelliteIds = MutableStateFlow<Set<String>>(emptySet())
+        val staleSatelliteIds: StateFlow<Set<String>> = _staleSatelliteIds.asStateFlow()
 
         private val deviceId by lazy { getOrCreateDeviceId() }
         private val deviceName by lazy { android.os.Build.MODEL ?: "Android" }
@@ -79,14 +133,28 @@ class SatelliteConnectionManager
             scope.launch {
                 val servers = discoveryRepo.discoverServers(DISC_PORT, DISC_TIMEOUT_MS)
                 _discoveredServers.value = servers
+                _lastScanAtMs.value = System.currentTimeMillis()
                 _isScanning.value = false
-                if (servers.isEmpty()) _events.emit(ConnectionEvent.Error("No satellites found — check your network"))
+                // No-op on empty: the row list + tvSatelliteEmpty already
+                // narrates "scanned, found nothing" via the lastScanAt
+                // timestamp. A notification would duplicate that message.
             }
         }
 
         // ── Connect / Disconnect ──────────────────────────────────────────────
 
-        fun connect(server: DiscoveredServer) {
+        /**
+         * Open or re-open a session to [server]. [intent] decides whether
+         * downstream failures emit user-visible notifications:
+         *  - [ConnectIntent.USER_INITIATED] — emit on every failure (the user
+         *    just acted and would otherwise see no signal).
+         *  - [ConnectIntent.AUTO_RECONNECT] / [ConnectIntent.RETRY_AFTER_DEATH]
+         *    — emit nothing; the row chip already conveys the result.
+         */
+        fun connect(
+            server: DiscoveredServer,
+            intent: ConnectIntent = ConnectIntent.USER_INITIATED,
+        ) {
             val id = SatelliteConnection.idFor(server)
             val existing = _connections.value[id]
             // Idempotent on live / in-flight sessions: the foreground observer
@@ -121,9 +189,9 @@ class SatelliteConnectionManager
                 // bouncing the user back to a pin dialog they can never satisfy
                 // (the dialog would re-pair against the dead IP).
                 if (store.satelliteSharedKey(id) != null) {
-                    openSession(conn, server)
+                    openSession(conn, server, intent)
                 } else {
-                    pairAndConnect(conn, server)
+                    pairAndConnect(conn, server, intent)
                 }
             }
         }
@@ -131,16 +199,14 @@ class SatelliteConnectionManager
         private suspend fun pairAndConnect(
             conn: SatelliteConnection,
             server: DiscoveredServer,
+            intent: ConnectIntent,
         ) {
+            val id = SatelliteConnection.idFor(server)
             val raw = runCatching { discoveryRepo.pair(server.ip, server.pairPort, deviceId, deviceName, "") }
             val rawText = raw.getOrNull()
             if (raw.isFailure || rawText.isNullOrBlank()) {
-                // Empty/exception from native pair() means we couldn't reach the
-                // server at all (DNS/connect failure on the LAN). This is the
-                // network-move case — surface it clearly instead of routing the
-                // user through a pin dialog that will fail against the dead IP.
                 conn.markDisconnected()
-                _events.emit(ConnectionEvent.Error(SERVER_UNREACHABLE_MSG))
+                emitErrorIfUserInitiated(intent, SERVER_UNREACHABLE_MSG)
                 return
             }
             val pair =
@@ -148,18 +214,35 @@ class SatelliteConnectionManager
                     .getOrNull()
             if (pair == null) {
                 conn.markDisconnected()
-                _events.emit(ConnectionEvent.Error(SERVER_UNREACHABLE_MSG))
+                emitErrorIfUserInitiated(intent, SERVER_UNREACHABLE_MSG)
                 return
             }
             if (!pair.ok || pair.sharedKey == null) {
-                // Server reachable but refused the empty PIN — first-time pair
-                // or credentials rotated server-side. Prompt for a PIN.
+                // Server reachable but refused the empty PIN. This is the
+                // "server forgot us" / "first-time pair" branch.
                 conn.markDisconnected()
-                _events.emit(ConnectionEvent.PairingRequired(server))
+                when (intent) {
+                    ConnectIntent.USER_INITIATED ->
+                        // User just tapped Connect on this satellite — prompt
+                        // them for a PIN immediately.
+                        _events.emit(ConnectionEvent.PairingRequired(server))
+                    ConnectIntent.AUTO_RECONNECT,
+                    ConnectIntent.RETRY_AFTER_DEATH,
+                    ->
+                        // Don't pop a dialog the user didn't ask for. Mark the
+                        // row as Stale so the chip reads "Needs pairing" and
+                        // the next user-initiated Connect tap promotes them to
+                        // the dialog cleanly. Also clear the bogus shared key
+                        // we might be carrying so a future auto-reconnect
+                        // doesn't retry the same failing handshake.
+                        markStale(id)
+                }
                 return
             }
-            store.setSatelliteSharedKey(SatelliteConnection.idFor(server), pair.sharedKey)
-            openSession(conn, server)
+            // Success path: any prior Stale marker no longer applies.
+            clearStale(id)
+            store.setSatelliteSharedKey(id, pair.sharedKey)
+            openSession(conn, server, intent)
         }
 
         fun pairWithPin(
@@ -193,19 +276,27 @@ class SatelliteConnectionManager
                     _events.emit(ConnectionEvent.Error(pair.error ?: "Pairing failed"))
                     return@launch
                 }
-                store.setSatelliteSharedKey(SatelliteConnection.idFor(server), pair.sharedKey)
-                openSession(conn, server)
+                clearStale(id)
+                store.setSatelliteSharedKey(id, pair.sharedKey)
+                openSession(conn, server, ConnectIntent.USER_INITIATED)
             }
         }
 
         private suspend fun openSession(
             conn: SatelliteConnection,
             server: DiscoveredServer,
+            intent: ConnectIntent,
         ) = withContext(Dispatchers.IO) {
+            val id = SatelliteConnection.idFor(server)
             val keyHex = sharedKeyFor(server) ?: ""
             if (keyHex.length != 64) {
                 conn.markDisconnected()
-                _events.emit(ConnectionEvent.Error("No shared key — re-pair needed"))
+                // The local key is bogus — drop it so a subsequent
+                // user-initiated Connect goes through the pair handshake fresh
+                // rather than re-trying with the same broken value.
+                store.forgetSatelliteSharedKey(id)
+                markStale(id)
+                emitErrorIfUserInitiated(intent, "No shared key — re-pair needed")
                 return@withContext
             }
             val key = hexToBytes(keyHex)
@@ -213,7 +304,7 @@ class SatelliteConnectionManager
             val rawConnText = rawConn.getOrNull()
             if (rawConn.isFailure || rawConnText.isNullOrBlank()) {
                 conn.markDisconnected()
-                _events.emit(ConnectionEvent.Error(SERVER_UNREACHABLE_MSG))
+                emitErrorIfUserInitiated(intent, SERVER_UNREACHABLE_MSG)
                 return@withContext
             }
             val resp =
@@ -221,14 +312,26 @@ class SatelliteConnectionManager
                     .getOrNull()
             if (resp == null) {
                 conn.markDisconnected()
-                _events.emit(ConnectionEvent.Error(SERVER_UNREACHABLE_MSG))
+                emitErrorIfUserInitiated(intent, SERVER_UNREACHABLE_MSG)
                 return@withContext
             }
             val connId = resp.connectionId
             val tokenHex = resp.token
             if (connId == null || tokenHex == null) {
                 conn.markDisconnected()
-                _events.emit(ConnectionEvent.Error("Error: ${resp.error ?: "connection failed"}"))
+                // Auth-shape failure: the server rejected our token-issue
+                // request with a body. The most common cause is that the
+                // server has forgotten this device's shared key, so clear
+                // ours too and mark Stale so the next user tap re-pairs
+                // cleanly instead of re-running the same dead handshake.
+                if (looksLikeAuthFailure(resp.error)) {
+                    store.forgetSatelliteSharedKey(id)
+                    markStale(id)
+                }
+                emitErrorIfUserInitiated(
+                    intent,
+                    "Error: ${resp.error ?: "connection failed"}",
+                )
                 return@withContext
             }
             val token = hexToBytes(tokenHex)
@@ -243,12 +346,29 @@ class SatelliteConnectionManager
             }
             controllerRepo.setConnectionParams(handle, token, key)
             store.rememberSatellite(server)
+            // Successful session: any Stale marker we set on the way here no
+            // longer applies, and the chip flips Live → Online.
+            clearStale(id)
             conn.markConnected(
                 handle,
                 connId,
-                onDead = { disconnect(conn.id) },
+                onDead = {
+                    // Silent auto-retry — the row chip handles the user-visible
+                    // narrative ("Connecting…" → "Online"/"Offline"/"Needs pairing").
+                    disconnect(conn.id)
+                    scope.launch {
+                        kotlinx.coroutines.delay(AUTO_RETRY_BACKOFF_MS)
+                        if (_connections.value[conn.id]?.state?.value == SessionState.Idle) {
+                            connect(server, ConnectIntent.RETRY_AFTER_DEATH)
+                        }
+                    }
+                },
                 onRegistrationFailed = { reason ->
                     scope.launch {
+                        // Registration failure is always notification-worthy
+                        // even on auto-reconnect: the session looks Online but
+                        // input silently drops, which is invisible state the
+                        // user must be told about.
                         _events.emit(
                             ConnectionEvent.Error(
                                 "Couldn't register controller with ${server.name} — $reason",
@@ -257,6 +377,46 @@ class SatelliteConnectionManager
                     }
                 },
             )
+        }
+
+        /**
+         * Emit a [ConnectionEvent.Error] only if the user has a recent
+         * mental model for "I asked for this". On AUTO_RECONNECT /
+         * RETRY_AFTER_DEATH the row chip carries all the feedback the user
+         * needs (Connecting → Saved/Stale/Online) and a notification on top
+         * would be noise the user didn't ask for.
+         */
+        private suspend fun emitErrorIfUserInitiated(
+            intent: ConnectIntent,
+            message: String,
+        ) {
+            if (intent == ConnectIntent.USER_INITIATED) {
+                _events.emit(ConnectionEvent.Error(message))
+            }
+        }
+
+        private fun markStale(id: String) {
+            _staleSatelliteIds.update { if (id in it) it else it + id }
+        }
+
+        private fun clearStale(id: String) {
+            _staleSatelliteIds.update { if (id in it) it - id else it }
+        }
+
+        /**
+         * Heuristic for "this connect-response error means our shared key
+         * is no longer recognized by the server". Used to decide whether
+         * to drop the local key + flip to Stale. Conservative: an exact
+         * server-text match would be brittle, so we match a small set of
+         * substrings the satellite uses in its 401-ish responses.
+         */
+        private fun looksLikeAuthFailure(error: String?): Boolean {
+            val e = error?.lowercase() ?: return false
+            return "unauthor" in e ||
+                "forbidden" in e ||
+                "unknown device" in e ||
+                "pairing" in e ||
+                "invalid token" in e
         }
 
         fun disconnect(id: String) {
@@ -274,6 +434,7 @@ class SatelliteConnectionManager
         fun forget(id: String) {
             disconnect(id)
             store.forgetSatellite(id)
+            clearStale(id)
             _connections.value = _connections.value - id
         }
 
@@ -310,7 +471,19 @@ class SatelliteConnectionManager
             private const val DISC_TIMEOUT_MS = 4000
             private const val LEGACY_PREFS = "satellite"
             private const val LEGACY_KEY_SHARED = "sharedKey"
+
+            /**
+             * Delay before the alive-poll's onDead path attempts a silent
+             * reconnect. Short enough that a momentary Wi-Fi drop self-heals
+             * before the user navigates away in frustration; long enough that
+             * a real outage doesn't burn the satellite's TCP/UDP buffers with
+             * back-to-back retries. The retry path uses
+             * [ConnectIntent.RETRY_AFTER_DEATH] so it's silent on failure —
+             * the user sees one "Connecting…" flicker, not a notification.
+             */
+            private const val AUTO_RETRY_BACKOFF_MS = 1500L
+
             internal const val SERVER_UNREACHABLE_MSG =
-                "Server unreachable — has it moved networks? Forget and re-add."
+                "Server unreachable — check it's powered on and on the same Wi-Fi."
         }
     }

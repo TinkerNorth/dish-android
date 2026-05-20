@@ -148,11 +148,31 @@ class SatelliteConnection(
         controllerRepo.startHeartbeat(handle)
         aliveJob =
             scope.launch {
+                // Synthesized Faltering: keep a short ring buffer of alive-poll
+                // results and only declare the session dead after FALTER_TO_DEAD
+                // consecutive misses. A single miss flips state to Faltering →
+                // chip "Unsteady"; a recovery before the threshold restores Live.
+                // This dampens single-tick Wi-Fi blips that the previous
+                // binary-alive code rendered as Online → Offline bounces.
+                var consecutiveMisses = 0
                 while (isActive) {
                     delay(ALIVE_POLL_MS)
-                    if (!controllerRepo.isConnectionAlive(handle)) {
-                        onDead()
-                        break
+                    val alive = controllerRepo.isConnectionAlive(handle)
+                    if (alive) {
+                        if (consecutiveMisses > 0 && _state.value == SessionState.Faltering) {
+                            _state.value = SessionState.Live
+                        }
+                        consecutiveMisses = 0
+                        continue
+                    }
+                    consecutiveMisses += 1
+                    when {
+                        consecutiveMisses >= FALTER_TO_DEAD -> {
+                            onDead()
+                            break
+                        }
+                        consecutiveMisses >= FALTER_THRESHOLD ->
+                            if (_state.value == SessionState.Live) _state.value = SessionState.Faltering
                     }
                 }
             }
@@ -387,6 +407,23 @@ class SatelliteConnection(
         private const val ALIVE_POLL_MS = 1000L
         private const val ACK_WAIT_ATTEMPTS = 20
         private const val ACK_WAIT_INTERVAL_MS = 100L
+
+        /**
+         * Consecutive missed alive-polls before [SessionState.Live] demotes to
+         * [SessionState.Faltering] (chip "Unsteady"). Recovery within the next
+         * poll restores [SessionState.Live] without the user ever seeing a
+         * disconnect. Tuned for Wi-Fi: a single ~1s blip stays "Online", but
+         * a real outage flips to "Unsteady" before the death threshold so the
+         * user sees the change coming.
+         */
+        private const val FALTER_THRESHOLD = 2
+
+        /**
+         * Consecutive missed alive-polls before the session is treated as dead
+         * and [onDead] fires. Above this, the manager runs its silent
+         * RETRY_AFTER_DEATH path; the chip flips Faltering → Connecting → final.
+         */
+        private const val FALTER_TO_DEAD = 5
 
         // MSG_CONTROLLER_ADD capability word (2-byte big-endian): bit 0x0001
         // analog triggers, 0x0002 rumble, 0x0004 motion (this client emits the

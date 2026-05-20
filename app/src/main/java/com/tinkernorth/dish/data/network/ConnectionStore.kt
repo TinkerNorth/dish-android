@@ -28,6 +28,12 @@ class ConnectionStore
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         }
 
+        // SharedPreferences itself is thread-safe for reads, but a
+        // read-modify-write list mutation (remembered() → mutate → persist)
+        // can race with another thread doing the same; the loser's edits
+        // disappear. Funnel every list mutation through a single monitor.
+        private val writeLock = Any()
+
         // ── Satellites ────────────────────────────────────────────────────────
 
         fun remembered(): List<RememberedSatellite> {
@@ -38,28 +44,32 @@ class ConnectionStore
         }
 
         fun rememberSatellite(server: DiscoveredServer) {
-            val list = remembered().toMutableList()
-            val id = SatelliteConnection.idFor(server)
-            list.removeAll { it.id == id }
-            list +=
-                RememberedSatellite(
-                    id = id,
-                    name = server.name,
-                    ip = server.ip,
-                    udpPort = server.udpPort,
-                    pairPort = server.pairPort,
-                    httpPort = server.httpPort,
-                )
-            persistSatellites(list)
+            synchronized(writeLock) {
+                val list = remembered().toMutableList()
+                val id = SatelliteConnection.idFor(server)
+                list.removeAll { it.id == id }
+                list +=
+                    RememberedSatellite(
+                        id = id,
+                        name = server.name,
+                        ip = server.ip,
+                        udpPort = server.udpPort,
+                        pairPort = server.pairPort,
+                        httpPort = server.httpPort,
+                    )
+                persistSatellitesLocked(list)
+            }
         }
 
         fun forgetSatellite(id: String) {
-            val list = remembered().filterNot { it.id == id }
-            persistSatellites(list)
-            prefs.edit().remove(satelliteKeyPref(id)).apply()
+            synchronized(writeLock) {
+                val list = remembered().filterNot { it.id == id }
+                persistSatellitesLocked(list)
+                prefs.edit().remove(satelliteKeyPref(id)).apply()
+            }
         }
 
-        private fun persistSatellites(list: List<RememberedSatellite>) {
+        private fun persistSatellitesLocked(list: List<RememberedSatellite>) {
             val raw = json.encodeToString(ListSerializer(RememberedSatellite.serializer()), list)
             prefs.edit().putString(KEY_SATELLITES, raw).apply()
         }
@@ -81,6 +91,18 @@ class ConnectionStore
             prefs.edit().putString(satelliteKeyPref(id), keyHex).apply()
         }
 
+        /**
+         * Drop the cached shared key for [id]. Called from
+         * [SatelliteConnectionManager] when a session-open auth-shape failure
+         * makes it clear the key the server expects has rotated — without this
+         * call, every subsequent auto-reconnect would re-attempt with the
+         * stale key and the user would be stuck in a permanent broken state
+         * requiring a manual Forget + re-add.
+         */
+        fun forgetSatelliteSharedKey(id: String) {
+            prefs.edit().remove(satelliteKeyPref(id)).apply()
+        }
+
         private fun satelliteKeyPref(id: String): String = "$KEY_SATELLITE_SHARED_PREFIX$id"
 
         // ── Bluetooth ─────────────────────────────────────────────────────────
@@ -93,18 +115,22 @@ class ConnectionStore
         }
 
         fun rememberBt(entry: RememberedBt) {
-            val list = rememberedBt().toMutableList()
-            list.removeAll { it.id == entry.id }
-            list += entry
-            persistBt(list)
+            synchronized(writeLock) {
+                val list = rememberedBt().toMutableList()
+                list.removeAll { it.id == entry.id }
+                list += entry
+                persistBtLocked(list)
+            }
         }
 
         fun forgetBt(id: String) {
-            val list = rememberedBt().filterNot { it.id == id }
-            persistBt(list)
+            synchronized(writeLock) {
+                val list = rememberedBt().filterNot { it.id == id }
+                persistBtLocked(list)
+            }
         }
 
-        private fun persistBt(list: List<RememberedBt>) {
+        private fun persistBtLocked(list: List<RememberedBt>) {
             val raw = json.encodeToString(ListSerializer(RememberedBt.serializer()), list)
             prefs.edit().putString(KEY_BT, raw).apply()
         }

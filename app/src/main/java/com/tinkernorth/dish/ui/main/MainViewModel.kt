@@ -67,6 +67,8 @@ class MainViewModel
                             inputType = SlotInputType.PHYSICAL,
                             name = dev.name,
                             physicalDeviceId = dev.id,
+                            isDisconnecting = dev.isDisconnecting,
+                            disconnectTimeLeft = dev.disconnectingTimeLeftSec ?: 0,
                         )
                     }
                 val slots =

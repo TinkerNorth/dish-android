@@ -85,12 +85,22 @@ class LowPowerManagerTest {
      * makes that call from a unit test anyway, so we bypass it.
      */
     private fun enterDimManually() {
-        val stateField = LowPowerManager::class.java.getDeclaredField("state")
-        stateField.isAccessible = true
-        stateField.set(lpm, LowPowerManager.State.ACTIVE)
+        // `state` is now a property delegating to the [_state] StateFlow —
+        // there is no `state` backing field to reflect into. Push directly
+        // into _state so both the legacy getter and the new stateFlow stay
+        // in lockstep.
+        setStateDirect(LowPowerManager.State.ACTIVE)
         val update = LowPowerManager::class.java.getDeclaredMethod("updateStatus")
         update.isAccessible = true
         update.invoke(lpm)
+    }
+
+    private fun setStateDirect(state: LowPowerManager.State) {
+        val field = LowPowerManager::class.java.getDeclaredField("_state")
+        field.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        val flow = field.get(lpm) as kotlinx.coroutines.flow.MutableStateFlow<LowPowerManager.State>
+        flow.value = state
     }
 
     /**
@@ -182,9 +192,7 @@ class LowPowerManagerTest {
         enterDimManually()
         // Drop straight back to IDLE via reflection — calling cancel() would
         // touch the Handler we couldn't reliably mock.
-        val stateField = LowPowerManager::class.java.getDeclaredField("state")
-        stateField.isAccessible = true
-        stateField.set(lpm, LowPowerManager.State.IDLE)
+        setStateDirect(LowPowerManager.State.IDLE)
 
         // Now while IDLE, count drops to 1. refreshStatus must NOT update the
         // status view because the overlay is gone.
@@ -206,5 +214,44 @@ class LowPowerManagerTest {
         // Nothing to verify; the test passes if this didn't throw.
         @Suppress("UNUSED_VARIABLE")
         val unused = View.NO_ID
+    }
+
+    // ── stateFlow ────────────────────────────────────────────────────────
+    //
+    // We drive the manager's internal _state directly rather than calling
+    // the package-private enter()/exit() — both touch Handler.postDelayed()
+    // which the AGP test runner reports as "not mocked". The shape under
+    // test is "state and stateFlow stay in lockstep", which is independent
+    // of the timer-driven transitions.
+
+    @Test
+    fun `stateFlow starts at IDLE`() {
+        assertEquals(LowPowerManager.State.IDLE, lpm.stateFlow.value)
+        assertEquals(LowPowerManager.State.IDLE, lpm.state)
+    }
+
+    @Test
+    fun `stateFlow reflects ACTIVE when internal state advances`() {
+        setStateDirect(LowPowerManager.State.ACTIVE)
+
+        assertEquals(LowPowerManager.State.ACTIVE, lpm.stateFlow.value)
+        assertEquals(LowPowerManager.State.ACTIVE, lpm.state)
+    }
+
+    @Test
+    fun `stateFlow reflects COUNTDOWN when internal state advances`() {
+        setStateDirect(LowPowerManager.State.COUNTDOWN)
+
+        assertEquals(LowPowerManager.State.COUNTDOWN, lpm.stateFlow.value)
+        assertEquals(LowPowerManager.State.COUNTDOWN, lpm.state)
+    }
+
+    @Test
+    fun `state property and stateFlow stay in lockstep across every state`() {
+        for (target in LowPowerManager.State.entries) {
+            setStateDirect(target)
+            assertEquals("state must mirror flow.value for $target", target, lpm.state)
+            assertEquals("flow.value must mirror state for $target", target, lpm.stateFlow.value)
+        }
     }
 }

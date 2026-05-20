@@ -11,6 +11,9 @@ import android.view.Window
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.util.Calendar
 import java.util.Locale
 
@@ -40,8 +43,21 @@ class LowPowerManager(
 
     enum class State { IDLE, COUNTDOWN, ACTIVE }
 
-    var state = State.IDLE
-        private set
+    private val _state = MutableStateFlow(State.IDLE)
+
+    /**
+     * Observable state for callers that need to react to dim-mode transitions
+     * (e.g. shifting bottom-anchored UI to make room for the COUNTDOWN pill).
+     * Mirrors the legacy [state] field — every assignment goes through
+     * [setState] so the two stay in sync.
+     */
+    val stateFlow: StateFlow<State> = _state.asStateFlow()
+
+    var state: State
+        get() = _state.value
+        private set(value) {
+            _state.value = value
+        }
 
     private var savedBrightness = -1f
     private val inactivityHandler = Handler(Looper.getMainLooper())

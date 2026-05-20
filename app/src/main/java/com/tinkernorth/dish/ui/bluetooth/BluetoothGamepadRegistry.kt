@@ -16,6 +16,15 @@ import kotlinx.coroutines.flow.update
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** Reason a remembered Bluetooth host is in the "Needs pairing" state. */
+enum class BtStaleReason {
+    /** OS fired `ACTION_KEY_MISSING` — host lost its end of the pairing key. */
+    KEY_MISSING,
+
+    /** BOND_BONDED → BOND_NONE — host was unpaired (intentionally or wiped). */
+    BOND_REMOVED,
+}
+
 /**
  * Projects the single [BluetoothHidSession] onto a per-connection-id slot
  * view. Android's HID Device profile only allows one registered app per
@@ -54,6 +63,51 @@ class BluetoothGamepadRegistry
         private val _errors =
             MutableSharedFlow<String>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
         val errors: SharedFlow<String> = _errors.asSharedFlow()
+
+        /**
+         * Per-host "Needs pairing" markers, set by [BluetoothBondMonitor] when
+         * the OS reports KEY_MISSING or an unexpected BOND_NONE on a remembered
+         * MAC. Cleared on the next successful [SessionState.Connected] for that
+         * host. Drives [com.tinkernorth.dish.data.network.LinkState.Stale] in
+         * [com.tinkernorth.dish.data.network.ConnectionHub] — the row chip
+         * flips to "Needs pairing" so the user knows the host (not just our
+         * app) needs to re-pair.
+         *
+         * Exposed as a map so the reason can drive notification copy
+         * ("re-pair the host" vs "the bond was removed"). [ConnectionHub]'s
+         * combine reads `.keys` for the Stale set lift.
+         */
+        private val _staleBtIds = MutableStateFlow<Map<String, BtStaleReason>>(emptyMap())
+        val staleBtIds: StateFlow<Map<String, BtStaleReason>> = _staleBtIds.asStateFlow()
+
+        /** Reason a host is in the Stale set, or null when it isn't. */
+        fun staleReasonFor(id: String): BtStaleReason? = _staleBtIds.value[id]
+
+        /**
+         * Mark a remembered BT host as needing re-pair. Idempotent on identical
+         * (id, reason); promotes BOND_REMOVED → KEY_MISSING if a later
+         * KEY_MISSING arrives for the same host so the more-specific copy wins.
+         */
+        fun markStale(
+            id: String,
+            reason: BtStaleReason,
+        ) {
+            _staleBtIds.update { current ->
+                val prior = current[id]
+                if (prior == reason) return@update current
+                // KEY_MISSING is the more specific signal — if we already
+                // recorded one, don't downgrade to BOND_REMOVED.
+                if (prior == BtStaleReason.KEY_MISSING && reason == BtStaleReason.BOND_REMOVED) {
+                    return@update current
+                }
+                current + (id to reason)
+            }
+        }
+
+        /** Clear a host from the Stale set. Called on the next [SessionState.Connected]. */
+        fun clearStale(id: String) {
+            _staleBtIds.update { if (id in it) it - id else it }
+        }
 
         init {
             session.addListener(::onSessionState)
@@ -223,6 +277,9 @@ class BluetoothGamepadRegistry
                     profileName = state.profile.profileName,
                 ),
             )
+            // The host is now bonded again — any Stale marker we may have set
+            // on an earlier KEY_MISSING / BOND_NONE is invalid by definition.
+            clearStale(stableId)
             synchronized(lock) {
                 if (currentId != stableId) activeConnId = stableId
                 _states.update { map ->

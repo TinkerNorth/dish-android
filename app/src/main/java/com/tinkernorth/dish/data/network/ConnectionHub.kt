@@ -139,16 +139,50 @@ class ConnectionHub
                 }
 
         init {
+            // We watch seven flows so the summaries refresh on any of:
+            //   * sessions add/remove or transition state
+            //   * BT slot states (Acquiring/Registered/Connected/Failed)
+            //   * discovery presence (Saved vs Ready vs Found split)
+            //   * bindings (boundSlotIds in summary)
+            //   * controller-type swap (Xbox/PS chip)
+            //   * Stale markers — both satellites (auto-reconnect pair-rejected)
+            //     and BT (KEY_MISSING / bond removed). Without these in the
+            //     combine() the row chip would stay "Offline" / "Online" even
+            //     though the manager flipped it Stale.
+            // The arity-7 vararg overload of `combine` takes an `Array<*>` —
+            // we destructure positionally with a small `unwrap` helper so the
+            // type narrowing stays at the boundary instead of leaking into
+            // buildSummaries.
             combine(
                 flatSatConnections,
                 bt.states,
                 satellite.discoveredServers,
                 _bindings,
                 _satTypes,
-            ) { satMap, btStates, discovered, _, _ ->
-                buildSummaries(satMap, btStates, discoveredIdSet(discovered))
-            }.onEach { _connections.value = it }
+                satellite.staleSatelliteIds,
+                bt.staleBtIds,
+            ) { args -> unwrapAndBuild(args) }
+                .onEach { _connections.value = it }
                 .launchIn(scope)
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        private fun unwrapAndBuild(args: Array<*>): List<ConnectionSummary> {
+            val satMap = args[0] as Map<String, SatelliteConnection>
+            val btStates = args[1] as Map<String, BluetoothGamepadRegistry.SlotState>
+            val discovered = args[2] as List<com.tinkernorth.dish.data.model.DiscoveredServer>
+            val staleSat = args[5] as Set<String>
+            // BT registry exposes a reason-keyed map; the hub only needs the
+            // set of ids to lift Saved → Stale. The reason itself drives the
+            // notification copy and lives one layer up in the activity.
+            val staleBtMap = args[6] as Map<String, *>
+            return buildSummaries(
+                satMap,
+                btStates,
+                discoveredIdSet(discovered),
+                staleSat,
+                staleBtMap.keys,
+            )
         }
 
         /**
@@ -164,6 +198,8 @@ class ConnectionHub
             satMap: Map<String, SatelliteConnection>,
             btStates: Map<String, BluetoothGamepadRegistry.SlotState>,
             discoveredIds: Set<String>,
+            staleSatIds: Set<String> = emptySet(),
+            staleBtIds: Set<String> = emptySet(),
         ): List<ConnectionSummary> {
             val bindings = _bindings.value
             val satTypes = _satTypes.value
@@ -179,13 +215,20 @@ class ConnectionHub
                     bindings,
                     satTypes,
                     discoveredIds,
+                    isStale = id in staleSatIds,
                 )?.let(result::add)
             }
 
             val rememberedBtIds = mutableSetOf<String>()
             for (entry in store.rememberedBt()) {
                 rememberedBtIds += entry.id
-                result += buildRememberedBtSummary(entry, btStates[entry.id], bindings)
+                result +=
+                    buildRememberedBtSummary(
+                        entry,
+                        btStates[entry.id],
+                        bindings,
+                        isStale = entry.id in staleBtIds,
+                    )
             }
 
             for ((id, state) in btStates) {
@@ -202,17 +245,18 @@ class ConnectionHub
          * [id] is currently in the discovery set:
          * - SessionState.Live      → LinkState.Connected
          * - SessionState.Linking   → LinkState.Connecting
-         * - SessionState.Faltering → LinkState.Unstable (not yet reachable;
-         *   native exposes only binary alive)
+         * - SessionState.Faltering → LinkState.Unstable
          * - SessionState.Idle / null:
+         *     [isStale] true       → LinkState.Stale   ("Needs pairing" — set by
+         *                            the manager when an auto-reconnect's pair
+         *                            handshake came back with ok=false, i.e.
+         *                            the server has forgotten us)
          *     in discoveredIds     → LinkState.Ready
          *     not in discoveredIds → LinkState.Saved
          *
-         * TODO(Stale): a server-side forget should land us in [LinkState.Stale],
-         * but detecting that requires the server to return a `PAIRING_UNKNOWN`
-         * error so we can distinguish "peer forgot us" from a transient
-         * unreachability. Until that protocol bit lands, a forgotten device
-         * falls through to Saved/Ready and the user only sees connect failures.
+         * Stale wins over Ready/Saved because it carries actionable intent
+         * (the user needs to re-enter a PIN); the chip and the action button
+         * are picked off this state.
          */
         private fun buildSatelliteSummary(
             id: String,
@@ -221,6 +265,7 @@ class ConnectionHub
             bindings: Map<String, String>,
             satTypes: Map<Pair<String, String>, Int>,
             discoveredIds: Set<String>,
+            isStale: Boolean,
         ): ConnectionSummary? {
             val server = conn?.server?.value ?: remembered?.toDiscovered() ?: return null
             val live =
@@ -229,7 +274,11 @@ class ConnectionHub
                     SessionState.Linking -> LinkState.Connecting
                     SessionState.Faltering -> LinkState.Unstable
                     SessionState.Idle, null ->
-                        if (id in discoveredIds) LinkState.Ready else LinkState.Saved
+                        when {
+                            isStale -> LinkState.Stale
+                            id in discoveredIds -> LinkState.Ready
+                            else -> LinkState.Saved
+                        }
                 }
             val bound = bindings.entries.filter { it.value == id }.map { it.key }
             return ConnectionSummary(
@@ -243,19 +292,31 @@ class ConnectionHub
             )
         }
 
-        /** Bluetooth: one summary per remembered host; live state from registry. */
+        /**
+         * Bluetooth: one summary per remembered host; live state from registry.
+         * [isStale] flips an idle remembered host to "Needs pairing" — set by
+         * [BluetoothBondMonitor] on KEY_MISSING / BOND_NONE transitions and
+         * cleared on a subsequent successful [SessionState.Connected].
+         */
         private fun buildRememberedBtSummary(
             entry: RememberedBt,
             state: BluetoothGamepadRegistry.SlotState?,
             bindings: Map<String, String>,
+            isStale: Boolean,
         ): ConnectionSummary {
             val bound = bindings.entries.filter { it.value == entry.id }.map { it.key }
+            val live =
+                if (isStale && state?.connected != true) {
+                    LinkState.Stale
+                } else {
+                    liveStateOf(state)
+                }
             return ConnectionSummary(
                 id = entry.id,
                 kind = ConnectionKind.BLUETOOTH,
                 label = entry.name.ifEmpty { entry.mac },
                 detail = "${entry.profileName} • ${entry.mac}",
-                live = liveStateOf(state),
+                live = live,
                 boundSlotIds = bound,
                 btProfile = entry.profileName,
             )
@@ -369,12 +430,7 @@ class ConnectionHub
             }
 
             // Re-emit connections so boundSlotIds refreshes.
-            _connections.value =
-                buildSummaries(
-                    satellite.connections.value,
-                    bt.states.value,
-                    discoveredIdSet(satellite.discoveredServers.value),
-                )
+            _connections.value = rebuildSummariesNow()
             // For satellite: attach the controller slot on the server side.
             satellite.get(connectionId)?.let { conn ->
                 scope.launch { conn.attachSlot(slotId, controllerType = type) }
@@ -387,13 +443,24 @@ class ConnectionHub
             _bindings.value = current
             satellite.get(connId)?.detachSlot(slotId)
             _satTypes.value = _satTypes.value - (connId to slotId)
-            _connections.value =
-                buildSummaries(
-                    satellite.connections.value,
-                    bt.states.value,
-                    discoveredIdSet(satellite.discoveredServers.value),
-                )
+            _connections.value = rebuildSummariesNow()
         }
+
+        /**
+         * Imperative summaries refresh used by [bind] / [unbind] /
+         * [setSatelliteControllerType] so the row UI reflects the change in
+         * the same frame the user's action triggered it. The combine() in
+         * [init] re-emits independently on its own tick — this just avoids a
+         * visible delay between tap and chip update.
+         */
+        private fun rebuildSummariesNow(): List<ConnectionSummary> =
+            buildSummaries(
+                satellite.connections.value,
+                bt.states.value,
+                discoveredIdSet(satellite.discoveredServers.value),
+                staleSatIds = satellite.staleSatelliteIds.value,
+                staleBtIds = bt.staleBtIds.value.keys,
+            )
 
         /**
          * Change the controller type (Xbox/PS/…) for a satellite-bound slot.
@@ -413,12 +480,7 @@ class ConnectionHub
             satellite.get(connectionId)?.let { conn ->
                 scope.launch { conn.setControllerType(slotId, type) }
             }
-            _connections.value =
-                buildSummaries(
-                    satellite.connections.value,
-                    bt.states.value,
-                    discoveredIdSet(satellite.discoveredServers.value),
-                )
+            _connections.value = rebuildSummariesNow()
         }
 
         fun boundConnection(slotId: String): ConnectionSummary? =
@@ -436,7 +498,11 @@ class ConnectionHub
             for (remembered in store.remembered()) {
                 val existing = satellite.get(remembered.id)
                 if (existing?.state?.value != SessionState.Live) {
-                    satellite.connect(remembered.toDiscovered())
+                    // AUTO_RECONNECT keeps failure paths silent — the row chip
+                    // (Connecting → Saved/Stale) is the user-visible signal.
+                    // Without this gate, every cold start with a powered-off
+                    // satellite fired a notification for each remembered host.
+                    satellite.connect(remembered.toDiscovered(), ConnectIntent.AUTO_RECONNECT)
                 }
             }
             val btHosts = store.rememberedBt()

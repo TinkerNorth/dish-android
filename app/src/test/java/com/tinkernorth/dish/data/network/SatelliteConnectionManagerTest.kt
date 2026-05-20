@@ -223,4 +223,143 @@ class SatelliteConnectionManagerTest {
             // for an already in-flight session.
             coVerify(exactly = 1) { discoveryRepo.pair(any(), any(), any(), any(), any()) }
         }
+
+    // ── ConnectIntent gating ─────────────────────────────────────────────
+    //
+    // The user-flagged cold-start cascade bug: auto-reconnect on app
+    // foreground used the same emit path as a user tap, so a powered-off
+    // satellite fired a toast on every relaunch. Auto-reconnect must now be
+    // silent — the row chip is the user-visible signal.
+
+    @Test
+    fun `AUTO_RECONNECT does not emit error when pair returns empty`() =
+        runMgrTest { mgr, events ->
+            coEvery { discoveryRepo.pair(any(), any(), any(), any(), any()) } returns ""
+
+            mgr.connect(server, ConnectIntent.AUTO_RECONNECT)
+            scope.testScheduler.advanceUntilIdle()
+
+            assertTrue(
+                "auto-reconnect must not emit a ConnectionEvent.Error on unreachable: $events",
+                events.none { it is ConnectionEvent.Error },
+            )
+            // The session still transitions Idle so the row chip falls back
+            // to Saved/Stale — that's the user-visible feedback.
+            assertEquals(SessionState.Idle, mgr.get(serverId)?.state?.value)
+        }
+
+    @Test
+    fun `AUTO_RECONNECT does not emit error when pair throws`() =
+        runMgrTest { mgr, events ->
+            coEvery { discoveryRepo.pair(any(), any(), any(), any(), any()) } throws
+                RuntimeException("ECONNREFUSED")
+
+            mgr.connect(server, ConnectIntent.AUTO_RECONNECT)
+            scope.testScheduler.advanceUntilIdle()
+
+            assertTrue(events.none { it is ConnectionEvent.Error })
+        }
+
+    @Test
+    fun `USER_INITIATED still emits error on unreachable (back-compat)`() =
+        runMgrTest { mgr, events ->
+            coEvery { discoveryRepo.pair(any(), any(), any(), any(), any()) } returns ""
+
+            mgr.connect(server, ConnectIntent.USER_INITIATED)
+            scope.testScheduler.advanceUntilIdle()
+
+            assertTrue(
+                "user-initiated MUST emit Error so the tap result is visible: $events",
+                events.any { it is ConnectionEvent.Error },
+            )
+        }
+
+    @Test
+    fun `default intent is USER_INITIATED so single-arg call sites stay loud`() =
+        runMgrTest { mgr, events ->
+            coEvery { discoveryRepo.pair(any(), any(), any(), any(), any()) } returns ""
+
+            mgr.connect(server)
+            scope.testScheduler.advanceUntilIdle()
+
+            assertTrue(events.any { it is ConnectionEvent.Error })
+        }
+
+    // ── Stale-state synthesis ────────────────────────────────────────────
+
+    @Test
+    fun `AUTO_RECONNECT marks Stale when server rejects empty PIN`() =
+        runMgrTest { mgr, events ->
+            coEvery { discoveryRepo.pair(any(), any(), any(), any(), any()) } returns
+                """{"ok":false,"error":"PIN required"}"""
+
+            mgr.connect(server, ConnectIntent.AUTO_RECONNECT)
+            scope.testScheduler.advanceUntilIdle()
+
+            assertTrue(
+                "stale set should contain the server id on auto-reconnect pair-rejected",
+                serverId in mgr.staleSatelliteIds.value,
+            )
+            // And critically: NO PairingRequired event fired — the user
+            // didn't ask, so no dialog pops up unprompted.
+            assertTrue(events.none { it is ConnectionEvent.PairingRequired })
+        }
+
+    @Test
+    fun `USER_INITIATED with pair-rejected still emits PairingRequired (not Stale)`() =
+        runMgrTest { mgr, events ->
+            coEvery { discoveryRepo.pair(any(), any(), any(), any(), any()) } returns
+                """{"ok":false,"error":"PIN required"}"""
+
+            mgr.connect(server, ConnectIntent.USER_INITIATED)
+            scope.testScheduler.advanceUntilIdle()
+
+            // The user tapped Connect — show them the PIN dialog rather than
+            // silently flipping the chip to "Needs pairing".
+            assertTrue(events.any { it is ConnectionEvent.PairingRequired })
+            assertTrue(
+                "stale set must NOT include user-initiated tap targets",
+                serverId !in mgr.staleSatelliteIds.value,
+            )
+        }
+
+    @Test
+    fun `pairWithPin success clears Stale marker`() =
+        runMgrTest { mgr, _ ->
+            // Pre-seed Stale via an auto-reconnect rejection.
+            coEvery { discoveryRepo.pair(any(), any(), any(), any(), "") } returns
+                """{"ok":false}"""
+            mgr.connect(server, ConnectIntent.AUTO_RECONNECT)
+            scope.testScheduler.advanceUntilIdle()
+            assertTrue(serverId in mgr.staleSatelliteIds.value)
+
+            // Now the user enters the right PIN. The pair returns a key
+            // (force openSession to error on connect so we don't need the
+            // full happy-path mock chain; the manager still clears Stale
+            // before openSession runs).
+            coEvery { discoveryRepo.pair(any(), any(), any(), any(), "1234") } returns
+                """{"ok":true,"sharedKey":"${"bb".repeat(32)}"}"""
+            coEvery { discoveryRepo.connect(any(), any(), any()) } returns ""
+
+            mgr.pairWithPin(server, "1234")
+            scope.testScheduler.advanceUntilIdle()
+
+            assertTrue(
+                "stale should clear on successful PIN handshake",
+                serverId !in mgr.staleSatelliteIds.value,
+            )
+        }
+
+    @Test
+    fun `forget clears Stale marker`() =
+        runMgrTest { mgr, _ ->
+            coEvery { discoveryRepo.pair(any(), any(), any(), any(), any()) } returns """{"ok":false}"""
+            mgr.connect(server, ConnectIntent.AUTO_RECONNECT)
+            scope.testScheduler.advanceUntilIdle()
+            assertTrue(serverId in mgr.staleSatelliteIds.value)
+
+            mgr.forget(serverId)
+
+            assertTrue(serverId !in mgr.staleSatelliteIds.value)
+        }
 }

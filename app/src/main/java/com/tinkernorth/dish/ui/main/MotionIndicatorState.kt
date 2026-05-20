@@ -47,12 +47,21 @@ enum class MotionIndicatorState(
 ) {
     STREAMING(R.string.motion_streaming, R.color.colorSuccess),
     PAUSED(R.string.motion_paused, R.color.colorWarning),
+
+    /**
+     * Source is started, connection is up, but no gyro samples have arrived
+     * in the stall window. The hardware exists but isn't ticking — e.g. an
+     * OEM that pauses sensors aggressively, or a defective gyro. Surfaced as
+     * the "paused (stalled)" detail rather than a separate enum case so the
+     * pill colour stays warning-amber.
+     */
+    STALLED(R.string.motion_stalled, R.color.colorWarning),
     NOT_FORWARDED(R.string.motion_not_forwarded, R.color.colorMuted),
     UNAVAILABLE(R.string.motion_unavailable, R.color.colorMuted),
     ;
 
     /** True for the states whose meaning warrants the one-line explanation. */
-    val hasDetail: Boolean get() = this == UNAVAILABLE || this == NOT_FORWARDED
+    val hasDetail: Boolean get() = this == UNAVAILABLE || this == NOT_FORWARDED || this == STALLED
 
     companion object {
         /**
@@ -82,10 +91,12 @@ enum class MotionIndicatorState(
             isStreaming: Boolean,
             connectionCarriesMotion: Boolean,
             connectionConnected: Boolean,
+            isStalled: Boolean = false,
         ): MotionIndicatorState =
             when {
                 !isAvailable -> UNAVAILABLE
                 !connectionCarriesMotion -> NOT_FORWARDED
+                isStreaming && connectionConnected && isStalled -> STALLED
                 isStreaming && connectionConnected -> STREAMING
                 else -> PAUSED
             }

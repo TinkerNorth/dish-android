@@ -10,9 +10,14 @@ import android.view.InputDevice
 import android.view.MotionEvent
 import com.tinkernorth.dish.data.network.SatelliteNative
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -32,11 +37,23 @@ class PhysicalGamepadRegistry
     @Inject
     constructor(
         @ApplicationContext context: Context,
+        private val scope: CoroutineScope,
     ) : InputManager.InputDeviceListener {
+        /**
+         * @property disconnectingTimeLeftSec when non-null the device has been
+         *   unplugged but is still in a grace window — the binding to its
+         *   satellite slot stays live so a USB cable jiggle (the most common
+         *   "false disconnect") doesn't free the server-side controller index
+         *   and force a re-register. `null` means the device is currently
+         *   present.
+         */
         data class Device(
             val id: Int,
             val name: String,
-        )
+            val disconnectingTimeLeftSec: Int? = null,
+        ) {
+            val isDisconnecting: Boolean get() = disconnectingTimeLeftSec != null
+        }
 
         private val inputManager =
             context.getSystemService(Context.INPUT_SERVICE) as InputManager
@@ -45,6 +62,13 @@ class PhysicalGamepadRegistry
         val devices: StateFlow<Map<Int, Device>> = _devices.asStateFlow()
 
         @Volatile private var installed = false
+
+        /**
+         * Active "remove after grace" jobs keyed by device id. Cancelled if the
+         * device returns within [DISCONNECT_GRACE_SEC]; otherwise the job
+         * finally drops the entry from [_devices] when the grace expires.
+         */
+        private val disconnectJobs = HashMap<Int, Job>()
 
         /**
          * Register the [InputManager] listener and seed the device map from
@@ -73,25 +97,60 @@ class PhysicalGamepadRegistry
             val dev = InputDevice.getDevice(deviceId) ?: return
             if (!isGamepad(dev)) return
             pushDeadzones(dev)
+            cancelDisconnect(deviceId)
             _devices.value = _devices.value + (deviceId to Device(deviceId, dev.name))
         }
 
         override fun onInputDeviceRemoved(deviceId: Int) {
-            if (deviceId !in _devices.value) return
-            _devices.value = _devices.value - deviceId
+            val current = _devices.value[deviceId] ?: return
+            // Start the grace window rather than yanking the entry: keeps the
+            // satellite slot reserved (no controller-remove → controller-add
+            // churn) while a USB cable jiggle re-enumerates. The countdown is
+            // mirrored to the UI as "Disconnecting… Ns" on the slot row.
+            scheduleDisconnect(current)
         }
 
         override fun onInputDeviceChanged(deviceId: Int) {
             val dev = InputDevice.getDevice(deviceId)
             if (dev == null || !isGamepad(dev)) {
-                if (deviceId in _devices.value) _devices.value = _devices.value - deviceId
+                _devices.value[deviceId]?.let { scheduleDisconnect(it) }
                 return
             }
             // Name or sources may have changed — refresh in place so the slot
             // row picks up the new label without a phantom add/remove cycle.
+            cancelDisconnect(deviceId)
             val current = _devices.value[deviceId]
-            if (current == null || current.name != dev.name) {
+            if (current == null || current.name != dev.name || current.isDisconnecting) {
                 _devices.value = _devices.value + (deviceId to Device(deviceId, dev.name))
+            }
+        }
+
+        private fun scheduleDisconnect(device: Device) {
+            // Replace any previous job so the timer always starts fresh.
+            disconnectJobs.remove(device.id)?.cancel()
+            disconnectJobs[device.id] =
+                scope.launch {
+                    var remaining = DISCONNECT_GRACE_SEC
+                    while (isActive && remaining > 0) {
+                        val current = _devices.value[device.id] ?: return@launch
+                        _devices.value =
+                            _devices.value + (device.id to current.copy(disconnectingTimeLeftSec = remaining))
+                        delay(1000L)
+                        remaining -= 1
+                    }
+                    // Grace expired — drop the entry. The binding observer
+                    // will see the absence on its next tick and clear the
+                    // native binding + hub.unbind for it.
+                    _devices.value = _devices.value - device.id
+                    disconnectJobs.remove(device.id)
+                }
+        }
+
+        private fun cancelDisconnect(deviceId: Int) {
+            disconnectJobs.remove(deviceId)?.cancel()
+            val cur = _devices.value[deviceId] ?: return
+            if (cur.isDisconnecting) {
+                _devices.value = _devices.value + (deviceId to cur.copy(disconnectingTimeLeftSec = null))
             }
         }
 
@@ -175,6 +234,18 @@ class PhysicalGamepadRegistry
          * still fall out cleanly at `keycodeToXusb` in the native pipeline.
          */
         private fun isGamepad(d: InputDevice): Boolean = isGamepadDeviceFromCapabilities(d.sources, d.keyboardType)
+
+        private companion object {
+            /**
+             * Grace period before a removed [InputDevice] is dropped from the
+             * registry. Within this window the slot row reads "Disconnecting…
+             * Ns" and the satellite binding stays live so a re-plug doesn't
+             * churn the server-side controller index. Chosen to cover a USB
+             * cable jiggle / re-enumeration without holding state long enough
+             * that a real removal feels stuck.
+             */
+            const val DISCONNECT_GRACE_SEC = 5
+        }
     }
 
 /**

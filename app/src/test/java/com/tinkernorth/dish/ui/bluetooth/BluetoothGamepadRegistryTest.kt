@@ -454,4 +454,61 @@ class BluetoothGamepadRegistryTest {
         fake.fireHostConnected("AA", "X")
         verify(exactly = 0) { store.rememberBt(any()) }
     }
+
+    // ── staleBtIds: KEY_MISSING / BOND_NONE markers ───────────────────────
+
+    @Test
+    fun `markStale records the reason on the staleBtIds flow`() {
+        registry.markStale("bt:AA", BtStaleReason.KEY_MISSING)
+
+        assertEquals(BtStaleReason.KEY_MISSING, registry.staleBtIds.value["bt:AA"])
+        assertEquals(BtStaleReason.KEY_MISSING, registry.staleReasonFor("bt:AA"))
+    }
+
+    @Test
+    fun `clearStale removes a host from staleBtIds`() {
+        registry.markStale("bt:AA", BtStaleReason.BOND_REMOVED)
+        registry.clearStale("bt:AA")
+
+        assertFalse(registry.staleBtIds.value.containsKey("bt:AA"))
+        assertNull(registry.staleReasonFor("bt:AA"))
+    }
+
+    @Test
+    fun `markStale is idempotent for the same reason`() {
+        registry.markStale("bt:AA", BtStaleReason.KEY_MISSING)
+        registry.markStale("bt:AA", BtStaleReason.KEY_MISSING)
+        // The semantic invariant: identical updates preserve the reason
+        // without flipping it to something else. StateFlow.update collapses
+        // duplicates internally, but the test pins the observable contract.
+        assertEquals(BtStaleReason.KEY_MISSING, registry.staleBtIds.value["bt:AA"])
+        assertEquals(1, registry.staleBtIds.value.size)
+    }
+
+    @Test
+    fun `KEY_MISSING takes precedence over later BOND_REMOVED`() {
+        registry.markStale("bt:AA", BtStaleReason.KEY_MISSING)
+        registry.markStale("bt:AA", BtStaleReason.BOND_REMOVED)
+
+        // The more-specific KEY_MISSING signal wins so the user copy reads
+        // "Re-pair X" (host lost its key) rather than the weaker "X was
+        // unpaired" — see BluetoothGamepadRegistry.markStale.
+        assertEquals(BtStaleReason.KEY_MISSING, registry.staleBtIds.value["bt:AA"])
+    }
+
+    @Test
+    fun `BOND_REMOVED is upgraded by a later KEY_MISSING`() {
+        registry.markStale("bt:AA", BtStaleReason.BOND_REMOVED)
+        registry.markStale("bt:AA", BtStaleReason.KEY_MISSING)
+
+        assertEquals(BtStaleReason.KEY_MISSING, registry.staleBtIds.value["bt:AA"])
+    }
+
+    @Test
+    fun `successful Connected clears the Stale marker`() {
+        registry.markStale("bt:AA", BtStaleReason.KEY_MISSING)
+        driveToConnected("bt-pending-1", "AA", "Xbox")
+
+        assertNull(registry.staleReasonFor("bt:AA"))
+    }
 }

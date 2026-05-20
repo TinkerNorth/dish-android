@@ -78,6 +78,25 @@ class PhoneMotionSource(
      */
     val isStreaming: Boolean get() = started
 
+    /**
+     * True when the source is started but no gyro sample has arrived recently
+     * (within [STALL_WINDOW_MS]). Happens on devices where the sensor exists
+     * but reports zero or fails silently — without this signal the motion
+     * indicator would read "streaming" with nothing actually reaching the
+     * wire. The overlay reads this to demote STREAMING → PAUSED with a
+     * "stalled" detail line.
+     */
+    val isStalled: Boolean
+        get() {
+            if (!started) return false
+            val last = lastGyroMonoMs
+            if (last == 0L) return true
+            return android.os.SystemClock.elapsedRealtime() - last > STALL_WINDOW_MS
+        }
+
+    /** Monotonic ms of the most recent gyro callback. Used by [isStalled]. */
+    @Volatile private var lastGyroMonoMs: Long = 0L
+
     // emit/started are handed between the main thread (start/stop) and the
     // SensorDispatch thread (callbacks); @Volatile makes that hand-off visible.
     @Volatile private var emit: Emit? = null
@@ -156,6 +175,7 @@ class PhoneMotionSource(
 
     private fun onGyro(values: FloatArray) {
         if (values.size < 3) return
+        lastGyroMonoMs = android.os.SystemClock.elapsedRealtime()
         val cb = emit ?: return
         val (x, y, z) =
             MotionScaling.remapLandscape(values[0], values[1], values[2], rotationSupplier())
@@ -182,5 +202,13 @@ class PhoneMotionSource(
         // Surface.ROTATION_0 — fallback when no rotation supplier is provided
         // (e.g. in tests); the identity remap in MotionScaling.remapLandscape.
         const val DEFAULT_ROTATION = 0
+
+        /**
+         * If the gyro hasn't fired for longer than this, treat the source as
+         * stalled. SENSOR_DELAY_GAME is ~20ms; 1.5s is enough to absorb a
+         * sensor pause / coalesce without overreacting, while still surfacing
+         * a "stalled" signal before the user wastes a level worth of input.
+         */
+        const val STALL_WINDOW_MS = 1500L
     }
 }

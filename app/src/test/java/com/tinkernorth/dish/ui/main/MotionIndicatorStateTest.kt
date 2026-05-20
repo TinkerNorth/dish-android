@@ -185,4 +185,81 @@ class MotionIndicatorStateTest {
         assertTrue("a dot-colour resource is unset", colors.all { it != 0 })
         assertEquals("labels must be unique per state", labels.size, labels.toSet().size)
     }
+
+    // ── STALLED — synthesised when the sensor exists but isn't ticking ──
+
+    @Test
+    fun `streaming + connected + stalled maps to STALLED`() {
+        // Gyro exists, source started, satellite connection up — but no
+        // gyro samples in the stall window. Must demote from STREAMING so
+        // the pill never claims it's live when nothing is.
+        assertEquals(
+            MotionIndicatorState.STALLED,
+            MotionIndicatorState.of(
+                isAvailable = true,
+                isStreaming = true,
+                connectionCarriesMotion = true,
+                connectionConnected = true,
+                isStalled = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `stalled flag is ignored when not streaming (stays PAUSED)`() {
+        // Source is stopped; the stalled flag is meaningless here because no
+        // sample window is in flight. PAUSED is the right reading.
+        assertEquals(
+            MotionIndicatorState.PAUSED,
+            MotionIndicatorState.of(
+                isAvailable = true,
+                isStreaming = false,
+                connectionCarriesMotion = true,
+                connectionConnected = true,
+                isStalled = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `stalled flag is ignored over Bluetooth (stays NOT_FORWARDED)`() {
+        // Bluetooth has no motion channel — stall detection is irrelevant.
+        assertEquals(
+            MotionIndicatorState.NOT_FORWARDED,
+            MotionIndicatorState.of(
+                isAvailable = true,
+                isStreaming = true,
+                connectionCarriesMotion = false,
+                connectionConnected = true,
+                isStalled = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `stalled flag is ignored when no gyroscope (stays UNAVAILABLE)`() {
+        assertEquals(
+            MotionIndicatorState.UNAVAILABLE,
+            MotionIndicatorState.of(
+                isAvailable = false,
+                isStreaming = true,
+                connectionCarriesMotion = true,
+                connectionConnected = true,
+                isStalled = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `STALLED carries a detail line so the limit is explained`() {
+        assertTrue(MotionIndicatorState.STALLED.hasDetail)
+    }
+
+    @Test
+    fun `STALLED has its own distinct label`() {
+        // The "every state has a distinct label" check above already covers
+        // this; pinning it explicitly so a future refactor that collapses
+        // STALLED onto PAUSED's label fails loudly here.
+        assertNotEquals(MotionIndicatorState.PAUSED.labelRes, MotionIndicatorState.STALLED.labelRes)
+    }
 }
