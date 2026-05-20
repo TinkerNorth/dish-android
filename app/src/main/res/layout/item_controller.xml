@@ -87,6 +87,20 @@
                     android:textSize="12sp" />
             </LinearLayout>
 
+            <!-- v6 brand connection-target glyph. Mirrors the row this slot
+                 is bound to over on activity_connections.xml — a satellite
+                 row's icon family is satellite, a Bluetooth row's is the
+                 Berkana rune. Painted in ControllerAdapter.bind() from the
+                 slot's boundStatus; hidden when unbound. -->
+            <ImageView
+                android:id="@+id/ivBoundKind"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="8dp"
+                android:contentDescription="@null"
+                android:visibility="gone"
+                android:src="@drawable/ic_satellite" />
+
             <View
                 android:id="@+id/dotStatus"
                 android:layout_width="8dp"

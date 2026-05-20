@@ -43,6 +43,16 @@
                     android:orientation="horizontal"
                     android:gravity="center_vertical">
 
+                    <!-- v6 brand satellite glyph — same icon family used in the
+                         satellite/web dashboard and dish-mac SectionHeader so a
+                         user moving between clients sees the same iconography. -->
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_marginEnd="6dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_satellite" />
+
                     <TextView
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
@@ -91,6 +101,13 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical">
+
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_marginEnd="6dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_bluetooth" />
 
                     <TextView
                         android:layout_width="0dp"

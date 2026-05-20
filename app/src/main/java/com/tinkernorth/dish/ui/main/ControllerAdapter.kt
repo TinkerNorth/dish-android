@@ -9,6 +9,7 @@ import android.graphics.drawable.GradientDrawable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
@@ -91,6 +92,18 @@ class ControllerAdapter(
                     else -> R.color.colorMuted
                 },
             )
+
+            // Connection-target glyph: mirrors the same icon family the
+            // ConnectionsActivity row uses, so a slot and its bound row read
+            // as the same thing. Hidden when the slot is unbound — the
+            // gamepad-type icon on the left already names the slot itself.
+            val bound = slot.boundStatus
+            if (bound == null) {
+                b.ivBoundKind.visibility = View.GONE
+            } else {
+                b.ivBoundKind.visibility = View.VISIBLE
+                b.ivBoundKind.setImageResource(boundKindGlyph(bound.kind, bound.live))
+            }
             b.root.alpha = if (slot.isDisconnecting) 0.5f else 1f
 
             b.cardRoot.strokeColor =
@@ -158,7 +171,13 @@ class ControllerAdapter(
                 buildConnectionRowContainer(ctx, dp, bound, ownedByOther) {
                     if (!ownedByOther) listener.onBind(slot.id, c.id)
                 }
-            row.addView(buildConnectionTitle(ctx, c))
+            // Leading v6 brand glyph + stacked title/detail column. Mirrors
+            // ConnectionsActivity row_connection.xml and dish-mac SlotCard's
+            // expanded picker so the same connection looks the same wherever
+            // it surfaces. The glyph reads the kind+live state straight from
+            // [ConnectionSummary], so a row's silhouette tracks the live
+            // SSE update without a separate refresh.
+            row.addView(buildConnectionHeader(ctx, dp, c))
             row.addView(buildConnectionDetail(ctx, c, bound, ownedByOther))
             // Per-slot Xbox/PS toggle for the satellite this slot is bound to.
             // Bluetooth's controller type is fixed by the remembered host so
@@ -200,26 +219,53 @@ class ControllerAdapter(
                 if (!ownedByOther) setOnClickListener { onClick() }
             }
 
-        private fun buildConnectionTitle(
+        /**
+         * Header row inside a bind-picker entry: 22dp v6 brand glyph on the
+         * leading edge, bold title to its right. The glyph replaces the old
+         * "📡 "/"🔗 " emoji prefix so the picker shares the same icon family
+         * as the Connections page rows and the slot card's bound-kind glyph
+         * — `boundKindGlyph()` is the single source of truth for kind+state
+         * → drawable.
+         */
+        private fun buildConnectionHeader(
             ctx: android.content.Context,
+            dp: Float,
             c: ConnectionSummary,
-        ): TextView {
-            val prefix =
-                when (c.kind) {
-                    ConnectionKind.SATELLITE -> "📡 "
-                    ConnectionKind.BLUETOOTH -> "🔗 "
-                }
+        ): LinearLayout {
             val statusSuffix =
                 when (c.live) {
                     LinkState.Connected, LinkState.Unstable -> " • online"
                     LinkState.Connecting -> " • connecting…"
                     LinkState.Found, LinkState.Stale, LinkState.Saved, LinkState.Ready -> ""
                 }
-            return TextView(ctx).apply {
-                text = "$prefix${c.label}$statusSuffix"
-                setTextColor(ctx.getColor(R.color.colorOnSurface))
-                textSize = 14f
-                typeface = Typeface.DEFAULT_BOLD
+            val title =
+                TextView(ctx).apply {
+                    text = "${c.label}$statusSuffix"
+                    setTextColor(ctx.getColor(R.color.colorOnSurface))
+                    textSize = 14f
+                    typeface = Typeface.DEFAULT_BOLD
+                    layoutParams =
+                        LinearLayout
+                            .LayoutParams(
+                                0,
+                                LinearLayout.LayoutParams.WRAP_CONTENT,
+                                1f,
+                            )
+                }
+            val glyph =
+                ImageView(ctx).apply {
+                    setImageResource(boundKindGlyph(c.kind, c.live))
+                    layoutParams =
+                        LinearLayout
+                            .LayoutParams((22 * dp).toInt(), (22 * dp).toInt())
+                            .apply { marginEnd = (8 * dp).toInt() }
+                    contentDescription = null
+                }
+            return LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                addView(glyph)
+                addView(title)
             }
         }
 
@@ -348,6 +394,29 @@ class ControllerAdapter(
          * ("Controller battery 12%, low, not charging") rather than a static
          * "battery level" label that conveys nothing.
          */
+        /**
+         * v6 brand glyph that names the connection this slot is bound to.
+         * Mirrors ConnectionsActivity.rowGlyphRes() so a slot's silhouette
+         * matches the source row's silhouette at a glance. Satellite rows
+         * carry the satellite glyph; Bluetooth rows carry the Berkana rune.
+         */
+        private fun boundKindGlyph(kind: ConnectionKind, state: LinkState): Int =
+            when (kind) {
+                ConnectionKind.SATELLITE ->
+                    when (state) {
+                        LinkState.Connected -> R.drawable.ic_satellite_connected
+                        LinkState.Saved, LinkState.Stale -> R.drawable.ic_satellite_off
+                        else -> R.drawable.ic_satellite
+                    }
+                ConnectionKind.BLUETOOTH ->
+                    when (state) {
+                        LinkState.Connected -> R.drawable.ic_bluetooth_connected
+                        LinkState.Connecting -> R.drawable.ic_bluetooth_searching
+                        LinkState.Saved, LinkState.Stale -> R.drawable.ic_bluetooth_off
+                        else -> R.drawable.ic_bluetooth
+                    }
+            }
+
         private fun bindBattery(battery: BatteryUi?) {
             val ctx = b.root.context
             if (battery == null) {

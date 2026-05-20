@@ -182,7 +182,8 @@ class ConnectionsActivity : AppCompatActivity() {
     }
 
     private fun satelliteRow(c: ConnectionSummary): View {
-        val rb = inflateRow(binding.llSatelliteList, c.label, c.detail, statusText(c))
+        val rb = inflateRow(binding.llSatelliteList, c.label, c.detail, statusText(c),
+            kind = ConnectionKind.SATELLITE, state = c.live)
         when (c.live) {
             LinkState.Connected, LinkState.Unstable -> {
                 rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = "Disconnect")
@@ -229,6 +230,8 @@ class ConnectionsActivity : AppCompatActivity() {
                 s.name.ifEmpty { s.ip },
                 "${s.ip} • UDP ${s.udpPort}",
                 "Found · ${getString(s.source.labelRes)}",
+                kind = ConnectionKind.SATELLITE,
+                state = LinkState.Found,
             )
         // Resting state by definition: as soon as the user taps Connect the
         // SatelliteConnectionManager calls markConnecting(), which lands the
@@ -241,7 +244,8 @@ class ConnectionsActivity : AppCompatActivity() {
     }
 
     private fun btRow(c: ConnectionSummary): View {
-        val rb = inflateRow(binding.llBtList, c.label, c.detail, statusText(c))
+        val rb = inflateRow(binding.llBtList, c.label, c.detail, statusText(c),
+            kind = ConnectionKind.BLUETOOTH, state = c.live)
         when (c.live) {
             LinkState.Connected, LinkState.Unstable -> {
                 rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = "Disconnect")
@@ -371,6 +375,8 @@ class ConnectionsActivity : AppCompatActivity() {
         title: String,
         detail: String,
         status: String,
+        kind: ConnectionKind,
+        state: LinkState,
     ): RowConnectionBinding {
         val rb = RowConnectionBinding.inflate(layoutInflater, parent, false)
         rb.tvRowTitle.text = title
@@ -389,8 +395,37 @@ class ConnectionsActivity : AppCompatActivity() {
                 else -> R.color.colorMuted
             }
         (rb.dotRow.background as GradientDrawable).setColor(getColor(color))
+        rb.ivRowGlyph.setImageResource(rowGlyphRes(kind, state))
         return rb
     }
+
+    /**
+     * Pick the v6 brand glyph for a row based on the connection kind and its
+     * current LinkState. The icon family lives in res/drawable/ic_{dish,
+     * satellite,bluetooth}{,_connected,_off}.xml — same shapes shipped to the
+     * other Dish clients and the satellite/web dashboard.
+     *
+     * Satellite rows use the satellite glyph (the row IS a satellite server
+     * the phone is reaching out to). Bluetooth rows use the Berkana rune.
+     * The same icon family carries through item_controller.xml so a slot
+     * bound to one of these rows reads visually identically to its source.
+     */
+    private fun rowGlyphRes(kind: ConnectionKind, state: LinkState): Int =
+        when (kind) {
+            ConnectionKind.SATELLITE ->
+                when (state) {
+                    LinkState.Connected -> R.drawable.ic_satellite_connected
+                    LinkState.Saved, LinkState.Stale -> R.drawable.ic_satellite_off
+                    else -> R.drawable.ic_satellite
+                }
+            ConnectionKind.BLUETOOTH ->
+                when (state) {
+                    LinkState.Connected -> R.drawable.ic_bluetooth_connected
+                    LinkState.Connecting -> R.drawable.ic_bluetooth_searching
+                    LinkState.Saved, LinkState.Stale -> R.drawable.ic_bluetooth_off
+                    else -> R.drawable.ic_bluetooth
+                }
+        }
 
     // ── Bluetooth add flow ────────────────────────────────────────────────
 

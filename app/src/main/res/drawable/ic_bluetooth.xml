@@ -1,0 +1,14 @@
+<!-- v6 brand "bluetooth" glyph: single stroked Berkana rune.
+     Mirrors bluetooth-assets/bluetooth.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+    <path
+        android:strokeColor="#8FCFE3"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M18,18 L46,46 L32,58 L32,6 L46,18 L18,46" />
+</vector>
