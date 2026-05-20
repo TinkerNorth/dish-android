@@ -104,6 +104,7 @@ class BluetoothBondMonitor
 
         private companion object {
             const val TAG = "DishBT"
+
             // Public from API 35; raw string keeps us building against earlier SDKs.
             const val ACTION_KEY_MISSING = "android.bluetooth.device.action.KEY_MISSING"
         }

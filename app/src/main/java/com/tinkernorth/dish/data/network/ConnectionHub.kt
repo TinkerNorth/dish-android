@@ -147,8 +147,7 @@ class ConnectionHub
                 _satTypes,
             ) { satMap, btStates, discovered, _, _ ->
                 buildSummaries(satMap, btStates, discoveredIdSet(discovered))
-            }
-                .onEach { _connections.value = it }
+            }.onEach { _connections.value = it }
                 .launchIn(scope)
         }
 

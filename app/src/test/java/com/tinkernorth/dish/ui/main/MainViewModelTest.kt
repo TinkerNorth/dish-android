@@ -8,8 +8,8 @@ import com.tinkernorth.dish.data.network.BatteryValidator.BatterySample
 import com.tinkernorth.dish.data.network.ConnectionEvent
 import com.tinkernorth.dish.data.network.ConnectionHub
 import com.tinkernorth.dish.data.network.ConnectionKind
-import com.tinkernorth.dish.data.network.LinkState
 import com.tinkernorth.dish.data.network.ConnectionSummary
+import com.tinkernorth.dish.data.network.LinkState
 import com.tinkernorth.dish.data.network.SatelliteConnectionManager
 import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
 import io.mockk.every

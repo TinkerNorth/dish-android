@@ -29,8 +29,8 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.data.network.ConnectionEvent
 import com.tinkernorth.dish.data.network.ConnectionHub
 import com.tinkernorth.dish.data.network.ConnectionKind
-import com.tinkernorth.dish.data.network.LinkState
 import com.tinkernorth.dish.data.network.ConnectionSummary
+import com.tinkernorth.dish.data.network.LinkState
 import com.tinkernorth.dish.data.network.RememberedBt
 import com.tinkernorth.dish.data.network.SatelliteConnection
 import com.tinkernorth.dish.data.network.SatelliteConnectionManager
@@ -182,8 +182,15 @@ class ConnectionsActivity : AppCompatActivity() {
     }
 
     private fun satelliteRow(c: ConnectionSummary): View {
-        val rb = inflateRow(binding.llSatelliteList, c.label, c.detail, statusText(c),
-            kind = ConnectionKind.SATELLITE, state = c.live)
+        val rb =
+            inflateRow(
+                binding.llSatelliteList,
+                c.label,
+                c.detail,
+                statusText(c),
+                kind = ConnectionKind.SATELLITE,
+                state = c.live,
+            )
         when (c.live) {
             LinkState.Connected, LinkState.Unstable -> {
                 rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = "Disconnect")
@@ -244,8 +251,15 @@ class ConnectionsActivity : AppCompatActivity() {
     }
 
     private fun btRow(c: ConnectionSummary): View {
-        val rb = inflateRow(binding.llBtList, c.label, c.detail, statusText(c),
-            kind = ConnectionKind.BLUETOOTH, state = c.live)
+        val rb =
+            inflateRow(
+                binding.llBtList,
+                c.label,
+                c.detail,
+                statusText(c),
+                kind = ConnectionKind.BLUETOOTH,
+                state = c.live,
+            )
         when (c.live) {
             LinkState.Connected, LinkState.Unstable -> {
                 rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = "Disconnect")
@@ -410,7 +424,10 @@ class ConnectionsActivity : AppCompatActivity() {
      * The same icon family carries through item_controller.xml so a slot
      * bound to one of these rows reads visually identically to its source.
      */
-    private fun rowGlyphRes(kind: ConnectionKind, state: LinkState): Int =
+    private fun rowGlyphRes(
+        kind: ConnectionKind,
+        state: LinkState,
+    ): Int =
         when (kind) {
             ConnectionKind.SATELLITE ->
                 when (state) {

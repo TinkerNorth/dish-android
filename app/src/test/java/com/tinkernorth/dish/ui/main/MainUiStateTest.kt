@@ -5,8 +5,8 @@ package com.tinkernorth.dish.ui.main
 
 import com.tinkernorth.dish.data.network.BatteryValidator
 import com.tinkernorth.dish.data.network.ConnectionKind
-import com.tinkernorth.dish.data.network.LinkState
 import com.tinkernorth.dish.data.network.ConnectionSummary
+import com.tinkernorth.dish.data.network.LinkState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull

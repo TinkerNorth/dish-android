@@ -19,8 +19,8 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.data.network.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.data.network.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.data.network.ConnectionKind
-import com.tinkernorth.dish.data.network.LinkState
 import com.tinkernorth.dish.data.network.ConnectionSummary
+import com.tinkernorth.dish.data.network.LinkState
 import com.tinkernorth.dish.databinding.ItemControllerBinding
 
 interface SlotActionListener {
@@ -69,6 +69,7 @@ class ControllerAdapter(
     inner class VH(
         private val b: ItemControllerBinding,
     ) : RecyclerView.ViewHolder(b.root) {
+        @Suppress("CyclomaticComplexMethod")
         fun bind(row: Row) {
             val slot = row.slot
             val ctx = b.root.context
@@ -381,26 +382,15 @@ class ControllerAdapter(
             }
 
         /**
-         * Paint the per-slot battery indicator (Task 1.2). Hidden entirely
-         * when [battery] is null (nothing reported yet).
-         *
-         * The icon is a rung of the v6 charge ladder picked by [batteryIcon]:
-         * the fill width — and the "!" on the critical glyph — convey the level
-         * **without relying on colour** (WCAG 1.4.1), so the icon keeps its own
-         * two-tone teal and only the percentage text takes the low-battery red.
-         *
-         * The icon's `contentDescription` is built dynamically from the level
-         * and charging state so a screen reader announces the actual value
-         * ("Controller battery 12%, low, not charging") rather than a static
-         * "battery level" label that conveys nothing.
-         */
-        /**
          * v6 brand glyph that names the connection this slot is bound to.
          * Mirrors ConnectionsActivity.rowGlyphRes() so a slot's silhouette
          * matches the source row's silhouette at a glance. Satellite rows
          * carry the satellite glyph; Bluetooth rows carry the Berkana rune.
          */
-        private fun boundKindGlyph(kind: ConnectionKind, state: LinkState): Int =
+        private fun boundKindGlyph(
+            kind: ConnectionKind,
+            state: LinkState,
+        ): Int =
             when (kind) {
                 ConnectionKind.SATELLITE ->
                     when (state) {

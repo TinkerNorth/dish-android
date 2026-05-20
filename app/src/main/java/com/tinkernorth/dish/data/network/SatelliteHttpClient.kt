@@ -72,9 +72,11 @@ internal object SatelliteHttpClient {
                     override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
                 },
             )
-        SSLContext.getInstance("TLS").apply {
-            init(null, trustAll, SecureRandom())
-        }.socketFactory
+        SSLContext
+            .getInstance("TLS")
+            .apply {
+                init(null, trustAll, SecureRandom())
+            }.socketFactory
     }
 
     /** Hostname verifier that accepts any hostname (the cert is self-signed). */
@@ -154,6 +156,7 @@ internal object SatelliteHttpClient {
      * failures as JSON `{error}` bodies, so the body is the useful payload
      * regardless of status code.
      */
+    @Suppress("NestedBlockDepth")
     private fun request(
         method: String,
         ip: String,

@@ -354,15 +354,42 @@ class GamepadTouchView
             val first: Drawable?
             val second: Drawable?
             when (s.hatSwitch) {
-                HAT_N -> { first = icDpadUp; second = null }
-                HAT_NE -> { first = icDpadUp; second = icDpadRight }
-                HAT_E -> { first = icDpadRight; second = null }
-                HAT_SE -> { first = icDpadDown; second = icDpadRight }
-                HAT_S -> { first = icDpadDown; second = null }
-                HAT_SW -> { first = icDpadDown; second = icDpadLeft }
-                HAT_W -> { first = icDpadLeft; second = null }
-                HAT_NW -> { first = icDpadUp; second = icDpadLeft }
-                else -> { first = null; second = null }
+                HAT_N -> {
+                    first = icDpadUp
+                    second = null
+                }
+                HAT_NE -> {
+                    first = icDpadUp
+                    second = icDpadRight
+                }
+                HAT_E -> {
+                    first = icDpadRight
+                    second = null
+                }
+                HAT_SE -> {
+                    first = icDpadDown
+                    second = icDpadRight
+                }
+                HAT_S -> {
+                    first = icDpadDown
+                    second = null
+                }
+                HAT_SW -> {
+                    first = icDpadDown
+                    second = icDpadLeft
+                }
+                HAT_W -> {
+                    first = icDpadLeft
+                    second = null
+                }
+                HAT_NW -> {
+                    first = icDpadUp
+                    second = icDpadLeft
+                }
+                else -> {
+                    first = null
+                    second = null
+                }
             }
 
             if (first == null) return
