@@ -5,6 +5,7 @@ package com.tinkernorth.dish
 
 import android.app.Application
 import androidx.lifecycle.ProcessLifecycleOwner
+import com.tinkernorth.dish.data.network.BluetoothBondMonitor
 import com.tinkernorth.dish.data.network.BluetoothGamepadBridge
 import com.tinkernorth.dish.data.network.ConnectionForegroundObserver
 import com.tinkernorth.dish.data.network.PhysicalBatterySource
@@ -35,6 +36,8 @@ class DishApplication : Application() {
     @Inject lateinit var wakeStateController: WakeStateController
 
     @Inject lateinit var btRegistry: BluetoothGamepadRegistry
+
+    @Inject lateinit var bluetoothBondMonitor: BluetoothBondMonitor
 
     override fun onCreate() {
         super.onCreate()
@@ -73,6 +76,10 @@ class DishApplication : Application() {
         // physical-gamepad reports routed to a BT slot; install the registry
         // here (process-scoped) so it's ready before any input arrives.
         BluetoothGamepadBridge.install(btRegistry)
+        // Catch KEY_MISSING + unexpected bond loss on remembered hosts and
+        // surface a Toast — without it the HID profile just hangs on Registered
+        // forever with no signal to the user that the peer dropped its key.
+        lifecycle.addObserver(bluetoothBondMonitor)
         // Rumble flows back from the satellite (game → virtual pad → wire).
         // RumbleBridge owns the phone's VibratorManager / Vibrator and is the
         // single dispatch target for satellite_jni.cpp::receiveAck. Routed
