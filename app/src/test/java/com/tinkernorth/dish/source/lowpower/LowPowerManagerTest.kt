@@ -3,6 +3,8 @@
 
 package com.tinkernorth.dish.source.lowpower
 
+import android.content.Context
+import android.content.res.Resources
 import android.os.Handler
 import android.os.Looper
 import android.view.View
@@ -11,6 +13,7 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.tinkernorth.dish.R
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
@@ -56,6 +59,21 @@ class LowPowerManagerTest {
                 every { attributes } returns params
             }
         statusView = mockk(relaxed = true)
+        // updateStatus() resolves the status copy from string/plurals resources
+        // via statusView.context. Stub the chain so the assertions can match
+        // the localized format the production code emits.
+        val context = mockk<Context>(relaxed = true)
+        val resources = mockk<Resources>(relaxed = true)
+        every { statusView.context } returns context
+        every { context.resources } returns resources
+        every { context.getString(R.string.low_power_status_idle) } returns "Idle"
+        every {
+            resources.getQuantityString(R.plurals.low_power_status_bound, any<Int>(), any<Int>())
+        } answers {
+            val count = secondArg<Int>()
+            val noun = if (count == 1) "controller" else "controllers"
+            "Bound · $count $noun"
+        }
         val countdownBanner = mockk<LinearLayout>(relaxed = true)
         val countdownSeconds = mockk<TextView>(relaxed = true)
         val overlay = mockk<FrameLayout>(relaxed = true)

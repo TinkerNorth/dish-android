@@ -26,7 +26,7 @@
             android:paddingTop="24dp">
 
             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="DISH" android:textColor="@color/colorPrimary" android:textSize="24sp"
+                android:text="@string/brand_name" android:textColor="@color/colorPrimary" android:textSize="24sp"
                 android:textStyle="bold" android:letterSpacing="0.12" android:layout_marginBottom="2dp" />
 
             <!-- Connections summary card -->
@@ -57,7 +57,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="CONNECTIONS"
+                            android:text="@string/section_connections"
                             android:textColor="@color/colorPrimary"
                             android:textSize="11sp"
                             android:fontFamily="monospace"
@@ -67,7 +67,7 @@
                             android:id="@+id/tvConnectionsSummary"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="No connections yet"
+                            android:text="@string/dashboard_connections_empty"
                             android:textColor="@color/colorOnSurface"
                             android:textSize="14sp"
                             android:layout_marginTop="2dp" />
@@ -78,13 +78,13 @@
                         style="@style/Widget.Dish.Button.Outlined"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Manage"
+                        android:text="@string/action_manage"
                         android:textAllCaps="false" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="CONTROLLERS" android:textColor="@color/colorPrimary"
+                android:text="@string/section_controllers" android:textColor="@color/colorPrimary"
                 android:textSize="11sp" android:fontFamily="monospace" android:letterSpacing="0.12"
                 android:paddingTop="14dp" android:paddingBottom="8dp" />
         </LinearLayout>

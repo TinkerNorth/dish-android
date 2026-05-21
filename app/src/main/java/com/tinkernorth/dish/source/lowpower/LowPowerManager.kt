@@ -12,6 +12,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.lifecycle.LifecycleOwner
+import com.tinkernorth.dish.R
 import com.tinkernorth.dish.architecture.abstracts.AbstractStateSource
 import java.util.Calendar
 import java.util.Locale
@@ -167,14 +168,15 @@ class LowPowerManager(
     private fun updateStatus() {
         val v = views ?: return
         val active = activeControllerCount()
+        val ctx = v.tvLowPowerStatus.context
         v.tvLowPowerStatus.text =
             if (active > 0) {
                 // "Bound" mirrors the bind/unbind concept on the dashboard;
                 // we previously said "Streaming" which conflated the routing
                 // state with the on-the-wire transmission state.
-                "Bound · $active controller${if (active > 1) "s" else ""}"
+                ctx.resources.getQuantityString(R.plurals.low_power_status_bound, active, active)
             } else {
-                "Idle"
+                ctx.getString(R.string.low_power_status_idle)
             }
     }
 

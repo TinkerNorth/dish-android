@@ -1,5 +1,8 @@
 <resources>
     <string name="app_name">Dish</string>
+    <!-- Brand wordmark — dashboard header and the native-load fallback screen.
+         Treated as a non-translatable brand asset. -->
+    <string name="brand_name" translatable="false">DISH</string>
 
     <!-- MainActivity dashboard. Vocabulary aligns with LinkState chips:
          a remembered/paired entry is "paired"; a Connected entry is "online". -->
@@ -8,6 +11,105 @@
     <string name="status_connected_of">%1$d of %2$d online</string>
     <string name="toast_pairing_needed">Pairing needed — open Connections</string>
     <string name="toast_bind_first">Bind a connection first</string>
+
+    <!-- Dashboard chrome (activity_main.xml). -->
+    <string name="section_connections">CONNECTIONS</string>
+    <string name="section_controllers">CONTROLLERS</string>
+    <string name="dashboard_connections_empty">No connections yet</string>
+    <string name="action_manage">Manage</string>
+
+    <!-- Connections page (activity_connections.xml). -->
+    <string name="title_connections">Connections</string>
+    <string name="section_satellites">SATELLITES</string>
+    <string name="section_bluetooth_hosts">BLUETOOTH HOSTS</string>
+    <string name="action_scan">Scan</string>
+    <string name="action_scanning">Scanning…</string>
+    <string name="action_add">Add</string>
+    <string name="bt_hosts_empty">No remembered hosts — tap Add to register a new one</string>
+
+    <!-- row_connection.xml + ConnectionsActivity dynamic row labels. -->
+    <string name="action_connect">Connect</string>
+    <string name="action_disconnect">Disconnect</string>
+    <string name="action_repair_short">Re-pair</string>
+    <string name="action_forget_short">Forget</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="bt_row_pair_from_host">Pair from host</string>
+    <string name="bt_row_acquiring">Acquiring…</string>
+    <string name="bt_row_waiting">Waiting…</string>
+
+    <!-- Confirm-forget Bluetooth host dialog. -->
+    <string name="dialog_forget_bt_title">Forget %1$s?</string>
+    <string name="dialog_forget_bt_message">Dish will stop remembering this host. The phone keeps the system-level pairing record — open Bluetooth settings to fully unpair.</string>
+    <string name="dialog_forget_bt_positive">Open settings</string>
+    <string name="dialog_forget_bt_negative">Not now</string>
+
+    <!-- Bluetooth-profile picker dialog. -->
+    <string name="dialog_controller_profile_title">Controller Profile</string>
+
+    <!-- Discoverability-expired banner posted from ConnectionsActivity. -->
+    <string name="notif_discoverability_expired_title">Discoverability expired</string>
+    <string name="notif_discoverability_expired_body">No host paired in time. Re-extend to keep trying.</string>
+    <string name="action_re_extend">Re-extend</string>
+
+    <!-- PIN dialog subtitle when a server name is known. -->
+    <string name="pair_dialog_subtitle_named">Enter the PIN shown on %1$s.</string>
+    <!-- Generic fallback used in the server-unreachable banner when no name
+         is in hand yet. -->
+    <string name="satellite_fallback_name">satellite</string>
+
+    <!-- Item controller card (item_controller.xml). -->
+    <string name="slot_output_to_label">Output to</string>
+    <string name="action_unbind">Unbind</string>
+    <string name="action_open_gamepad">Open Gamepad</string>
+    <string name="desc_open_gamepad">Open gamepad</string>
+    <string name="desc_expand">Expand</string>
+
+    <!-- ControllerAdapter slot-status text (renders below the slot name). -->
+    <string name="slot_status_disconnecting">Disconnecting… %1$ds</string>
+    <string name="slot_status_routing_to">→ %1$s</string>
+    <string name="slot_status_bound">Bound</string>
+    <string name="slot_status_tap_to_bind">Tap to bind</string>
+
+    <!-- ControllerAdapter per-slot picker rows: empty state + inline status. -->
+    <string name="picker_empty_no_connections">No connections yet — tap Manage above</string>
+    <string name="picker_empty_no_available">No connections available right now</string>
+    <string name="picker_status_online"> • online</string>
+    <string name="picker_status_connecting"> • connecting…</string>
+    <string name="picker_status_offline"> • offline</string>
+    <string name="picker_status_needs_pairing"> • needs pairing</string>
+    <string name="picker_detail_bound_here"> • bound here</string>
+    <string name="picker_detail_in_use"> • in use</string>
+
+    <!-- Per-slot controller-type toggle. Brand names are not translated. -->
+    <string name="picker_type_label">Type</string>
+    <string name="picker_type_xbox" translatable="false">Xbox</string>
+    <string name="picker_type_playstation" translatable="false">PlayStation</string>
+
+    <!-- LinkState chip / row-status vocabulary, shared across UI. -->
+    <string name="chip_status_found">Found</string>
+    <string name="chip_status_needs_pairing">Needs pairing</string>
+    <string name="chip_status_offline">Offline</string>
+    <string name="chip_status_ready">Ready</string>
+    <string name="chip_status_connecting">Connecting…</string>
+    <string name="chip_status_online">Online</string>
+    <string name="chip_status_unstable">Unsteady</string>
+
+    <!-- Gamepad overlay (activity_gamepad_overlay.xml + GamepadOverlayActivity). -->
+    <string name="overlay_status_streaming">Streaming</string>
+    <string name="overlay_status_unknown">Unknown connection</string>
+    <string name="overlay_status_not_connected">Not connected</string>
+    <string name="overlay_action_back">BACK</string>
+
+    <!-- Default slot / connection labels. -->
+    <string name="default_virtual_controller_name">Virtual Controller</string>
+    <string name="default_bluetooth_gamepad_label">Bluetooth gamepad</string>
+
+    <!-- Bluetooth row subtitle ("<profile> • <MAC>") and transient-slot detail
+         text shown while a new pairing is in flight. -->
+    <string name="bt_row_detail">%1$s • %2$s</string>
+    <string name="bt_transient_ready_to_pair">Ready to pair — find this device on your host</string>
+    <string name="bt_transient_acquiring">Acquiring HID profile…</string>
+    <string name="bt_transient_idle">Idle</string>
 
     <!-- Touch-overlay phone-motion (gyro/accel) indicator. States: streaming,
          paused (overlay backgrounded), not-forwarded (Bluetooth connection
@@ -38,6 +140,11 @@
     <string name="battery_state_charging">charging</string>
     <string name="battery_state_low">low, not charging</string>
     <string name="battery_state_discharging">on battery</string>
+
+    <!-- Discovered-satellite row: subtitle ("IP · UDP port") and status chip
+         ("Found · <source>"). -->
+    <string name="discovered_row_detail">%1$s • UDP %2$d</string>
+    <string name="discovered_row_status">Found · %1$s</string>
 
     <!-- Connections list: how a discovered satellite was found. Shown in the
          row subtitle after "Found · ". -->
@@ -109,4 +216,42 @@
     <!-- Native-load fatal fallback. -->
     <string name="fatal_native_title">This build won\'t run on your device</string>
     <string name="fatal_native_body">The Dish native library couldn\'t load. Please reinstall from the Play Store, or contact support.</string>
+
+    <!-- Low-power overlay (overlay_low_power.xml + LowPowerManager). -->
+    <string name="low_power_in">LOW POWER IN</string>
+    <string name="low_power">LOW POWER</string>
+    <string name="low_power_seconds_suffix">s</string>
+    <string name="low_power_status_idle">Idle</string>
+    <string name="low_power_tap_to_wake">TAP TO WAKE</string>
+    <plurals name="low_power_status_bound">
+        <item quantity="one">Bound · %1$d controller</item>
+        <item quantity="other">Bound · %1$d controllers</item>
+    </plurals>
+
+    <!-- Numeric placeholders rendered before the runtime value lands. Kept as
+         resources (translatable=false) so layout previews and lint pass, but
+         the runtime always overwrites them. -->
+    <string name="low_power_countdown_placeholder" translatable="false">5</string>
+    <string name="low_power_clock_placeholder" translatable="false">00:00</string>
+
+    <!-- Telemetry placeholder labels (debug card). Technical jargon, not translated. -->
+    <string name="telemetry_title" translatable="false">TELEMETRY</string>
+    <string name="telemetry_evt_placeholder" translatable="false">EVT —</string>
+    <string name="telemetry_smp_placeholder" translatable="false">SMP —</string>
+    <string name="telemetry_snd_placeholder" translatable="false">SND —</string>
+    <string name="telemetry_total_placeholder" translatable="false">TOTAL 0</string>
+    <string name="telemetry_lx_placeholder" translatable="false">LX —</string>
+    <string name="telemetry_ly_placeholder" translatable="false">LY —</string>
+    <string name="telemetry_rx_placeholder" translatable="false">RX —</string>
+    <string name="telemetry_ry_placeholder" translatable="false">RY —</string>
+    <string name="telemetry_lt_placeholder" translatable="false">LT —</string>
+    <string name="telemetry_rt_placeholder" translatable="false">RT —</string>
+    <string name="telemetry_btn_placeholder" translatable="false">BTN 0000</string>
+
+    <!-- Legacy / unused pairing layout strings — moved out of literals to keep
+         the layout tree clean. dialog_pairing.xml itself is not currently
+         inflated anywhere; kept until removed in a future cleanup. -->
+    <string name="pairing_dialog_legacy_title">Pair with Server</string>
+    <string name="pairing_dialog_legacy_message">Enter the PIN shown on your PC screen:</string>
+    <string name="pairing_dialog_legacy_pin_hint" translatable="false">0000</string>
 </resources>

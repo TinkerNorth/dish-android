@@ -140,20 +140,20 @@ class ConnectionGlyphsTest {
 
     @Test
     fun `chip text matches the shared LinkState vocabulary`() {
-        assertEquals("Found", statusChipText(LinkState.Found))
-        assertEquals("Needs pairing", statusChipText(LinkState.Stale))
-        assertEquals("Offline", statusChipText(LinkState.Saved))
-        assertEquals("Ready", statusChipText(LinkState.Ready))
-        assertEquals("Connecting…", statusChipText(LinkState.Connecting))
-        assertEquals("Online", statusChipText(LinkState.Connected))
-        assertEquals("Unsteady", statusChipText(LinkState.Unstable))
+        assertEquals(R.string.chip_status_found, statusChipTextRes(LinkState.Found))
+        assertEquals(R.string.chip_status_needs_pairing, statusChipTextRes(LinkState.Stale))
+        assertEquals(R.string.chip_status_offline, statusChipTextRes(LinkState.Saved))
+        assertEquals(R.string.chip_status_ready, statusChipTextRes(LinkState.Ready))
+        assertEquals(R.string.chip_status_connecting, statusChipTextRes(LinkState.Connecting))
+        assertEquals(R.string.chip_status_online, statusChipTextRes(LinkState.Connected))
+        assertEquals(R.string.chip_status_unstable, statusChipTextRes(LinkState.Unstable))
     }
 
     @Test
     fun `every LinkState has a chip text`() {
         // Lock in exhaustiveness: a new LinkState that doesn't update
-        // statusChipText would throw NoWhenBranchMatchedException.
-        for (state in LinkState.entries) statusChipText(state)
+        // statusChipTextRes would throw NoWhenBranchMatchedException.
+        for (state in LinkState.entries) statusChipTextRes(state)
     }
 
     @Test

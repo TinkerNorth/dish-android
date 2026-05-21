@@ -190,8 +190,8 @@ class ConnectionsActivity : AppCompatActivity() {
                 satellite.isScanning.collect { scanning ->
                     binding.btnSatelliteScan.setLoading(
                         loading = scanning,
-                        loadingText = "Scanning…",
-                        restingText = "Scan",
+                        loadingText = getString(R.string.action_scanning),
+                        restingText = getString(R.string.action_scan),
                     )
                 }
             }
@@ -348,20 +348,20 @@ class ConnectionsActivity : AppCompatActivity() {
                 binding.llSatelliteList,
                 c.label,
                 c.detail,
-                statusChipText(c.live),
+                statusChipText(this, c.live),
                 kind = ConnectionKind.SATELLITE,
                 state = c.live,
             )
         when (c.live) {
             LinkState.Connected, LinkState.Unstable -> {
-                rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = "Disconnect")
+                rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = getString(R.string.action_disconnect))
                 rb.btnRowAction.setOnClickListener { satellite.disconnect(c.id) }
             }
             LinkState.Connecting -> {
                 rb.btnRowAction.setLoading(
                     loading = true,
-                    loadingText = "Connecting…",
-                    restingText = "Connect",
+                    loadingText = getString(R.string.chip_status_connecting),
+                    restingText = getString(R.string.action_connect),
                 )
                 rb.btnRowAction.setOnClickListener(null)
             }
@@ -369,7 +369,7 @@ class ConnectionsActivity : AppCompatActivity() {
                 // The auto-reconnect path discovered the server has forgotten
                 // us. Tapping the row offers a PIN entry directly rather than
                 // an opaque "Connect" that would re-run the same dead pair.
-                rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = "Re-pair")
+                rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = getString(R.string.action_repair_short))
                 rb.btnRowAction.setOnClickListener {
                     val remembered =
                         satellite.remembered().firstOrNull { it.id == c.id } ?: return@setOnClickListener
@@ -377,7 +377,7 @@ class ConnectionsActivity : AppCompatActivity() {
                 }
             }
             LinkState.Saved, LinkState.Ready, LinkState.Found -> {
-                rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = "Connect")
+                rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = getString(R.string.action_connect))
                 rb.btnRowAction.setOnClickListener {
                     val remembered = satellite.remembered().firstOrNull { it.id == c.id } ?: return@setOnClickListener
                     satellite.connect(remembered.toDiscovered())
@@ -385,7 +385,7 @@ class ConnectionsActivity : AppCompatActivity() {
             }
         }
         rb.btnRowSecondary.visibility = View.VISIBLE
-        rb.btnRowSecondary.text = "Forget"
+        rb.btnRowSecondary.text = getString(R.string.action_forget_short)
         rb.btnRowSecondary.setOnClickListener { satellite.forget(c.id) }
         return rb.root
     }
@@ -395,12 +395,12 @@ class ConnectionsActivity : AppCompatActivity() {
             inflateRow(
                 binding.llSatelliteList,
                 s.name.ifEmpty { s.ip },
-                "${s.ip} • UDP ${s.udpPort}",
-                "Found · ${getString(s.source.labelRes)}",
+                getString(R.string.discovered_row_detail, s.ip, s.udpPort),
+                getString(R.string.discovered_row_status, getString(s.source.labelRes)),
                 kind = ConnectionKind.SATELLITE,
                 state = LinkState.Found,
             )
-        rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = "Connect")
+        rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = getString(R.string.action_connect))
         rb.btnRowAction.setOnClickListener { satellite.connect(s) }
         return rb.root
     }
@@ -411,27 +411,27 @@ class ConnectionsActivity : AppCompatActivity() {
                 binding.llBtList,
                 c.label,
                 c.detail,
-                statusChipText(c.live),
+                statusChipText(this, c.live),
                 kind = ConnectionKind.BLUETOOTH,
                 state = c.live,
             )
         when (c.live) {
             LinkState.Connected, LinkState.Unstable -> {
-                rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = "Disconnect")
+                rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = getString(R.string.action_disconnect))
                 rb.btnRowAction.setOnClickListener { btRegistry.stop(c.id) }
             }
             LinkState.Connecting -> {
                 val state = btRegistry.state(c.id)
                 val label =
                     when {
-                        state.registered -> "Pair from host"
-                        state.acquiring -> "Acquiring…"
-                        else -> "Waiting…"
+                        state.registered -> getString(R.string.bt_row_pair_from_host)
+                        state.acquiring -> getString(R.string.bt_row_acquiring)
+                        else -> getString(R.string.bt_row_waiting)
                     }
                 rb.btnRowAction.setLoading(
                     loading = true,
                     loadingText = label,
-                    restingText = "Connect",
+                    restingText = getString(R.string.action_connect),
                 )
                 rb.btnRowAction.setOnClickListener(null)
             }
@@ -439,14 +439,14 @@ class ConnectionsActivity : AppCompatActivity() {
                 // KEY_MISSING or BOND_NONE on this host. Action deep-links to
                 // the OS device-details screen where the user can Forget on
                 // the OS side and re-pair from there.
-                rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = "Re-pair")
+                rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = getString(R.string.action_repair_short))
                 rb.btnRowAction.setOnClickListener {
                     val entry = store.rememberedBt().firstOrNull { it.id == c.id } ?: return@setOnClickListener
                     openBluetoothDeviceDetails(entry.mac)
                 }
             }
             LinkState.Saved, LinkState.Ready, LinkState.Found -> {
-                rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = "Connect")
+                rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = getString(R.string.action_connect))
                 rb.btnRowAction.setOnClickListener {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) btRegistry.tryAutoReconnect(c.id)
                 }
@@ -455,7 +455,7 @@ class ConnectionsActivity : AppCompatActivity() {
         rb.btnRowSecondary.visibility = View.VISIBLE
         val rememberedEntry = store.rememberedBt().firstOrNull { it.id == c.id }
         val isRemembered = rememberedEntry != null
-        rb.btnRowSecondary.text = if (isRemembered) "Forget" else "Cancel"
+        rb.btnRowSecondary.text = getString(if (isRemembered) R.string.action_forget_short else R.string.action_cancel)
         rb.btnRowSecondary.setOnClickListener {
             if (isRemembered) {
                 confirmForgetBt(c.id, rememberedEntry)
@@ -472,16 +472,14 @@ class ConnectionsActivity : AppCompatActivity() {
         entry: RememberedBt,
     ) {
         MaterialAlertDialogBuilder(this)
-            .setTitle("Forget ${entry.name}?")
-            .setMessage(
-                "Dish will stop remembering this host. The phone keeps the system-level " +
-                    "pairing record — open Bluetooth settings to fully unpair.",
-            ).setPositiveButton("Open settings") { _, _ ->
+            .setTitle(getString(R.string.dialog_forget_bt_title, entry.name))
+            .setMessage(getString(R.string.dialog_forget_bt_message))
+            .setPositiveButton(R.string.dialog_forget_bt_positive) { _, _ ->
                 commitForgetBt(id)
                 openBluetoothDeviceDetails(entry.mac)
-            }.setNegativeButton("Not now") { _, _ ->
+            }.setNegativeButton(R.string.dialog_forget_bt_negative) { _, _ ->
                 commitForgetBt(id)
-            }.setNeutralButton("Cancel", null)
+            }.setNeutralButton(R.string.action_cancel, null)
             .show()
     }
 
@@ -549,9 +547,9 @@ class ConnectionsActivity : AppCompatActivity() {
         val profiles = BluetoothGamepad.GamepadProfile.entries
         val names = profiles.map { it.profileName }.toTypedArray()
         MaterialAlertDialogBuilder(this)
-            .setTitle("Controller Profile")
+            .setTitle(R.string.dialog_controller_profile_title)
             .setItems(names) { _, which -> startBtRegistration(profiles[which]) }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.action_cancel, null)
             .show()
     }
 
@@ -596,7 +594,7 @@ class ConnectionsActivity : AppCompatActivity() {
                 dishTitle = getString(R.string.pair_dialog_title)
                 dishSubtitle =
                     if (server.name.isNotEmpty()) {
-                        "Enter the PIN shown on ${server.name}."
+                        getString(R.string.pair_dialog_subtitle_named, server.name)
                     } else {
                         getString(R.string.pair_dialog_subtitle)
                     }
@@ -628,7 +626,7 @@ class ConnectionsActivity : AppCompatActivity() {
         }
         notifications.error(
             glyph = R.drawable.ic_satellite_off,
-            title = getString(R.string.notif_server_unreachable_title, pairing?.name ?: "satellite"),
+            title = getString(R.string.notif_server_unreachable_title, pairing?.name ?: getString(R.string.satellite_fallback_name)),
             body = message,
         )
     }
@@ -814,11 +812,11 @@ class ConnectionsActivity : AppCompatActivity() {
                 if (state.connected) return@launch
                 notifications.warn(
                     glyph = R.drawable.ic_bluetooth_off,
-                    title = "Discoverability expired",
-                    body = "No host paired in time. Re-extend to keep trying.",
+                    title = getString(R.string.notif_discoverability_expired_title),
+                    body = getString(R.string.notif_discoverability_expired_body),
                     action =
                         DishNotification.Action(
-                            label = "Re-extend",
+                            label = getString(R.string.action_re_extend),
                         ) {
                             relaunchDiscoverabilityFor(connId)
                         },

@@ -90,7 +90,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:textAllCaps="false"
-                android:text="Connect" />
+                android:text="@string/action_connect" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnRowSecondary"
@@ -100,7 +100,7 @@
                 android:layout_weight="1"
                 android:layout_marginStart="8dp"
                 android:textAllCaps="false"
-                android:text="Forget"
+                android:text="@string/action_forget_short"
                 android:visibility="gone" />
         </LinearLayout>
     </LinearLayout>

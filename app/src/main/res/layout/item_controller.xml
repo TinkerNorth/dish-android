@@ -113,7 +113,7 @@
                 android:layout_height="28dp"
                 android:padding="2dp"
                 android:src="@drawable/ic_open_gamepad"
-                android:contentDescription="Open gamepad"
+                android:contentDescription="@string/desc_open_gamepad"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:clickable="true"
                 android:focusable="true"
@@ -126,7 +126,7 @@
                 android:layout_height="20dp"
                 android:layout_marginStart="6dp"
                 android:src="@drawable/ic_chevron_down"
-                android:contentDescription="Expand"
+                android:contentDescription="@string/desc_expand"
                 app:tint="@color/colorMuted" />
         </LinearLayout>
 
@@ -143,7 +143,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Output to"
+                android:text="@string/slot_output_to_label"
                 android:textColor="@color/colorMuted"
                 android:textSize="11sp"
                 android:fontFamily="monospace"
@@ -162,7 +162,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Unbind"
+                android:text="@string/action_unbind"
                 android:textAllCaps="false"
                 android:visibility="gone" />
 
@@ -172,7 +172,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Open Gamepad"
+                android:text="@string/action_open_gamepad"
                 android:textAllCaps="false"
                 app:icon="@drawable/ic_open_gamepad"
                 app:iconGravity="textStart"

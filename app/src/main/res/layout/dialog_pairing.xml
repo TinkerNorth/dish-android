@@ -10,7 +10,7 @@
         android:id="@+id/tv_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Pair with Server"
+        android:text="@string/pairing_dialog_legacy_title"
         android:textColor="@color/colorOnSurface"
         android:textSize="20sp"
         android:textStyle="bold" />
@@ -20,7 +20,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="Enter the PIN shown on your PC screen:"
+        android:text="@string/pairing_dialog_legacy_message"
         android:textColor="@color/colorMuted" />
 
     <EditText
@@ -28,7 +28,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:hint="0000"
+        android:hint="@string/pairing_dialog_legacy_pin_hint"
         android:inputType="number"
         android:maxLength="4"
         android:gravity="center"

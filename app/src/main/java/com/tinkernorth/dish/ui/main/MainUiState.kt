@@ -83,7 +83,11 @@ data class ControllerSlot(
 data class MainUiState(
     val slots: List<ControllerSlot> =
         listOf(
-            ControllerSlot(id = VIRTUAL_SLOT_ID, inputType = SlotInputType.VIRTUAL, name = "Virtual Controller"),
+            // Placeholder name; the real localised label is set by the
+            // ViewModel from R.string.default_virtual_controller_name on the
+            // first state emission. Kept blank here so no English literal
+            // survives in the data layer.
+            ControllerSlot(id = VIRTUAL_SLOT_ID, inputType = SlotInputType.VIRTUAL, name = ""),
         ),
     val connections: List<ConnectionSummary> = emptyList(),
 ) {

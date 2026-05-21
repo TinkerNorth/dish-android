@@ -173,14 +173,14 @@ class ControllerAdapter(
                     addLabel(
                         b.llConnectionList,
                         dp,
-                        "No connections yet — tap Manage above",
+                        ctx.getString(R.string.picker_empty_no_connections),
                         R.color.colorMuted,
                     )
                 visible.isEmpty() ->
                     addLabel(
                         b.llConnectionList,
                         dp,
-                        "No connections available right now",
+                        ctx.getString(R.string.picker_empty_no_available),
                         R.color.colorMuted,
                     )
                 else ->
@@ -293,10 +293,10 @@ class ControllerAdapter(
             // so the bound row reads as disconnected rather than silent.
             val statusSuffix =
                 when (c.live) {
-                    LinkState.Connected, LinkState.Unstable -> " • online"
-                    LinkState.Connecting -> " • connecting…"
-                    LinkState.Saved -> " • offline"
-                    LinkState.Stale -> " • needs pairing"
+                    LinkState.Connected, LinkState.Unstable -> ctx.getString(R.string.picker_status_online)
+                    LinkState.Connecting -> ctx.getString(R.string.picker_status_connecting)
+                    LinkState.Saved -> ctx.getString(R.string.picker_status_offline)
+                    LinkState.Stale -> ctx.getString(R.string.picker_status_needs_pairing)
                     LinkState.Found, LinkState.Ready -> ""
                 }
             val title =
@@ -340,8 +340,8 @@ class ControllerAdapter(
                 buildString {
                     append(c.detail)
                     when {
-                        bound -> append(" • bound here")
-                        ownedByOther -> append(" • in use")
+                        bound -> append(ctx.getString(R.string.picker_detail_bound_here))
+                        ownedByOther -> append(ctx.getString(R.string.picker_detail_in_use))
                     }
                 }
             return TextView(ctx).apply {
@@ -371,7 +371,7 @@ class ControllerAdapter(
                 }
             container.addView(
                 TextView(ctx).apply {
-                    text = "Type"
+                    text = ctx.getString(R.string.picker_type_label)
                     setTextColor(ctx.getColor(R.color.colorMuted))
                     textSize = 11f
                     typeface = Typeface.MONOSPACE
@@ -390,7 +390,7 @@ class ControllerAdapter(
                 typeChip(
                     ctx,
                     dp,
-                    label = "Xbox",
+                    label = ctx.getString(R.string.picker_type_xbox),
                     selected = current == CONTROLLER_TYPE_XBOX,
                 ) { listener.onChangeDeviceType(slot.id, c.id, CONTROLLER_TYPE_XBOX) },
             )
@@ -398,7 +398,7 @@ class ControllerAdapter(
                 typeChip(
                     ctx,
                     dp,
-                    label = "PlayStation",
+                    label = ctx.getString(R.string.picker_type_playstation),
                     selected = current == CONTROLLER_TYPE_PLAYSTATION,
                 ) { listener.onChangeDeviceType(slot.id, c.id, CONTROLLER_TYPE_PLAYSTATION) },
             )
@@ -504,15 +504,17 @@ class ControllerAdapter(
             return ctx.getString(R.string.battery_desc, levelText, ctx.getString(stateRes))
         }
 
-        private fun slotStatusText(s: ControllerSlot) =
-            when {
-                s.isDisconnecting -> "Disconnecting… ${s.disconnectTimeLeft}s"
+        private fun slotStatusText(s: ControllerSlot): String {
+            val ctx = b.root.context
+            return when {
+                s.isDisconnecting -> ctx.getString(R.string.slot_status_disconnecting, s.disconnectTimeLeft)
                 s.boundStatus?.live == LinkState.Connected ->
-                    "→ ${s.boundStatus.label}"
-                s.boundStatus?.live == LinkState.Connecting -> "Connecting…"
-                s.boundConnectionId != null -> "Bound"
-                else -> "Tap to bind"
+                    ctx.getString(R.string.slot_status_routing_to, s.boundStatus.label)
+                s.boundStatus?.live == LinkState.Connecting -> ctx.getString(R.string.chip_status_connecting)
+                s.boundConnectionId != null -> ctx.getString(R.string.slot_status_bound)
+                else -> ctx.getString(R.string.slot_status_tap_to_bind)
             }
+        }
 
         private fun initDot(v: View) {
             if (v.background is GradientDrawable) return

@@ -21,7 +21,7 @@
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
             android:background="@color/colorBackground"
-            app:title="Connections"
+            app:title="@string/title_connections"
             app:titleTextColor="@color/colorOnSurface"
             app:navigationIcon="@android:drawable/ic_menu_revert" />
 
@@ -58,7 +58,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="SATELLITES"
+                        android:text="@string/section_satellites"
                         android:textColor="@color/colorPrimary"
                         android:textSize="11sp"
                         android:fontFamily="monospace"
@@ -69,7 +69,7 @@
                         style="@style/Widget.Dish.Button.Outlined"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Scan"
+                        android:text="@string/action_scan"
                         android:textAllCaps="false" />
                 </LinearLayout>
 
@@ -84,7 +84,7 @@
                     android:id="@+id/tvSatelliteEmpty"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Tap Scan to find satellites on your network"
+                    android:text="@string/discovery_empty_never_scanned"
                     android:textColor="@color/colorMuted"
                     android:textSize="12sp"
                     android:paddingVertical="12dp"
@@ -114,7 +114,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="BLUETOOTH HOSTS"
+                        android:text="@string/section_bluetooth_hosts"
                         android:textColor="@color/colorPrimary"
                         android:textSize="11sp"
                         android:fontFamily="monospace"
@@ -125,7 +125,7 @@
                         style="@style/Widget.Dish.Button.Outlined"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Add"
+                        android:text="@string/action_add"
                         android:textAllCaps="false" />
                 </LinearLayout>
 
@@ -140,7 +140,7 @@
                     android:id="@+id/tvBtEmpty"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="No remembered hosts — tap Add to register a new one"
+                    android:text="@string/bt_hosts_empty"
                     android:textColor="@color/colorMuted"
                     android:textSize="12sp"
                     android:paddingVertical="12dp" />

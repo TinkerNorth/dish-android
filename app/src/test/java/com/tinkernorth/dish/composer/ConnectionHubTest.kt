@@ -3,6 +3,7 @@
 
 package com.tinkernorth.dish.composer
 
+import android.content.Context
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedBt
@@ -72,6 +73,36 @@ class ConnectionHubTest {
     }
 
     /**
+     * Mock Context that resolves the string resources [ConnectionsComposer]
+     * uses, applying format args inline. Keeps these assertions free of
+     * Robolectric while still exercising the formatter.
+     */
+    private fun fakeStringContext(): Context {
+        val ctx = mockk<Context>(relaxed = true)
+        every { ctx.getString(com.tinkernorth.dish.R.string.bt_transient_acquiring) } returns
+            "Acquiring HID profile…"
+        every { ctx.getString(com.tinkernorth.dish.R.string.bt_transient_ready_to_pair) } returns
+            "Ready to pair — find this device on your host"
+        every { ctx.getString(com.tinkernorth.dish.R.string.bt_transient_idle) } returns "Idle"
+        every { ctx.getString(com.tinkernorth.dish.R.string.default_bluetooth_gamepad_label) } returns
+            "Bluetooth gamepad"
+        every {
+            ctx.getString(com.tinkernorth.dish.R.string.bt_row_detail, any<Any>(), any<Any>())
+        } answers {
+            // Mockk surfaces vararg formatArgs as a single Array<*> at index 1.
+            val args = invocation.args[1] as Array<*>
+            "${args[0]} • ${args[1]}"
+        }
+        every {
+            ctx.getString(com.tinkernorth.dish.R.string.discovered_row_detail, any<Any>(), any<Any>())
+        } answers {
+            val args = invocation.args[1] as Array<*>
+            "${args[0]} • UDP ${args[1]}"
+        }
+        return ctx
+    }
+
+    /**
      * Build a hub *after* per-test mocks are set. The hub's combine emits its
      * first summary snapshot when collection starts inside `init`, so any
      * store-mocking must happen before this call.
@@ -90,6 +121,11 @@ class ConnectionHubTest {
                 .ControllerTypeStore()
         val composer =
             ConnectionsComposer(
+                // Resolve the few string resources the composer uses to build
+                // user-facing summary fields. Assertions below check substrings
+                // ("Acquiring", "PlayStation • …") so an empty default would
+                // mask real regressions.
+                context = fakeStringContext(),
                 satellite = satellite,
                 bt = bt,
                 store = store,

@@ -3,8 +3,10 @@
 
 package com.tinkernorth.dish.ui.main
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionHub
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.connection.ConnectionEvent
@@ -12,6 +14,7 @@ import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -37,6 +40,7 @@ import javax.inject.Inject
 class MainViewModel
     @Inject
     constructor(
+        @ApplicationContext private val context: Context,
         val satellite: SatelliteConnectionManager,
         val hub: ConnectionHub,
         private val gamepadRegistry: PhysicalGamepadRegistry,
@@ -59,7 +63,7 @@ class MainViewModel
                     ControllerSlot(
                         id = VIRTUAL_SLOT_ID,
                         inputType = SlotInputType.VIRTUAL,
-                        name = "Virtual Controller",
+                        name = context.getString(R.string.default_virtual_controller_name),
                     )
                 val physical =
                     devices.values.map { dev ->

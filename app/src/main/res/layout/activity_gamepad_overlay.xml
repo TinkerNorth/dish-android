@@ -40,7 +40,7 @@
                 android:id="@+id/tvOverlayStatus"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Streaming"
+                android:text="@string/overlay_status_streaming"
                 android:textColor="@color/colorOnSurface"
                 android:textSize="11sp"
                 android:fontFamily="monospace" />
@@ -101,7 +101,7 @@
         android:layout_gravity="top|end"
         android:layout_marginTop="8dp"
         android:layout_marginEnd="12dp"
-        android:text="BACK"
+        android:text="@string/overlay_action_back"
         android:textSize="11sp"
         android:minWidth="64dp" />
 

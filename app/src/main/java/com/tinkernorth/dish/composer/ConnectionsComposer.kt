@@ -3,6 +3,8 @@
 
 package com.tinkernorth.dish.composer
 
+import android.content.Context
+import com.tinkernorth.dish.R
 import com.tinkernorth.dish.architecture.abstracts.AbstractComposer
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.repository.ConnectionStore
@@ -14,6 +16,7 @@ import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
 import com.tinkernorth.dish.source.store.ControllerTypeStore
 import com.tinkernorth.dish.source.store.SlotBindingStore
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -76,6 +79,7 @@ private inline fun <T1, T2, T3, T4, T5, T6, T7, R> combine7(
 class ConnectionsComposer
     @Inject
     constructor(
+        @ApplicationContext private val context: Context,
         private val satellite: SatelliteConnectionManager,
         private val bt: BluetoothGamepadRegistry,
         private val store: ConnectionStore,
@@ -193,7 +197,7 @@ class ConnectionsComposer
                 id = id,
                 kind = ConnectionKind.SATELLITE,
                 label = server.name.ifEmpty { server.ip },
-                detail = "${server.ip} • UDP ${server.udpPort}",
+                detail = context.getString(R.string.discovered_row_detail, server.ip, server.udpPort),
                 live = live,
                 boundSlotIds = bound,
                 satelliteControllerTypes = buildSlotTypes(id, bound, satTypes),
@@ -217,7 +221,7 @@ class ConnectionsComposer
                 id = entry.id,
                 kind = ConnectionKind.BLUETOOTH,
                 label = entry.name.ifEmpty { entry.mac },
-                detail = "${entry.profileName} • ${entry.mac}",
+                detail = context.getString(R.string.bt_row_detail, entry.profileName, entry.mac),
                 live = live,
                 boundSlotIds = bound,
                 btProfile = entry.profileName,
@@ -232,14 +236,14 @@ class ConnectionsComposer
             val detail =
                 when {
                     slotState.connected -> slotState.connectedName.orEmpty()
-                    slotState.registered -> "Ready to pair — find this device on your host"
-                    slotState.acquiring || slotState.autoReconnecting -> "Acquiring HID profile…"
-                    else -> "Idle"
+                    slotState.registered -> context.getString(R.string.bt_transient_ready_to_pair)
+                    slotState.acquiring || slotState.autoReconnecting -> context.getString(R.string.bt_transient_acquiring)
+                    else -> context.getString(R.string.bt_transient_idle)
                 }
             return ConnectionSummary(
                 id = id,
                 kind = ConnectionKind.BLUETOOTH,
-                label = slotState.profileName ?: "Bluetooth gamepad",
+                label = slotState.profileName ?: context.getString(R.string.default_bluetooth_gamepad_label),
                 detail = detail,
                 live = liveStateOf(slotState),
                 boundSlotIds = bindings.entries.filter { it.value == id }.map { it.key },

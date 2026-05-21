@@ -35,7 +35,7 @@ class NativeUnavailableActivity : AppCompatActivity() {
             }
         root.addView(
             TextView(this).apply {
-                text = "DISH"
+                text = getString(R.string.brand_name)
                 setTextColor(getColor(R.color.colorPrimary))
                 textSize = 24f
                 typeface = Typeface.DEFAULT_BOLD

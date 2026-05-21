@@ -217,10 +217,10 @@ class GamepadOverlayActivity :
         val connected = summary?.live == LinkState.Connected
         binding.tvOverlayStatus.text =
             when {
-                connected -> summary?.label ?: "Streaming"
-                summary?.live == LinkState.Connecting -> "Connecting…"
-                summary == null -> "Unknown connection"
-                else -> "Not connected"
+                connected -> summary?.label ?: getString(R.string.overlay_status_streaming)
+                summary?.live == LinkState.Connecting -> getString(R.string.chip_status_connecting)
+                summary == null -> getString(R.string.overlay_status_unknown)
+                else -> getString(R.string.overlay_status_not_connected)
             }
         (binding.dotOverlay.background as? GradientDrawable)?.setColor(
             getColor(if (connected) R.color.colorSuccess else R.color.colorMuted),

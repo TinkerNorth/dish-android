@@ -3,6 +3,7 @@
 
 package com.tinkernorth.dish.ui.main
 
+import android.content.Context
 import com.tinkernorth.dish.composer.ConnectionHub
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
@@ -64,7 +65,11 @@ class MainViewModelTest {
         every { hub.bindings } returns bindingsFlow
         every { gamepadRegistry.devices } returns devicesFlow
         every { satellite.events } returns satelliteEvents
-        vm = MainViewModel(satellite, hub, gamepadRegistry, batteryStore)
+        // The VM resolves the virtual-slot label from string resources via the
+        // injected Context. A relaxed mock returns "" by default, which keeps
+        // the existing assertions (focused on slot wiring, not the label) green.
+        val context = mockk<Context>(relaxed = true)
+        vm = MainViewModel(context, satellite, hub, gamepadRegistry, batteryStore)
     }
 
     @After
