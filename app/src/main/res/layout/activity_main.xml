@@ -103,7 +103,7 @@
 
     <!-- Low-power overlays. The Snackbar-based feedback layer doesn't need
          a layout include — it's instantiated at runtime by
-         DishSnackbarController via Snackbar.make() against this root view. -->
+         DishNotifications via Snackbar.make() against this root view. -->
     <include layout="@layout/overlay_low_power" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

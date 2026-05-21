@@ -5,8 +5,8 @@ package com.tinkernorth.dish.ui.common
 
 import androidx.annotation.DrawableRes
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.data.network.ConnectionKind
-import com.tinkernorth.dish.data.network.LinkState
+import com.tinkernorth.dish.composer.ConnectionKind
+import com.tinkernorth.dish.composer.LinkState
 
 /**
  * Single source of truth for the v6 brand glyph used to identify a

@@ -5,9 +5,9 @@ package com.tinkernorth.dish.di
 
 import android.content.Context
 import android.os.Build
-import com.tinkernorth.dish.ui.bluetooth.AndroidHidProxyClient
-import com.tinkernorth.dish.ui.bluetooth.BluetoothHidSession
-import com.tinkernorth.dish.ui.bluetooth.HidProxyClient
+import com.tinkernorth.dish.source.bluetooth.AndroidHidProxyClient
+import com.tinkernorth.dish.source.bluetooth.BluetoothHidSession
+import com.tinkernorth.dish.source.bluetooth.HidProxyClient
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -38,7 +38,7 @@ object AppModule {
     /**
      * A fresh [HidProxyClient] per session start — each profile-proxy binding
      * is single-use from Android's point of view, so the session allocates a
-     * new instance every time it enters [com.tinkernorth.dish.ui.bluetooth.SessionState.Acquiring].
+     * new instance every time it enters [com.tinkernorth.dish.source.bluetooth.BluetoothSessionState.Acquiring].
      * On API < 28 the factory returns a no-op stub; the FSM will surface a
      * Failed state when it tries to acquire.
      */
@@ -67,7 +67,7 @@ private object UnavailableHidProxyClient : HidProxyClient {
         events.onError("Bluetooth HID Device requires Android 9+")
     }
 
-    override fun registerApp(profile: com.tinkernorth.dish.ui.bluetooth.BluetoothGamepad.GamepadProfile) = Unit
+    override fun registerApp(profile: com.tinkernorth.dish.core.input.BluetoothGamepad.GamepadProfile) = Unit
 
     override fun connectToHost(mac: String) = Unit
 

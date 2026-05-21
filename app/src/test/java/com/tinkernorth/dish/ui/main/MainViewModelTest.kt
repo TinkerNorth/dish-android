@@ -3,15 +3,16 @@
 
 package com.tinkernorth.dish.ui.main
 
-import com.tinkernorth.dish.data.network.BatteryStatusStore
-import com.tinkernorth.dish.data.network.BatteryValidator.BatterySample
-import com.tinkernorth.dish.data.network.ConnectionEvent
-import com.tinkernorth.dish.data.network.ConnectionHub
-import com.tinkernorth.dish.data.network.ConnectionKind
-import com.tinkernorth.dish.data.network.ConnectionSummary
-import com.tinkernorth.dish.data.network.LinkState
-import com.tinkernorth.dish.data.network.SatelliteConnectionManager
-import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
+import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.composer.ConnectionKind
+import com.tinkernorth.dish.composer.ConnectionSummary
+import com.tinkernorth.dish.composer.LinkState
+import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
+import com.tinkernorth.dish.source.connection.ConnectionEvent
+import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.sensor.BatteryValidator
+import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
+import com.tinkernorth.dish.source.store.BatteryStatusStore
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -168,7 +169,7 @@ class MainViewModelTest {
             devicesFlow.value = mapOf(9 to PhysicalGamepadRegistry.Device(9, "Pad"))
             batteryStore.put(
                 "9",
-                BatterySample(72, com.tinkernorth.dish.data.network.BatteryValidator.STATUS_DISCHARGING),
+                BatterySample(72, com.tinkernorth.dish.source.sensor.BatteryValidator.STATUS_DISCHARGING),
             )
             dispatcher.scheduler.runCurrent()
 

@@ -4,8 +4,8 @@
 package com.tinkernorth.dish.ui.common
 
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.data.network.ConnectionKind
-import com.tinkernorth.dish.data.network.LinkState
+import com.tinkernorth.dish.composer.ConnectionKind
+import com.tinkernorth.dish.composer.LinkState
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

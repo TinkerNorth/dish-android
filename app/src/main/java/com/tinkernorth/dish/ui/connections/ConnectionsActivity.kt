@@ -25,27 +25,36 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.data.network.ConnectionEvent
-import com.tinkernorth.dish.data.network.ConnectionHub
-import com.tinkernorth.dish.data.network.ConnectionKind
-import com.tinkernorth.dish.data.network.ConnectionSummary
-import com.tinkernorth.dish.data.network.LinkState
-import com.tinkernorth.dish.data.network.RememberedBt
-import com.tinkernorth.dish.data.network.SatelliteConnection
-import com.tinkernorth.dish.data.network.SatelliteConnectionManager
-import com.tinkernorth.dish.data.network.WakeStateController
-import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
+import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.composer.ConnectionKind
+import com.tinkernorth.dish.composer.ConnectionSummary
+import com.tinkernorth.dish.composer.LinkState
+import com.tinkernorth.dish.composer.WakeStateController
+import com.tinkernorth.dish.core.input.BluetoothGamepad
+import com.tinkernorth.dish.core.model.DiscoveredServer
+import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.databinding.ActivityConnectionsBinding
 import com.tinkernorth.dish.databinding.RowConnectionBinding
-import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepad
-import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
-import com.tinkernorth.dish.ui.common.DishNotification
-import com.tinkernorth.dish.ui.common.DishNotificationQueue
+import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
+import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
+import com.tinkernorth.dish.repository.ConnectionStore
+import com.tinkernorth.dish.repository.RememberedBt
+import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
+import com.tinkernorth.dish.source.bluetooth.BtStaleReason
+import com.tinkernorth.dish.source.connection.ConnectionEvent
+import com.tinkernorth.dish.source.connection.SatelliteConnection
+import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.notification.DishNotifications
+import com.tinkernorth.dish.source.system.BluetoothAdapterState
+import com.tinkernorth.dish.source.system.BluetoothAdapterStateObserver
+import com.tinkernorth.dish.source.system.BluetoothPermissionState
+import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
+import com.tinkernorth.dish.source.system.NetworkState
+import com.tinkernorth.dish.source.system.NetworkStateObserver
 import com.tinkernorth.dish.ui.common.dotColorForState
 import com.tinkernorth.dish.ui.common.glyphForConnection
 import com.tinkernorth.dish.ui.common.setLoading
 import com.tinkernorth.dish.ui.common.statusChipText
-import com.tinkernorth.dish.util.GamepadActivityHost
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -61,7 +70,7 @@ import javax.inject.Inject
  * connection-management UI.
  *
  * Native [android.widget.Toast] is no longer used here; every feedback path
- * routes through [DishNotificationQueue] and renders via the themed
+ * routes through [DishNotifications] and renders via the themed
  * [DishNotificationHost] overlay.
  */
 @AndroidEntryPoint
@@ -72,19 +81,19 @@ class ConnectionsActivity : AppCompatActivity() {
 
     @Inject lateinit var hub: ConnectionHub
 
-    @Inject lateinit var store: com.tinkernorth.dish.data.network.ConnectionStore
+    @Inject lateinit var store: com.tinkernorth.dish.repository.ConnectionStore
 
     @Inject lateinit var wakeState: WakeStateController
 
     @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
 
-    @Inject lateinit var notifications: DishNotificationQueue
+    @Inject lateinit var notifications: DishNotifications
 
-    @Inject lateinit var btAdapterState: com.tinkernorth.dish.data.network.BluetoothAdapterStateObserver
+    @Inject lateinit var btAdapterState: com.tinkernorth.dish.source.system.BluetoothAdapterStateObserver
 
-    @Inject lateinit var btPermissionState: com.tinkernorth.dish.data.network.BluetoothPermissionStateObserver
+    @Inject lateinit var btPermissionState: com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
 
-    @Inject lateinit var networkState: com.tinkernorth.dish.data.network.NetworkStateObserver
+    @Inject lateinit var networkState: com.tinkernorth.dish.source.system.NetworkStateObserver
 
     private lateinit var binding: ActivityConnectionsBinding
     private lateinit var gamepadHost: GamepadActivityHost
@@ -108,7 +117,7 @@ class ConnectionsActivity : AppCompatActivity() {
     private var pinDialog: PairPinDialog? = null
 
     /** Server we're currently pairing with — drives the in-flight error wiring. */
-    private var pairingServer: com.tinkernorth.dish.data.model.DiscoveredServer? = null
+    private var pairingServer: com.tinkernorth.dish.core.model.DiscoveredServer? = null
 
     private val btPermissionLauncher =
         registerForActivityResult(
@@ -381,7 +390,7 @@ class ConnectionsActivity : AppCompatActivity() {
         return rb.root
     }
 
-    private fun discoveredSatelliteRow(s: com.tinkernorth.dish.data.model.DiscoveredServer): View {
+    private fun discoveredSatelliteRow(s: com.tinkernorth.dish.core.model.DiscoveredServer): View {
         val rb =
             inflateRow(
                 binding.llSatelliteList,
@@ -573,7 +582,7 @@ class ConnectionsActivity : AppCompatActivity() {
      * server rejects the PIN — the old behaviour reset the user's typed PIN
      * on every failure.
      */
-    private fun showPairingDialog(server: com.tinkernorth.dish.data.model.DiscoveredServer) {
+    private fun showPairingDialog(server: com.tinkernorth.dish.core.model.DiscoveredServer) {
         // Replace any prior dialog (e.g. user dismissed and re-tapped) to keep
         // there at most one in-flight pair operation.
         pinDialog?.dismiss()
@@ -659,7 +668,7 @@ class ConnectionsActivity : AppCompatActivity() {
 
     // ── System-state banners ──────────────────────────────────────────────
 
-    private fun applyBtAdapterBanner(state: com.tinkernorth.dish.data.network.BluetoothAdapterState) {
+    private fun applyBtAdapterBanner(state: com.tinkernorth.dish.source.system.BluetoothAdapterState) {
         // State-driven banner: persistent until the state recovers. Explicit
         // dismiss before each re-post so the dismissal animation fires when
         // the user toggles BT on, instead of relying on same-key replacement
@@ -667,8 +676,8 @@ class ConnectionsActivity : AppCompatActivity() {
         btAdapterBannerId?.let { notifications.dismiss(it) }
         btAdapterBannerId =
             when (state) {
-                com.tinkernorth.dish.data.network.BluetoothAdapterState.ON -> null
-                com.tinkernorth.dish.data.network.BluetoothAdapterState.UNSUPPORTED ->
+                com.tinkernorth.dish.source.system.BluetoothAdapterState.ON -> null
+                com.tinkernorth.dish.source.system.BluetoothAdapterState.UNSUPPORTED ->
                     notifications.info(
                         glyph = R.drawable.ic_bluetooth_off,
                         title = getString(R.string.notif_bt_unsupported_title),
@@ -676,7 +685,7 @@ class ConnectionsActivity : AppCompatActivity() {
                         key = "bt-adapter-unsupported",
                         durationMs = DishNotification.DURATION_PERSISTENT,
                     )
-                com.tinkernorth.dish.data.network.BluetoothAdapterState.OFF ->
+                com.tinkernorth.dish.source.system.BluetoothAdapterState.OFF ->
                     notifications.warn(
                         glyph = R.drawable.ic_bluetooth_off,
                         title = getString(R.string.notif_bt_adapter_off_title),
@@ -691,10 +700,10 @@ class ConnectionsActivity : AppCompatActivity() {
             }
     }
 
-    private fun applyBtPermissionBanner(state: com.tinkernorth.dish.data.network.BluetoothPermissionState) {
+    private fun applyBtPermissionBanner(state: com.tinkernorth.dish.source.system.BluetoothPermissionState) {
         btPermissionBannerId?.let { notifications.dismiss(it) }
         btPermissionBannerId =
-            if (state == com.tinkernorth.dish.data.network.BluetoothPermissionState.DENIED) {
+            if (state == com.tinkernorth.dish.source.system.BluetoothPermissionState.DENIED) {
                 notifications.warn(
                     glyph = R.drawable.ic_bluetooth_off,
                     title = getString(R.string.notif_bt_permission_title),
@@ -717,7 +726,7 @@ class ConnectionsActivity : AppCompatActivity() {
      * with a deep-link action; entries that disappeared (because the user
      * re-paired and Connected restored) get dismissed.
      */
-    private fun applyBtStaleBanners(stale: Map<String, com.tinkernorth.dish.ui.bluetooth.BtStaleReason>) {
+    private fun applyBtStaleBanners(stale: Map<String, com.tinkernorth.dish.source.bluetooth.BtStaleReason>) {
         // Dismiss banners whose host is no longer stale.
         val gone = btStaleBannerIds.keys - stale.keys
         for (id in gone) {
@@ -729,16 +738,16 @@ class ConnectionsActivity : AppCompatActivity() {
             val entry = store.rememberedBt().firstOrNull { it.id == id } ?: continue
             val titleRes =
                 when (reason) {
-                    com.tinkernorth.dish.ui.bluetooth.BtStaleReason.KEY_MISSING ->
+                    com.tinkernorth.dish.source.bluetooth.BtStaleReason.KEY_MISSING ->
                         R.string.notif_bt_key_missing_title
-                    com.tinkernorth.dish.ui.bluetooth.BtStaleReason.BOND_REMOVED ->
+                    com.tinkernorth.dish.source.bluetooth.BtStaleReason.BOND_REMOVED ->
                         R.string.notif_bt_bond_removed_title
                 }
             val bodyRes =
                 when (reason) {
-                    com.tinkernorth.dish.ui.bluetooth.BtStaleReason.KEY_MISSING ->
+                    com.tinkernorth.dish.source.bluetooth.BtStaleReason.KEY_MISSING ->
                         R.string.notif_bt_key_missing_body
-                    com.tinkernorth.dish.ui.bluetooth.BtStaleReason.BOND_REMOVED ->
+                    com.tinkernorth.dish.source.bluetooth.BtStaleReason.BOND_REMOVED ->
                         R.string.notif_bt_bond_removed_body
                 }
             btStaleBannerIds[id] =
@@ -756,12 +765,12 @@ class ConnectionsActivity : AppCompatActivity() {
         }
     }
 
-    private fun applyNetworkBanner(state: com.tinkernorth.dish.data.network.NetworkState) {
+    private fun applyNetworkBanner(state: com.tinkernorth.dish.source.system.NetworkState) {
         networkBannerId?.let { notifications.dismiss(it) }
         networkBannerId =
             when (state) {
-                com.tinkernorth.dish.data.network.NetworkState.WIFI -> null
-                com.tinkernorth.dish.data.network.NetworkState.NONE ->
+                com.tinkernorth.dish.source.system.NetworkState.WIFI -> null
+                com.tinkernorth.dish.source.system.NetworkState.NONE ->
                     notifications.error(
                         glyph = R.drawable.ic_satellite_off,
                         title = getString(R.string.notif_no_network_title),
@@ -773,7 +782,7 @@ class ConnectionsActivity : AppCompatActivity() {
                         key = "network-none",
                         durationMs = DishNotification.DURATION_PERSISTENT,
                     )
-                com.tinkernorth.dish.data.network.NetworkState.CELLULAR ->
+                com.tinkernorth.dish.source.system.NetworkState.CELLULAR ->
                     notifications.warn(
                         glyph = R.drawable.ic_satellite_off,
                         title = getString(R.string.notif_cellular_only_title),

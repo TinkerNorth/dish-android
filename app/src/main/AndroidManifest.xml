@@ -86,7 +86,7 @@
         <!-- Foreground service for keeping the streaming session alive.
              Controlled by StreamingServiceController; not exported. -->
         <service
-            android:name=".data.network.StreamingService"
+            android:name=".composer.StreamingService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 

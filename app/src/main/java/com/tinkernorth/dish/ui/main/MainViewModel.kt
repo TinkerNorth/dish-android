@@ -5,11 +5,12 @@ package com.tinkernorth.dish.ui.main
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.tinkernorth.dish.data.network.BatteryStatusStore
-import com.tinkernorth.dish.data.network.ConnectionEvent
-import com.tinkernorth.dish.data.network.ConnectionHub
-import com.tinkernorth.dish.data.network.SatelliteConnectionManager
-import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
+import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
+import com.tinkernorth.dish.source.connection.ConnectionEvent
+import com.tinkernorth.dish.source.connection.SatelliteConnection
+import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.store.BatteryStatusStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -92,7 +93,7 @@ class MainViewModel
                         is ConnectionEvent.PairingRequired ->
                             _events.emit(
                                 MainEvent.ShowPairingDialog(
-                                    com.tinkernorth.dish.data.network.SatelliteConnection
+                                    com.tinkernorth.dish.source.connection.SatelliteConnection
                                         .idFor(event.server),
                                 ),
                             )

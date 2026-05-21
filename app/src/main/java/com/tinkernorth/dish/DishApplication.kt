@@ -5,21 +5,22 @@ package com.tinkernorth.dish
 
 import android.app.Application
 import androidx.lifecycle.ProcessLifecycleOwner
-import com.tinkernorth.dish.data.network.BluetoothAdapterStateObserver
-import com.tinkernorth.dish.data.network.BluetoothBondMonitor
-import com.tinkernorth.dish.data.network.BluetoothGamepadBridge
-import com.tinkernorth.dish.data.network.BluetoothPermissionStateObserver
-import com.tinkernorth.dish.data.network.ConnectionForegroundObserver
-import com.tinkernorth.dish.data.network.NetworkStateObserver
-import com.tinkernorth.dish.data.network.PhysicalBatterySource
-import com.tinkernorth.dish.data.network.PhysicalMotionSource
-import com.tinkernorth.dish.data.network.PhysicalSlotBindingObserver
-import com.tinkernorth.dish.data.network.RumbleBridge
-import com.tinkernorth.dish.data.network.StreamingServiceController
-import com.tinkernorth.dish.data.network.VirtualBatterySource
-import com.tinkernorth.dish.data.network.WakeStateController
-import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
-import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
+import com.tinkernorth.dish.composer.StreamingService
+import com.tinkernorth.dish.composer.StreamingServiceController
+import com.tinkernorth.dish.composer.WakeStateController
+import com.tinkernorth.dish.hotpath.input.BluetoothGamepadBridge
+import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
+import com.tinkernorth.dish.hotpath.input.PhysicalSlotBindingObserver
+import com.tinkernorth.dish.hotpath.input.RumbleBridge
+import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
+import com.tinkernorth.dish.source.sensor.PhysicalBatterySource
+import com.tinkernorth.dish.source.sensor.PhysicalMotionSource
+import com.tinkernorth.dish.source.sensor.VirtualBatterySource
+import com.tinkernorth.dish.source.system.BluetoothAdapterStateObserver
+import com.tinkernorth.dish.source.system.BluetoothBondMonitor
+import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
+import com.tinkernorth.dish.source.system.ConnectionForegroundObserver
+import com.tinkernorth.dish.source.system.NetworkStateObserver
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import javax.inject.Inject
@@ -53,7 +54,7 @@ class DishApplication : Application() {
     @Inject lateinit var streamingServiceController: StreamingServiceController
 
     /**
-     * Process-scoped CoroutineScope, exposed for [com.tinkernorth.dish.data.network.StreamingService]
+     * Process-scoped CoroutineScope, exposed for [com.tinkernorth.dish.composer.StreamingService]
      * whose framework-owned lifecycle can't see the Hilt singletons that
      * everything else uses. Same instance Hilt hands to every @Singleton.
      */

@@ -6,20 +6,21 @@ package com.tinkernorth.dish.ui.main
 import androidx.annotation.ColorRes
 import androidx.annotation.StringRes
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.source.sensor.PhoneMotionSource
 
 /**
  * The phone-motion state shown by the touch-overlay's motion pill.
  *
  * The touch overlay forwards the phone's gyro + accelerometer as an
  * `MSG_MOTION` stream (Task 1.1, see
- * [com.tinkernorth.dish.data.network.PhoneMotionSource]). The user must be
+ * [com.tinkernorth.dish.source.sensor.PhoneMotionSource]). The user must be
  * able to tell — with no ambiguity — whether motion is actually going out:
  *
  *  - [STREAMING]      the phone has a gyroscope, the overlay is resumed, and
  *                     the bound connection is a satellite connection (the
  *                     only kind that carries `MSG_MOTION`) that is actually
  *                     CONNECTED — so
- *                     [com.tinkernorth.dish.data.network.PhoneMotionSource]
+ *                     [com.tinkernorth.dish.source.sensor.PhoneMotionSource]
  *                     is started and samples are reaching the wire.
  *  - [PAUSED]         the phone has a gyroscope but motion is not flowing
  *                     right now: either the source is stopped (overlay
@@ -33,7 +34,7 @@ import com.tinkernorth.dish.R
  *                     so motion is captured-but-dropped, never sent. Honest
  *                     about the limit instead of falsely claiming "streaming".
  *  - [UNAVAILABLE]    the phone has no gyroscope
- *                     ([com.tinkernorth.dish.data.network.PhoneMotionSource.isAvailable]
+ *                     ([com.tinkernorth.dish.source.sensor.PhoneMotionSource.isAvailable]
  *                     is false); nothing motion-related will ever be sent.
  *
  * There is no user-facing motion on/off toggle in this slice, so "off"
@@ -69,9 +70,9 @@ enum class MotionIndicatorState(
          * state:
          *
          *  - [isAvailable]   — whether the phone has a gyroscope
-         *    ([com.tinkernorth.dish.data.network.PhoneMotionSource.isAvailable]).
+         *    ([com.tinkernorth.dish.source.sensor.PhoneMotionSource.isAvailable]).
          *  - [isStreaming]   — whether the source is currently started
-         *    ([com.tinkernorth.dish.data.network.PhoneMotionSource.isStreaming]).
+         *    ([com.tinkernorth.dish.source.sensor.PhoneMotionSource.isStreaming]).
          *  - [connectionCarriesMotion] — whether the bound connection kind
          *    has an `MSG_MOTION` channel (satellite does, Bluetooth-HID does
          *    not).

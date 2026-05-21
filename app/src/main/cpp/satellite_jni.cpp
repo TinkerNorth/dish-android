@@ -513,8 +513,10 @@ static void ensureSodiumInit() {
 
 /* ── UDP Socket ────────────────────────────────────────────────────────────── */
 
-JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_openSocket(
-    JNIEnv* env, jobject, jstring ip, jint port) {
+JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_openSocket(JNIEnv* env,
+                                                                                     jobject,
+                                                                                     jstring ip,
+                                                                                     jint port) {
     ensureSodiumInit();
     int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (sock < 0) {
@@ -550,8 +552,9 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_op
     return handle;
 }
 
-JNIEXPORT void JNICALL
-Java_com_tinkernorth_dish_data_network_SatelliteNative_closeSocket(JNIEnv*, jobject, jint handle) {
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_closeSocket(JNIEnv*,
+                                                                                      jobject,
+                                                                                      jint handle) {
     std::shared_ptr<Session> s;
     {
         std::lock_guard<std::mutex> lock(g_sessionsMtx);
@@ -571,7 +574,7 @@ Java_com_tinkernorth_dish_data_network_SatelliteNative_closeSocket(JNIEnv*, jobj
 
 /* ── Connection params (called after HTTP POST /api/connections) ───────────── */
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_setConnectionParams(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setConnectionParams(
     JNIEnv* env, jobject, jint handle, jbyteArray tokenArr, jbyteArray keyArr) {
     ensureSodiumInit();
     auto s = getSession(handle);
@@ -591,7 +594,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_se
 
 /* ── Encrypted gamepad data ────────────────────────────────────────────────── */
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_sendReport(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendReport(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jint wB, jint bLT, jint bRT, jint sLX,
     jint sLY, jint sRX, jint sRY) {
     auto s = getSession(handle);
@@ -612,7 +615,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_se
 
 /* ── Controller add/remove ─────────────────────────────────────────────────── */
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_controllerAdd(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_controllerAdd(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jint capabilities) {
     auto s = getSession(handle);
     if (!s) return;
@@ -624,7 +627,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_co
          capabilities);
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_controllerRemove(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_controllerRemove(
     JNIEnv*, jobject, jint handle, jint controllerIndex) {
     auto s = getSession(handle);
     if (!s) return;
@@ -633,7 +636,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_co
     LOGI("Session %d: sent controller remove idx=%d", handle, controllerIndex);
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_sendControllerType(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendControllerType(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jint controllerType) {
     auto s = getSession(handle);
     if (!s) return;
@@ -652,7 +655,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_se
 // satellite docs §0x000A is the canonical spec. Caller is also responsible
 // for any per-controller rate-limiting (MotionRateLimiter.kt) before reaching
 // this method.
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_sendMotion(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendMotion(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jshort gyroX, jshort gyroY, jshort gyroZ,
     jshort accelX, jshort accelY, jshort accelZ, jint timestampDeltaUs) {
     auto s = getSession(handle);
@@ -670,7 +673,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_se
 // validation before the Kotlin → JNI call (it validates, it does not dedup).
 // `level` is 0..100 inclusive, or 0xFF for unknown. `status` is one of the
 // BATTERY_STATUS_* constants documented in satellite/docs/protocol.md §0x000B.
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_sendBattery(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendBattery(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jint level, jint status) {
     auto s = getSession(handle);
     if (!s) return;
@@ -682,8 +685,8 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_se
 
 /* ── Heartbeat start/stop ──────────────────────────────────────────────────── */
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_startHeartbeat(
-    JNIEnv*, jobject, jint handle) {
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_core_jni_SatelliteNative_startHeartbeat(JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return;
     if (s->heartbeatRunning.load()) return;
@@ -693,45 +696,44 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_st
     s->heartbeatThread = std::thread(heartbeatLoop, s);
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_stopHeartbeat(
-    JNIEnv*, jobject, jint handle) {
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_core_jni_SatelliteNative_stopHeartbeat(JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return;
     s->heartbeatRunning.store(false);
     if (s->heartbeatThread.joinable()) s->heartbeatThread.join();
 }
 
-JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_isConnectionAlive(
+JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_isConnectionAlive(
     JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return JNI_FALSE;
     return s->connectionAlive.load() ? JNI_TRUE : JNI_FALSE;
 }
 
-JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_getLastControllerAck(
+JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getLastControllerAck(
     JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return -1;
     return s->lastControllerAck.load(std::memory_order_acquire);
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_resetControllerAck(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_resetControllerAck(
     JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return;
     s->lastControllerAck.store(-1, std::memory_order_release);
 }
 
-JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_getVigemAvailable(
+JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getVigemAvailable(
     JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return -1;
     return (jint)s->vigemAvailable.load(std::memory_order_acquire);
 }
 
-JNIEXPORT jint JNICALL
-Java_com_tinkernorth_dish_data_network_SatelliteNative_getActiveControllerCount(JNIEnv*, jobject,
-                                                                                jint handle) {
+JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getActiveControllerCount(
+    JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return -1;
     return (jint)s->activeControllerCount.load(std::memory_order_acquire);
@@ -739,8 +741,9 @@ Java_com_tinkernorth_dish_data_network_SatelliteNative_getActiveControllerCount(
 
 /* ── Receive ACK (called from a background thread) ────────────────────────── */
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_receiveAck(
-    JNIEnv* env, jobject, jint handle) {
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiveAck(JNIEnv* env,
+                                                                                     jobject,
+                                                                                     jint handle) {
     auto s = getSession(handle);
     if (!s || s->udpSock < 0) return;
     uint8_t buf[128];
@@ -823,7 +826,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_re
 
 /* ── LAN Discovery ────────────────────────────────────────────────────────── */
 
-JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_discoverServers(
+JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_discoverServers(
     JNIEnv* env, jobject, jint discPort, jint timeoutMs) {
     int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (sock < 0) return env->NewStringUTF("[]");
@@ -889,8 +892,7 @@ JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative
 
 /* ── Physical-slot bindings (driven from MainActivity) ─────────────────── */
 
-JNIEXPORT void JNICALL
-Java_com_tinkernorth_dish_data_network_SatelliteNative_bindPhysicalSlotSatellite(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_bindPhysicalSlotSatellite(
     JNIEnv*, jobject, jint deviceId, jint sessionHandle, jint controllerIndex) {
     std::lock_guard<std::mutex> lock(g_slotsMtx);
     auto& b = g_slots[deviceId];
@@ -900,8 +902,7 @@ Java_com_tinkernorth_dish_data_network_SatelliteNative_bindPhysicalSlotSatellite
     b.btConnectionId.clear();
 }
 
-JNIEXPORT void JNICALL
-Java_com_tinkernorth_dish_data_network_SatelliteNative_bindPhysicalSlotBluetooth(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_bindPhysicalSlotBluetooth(
     JNIEnv* env, jobject, jint deviceId, jstring connectionId) {
     const char* cstr = env->GetStringUTFChars(connectionId, nullptr);
     std::string copy = cstr ? std::string(cstr) : std::string();
@@ -914,19 +915,19 @@ Java_com_tinkernorth_dish_data_network_SatelliteNative_bindPhysicalSlotBluetooth
     b.btConnectionId = std::move(copy);
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_unbindPhysicalSlot(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_unbindPhysicalSlot(
     JNIEnv*, jobject, jint deviceId) {
     std::lock_guard<std::mutex> lock(g_slotsMtx);
     g_slots.erase(deviceId);
 }
 
 JNIEXPORT void JNICALL
-Java_com_tinkernorth_dish_data_network_SatelliteNative_clearAllPhysicalSlots(JNIEnv*, jobject) {
+Java_com_tinkernorth_dish_core_jni_SatelliteNative_clearAllPhysicalSlots(JNIEnv*, jobject) {
     std::lock_guard<std::mutex> lock(g_slotsMtx);
     g_slots.clear();
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_setDeviceDeadzones(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setDeviceDeadzones(
     JNIEnv*, jobject, jint deviceId, jfloat flatX, jfloat flatY, jfloat flatZ, jfloat flatRZ) {
     std::lock_guard<std::mutex> lock(g_devicesMtx);
     auto& s = g_devices[deviceId];
@@ -957,7 +958,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_SatelliteNative_se
  * caller should treat that as "consumed" and not fall through to super.
  */
 JNIEXPORT jboolean JNICALL
-Java_com_tinkernorth_dish_data_network_SatelliteNative_processGamepadKeyEvent(
+Java_com_tinkernorth_dish_core_jni_SatelliteNative_processGamepadKeyEvent(
     JNIEnv*, jobject, jint deviceId, jint /*source*/, jint action, jint keyCode) {
     // The event's source bits are unreliable as a "is this a gamepad event"
     // discriminator: generic HID joystick adapters dispatch button events
@@ -982,7 +983,7 @@ Java_com_tinkernorth_dish_data_network_SatelliteNative_processGamepadKeyEvent(
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_tinkernorth_dish_data_network_SatelliteNative_processGamepadMotionEvent(
+Java_com_tinkernorth_dish_core_jni_SatelliteNative_processGamepadMotionEvent(
     JNIEnv*, jobject, jint deviceId, jint source, jint action, jfloat x, jfloat y, jfloat z,
     jfloat rz, jfloat rx, jfloat ry, jfloat hatX, jfloat hatY, jfloat lTrigger, jfloat rTrigger,
     jfloat brake, jfloat gas) {
@@ -1011,7 +1012,7 @@ Java_com_tinkernorth_dish_data_network_SatelliteNative_processGamepadMotionEvent
 // Force-zero every device that's bound to a slot and emit a release-all
 // report. Used on focus loss so no button stays held server-side.
 JNIEXPORT void JNICALL
-Java_com_tinkernorth_dish_data_network_SatelliteNative_releaseAllPhysicalReports(JNIEnv*, jobject) {
+Java_com_tinkernorth_dish_core_jni_SatelliteNative_releaseAllPhysicalReports(JNIEnv*, jobject) {
     std::lock_guard<std::mutex> lock(g_devicesMtx);
     for (auto& kv : g_devices) {
         gamepad::resetState(kv.second);
@@ -1024,7 +1025,7 @@ Java_com_tinkernorth_dish_data_network_SatelliteNative_releaseAllPhysicalReports
 // class here, not in JNI_OnLoad, because FindClass() in JNI_OnLoad uses the
 // system classloader (which doesn't see app classes); from a regular JNI
 // call the app classloader is on the call stack so the lookup succeeds.
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_BluetoothGamepadBridge_nativeInstall(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_hotpath_input_BluetoothGamepadBridge_nativeInstall(
     JNIEnv* env, jclass bridgeCls) {
     if (g_btBridgeClass == nullptr) { g_btBridgeClass = (jclass)env->NewGlobalRef(bridgeCls); }
     if (g_btDispatchMethod == nullptr) {
@@ -1046,7 +1047,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_data_network_BluetoothGamepadBr
 // JVM-attached thread (Kotlin Dispatchers.IO), so there's no separate
 // dispatcher thread to spawn here.
 JNIEXPORT void JNICALL
-Java_com_tinkernorth_dish_data_network_RumbleBridge_nativeInstall(JNIEnv* env, jclass bridgeCls) {
+Java_com_tinkernorth_dish_hotpath_input_RumbleBridge_nativeInstall(JNIEnv* env, jclass bridgeCls) {
     if (g_rumbleBridgeClass == nullptr) {
         g_rumbleBridgeClass = (jclass)env->NewGlobalRef(bridgeCls);
     }

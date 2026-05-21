@@ -13,16 +13,17 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.androidgamesdk.GameActivity
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.data.network.ConnectionHub
-import com.tinkernorth.dish.data.network.LinkState
-import com.tinkernorth.dish.data.network.SatelliteConnectionManager
-import com.tinkernorth.dish.data.network.WakeStateController
-import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
+import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.composer.LinkState
+import com.tinkernorth.dish.composer.WakeStateController
+import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.databinding.ActivityMainBinding
-import com.tinkernorth.dish.ui.common.DishNotification
-import com.tinkernorth.dish.ui.common.DishNotificationQueue
+import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
+import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
+import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.ui.connections.ConnectionsActivity
-import com.tinkernorth.dish.util.GamepadActivityHost
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -43,7 +44,7 @@ class MainActivity :
 
     @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
 
-    @Inject lateinit var notifications: DishNotificationQueue
+    @Inject lateinit var notifications: DishNotifications
 
     private lateinit var gamepadHost: GamepadActivityHost
 
@@ -196,7 +197,7 @@ class MainActivity :
         val usePs =
             summary?.btProfile == "PlayStation" ||
                 summary?.satelliteControllerTypes?.get(VIRTUAL_SLOT_ID) ==
-                com.tinkernorth.dish.data.network.CONTROLLER_TYPE_PLAYSTATION
+                com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
         val intent =
             Intent(this, GamepadOverlayActivity::class.java).apply {
                 putExtra(GamepadOverlayActivity.EXTRA_CONNECTION_ID, cid)

@@ -3,8 +3,11 @@
 
 package com.tinkernorth.dish.ui.main
 
-import com.tinkernorth.dish.data.network.BatteryValidator
-import com.tinkernorth.dish.data.network.ConnectionSummary
+import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.composer.ConnectionSummary
+import com.tinkernorth.dish.composer.LinkState
+import com.tinkernorth.dish.source.sensor.BatteryValidator
+import com.tinkernorth.dish.source.store.BatteryStatusStore
 
 // ── Per-slot types ───────────────────────────────────────────────────────
 
@@ -14,7 +17,7 @@ enum class SlotInputType { VIRTUAL, PHYSICAL }
  * Battery state of a controller slot, rendered by [ControllerAdapter] as a
  * percentage + icon on the slot row. Built from the latest wire
  * `(level, status)` reported for the slot (see
- * [com.tinkernorth.dish.data.network.BatteryStatusStore]).
+ * [com.tinkernorth.dish.source.store.BatteryStatusStore]).
  *
  * [level] is 0..100, or null when the source reported the
  * [BatteryValidator.LEVEL_UNKNOWN] sentinel (a pad that exposes a charging
@@ -86,7 +89,7 @@ data class MainUiState(
 ) {
     val virtualSlot get() = slots.first { it.id == VIRTUAL_SLOT_ID }
     val physicalSlots get() = slots.filter { it.inputType == SlotInputType.PHYSICAL }
-    val anyConnected get() = connections.any { it.live == com.tinkernorth.dish.data.network.LinkState.Connected }
+    val anyConnected get() = connections.any { it.live == com.tinkernorth.dish.composer.LinkState.Connected }
 
     /**
      * Slots that can route input to a live connection right now: bound to a
@@ -101,7 +104,7 @@ data class MainUiState(
         slots.count {
             !it.isDisconnecting &&
                 it.boundConnectionId != null &&
-                it.boundStatus?.live == com.tinkernorth.dish.data.network.LinkState.Connected &&
+                it.boundStatus?.live == com.tinkernorth.dish.composer.LinkState.Connected &&
                 (it.inputType == SlotInputType.VIRTUAL || it.physicalDeviceId >= 0)
         }
 }

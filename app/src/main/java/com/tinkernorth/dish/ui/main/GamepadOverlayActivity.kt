@@ -19,22 +19,23 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.data.network.ConnectionEvent
-import com.tinkernorth.dish.data.network.ConnectionHub
-import com.tinkernorth.dish.data.network.ConnectionKind
-import com.tinkernorth.dish.data.network.LinkState
-import com.tinkernorth.dish.data.network.PhoneBatterySource
-import com.tinkernorth.dish.data.network.PhoneMotionSource
-import com.tinkernorth.dish.data.network.SatelliteConnectionManager
-import com.tinkernorth.dish.data.network.WakeStateController
-import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
+import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.composer.ConnectionKind
+import com.tinkernorth.dish.composer.LinkState
+import com.tinkernorth.dish.composer.WakeStateController
+import com.tinkernorth.dish.core.input.hidToXusb
+import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.databinding.ActivityGamepadOverlayBinding
-import com.tinkernorth.dish.ui.bluetooth.BluetoothGamepadRegistry
-import com.tinkernorth.dish.ui.bluetooth.hidToXusb
-import com.tinkernorth.dish.ui.common.DishNotification
-import com.tinkernorth.dish.ui.common.DishNotificationQueue
+import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
+import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
+import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
+import com.tinkernorth.dish.source.connection.ConnectionEvent
+import com.tinkernorth.dish.source.connection.SatelliteConnection
+import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.notification.DishNotifications
+import com.tinkernorth.dish.source.sensor.PhoneBatterySource
+import com.tinkernorth.dish.source.sensor.PhoneMotionSource
 import com.tinkernorth.dish.ui.common.GamepadTouchView
-import com.tinkernorth.dish.util.GamepadActivityHost
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -44,7 +45,7 @@ import javax.inject.Inject
  *
  * Bound to a single connection id passed via [EXTRA_CONNECTION_ID]; reports
  * are routed to that connection through either the [BluetoothGamepadRegistry]
- * or the matching [com.tinkernorth.dish.data.network.SatelliteConnection] in
+ * or the matching [com.tinkernorth.dish.source.connection.SatelliteConnection] in
  * the [SatelliteConnectionManager]. Both owners outlive the host activity so
  * the same session is reused on re-entry.
  *
@@ -66,7 +67,7 @@ class GamepadOverlayActivity :
 
     @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
 
-    @Inject lateinit var notifications: DishNotificationQueue
+    @Inject lateinit var notifications: DishNotifications
 
     private lateinit var binding: ActivityGamepadOverlayBinding
     private lateinit var gamepadHost: GamepadActivityHost

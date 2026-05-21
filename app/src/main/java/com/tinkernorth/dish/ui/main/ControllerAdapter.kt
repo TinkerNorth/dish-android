@@ -16,11 +16,11 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.data.network.CONTROLLER_TYPE_PLAYSTATION
-import com.tinkernorth.dish.data.network.CONTROLLER_TYPE_XBOX
-import com.tinkernorth.dish.data.network.ConnectionKind
-import com.tinkernorth.dish.data.network.ConnectionSummary
-import com.tinkernorth.dish.data.network.LinkState
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
+import com.tinkernorth.dish.composer.ConnectionKind
+import com.tinkernorth.dish.composer.ConnectionSummary
+import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.databinding.ItemControllerBinding
 import com.tinkernorth.dish.ui.common.glyphForConnection
 

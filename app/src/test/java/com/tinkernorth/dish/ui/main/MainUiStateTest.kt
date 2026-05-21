@@ -3,10 +3,10 @@
 
 package com.tinkernorth.dish.ui.main
 
-import com.tinkernorth.dish.data.network.BatteryValidator
-import com.tinkernorth.dish.data.network.ConnectionKind
-import com.tinkernorth.dish.data.network.ConnectionSummary
-import com.tinkernorth.dish.data.network.LinkState
+import com.tinkernorth.dish.composer.ConnectionKind
+import com.tinkernorth.dish.composer.ConnectionSummary
+import com.tinkernorth.dish.composer.LinkState
+import com.tinkernorth.dish.source.sensor.BatteryValidator
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
