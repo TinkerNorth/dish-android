@@ -4,7 +4,10 @@
 package com.tinkernorth.dish
 
 import android.app.Application
+import android.content.pm.ApplicationInfo
+import android.os.StrictMode
 import androidx.lifecycle.ProcessLifecycleOwner
+import com.tinkernorth.dish.composer.CrashReportingController
 import com.tinkernorth.dish.composer.StreamingService
 import com.tinkernorth.dish.composer.StreamingServiceController
 import com.tinkernorth.dish.composer.WakeStateController
@@ -53,6 +56,8 @@ class DishApplication : Application() {
 
     @Inject lateinit var streamingServiceController: StreamingServiceController
 
+    @Inject lateinit var crashReportingController: CrashReportingController
+
     /**
      * Process-scoped CoroutineScope, exposed for [com.tinkernorth.dish.composer.StreamingService]
      * whose framework-owned lifecycle can't see the Hilt singletons that
@@ -62,6 +67,12 @@ class DishApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        installStrictModeIfDebuggable()
+        // CrashReportingController must install BEFORE the native-load try
+        // block: if the native library fails to load (the catch path below),
+        // we still want the opt-in preference to be applied so Crashlytics
+        // can report the load failure on this exact launch.
+        ProcessLifecycleOwner.get().lifecycle.addObserver(crashReportingController)
         // The satellite native library is loaded eagerly from a handful of
         // companion init blocks (SatelliteNative, RumbleBridge, BluetoothGamepadBridge).
         // If the APK ships without the matching ABI (rare but real on
@@ -80,6 +91,35 @@ class DishApplication : Application() {
                 t,
             )
         }
+    }
+
+    /**
+     * StrictMode in debug builds only. Catches disk/network on the main
+     * thread, leaked closables, and leaked SQLite cursors during dev. Gated
+     * on the debuggable flag so release builds pay nothing — release R8
+     * will dead-code-eliminate the body of the if() branch as well.
+     */
+    private fun installStrictModeIfDebuggable() {
+        val isDebuggable = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        if (!isDebuggable) return
+        StrictMode.setThreadPolicy(
+            StrictMode.ThreadPolicy
+                .Builder()
+                .detectDiskReads()
+                .detectDiskWrites()
+                .detectNetwork()
+                .penaltyLog()
+                .build(),
+        )
+        StrictMode.setVmPolicy(
+            StrictMode.VmPolicy
+                .Builder()
+                .detectLeakedClosableObjects()
+                .detectLeakedRegistrationObjects()
+                .detectActivityLeaks()
+                .penaltyLog()
+                .build(),
+        )
     }
 
     /**

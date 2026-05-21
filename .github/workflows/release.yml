@@ -13,13 +13,23 @@ on:
 # for workflow_dispatch on feature branches; tagged releases on main are
 # blocked by `required-secrets` if any are missing):
 #
-#   KEYSTORE_BASE64       base64 of the .jks/.keystore signing keystore
-#   KEYSTORE_PASSWORD     keystore password
-#   KEY_ALIAS             alias of the signing key
-#   KEY_PASSWORD          password of the signing key
+#   KEYSTORE_BASE64               base64 of the .jks/.keystore signing keystore
+#   KEYSTORE_PASSWORD             keystore password
+#   KEY_ALIAS                     alias of the signing key
+#   KEY_PASSWORD                  password of the signing key
 #
 # When all four are present, the AAB and APK are signed; otherwise they are
 # uploaded unsigned and tagged with `-unsigned` in the filename.
+#
+# Optional secrets (not blocking, but enable observability features):
+#
+#   GOOGLE_SERVICES_JSON_BASE64   base64 of app/google-services.json — when
+#                                 set, Crashlytics is wired into the build
+#                                 and the R8 mapping is auto-uploaded to
+#                                 Firebase. When unset, the build still
+#                                 succeeds but ships without crash reporting.
+#                                 See HANDOFF.md item 3.
+#   NVD_API_KEY                   speeds up OWASP Dependency-Check syncs.
 #
 # Pin map (verify with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`):
 #   actions/checkout                @ v4.2.2  → 11bd71901bbe5b1630ceea73d27597364c9af683
@@ -119,6 +129,41 @@ jobs:
             echo "::warning::KEYSTORE_BASE64 not set — release artifacts will be unsigned."
           fi
 
+      - name: Decode google-services.json (if secret present)
+        id: firebase
+        env:
+          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          if [ -n "${GOOGLE_SERVICES_JSON_BASE64}" ]; then
+            echo "${GOOGLE_SERVICES_JSON_BASE64}" | base64 -d > app/google-services.json
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "Firebase Crashlytics will be enabled in this build."
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::GOOGLE_SERVICES_JSON_BASE64 not set — Crashlytics will not be wired into this build."
+          fi
+
+      - name: Compute version from tag
+        id: ver
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME:-${{ inputs.tag }}}"
+          name="${tag#v}"
+          # vX.Y.Z → versionCode = X*10000 + Y*100 + Z. Re-derive locally with
+          # `git describe --tags` if changing this scheme; mirror in HANDOFF.md item 4.
+          if [[ "$name" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            major="${BASH_REMATCH[1]}"
+            minor="${BASH_REMATCH[2]}"
+            patch="${BASH_REMATCH[3]}"
+            code=$((major * 10000 + minor * 100 + patch))
+          else
+            echo "::warning::Tag '$tag' does not match vMAJOR.MINOR.PATCH — falling back to versionCode=1."
+            code=1
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "Resolved versionCode=$code versionName=$name"
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
@@ -128,6 +173,8 @@ jobs:
           DISH_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           DISH_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           DISH_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          DISH_VERSION_CODE: ${{ steps.ver.outputs.code }}
+          DISH_VERSION_NAME: ${{ steps.ver.outputs.name }}
         run: |
           ./gradlew assembleRelease bundleRelease
 
@@ -145,6 +192,21 @@ jobs:
           [ -n "$apk" ] && cp "$apk" "dist/dish-${tag}${suffix}.apk"
           aab=$(find app/build/outputs/bundle/release -name '*.aab' | head -1)
           [ -n "$aab" ] && cp "$aab" "dist/dish-${tag}${suffix}.aab"
+          # R8 mapping file for de-obfuscating prod stack traces. Crashlytics
+          # auto-ingests this when google-services.json is present; we also
+          # ship it as a release asset so external consumers (or a future
+          # Crashlytics replacement) can de-obfuscate without GCP access.
+          mapping=$(find app/build/outputs/mapping/release -name 'mapping.txt' | head -1)
+          [ -n "$mapping" ] && cp "$mapping" "dist/dish-${tag}${suffix}-mapping.txt"
+          # Native debug symbols for the JNI .so — lets crash reporters
+          # symbolize native stack frames from the encrypted-wire / rumble
+          # hot path.
+          native_symbols=$(find app/build/intermediates/merged_native_libs/release -name '*.so' 2>/dev/null | head -1)
+          if [ -n "$native_symbols" ]; then
+            mkdir -p dist/native-symbols
+            find app/build/intermediates/merged_native_libs/release -name '*.so' \
+              -exec cp --parents {} dist/native-symbols/ \; 2>/dev/null || true
+          fi
           ls -l dist/
 
       - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
