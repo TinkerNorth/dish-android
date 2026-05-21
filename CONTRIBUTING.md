@@ -126,6 +126,12 @@ gitleaks detect --no-banner --redact --source .
 
 ### Gradle dependency verification (`gradle/verification-metadata.xml`)
 
+**Status:** the file is not yet committed. See `HANDOFF.md` item 6 for
+the open work. Until it lands, the section below describes the intended
+flow once a first generation pass is committed; following it on a clean
+checkout today will still produce a useful file you can use as a
+review aid.
+
 When you intentionally add or upgrade a dependency, regenerate the
 verification metadata so transitive jar tampering fails resolution:
 

@@ -7,6 +7,53 @@ plugins {
     alias(libs.plugins.detekt)
 }
 
+// Crashlytics is gated on the presence of app/google-services.json so that
+// local development without a Firebase project still produces a runnable
+// build. CI populates the file from the GOOGLE_SERVICES_JSON_BASE64 secret
+// before invoking ./gradlew assembleRelease bundleRelease.
+val googleServicesJson = file("google-services.json")
+val firebaseEnabled = googleServicesJson.exists()
+if (firebaseEnabled) {
+    apply(plugin = "com.google.gms.google-services")
+    apply(plugin = "com.google.firebase.crashlytics")
+}
+
+// versionCode / versionName resolution:
+//   1. DISH_VERSION_CODE + DISH_VERSION_NAME env vars (set by release.yml
+//      from the git tag).
+//   2. `git describe --tags --match v*` if a tag exists locally.
+//   3. Fallback to 1 / "1.0" for fresh clones with no tags.
+//
+// Keeps local debug builds usable while producing meaningful values for
+// tagged releases. See HANDOFF.md item 4 for the versioning scheme.
+data class ResolvedVersion(val code: Int, val name: String)
+
+fun resolveVersion(): ResolvedVersion {
+    System.getenv("DISH_VERSION_CODE")?.toIntOrNull()?.let { code ->
+        System.getenv("DISH_VERSION_NAME")?.takeIf { it.isNotBlank() }?.let { name ->
+            return ResolvedVersion(code, name)
+        }
+    }
+    runCatching {
+        val proc = ProcessBuilder("git", "describe", "--tags", "--match", "v*", "--abbrev=0")
+            .redirectErrorStream(true)
+            .start()
+        val out = proc.inputStream.bufferedReader().readText().trim()
+        if (!proc.waitFor(2, java.util.concurrent.TimeUnit.SECONDS) || proc.exitValue() != 0 || out.isEmpty()) {
+            return@runCatching null
+        }
+        val match = Regex("^v(\\d+)\\.(\\d+)\\.(\\d+)").find(out) ?: return@runCatching null
+        val (major, minor, patch) = match.destructured
+        ResolvedVersion(
+            code = major.toInt() * 10000 + minor.toInt() * 100 + patch.toInt(),
+            name = out.removePrefix("v"),
+        )
+    }.getOrNull()?.let { return it }
+    return ResolvedVersion(1, "1.0")
+}
+
+val resolvedVersion = resolveVersion()
+
 android {
     namespace = "com.tinkernorth.dish"
     compileSdk = 36
@@ -15,8 +62,8 @@ android {
         applicationId = "com.tinkernorth.dish"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = resolvedVersion.code
+        versionName = resolvedVersion.name
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -95,12 +142,23 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
+    if (firebaseEnabled) {
+        implementation(platform(libs.firebase.bom))
+        implementation(libs.firebase.crashlytics)
+        // Analytics is optional but Crashlytics gains free trend data from it.
+        // If you want pure crash reporting with zero analytics, remove this
+        // line and add a Data Safety note to PRIVACY.md.
+        implementation(libs.firebase.analytics)
+    }
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.turbine)
     testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.rules)
 }
 
 ktlint {

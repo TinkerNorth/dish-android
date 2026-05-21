@@ -4,6 +4,8 @@
 package com.tinkernorth.dish
 
 import android.app.Application
+import android.content.pm.ApplicationInfo
+import android.os.StrictMode
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.tinkernorth.dish.composer.StreamingService
 import com.tinkernorth.dish.composer.StreamingServiceController
@@ -62,6 +64,7 @@ class DishApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        installStrictModeIfDebuggable()
         // The satellite native library is loaded eagerly from a handful of
         // companion init blocks (SatelliteNative, RumbleBridge, BluetoothGamepadBridge).
         // If the APK ships without the matching ABI (rare but real on
@@ -80,6 +83,33 @@ class DishApplication : Application() {
                 t,
             )
         }
+    }
+
+    /**
+     * StrictMode in debug builds only. Catches disk/network on the main
+     * thread, leaked closables, and leaked SQLite cursors during dev. Gated
+     * on the debuggable flag so release builds pay nothing — release R8
+     * will dead-code-eliminate the body of the if() branch as well.
+     */
+    private fun installStrictModeIfDebuggable() {
+        val isDebuggable = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        if (!isDebuggable) return
+        StrictMode.setThreadPolicy(
+            StrictMode.ThreadPolicy.Builder()
+                .detectDiskReads()
+                .detectDiskWrites()
+                .detectNetwork()
+                .penaltyLog()
+                .build(),
+        )
+        StrictMode.setVmPolicy(
+            StrictMode.VmPolicy.Builder()
+                .detectLeakedClosableObjects()
+                .detectLeakedRegistrationObjects()
+                .detectActivityLeaks()
+                .penaltyLog()
+                .build(),
+        )
     }
 
     /**

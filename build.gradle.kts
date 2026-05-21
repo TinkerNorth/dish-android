@@ -10,6 +10,11 @@ plugins {
     // the NVD + GitHub advisory database. PR-time CI runs
     // `./gradlew dependencyCheckAnalyze` and fails on CVSS >= 7.0.
     alias(libs.plugins.dependency.check) apply false
+    // Firebase plugins — declared at the root so :app can apply them
+    // conditionally (only when google-services.json is present). The
+    // plugins themselves are NOT applied at the root; :app does that.
+    alias(libs.plugins.google.services) apply false
+    alias(libs.plugins.firebase.crashlytics) apply false
 }
 
 // Apply dependency-check at the root so `./gradlew dependencyCheckAggregate`

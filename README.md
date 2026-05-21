@@ -193,18 +193,19 @@ gitleaks, action-pin lint, and CodeQL `java-kotlin` + `cpp` analysis.
 ## Privacy
 
 Public privacy policy:
-[`dish.tinkernorth.com/privacy/dish-android/`](https://dish.tinkernorth.com/privacy/dish-android/).
-The policy is also linked from the in-app Connections screen's
-overflow menu. Short version: no telemetry, no analytics, no crash
-reporting, no third-party SDKs, no account system, no cloud backend.
-The app only talks to the Satellite servers you have explicitly paired
-with on your own LAN. The policy covers GDPR, UK GDPR, CCPA/CPRA, and
+[`dish.tinkernorth.com/privacy/dish-android/`](https://dish.tinkernorth.com/privacy/dish-android/),
+mirrored in-repo at [`PRIVACY.md`](PRIVACY.md). The policy is also
+linked from the in-app Connections screen's overflow menu. Short
+version: the app is LAN-only, makes no calls to TinkerNorth-operated
+servers, and uses Firebase Crashlytics for crash + ANR reports only
+(stack traces, device model, install UUID — no gamepad input, no
+satellite IPs, no SSIDs). Opt-out toggle is on the roadmap — see
+`HANDOFF.md` item 2. The policy covers GDPR, UK GDPR, CCPA/CPRA, and
 LGPD inside the single document.
 
 Privacy contact: <privacy@tinkernorth.com>. For data subject access /
 deletion requests under GDPR, UK GDPR, CCPA / CPRA, or LGPD, email us
-there — note that because the app collects no personal data, most
-requests are answered by confirming we hold nothing about you.
+there.
 
 ## Security
 
@@ -213,6 +214,14 @@ release ships cosign keyless signatures, SHA256SUMS, SBOMs (SPDX +
 CycloneDX), and SLSA L3 provenance — see
 [`CONTRIBUTING.md#security`](CONTRIBUTING.md#security) for the
 verification recipe.
+
+## Release process
+
+- Notable changes are tracked in [`CHANGELOG.md`](CHANGELOG.md).
+- Pre-launch release-readiness items (Firebase setup, Play Console
+  configuration, version scheme, GHAS enablement) are tracked in
+  [`HANDOFF.md`](HANDOFF.md). Workflow comments reference items by
+  number; keep the numbering stable.
 
 ## License
 
