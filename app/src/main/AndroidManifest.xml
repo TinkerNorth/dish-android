@@ -8,6 +8,18 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Foreground service: required to keep the streaming session alive
+         across app backgrounding. CONNECTED_DEVICE is the type that fits a
+         controller-to-host session (alternative would be DATA_SYNC but that's
+         meant for background sync jobs, not user-facing streaming). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+
+    <!-- API 33+: required to post the ongoing-session notification. The user
+         can decline; the service still runs, the notification just isn't
+         visible. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- Rumble: routed to the phone's Vibrator / VibratorManager when a
          satellite forwards game-side haptic events (MSG_RUMBLE 0x0009). -->
     <uses-permission android:name="android.permission.VIBRATE" />
@@ -22,14 +34,17 @@
 
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 
+    <!-- usesCleartextTraffic removed: the satellite client API is HTTPS now,
+         so no plaintext HTTP is sent. The encrypted UDP gamepad wire and the
+         LAN discovery beacon are raw sockets, which this flag never gated. -->
     <application
         android:name=".DishApplication"
-        android:usesCleartextTraffic="true"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:localeConfig="@xml/locales_config"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Dish">
@@ -45,6 +60,15 @@
             <meta-data android:name="android.app.lib_name"
                 android:value="satellite" />
         </activity>
+
+        <!-- Fatal-fallback screen used when the satellite native library
+             fails to load (usually an ABI mismatch on a sideloaded build).
+             Routed to by an exported alias so it can be the LAUNCHER target
+             on devices where MainActivity would crash before drawing. -->
+        <activity
+            android:name=".ui.main.NativeUnavailableActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Dish" />
         <activity
             android:name=".ui.main.GamepadOverlayActivity"
             android:exported="false"
@@ -59,6 +83,13 @@
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:parentActivityName=".ui.main.MainActivity"
             tools:targetApi="p" />
+
+        <!-- Foreground service for keeping the streaming session alive.
+             Controlled by StreamingServiceController; not exported. -->
+        <service
+            android:name=".composer.StreamingService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
 
     </application>
 

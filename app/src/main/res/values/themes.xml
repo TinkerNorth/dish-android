@@ -42,4 +42,24 @@
         <item name="android:insetBottom">0dp</item>
         <item name="rippleColor">@color/colorPrimaryDark</item>
     </style>
+
+    <!-- Custom dialog theme: transparent window background so the bg_pill
+         surface's rounded corners + cyan outline are the only visible shape,
+         dim behind so the activity recedes (matches the dim-on-low-power
+         scrim alpha for a consistent floating-element treatment). Used by
+         PairPinDialog. -->
+    <style name="Theme.Dish.Dialog" parent="Theme.AppCompat.Dialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimAmount">0.6</item>
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryVariant">@color/colorPrimaryDark</item>
+        <item name="colorOnPrimary">@color/colorOnPrimary</item>
+        <item name="colorSurface">@color/colorSurface</item>
+        <item name="colorOnSurface">@color/colorOnSurface</item>
+        <item name="materialButtonStyle">@style/Widget.Dish.Button</item>
+    </style>
 </resources>

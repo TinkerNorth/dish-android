@@ -128,8 +128,10 @@ val nativeTestConfigure =
         description = "Configure the host CMake build for the native unit tests."
         inputs.file(nativeTestSrcDir.file("CMakeLists.txt"))
         inputs.file(nativeTestSrcDir.file("gamepad_input_test.cpp"))
+        inputs.file(nativeTestSrcDir.file("wire_encoders_test.cpp"))
         inputs.file(layout.projectDirectory.file("src/main/cpp/gamepad_input.h"))
         inputs.file(layout.projectDirectory.file("src/main/cpp/gamepad_input.cpp"))
+        inputs.file(layout.projectDirectory.file("src/main/cpp/wire_encoders.h"))
         outputs.dir(nativeTestBuildDir)
         commandLine(
             "cmake",

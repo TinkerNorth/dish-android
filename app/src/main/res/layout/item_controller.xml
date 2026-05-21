@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/cardRoot"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -54,6 +55,52 @@
                     android:textSize="12sp" />
             </LinearLayout>
 
+            <!-- ── Battery indicator (Task 1.2): icon + percentage ── -->
+            <LinearLayout
+                android:id="@+id/llBattery"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="10dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:visibility="gone">
+
+                <!-- contentDescription is set dynamically in ControllerAdapter
+                     (level + charging state) so screen readers announce the
+                     actual value; tools:ignore silences the static-text lint. -->
+                <!-- No tint: the battery glyphs are intentionally two-tone
+                     (teal hull + white overlay). bindBattery() swaps in the
+                     charge-ladder rung; only the percentage text goes red. -->
+                <ImageView
+                    android:id="@+id/ivBattery"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_battery"
+                    tools:ignore="ContentDescription" />
+
+                <TextView
+                    android:id="@+id/tvBattery"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="3dp"
+                    android:textColor="@color/colorMuted"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <!-- v6 brand connection-target glyph. Mirrors the row this slot
+                 is bound to over on activity_connections.xml — a satellite
+                 row's icon family is satellite, a Bluetooth row's is the
+                 Berkana rune. Painted in ControllerAdapter.bind() from the
+                 slot's boundStatus; hidden when unbound. -->
+            <ImageView
+                android:id="@+id/ivBoundKind"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="8dp"
+                android:contentDescription="@null"
+                android:visibility="gone"
+                android:src="@drawable/ic_satellite" />
+
             <View
                 android:id="@+id/dotStatus"
                 android:layout_width="8dp"
@@ -66,7 +113,7 @@
                 android:layout_height="28dp"
                 android:padding="2dp"
                 android:src="@drawable/ic_open_gamepad"
-                android:contentDescription="Open gamepad"
+                android:contentDescription="@string/desc_open_gamepad"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:clickable="true"
                 android:focusable="true"
@@ -79,7 +126,7 @@
                 android:layout_height="20dp"
                 android:layout_marginStart="6dp"
                 android:src="@drawable/ic_chevron_down"
-                android:contentDescription="Expand"
+                android:contentDescription="@string/desc_expand"
                 app:tint="@color/colorMuted" />
         </LinearLayout>
 
@@ -96,7 +143,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Output to"
+                android:text="@string/slot_output_to_label"
                 android:textColor="@color/colorMuted"
                 android:textSize="11sp"
                 android:fontFamily="monospace"
@@ -115,7 +162,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Unbind"
+                android:text="@string/action_unbind"
                 android:textAllCaps="false"
                 android:visibility="gone" />
 
@@ -125,7 +172,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Open Gamepad"
+                android:text="@string/action_open_gamepad"
                 android:textAllCaps="false"
                 app:icon="@drawable/ic_open_gamepad"
                 app:iconGravity="textStart"

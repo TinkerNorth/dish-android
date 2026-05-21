@@ -3,13 +3,18 @@
 
 package com.tinkernorth.dish.ui.main
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.tinkernorth.dish.data.network.ConnectionEvent
-import com.tinkernorth.dish.data.network.ConnectionHub
-import com.tinkernorth.dish.data.network.SatelliteConnectionManager
-import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
+import com.tinkernorth.dish.R
+import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
+import com.tinkernorth.dish.source.connection.ConnectionEvent
+import com.tinkernorth.dish.source.connection.SatelliteConnection
+import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.store.BatteryStatusStore
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -35,9 +40,11 @@ import javax.inject.Inject
 class MainViewModel
     @Inject
     constructor(
+        @ApplicationContext private val context: Context,
         val satellite: SatelliteConnectionManager,
         val hub: ConnectionHub,
         private val gamepadRegistry: PhysicalGamepadRegistry,
+        private val batteryStatusStore: BatteryStatusStore,
     ) : ViewModel() {
         private val _uiState = MutableStateFlow(MainUiState())
         val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
@@ -50,12 +57,13 @@ class MainViewModel
                 hub.connections,
                 hub.bindings,
                 gamepadRegistry.devices,
-            ) { conns, bindings, devices ->
+                batteryStatusStore.samples,
+            ) { conns, bindings, devices, batteries ->
                 val virtual =
                     ControllerSlot(
                         id = VIRTUAL_SLOT_ID,
                         inputType = SlotInputType.VIRTUAL,
-                        name = "Virtual Controller",
+                        name = context.getString(R.string.default_virtual_controller_name),
                     )
                 val physical =
                     devices.values.map { dev ->
@@ -64,6 +72,8 @@ class MainViewModel
                             inputType = SlotInputType.PHYSICAL,
                             name = dev.name,
                             physicalDeviceId = dev.id,
+                            isDisconnecting = dev.isDisconnecting,
+                            disconnectTimeLeft = dev.disconnectingTimeLeftSec ?: 0,
                         )
                     }
                 val slots =
@@ -72,6 +82,10 @@ class MainViewModel
                         slot.copy(
                             boundConnectionId = cid,
                             boundStatus = cid?.let { id -> conns.firstOrNull { it.id == id } },
+                            battery =
+                                batteries[slot.id]?.let { s ->
+                                    BatteryUi.fromWire(s.level, s.status)
+                                },
                         )
                     }
                 MainUiState(slots = slots, connections = conns)
@@ -83,7 +97,7 @@ class MainViewModel
                         is ConnectionEvent.PairingRequired ->
                             _events.emit(
                                 MainEvent.ShowPairingDialog(
-                                    com.tinkernorth.dish.data.network.SatelliteConnection
+                                    com.tinkernorth.dish.source.connection.SatelliteConnection
                                         .idFor(event.server),
                                 ),
                             )

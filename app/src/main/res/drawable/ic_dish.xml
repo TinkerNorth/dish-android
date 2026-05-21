@@ -1,0 +1,41 @@
+<!-- v6 brand "dish" glyph: parabolic reflector on a pole, tilted -28°.
+     Geometry mirrors dish-assets/dish.svg (TinkerNorth brand book). The
+     two-tone palette is self-coloured — do NOT apply android:tint /
+     app:tint, it would flatten the white overlay onto the teal hull. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+    <!-- base plate -->
+    <path
+        android:fillColor="#8FCFE3"
+        android:pathData="M15,56 H49 A1,1 0 0 1 50,57 V59 A1,1 0 0 1 49,60 H15 A1,1 0 0 1 14,59 V57 A1,1 0 0 1 15,56 Z" />
+    <!-- pole -->
+    <path
+        android:fillColor="#8FCFE3"
+        android:pathData="M30,42 H34 V56 H30 Z" />
+    <!-- reflector group, tilted -28° around (32,28) -->
+    <group
+        android:pivotX="32"
+        android:pivotY="28"
+        android:rotation="-28">
+        <!-- outer dish -->
+        <path
+            android:fillColor="#8FCFE3"
+            android:pathData="M8,28 A24,8 0 1 0 56,28 A24,8 0 1 0 8,28 Z" />
+        <!-- inner white overlay -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillAlpha="0.55"
+            android:pathData="M14,28 A18,4 0 1 0 50,28 A18,4 0 1 0 14,28 Z" />
+        <!-- feed horn -->
+        <path
+            android:fillColor="#8FCFE3"
+            android:pathData="M29,28 A3,3 0 1 0 35,28 A3,3 0 1 0 29,28 Z" />
+        <!-- mast -->
+        <path
+            android:fillColor="#8FCFE3"
+            android:pathData="M30,14 H34 V28 H30 Z" />
+    </group>
+</vector>

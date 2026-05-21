@@ -1,0 +1,220 @@
+<resources>
+    <string name="app_name">Dish</string>
+
+    <!-- Panel principal MainActivity. El vocabulario sigue las etiquetas de
+         LinkState: una entrada recordada/emparejada está «emparejada»;
+         una entrada Connected está «en línea». -->
+    <string name="status_remembered">%1$d emparejada(s)</string>
+    <string name="status_tap_manage">Toca Gestionar para añadir una</string>
+    <string name="status_connected_of">%1$d de %2$d en línea</string>
+    <string name="toast_pairing_needed">Emparejamiento necesario — abrir Conexiones</string>
+    <string name="toast_bind_first">Enlaza una conexión primero</string>
+
+    <!-- Cabecera del panel principal (activity_main.xml). -->
+    <string name="section_connections">CONEXIONES</string>
+    <string name="section_controllers">MANDOS</string>
+    <string name="dashboard_connections_empty">Aún no hay conexiones</string>
+    <string name="action_manage">Gestionar</string>
+
+    <!-- Página de conexiones (activity_connections.xml). -->
+    <string name="title_connections">Conexiones</string>
+    <string name="section_satellites">SATÉLITES</string>
+    <string name="section_bluetooth_hosts">HOSTS BLUETOOTH</string>
+    <string name="action_scan">Buscar</string>
+    <string name="action_scanning">Buscando…</string>
+    <string name="action_add">Añadir</string>
+    <string name="bt_hosts_empty">No hay hosts recordados — toca Añadir para registrar uno nuevo</string>
+
+    <!-- row_connection.xml + etiquetas dinámicas de fila en ConnectionsActivity. -->
+    <string name="action_connect">Conectar</string>
+    <string name="action_disconnect">Desconectar</string>
+    <string name="action_repair_short">Reemparejar</string>
+    <string name="action_forget_short">Olvidar</string>
+    <string name="action_cancel">Cancelar</string>
+    <string name="bt_row_pair_from_host">Emparejar desde el host</string>
+    <string name="bt_row_acquiring">Adquiriendo…</string>
+    <string name="bt_row_waiting">Esperando…</string>
+
+    <!-- Diálogo de confirmación de olvidar host Bluetooth. -->
+    <string name="dialog_forget_bt_title">¿Olvidar %1$s?</string>
+    <string name="dialog_forget_bt_message">Dish dejará de recordar este host. El teléfono conserva el emparejamiento a nivel del sistema — abre los ajustes de Bluetooth para eliminarlo del todo.</string>
+    <string name="dialog_forget_bt_positive">Abrir ajustes</string>
+    <string name="dialog_forget_bt_negative">Ahora no</string>
+
+    <!-- Diálogo del selector de perfil Bluetooth. -->
+    <string name="dialog_controller_profile_title">Perfil del mando</string>
+
+    <!-- Banner publicado desde ConnectionsActivity cuando expira la visibilidad. -->
+    <string name="notif_discoverability_expired_title">Visibilidad expirada</string>
+    <string name="notif_discoverability_expired_body">Ningún host se emparejó a tiempo. Extiende para seguir intentándolo.</string>
+    <string name="action_re_extend">Extender</string>
+
+    <!-- Subtítulo del diálogo PIN cuando se conoce el nombre del servidor. -->
+    <string name="pair_dialog_subtitle_named">Introduce el PIN que aparece en %1$s.</string>
+    <!-- Texto genérico usado en el banner «servidor no responde» cuando aún
+         no hay nombre disponible. -->
+    <string name="satellite_fallback_name">satélite</string>
+
+    <!-- Tarjeta item_controller (item_controller.xml). -->
+    <string name="slot_output_to_label">Salida hacia</string>
+    <string name="action_unbind">Desenlazar</string>
+    <string name="action_open_gamepad">Abrir el mando</string>
+    <string name="desc_open_gamepad">Abrir el mando</string>
+    <string name="desc_expand">Expandir</string>
+
+    <!-- Texto de estado del slot en ControllerAdapter (bajo el nombre). -->
+    <string name="slot_status_disconnecting">Desconectando… %1$ds</string>
+    <string name="slot_status_routing_to">→ %1$s</string>
+    <string name="slot_status_bound">Enlazado</string>
+    <string name="slot_status_tap_to_bind">Toca para enlazar</string>
+
+    <!-- Filas del selector por slot en ControllerAdapter. -->
+    <string name="picker_empty_no_connections">No hay conexiones aún — toca Gestionar arriba</string>
+    <string name="picker_empty_no_available">No hay conexiones disponibles ahora mismo</string>
+    <string name="picker_status_online"> • en línea</string>
+    <string name="picker_status_connecting"> • conectando…</string>
+    <string name="picker_status_offline"> • desconectada</string>
+    <string name="picker_status_needs_pairing"> • emparejamiento necesario</string>
+    <string name="picker_detail_bound_here"> • enlazada aquí</string>
+    <string name="picker_detail_in_use"> • en uso</string>
+
+    <!-- Selector de tipo de mando por slot. -->
+    <string name="picker_type_label">Tipo</string>
+
+    <!-- Vocabulario de etiquetas/filas para LinkState. -->
+    <string name="chip_status_found">Encontrado</string>
+    <string name="chip_status_needs_pairing">Emparejar</string>
+    <string name="chip_status_offline">Desconectado</string>
+    <string name="chip_status_ready">Listo</string>
+    <string name="chip_status_connecting">Conectando…</string>
+    <string name="chip_status_online">En línea</string>
+    <string name="chip_status_unstable">Inestable</string>
+
+    <!-- Capa de superposición del mando (activity_gamepad_overlay.xml + GamepadOverlayActivity). -->
+    <string name="overlay_status_streaming">Transmitiendo</string>
+    <string name="overlay_status_unknown">Conexión desconocida</string>
+    <string name="overlay_status_not_connected">Sin conexión</string>
+    <string name="overlay_action_back">VOLVER</string>
+
+    <!-- Etiquetas por defecto de slot/conexión. -->
+    <string name="default_virtual_controller_name">Mando virtual</string>
+    <string name="default_bluetooth_gamepad_label">Mando Bluetooth</string>
+
+    <!-- Subtítulo de fila Bluetooth y estado transitorio del slot durante el
+         emparejamiento. -->
+    <string name="bt_row_detail">%1$s • %2$s</string>
+    <string name="bt_transient_ready_to_pair">Listo para emparejar — busca este dispositivo en tu host</string>
+    <string name="bt_transient_acquiring">Adquiriendo perfil HID…</string>
+    <string name="bt_transient_idle">Inactivo</string>
+
+    <!-- Indicador de movimiento (giroscopio/acelerómetro) en la superposición
+         táctil. Estados: transmitiendo, en pausa (superposición en segundo
+         plano), no transmitido (la conexión Bluetooth no tiene canal de
+         movimiento) y no disponible (sin giroscopio). -->
+    <string name="motion_streaming">Movimiento: transmitiendo</string>
+    <string name="motion_paused">Movimiento: en pausa</string>
+    <string name="motion_stalled">Movimiento: bloqueado</string>
+    <string name="motion_not_forwarded">Movimiento: no enviado</string>
+    <string name="motion_unavailable">Movimiento: sin giroscopio</string>
+    <string name="motion_unavailable_detail">Este teléfono no tiene giroscopio, por lo que el movimiento (puntería con giroscopio / inclinación) no se envía.</string>
+    <string name="motion_not_forwarded_detail">Esta conexión Bluetooth no tiene canal de movimiento. Usa una conexión por satélite para enviar puntería con giroscopio / inclinación.</string>
+    <string name="motion_stalled_detail">Sensor de movimiento bloqueado — prueba a pulsar el botón Atrás para reiniciarlo, o reinicia Dish.</string>
+
+    <!-- Indicador de batería por slot. -->
+    <string name="battery_percent">%1$d %%</string>
+    <string name="battery_unknown_level">--</string>
+
+    <!-- Descripción dinámica de la batería para lectores de pantalla. -->
+    <string name="battery_desc">Batería del mando %1$s, %2$s</string>
+    <string name="battery_desc_level_unknown">nivel desconocido</string>
+    <string name="battery_state_charging">cargando</string>
+    <string name="battery_state_low">baja, sin cargar</string>
+    <string name="battery_state_discharging">con batería</string>
+
+    <!-- Subtítulo de fila descubierta y chip de estado. -->
+    <string name="discovered_row_detail">%1$s • UDP %2$d</string>
+    <string name="discovered_row_status">Encontrado · %1$s</string>
+
+    <!-- Lista de conexiones: cómo se detectó un satélite. -->
+    <string name="discovery_source_broadcast">Difusión UDP</string>
+    <string name="discovery_source_mdns">mDNS</string>
+    <string name="discovery_source_both">mDNS + difusión</string>
+
+    <!-- Etiquetas de acción de las notificaciones Dish. -->
+    <string name="action_open_settings">AJUSTES</string>
+    <string name="action_retry">REINTENTAR</string>
+    <string name="action_reconnect">RECONECTAR</string>
+    <string name="action_repair">REEMPAREJAR</string>
+    <string name="action_open">ABRIR</string>
+    <string name="action_forget">OLVIDAR</string>
+    <string name="action_turn_on">ACTIVAR</string>
+    <string name="action_grant">PERMITIR</string>
+
+    <!-- Texto de las notificaciones Dish. -->
+    <string name="notif_bt_permission_title">Permiso de Bluetooth necesario</string>
+    <string name="notif_bt_permission_body">Dish necesita acceso a Bluetooth para registrar un mando.</string>
+    <string name="notif_bt_discoverability_denied_title">Visibilidad denegada</string>
+    <string name="notif_bt_discoverability_denied_body">Tu host no puede ver este teléfono hasta que lo hagas visible.</string>
+    <string name="notif_bt_adapter_off_title">Bluetooth desactivado</string>
+    <string name="notif_bt_adapter_off_body">Activa el Bluetooth para usar un host de mando.</string>
+    <string name="notif_bt_unsupported_title">Bluetooth HID requiere Android 9+</string>
+    <string name="notif_bt_unsupported_body">Este dispositivo no puede emparejarse como mando Bluetooth.</string>
+    <string name="notif_bt_key_missing_title">Reemparejar %1$s</string>
+    <string name="notif_bt_key_missing_body">El host ha olvidado su parte del emparejamiento. Olvídalo en ambos lados y vuelve a emparejar.</string>
+    <string name="notif_bt_bond_removed_title">%1$s desemparejado</string>
+    <string name="notif_bt_bond_removed_body">Reempareja para reconectar.</string>
+    <string name="notif_no_network_title">Sin red</string>
+    <string name="notif_no_network_body">Conéctate a la misma Wi-Fi que tu satélite.</string>
+    <string name="notif_cellular_only_title">Solo datos móviles</string>
+    <string name="notif_cellular_only_body">Los satélites viven en tu LAN Wi-Fi, no en los datos móviles.</string>
+    <string name="notif_bind_first_title">Enlaza una conexión primero</string>
+    <string name="notif_pairing_needed_title">Emparejamiento necesario</string>
+    <string name="notif_pairing_needed_body">Abre Conexiones para introducir el PIN de %1$s.</string>
+    <string name="notif_server_unreachable_title">%1$s no responde</string>
+    <string name="notif_server_unreachable_body">Comprueba que esté encendido y en la misma Wi-Fi.</string>
+    <string name="notif_registration_failed_title">Error al registrar el mando</string>
+    <string name="notif_pair_pin_failed_title">PIN incorrecto</string>
+    <string name="notif_session_lost_title">Conexión con %1$s perdida</string>
+    <string name="notif_session_lost_body">Reconectando…</string>
+
+    <!-- Estado vacío dinámico para la lista de satélites. -->
+    <string name="discovery_empty_never_scanned">Toca Buscar para encontrar satélites en tu red</string>
+    <string name="discovery_empty_no_results">No se encontraron satélites a las %1$s — comprueba la Wi-Fi y que tu host esté encendido.</string>
+
+    <!-- Diálogo personalizado de PIN. -->
+    <string name="pair_dialog_title">Emparejar con satélite</string>
+    <string name="pair_dialog_subtitle">Introduce el PIN que aparece en tu satélite.</string>
+    <string name="pair_dialog_pin_hint">PIN</string>
+    <string name="pair_dialog_submit">EMPAREJAR</string>
+    <string name="pair_dialog_cancel">CANCELAR</string>
+    <string name="pair_dialog_pairing">EMPAREJANDO…</string>
+    <string name="pair_dialog_error_empty">Introduce el PIN que aparece en tu satélite.</string>
+
+    <!-- Notificación del servicio en primer plano. -->
+    <string name="streaming_channel_name">Sesión de transmisión</string>
+    <string name="streaming_channel_description">Mantiene Dish activo mientras un mando transmite.</string>
+    <string name="streaming_notification_title">Dish · Transmitiendo</string>
+    <string name="streaming_notification_body">%1$d mando transmite a %2$s</string>
+    <string name="streaming_notification_body_plural">%1$d mandos transmitiendo</string>
+    <string name="streaming_notification_stop">Detener</string>
+
+    <!-- Pantalla de respaldo cuando falla la carga nativa. -->
+    <string name="fatal_native_title">Esta versión no se ejecutará en tu dispositivo</string>
+    <string name="fatal_native_body">La biblioteca nativa de Dish no pudo cargarse. Reinstala desde Google Play, o contacta con el soporte.</string>
+
+    <!-- Superposición de modo de ahorro de energía. -->
+    <string name="low_power_in">AHORRO EN</string>
+    <string name="low_power">AHORRO DE ENERGÍA</string>
+    <string name="low_power_seconds_suffix">s</string>
+    <string name="low_power_status_idle">Inactivo</string>
+    <string name="low_power_tap_to_wake">TOCA PARA DESPERTAR</string>
+    <plurals name="low_power_status_bound">
+        <item quantity="one">Enlazado · %1$d mando</item>
+        <item quantity="many">Enlazados · %1$d mandos</item>
+        <item quantity="other">Enlazados · %1$d mandos</item>
+    </plurals>
+
+    <!-- Cadenas heredadas del antiguo diseño de emparejamiento. -->
+    <string name="pairing_dialog_legacy_title">Emparejar con servidor</string>
+    <string name="pairing_dialog_legacy_message">Introduce el PIN que aparece en la pantalla de tu PC:</string>
+</resources>

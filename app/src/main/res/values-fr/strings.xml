@@ -1,0 +1,219 @@
+<resources>
+    <string name="app_name">Dish</string>
+
+    <!-- Tableau de bord MainActivity. Vocabulaire aligné avec les puces LinkState :
+         une entrée mémorisée/appairée est « appairée » ; une entrée Connected est « en ligne ». -->
+    <string name="status_remembered">%1$d appairée(s)</string>
+    <string name="status_tap_manage">Touchez Gérer pour en ajouter une</string>
+    <string name="status_connected_of">%1$d sur %2$d en ligne</string>
+    <string name="toast_pairing_needed">Appairage requis — ouvrir Connexions</string>
+    <string name="toast_bind_first">Liez d\'abord une connexion</string>
+
+    <!-- Chrome du tableau de bord (activity_main.xml). -->
+    <string name="section_connections">CONNEXIONS</string>
+    <string name="section_controllers">MANETTES</string>
+    <string name="dashboard_connections_empty">Aucune connexion pour l\'instant</string>
+    <string name="action_manage">Gérer</string>
+
+    <!-- Page Connexions (activity_connections.xml). -->
+    <string name="title_connections">Connexions</string>
+    <string name="section_satellites">SATELLITES</string>
+    <string name="section_bluetooth_hosts">HÔTES BLUETOOTH</string>
+    <string name="action_scan">Scanner</string>
+    <string name="action_scanning">Recherche…</string>
+    <string name="action_add">Ajouter</string>
+    <string name="bt_hosts_empty">Aucun hôte mémorisé — touchez Ajouter pour en enregistrer un</string>
+
+    <!-- row_connection.xml + libellés dynamiques des lignes dans ConnectionsActivity. -->
+    <string name="action_connect">Connecter</string>
+    <string name="action_disconnect">Déconnecter</string>
+    <string name="action_repair_short">Réappairer</string>
+    <string name="action_forget_short">Oublier</string>
+    <string name="action_cancel">Annuler</string>
+    <string name="bt_row_pair_from_host">Appairer depuis l\'hôte</string>
+    <string name="bt_row_acquiring">Acquisition…</string>
+    <string name="bt_row_waiting">En attente…</string>
+
+    <!-- Boîte de dialogue de confirmation d\'oubli d\'un hôte Bluetooth. -->
+    <string name="dialog_forget_bt_title">Oublier %1$s ?</string>
+    <string name="dialog_forget_bt_message">Dish ne mémorisera plus cet hôte. Le téléphone conserve l\'appairage au niveau système — ouvrez les paramètres Bluetooth pour le supprimer complètement.</string>
+    <string name="dialog_forget_bt_positive">Ouvrir les paramètres</string>
+    <string name="dialog_forget_bt_negative">Plus tard</string>
+
+    <!-- Boîte de dialogue de sélection de profil Bluetooth. -->
+    <string name="dialog_controller_profile_title">Profil de manette</string>
+
+    <!-- Bannière de fin de période de visibilité publiée depuis ConnectionsActivity. -->
+    <string name="notif_discoverability_expired_title">Visibilité expirée</string>
+    <string name="notif_discoverability_expired_body">Aucun hôte appairé à temps. Prolongez pour réessayer.</string>
+    <string name="action_re_extend">Prolonger</string>
+
+    <!-- Sous-titre de la boîte de dialogue PIN quand le nom du serveur est connu. -->
+    <string name="pair_dialog_subtitle_named">Saisissez le PIN affiché sur %1$s.</string>
+    <!-- Repli générique utilisé dans la bannière « serveur injoignable » quand aucun
+         nom n\'est encore disponible. -->
+    <string name="satellite_fallback_name">satellite</string>
+
+    <!-- Carte item_controller (item_controller.xml). -->
+    <string name="slot_output_to_label">Sortie vers</string>
+    <string name="action_unbind">Délier</string>
+    <string name="action_open_gamepad">Ouvrir la manette</string>
+    <string name="desc_open_gamepad">Ouvrir la manette</string>
+    <string name="desc_expand">Développer</string>
+
+    <!-- Texte du statut de l\'emplacement dans ControllerAdapter (sous le nom). -->
+    <string name="slot_status_disconnecting">Déconnexion… %1$ds</string>
+    <string name="slot_status_routing_to">→ %1$s</string>
+    <string name="slot_status_bound">Liée</string>
+    <string name="slot_status_tap_to_bind">Touchez pour lier</string>
+
+    <!-- Lignes du sélecteur par emplacement dans ControllerAdapter. -->
+    <string name="picker_empty_no_connections">Aucune connexion — touchez Gérer ci-dessus</string>
+    <string name="picker_empty_no_available">Aucune connexion disponible pour l\'instant</string>
+    <string name="picker_status_online"> • en ligne</string>
+    <string name="picker_status_connecting"> • connexion…</string>
+    <string name="picker_status_offline"> • hors ligne</string>
+    <string name="picker_status_needs_pairing"> • appairage requis</string>
+    <string name="picker_detail_bound_here"> • liée ici</string>
+    <string name="picker_detail_in_use"> • utilisée</string>
+
+    <!-- Bascule de type de manette par emplacement. -->
+    <string name="picker_type_label">Type</string>
+
+    <!-- Vocabulaire des puces / lignes pour LinkState. -->
+    <string name="chip_status_found">Trouvée</string>
+    <string name="chip_status_needs_pairing">Appairage requis</string>
+    <string name="chip_status_offline">Hors ligne</string>
+    <string name="chip_status_ready">Prête</string>
+    <string name="chip_status_connecting">Connexion…</string>
+    <string name="chip_status_online">En ligne</string>
+    <string name="chip_status_unstable">Instable</string>
+
+    <!-- Superposition manette (activity_gamepad_overlay.xml + GamepadOverlayActivity). -->
+    <string name="overlay_status_streaming">Diffusion en cours</string>
+    <string name="overlay_status_unknown">Connexion inconnue</string>
+    <string name="overlay_status_not_connected">Non connectée</string>
+    <string name="overlay_action_back">RETOUR</string>
+
+    <!-- Libellés par défaut pour les emplacements / connexions. -->
+    <string name="default_virtual_controller_name">Manette virtuelle</string>
+    <string name="default_bluetooth_gamepad_label">Manette Bluetooth</string>
+
+    <!-- Sous-titre des lignes Bluetooth et état transitoire d\'un emplacement
+         pendant un appairage en cours. -->
+    <string name="bt_row_detail">%1$s • %2$s</string>
+    <string name="bt_transient_ready_to_pair">Prête à appairer — repérez cet appareil sur votre hôte</string>
+    <string name="bt_transient_acquiring">Acquisition du profil HID…</string>
+    <string name="bt_transient_idle">Inactive</string>
+
+    <!-- Indicateur de mouvement (gyro/accéléromètre) en superposition tactile.
+         États : streaming, en pause (superposition en arrière-plan), non transmis
+         (la connexion Bluetooth n\'a pas de canal de mouvement), et indisponible
+         (pas de gyroscope). -->
+    <string name="motion_streaming">Mouvement : diffusion</string>
+    <string name="motion_paused">Mouvement : en pause</string>
+    <string name="motion_stalled">Mouvement : bloqué</string>
+    <string name="motion_not_forwarded">Mouvement : non transmis</string>
+    <string name="motion_unavailable">Mouvement : pas de gyroscope</string>
+    <string name="motion_unavailable_detail">Ce téléphone n\'a pas de gyroscope, le mouvement (visée gyro / inclinaison) n\'est pas transmis.</string>
+    <string name="motion_not_forwarded_detail">Cette connexion Bluetooth n\'a pas de canal de mouvement. Utilisez une connexion satellite pour transmettre la visée gyro / inclinaison.</string>
+    <string name="motion_stalled_detail">Capteur de mouvement bloqué — essayez d\'appuyer sur le bouton retour, ou redémarrez Dish.</string>
+
+    <!-- Indicateur de batterie par emplacement. -->
+    <string name="battery_percent">%1$d %%</string>
+    <string name="battery_unknown_level">--</string>
+
+    <!-- Description dynamique de la batterie pour les lecteurs d\'écran. -->
+    <string name="battery_desc">Batterie manette %1$s, %2$s</string>
+    <string name="battery_desc_level_unknown">niveau inconnu</string>
+    <string name="battery_state_charging">en charge</string>
+    <string name="battery_state_low">faible, hors charge</string>
+    <string name="battery_state_discharging">sur batterie</string>
+
+    <!-- Sous-titre des lignes (« IP · UDP port ») et puce de statut (« Trouvé · <source> »). -->
+    <string name="discovered_row_detail">%1$s • UDP %2$d</string>
+    <string name="discovered_row_status">Trouvé · %1$s</string>
+
+    <!-- Liste des connexions : comment un satellite découvert a été repéré. -->
+    <string name="discovery_source_broadcast">Diffusion UDP</string>
+    <string name="discovery_source_mdns">mDNS</string>
+    <string name="discovery_source_both">mDNS + diffusion</string>
+
+    <!-- Libellés d\'action des notifications Dish. -->
+    <string name="action_open_settings">PARAMÈTRES</string>
+    <string name="action_retry">RÉESSAYER</string>
+    <string name="action_reconnect">RECONNECTER</string>
+    <string name="action_repair">RÉAPPAIRER</string>
+    <string name="action_open">OUVRIR</string>
+    <string name="action_forget">OUBLIER</string>
+    <string name="action_turn_on">ACTIVER</string>
+    <string name="action_grant">AUTORISER</string>
+
+    <!-- Texte des notifications Dish. -->
+    <string name="notif_bt_permission_title">Autorisation Bluetooth nécessaire</string>
+    <string name="notif_bt_permission_body">Dish a besoin de l\'accès Bluetooth pour enregistrer une manette.</string>
+    <string name="notif_bt_discoverability_denied_title">Visibilité refusée</string>
+    <string name="notif_bt_discoverability_denied_body">Votre hôte ne peut pas voir ce téléphone tant que vous ne l\'avez pas rendu visible.</string>
+    <string name="notif_bt_adapter_off_title">Bluetooth désactivé</string>
+    <string name="notif_bt_adapter_off_body">Activez le Bluetooth pour utiliser un hôte manette.</string>
+    <string name="notif_bt_unsupported_title">Le Bluetooth HID nécessite Android 9+</string>
+    <string name="notif_bt_unsupported_body">Cet appareil ne peut pas s\'appairer comme manette Bluetooth.</string>
+    <string name="notif_bt_key_missing_title">Réappairer %1$s</string>
+    <string name="notif_bt_key_missing_body">L\'hôte a oublié sa part d\'appairage. Oubliez des deux côtés puis réappairez.</string>
+    <string name="notif_bt_bond_removed_title">%1$s désappairée</string>
+    <string name="notif_bt_bond_removed_body">Réappairez pour vous reconnecter.</string>
+    <string name="notif_no_network_title">Pas de réseau</string>
+    <string name="notif_no_network_body">Connectez-vous au même Wi-Fi que votre satellite.</string>
+    <string name="notif_cellular_only_title">Données mobiles uniquement</string>
+    <string name="notif_cellular_only_body">Les satellites vivent sur votre LAN Wi-Fi, pas sur les données mobiles.</string>
+    <string name="notif_bind_first_title">Liez d\'abord une connexion</string>
+    <string name="notif_pairing_needed_title">Appairage requis</string>
+    <string name="notif_pairing_needed_body">Ouvrez Connexions pour saisir le PIN de %1$s.</string>
+    <string name="notif_server_unreachable_title">%1$s ne répond pas</string>
+    <string name="notif_server_unreachable_body">Vérifiez qu\'il est allumé et sur le même Wi-Fi.</string>
+    <string name="notif_registration_failed_title">Échec de l\'enregistrement de la manette</string>
+    <string name="notif_pair_pin_failed_title">PIN incorrect</string>
+    <string name="notif_session_lost_title">Connexion à %1$s perdue</string>
+    <string name="notif_session_lost_body">Reconnexion…</string>
+
+    <!-- État vide dynamique de la liste satellite. -->
+    <string name="discovery_empty_never_scanned">Touchez Scanner pour trouver des satellites sur votre réseau</string>
+    <string name="discovery_empty_no_results">Aucun satellite trouvé à %1$s — vérifiez le Wi-Fi et que votre hôte est allumé.</string>
+
+    <!-- Boîte de dialogue PIN personnalisée. -->
+    <string name="pair_dialog_title">Appairer avec un satellite</string>
+    <string name="pair_dialog_subtitle">Saisissez le PIN affiché sur votre satellite.</string>
+    <string name="pair_dialog_pin_hint">PIN</string>
+    <string name="pair_dialog_submit">APPAIRER</string>
+    <string name="pair_dialog_cancel">ANNULER</string>
+    <string name="pair_dialog_pairing">APPAIRAGE…</string>
+    <string name="pair_dialog_error_empty">Saisissez le PIN affiché sur votre satellite.</string>
+
+    <!-- Notification du service au premier plan. -->
+    <string name="streaming_channel_name">Session de diffusion</string>
+    <string name="streaming_channel_description">Maintient Dish actif pendant qu\'une manette diffuse.</string>
+    <string name="streaming_notification_title">Dish · Diffusion</string>
+    <string name="streaming_notification_body">%1$d manette diffuse vers %2$s</string>
+    <string name="streaming_notification_body_plural">%1$d manettes diffusent</string>
+    <string name="streaming_notification_stop">Arrêter</string>
+
+    <!-- Écran de repli quand le chargement natif échoue. -->
+    <string name="fatal_native_title">Cette version ne fonctionnera pas sur votre appareil</string>
+    <string name="fatal_native_body">La bibliothèque native Dish n\'a pas pu se charger. Réinstallez depuis Google Play, ou contactez le support.</string>
+
+    <!-- Superposition mode économie d\'énergie (overlay_low_power.xml + LowPowerManager). -->
+    <string name="low_power_in">ÉCO DANS</string>
+    <string name="low_power">MODE ÉCO</string>
+    <string name="low_power_seconds_suffix">s</string>
+    <string name="low_power_status_idle">Inactif</string>
+    <string name="low_power_tap_to_wake">TOUCHEZ POUR RÉVEILLER</string>
+    <plurals name="low_power_status_bound">
+        <item quantity="one">Liée · %1$d manette</item>
+        <item quantity="many">Liées · %1$d manettes</item>
+        <item quantity="other">Liées · %1$d manettes</item>
+    </plurals>
+
+    <!-- Chaînes héritées de l\'ancienne mise en page d\'appairage. -->
+    <string name="pairing_dialog_legacy_title">Appairer avec un serveur</string>
+    <string name="pairing_dialog_legacy_message">Saisissez le PIN affiché sur l\'écran de votre PC :</string>
+</resources>

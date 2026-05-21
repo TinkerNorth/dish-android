@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Animated charging battery (v6 brand). The fill group ramps 0->100% over
+     3.0s, holds 0.6s, then loops (battery_fill interpolator over a 3.6s clock);
+     the bolt's white overlay pulses on an independent 1.5s clock. This is the
+     Android twin of battery-charging-animated.svg. Shown by ControllerAdapter
+     when the battery status is charging. The two-tone palette is self-coloured
+     — do NOT apply android:tint / app:tint, and the ImageView must not either.
+     ControllerAdapter calls start() on the drawable to run the loop. -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+
+    <aapt:attr name="android:drawable">
+        <vector
+            android:width="24dp"
+            android:height="24dp"
+            android:viewportWidth="64"
+            android:viewportHeight="64">
+            <path
+                android:fillColor="#8FCFE3"
+                android:pathData="M11,22 L47,22 A3,3 0 0 1 50,25 L50,39 A3,3 0 0 1 47,42 L11,42 A3,3 0 0 1 8,39 L8,25 A3,3 0 0 1 11,22 Z" />
+            <path
+                android:fillColor="#8FCFE3"
+                android:pathData="M51,28 L53,28 A1,1 0 0 1 54,29 L54,35 A1,1 0 0 1 53,36 L51,36 A1,1 0 0 1 50,35 L50,29 A1,1 0 0 1 51,28 Z" />
+            <path
+                android:fillColor="#FFFFFF"
+                android:fillAlpha="0.55"
+                android:pathData="M12,25 L46,25 A1,1 0 0 1 47,26 L47,38 A1,1 0 0 1 46,39 L12,39 A1,1 0 0 1 11,38 L11,26 A1,1 0 0 1 12,25 Z" />
+            <group
+                android:name="fill"
+                android:pivotX="11"
+                android:pivotY="32">
+                <path
+                    android:fillColor="#8FCFE3"
+                    android:pathData="M12,25 L46,25 A1,1 0 0 1 47,26 L47,38 A1,1 0 0 1 46,39 L12,39 A1,1 0 0 1 11,38 L11,26 A1,1 0 0 1 12,25 Z" />
+                <path
+                    android:fillColor="#FFFFFF"
+                    android:fillAlpha="0.55"
+                    android:pathData="M14,27 L44,27 A1,1 0 0 1 45,28 L45,29 A1,1 0 0 1 44,30 L14,30 A1,1 0 0 1 13,29 L13,28 A1,1 0 0 1 14,27 Z" />
+            </group>
+            <path
+                android:fillColor="#0F1620"
+                android:pathData="M32,24 L22,34 L28,34 L26,42 L38,30 L32,30 L34,24 Z" />
+            <path
+                android:name="bolt_overlay"
+                android:fillColor="#FFFFFF"
+                android:fillAlpha="0.55"
+                android:pathData="M32,25.5 L24,33.5 L28.5,33.5 L27,40 L36,30.5 L32.5,30.5 L33.5,25.5 Z" />
+        </vector>
+    </aapt:attr>
+
+    <!-- Fill ramp: scale the fill group from collapsed (empty) to full width,
+         anchored at the hull's left inner edge (pivotX=11). -->
+    <target android:name="fill">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="scaleX"
+                android:valueFrom="0.0"
+                android:valueTo="1.0"
+                android:valueType="floatType"
+                android:duration="3600"
+                android:repeatCount="infinite"
+                android:interpolator="@interpolator/battery_fill" />
+        </aapt:attr>
+    </target>
+
+    <!-- Bolt pulse: independent 1.5s sinusoidal opacity loop on the overlay. -->
+    <target android:name="bolt_overlay">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="fillAlpha"
+                android:valueFrom="0.55"
+                android:valueTo="0.95"
+                android:valueType="floatType"
+                android:duration="750"
+                android:repeatCount="infinite"
+                android:repeatMode="reverse"
+                android:interpolator="@android:interpolator/accelerate_decelerate" />
+        </aapt:attr>
+    </target>
+</animated-vector>

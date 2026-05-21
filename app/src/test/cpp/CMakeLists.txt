@@ -38,5 +38,15 @@ target_include_directories(gamepad_input_test PRIVATE "${SATELLITE_CPP}")
 target_compile_options(gamepad_input_test PRIVATE -Wall -Wextra -Wpedantic)
 target_link_libraries(gamepad_input_test PRIVATE GTest::gtest_main)
 
+# Pure wire-encoder unit tests — no Android / JNI dependency, just the LE
+# byte-layout pins for MSG_MOTION (0x000A) and MSG_BATTERY (0x000B).
+add_executable(wire_encoders_test
+    wire_encoders_test.cpp
+)
+target_include_directories(wire_encoders_test PRIVATE "${SATELLITE_CPP}")
+target_compile_options(wire_encoders_test PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(wire_encoders_test PRIVATE GTest::gtest_main)
+
 include(GoogleTest)
 gtest_discover_tests(gamepad_input_test)
+gtest_discover_tests(wire_encoders_test)

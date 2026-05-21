@@ -1,0 +1,31 @@
+<!-- Battery at ~10% with an exclamation overlay (v6 brand). Shown below 15%
+     and not charging. The "!" glyph — not just a red tint — is what makes the
+     critical state perceivable without relying on colour (WCAG 1.4.1). The
+     two-tone palette is self-coloured: do NOT apply android:tint / app:tint. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+    <path
+        android:fillColor="#8FCFE3"
+        android:pathData="M11,22 L47,22 A3,3 0 0 1 50,25 L50,39 A3,3 0 0 1 47,42 L11,42 A3,3 0 0 1 8,39 L8,25 A3,3 0 0 1 11,22 Z" />
+    <path
+        android:fillColor="#8FCFE3"
+        android:pathData="M51,28 L53,28 A1,1 0 0 1 54,29 L54,35 A1,1 0 0 1 53,36 L51,36 A1,1 0 0 1 50,35 L50,29 A1,1 0 0 1 51,28 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.55"
+        android:pathData="M12,25 L46,25 A1,1 0 0 1 47,26 L47,38 A1,1 0 0 1 46,39 L12,39 A1,1 0 0 1 11,38 L11,26 A1,1 0 0 1 12,25 Z" />
+    <path
+        android:fillColor="#8FCFE3"
+        android:pathData="M12,25 L13.6,25 A1,1 0 0 1 14.6,26 L14.6,38 A1,1 0 0 1 13.6,39 L12,39 A1,1 0 0 1 11,38 L11,26 A1,1 0 0 1 12,25 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.55"
+        android:pathData="M35,28 L36,28 A1,1 0 0 1 37,29 L37,34 A1,1 0 0 1 36,35 L35,35 A1,1 0 0 1 34,34 L34,29 A1,1 0 0 1 35,28 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.55"
+        android:pathData="M35,36 L36,36 A1,1 0 0 1 37,37 L37,38 A1,1 0 0 1 36,39 L35,39 A1,1 0 0 1 34,38 L34,37 A1,1 0 0 1 35,36 Z" />
+</vector>

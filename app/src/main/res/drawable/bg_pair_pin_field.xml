@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pill-style input surface for the PIN dialog field. Matches the bg_pill
+     idiom but with a 6dp radius (a 20dp radius would over-soften an input
+     field) and the cyan outline at full saturation so the field reads as
+     focused/interactive even before the user taps. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/colorBackground" />
+    <corners android:radius="6dp" />
+    <stroke android:width="1dp" android:color="@color/colorPrimary" />
+</shape>

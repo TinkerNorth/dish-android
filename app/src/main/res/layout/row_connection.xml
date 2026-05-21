@@ -22,11 +22,29 @@
             android:orientation="horizontal"
             android:gravity="center_vertical">
 
-            <View
-                android:id="@+id/dotRow"
-                android:layout_width="8dp"
-                android:layout_height="8dp"
-                android:layout_marginEnd="10dp" />
+            <!-- v6 brand state glyph (dish/bluetooth, state-keyed). Painted
+                 in ConnectionsActivity.inflateRow() based on the connection
+                 kind and LinkState. The 8dp coloured dot still sits in the
+                 lower-right corner of the glyph as a secondary tonal cue
+                 (live=green, connecting=primary, else=muted). -->
+            <FrameLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="10dp">
+
+                <ImageView
+                    android:id="@+id/ivRowGlyph"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_satellite" />
+
+                <View
+                    android:id="@+id/dotRow"
+                    android:layout_width="8dp"
+                    android:layout_height="8dp"
+                    android:layout_gravity="bottom|end" />
+            </FrameLayout>
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -72,7 +90,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:textAllCaps="false"
-                android:text="Connect" />
+                android:text="@string/action_connect" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnRowSecondary"
@@ -82,7 +100,7 @@
                 android:layout_weight="1"
                 android:layout_marginStart="8dp"
                 android:textAllCaps="false"
-                android:text="Forget"
+                android:text="@string/action_forget_short"
                 android:visibility="gone" />
         </LinearLayout>
     </LinearLayout>

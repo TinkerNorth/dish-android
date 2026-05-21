@@ -1,0 +1,19 @@
+<!-- "bluetooth-connected" — Berkana rune flanked by two connection dots. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+    <path
+        android:strokeColor="#8FCFE3"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M18,18 L46,46 L32,58 L32,6 L46,18 L18,46" />
+    <path
+        android:fillColor="#8FCFE3"
+        android:pathData="M3,32 A3,3 0 1 0 9,32 A3,3 0 1 0 3,32 Z" />
+    <path
+        android:fillColor="#8FCFE3"
+        android:pathData="M55,32 A3,3 0 1 0 61,32 A3,3 0 1 0 55,32 Z" />
+</vector>
