@@ -190,6 +190,26 @@ gitleaks, action-pin lint, and CodeQL `java-kotlin` + `cpp` analysis.
 > blocked at the platform level. Treat the PR-based flow as a convention
 > and rely on the CI workflows as the quality gate.
 
+## Privacy
+
+Public privacy policy:
+[`dish.tinkernorth.com/privacy/dish-android/`](https://dish.tinkernorth.com/privacy/dish-android/),
+mirrored in-repo at [`PRIVACY.md`](PRIVACY.md). The policy is also
+linked from the gear icon on the main screen → Settings → Privacy
+policy. Short version: the app is LAN-only, makes no calls to
+TinkerNorth-operated servers, and uses Firebase Crashlytics for crash
++ ANR reports only (stack traces, device model, install UUID — no
+gamepad input, no satellite IPs, no SSIDs). Firebase Analytics is
+deliberately not bundled, so no advertising ID is collected and no
+auto-event telemetry fires. The crash-reporting opt-out toggle lives
+on the same Settings screen → Diagnostics → *Share crash reports*.
+The policy covers GDPR, UK GDPR, CCPA/CPRA, and LGPD inside the
+single document.
+
+Privacy contact: <privacy@tinkernorth.com>. For data subject access /
+deletion requests under GDPR, UK GDPR, CCPA / CPRA, or LGPD, email us
+there.
+
 ## Security
 
 Vulnerability disclosure: [`SECURITY.md`](SECURITY.md). Every
@@ -197,6 +217,14 @@ release ships cosign keyless signatures, SHA256SUMS, SBOMs (SPDX +
 CycloneDX), and SLSA L3 provenance — see
 [`CONTRIBUTING.md#security`](CONTRIBUTING.md#security) for the
 verification recipe.
+
+## Release process
+
+- Notable changes are tracked in [`CHANGELOG.md`](CHANGELOG.md).
+- Pre-launch release-readiness items (Firebase setup, Play Console
+  configuration, version scheme, GHAS enablement) are tracked in
+  [`HANDOFF.md`](HANDOFF.md). Workflow comments reference items by
+  number; keep the numbering stable.
 
 ## License
 

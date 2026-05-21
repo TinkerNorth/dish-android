@@ -1,0 +1,19 @@
+<!-- v6 brand "settings gear" master mark — 8-tooth gear with a contrasting
+     ink hub. Sourced from the Claude Design "Settings Gear" handoff:
+       - 64u viewport, 8 teeth at 45°, half-tooth angle 11°
+       - tooth tip ø56 (R=28), gear body ø44 (r=22), hub ø14 (r=7 at 32,32)
+       - light-theme palette: #8FCFE3 (Dish Blue 300) gear + #0F1620 ink hub
+     Each tooth is 4 vertices at radii 22 & 28, connected by a 23° arc on
+     the body radius to the next tooth. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+    <path
+        android:fillColor="#8FCFE3"
+        android:pathData="M27.80,10.40 L26.66,4.51 L37.34,4.51 L36.20,10.40 A22,22 0 0,1 44.30,13.76 L47.66,8.79 L55.21,16.34 L50.24,19.70 A22,22 0 0,1 53.60,27.80 L59.49,26.66 L59.49,37.34 L53.60,36.20 A22,22 0 0,1 50.24,44.30 L55.21,47.66 L47.66,55.21 L44.30,50.24 A22,22 0 0,1 36.20,53.60 L37.34,59.49 L26.66,59.49 L27.80,53.60 A22,22 0 0,1 19.70,50.24 L16.34,55.21 L8.79,47.66 L13.76,44.30 A22,22 0 0,1 10.40,36.20 L4.51,37.34 L4.51,26.66 L10.40,27.80 A22,22 0 0,1 13.76,19.70 L8.79,16.34 L16.34,8.79 L19.70,13.76 A22,22 0 0,1 27.80,10.40 Z" />
+    <path
+        android:fillColor="#0F1620"
+        android:pathData="M32,25 A7,7 0 1,0 32,39 A7,7 0 1,0 32,25 Z" />
+</vector>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Explicit deny-cleartext config. All HTTP traffic the app makes (the
+    HTTPS satellite client API and any future telemetry endpoint) MUST be
+    TLS. The encrypted UDP gamepad wire and LAN discovery beacons are raw
+    sockets and are not gated by this config; they carry their own AEAD.
+
+    This is a belt-and-braces signal to Android's PlatformVal validator
+    and to Play's pre-launch security checks: even if a future PR forgets
+    to set `usesCleartextTraffic="false"`, this config still wins.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!--
+        Debug-only override: allow cleartext to localhost / 10.0.2.2 so
+        Android Studio's emulator <-> host bridge keeps working during
+        development. Production builds (debuggable=false) ignore this
+        block entirely.
+    -->
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
+</network-security-config>

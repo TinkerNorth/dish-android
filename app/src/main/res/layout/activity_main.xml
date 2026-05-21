@@ -25,9 +25,33 @@
             android:paddingHorizontal="20dp"
             android:paddingTop="24dp">
 
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:text="@string/brand_name" android:textColor="@color/colorPrimary" android:textSize="24sp"
-                android:textStyle="bold" android:letterSpacing="0.12" android:layout_marginBottom="2dp" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="2dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/brand_name"
+                    android:textColor="@color/colorPrimary"
+                    android:textSize="24sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.12" />
+
+                <ImageButton
+                    android:id="@+id/btnSettings"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:src="@drawable/ic_settings"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/menu_settings"
+                    android:padding="8dp"
+                    android:scaleType="fitCenter" />
+            </LinearLayout>
 
             <!-- Connections summary card -->
             <com.google.android.material.card.MaterialCardView

@@ -24,6 +24,7 @@ import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.ui.connections.ConnectionsActivity
+import com.tinkernorth.dish.ui.settings.SettingsActivity
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -97,6 +98,9 @@ class MainActivity :
         binding.rvControllers.adapter = controllerAdapter
         binding.btnManageConnections.setOnClickListener {
             startActivity(Intent(this, ConnectionsActivity::class.java))
+        }
+        binding.btnSettings.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
         }
     }
 
