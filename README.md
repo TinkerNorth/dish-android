@@ -190,6 +190,17 @@ gitleaks, action-pin lint, and CodeQL `java-kotlin` + `cpp` analysis.
 > blocked at the platform level. Treat the PR-based flow as a convention
 > and rely on the CI workflows as the quality gate.
 
+## Privacy
+
+Public privacy policy:
+[`dish.tinkernorth.com/privacy/dish-android/`](https://dish.tinkernorth.com/privacy/dish-android/).
+The policy is also linked from the in-app Connections screen's
+overflow menu. Short version: no telemetry, no analytics, no crash
+reporting, no third-party SDKs, no account system, no cloud backend.
+The app only talks to the Satellite servers you have explicitly paired
+with on your own LAN. The policy covers GDPR, UK GDPR, CCPA/CPRA, and
+LGPD inside the single document.
+
 ## Security
 
 Vulnerability disclosure: [`SECURITY.md`](SECURITY.md). Every

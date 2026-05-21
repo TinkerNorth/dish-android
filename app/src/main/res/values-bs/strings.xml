@@ -216,4 +216,8 @@
     <!-- Stringovi naslijeđeni iz starog izgleda uparivanja. -->
     <string name="pairing_dialog_legacy_title">Upari sa serverom</string>
     <string name="pairing_dialog_legacy_message">Unesite PIN prikazan na ekranu vašeg računara:</string>
+
+    <!-- Connections ekran – meni dodatnih opcija. -->
+    <string name="menu_privacy_policy">Politika privatnosti</string>
+    <string name="error_open_url">Nije moguće otvoriti preglednik</string>
 </resources>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Overflow menu for the Connections screen. Items here are "meta"
+     items that don't fit on the main controls surface (privacy policy,
+     open-source notice, etc.) and are expected to be tapped rarely. -->
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/action_privacy_policy"
+        android:title="@string/menu_privacy_policy"
+        app:showAsAction="never" />
+
+</menu>

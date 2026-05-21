@@ -217,4 +217,8 @@
     <!-- Cadenas heredadas del antiguo diseño de emparejamiento. -->
     <string name="pairing_dialog_legacy_title">Emparejar con servidor</string>
     <string name="pairing_dialog_legacy_message">Introduce el PIN que aparece en la pantalla de tu PC:</string>
+
+    <!-- Menú de desbordamiento de la pantalla Conexiones. -->
+    <string name="menu_privacy_policy">Política de privacidad</string>
+    <string name="error_open_url">No se pudo abrir el navegador</string>
 </resources>

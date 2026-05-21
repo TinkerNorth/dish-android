@@ -216,4 +216,8 @@
     <!-- Chaînes héritées de l\'ancienne mise en page d\'appairage. -->
     <string name="pairing_dialog_legacy_title">Appairer avec un serveur</string>
     <string name="pairing_dialog_legacy_message">Saisissez le PIN affiché sur l\'écran de votre PC :</string>
+
+    <!-- Menu de débordement de l\'écran Connexions. -->
+    <string name="menu_privacy_policy">Politique de confidentialité</string>
+    <string name="error_open_url">Impossible d\'ouvrir le navigateur</string>
 </resources>

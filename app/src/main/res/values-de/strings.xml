@@ -216,4 +216,8 @@
     <!-- Altlasten aus dem alten Kopplungs-Layout. -->
     <string name="pairing_dialog_legacy_title">Mit Server koppeln</string>
     <string name="pairing_dialog_legacy_message">Gib den PIN ein, der auf deinem PC-Bildschirm angezeigt wird:</string>
+
+    <!-- Connections-Bildschirm – Überlauf-Menü. -->
+    <string name="menu_privacy_policy">Datenschutzerklärung</string>
+    <string name="error_open_url">Browser konnte nicht geöffnet werden</string>
 </resources>

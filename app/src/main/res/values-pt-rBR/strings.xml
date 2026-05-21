@@ -217,4 +217,8 @@
     <!-- Strings herdadas do antigo layout de pareamento. -->
     <string name="pairing_dialog_legacy_title">Parear com servidor</string>
     <string name="pairing_dialog_legacy_message">Digite o PIN exibido na tela do seu PC:</string>
+
+    <!-- Menu de excesso da tela Conexões. -->
+    <string name="menu_privacy_policy">Política de privacidade</string>
+    <string name="error_open_url">Não foi possível abrir o navegador</string>
 </resources>
