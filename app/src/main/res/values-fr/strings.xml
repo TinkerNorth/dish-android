@@ -209,6 +209,7 @@
     <string name="low_power_tap_to_wake">TOUCHEZ POUR RÉVEILLER</string>
     <plurals name="low_power_status_bound">
         <item quantity="one">Liée · %1$d manette</item>
+        <item quantity="many">Liées · %1$d manettes</item>
         <item quantity="other">Liées · %1$d manettes</item>
     </plurals>
 

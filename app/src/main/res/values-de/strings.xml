@@ -1,0 +1,219 @@
+<resources>
+    <string name="app_name">Dish</string>
+
+    <!-- MainActivity-Dashboard. Begriffe folgen den LinkState-Chips:
+         ein gemerkter/gekoppelter Eintrag ist „gekoppelt"; ein
+         Connected-Eintrag ist „online". -->
+    <string name="status_remembered">%1$d gekoppelt</string>
+    <string name="status_tap_manage">Auf Verwalten tippen, um eine hinzuzufügen</string>
+    <string name="status_connected_of">%1$d von %2$d online</string>
+    <string name="toast_pairing_needed">Kopplung nötig — Verbindungen öffnen</string>
+    <string name="toast_bind_first">Erst eine Verbindung verknüpfen</string>
+
+    <!-- Dashboard-Chrome (activity_main.xml). -->
+    <string name="section_connections">VERBINDUNGEN</string>
+    <string name="section_controllers">CONTROLLER</string>
+    <string name="dashboard_connections_empty">Noch keine Verbindungen</string>
+    <string name="action_manage">Verwalten</string>
+
+    <!-- Verbindungen-Seite (activity_connections.xml). -->
+    <string name="title_connections">Verbindungen</string>
+    <string name="section_satellites">SATELLITEN</string>
+    <string name="section_bluetooth_hosts">BLUETOOTH-HOSTS</string>
+    <string name="action_scan">Suchen</string>
+    <string name="action_scanning">Suche läuft…</string>
+    <string name="action_add">Hinzufügen</string>
+    <string name="bt_hosts_empty">Keine gemerkten Hosts — auf Hinzufügen tippen, um einen neuen zu registrieren</string>
+
+    <!-- row_connection.xml + dynamische Zeilenbeschriftungen in ConnectionsActivity. -->
+    <string name="action_connect">Verbinden</string>
+    <string name="action_disconnect">Trennen</string>
+    <string name="action_repair_short">Neu koppeln</string>
+    <string name="action_forget_short">Entfernen</string>
+    <string name="action_cancel">Abbrechen</string>
+    <string name="bt_row_pair_from_host">Vom Host koppeln</string>
+    <string name="bt_row_acquiring">Wird abgerufen…</string>
+    <string name="bt_row_waiting">Warten…</string>
+
+    <!-- Bestätigungsdialog für das Entfernen eines Bluetooth-Hosts. -->
+    <string name="dialog_forget_bt_title">%1$s entfernen?</string>
+    <string name="dialog_forget_bt_message">Dish merkt sich diesen Host nicht mehr. Das Telefon behält die systemseitige Kopplung — öffne die Bluetooth-Einstellungen, um sie vollständig zu entfernen.</string>
+    <string name="dialog_forget_bt_positive">Einstellungen öffnen</string>
+    <string name="dialog_forget_bt_negative">Jetzt nicht</string>
+
+    <!-- Dialog zur Auswahl des Bluetooth-Profils. -->
+    <string name="dialog_controller_profile_title">Controller-Profil</string>
+
+    <!-- Banner für abgelaufene Sichtbarkeit aus ConnectionsActivity. -->
+    <string name="notif_discoverability_expired_title">Sichtbarkeit abgelaufen</string>
+    <string name="notif_discoverability_expired_body">Kein Host wurde rechtzeitig gekoppelt. Verlängere, um es weiter zu versuchen.</string>
+    <string name="action_re_extend">Verlängern</string>
+
+    <!-- Untertitel des PIN-Dialogs, wenn der Servername bekannt ist. -->
+    <string name="pair_dialog_subtitle_named">Gib den PIN ein, der auf %1$s angezeigt wird.</string>
+    <!-- Allgemeiner Fallback im „Server nicht erreichbar"-Banner, wenn noch
+         kein Name vorliegt. -->
+    <string name="satellite_fallback_name">Satellit</string>
+
+    <!-- item_controller-Karte (item_controller.xml). -->
+    <string name="slot_output_to_label">Ausgabe an</string>
+    <string name="action_unbind">Trennen</string>
+    <string name="action_open_gamepad">Controller öffnen</string>
+    <string name="desc_open_gamepad">Controller öffnen</string>
+    <string name="desc_expand">Aufklappen</string>
+
+    <!-- Slot-Statustext im ControllerAdapter (unter dem Namen). -->
+    <string name="slot_status_disconnecting">Trennt… %1$ds</string>
+    <string name="slot_status_routing_to">→ %1$s</string>
+    <string name="slot_status_bound">Verknüpft</string>
+    <string name="slot_status_tap_to_bind">Tippen zum Verknüpfen</string>
+
+    <!-- Slot-Picker-Zeilen im ControllerAdapter. -->
+    <string name="picker_empty_no_connections">Noch keine Verbindungen — oben auf Verwalten tippen</string>
+    <string name="picker_empty_no_available">Aktuell keine Verbindungen verfügbar</string>
+    <string name="picker_status_online"> • online</string>
+    <string name="picker_status_connecting"> • verbindet…</string>
+    <string name="picker_status_offline"> • offline</string>
+    <string name="picker_status_needs_pairing"> • Kopplung nötig</string>
+    <string name="picker_detail_bound_here"> • hier verknüpft</string>
+    <string name="picker_detail_in_use"> • belegt</string>
+
+    <!-- Controllertyp-Umschalter pro Slot. -->
+    <string name="picker_type_label">Typ</string>
+
+    <!-- LinkState-Chip-/Zeilen-Vokabular. -->
+    <string name="chip_status_found">Gefunden</string>
+    <string name="chip_status_needs_pairing">Kopplung nötig</string>
+    <string name="chip_status_offline">Offline</string>
+    <string name="chip_status_ready">Bereit</string>
+    <string name="chip_status_connecting">Verbindet…</string>
+    <string name="chip_status_online">Online</string>
+    <string name="chip_status_unstable">Instabil</string>
+
+    <!-- Controller-Overlay (activity_gamepad_overlay.xml + GamepadOverlayActivity). -->
+    <string name="overlay_status_streaming">Streamt</string>
+    <string name="overlay_status_unknown">Unbekannte Verbindung</string>
+    <string name="overlay_status_not_connected">Nicht verbunden</string>
+    <string name="overlay_action_back">ZURÜCK</string>
+
+    <!-- Standardbezeichnungen für Slot/Verbindung. -->
+    <string name="default_virtual_controller_name">Virtueller Controller</string>
+    <string name="default_bluetooth_gamepad_label">Bluetooth-Controller</string>
+
+    <!-- Bluetooth-Zeilenuntertitel und Slot-Übergangszustand während des
+         Kopplungsvorgangs. -->
+    <string name="bt_row_detail">%1$s • %2$s</string>
+    <string name="bt_transient_ready_to_pair">Bereit zum Koppeln — suche dieses Gerät auf deinem Host</string>
+    <string name="bt_transient_acquiring">HID-Profil wird abgerufen…</string>
+    <string name="bt_transient_idle">Inaktiv</string>
+
+    <!-- Bewegungs-Indikator (Gyro/Beschleunigung) im Touch-Overlay. Zustände:
+         streamt, pausiert (Overlay im Hintergrund), nicht weitergeleitet
+         (Bluetooth-Verbindung hat keinen Bewegungskanal), nicht verfügbar
+         (kein Gyroskop). -->
+    <string name="motion_streaming">Bewegung: streamt</string>
+    <string name="motion_paused">Bewegung: pausiert</string>
+    <string name="motion_stalled">Bewegung: blockiert</string>
+    <string name="motion_not_forwarded">Bewegung: nicht gesendet</string>
+    <string name="motion_unavailable">Bewegung: kein Gyroskop</string>
+    <string name="motion_unavailable_detail">Dieses Telefon hat kein Gyroskop, daher wird die Bewegung (Gyro-Zielen / Neigung) nicht gesendet.</string>
+    <string name="motion_not_forwarded_detail">Diese Bluetooth-Verbindung hat keinen Bewegungskanal. Nutze eine Satelliten-Verbindung, um Gyro-Zielen / Neigung zu senden.</string>
+    <string name="motion_stalled_detail">Bewegungssensor blockiert — versuche die Zurück-Taste zum Zurücksetzen oder starte Dish neu.</string>
+
+    <!-- Akku-Anzeige pro Slot. -->
+    <string name="battery_percent">%1$d %%</string>
+    <string name="battery_unknown_level">--</string>
+
+    <!-- Dynamische Akku-Beschreibung für Screenreader. -->
+    <string name="battery_desc">Controller-Akku %1$s, %2$s</string>
+    <string name="battery_desc_level_unknown">Ladestand unbekannt</string>
+    <string name="battery_state_charging">lädt</string>
+    <string name="battery_state_low">niedrig, lädt nicht</string>
+    <string name="battery_state_discharging">im Akkubetrieb</string>
+
+    <!-- Untertitel der entdeckten Zeile und Status-Chip. -->
+    <string name="discovered_row_detail">%1$s • UDP %2$d</string>
+    <string name="discovered_row_status">Gefunden · %1$s</string>
+
+    <!-- Verbindungsliste: wie ein Satellit entdeckt wurde. -->
+    <string name="discovery_source_broadcast">UDP-Broadcast</string>
+    <string name="discovery_source_mdns">mDNS</string>
+    <string name="discovery_source_both">mDNS + Broadcast</string>
+
+    <!-- Aktionsbeschriftungen der Dish-Benachrichtigungen. -->
+    <string name="action_open_settings">EINSTELLUNGEN</string>
+    <string name="action_retry">ERNEUT VERSUCHEN</string>
+    <string name="action_reconnect">NEU VERBINDEN</string>
+    <string name="action_repair">NEU KOPPELN</string>
+    <string name="action_open">ÖFFNEN</string>
+    <string name="action_forget">ENTFERNEN</string>
+    <string name="action_turn_on">EINSCHALTEN</string>
+    <string name="action_grant">ERLAUBEN</string>
+
+    <!-- Text der Dish-Benachrichtigungen. -->
+    <string name="notif_bt_permission_title">Bluetooth-Berechtigung nötig</string>
+    <string name="notif_bt_permission_body">Dish braucht Bluetooth-Zugriff, um einen Controller zu registrieren.</string>
+    <string name="notif_bt_discoverability_denied_title">Sichtbarkeit abgelehnt</string>
+    <string name="notif_bt_discoverability_denied_body">Dein Host kann dieses Telefon erst sehen, wenn du es sichtbar machst.</string>
+    <string name="notif_bt_adapter_off_title">Bluetooth ist aus</string>
+    <string name="notif_bt_adapter_off_body">Schalte Bluetooth ein, um einen Controller-Host zu nutzen.</string>
+    <string name="notif_bt_unsupported_title">Bluetooth-HID erfordert Android 9+</string>
+    <string name="notif_bt_unsupported_body">Dieses Gerät kann sich nicht als Bluetooth-Controller koppeln.</string>
+    <string name="notif_bt_key_missing_title">%1$s neu koppeln</string>
+    <string name="notif_bt_key_missing_body">Der Host hat seinen Teil der Kopplung verloren. Auf beiden Seiten entfernen und neu koppeln.</string>
+    <string name="notif_bt_bond_removed_title">%1$s entkoppelt</string>
+    <string name="notif_bt_bond_removed_body">Neu koppeln, um wieder zu verbinden.</string>
+    <string name="notif_no_network_title">Kein Netzwerk</string>
+    <string name="notif_no_network_body">Verbinde dich mit demselben WLAN wie dein Satellit.</string>
+    <string name="notif_cellular_only_title">Nur mobile Daten</string>
+    <string name="notif_cellular_only_body">Satelliten leben in deinem WLAN-LAN, nicht in den mobilen Daten.</string>
+    <string name="notif_bind_first_title">Erst eine Verbindung verknüpfen</string>
+    <string name="notif_pairing_needed_title">Kopplung nötig</string>
+    <string name="notif_pairing_needed_body">Öffne Verbindungen, um den PIN für %1$s einzugeben.</string>
+    <string name="notif_server_unreachable_title">%1$s antwortet nicht</string>
+    <string name="notif_server_unreachable_body">Prüfe, ob er eingeschaltet ist und im selben WLAN.</string>
+    <string name="notif_registration_failed_title">Controller-Registrierung fehlgeschlagen</string>
+    <string name="notif_pair_pin_failed_title">PIN nicht korrekt</string>
+    <string name="notif_session_lost_title">Verbindung zu %1$s verloren</string>
+    <string name="notif_session_lost_body">Verbindet neu…</string>
+
+    <!-- Dynamischer Leer­zustand für die Satellitenliste. -->
+    <string name="discovery_empty_never_scanned">Tippe auf Suchen, um Satelliten in deinem Netzwerk zu finden</string>
+    <string name="discovery_empty_no_results">Keine Satelliten bei %1$s gefunden — prüfe das WLAN und ob dein Host eingeschaltet ist.</string>
+
+    <!-- Eigener PIN-Dialog. -->
+    <string name="pair_dialog_title">Mit Satellit koppeln</string>
+    <string name="pair_dialog_subtitle">Gib den PIN ein, der auf deinem Satelliten angezeigt wird.</string>
+    <string name="pair_dialog_pin_hint">PIN</string>
+    <string name="pair_dialog_submit">KOPPELN</string>
+    <string name="pair_dialog_cancel">ABBRECHEN</string>
+    <string name="pair_dialog_pairing">KOPPELT…</string>
+    <string name="pair_dialog_error_empty">Gib den PIN ein, der auf deinem Satelliten angezeigt wird.</string>
+
+    <!-- Vordergrund-Service-Benachrichtigung. -->
+    <string name="streaming_channel_name">Streaming-Sitzung</string>
+    <string name="streaming_channel_description">Hält Dish aktiv, während ein Controller streamt.</string>
+    <string name="streaming_notification_title">Dish · Streamt</string>
+    <string name="streaming_notification_body">%1$d Controller streamt an %2$s</string>
+    <string name="streaming_notification_body_plural">%1$d Controller streamen</string>
+    <string name="streaming_notification_stop">Stoppen</string>
+
+    <!-- Fallback-Bildschirm, wenn das native Laden fehlschlägt. -->
+    <string name="fatal_native_title">Diese Version läuft nicht auf deinem Gerät</string>
+    <string name="fatal_native_body">Die native Dish-Bibliothek konnte nicht geladen werden. Installiere bitte über Google Play neu oder kontaktiere den Support.</string>
+
+    <!-- Energiesparmodus-Overlay (overlay_low_power.xml + LowPowerManager). -->
+    <string name="low_power_in">ENERGIESPAREN IN</string>
+    <string name="low_power">ENERGIESPAREN</string>
+    <string name="low_power_seconds_suffix">s</string>
+    <string name="low_power_status_idle">Inaktiv</string>
+    <string name="low_power_tap_to_wake">ZUM WECKEN TIPPEN</string>
+    <plurals name="low_power_status_bound">
+        <item quantity="one">Verknüpft · %1$d Controller</item>
+        <item quantity="other">Verknüpft · %1$d Controller</item>
+    </plurals>
+
+    <!-- Altlasten aus dem alten Kopplungs-Layout. -->
+    <string name="pairing_dialog_legacy_title">Mit Server koppeln</string>
+    <string name="pairing_dialog_legacy_message">Gib den PIN ein, der auf deinem PC-Bildschirm angezeigt wird:</string>
+</resources>

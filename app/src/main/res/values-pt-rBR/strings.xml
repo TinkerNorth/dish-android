@@ -1,0 +1,220 @@
+<resources>
+    <string name="app_name">Dish</string>
+
+    <!-- Painel principal MainActivity. O vocabulário acompanha os chips
+         LinkState: uma entrada lembrada/pareada está « pareada »; uma
+         entrada Connected está « on-line ». -->
+    <string name="status_remembered">%1$d pareado(s)</string>
+    <string name="status_tap_manage">Toque em Gerenciar para adicionar um</string>
+    <string name="status_connected_of">%1$d de %2$d on-line</string>
+    <string name="toast_pairing_needed">Pareamento necessário — abrir Conexões</string>
+    <string name="toast_bind_first">Vincule uma conexão primeiro</string>
+
+    <!-- Cabeçalho do painel principal (activity_main.xml). -->
+    <string name="section_connections">CONEXÕES</string>
+    <string name="section_controllers">CONTROLES</string>
+    <string name="dashboard_connections_empty">Nenhuma conexão ainda</string>
+    <string name="action_manage">Gerenciar</string>
+
+    <!-- Página Conexões (activity_connections.xml). -->
+    <string name="title_connections">Conexões</string>
+    <string name="section_satellites">SATÉLITES</string>
+    <string name="section_bluetooth_hosts">HOSTS BLUETOOTH</string>
+    <string name="action_scan">Buscar</string>
+    <string name="action_scanning">Buscando…</string>
+    <string name="action_add">Adicionar</string>
+    <string name="bt_hosts_empty">Nenhum host lembrado — toque em Adicionar para registrar um novo</string>
+
+    <!-- row_connection.xml + rótulos dinâmicos de linha no ConnectionsActivity. -->
+    <string name="action_connect">Conectar</string>
+    <string name="action_disconnect">Desconectar</string>
+    <string name="action_repair_short">Reparear</string>
+    <string name="action_forget_short">Esquecer</string>
+    <string name="action_cancel">Cancelar</string>
+    <string name="bt_row_pair_from_host">Parear pelo host</string>
+    <string name="bt_row_acquiring">Adquirindo…</string>
+    <string name="bt_row_waiting">Aguardando…</string>
+
+    <!-- Diálogo de confirmação de esquecimento de host Bluetooth. -->
+    <string name="dialog_forget_bt_title">Esquecer %1$s?</string>
+    <string name="dialog_forget_bt_message">O Dish deixará de lembrar este host. O telefone mantém o pareamento no nível do sistema — abra as configurações de Bluetooth para removê-lo por completo.</string>
+    <string name="dialog_forget_bt_positive">Abrir configurações</string>
+    <string name="dialog_forget_bt_negative">Agora não</string>
+
+    <!-- Diálogo do seletor de perfil Bluetooth. -->
+    <string name="dialog_controller_profile_title">Perfil do controle</string>
+
+    <!-- Banner publicado pelo ConnectionsActivity quando a visibilidade expira. -->
+    <string name="notif_discoverability_expired_title">Visibilidade expirou</string>
+    <string name="notif_discoverability_expired_body">Nenhum host foi pareado a tempo. Estenda para tentar novamente.</string>
+    <string name="action_re_extend">Estender</string>
+
+    <!-- Subtítulo do diálogo PIN quando o nome do servidor é conhecido. -->
+    <string name="pair_dialog_subtitle_named">Digite o PIN exibido em %1$s.</string>
+    <!-- Texto genérico usado no banner « servidor não responde » quando
+         ainda não há nome disponível. -->
+    <string name="satellite_fallback_name">satélite</string>
+
+    <!-- Cartão item_controller (item_controller.xml). -->
+    <string name="slot_output_to_label">Saída para</string>
+    <string name="action_unbind">Desvincular</string>
+    <string name="action_open_gamepad">Abrir o controle</string>
+    <string name="desc_open_gamepad">Abrir o controle</string>
+    <string name="desc_expand">Expandir</string>
+
+    <!-- Texto de status do slot no ControllerAdapter (abaixo do nome). -->
+    <string name="slot_status_disconnecting">Desconectando… %1$ds</string>
+    <string name="slot_status_routing_to">→ %1$s</string>
+    <string name="slot_status_bound">Vinculado</string>
+    <string name="slot_status_tap_to_bind">Toque para vincular</string>
+
+    <!-- Linhas do seletor por slot no ControllerAdapter. -->
+    <string name="picker_empty_no_connections">Nenhuma conexão ainda — toque em Gerenciar acima</string>
+    <string name="picker_empty_no_available">Nenhuma conexão disponível agora</string>
+    <string name="picker_status_online"> • on-line</string>
+    <string name="picker_status_connecting"> • conectando…</string>
+    <string name="picker_status_offline"> • off-line</string>
+    <string name="picker_status_needs_pairing"> • pareamento necessário</string>
+    <string name="picker_detail_bound_here"> • vinculado aqui</string>
+    <string name="picker_detail_in_use"> • em uso</string>
+
+    <!-- Bascula de tipo de controle por slot. -->
+    <string name="picker_type_label">Tipo</string>
+
+    <!-- Vocabulário dos chips/linhas para LinkState. -->
+    <string name="chip_status_found">Encontrado</string>
+    <string name="chip_status_needs_pairing">Parear novamente</string>
+    <string name="chip_status_offline">Off-line</string>
+    <string name="chip_status_ready">Pronto</string>
+    <string name="chip_status_connecting">Conectando…</string>
+    <string name="chip_status_online">On-line</string>
+    <string name="chip_status_unstable">Instável</string>
+
+    <!-- Superposição do controle (activity_gamepad_overlay.xml + GamepadOverlayActivity). -->
+    <string name="overlay_status_streaming">Transmitindo</string>
+    <string name="overlay_status_unknown">Conexão desconhecida</string>
+    <string name="overlay_status_not_connected">Não conectado</string>
+    <string name="overlay_action_back">VOLTAR</string>
+
+    <!-- Rótulos padrão para slot/conexão. -->
+    <string name="default_virtual_controller_name">Controle virtual</string>
+    <string name="default_bluetooth_gamepad_label">Controle Bluetooth</string>
+
+    <!-- Subtítulo da linha Bluetooth e estado transitório do slot durante o
+         pareamento. -->
+    <string name="bt_row_detail">%1$s • %2$s</string>
+    <string name="bt_transient_ready_to_pair">Pronto para parear — procure este dispositivo no seu host</string>
+    <string name="bt_transient_acquiring">Adquirindo perfil HID…</string>
+    <string name="bt_transient_idle">Inativo</string>
+
+    <!-- Indicador de movimento (giroscópio/acelerômetro) na superposição
+         tátil. Estados: transmitindo, pausado (superposição em segundo
+         plano), não enviado (a conexão Bluetooth não tem canal de
+         movimento) e indisponível (sem giroscópio). -->
+    <string name="motion_streaming">Movimento: transmitindo</string>
+    <string name="motion_paused">Movimento: pausado</string>
+    <string name="motion_stalled">Movimento: travado</string>
+    <string name="motion_not_forwarded">Movimento: não enviado</string>
+    <string name="motion_unavailable">Movimento: sem giroscópio</string>
+    <string name="motion_unavailable_detail">Este telefone não tem giroscópio, então o movimento (mira giroscópica / inclinação) não é enviado.</string>
+    <string name="motion_not_forwarded_detail">Esta conexão Bluetooth não tem canal de movimento. Use uma conexão por satélite para enviar mira giroscópica / inclinação.</string>
+    <string name="motion_stalled_detail">Sensor de movimento travado — tente pressionar o botão Voltar para reiniciá-lo, ou reinicie o Dish.</string>
+
+    <!-- Indicador de bateria por slot. -->
+    <string name="battery_percent">%1$d %%</string>
+    <string name="battery_unknown_level">--</string>
+
+    <!-- Descrição dinâmica da bateria para leitores de tela. -->
+    <string name="battery_desc">Bateria do controle %1$s, %2$s</string>
+    <string name="battery_desc_level_unknown">nível desconhecido</string>
+    <string name="battery_state_charging">carregando</string>
+    <string name="battery_state_low">baixa, sem carga</string>
+    <string name="battery_state_discharging">na bateria</string>
+
+    <!-- Subtítulo da linha descoberta e chip de status. -->
+    <string name="discovered_row_detail">%1$s • UDP %2$d</string>
+    <string name="discovered_row_status">Encontrado · %1$s</string>
+
+    <!-- Lista de conexões: como um satélite foi detectado. -->
+    <string name="discovery_source_broadcast">Transmissão UDP</string>
+    <string name="discovery_source_mdns">mDNS</string>
+    <string name="discovery_source_both">mDNS + transmissão</string>
+
+    <!-- Rótulos de ação das notificações Dish. -->
+    <string name="action_open_settings">CONFIG.</string>
+    <string name="action_retry">TENTAR DE NOVO</string>
+    <string name="action_reconnect">RECONECTAR</string>
+    <string name="action_repair">REPAREAR</string>
+    <string name="action_open">ABRIR</string>
+    <string name="action_forget">ESQUECER</string>
+    <string name="action_turn_on">ATIVAR</string>
+    <string name="action_grant">PERMITIR</string>
+
+    <!-- Texto das notificações Dish. -->
+    <string name="notif_bt_permission_title">Permissão de Bluetooth necessária</string>
+    <string name="notif_bt_permission_body">O Dish precisa de acesso ao Bluetooth para registrar um controle.</string>
+    <string name="notif_bt_discoverability_denied_title">Visibilidade recusada</string>
+    <string name="notif_bt_discoverability_denied_body">Seu host não consegue ver este telefone até você torná-lo visível.</string>
+    <string name="notif_bt_adapter_off_title">Bluetooth desativado</string>
+    <string name="notif_bt_adapter_off_body">Ative o Bluetooth para usar um host de controle.</string>
+    <string name="notif_bt_unsupported_title">O Bluetooth HID requer Android 9+</string>
+    <string name="notif_bt_unsupported_body">Este dispositivo não pode parear como controle Bluetooth.</string>
+    <string name="notif_bt_key_missing_title">Reparear %1$s</string>
+    <string name="notif_bt_key_missing_body">O host esqueceu o lado dele do pareamento. Esqueça em ambos os lados e pareie de novo.</string>
+    <string name="notif_bt_bond_removed_title">%1$s despareado</string>
+    <string name="notif_bt_bond_removed_body">Pareie de novo para reconectar.</string>
+    <string name="notif_no_network_title">Sem rede</string>
+    <string name="notif_no_network_body">Conecte-se ao mesmo Wi-Fi do seu satélite.</string>
+    <string name="notif_cellular_only_title">Somente dados móveis</string>
+    <string name="notif_cellular_only_body">Satélites vivem na sua LAN Wi-Fi, não nos dados móveis.</string>
+    <string name="notif_bind_first_title">Vincule uma conexão primeiro</string>
+    <string name="notif_pairing_needed_title">Pareamento necessário</string>
+    <string name="notif_pairing_needed_body">Abra Conexões para digitar o PIN de %1$s.</string>
+    <string name="notif_server_unreachable_title">%1$s não responde</string>
+    <string name="notif_server_unreachable_body">Verifique se está ligado e no mesmo Wi-Fi.</string>
+    <string name="notif_registration_failed_title">Falha ao registrar o controle</string>
+    <string name="notif_pair_pin_failed_title">PIN incorreto</string>
+    <string name="notif_session_lost_title">Conexão com %1$s perdida</string>
+    <string name="notif_session_lost_body">Reconectando…</string>
+
+    <!-- Estado vazio dinâmico para a lista de satélites. -->
+    <string name="discovery_empty_never_scanned">Toque em Buscar para encontrar satélites na sua rede</string>
+    <string name="discovery_empty_no_results">Nenhum satélite encontrado às %1$s — verifique o Wi-Fi e se seu host está ligado.</string>
+
+    <!-- Diálogo PIN personalizado. -->
+    <string name="pair_dialog_title">Parear com satélite</string>
+    <string name="pair_dialog_subtitle">Digite o PIN exibido no seu satélite.</string>
+    <string name="pair_dialog_pin_hint">PIN</string>
+    <string name="pair_dialog_submit">PAREAR</string>
+    <string name="pair_dialog_cancel">CANCELAR</string>
+    <string name="pair_dialog_pairing">PAREANDO…</string>
+    <string name="pair_dialog_error_empty">Digite o PIN exibido no seu satélite.</string>
+
+    <!-- Notificação de serviço em primeiro plano. -->
+    <string name="streaming_channel_name">Sessão de transmissão</string>
+    <string name="streaming_channel_description">Mantém o Dish ativo enquanto um controle transmite.</string>
+    <string name="streaming_notification_title">Dish · Transmitindo</string>
+    <string name="streaming_notification_body">%1$d controle transmitindo para %2$s</string>
+    <string name="streaming_notification_body_plural">%1$d controles transmitindo</string>
+    <string name="streaming_notification_stop">Parar</string>
+
+    <!-- Tela de fallback quando o carregamento nativo falha. -->
+    <string name="fatal_native_title">Esta versão não vai rodar no seu dispositivo</string>
+    <string name="fatal_native_body">A biblioteca nativa do Dish não pôde ser carregada. Reinstale pela Google Play ou entre em contato com o suporte.</string>
+
+    <!-- Superposição do modo de baixa potência. -->
+    <string name="low_power_in">ECONOMIA EM</string>
+    <string name="low_power">MODO ECONOMIA</string>
+    <string name="low_power_seconds_suffix">s</string>
+    <string name="low_power_status_idle">Ocioso</string>
+    <string name="low_power_tap_to_wake">TOQUE PARA ACORDAR</string>
+    <plurals name="low_power_status_bound">
+        <item quantity="one">Vinculado · %1$d controle</item>
+        <item quantity="many">Vinculados · %1$d controles</item>
+        <item quantity="other">Vinculados · %1$d controles</item>
+    </plurals>
+
+    <!-- Strings herdadas do antigo layout de pareamento. -->
+    <string name="pairing_dialog_legacy_title">Parear com servidor</string>
+    <string name="pairing_dialog_legacy_message">Digite o PIN exibido na tela do seu PC:</string>
+</resources>
