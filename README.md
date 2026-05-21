@@ -201,6 +201,11 @@ The app only talks to the Satellite servers you have explicitly paired
 with on your own LAN. The policy covers GDPR, UK GDPR, CCPA/CPRA, and
 LGPD inside the single document.
 
+Privacy contact: <privacy@tinkernorth.com>. For data subject access /
+deletion requests under GDPR, UK GDPR, CCPA / CPRA, or LGPD, email us
+there — note that because the app collects no personal data, most
+requests are answered by confirming we hold nothing about you.
+
 ## Security
 
 Vulnerability disclosure: [`SECURITY.md`](SECURITY.md). Every
