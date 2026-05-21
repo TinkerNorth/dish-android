@@ -195,13 +195,16 @@ gitleaks, action-pin lint, and CodeQL `java-kotlin` + `cpp` analysis.
 Public privacy policy:
 [`dish.tinkernorth.com/privacy/dish-android/`](https://dish.tinkernorth.com/privacy/dish-android/),
 mirrored in-repo at [`PRIVACY.md`](PRIVACY.md). The policy is also
-linked from the in-app Connections screen's overflow menu. Short
-version: the app is LAN-only, makes no calls to TinkerNorth-operated
-servers, and uses Firebase Crashlytics for crash + ANR reports only
-(stack traces, device model, install UUID — no gamepad input, no
-satellite IPs, no SSIDs). Opt-out toggle is on the roadmap — see
-`HANDOFF.md` item 2. The policy covers GDPR, UK GDPR, CCPA/CPRA, and
-LGPD inside the single document.
+linked from the gear icon on the main screen → Settings → Privacy
+policy. Short version: the app is LAN-only, makes no calls to
+TinkerNorth-operated servers, and uses Firebase Crashlytics for crash
++ ANR reports only (stack traces, device model, install UUID — no
+gamepad input, no satellite IPs, no SSIDs). Firebase Analytics is
+deliberately not bundled, so no advertising ID is collected and no
+auto-event telemetry fires. The crash-reporting opt-out toggle lives
+on the same Settings screen → Diagnostics → *Share crash reports*.
+The policy covers GDPR, UK GDPR, CCPA/CPRA, and LGPD inside the
+single document.
 
 Privacy contact: <privacy@tinkernorth.com>. For data subject access /
 deletion requests under GDPR, UK GDPR, CCPA / CPRA, or LGPD, email us

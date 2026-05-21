@@ -17,17 +17,20 @@ four repos share a version number.
 
 ### Added
 
-- Firebase Crashlytics integration for crash + ANR reporting. The
-  Crashlytics + Analytics SDKs are unconditional dependencies; the
-  `google-services` and `firebase-crashlytics` Gradle plugins remain
-  conditional on `app/google-services.json` so local builds without a
-  Firebase project still compile and run (Crashlytics no-ops at runtime
-  via a `FirebaseApp.getApps` check).
+- Firebase Crashlytics integration for crash + ANR reporting.
+  Crashlytics is the only Firebase SDK on the classpath; Firebase
+  Analytics is deliberately NOT included (see the comment in
+  `app/build.gradle.kts` for the rationale). The `google-services` and
+  `firebase-crashlytics` Gradle plugins remain conditional on
+  `app/google-services.json` so local builds without a Firebase project
+  still compile and run (Crashlytics no-ops at runtime via a
+  `FirebaseApp.getApps` check).
 - In-app crash-reporting opt-out — `SettingsActivity` reachable from
-  *Connections → ⋮ → Settings*. Backed by `CrashReportingStore`
-  (separate `user_preferences.xml` SharedPreferences, included in cloud
-  backup) and `CrashReportingController` (process-lifecycle observer
-  that bridges the store to `FirebaseCrashlytics.setCrashlyticsCollectionEnabled`).
+  the gear icon on the main screen → *Share crash reports*. Backed by
+  `CrashReportingStore` (separate `user_preferences.xml`
+  SharedPreferences, included in cloud backup) and
+  `CrashReportingController` (process-lifecycle observer that bridges
+  the store to `FirebaseCrashlytics.setCrashlyticsCollectionEnabled`).
 - `PRIVACY.md` describing data collection, processors, and user choices.
 - `network_security_config.xml` denying cleartext traffic explicitly
   (the previous `usesCleartextTraffic` removal was implicit).
@@ -38,6 +41,16 @@ four repos share a version number.
 - Mapping file (`mapping.txt`) is now shipped with every signed release,
   cosign-signed alongside the APK/AAB, so external de-obfuscation of
   prod stack traces is possible without Firebase access.
+
+### Removed
+
+- `firebase-analytics` dependency. Pulling it in would have
+  auto-collected events (`first_open`, `session_start`, `screen_view`,
+  `app_remove`, ...) and caused the manifest merger to inject
+  `com.google.android.gms.permission.AD_ID` into the production APK,
+  contradicting the policy's zero-analytics / no-advertising-ID
+  posture. With Analytics out, the only Firebase product running is
+  Crashlytics, and the merged manifest no longer declares `AD_ID`.
 
 ### Changed
 

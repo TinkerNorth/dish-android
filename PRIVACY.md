@@ -86,8 +86,6 @@ Crashlytics. The report contains:
 - App version code and version name
 - An auto-generated Firebase Installation ID (a UUID that lets us count
   unique affected installs without identifying you personally)
-- Custom debug keys we set (e.g. "did the native library load?", "is
-  Bluetooth permission granted?")
 - The last few log lines we explicitly flagged as relevant (we do not
   upload general `logcat` content)
 

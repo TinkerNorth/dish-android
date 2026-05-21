@@ -178,10 +178,13 @@ dependencies {
     // they need the JSON to generate resources and upload mapping files.
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.crashlytics)
-    // Analytics is optional but Crashlytics gains free trend data from it.
-    // If you want pure crash reporting with zero analytics, remove this
-    // line and add a Data Safety note to PRIVACY.md.
-    implementation(libs.firebase.analytics)
+    // Firebase Analytics is deliberately NOT pulled in. Adding it would (a)
+    // auto-collect events like session_start / screen_view / first_open / app_remove,
+    // (b) cause the manifest merger to inject
+    // com.google.android.gms.permission.AD_ID into the production APK, and
+    // (c) require a Firebase Analytics section in PRIVACY.md plus a Data
+    // Safety form entry. The published policy promises a zero-analytics
+    // posture; keep this dep out unless that posture changes.
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.turbine)

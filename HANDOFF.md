@@ -25,14 +25,14 @@ references the URL. Paste the hosted URL into the Play Console's
 ## 2. Crash-reporting opt-out toggle
 
 Closed: shipped via `SettingsActivity` + `CrashReportingStore` +
-`CrashReportingController`. Reachable from
-*Connections → ⋮ → Settings → Send crash reports*. The switch persists
-to `user_preferences.xml` (separate from the encrypted-keys
-`connection_store.xml` so cloud backup CAN carry the preference across
-device transfers) and the controller applies it via
+`CrashReportingController`. Reachable from the **gear icon on
+MainActivity → Settings → Diagnostics → *Share crash reports***. The
+switch persists to `user_preferences.xml` (separate from the
+encrypted-keys `connection_store.xml` so cloud backup CAN carry the
+preference across device transfers) and the controller applies it via
 `FirebaseCrashlytics.setCrashlyticsCollectionEnabled` on every
-`ProcessLifecycleOwner.onStart` and whenever the user flips the switch.
-`PRIVACY.md` §1 and §5 reflect the shipped behaviour.
+`ProcessLifecycleOwner.onStart` and whenever the user flips the
+switch. `PRIVACY.md` §1 and §5 reflect the shipped behaviour.
 
 ## 3. Firebase project & `google-services.json`
 
