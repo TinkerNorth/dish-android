@@ -3,13 +3,17 @@
 
 package com.tinkernorth.dish.ui.main
 
-import com.tinkernorth.dish.data.network.ConnectionEvent
-import com.tinkernorth.dish.data.network.ConnectionHub
-import com.tinkernorth.dish.data.network.ConnectionKind
-import com.tinkernorth.dish.data.network.ConnectionLive
-import com.tinkernorth.dish.data.network.ConnectionSummary
-import com.tinkernorth.dish.data.network.SatelliteConnectionManager
-import com.tinkernorth.dish.data.repository.PhysicalGamepadRegistry
+import android.content.Context
+import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.composer.ConnectionKind
+import com.tinkernorth.dish.composer.ConnectionSummary
+import com.tinkernorth.dish.composer.LinkState
+import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
+import com.tinkernorth.dish.source.connection.ConnectionEvent
+import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.sensor.BatteryValidator
+import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
+import com.tinkernorth.dish.source.store.BatteryStatusStore
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -40,6 +44,7 @@ class MainViewModelTest {
     private lateinit var hub: ConnectionHub
     private lateinit var satellite: SatelliteConnectionManager
     private lateinit var gamepadRegistry: PhysicalGamepadRegistry
+    private lateinit var batteryStore: BatteryStatusStore
     private lateinit var vm: MainViewModel
 
     private val connectionsFlow = MutableStateFlow<List<ConnectionSummary>>(emptyList())
@@ -53,11 +58,18 @@ class MainViewModelTest {
         hub = mockk(relaxed = true)
         satellite = mockk(relaxed = true)
         gamepadRegistry = mockk(relaxed = true)
+        // BatteryStatusStore is a pure JVM holder (no Android deps) — use the
+        // real thing so battery samples really thread through to the slots.
+        batteryStore = BatteryStatusStore()
         every { hub.connections } returns connectionsFlow
         every { hub.bindings } returns bindingsFlow
         every { gamepadRegistry.devices } returns devicesFlow
         every { satellite.events } returns satelliteEvents
-        vm = MainViewModel(satellite, hub, gamepadRegistry)
+        // The VM resolves the virtual-slot label from string resources via the
+        // injected Context. A relaxed mock returns "" by default, which keeps
+        // the existing assertions (focused on slot wiring, not the label) green.
+        val context = mockk<Context>(relaxed = true)
+        vm = MainViewModel(context, satellite, hub, gamepadRegistry, batteryStore)
     }
 
     @After
@@ -142,7 +154,7 @@ class MainViewModelTest {
                     kind = ConnectionKind.SATELLITE,
                     label = "PC",
                     detail = "1.1.1.1",
-                    live = ConnectionLive.CONNECTED,
+                    live = LinkState.Connected,
                     boundSlotIds = listOf(VIRTUAL_SLOT_ID),
                 )
             connectionsFlow.value = listOf(summary)
@@ -154,6 +166,36 @@ class MainViewModelTest {
                     .first { it.id == VIRTUAL_SLOT_ID }
             assertEquals("s:1", virtual.boundConnectionId)
             assertEquals(summary, virtual.boundStatus)
+        }
+
+    @Test
+    fun `battery store sample is surfaced onto the matching slot`() =
+        runTest(dispatcher) {
+            devicesFlow.value = mapOf(9 to PhysicalGamepadRegistry.Device(9, "Pad"))
+            batteryStore.put(
+                "9",
+                BatterySample(72, com.tinkernorth.dish.source.sensor.BatteryValidator.STATUS_DISCHARGING),
+            )
+            dispatcher.scheduler.runCurrent()
+
+            val pad =
+                vm.uiState.value.slots
+                    .first { it.id == "9" }
+            assertEquals(72, pad.battery?.level)
+            assertEquals(false, pad.battery?.charging)
+        }
+
+    @Test
+    fun `slot with no reported battery has a null battery field`() =
+        runTest(dispatcher) {
+            devicesFlow.value = mapOf(9 to PhysicalGamepadRegistry.Device(9, "Pad"))
+            dispatcher.scheduler.runCurrent()
+
+            assertNull(
+                vm.uiState.value.slots
+                    .first { it.id == "9" }
+                    .battery,
+            )
         }
 
     @Test

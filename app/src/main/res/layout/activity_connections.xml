@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Root is FrameLayout so the dim-screen overlay can sit on top of the
-     existing content. The previous LinearLayout root only allowed vertical
-     stacking; with overlay_low_power included, the dim FrameLayout (which
-     is match_parent) needs to render above everything else. -->
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- CoordinatorLayout root: required by Material Snackbar's swipe-to-dismiss,
+     and a drop-in replacement for the previous FrameLayout (every child uses
+     match_parent / wrap_content + optional layout_gravity). The dim-screen
+     overlay still sits on top of the existing content because it's included
+     last in document order. -->
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -20,7 +21,7 @@
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
             android:background="@color/colorBackground"
-            app:title="Connections"
+            app:title="@string/title_connections"
             app:titleTextColor="@color/colorOnSurface"
             app:navigationIcon="@android:drawable/ic_menu_revert" />
 
@@ -43,11 +44,21 @@
                     android:orientation="horizontal"
                     android:gravity="center_vertical">
 
+                    <!-- v6 brand satellite glyph — same icon family used in the
+                         satellite/web dashboard and dish-mac SectionHeader so a
+                         user moving between clients sees the same iconography. -->
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_marginEnd="6dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_satellite" />
+
                     <TextView
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="SATELLITES"
+                        android:text="@string/section_satellites"
                         android:textColor="@color/colorPrimary"
                         android:textSize="11sp"
                         android:fontFamily="monospace"
@@ -58,7 +69,7 @@
                         style="@style/Widget.Dish.Button.Outlined"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Scan"
+                        android:text="@string/action_scan"
                         android:textAllCaps="false" />
                 </LinearLayout>
 
@@ -73,7 +84,7 @@
                     android:id="@+id/tvSatelliteEmpty"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Tap Scan to find satellites on your network"
+                    android:text="@string/discovery_empty_never_scanned"
                     android:textColor="@color/colorMuted"
                     android:textSize="12sp"
                     android:paddingVertical="12dp"
@@ -92,11 +103,18 @@
                     android:orientation="horizontal"
                     android:gravity="center_vertical">
 
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_marginEnd="6dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_bluetooth" />
+
                     <TextView
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="BLUETOOTH HOSTS"
+                        android:text="@string/section_bluetooth_hosts"
                         android:textColor="@color/colorPrimary"
                         android:textSize="11sp"
                         android:fontFamily="monospace"
@@ -107,7 +125,7 @@
                         style="@style/Widget.Dish.Button.Outlined"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Add"
+                        android:text="@string/action_add"
                         android:textAllCaps="false" />
                 </LinearLayout>
 
@@ -122,7 +140,7 @@
                     android:id="@+id/tvBtEmpty"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="No remembered hosts — tap Add to register a new one"
+                    android:text="@string/bt_hosts_empty"
                     android:textColor="@color/colorMuted"
                     android:textSize="12sp"
                     android:paddingVertical="12dp" />
@@ -134,4 +152,4 @@
     <!-- Low-power overlays (countdown banner + dim screen). Included last so
          the dim FrameLayout sits on top, identical to activity_main.xml. -->
     <include layout="@layout/overlay_low_power" />
-</FrameLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

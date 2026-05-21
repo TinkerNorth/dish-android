@@ -1,0 +1,522 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+// Copyright (C) 2026 Dish contributors.
+
+package com.tinkernorth.dish.source.notification
+
+import android.content.Context
+import android.graphics.Typeface
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.AbsoluteSizeSpan
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
+import android.text.style.TypefaceSpan
+import android.view.Gravity
+import android.view.View
+import android.widget.TextView
+import androidx.annotation.DrawableRes
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import com.google.android.material.snackbar.Snackbar
+import com.tinkernorth.dish.R
+import com.tinkernorth.dish.core.model.DishNotification
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicLong
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/**
+ * Process-scoped notification bus + per-Activity Snackbar renderer in one class.
+ *
+ * Replaces the prior `DishNotificationQueue` + `DishSnackbarController` split.
+ * The two had identical lifetimes (every Activity that observed the queue also
+ * spun up a controller) and the boundary between them was leaking through every
+ * Activity's onCreate. Merging them collapses ~10 lines of per-Activity
+ * boilerplate to one [attach] call.
+ *
+ * **Decoupling preserved.** The class subscribes to nothing on its own — emitters
+ * (`SatelliteConnectionManager`, etc.) call [post] / [error] / etc. directly,
+ * exactly as they did against the old queue. The merge does *not* turn this
+ * into a god-mouth that imports every data-layer flow; that boundary stays.
+ *
+ * **Testability preserved.** The data-flow surface (posts, dismissals, same-key
+ * dedup, monotonic ids) is independent of any View work. Rendering goes through
+ * a swappable [Renderer]; tests pass a recording fake. The default renderer
+ * (`MaterialSnackbarRenderer`) is the only place View / Snackbar APIs are
+ * touched.
+ *
+ * **One-shot, no replay.** Posts go to a `replay = 0` SharedFlow. An Activity
+ * STARTED at emit time renders the banner; an Activity in transition (gap
+ * between A.onStop and B.onStart) misses it. This matches the prior queue's
+ * behaviour and is intentional — state-driven UX persists via re-derivation
+ * from upstream StateFlows, not by replaying old notifications.
+ *
+ * **Same-key replacement.** Two posts with the same non-null `key` cause the
+ * prior live Snackbar to dismiss before the new one shows. Lives on the render
+ * side because dedup requires tracking live `Renderer.Handle`s.
+ */
+@Singleton
+class DishNotifications
+    @Inject
+    constructor() {
+        // ── Posting API (pure SharedFlow surface; no Android types) ──────────
+
+        private val _posts =
+            MutableSharedFlow<DishNotification>(
+                replay = 0,
+                extraBufferCapacity = BUFFER,
+                onBufferOverflow = BufferOverflow.DROP_OLDEST,
+            )
+        val posts: SharedFlow<DishNotification> = _posts.asSharedFlow()
+
+        private val _dismissals =
+            MutableSharedFlow<Long>(
+                replay = 0,
+                extraBufferCapacity = BUFFER,
+                onBufferOverflow = BufferOverflow.DROP_OLDEST,
+            )
+        val dismissals: SharedFlow<Long> = _dismissals.asSharedFlow()
+
+        private val nextId = AtomicLong(1L)
+
+        /**
+         * Post a notification to the bus. The id is assigned and returned so a
+         * caller can later [dismiss] it (e.g. when the underlying state clears
+         * before the auto-dismiss fires). Posts with the same non-null [key]
+         * replace prior posts.
+         */
+        fun post(
+            severity: DishNotification.Severity = DishNotification.Severity.INFO,
+            title: String,
+            body: String? = null,
+            @DrawableRes glyph: Int? = null,
+            action: DishNotification.Action? = null,
+            key: String? = null,
+            durationMs: Long = defaultDurationFor(severity),
+        ): Long {
+            val id = nextId.getAndIncrement()
+            val n =
+                DishNotification(
+                    id = id,
+                    severity = severity,
+                    title = title,
+                    body = body,
+                    glyph = glyph,
+                    action = action,
+                    key = key,
+                    durationMs = durationMs,
+                )
+            _posts.tryEmit(n)
+            return id
+        }
+
+        /** Dismiss a previously-posted notification by id. No-op if already gone. */
+        fun dismiss(id: Long) {
+            _dismissals.tryEmit(id)
+        }
+
+        // ── Convenience builders ────────────────────────────────────────────
+
+        /** Short transient banner. */
+        fun info(
+            title: String,
+            body: String? = null,
+            @DrawableRes glyph: Int? = null,
+            action: DishNotification.Action? = null,
+            key: String? = null,
+            durationMs: Long = DishNotification.DURATION_SHORT,
+        ): Long = post(DishNotification.Severity.INFO, title, body, glyph, action, key, durationMs)
+
+        /** Short transient success banner. */
+        fun success(
+            title: String,
+            body: String? = null,
+            @DrawableRes glyph: Int? = null,
+            action: DishNotification.Action? = null,
+            key: String? = null,
+            durationMs: Long = DishNotification.DURATION_SHORT,
+        ): Long = post(DishNotification.Severity.SUCCESS, title, body, glyph, action, key, durationMs)
+
+        /** Warning banner. Auto-dismisses after DURATION_LONG by default; opt in to PERSISTENT. */
+        fun warn(
+            title: String,
+            body: String? = null,
+            @DrawableRes glyph: Int? = null,
+            action: DishNotification.Action? = null,
+            key: String? = null,
+            durationMs: Long = DishNotification.DURATION_LONG,
+        ): Long = post(DishNotification.Severity.WARN, title, body, glyph, action, key, durationMs)
+
+        /** Error banner. Same duration semantics as [warn]. */
+        fun error(
+            title: String,
+            body: String? = null,
+            @DrawableRes glyph: Int? = null,
+            action: DishNotification.Action? = null,
+            key: String? = null,
+            durationMs: Long = DishNotification.DURATION_LONG,
+        ): Long = post(DishNotification.Severity.ERROR, title, body, glyph, action, key, durationMs)
+
+        // ── Attachment + rendering ──────────────────────────────────────────
+
+        /**
+         * Production attach: call once in `Activity.onCreate(...)`.
+         *
+         * Wires a [MaterialSnackbarRenderer] against [rootView], subscribes to
+         * the posts/dismissals flows while the owner is STARTED, and cleans up
+         * on DESTROYED. The returned [Attachment] holds the per-Activity
+         * anchor view (used by `GamepadActivityHost` to lift Snackbars above
+         * the low-power countdown pill).
+         */
+        fun attach(
+            owner: LifecycleOwner,
+            rootView: View,
+        ): Attachment = attachWithRenderer(owner, MaterialSnackbarRenderer(rootView), owner.lifecycleScope)
+
+        /**
+         * Test seam: attach with a custom renderer + scope. Production code
+         * should use [attach]; this overload exists so unit tests can drive the
+         * lifecycle without an Android View tree.
+         */
+        fun attachWithRenderer(
+            owner: LifecycleOwner,
+            renderer: Renderer,
+            scope: CoroutineScope = owner.lifecycleScope,
+        ): Attachment {
+            val attachment = Attachment(renderer)
+
+            scope.launch {
+                owner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    // posts → render, dedup by key, track for dismiss-by-id
+                    launch {
+                        posts.onEach { n -> attachment.handlePost(n) }.launchIn(this)
+                    }
+                    // dismissals → dismiss the live handle if we still have one
+                    launch {
+                        dismissals.onEach { id -> attachment.handleDismiss(id) }.launchIn(this)
+                    }
+                }
+            }
+
+            owner.lifecycle.addObserver(
+                object : DefaultLifecycleObserver {
+                    override fun onDestroy(o: LifecycleOwner) {
+                        attachment.dismissAll()
+                    }
+                },
+            )
+
+            return attachment
+        }
+
+        // ── Internals ───────────────────────────────────────────────────────
+
+        /**
+         * Severity-default duration. Every severity auto-dismisses by default;
+         * persistent banners are explicit opt-in. Prior default of "WARN/ERROR
+         * are persistent" caused transient failures like "satellite isn't
+         * responding" to stay on screen forever.
+         */
+        private fun defaultDurationFor(severity: DishNotification.Severity): Long =
+            when (severity) {
+                DishNotification.Severity.INFO,
+                DishNotification.Severity.SUCCESS,
+                -> DishNotification.DURATION_SHORT
+                DishNotification.Severity.WARN,
+                DishNotification.Severity.ERROR,
+                -> DishNotification.DURATION_LONG
+            }
+
+        // ── Public interfaces ───────────────────────────────────────────────
+
+        /**
+         * The View-touching boundary. The production implementation is
+         * [MaterialSnackbarRenderer]; tests swap a recording fake.
+         */
+        interface Renderer {
+            fun show(
+                notification: DishNotification,
+                anchor: View?,
+            ): Handle
+
+            interface Handle {
+                fun dismiss()
+            }
+        }
+
+        /**
+         * Returned by [attach]. Holds per-Activity rendering state (live
+         * Snackbar handles, dedup map, anchor view). The anchor view setter is
+         * exposed for `GamepadActivityHost`, which lifts the Snackbar above
+         * the low-power countdown pill while it's visible.
+         *
+         * Internally tracks live handles by id and by key for dedup. Cleared
+         * on `onDestroy`.
+         */
+        class Attachment internal constructor(
+            private val renderer: Renderer,
+        ) {
+            @Volatile var anchorView: View? = null
+
+            // Single source of truth: byId maps id → handle. byKey is a side
+            // index mapping key → id so we can look up the live id for a key
+            // in O(1). Any mutation that touches one map must touch the other
+            // to keep them coherent — that's why both are guarded by [lock].
+            private val byId = mutableMapOf<Long, Renderer.Handle>()
+            private val byKey = mutableMapOf<String, Long>()
+            private val lock = Any()
+
+            internal fun handlePost(notification: DishNotification) {
+                // Same-key replacement: pull both the prior id (from byKey)
+                // and its handle (from byId) so neither map is left holding a
+                // stale entry. Earlier this only dropped byKey, which left
+                // byId tracking the dismissed handle and made liveById
+                // over-count.
+                val priorHandle: Renderer.Handle? =
+                    synchronized(lock) {
+                        val key = notification.key
+                        if (key != null) {
+                            val priorId = byKey.remove(key)
+                            if (priorId != null) byId.remove(priorId) else null
+                        } else {
+                            null
+                        }
+                    }
+                priorHandle?.dismiss()
+
+                val handle = renderer.show(notification, anchorView)
+
+                synchronized(lock) {
+                    byId[notification.id] = handle
+                    notification.key?.let { byKey[it] = notification.id }
+                }
+            }
+
+            internal fun handleDismiss(id: Long) {
+                val handle: Renderer.Handle? =
+                    synchronized(lock) {
+                        val h = byId.remove(id)
+                        if (h != null) {
+                            // Clear the side index too. removeAll is safe even
+                            // when no entry exists for this id (null key).
+                            byKey.entries.removeAll { it.value == id }
+                        }
+                        h
+                    }
+                handle?.dismiss()
+            }
+
+            internal fun dismissAll() {
+                val toDismiss: List<Renderer.Handle> =
+                    synchronized(lock) {
+                        val snapshot = byId.values.toList()
+                        byId.clear()
+                        byKey.clear()
+                        snapshot
+                    }
+                toDismiss.forEach { it.dismiss() }
+            }
+
+            /** Visible for testing: how many handles are currently tracked by id. */
+            internal fun liveById(): Int = synchronized(lock) { byId.size }
+
+            /** Visible for testing: how many handles are currently tracked by key. */
+            internal fun liveByKey(): Int = synchronized(lock) { byKey.size }
+        }
+
+        private companion object {
+            const val BUFFER = 16
+        }
+    }
+
+// ── Material renderer (default) ─────────────────────────────────────────────
+//
+// The production implementation of [DishNotifications.Renderer]. Builds a
+// Material [Snackbar] for each post, styled with the brand cyan/severity rail
+// and monospace body. Kept in this file so the renderer's lifetime is obviously
+// the same as the queue's and to avoid an extra file for what's essentially
+// "the Snackbar build helper."
+
+internal class MaterialSnackbarRenderer(
+    private val rootView: View,
+) : DishNotifications.Renderer {
+    override fun show(
+        notification: DishNotification,
+        anchor: View?,
+    ): DishNotifications.Renderer.Handle {
+        val ctx = rootView.context
+        val snackbar =
+            Snackbar
+                .make(rootView, buildStyledText(ctx, notification), durationFor(notification))
+                .applyDishTheme(notification.severity)
+        anchor?.let { snackbar.anchorView = it }
+        notification.action?.let { action ->
+            snackbar.setAction(action.label) { action.handler() }
+        }
+        snackbar.show()
+        return SnackbarHandle(snackbar)
+    }
+
+    private fun durationFor(notification: DishNotification): Int =
+        when {
+            notification.durationMs == DishNotification.DURATION_PERSISTENT ->
+                Snackbar.LENGTH_INDEFINITE
+            notification.durationMs >= DishNotification.DURATION_LONG ->
+                Snackbar.LENGTH_LONG
+            else -> Snackbar.LENGTH_SHORT
+        }
+
+    private class SnackbarHandle(
+        private val snackbar: Snackbar,
+    ) : DishNotifications.Renderer.Handle {
+        override fun dismiss() {
+            snackbar.dismiss()
+        }
+    }
+}
+
+// ── Brand theming (unchanged from the prior DishSnackbarController) ──────────
+
+private fun buildStyledText(
+    ctx: Context,
+    notification: DishNotification,
+): CharSequence {
+    val builder = SpannableStringBuilder()
+    val titleStart = builder.length
+    builder.append(notification.title)
+    builder.setSpan(
+        StyleSpan(Typeface.BOLD),
+        titleStart,
+        builder.length,
+        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+    )
+    val body = notification.body
+    if (!body.isNullOrBlank()) {
+        builder.append("\n")
+        val bodyStart = builder.length
+        builder.append(body)
+        builder.setSpan(
+            ForegroundColorSpan(ctx.getColor(R.color.colorMuted)),
+            bodyStart,
+            builder.length,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+        )
+        builder.setSpan(
+            AbsoluteSizeSpan(spToPx(ctx, BODY_SP)),
+            bodyStart,
+            builder.length,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+        )
+        builder.setSpan(
+            TypefaceSpan("monospace"),
+            bodyStart,
+            builder.length,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+        )
+    }
+    return builder
+}
+
+private fun Snackbar.applyDishTheme(severity: DishNotification.Severity): Snackbar {
+    val ctx = view.context
+    view.background = buildBackground(ctx, severity)
+    view.elevation = dpToPx(ctx, ELEVATION_DP)
+    val horizontalPad = dpToPxInt(ctx, HORIZONTAL_PAD_DP)
+    val verticalPad = dpToPxInt(ctx, VERTICAL_PAD_DP)
+    view.setPadding(horizontalPad, verticalPad, horizontalPad, verticalPad)
+    setTextColor(ctx.getColor(R.color.colorOnSurface))
+    view.findViewById<TextView>(com.google.android.material.R.id.snackbar_text)?.apply {
+        maxLines = MAX_TEXT_LINES
+        textSize = TITLE_SP
+        typeface = Typeface.DEFAULT_BOLD
+        setPadding(dpToPxInt(ctx, TEXT_LEADING_INDENT_DP), 0, 0, 0)
+    }
+    val actionColor =
+        when (severity) {
+            DishNotification.Severity.INFO,
+            DishNotification.Severity.SUCCESS,
+            -> R.color.colorPrimary
+            DishNotification.Severity.WARN -> R.color.colorWarning
+            DishNotification.Severity.ERROR -> R.color.colorError
+        }
+    setActionTextColor(ctx.getColor(actionColor))
+    view.findViewById<TextView>(com.google.android.material.R.id.snackbar_action)?.apply {
+        typeface = Typeface.DEFAULT_BOLD
+        textSize = ACTION_SP
+        letterSpacing = ACTION_LETTER_SPACING
+    }
+    return this
+}
+
+private fun buildBackground(
+    ctx: Context,
+    severity: DishNotification.Severity,
+): Drawable {
+    val surface =
+        GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dpToPx(ctx, CORNER_RADIUS_DP)
+            setColor(ctx.getColor(R.color.colorSurface))
+            setStroke(dpToPxInt(ctx, 1f), ctx.getColor(R.color.colorOutline))
+        }
+    val railColorRes =
+        when (severity) {
+            DishNotification.Severity.INFO -> R.color.colorPrimary
+            DishNotification.Severity.SUCCESS -> R.color.colorSuccess
+            DishNotification.Severity.WARN -> R.color.colorWarning
+            DishNotification.Severity.ERROR -> R.color.colorError
+        }
+    val rail =
+        GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            setColor(ctx.getColor(railColorRes))
+            val r = dpToPx(ctx, CORNER_RADIUS_DP)
+            cornerRadii = floatArrayOf(r, r, 0f, 0f, 0f, 0f, r, r)
+        }
+    val layers = LayerDrawable(arrayOf(surface, rail))
+    layers.setLayerWidth(1, dpToPxInt(ctx, RAIL_WIDTH_DP))
+    layers.setLayerGravity(1, Gravity.START or Gravity.FILL_VERTICAL)
+    return layers
+}
+
+private fun dpToPx(
+    ctx: Context,
+    dp: Float,
+): Float = dp * ctx.resources.displayMetrics.density
+
+private fun dpToPxInt(
+    ctx: Context,
+    dp: Float,
+): Int = dpToPx(ctx, dp).toInt()
+
+private fun spToPx(
+    ctx: Context,
+    sp: Float,
+): Int = (sp * ctx.resources.displayMetrics.scaledDensity).toInt()
+
+private const val CORNER_RADIUS_DP = 10f
+private const val RAIL_WIDTH_DP = 4f
+private const val ELEVATION_DP = 6f
+private const val HORIZONTAL_PAD_DP = 4f
+private const val VERTICAL_PAD_DP = 2f
+private const val TEXT_LEADING_INDENT_DP = 12f
+private const val TITLE_SP = 13f
+private const val BODY_SP = 11f
+private const val ACTION_SP = 12f
+private const val ACTION_LETTER_SPACING = 0.04f
+
+/** Title (1 line) + body (up to 2 lines) — Material default is 2 total. */
+private const val MAX_TEXT_LINES = 3

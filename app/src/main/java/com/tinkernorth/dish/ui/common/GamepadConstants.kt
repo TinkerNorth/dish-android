@@ -55,6 +55,19 @@ internal object GamepadConstants {
     /** Drawn-icon size for ABXY (multiples of [btnRadius]). */
     const val ABXY_BTN_DRAW_SIZE_FACTOR = 2.2f
 
+    /**
+     * Radius of the centre "all four buttons" zone, expressed as a fraction
+     * of the cluster centre → button-centre distance. A touch inside this
+     * disc triggers A + B + X + Y at once.
+     *
+     * Outside the disc the cluster is split into the same 8-direction
+     * sweet-spot map as the d-pad (see [DPAD_DIAGONAL_THRESHOLD]): the
+     * cardinal sectors map to a single button, the diagonal sectors to the
+     * two adjacent buttons. Live-tracking — the held bits follow the finger
+     * across zones, so sliding from B into A drops B and picks up A.
+     */
+    const val ABXY_CENTER_ZONE_FRACTION = 0.5f
+
     // ── Sticks ───────────────────────────────────────────────────────────
 
     /** Main-stick radius cap as a fraction of a content-quarter width. */
@@ -134,13 +147,21 @@ internal object GamepadConstants {
     /** Pickup radius around centre buttons (× smallBtnRadius). */
     const val CENTER_BTN_PICKUP_FACTOR = 1.5f
 
-    // ── D-pad hat-switch bands ───────────────────────────────────────────
+    // ── D-pad diagonal sweet-spot ────────────────────────────────────────
 
-    /** Width of one of the eight hat-switch direction bands, in degrees. */
-    const val HAT_BAND_DEG = 45.0
-
-    /** Half-width of a hat-switch band, in degrees. */
-    const val HAT_BAND_HALF_DEG = 22.5
+    /**
+     * Minor-axis / major-axis threshold for a d-pad touch to register as a
+     * diagonal (NE/SE/SW/NW) instead of snapping to the nearest cardinal.
+     *
+     * Below this ratio the touch falls back to the dominant axis. With
+     * 0.3 each diagonal sweet-spot spans ~57° (`2·(45°−atan(0.3))`) and
+     * each cardinal narrows to ~33°. The bias favours diagonals because
+     * thumb-driven d-pads rarely land precisely on the 45° line — the
+     * old 8-octant geometric split gave each direction the same 45° band
+     * and in practice "up + left" almost always fell into pure up or
+     * pure left.
+     */
+    const val DPAD_DIAGONAL_THRESHOLD = 0.3f
 
     // ── Triggers ─────────────────────────────────────────────────────────
     const val TRIGGER_MAX = 255

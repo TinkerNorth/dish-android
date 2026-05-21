@@ -1,0 +1,25 @@
+<!-- Battery at 75% fill (v6 brand). Shown for a level in 60-90%. The two-tone
+     palette is self-coloured — do NOT apply android:tint / app:tint. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+    <path
+        android:fillColor="#8FCFE3"
+        android:pathData="M11,22 L47,22 A3,3 0 0 1 50,25 L50,39 A3,3 0 0 1 47,42 L11,42 A3,3 0 0 1 8,39 L8,25 A3,3 0 0 1 11,22 Z" />
+    <path
+        android:fillColor="#8FCFE3"
+        android:pathData="M51,28 L53,28 A1,1 0 0 1 54,29 L54,35 A1,1 0 0 1 53,36 L51,36 A1,1 0 0 1 50,35 L50,29 A1,1 0 0 1 51,28 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.55"
+        android:pathData="M12,25 L46,25 A1,1 0 0 1 47,26 L47,38 A1,1 0 0 1 46,39 L12,39 A1,1 0 0 1 11,38 L11,26 A1,1 0 0 1 12,25 Z" />
+    <path
+        android:fillColor="#8FCFE3"
+        android:pathData="M12,25 L37,25 A1,1 0 0 1 38,26 L38,38 A1,1 0 0 1 37,39 L12,39 A1,1 0 0 1 11,38 L11,26 A1,1 0 0 1 12,25 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.55"
+        android:pathData="M14,27 L35,27 A1,1 0 0 1 36,28 L36,29 A1,1 0 0 1 35,30 L14,30 A1,1 0 0 1 13,29 L13,28 A1,1 0 0 1 14,27 Z" />
+</vector>

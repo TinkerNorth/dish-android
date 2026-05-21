@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Charge-ramp easing for ic_battery_charging: maps the first 0.833 of the
+     timeline (3.0s of the 3.6s loop) linearly to a full 0->1 fill, then holds
+     at 1 for the remaining 0.6s before the loop restarts. -->
+<pathInterpolator xmlns:android="http://schemas.android.com/apk/res/android"
+    android:pathData="M 0,0 L 0.833,1 L 1,1" />

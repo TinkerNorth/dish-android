@@ -5,14 +5,16 @@ package com.tinkernorth.dish.ui.common
 
 import android.view.MotionEvent
 import com.tinkernorth.dish.ui.common.GamepadConstants.ABXY_BTN_SPACING_FACTOR
+import com.tinkernorth.dish.ui.common.GamepadConstants.ABXY_CENTER_ZONE_FRACTION
 import com.tinkernorth.dish.ui.common.GamepadConstants.CENTER_BTN_PICKUP_FACTOR
-import com.tinkernorth.dish.ui.common.GamepadConstants.HAT_BAND_DEG
-import com.tinkernorth.dish.ui.common.GamepadConstants.HAT_BAND_HALF_DEG
+import com.tinkernorth.dish.ui.common.GamepadConstants.DPAD_DIAGONAL_THRESHOLD
 import com.tinkernorth.dish.ui.common.GamepadConstants.HOME_VERTICAL_OFFSET_FACTOR
 import com.tinkernorth.dish.ui.common.GamepadConstants.PICKUP_RADIUS_FACTOR
 import com.tinkernorth.dish.ui.common.GamepadConstants.TRIGGER_MAX
-import kotlin.math.atan2
+import kotlin.math.abs
 import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Touch handling for [GamepadTouchView]. Owns the per-pointer-id tracking and
@@ -55,9 +57,17 @@ internal class GamepadGestureRecognizer {
     private var ltPointerId = INVALID_POINTER
     private var rtPointerId = INVALID_POINTER
     private var dpadPointerId = INVALID_POINTER
-    private var abxyPointerId = INVALID_POINTER
     private var lbPointerId = INVALID_POINTER
     private var rbPointerId = INVALID_POINTER
+
+    // ABXY is live-tracked, not additive: each pointer's current zone is
+    // recomputed on every MOVE so sliding from B into A drops B and picks up
+    // A (mirrors the d-pad's "hat follows the finger" contract). For multi-
+    // touch the state bits are the OR of every pointer's current zone.
+    private val abxyPointerBits = mutableMapOf<Int, Int>()
+    private val abxyMask =
+        GamepadTouchView.BTN_A or GamepadTouchView.BTN_B or
+            GamepadTouchView.BTN_X or GamepadTouchView.BTN_Y
 
     /**
      * Process a [MotionEvent] against the supplied [layout]. Mutates [state]
@@ -102,9 +112,9 @@ internal class GamepadGestureRecognizer {
         ltPointerId = INVALID_POINTER
         rtPointerId = INVALID_POINTER
         dpadPointerId = INVALID_POINTER
-        abxyPointerId = INVALID_POINTER
         lbPointerId = INVALID_POINTER
         rbPointerId = INVALID_POINTER
+        abxyPointerBits.clear()
     }
 
     @Suppress("CyclomaticComplexMethod", "ReturnCount", "LongMethod")
@@ -169,8 +179,8 @@ internal class GamepadGestureRecognizer {
             return
         }
         if (l.abxyRect.contains(x, y)) {
-            abxyPointerId = pid
-            updateAbxy(x, y, l)
+            abxyPointerBits[pid] = computeAbxyZone(x, y, l)
+            refreshAbxyButtons()
             return
         }
         // Centre buttons — not pointer-tracked; cleared in handlePointerUp's
@@ -242,6 +252,19 @@ internal class GamepadGestureRecognizer {
         if (pid == dpadPointerId) {
             updateDpad(x, y, l)
         }
+        // ABXY MOVE is live: the held bits track the finger's current zone,
+        // so sliding from one button into another replaces (rather than
+        // accumulates) — same contract as the d-pad's hat-switch follow.
+        // Zones extend infinitely past the visible cluster, so a drag in
+        // the same direction past the cluster boundary keeps the same bits.
+        val currentBits = abxyPointerBits[pid]
+        if (currentBits != null) {
+            val newBits = computeAbxyZone(x, y, l)
+            if (newBits != currentBits) {
+                abxyPointerBits[pid] = newBits
+                refreshAbxyButtons()
+            }
+        }
     }
 
     @Suppress("ReturnCount", "LongMethod")
@@ -303,14 +326,11 @@ internal class GamepadGestureRecognizer {
             state.hatSwitch = GamepadTouchView.HAT_NONE
             return
         }
-        if (pid == abxyPointerId) {
-            abxyPointerId = INVALID_POINTER
-            state.buttons =
-                state.buttons and
-                (
-                    GamepadTouchView.BTN_A or GamepadTouchView.BTN_B or
-                        GamepadTouchView.BTN_X or GamepadTouchView.BTN_Y
-                ).inv()
+        if (abxyPointerBits.containsKey(pid)) {
+            abxyPointerBits.remove(pid)
+            // Other pointers may still be holding ABXY bits — re-OR what
+            // remains so the release only clears bits no one else is on.
+            refreshAbxyButtons()
             return
         }
         if (pid == lbPointerId) {
@@ -341,57 +361,84 @@ internal class GamepadGestureRecognizer {
     ) {
         val dx = x - l.dpadRect.centerX()
         val dy = y - l.dpadRect.centerY()
-        val angle =
-            Math
-                .toDegrees(atan2(dy.toDouble(), dx.toDouble()))
-                .let { if (it < 0) it + FULL_CIRCLE_DEG else it }
-        // Eight 45° bands rotated by 22.5° so E is centred on 0°.
-        val octant = (((angle + HAT_BAND_HALF_DEG) / HAT_BAND_DEG).toInt() % HAT_OCTANTS.size)
-        state.hatSwitch = HAT_OCTANTS[octant]
+        if (dx == 0f && dy == 0f) {
+            state.hatSwitch = GamepadTouchView.HAT_NONE
+            return
+        }
+        val absDx = abs(dx)
+        val absDy = abs(dy)
+        val major = max(absDx, absDy)
+        val minor = min(absDx, absDy)
+        // Diagonal when the minor axis is within DPAD_DIAGONAL_THRESHOLD of
+        // the major. The two-axis HAT encoding can't represent left+right or
+        // up+down simultaneously, so picking a diagonal is a one-way choice
+        // — east-vs-west and north-vs-south fall out of the sign of dx/dy.
+        val isDiagonal = (minor / major) >= DPAD_DIAGONAL_THRESHOLD
+        val east = dx > 0
+        val south = dy > 0
+        state.hatSwitch =
+            when {
+                isDiagonal && east && south -> GamepadTouchView.HAT_SE
+                isDiagonal && east && !south -> GamepadTouchView.HAT_NE
+                isDiagonal && !east && south -> GamepadTouchView.HAT_SW
+                isDiagonal && !east && !south -> GamepadTouchView.HAT_NW
+                absDx >= absDy -> if (east) GamepadTouchView.HAT_E else GamepadTouchView.HAT_W
+                else -> if (south) GamepadTouchView.HAT_S else GamepadTouchView.HAT_N
+            }
     }
 
-    private fun updateAbxy(
+    /**
+     * Resolve a touch position to the set of ABXY bits its zone represents.
+     *
+     * The cluster is divided into nine zones around its centre:
+     *  - a centre disc (radius = [ABXY_CENTER_ZONE_FRACTION] of the centre →
+     *    button-centre distance) → all four buttons,
+     *  - four cardinal sectors → a single button (N=Y, S=A, E=B, W=X),
+     *  - four diagonal sectors → the two adjacent buttons (NE=Y+B, SE=A+B,
+     *    SW=A+X, NW=Y+X).
+     *
+     * Cardinal-vs-diagonal selection uses the same `min(|dx|,|dy|) /
+     * max(|dx|,|dy|) ≥ DPAD_DIAGONAL_THRESHOLD` test as the d-pad. Zones
+     * extend infinitely past the visible cluster — dragging far in one
+     * direction keeps the same bits held until the finger crosses into
+     * another zone.
+     */
+    private fun computeAbxyZone(
         x: Float,
         y: Float,
         l: GamepadLayout,
-    ) {
-        val cx = l.abxyRect.centerX()
-        val cy = l.abxyRect.centerY()
+    ): Int {
+        val dx = x - l.abxyRect.centerX()
+        val dy = y - l.abxyRect.centerY()
         val sp = l.btnRadius * ABXY_BTN_SPACING_FACTOR
-        val pickR = l.btnRadius * PICKUP_RADIUS_FACTOR
-        if (hypot(x - cx, y - (cy - sp)) < pickR) {
-            state.buttons = state.buttons or GamepadTouchView.BTN_Y
+        val centerR = sp * ABXY_CENTER_ZONE_FRACTION
+        if ((dx * dx + dy * dy) < centerR * centerR) {
+            return abxyMask
         }
-        if (hypot(x - cx, y - (cy + sp)) < pickR) {
-            state.buttons = state.buttons or GamepadTouchView.BTN_A
+        val absDx = abs(dx)
+        val absDy = abs(dy)
+        val major = max(absDx, absDy)
+        val minor = min(absDx, absDy)
+        val isDiagonal = (minor / major) >= DPAD_DIAGONAL_THRESHOLD
+        val east = dx > 0
+        val south = dy > 0
+        return when {
+            isDiagonal && east && south -> GamepadTouchView.BTN_A or GamepadTouchView.BTN_B
+            isDiagonal && east && !south -> GamepadTouchView.BTN_Y or GamepadTouchView.BTN_B
+            isDiagonal && !east && south -> GamepadTouchView.BTN_A or GamepadTouchView.BTN_X
+            isDiagonal && !east && !south -> GamepadTouchView.BTN_Y or GamepadTouchView.BTN_X
+            absDx >= absDy -> if (east) GamepadTouchView.BTN_B else GamepadTouchView.BTN_X
+            else -> if (south) GamepadTouchView.BTN_A else GamepadTouchView.BTN_Y
         }
-        if (hypot(x - (cx - sp), y - cy) < pickR) {
-            state.buttons = state.buttons or GamepadTouchView.BTN_X
-        }
-        if (hypot(x - (cx + sp), y - cy) < pickR) {
-            state.buttons = state.buttons or GamepadTouchView.BTN_B
-        }
+    }
+
+    private fun refreshAbxyButtons() {
+        var bits = 0
+        for (zoneBits in abxyPointerBits.values) bits = bits or zoneBits
+        state.buttons = (state.buttons and abxyMask.inv()) or bits
     }
 
     companion object {
         private const val INVALID_POINTER = -1
-        private const val FULL_CIRCLE_DEG = 360.0
-
-        /**
-         * Octant → hat-switch direction. Index `i` is the band centred on
-         * `i * 45°` measured from east (atan2 0° → +x). E, SE, S, SW, W, NW,
-         * N, NE — y-down so SE follows E.
-         */
-        private val HAT_OCTANTS =
-            intArrayOf(
-                GamepadTouchView.HAT_E,
-                GamepadTouchView.HAT_SE,
-                GamepadTouchView.HAT_S,
-                GamepadTouchView.HAT_SW,
-                GamepadTouchView.HAT_W,
-                GamepadTouchView.HAT_NW,
-                GamepadTouchView.HAT_N,
-                GamepadTouchView.HAT_NE,
-            )
     }
 }

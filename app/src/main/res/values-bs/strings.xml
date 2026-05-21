@@ -1,0 +1,219 @@
+<resources>
+    <string name="app_name">Dish</string>
+
+    <!-- MainActivity kontrolna tabla. Rječnik prati LinkState čipove:
+         zapamćeni/upareni unos je „uparen"; Connected unos je „na vezi". -->
+    <string name="status_remembered">%1$d upareno</string>
+    <string name="status_tap_manage">Dodirnite Upravljanje da dodate vezu</string>
+    <string name="status_connected_of">%1$d od %2$d na vezi</string>
+    <string name="toast_pairing_needed">Potrebno uparivanje — otvorite Veze</string>
+    <string name="toast_bind_first">Prvo povežite jednu vezu</string>
+
+    <!-- Hrom kontrolne table (activity_main.xml). -->
+    <string name="section_connections">VEZE</string>
+    <string name="section_controllers">KONTROLERI</string>
+    <string name="dashboard_connections_empty">Još nema veza</string>
+    <string name="action_manage">Upravljanje</string>
+
+    <!-- Stranica Veze (activity_connections.xml). -->
+    <string name="title_connections">Veze</string>
+    <string name="section_satellites">SATELITI</string>
+    <string name="section_bluetooth_hosts">BLUETOOTH HOSTOVI</string>
+    <string name="action_scan">Skeniraj</string>
+    <string name="action_scanning">Skeniranje…</string>
+    <string name="action_add">Dodaj</string>
+    <string name="bt_hosts_empty">Nema zapamćenih hostova — dodirnite Dodaj da registrujete novi</string>
+
+    <!-- row_connection.xml + dinamičke oznake redova u ConnectionsActivity. -->
+    <string name="action_connect">Poveži</string>
+    <string name="action_disconnect">Prekini vezu</string>
+    <string name="action_repair_short">Ponovo upari</string>
+    <string name="action_forget_short">Zaboravi</string>
+    <string name="action_cancel">Otkaži</string>
+    <string name="bt_row_pair_from_host">Upari sa hosta</string>
+    <string name="bt_row_acquiring">Preuzimanje…</string>
+    <string name="bt_row_waiting">Čekanje…</string>
+
+    <!-- Dijalog potvrde za zaboravljanje Bluetooth hosta. -->
+    <string name="dialog_forget_bt_title">Zaboraviti %1$s?</string>
+    <string name="dialog_forget_bt_message">Dish više neće pamtiti ovaj host. Telefon zadržava sistemsko uparivanje — otvorite Bluetooth podešavanja da ga u potpunosti uklonite.</string>
+    <string name="dialog_forget_bt_positive">Otvori podešavanja</string>
+    <string name="dialog_forget_bt_negative">Ne sada</string>
+
+    <!-- Dijalog za izbor Bluetooth profila. -->
+    <string name="dialog_controller_profile_title">Profil kontrolera</string>
+
+    <!-- Baner istek vidljivosti iz ConnectionsActivity. -->
+    <string name="notif_discoverability_expired_title">Vidljivost je istekla</string>
+    <string name="notif_discoverability_expired_body">Nijedan host nije upario na vrijeme. Produžite da nastavite pokušaje.</string>
+    <string name="action_re_extend">Produži</string>
+
+    <!-- Podnaslov PIN dijaloga kad je ime servera poznato. -->
+    <string name="pair_dialog_subtitle_named">Unesite PIN prikazan na %1$s.</string>
+    <!-- Generička zamjena u baneru „server nedostupan" kad ime nije
+         dostupno. -->
+    <string name="satellite_fallback_name">satelit</string>
+
+    <!-- Kartica item_controller (item_controller.xml). -->
+    <string name="slot_output_to_label">Izlaz na</string>
+    <string name="action_unbind">Odveži</string>
+    <string name="action_open_gamepad">Otvori kontroler</string>
+    <string name="desc_open_gamepad">Otvori kontroler</string>
+    <string name="desc_expand">Proširi</string>
+
+    <!-- Tekst statusa slota u ControllerAdapter (ispod imena). -->
+    <string name="slot_status_disconnecting">Prekidanje veze… %1$ds</string>
+    <string name="slot_status_routing_to">→ %1$s</string>
+    <string name="slot_status_bound">Povezan</string>
+    <string name="slot_status_tap_to_bind">Dodirnite za povezivanje</string>
+
+    <!-- Redovi izbora po slotu u ControllerAdapter. -->
+    <string name="picker_empty_no_connections">Još nema veza — dodirnite Upravljanje iznad</string>
+    <string name="picker_empty_no_available">Trenutno nema dostupnih veza</string>
+    <string name="picker_status_online"> • na vezi</string>
+    <string name="picker_status_connecting"> • povezivanje…</string>
+    <string name="picker_status_offline"> • van veze</string>
+    <string name="picker_status_needs_pairing"> • potrebno uparivanje</string>
+    <string name="picker_detail_bound_here"> • povezano ovdje</string>
+    <string name="picker_detail_in_use"> • u upotrebi</string>
+
+    <!-- Prekidač tipa kontrolera po slotu. -->
+    <string name="picker_type_label">Tip</string>
+
+    <!-- Vokabular čipova/redova za LinkState. -->
+    <string name="chip_status_found">Pronađen</string>
+    <string name="chip_status_needs_pairing">Potrebno uparivanje</string>
+    <string name="chip_status_offline">Van veze</string>
+    <string name="chip_status_ready">Spreman</string>
+    <string name="chip_status_connecting">Povezivanje…</string>
+    <string name="chip_status_online">Na vezi</string>
+    <string name="chip_status_unstable">Nestabilan</string>
+
+    <!-- Sloj kontrolera (activity_gamepad_overlay.xml + GamepadOverlayActivity). -->
+    <string name="overlay_status_streaming">Striming u toku</string>
+    <string name="overlay_status_unknown">Nepoznata veza</string>
+    <string name="overlay_status_not_connected">Nije povezan</string>
+    <string name="overlay_action_back">NAZAD</string>
+
+    <!-- Podrazumijevane oznake za slot/vezu. -->
+    <string name="default_virtual_controller_name">Virtuelni kontroler</string>
+    <string name="default_bluetooth_gamepad_label">Bluetooth kontroler</string>
+
+    <!-- Podnaslov Bluetooth reda i prelazno stanje slota tokom uparivanja. -->
+    <string name="bt_row_detail">%1$s • %2$s</string>
+    <string name="bt_transient_ready_to_pair">Spreman za uparivanje — pronađite ovaj uređaj na svom hostu</string>
+    <string name="bt_transient_acquiring">Preuzimanje HID profila…</string>
+    <string name="bt_transient_idle">Neaktivan</string>
+
+    <!-- Indikator pokreta (žiroskop/akcelerometar) u sloju dodira. Stanja:
+         striming, pauziran (sloj u pozadini), nije proslijeđen (Bluetooth
+         veza nema kanal za pokret) i nedostupan (nema žiroskopa). -->
+    <string name="motion_streaming">Pokret: striming</string>
+    <string name="motion_paused">Pokret: pauziran</string>
+    <string name="motion_stalled">Pokret: zaglavljen</string>
+    <string name="motion_not_forwarded">Pokret: nije poslan</string>
+    <string name="motion_unavailable">Pokret: nema žiroskopa</string>
+    <string name="motion_unavailable_detail">Ovaj telefon nema žiroskop, pa se pokret (žiro nišanjenje / nagib) ne šalje.</string>
+    <string name="motion_not_forwarded_detail">Ova Bluetooth veza nema kanal za pokret. Koristite satelitsku vezu za slanje žiro nišanjenja / nagiba.</string>
+    <string name="motion_stalled_detail">Senzor pokreta je zaglavljen — pokušajte pritisnuti dugme Nazad za resetovanje, ili restartujte Dish.</string>
+
+    <!-- Indikator baterije po slotu. -->
+    <string name="battery_percent">%1$d %%</string>
+    <string name="battery_unknown_level">--</string>
+
+    <!-- Dinamički opis baterije za čitače ekrana. -->
+    <string name="battery_desc">Baterija kontrolera %1$s, %2$s</string>
+    <string name="battery_desc_level_unknown">nepoznat nivo</string>
+    <string name="battery_state_charging">puni se</string>
+    <string name="battery_state_low">slaba, ne puni se</string>
+    <string name="battery_state_discharging">na bateriji</string>
+
+    <!-- Podnaslov pronađenog reda i čip statusa. -->
+    <string name="discovered_row_detail">%1$s • UDP %2$d</string>
+    <string name="discovered_row_status">Pronađen · %1$s</string>
+
+    <!-- Lista veza: kako je satelit otkriven. -->
+    <string name="discovery_source_broadcast">UDP emitovanje</string>
+    <string name="discovery_source_mdns">mDNS</string>
+    <string name="discovery_source_both">mDNS + emitovanje</string>
+
+    <!-- Oznake akcija Dish obavještenja. -->
+    <string name="action_open_settings">PODEŠAVANJA</string>
+    <string name="action_retry">POKUŠAJ PONOVO</string>
+    <string name="action_reconnect">PONOVO POVEŽI</string>
+    <string name="action_repair">PONOVO UPARI</string>
+    <string name="action_open">OTVORI</string>
+    <string name="action_forget">ZABORAVI</string>
+    <string name="action_turn_on">UKLJUČI</string>
+    <string name="action_grant">DOZVOLI</string>
+
+    <!-- Tekst Dish obavještenja. -->
+    <string name="notif_bt_permission_title">Potrebna Bluetooth dozvola</string>
+    <string name="notif_bt_permission_body">Dish-u treba pristup Bluetooth-u da registruje kontroler.</string>
+    <string name="notif_bt_discoverability_denied_title">Vidljivost odbijena</string>
+    <string name="notif_bt_discoverability_denied_body">Vaš host ne može vidjeti ovaj telefon dok ga ne učinite vidljivim.</string>
+    <string name="notif_bt_adapter_off_title">Bluetooth je isključen</string>
+    <string name="notif_bt_adapter_off_body">Uključite Bluetooth da koristite host kontrolera.</string>
+    <string name="notif_bt_unsupported_title">Bluetooth HID zahtijeva Android 9+</string>
+    <string name="notif_bt_unsupported_body">Ovaj uređaj ne može se upariti kao Bluetooth kontroler.</string>
+    <string name="notif_bt_key_missing_title">Ponovo upari %1$s</string>
+    <string name="notif_bt_key_missing_body">Host je zaboravio svoju stranu uparivanja. Zaboravite na obje strane i ponovo uparite.</string>
+    <string name="notif_bt_bond_removed_title">%1$s je razuparen</string>
+    <string name="notif_bt_bond_removed_body">Ponovo uparite za povezivanje.</string>
+    <string name="notif_no_network_title">Nema mreže</string>
+    <string name="notif_no_network_body">Povežite se na isti Wi-Fi kao i vaš satelit.</string>
+    <string name="notif_cellular_only_title">Samo mobilni podaci</string>
+    <string name="notif_cellular_only_body">Sateliti žive na vašem Wi-Fi LAN-u, ne na mobilnim podacima.</string>
+    <string name="notif_bind_first_title">Prvo povežite jednu vezu</string>
+    <string name="notif_pairing_needed_title">Potrebno uparivanje</string>
+    <string name="notif_pairing_needed_body">Otvorite Veze da unesete PIN za %1$s.</string>
+    <string name="notif_server_unreachable_title">%1$s ne odgovara</string>
+    <string name="notif_server_unreachable_body">Provjerite da je uključen i na istom Wi-Fi-u.</string>
+    <string name="notif_registration_failed_title">Registracija kontrolera nije uspjela</string>
+    <string name="notif_pair_pin_failed_title">PIN se ne poklapa</string>
+    <string name="notif_session_lost_title">Veza sa %1$s je izgubljena</string>
+    <string name="notif_session_lost_body">Ponovno povezivanje…</string>
+
+    <!-- Dinamičko prazno stanje liste satelita. -->
+    <string name="discovery_empty_never_scanned">Dodirnite Skeniraj da pronađete satelite na vašoj mreži</string>
+    <string name="discovery_empty_no_results">Nije pronađen nijedan satelit u %1$s — provjerite Wi-Fi i da li je host uključen.</string>
+
+    <!-- Prilagođeni PIN dijalog. -->
+    <string name="pair_dialog_title">Upari sa satelitom</string>
+    <string name="pair_dialog_subtitle">Unesite PIN prikazan na satelitu.</string>
+    <string name="pair_dialog_pin_hint">PIN</string>
+    <string name="pair_dialog_submit">UPARI</string>
+    <string name="pair_dialog_cancel">OTKAŽI</string>
+    <string name="pair_dialog_pairing">UPARIVANJE…</string>
+    <string name="pair_dialog_error_empty">Unesite PIN prikazan na satelitu.</string>
+
+    <!-- Obavještenje servisa u prvom planu. -->
+    <string name="streaming_channel_name">Sesija strimanja</string>
+    <string name="streaming_channel_description">Drži Dish aktivnim dok kontroler strima.</string>
+    <string name="streaming_notification_title">Dish · Striming</string>
+    <string name="streaming_notification_body">%1$d kontroler strima na %2$s</string>
+    <string name="streaming_notification_body_plural">%1$d kontrolera strima</string>
+    <string name="streaming_notification_stop">Zaustavi</string>
+
+    <!-- Rezervni ekran kada nativno učitavanje ne uspije. -->
+    <string name="fatal_native_title">Ovaj build se neće pokrenuti na vašem uređaju</string>
+    <string name="fatal_native_body">Dish nativna biblioteka se nije mogla učitati. Reinstalirajte sa Google Play-a, ili kontaktirajte podršku.</string>
+
+    <!-- Sloj režima niske potrošnje (overlay_low_power.xml + LowPowerManager). -->
+    <string name="low_power_in">UŠTEDA ZA</string>
+    <string name="low_power">UŠTEDA ENERGIJE</string>
+    <string name="low_power_seconds_suffix">s</string>
+    <string name="low_power_status_idle">Neaktivan</string>
+    <string name="low_power_tap_to_wake">DODIRNITE ZA BUĐENJE</string>
+    <!-- Bosanski koristi one/few/other plural oblike. Koristimo srednji rod
+         „Vezano" koji izbjegava potrebu za rodnim/brojnim slaganjem. -->
+    <plurals name="low_power_status_bound">
+        <item quantity="one">Vezano · %1$d kontroler</item>
+        <item quantity="few">Vezano · %1$d kontrolera</item>
+        <item quantity="other">Vezano · %1$d kontrolera</item>
+    </plurals>
+
+    <!-- Stringovi naslijeđeni iz starog izgleda uparivanja. -->
+    <string name="pairing_dialog_legacy_title">Upari sa serverom</string>
+    <string name="pairing_dialog_legacy_message">Unesite PIN prikazan na ekranu vašeg računara:</string>
+</resources>

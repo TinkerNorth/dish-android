@@ -1,78 +1,138 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Rebuilt in the v6 deep-space cyan idiom: floating bg_pill banner for the
+     pre-dim countdown + a HUD-style dim overlay with letter-spaced monospace
+     labels sandwiching the clock and a faint "TAP TO WAKE" affordance.
+     View IDs and root types are preserved so LowPowerManager.Views still binds.
+-->
 <merge xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Countdown banner (appears before low-power kicks in) -->
+    <!-- ── Countdown banner (shown ~5s before the dim kicks in) ─────────── -->
     <LinearLayout
         android:id="@+id/llCountdownBanner"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="24dp"
+        android:background="@drawable/bg_pill"
         android:orientation="horizontal"
-        android:gravity="center"
-        android:background="@color/colorSurface"
-        android:padding="12dp"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="10dp"
         android:visibility="gone">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Low-power mode in "
+            android:text="@string/low_power_in"
             android:textColor="@color/colorMuted"
-            android:textSize="13sp" />
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.12"
+            android:layout_marginEnd="10dp" />
 
         <TextView
             android:id="@+id/tvCountdownSeconds"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="30"
-            android:textColor="@color/colorWarning"
-            android:textSize="13sp"
-            android:textStyle="bold" />
+            android:minWidth="24dp"
+            android:gravity="center"
+            android:text="@string/low_power_countdown_placeholder"
+            android:textColor="@color/colorPrimary"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="s"
+            android:text="@string/low_power_seconds_suffix"
             android:textColor="@color/colorMuted"
-            android:textSize="13sp" />
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:layout_marginStart="2dp" />
     </LinearLayout>
 
-    <!-- Full-screen dim overlay when in low-power mode -->
+    <!-- ── Full-screen dim overlay when in low-power mode ───────────────── -->
     <FrameLayout
         android:id="@+id/flLowPowerOverlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="@color/colorOverlayScrim"
-        android:visibility="gone"
         android:clickable="true"
-        android:focusable="true">
+        android:focusable="true"
+        android:visibility="gone">
 
+        <!-- Centered HUD stack: brand label, clock, status. -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:orientation="vertical"
-            android:gravity="center">
+            android:gravity="center_horizontal">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/low_power"
+                android:textColor="@color/colorPrimary"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.32" />
+
+            <!-- Thin cyan-tinted rule under the section label. -->
+            <View
+                android:layout_width="56dp"
+                android:layout_height="1dp"
+                android:layout_marginTop="10dp"
+                android:background="@color/colorOutline" />
 
             <TextView
                 android:id="@+id/tvLowPowerTime"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="00:00"
+                android:layout_marginTop="14dp"
+                android:text="@string/low_power_clock_placeholder"
                 android:textColor="@color/colorPrimary"
-                android:textSize="48sp"
+                android:textSize="64sp"
+                android:textStyle="bold"
                 android:fontFamily="monospace"
-                android:textStyle="bold" />
+                android:letterSpacing="0.04" />
+
+            <!-- Twin to the rule above the clock; brackets the time visually. -->
+            <View
+                android:layout_width="56dp"
+                android:layout_height="1dp"
+                android:layout_marginTop="14dp"
+                android:background="@color/colorOutline" />
 
             <TextView
                 android:id="@+id/tvLowPowerStatus"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="LOW POWER — TAP TO WAKE"
+                android:layout_marginTop="14dp"
+                android:text="@string/low_power_status_idle"
                 android:textColor="@color/colorMuted"
                 android:textSize="12sp"
-                android:layout_marginTop="8dp"
-                android:fontFamily="monospace" />
+                android:fontFamily="monospace"
+                android:letterSpacing="0.08" />
         </LinearLayout>
+
+        <!-- Faint affordance — screen is dimmed to ~1% brightness so this
+             reads as a hint, not a CTA. -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="32dp"
+            android:alpha="0.7"
+            android:background="@drawable/bg_pill"
+            android:paddingHorizontal="18dp"
+            android:paddingVertical="8dp"
+            android:text="@string/low_power_tap_to_wake"
+            android:textColor="@color/colorMuted"
+            android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.18" />
     </FrameLayout>
 </merge>
