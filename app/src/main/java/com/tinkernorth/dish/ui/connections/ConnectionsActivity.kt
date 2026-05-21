@@ -14,8 +14,6 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.KeyEvent
-import android.view.Menu
-import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -862,39 +860,6 @@ class ConnectionsActivity : AppCompatActivity() {
 
     private fun openWifiSettings() {
         runCatching { startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)) }
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════
-    //  OVERFLOW MENU — privacy policy + future meta items
-    // ═══════════════════════════════════════════════════════════════════════
-
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.connections_menu, menu)
-        return true
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean = when (item.itemId) {
-        R.id.action_privacy_policy -> {
-            openExternalUrl(getString(R.string.url_privacy_policy))
-            true
-        }
-        else -> super.onOptionsItemSelected(item)
-    }
-
-    /** Open [url] in the user's default browser. Surfaces a DishNotifications
-     *  warn banner if no Activity can handle the intent (rare — usually means
-     *  a stripped-down device with no browser installed). */
-    private fun openExternalUrl(url: String) {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        runCatching { startActivity(intent) }
-            .onFailure {
-                notifications.warn(
-                    title = getString(R.string.error_open_url),
-                    body = url,
-                    key = "external-url-failed",
-                )
-            }
     }
 
     // ═══════════════════════════════════════════════════════════════════════

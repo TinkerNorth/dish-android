@@ -27,9 +27,11 @@ local network.
   Android version, and an auto-generated install ID — they do not contain
   the names of the satellites you pair with, your IP address, or your
   controller input.
-- You can opt out of crash reporting at any time from the in-app settings
-  (TODO: implement the toggle; until then, uninstalling the app is the
-  only way to stop collection).
+- You can opt out of crash reporting at any time from the gear icon on
+  the main screen → *Share crash reports*. The choice persists across
+  launches and is honoured before any crash can be uploaded on the next
+  start. Reports already collected before you opt out are retained by
+  Firebase for 90 days, then deleted.
 
 ---
 
@@ -135,13 +137,20 @@ or comparable laws in other jurisdictions.
 
 ## 5. Your choices
 
-- **Crash reporting opt-out:** TODO — add a settings toggle that calls
-  `FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(false)`.
+- **Crash reporting opt-out:** tap the gear icon on the main screen,
+  then flip *Share crash reports* off. The switch is on by default;
+  flipping it off calls
+  `FirebaseCrashlytics.setCrashlyticsCollectionEnabled(false)` and
+  persists the choice (in app-private storage, included in cloud
+  backup so it survives device transfers). The next app start applies
+  the saved preference before any code path that could produce a crash
+  report.
 - **Forget a satellite or host:** *Connections → Forget* deletes the
   stored shared key and the entry from `connection_store.xml`. There is
   no server-side record to delete because there is no TinkerNorth server.
 - **Wipe everything:** Uninstall the app. All app-private storage,
-  including paired keys, is removed by Android.
+  including paired keys and the crash-reporting preference, is removed
+  by Android.
 
 ---
 
@@ -186,9 +195,6 @@ These are the only items in this policy that point at unfinished work
 in the app. They're tracked in `HANDOFF.md` and will move to "closed"
 here once the corresponding code lands.
 
-- [ ] In-app Crashlytics opt-out toggle (`HANDOFF.md` item 2). Until
-      shipped, declining crash reporting requires uninstalling the
-      app — that caveat lives in §5.
 - [ ] If Firebase Analytics is ever added (it isn't today), this
       policy and the Google Play Data Safety form both need a new
       entry covering it.

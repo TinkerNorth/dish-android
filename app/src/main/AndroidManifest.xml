@@ -87,6 +87,14 @@
             android:parentActivityName=".ui.main.MainActivity"
             tools:targetApi="p" />
 
+        <activity
+            android:name=".ui.settings.SettingsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Dish"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:parentActivityName=".ui.connections.ConnectionsActivity"
+            tools:targetApi="p" />
+
         <!-- Foreground service for keeping the streaming session alive.
              Controlled by StreamingServiceController; not exported. -->
         <service

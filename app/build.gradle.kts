@@ -1,3 +1,5 @@
+import java.util.concurrent.TimeUnit
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.serialization)
@@ -26,7 +28,10 @@ if (firebaseEnabled) {
 //
 // Keeps local debug builds usable while producing meaningful values for
 // tagged releases. See HANDOFF.md item 4 for the versioning scheme.
-data class ResolvedVersion(val code: Int, val name: String)
+data class ResolvedVersion(
+    val code: Int,
+    val name: String,
+)
 
 fun resolveVersion(): ResolvedVersion {
     System.getenv("DISH_VERSION_CODE")?.toIntOrNull()?.let { code ->
@@ -35,11 +40,16 @@ fun resolveVersion(): ResolvedVersion {
         }
     }
     runCatching {
-        val proc = ProcessBuilder("git", "describe", "--tags", "--match", "v*", "--abbrev=0")
-            .redirectErrorStream(true)
-            .start()
-        val out = proc.inputStream.bufferedReader().readText().trim()
-        if (!proc.waitFor(2, java.util.concurrent.TimeUnit.SECONDS) || proc.exitValue() != 0 || out.isEmpty()) {
+        val proc =
+            ProcessBuilder("git", "describe", "--tags", "--match", "v*", "--abbrev=0")
+                .redirectErrorStream(true)
+                .start()
+        val out =
+            proc.inputStream
+                .bufferedReader()
+                .readText()
+                .trim()
+        if (!proc.waitFor(2, TimeUnit.SECONDS) || proc.exitValue() != 0 || out.isEmpty()) {
             return@runCatching null
         }
         val match = Regex("^v(\\d+)\\.(\\d+)\\.(\\d+)").find(out) ?: return@runCatching null
@@ -115,6 +125,11 @@ android {
     buildFeatures {
         viewBinding = true
         prefab = true
+        // BuildConfig — needed by SettingsActivity to render the version row
+        // ("1.0 · build 1" style) without going through PackageManager.
+        // AGP 8 made this opt-in to shave a few generated classes off apps
+        // that don't reference BuildConfig at all.
+        buildConfig = true
     }
     packaging {
         jniLibs {
@@ -126,6 +141,19 @@ android {
             path = file("src/main/cpp/CMakeLists.txt")
             version = "3.22.1"
         }
+    }
+
+    // MissingTranslation is promoted from warning → error so CI's existing
+    // ./gradlew lint step fails when a new string in values/ isn't translated
+    // into every locale folder under locales_config (bs, de, es, fr, pt-rBR).
+    // ExtraTranslation stays at warning — useful for cleanup but it doesn't
+    // break the user-facing app if a stale translation lingers.
+    // Pre-commit hook (scripts/check-translations.py) runs the same check
+    // faster (no Gradle) when any values*/strings.xml is staged.
+    lint {
+        error += "MissingTranslation"
+        abortOnError = true
+        checkReleaseBuilds = true
     }
 }
 
@@ -142,14 +170,18 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
-    if (firebaseEnabled) {
-        implementation(platform(libs.firebase.bom))
-        implementation(libs.firebase.crashlytics)
-        // Analytics is optional but Crashlytics gains free trend data from it.
-        // If you want pure crash reporting with zero analytics, remove this
-        // line and add a Data Safety note to PRIVACY.md.
-        implementation(libs.firebase.analytics)
-    }
+    // Firebase SDKs are unconditional: the CrashReportingController references
+    // them directly. The classes are on the classpath even when
+    // google-services.json is absent — `FirebaseApp.getApps(context)` then
+    // returns empty and the controller no-ops. Only the `google-services` /
+    // `firebase-crashlytics` Gradle PLUGINS are conditional (above), because
+    // they need the JSON to generate resources and upload mapping files.
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.crashlytics)
+    // Analytics is optional but Crashlytics gains free trend data from it.
+    // If you want pure crash reporting with zero analytics, remove this
+    // line and add a Data Safety note to PRIVACY.md.
+    implementation(libs.firebase.analytics)
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.turbine)

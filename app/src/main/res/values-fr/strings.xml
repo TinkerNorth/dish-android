@@ -217,7 +217,16 @@
     <string name="pairing_dialog_legacy_title">Appairer avec un serveur</string>
     <string name="pairing_dialog_legacy_message">Saisissez le PIN affiché sur l\'écran de votre PC :</string>
 
-    <!-- Menu de débordement de l\'écran Connexions. -->
+    <!-- Lien Politique de confidentialité (dans Paramètres) et message d\'erreur partagé. -->
     <string name="menu_privacy_policy">Politique de confidentialité</string>
     <string name="error_open_url">Impossible d\'ouvrir le navigateur</string>
+
+    <!-- Écran Paramètres (icône d\'engrenage sur l\'écran principal). -->
+    <string name="menu_settings">Paramètres</string>
+    <string name="settings_title">Paramètres</string>
+    <string name="settings_section_diagnostics">DIAGNOSTICS</string>
+    <string name="settings_section_about">À PROPOS</string>
+    <string name="settings_crash_reporting_title">Partager les rapports de plantage</string>
+    <string name="settings_crash_reporting_body">Partagez avec TinkerNorth des journaux de plantage anonymisés et des traces de pile pour aider à corriger les bugs. Aucune partie ni entrée de manette n\'est incluse.</string>
+    <string name="settings_version_label">VERSION</string>
 </resources>

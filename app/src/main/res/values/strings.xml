@@ -257,7 +257,23 @@
 
     <!-- Connections screen overflow menu. -->
     <string name="menu_privacy_policy">Privacy policy</string>
+    <string name="menu_settings">Settings</string>
     <string name="error_open_url">Couldn\'t open browser</string>
+
+    <!-- Settings screen. Two sections — Diagnostics (crash reports opt-in
+         with a live status dot) and About (privacy policy + version). Copy
+         is intentionally warm and concrete: leads with the user benefit, says
+         what *isn't* sent in plain language, avoids jargon. Layout mirrors
+         the Claude Design "Settings" handoff. -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_diagnostics">DIAGNOSTICS</string>
+    <string name="settings_section_about">ABOUT</string>
+    <string name="settings_crash_reporting_title">Share crash reports</string>
+    <string name="settings_crash_reporting_body">Share anonymized crash logs and stack traces with TinkerNorth to help fix bugs. No gameplay or controller input is included.</string>
+    <string name="settings_version_label">VERSION</string>
+    <!-- Brand wordmark in the footer. Not translated — stylistic constant
+         across all locales, matching the rest of TinkerNorth's brand usage. -->
+    <string name="settings_brand_footer" translatable="false">TINKERNORTH · DISH</string>
 
     <!-- Privacy policy URL. Not translatable: the policy itself is in English on
          the canonical TinkerNorth domain. The page covers all jurisdictions

@@ -218,7 +218,16 @@
     <string name="pairing_dialog_legacy_title">Emparejar con servidor</string>
     <string name="pairing_dialog_legacy_message">Introduce el PIN que aparece en la pantalla de tu PC:</string>
 
-    <!-- Menú de desbordamiento de la pantalla Conexiones. -->
+    <!-- Enlace a la Política de privacidad (en Ajustes) y mensaje de error compartido. -->
     <string name="menu_privacy_policy">Política de privacidad</string>
     <string name="error_open_url">No se pudo abrir el navegador</string>
+
+    <!-- Pantalla de Ajustes (icono del engranaje en la pantalla principal). -->
+    <string name="menu_settings">Ajustes</string>
+    <string name="settings_title">Ajustes</string>
+    <string name="settings_section_diagnostics">DIAGNÓSTICO</string>
+    <string name="settings_section_about">ACERCA DE</string>
+    <string name="settings_crash_reporting_title">Compartir informes de fallos</string>
+    <string name="settings_crash_reporting_body">Comparte registros de fallos anonimizados y rastreos de pila con TinkerNorth para ayudar a corregir errores. No se incluyen partidas ni entradas del mando.</string>
+    <string name="settings_version_label">VERSIÓN</string>
 </resources>

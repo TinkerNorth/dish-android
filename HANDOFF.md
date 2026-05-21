@@ -24,29 +24,40 @@ references the URL. Paste the hosted URL into the Play Console's
 
 ## 2. Crash-reporting opt-out toggle
 
-**Status:** Crashlytics is wired (see `app/build.gradle.kts` and
-`DishApplication.kt`). Default is *enabled*. No in-app toggle exists yet.
-
-**Needed:** add a Settings screen with a single switch that calls
-`FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(...)`
-and persists the choice in app-private SharedPreferences. Remove the
-"uninstall to stop collection" caveat from `PRIVACY.md` §5 once shipped.
+Closed: shipped via `SettingsActivity` + `CrashReportingStore` +
+`CrashReportingController`. Reachable from
+*Connections → ⋮ → Settings → Send crash reports*. The switch persists
+to `user_preferences.xml` (separate from the encrypted-keys
+`connection_store.xml` so cloud backup CAN carry the preference across
+device transfers) and the controller applies it via
+`FirebaseCrashlytics.setCrashlyticsCollectionEnabled` on every
+`ProcessLifecycleOwner.onStart` and whenever the user flips the switch.
+`PRIVACY.md` §1 and §5 reflect the shipped behaviour.
 
 ## 3. Firebase project & `google-services.json`
 
-**Status:** Build wiring exists; the credential file does not. Local and
-CI builds skip the Firebase plugins until the file is present.
+**Status:** Firebase project `dish-tinkernorth` (project number
+`62501381550`) created and `app/google-services.json` present locally
+(gitignored — not committed). Local Gradle builds now apply the
+`google-services` and `firebase-crashlytics` plugins; Crashlytics
+auto-initializes at runtime; the in-app toggle is live end-to-end.
 
-**Needed:**
+**Still needed for CI release builds:** store the file's contents as a
+base64 GitHub Actions secret (`GOOGLE_SERVICES_JSON_BASE64`) so the
+release workflow's `Decode google-services.json` step can materialize
+it before `assembleRelease bundleRelease`. Without the secret, CI
+builds still succeed but ship without Crashlytics wired — the
+`-unsigned` / mapping-upload-to-Firebase paths require it.
 
-- Create a Firebase project for the production app
-  (`com.tinkernorth.dish`).
-- Download `google-services.json` and place it at `app/google-services.json`
-  (already in `.gitignore`).
-- For CI release builds, store the file as a base64 GitHub Actions
-  secret (`GOOGLE_SERVICES_JSON_BASE64`) and decode it during the
-  release workflow before `assembleRelease bundleRelease`. Mirror the
-  pattern already used for the keystore.
+```bash
+# Generate the value for the GitHub secret:
+base64 -w0 app/google-services.json | pbcopy   # macOS
+base64 -w0 app/google-services.json            # Linux (paste manually)
+```
+
+Add via *Repository → Settings → Secrets and variables → Actions* →
+*New repository secret* → name `GOOGLE_SERVICES_JSON_BASE64`. The
+release workflow already knows how to decode it.
 
 ## 4. Versioning ramp
 
