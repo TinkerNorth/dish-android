@@ -3,6 +3,7 @@
 
 package com.tinkernorth.dish.source.lowpower
 
+import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.view.Window
@@ -251,5 +252,66 @@ class LowPowerManagerTest {
             setStateDirect(target)
             assertEquals("state.value must mirror set state for $target", target, lpm.state.value)
         }
+    }
+
+    // ── re-arm after dismissal ─────────────────────────────────────────────
+    //
+    // Regression for: dismissing the dim overlay (ACTIVE → IDLE via touch)
+    // left the inactivity timer un-posted, so the overlay never re-appeared
+    // until the user touched the screen again. `WakeStateController
+    // .shouldKeepScreenOn` is a StateFlow that doesn't re-emit the same value,
+    // so `onLockStateChanged(true)` isn't called a second time — `exit()`
+    // has to re-arm the timer itself (via onUserInteraction's ACTIVE branch).
+
+    /**
+     * Swap a private field on [lpm] with [value]. Used to install mock
+     * Handlers so we can verify scheduling without a real Looper.
+     */
+    private fun setPrivateField(
+        name: String,
+        value: Any,
+    ) {
+        val field = LowPowerManager::class.java.getDeclaredField(name)
+        field.isAccessible = true
+        field.set(lpm, value)
+    }
+
+    @Test
+    fun `dismissing the dim re-arms the inactivity timer`() {
+        // Replace the real Handlers (constructed in init with the mocked
+        // Looper) with relaxed mocks so exit()'s clockHandler.removeCallbacks
+        // and the post-exit inactivityHandler.postDelayed are observable.
+        val inactivityHandler = mockk<Handler>(relaxed = true)
+        val clockHandler = mockk<Handler>(relaxed = true)
+        setPrivateField("inactivityHandler", inactivityHandler)
+        setPrivateField("clockHandler", clockHandler)
+
+        // Drive directly to ACTIVE — enter() touches a Handler we can't drive
+        // through and isn't what's under test here.
+        setStateDirect(LowPowerManager.State.ACTIVE)
+
+        lpm.onUserInteraction()
+
+        assertEquals(LowPowerManager.State.IDLE, lpm.state.value)
+        // Re-arm: postDelayed scheduled at the inactivity delay (15s). The
+        // bug fix lives in onUserInteraction's ACTIVE branch; without it the
+        // post never happens and the overlay can't return.
+        verify { inactivityHandler.postDelayed(any(), 15_000L) }
+    }
+
+    @Test
+    fun `dismissing the countdown still re-arms the inactivity timer`() {
+        // Sanity check that the COUNTDOWN branch is unchanged — it already
+        // called resetInactivityTimer before this fix, so verify we didn't
+        // accidentally regress it.
+        val inactivityHandler = mockk<Handler>(relaxed = true)
+        setPrivateField("inactivityHandler", inactivityHandler)
+
+        setStateDirect(LowPowerManager.State.COUNTDOWN)
+
+        lpm.onUserInteraction()
+
+        assertEquals(LowPowerManager.State.IDLE, lpm.state.value)
+        verify { inactivityHandler.postDelayed(any(), 15_000L) }
     }
 }

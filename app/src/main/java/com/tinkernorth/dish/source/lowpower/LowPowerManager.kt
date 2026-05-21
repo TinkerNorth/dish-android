@@ -67,7 +67,16 @@ class LowPowerManager(
     /** User touched the screen while locks are active. */
     fun onUserInteraction() {
         when (state.value) {
-            State.ACTIVE -> exit()
+            // Re-arm explicitly after exit(): `shouldKeepScreenOn` is a
+            // StateFlow that doesn't re-emit `true` for an already-true value,
+            // so onLockStateChanged won't fire a second time. Without this,
+            // dismissing the dim once leaves the inactivity timer un-posted
+            // until the next touch — a user who dismisses and walks away
+            // never sees the overlay return.
+            State.ACTIVE -> {
+                exit()
+                resetInactivityTimer()
+            }
             State.COUNTDOWN -> {
                 countdownTimer?.cancel()
                 countdownTimer = null
