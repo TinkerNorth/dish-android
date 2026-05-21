@@ -10,6 +10,7 @@ import android.content.IntentFilter
 import android.os.Build
 import android.util.Log
 import android.view.InputDevice
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.composer.ConnectionHub
@@ -160,7 +161,17 @@ class PhysicalBatterySource
                         scope.launch { pollOnce() }
                     }
                 }
-            context.registerReceiver(receiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            // ACTION_BATTERY_CHANGED is a protected system broadcast and is
+            // exempt from the API-34 receiver-flag enforcement, but route
+            // through ContextCompat with RECEIVER_NOT_EXPORTED anyway so the
+            // intent is unambiguous to the next reader and consistent with
+            // the BluetoothBondMonitor / BluetoothAdapterStateObserver pattern.
+            ContextCompat.registerReceiver(
+                context,
+                receiver,
+                IntentFilter(Intent.ACTION_BATTERY_CHANGED),
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
             chargingReceiver = receiver
         }
 

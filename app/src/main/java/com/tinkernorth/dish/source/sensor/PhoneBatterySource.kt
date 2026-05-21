@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
@@ -120,7 +121,17 @@ class PhoneBatterySource(
         // charging-state transition and double-reported (the poll loop's
         // immediate first read already covers the initial report). Only
         // genuine later transitions are acted on.
-        val sticky = context.registerReceiver(receiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        // ACTION_BATTERY_CHANGED is a protected system broadcast and exempt
+        // from API-34 receiver-flag enforcement, but route through
+        // ContextCompat with RECEIVER_NOT_EXPORTED for consistency with the
+        // other Dish receivers; the call still returns the sticky intent.
+        val sticky =
+            ContextCompat.registerReceiver(
+                context,
+                receiver,
+                IntentFilter(Intent.ACTION_BATTERY_CHANGED),
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
         sticky?.let { lastStatus = sampleFromIntent(it).status }
         chargingReceiver = receiver
     }

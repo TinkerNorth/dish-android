@@ -48,11 +48,11 @@ class SatelliteConnectionManagerTest {
     // first real suspension). Many of these tests inspect state immediately after a
     // mgr.X() call that internally does scope.launch { ... clearStale/markStale }.
     // With StandardTestDispatcher the launch is queued for later; with Unconfined
-    // it runs inline. Critically, this matters when the launched body later does
-    // `withContext(Dispatchers.IO)` (openSession) — that suspension does not honor
-    // the test scheduler, but the synchronous prefix (clearStale, etc.) does
-    // execute deterministically with Unconfined, removing the race.
+    // it runs inline. The injected ioDispatcher below shares the test scheduler so
+    // the openSession() body — which `withContext(ioDispatcher)` — also runs under
+    // the test's deterministic schedule rather than escaping to real Dispatchers.IO.
     private val scope = TestScope(UnconfinedTestDispatcher())
+    private val ioDispatcher = UnconfinedTestDispatcher(scope.testScheduler)
     private val json = Json { ignoreUnknownKeys = true }
 
     private val server =
@@ -90,6 +90,7 @@ class SatelliteConnectionManagerTest {
             controllerRepo = controllerRepo,
             store = store,
             json = json,
+            ioDispatcher = ioDispatcher,
         )
 
     private fun runMgrTest(block: suspend (SatelliteConnectionManager, MutableList<ConnectionEvent>) -> Unit) =
@@ -349,6 +350,12 @@ class SatelliteConnectionManagerTest {
             coEvery { discoveryRepo.pair(any(), any(), any(), any(), "1234") } returns
                 """{"ok":true,"sharedKey":"${"bb".repeat(32)}"}"""
             coEvery { discoveryRepo.connect(any(), any(), any()) } returns ""
+            // openSession reads the just-stored key back via the (mocked)
+            // store; mirror that read so it doesn't fall into the empty-key
+            // branch that would re-mark Stale. The production store really
+            // does persist + return the value just written; this aligns the
+            // mock with that behaviour for the assertion this test is making.
+            every { store.satelliteSharedKey(serverId) } returns "bb".repeat(32)
 
             mgr.pairWithPin(server, "1234")
             scope.testScheduler.advanceUntilIdle()

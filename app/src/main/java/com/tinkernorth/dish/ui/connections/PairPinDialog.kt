@@ -69,10 +69,15 @@ class PairPinDialog(
 
         binding.btnPairCancel.setOnClickListener { cancel() }
         binding.btnPairSubmit.setOnClickListener {
-            val pin =
-                binding.etPin.text
-                    .toString()
-                    .ifEmpty { "0000" }
+            val pin = binding.etPin.text.toString()
+            if (pin.isEmpty()) {
+                // Reject empty client-side. The previous default-"0000" path
+                // silently shipped a PIN the user didn't type, leaving them to
+                // wonder why a confidently-entered (empty) attempt was wrong.
+                showError(context.getString(R.string.pair_dialog_error_empty))
+                binding.etPin.requestFocus()
+                return@setOnClickListener
+            }
             // Clear the inline error if the user is resubmitting after a bad PIN.
             showError(null)
             onSubmit(pin)
@@ -81,8 +86,10 @@ class PairPinDialog(
 
     /**
      * Flip the dialog between resting and in-flight. While busy the Pair
-     * button shows an in-button spinner with the "PAIRING…" label and the
-     * field is disabled to prevent edits mid-handshake.
+     * button shows an in-button spinner with the "PAIRING…" label, the
+     * field is disabled to prevent edits mid-handshake, and outside-tap
+     * dismissal is locked so the user can't drop the dialog before the
+     * server's response lands.
      */
     fun setBusy(busy: Boolean) {
         binding.btnPairSubmit.setLoading(
@@ -92,6 +99,8 @@ class PairPinDialog(
         )
         binding.btnPairCancel.isEnabled = !busy
         binding.etPin.isEnabled = !busy
+        setCanceledOnTouchOutside(!busy)
+        setCancelable(!busy)
     }
 
     /**

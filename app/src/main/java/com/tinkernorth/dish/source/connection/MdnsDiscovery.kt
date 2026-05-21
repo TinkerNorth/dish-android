@@ -9,8 +9,9 @@ import android.net.nsd.NsdServiceInfo
 import android.util.Log
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.DiscoverySource
+import com.tinkernorth.dish.di.IoDispatcher
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -36,6 +37,7 @@ class MdnsDiscovery
     @Inject
     constructor(
         @ApplicationContext private val context: Context,
+        @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     ) {
         /**
          * Browse for [timeoutMs], resolving every advertised satellite to a
@@ -43,7 +45,7 @@ class MdnsDiscovery
          * LAN just yields an empty list.
          */
         suspend fun discover(timeoutMs: Int): List<DiscoveredServer> =
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 val nsd =
                     context.getSystemService(Context.NSD_SERVICE) as? NsdManager
                         ?: return@withContext emptyList()

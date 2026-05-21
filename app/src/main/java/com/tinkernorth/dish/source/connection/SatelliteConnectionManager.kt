@@ -10,11 +10,12 @@ import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.PairResponse
 import com.tinkernorth.dish.core.net.DiscoveryRepository
 import com.tinkernorth.dish.core.net.hexToBytes
+import com.tinkernorth.dish.di.IoDispatcher
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedSatellite
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -78,6 +80,7 @@ class SatelliteConnectionManager
         val controllerRepo: ControllerRepository,
         private val store: ConnectionStore,
         private val json: Json,
+        @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     ) {
         private val _connections = MutableStateFlow<Map<String, SatelliteConnection>>(emptyMap())
         val connections: StateFlow<Map<String, SatelliteConnection>> = _connections.asStateFlow()
@@ -138,8 +141,10 @@ class SatelliteConnectionManager
         // ── Discovery ─────────────────────────────────────────────────────────
 
         fun startDiscovery() {
-            if (_isScanning.value) return
-            _isScanning.value = true
+            // compareAndSet so two concurrent foreground kicks (MainActivity
+            // onCreate + ConnectionForegroundObserver) don't both clear the
+            // gate and launch parallel scans.
+            if (!_isScanning.compareAndSet(expect = false, update = true)) return
             scope.launch {
                 val servers = discoveryRepo.discoverServers(DISC_PORT, DISC_TIMEOUT_MS)
                 _discoveredServers.value = servers
@@ -166,28 +171,38 @@ class SatelliteConnectionManager
             intent: ConnectIntent = ConnectIntent.USER_INITIATED,
         ) {
             val id = SatelliteConnection.idFor(server)
-            val existing = _connections.value[id]
+            // Atomic find-or-create. Without `update` two concurrent first-time
+            // connects to the same id (foreground observer + a user tap landing
+            // in the same tick) could each enter the `existing == null` branch
+            // and construct competing SatelliteConnection instances; the loser
+            // would leak its scope/mutex references until GC.
+            var created: SatelliteConnection? = null
+            val conn =
+                _connections
+                    .updateAndGet { map ->
+                        val cur = map[id]
+                        if (cur != null) return@updateAndGet map
+                        val fresh = SatelliteConnection(id, server, scope, controllerRepo, ioDispatcher)
+                        created = fresh
+                        map + (id to fresh)
+                    }[id] ?: return
             // Idempotent on live / in-flight sessions: the foreground observer
             // and MainActivity both kick auto-reconnect on every return, so
             // without this guard a CONNECTING session would have its pair/auth
             // flow restarted mid-handshake, leaking sockets and confusing the
             // server.
-            if (existing != null) {
-                when (existing.state.value) {
+            if (created == null) {
+                when (conn.state.value) {
                     SatelliteSessionState.Live,
                     SatelliteSessionState.Linking,
                     SatelliteSessionState.Faltering,
                     -> {
-                        existing.updateServer(server)
+                        conn.updateServer(server)
                         return
                     }
                     SatelliteSessionState.Idle -> Unit
                 }
             }
-            val conn =
-                existing ?: SatelliteConnection(id, server, scope, controllerRepo).also {
-                    _connections.value = _connections.value + (id to it)
-                }
             conn.updateServer(server)
             conn.markConnecting()
             scope.launch {
@@ -260,10 +275,15 @@ class SatelliteConnectionManager
             pin: String,
         ) {
             val id = SatelliteConnection.idFor(server)
+            // Same atomic find-or-create as connect(): two concurrent PIN
+            // submissions on the same satellite must not race to allocate
+            // duplicate SatelliteConnection instances.
             val conn =
-                _connections.value[id] ?: SatelliteConnection(id, server, scope, controllerRepo).also {
-                    _connections.value = _connections.value + (id to it)
-                }
+                _connections
+                    .updateAndGet { map ->
+                        if (map.containsKey(id)) return@updateAndGet map
+                        map + (id to SatelliteConnection(id, server, scope, controllerRepo, ioDispatcher))
+                    }[id] ?: return
             conn.markConnecting()
             scope.launch {
                 val raw = runCatching { discoveryRepo.pair(server.ip, server.pairPort, deviceId, deviceName, pin) }
@@ -296,7 +316,7 @@ class SatelliteConnectionManager
             conn: SatelliteConnection,
             server: DiscoveredServer,
             intent: ConnectIntent,
-        ) = withContext(Dispatchers.IO) {
+        ) = withContext(ioDispatcher) {
             val id = SatelliteConnection.idFor(server)
             val keyHex = sharedKeyFor(server) ?: ""
             if (keyHex.length != 64) {
@@ -435,7 +455,7 @@ class SatelliteConnectionManager
             val cid = conn.connectionId
             conn.markDisconnected()
             if (cid != null) {
-                scope.launch(Dispatchers.IO) {
+                scope.launch(ioDispatcher) {
                     runCatching { discoveryRepo.disconnect(srv.ip, srv.httpPort, cid, deviceId) }
                 }
             }
@@ -445,7 +465,7 @@ class SatelliteConnectionManager
             disconnect(id)
             store.forgetSatellite(id)
             clearStale(id)
-            _connections.value = _connections.value - id
+            _connections.update { it - id }
         }
 
         // ── Prefs ─────────────────────────────────────────────────────────────

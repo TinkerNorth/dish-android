@@ -3,6 +3,8 @@
 
 package com.tinkernorth.dish.hotpath.input
 
+import com.tinkernorth.dish.core.input.hidButtonsOf
+import com.tinkernorth.dish.core.input.hidHatOf
 import com.tinkernorth.dish.core.input.xusbToHid
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 
@@ -53,12 +55,12 @@ object BluetoothGamepadBridge {
         sRY: Int,
     ) {
         val r = registry ?: return
-        val (hidButtons, hat) = xusbToHid(wButtons)
+        val packed = xusbToHid(wButtons)
         val report =
             r.buildReport(
                 connectionId,
-                hidButtons,
-                hat,
+                hidButtonsOf(packed),
+                hidHatOf(packed),
                 sLX.toShort(),
                 sLY.toShort(),
                 sRX.toShort(),

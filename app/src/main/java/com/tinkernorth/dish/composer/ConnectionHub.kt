@@ -12,11 +12,7 @@ import com.tinkernorth.dish.source.connection.SatelliteSessionState
 import com.tinkernorth.dish.source.store.ControllerTypeStore
 import com.tinkernorth.dish.source.store.SlotBindingStore
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -111,23 +107,18 @@ class ConnectionHub
         val bindings: StateFlow<Map<String, String>> = bindingStore.state
         val satTypes: StateFlow<Map<Pair<String, String>, Int>> = typeStore.state
 
-        // Connections is a forwarding StateFlow that mirrors the composer's
-        // derivation, plus the imperative `bind`/`unbind` paths push a fresh
-        // snapshot into it so the UI sees the change in the same frame the user's
-        // tap triggered it (rather than waiting for the combine to re-emit).
-        private val _connections =
-            MutableStateFlow<List<ConnectionSummary>>(emptyList())
-        val connections: StateFlow<List<ConnectionSummary>> = _connections.asStateFlow()
-
-        init {
-            // Mirror composer.state into the forwarding flow.
-            composer.state
-                .onEach { _connections.value = it }
-                .launchIn(scope)
-        }
+        // Single source of truth: the composer's derived StateFlow. An earlier
+        // version mirrored this into a hub-local MutableStateFlow and imperative
+        // bind()/unbind() pushed a fresh snapshot into the mirror so the UI
+        // wouldn't wait for the combine to re-emit. That created two writers
+        // (composer onEach + imperative path) on one mutable, and a late
+        // composer emission could overwrite a just-pushed imperative snapshot.
+        // Now imperative paths just mutate the underlying stores; the combine
+        // re-fires automatically and downstream consumers see the new value.
+        val connections: StateFlow<List<ConnectionSummary>> = composer.state
 
         /** Look up a summary by id. */
-        fun summary(id: String): ConnectionSummary? = _connections.value.firstOrNull { it.id == id }
+        fun summary(id: String): ConnectionSummary? = connections.value.firstOrNull { it.id == id }
 
         /**
          * Bind [slotId] to [connectionId]. Eviction depends on the connection
@@ -171,10 +162,6 @@ class ConnectionHub
                 typeStore.setTypeIfAbsent(connectionId, slotId, CONTROLLER_TYPE_XBOX)
             }
 
-            // Push a fresh snapshot so the UI sees the new boundSlotIds without
-            // waiting for the combine to re-emit on its own tick.
-            _connections.value = composer.buildSummariesNow()
-
             // For satellite: attach the controller slot on the server side.
             val type = typeStore.typeFor(connectionId, slotId) ?: CONTROLLER_TYPE_XBOX
             satellite.get(connectionId)?.let { conn ->
@@ -187,7 +174,6 @@ class ConnectionHub
             bindingStore.unbind(slotId)
             satellite.get(connId)?.detachSlot(slotId)
             typeStore.clear(connId, slotId)
-            _connections.value = composer.buildSummariesNow()
         }
 
         /**
@@ -207,12 +193,11 @@ class ConnectionHub
             satellite.get(connectionId)?.let { conn ->
                 scope.launch { conn.setControllerType(slotId, type) }
             }
-            _connections.value = composer.buildSummariesNow()
         }
 
         fun boundConnection(slotId: String): ConnectionSummary? =
             bindingStore.connectionFor(slotId)?.let { id ->
-                _connections.value.firstOrNull { it.id == id }
+                connections.value.firstOrNull { it.id == id }
             }
 
         /**

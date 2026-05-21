@@ -64,12 +64,19 @@ private const val HAT_NW = 8
 
 /**
  * Translate an XUSB `wButtons` value (as produced by the native input thread)
- * into the `(hidButtons, hatSwitch)` pair expected by [buildHidReport].
+ * into a packed `Int` carrying both the HID buttons bitfield and the 4-bit hat
+ * code expected by [buildHidReport]. Layout:
+ *   bits  0..15 — HID buttons (`hidButtonsOf(packed)`)
+ *   bits 16..19 — HID hat code  (`hidHatOf(packed)`)
+ *
+ * Packed into a primitive Int instead of `Pair<Int, Int>` because this is the
+ * Bluetooth-bound physical-gamepad hotpath. A `Pair` allocation per report at
+ * ≤ 250 Hz is ~6 KB/s of pointless garbage.
  *
  * The low-nibble XUSB d-pad bits are folded into the hat; the remaining XUSB
  * button bits are remapped to their HID positions. Unknown bits are dropped.
  */
-fun xusbToHid(wButtons: Int): Pair<Int, Int> {
+fun xusbToHid(wButtons: Int): Int {
     val hat = dpadBitsToHat(wButtons and XUSB_DPAD_MASK)
     var hid = 0
     if (wButtons and XUSB_START != 0) hid = hid or HID_START
@@ -83,8 +90,14 @@ fun xusbToHid(wButtons: Int): Pair<Int, Int> {
     if (wButtons and XUSB_B != 0) hid = hid or HID_B
     if (wButtons and XUSB_X != 0) hid = hid or HID_X
     if (wButtons and XUSB_Y != 0) hid = hid or HID_Y
-    return hid to hat
+    return (hat shl 16) or (hid and 0xFFFF)
 }
+
+/** Extract the HID buttons bitfield from a [xusbToHid] packed result. */
+fun hidButtonsOf(packed: Int): Int = packed and 0xFFFF
+
+/** Extract the HID hat code from a [xusbToHid] packed result. */
+fun hidHatOf(packed: Int): Int = (packed shr 16) and 0xF
 
 /**
  * Inverse of [xusbToHid]: translate the HID `(buttons, hat)` pair emitted by

@@ -96,6 +96,7 @@
     <string name="pair_dialog_submit">PAIR</string>
     <string name="pair_dialog_cancel">CANCEL</string>
     <string name="pair_dialog_pairing">PAIRING…</string>
+    <string name="pair_dialog_error_empty">Enter the PIN shown on your satellite.</string>
 
     <!-- Foreground service notification. -->
     <string name="streaming_channel_name">Streaming session</string>

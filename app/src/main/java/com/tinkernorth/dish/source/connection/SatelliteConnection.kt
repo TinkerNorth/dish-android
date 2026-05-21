@@ -9,6 +9,7 @@ import com.tinkernorth.dish.core.jni.ControllerRepository
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.source.sensor.BatteryValidator
 import com.tinkernorth.dish.source.sensor.MotionRateLimiter
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -46,6 +47,7 @@ class SatelliteConnection(
     server: DiscoveredServer,
     private val scope: CoroutineScope,
     private val controllerRepo: ControllerRepository,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val _server = MutableStateFlow(server)
     val server: StateFlow<DiscoveredServer> = _server.asStateFlow()
@@ -144,7 +146,7 @@ class SatelliteConnection(
         this.onRegistrationFailed = onRegistrationFailed
         controllerRepo.resetControllerAck(handle)
         ackJob =
-            scope.launch(Dispatchers.IO) {
+            scope.launch(ioDispatcher) {
                 while (isActive) {
                     controllerRepo.receiveAck(handle)
                 }
@@ -268,7 +270,7 @@ class SatelliteConnection(
         }
         val snap = info ?: return
         if (snap.registered && handle >= 0) {
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 controllerRepo.sendControllerType(handle, snap.controllerIndex, controllerType)
             }
         }
@@ -276,7 +278,7 @@ class SatelliteConnection(
 
     private suspend fun registerController(slotId: String) =
         registrationMutex.withLock {
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 val info = _slots.value[slotId] ?: return@withContext
                 if (info.registered) return@withContext
                 if (handle < 0) return@withContext

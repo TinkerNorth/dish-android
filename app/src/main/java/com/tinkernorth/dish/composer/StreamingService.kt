@@ -89,7 +89,13 @@ class StreamingService : Service() {
             stopAllSessions()
             stopSelf()
         }
-        return START_STICKY
+        // START_NOT_STICKY: the service is tightly coupled to the rest of the
+        // process — native sessions, ConnectionHub, BluetoothGamepadRegistry.
+        // If the OS kills the process the rest of that state is gone too, so
+        // an OS-respawned bare service with a stale notification helps nobody.
+        // StreamingServiceController will re-launch us the moment the user
+        // re-opens the app and a binding becomes active again.
+        return START_NOT_STICKY
     }
 
     /**
@@ -115,7 +121,14 @@ class StreamingService : Service() {
         count: Int,
         conns: List<ConnectionSummary>,
     ) {
-        if (count <= 0) return
+        if (count <= 0) {
+            // Belt-and-braces: the controller normally stops us on count == 0,
+            // but if we observe it ourselves first (out-of-order emissions
+            // between two onEach collectors), tear down so the notification
+            // never lingers as "0 controllers streaming".
+            stopSelf()
+            return
+        }
         val primary =
             conns
                 .firstOrNull { it.live == LinkState.Connected }

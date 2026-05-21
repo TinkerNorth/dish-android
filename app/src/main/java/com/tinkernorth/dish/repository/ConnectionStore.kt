@@ -50,8 +50,12 @@ class ConnectionStore
         }
 
         fun forgetSatellite(id: String) {
-            satellites.remove(id)
+            // Key first, so a crash between the two removes leaves the user
+            // with a remembered satellite that needs re-pairing (recoverable
+            // by the existing pair flow) rather than an orphaned shared key
+            // with no remembered satellite (a silent leak that accumulates).
             satelliteKeys.remove(id)
+            satellites.remove(id)
         }
 
         // ── Per-satellite shared keys ─────────────────────────────────────────

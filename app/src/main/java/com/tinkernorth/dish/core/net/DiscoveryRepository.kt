@@ -7,8 +7,9 @@ import android.util.Log
 import com.tinkernorth.dish.core.jni.SatelliteNative
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.DiscoverySource
+import com.tinkernorth.dish.di.IoDispatcher
 import com.tinkernorth.dish.source.connection.MdnsDiscovery
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
@@ -25,6 +26,7 @@ class DiscoveryRepository
     @Inject
     constructor(
         private val mdns: MdnsDiscovery,
+        @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     ) {
         private val mutex = Mutex()
 
@@ -40,7 +42,7 @@ class DiscoveryRepository
             port: Int,
             timeoutMs: Int,
         ): List<DiscoveredServer> =
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 mutex.withLock {
                     coroutineScope {
                         val broadcast =
@@ -71,7 +73,7 @@ class DiscoveryRepository
             deviceName: String,
             pin: String,
         ): String =
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 mutex.withLock {
                     SatelliteHttpClient.pair(ip, port, deviceId, deviceName, pin)
                 }
@@ -83,7 +85,7 @@ class DiscoveryRepository
             port: Int,
             deviceId: String,
         ): String =
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 mutex.withLock {
                     SatelliteHttpClient.connect(ip, port, deviceId)
                 }
@@ -96,7 +98,7 @@ class DiscoveryRepository
             connectionId: String,
             deviceId: String,
         ): String =
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 mutex.withLock {
                     SatelliteHttpClient.disconnect(ip, port, connectionId, deviceId)
                 }

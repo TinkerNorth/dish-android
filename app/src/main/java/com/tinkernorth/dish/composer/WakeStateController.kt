@@ -40,6 +40,11 @@ import javax.inject.Singleton
  * Both are zeroed on `onStop` regardless of what the underlying composer is producing,
  * because a backgrounded app should not be "streaming" from the user's point of view —
  * the wake lock has been released, so the dashboard / overlay must agree.
+ *
+ * **Thread safety:** the composer's `onEach` runs on the app scope's dispatcher
+ * while `onStop` runs on the main thread (ProcessLifecycleOwner). All wake-lock
+ * mutations and the `stopped` gate live under [lock] so a late onEach emission
+ * cannot re-acquire after onStop has decided to release.
  */
 @Singleton
 class WakeStateController
@@ -58,32 +63,50 @@ class WakeStateController
         private val _shouldKeepScreenOn = MutableStateFlow(false)
         val shouldKeepScreenOn: StateFlow<Boolean> = _shouldKeepScreenOn.asStateFlow()
 
-        @Volatile private var wakeLock: PowerManager.WakeLock? = null
+        private val lock = Any()
+        private var wakeLock: PowerManager.WakeLock? = null
+        private var stopped = false
         private var job: Job? = null
 
         override fun onStart(owner: LifecycleOwner) {
             if (job != null) return
+            synchronized(lock) { stopped = false }
             job =
                 composer.state
-                    .onEach { wake ->
-                        setState(wake)
-                        _streamingSlotCount.value = wake.streamingSlotCount
-                        val keep = wake.shouldKeepScreenOn
-                        if (keep == _shouldKeepScreenOn.value) return@onEach
-                        _shouldKeepScreenOn.value = keep
-                        if (keep) acquire() else release()
-                    }.launchIn(scope)
+                    .onEach(::apply)
+                    .launchIn(scope)
         }
 
         override fun onStop(owner: LifecycleOwner) {
+            synchronized(lock) {
+                stopped = true
+                release()
+            }
             job?.cancel()
             job = null
             setState(WakeState.Idle)
             _streamingSlotCount.value = 0
             _shouldKeepScreenOn.value = false
-            release()
         }
 
+        /**
+         * Mirror [wake] into the exposed flows and drive the wake-lock side
+         * effect. The wake-lock toggle and the gate are guarded so a late
+         * emission delivered after [onStop] cannot strand a held lock.
+         */
+        private fun apply(wake: WakeState) {
+            setState(wake)
+            _streamingSlotCount.value = wake.streamingSlotCount
+            synchronized(lock) {
+                if (stopped) return
+                val keep = wake.shouldKeepScreenOn
+                if (keep == _shouldKeepScreenOn.value) return
+                _shouldKeepScreenOn.value = keep
+                if (keep) acquire() else release()
+            }
+        }
+
+        /** Call under [lock] only. */
         private fun acquire() {
             if (wakeLock?.isHeld == true) return
             wakeLock =
@@ -92,6 +115,7 @@ class WakeStateController
                     .apply { acquire() }
         }
 
+        /** Call under [lock] only. */
         private fun release() {
             wakeLock?.let { if (it.isHeld) it.release() }
             wakeLock = null

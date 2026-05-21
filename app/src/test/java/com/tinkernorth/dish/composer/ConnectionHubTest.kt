@@ -306,6 +306,10 @@ class ConnectionHubTest {
         val hub = buildHub()
 
         hub.bind(slotId = "slot-A", connectionId = "s:1")
+        // hub.connections forwards composer.state; mutating bindingStore fires
+        // the combine on its scheduled tick rather than synchronously, so the
+        // test must drive the scheduler before reading the derived value.
+        scope.testScheduler.runCurrent()
 
         assertEquals(mapOf("slot-A" to "s:1"), hub.bindings.value)
         assertEquals(
@@ -328,6 +332,7 @@ class ConnectionHubTest {
 
         hub.bind("slot-A", "s:1")
         hub.bind("slot-B", "s:1")
+        scope.testScheduler.runCurrent()
 
         assertEquals(
             mapOf("slot-A" to "s:1", "slot-B" to "s:1"),
@@ -400,6 +405,7 @@ class ConnectionHubTest {
         val hub = buildHub()
 
         hub.bind("slot-A", "s:1")
+        scope.testScheduler.runCurrent()
 
         val summary = hub.connections.value.first { it.id == "s:1" }
         assertEquals(CONTROLLER_TYPE_XBOX, summary.satelliteControllerTypes["slot-A"])

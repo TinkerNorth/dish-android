@@ -24,6 +24,35 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
+ * Typed 7-arity combine that avoids the `Array<*>` cast jungle the bare
+ * `combine(vararg)` overload forces. The single unchecked cast lives here so
+ * call sites stay refactor-safe — changing an upstream flow's value type
+ * reshapes the [transform] lambda at compile time.
+ */
+@Suppress("UNCHECKED_CAST", "LongParameterList")
+private inline fun <T1, T2, T3, T4, T5, T6, T7, R> combine7(
+    f1: Flow<T1>,
+    f2: Flow<T2>,
+    f3: Flow<T3>,
+    f4: Flow<T4>,
+    f5: Flow<T5>,
+    f6: Flow<T6>,
+    f7: Flow<T7>,
+    crossinline transform: suspend (T1, T2, T3, T4, T5, T6, T7) -> R,
+): Flow<R> =
+    combine(f1, f2, f3, f4, f5, f6, f7) { args ->
+        transform(
+            args[0] as T1,
+            args[1] as T2,
+            args[2] as T3,
+            args[3] as T4,
+            args[4] as T5,
+            args[5] as T6,
+            args[6] as T7,
+        )
+    }
+
+/**
  * Derives the unified `List<ConnectionSummary>` that the UI renders. Pulled out of
  * the former `ConnectionHub` god object so the combine + `buildSummaries` logic
  * is testable in isolation.
@@ -70,7 +99,7 @@ class ConnectionsComposer
             }
 
         override fun upstream(): Flow<List<ConnectionSummary>> =
-            combine(
+            combine7(
                 flatSatConnections,
                 bt.states,
                 satellite.discoveredServers,
@@ -78,42 +107,20 @@ class ConnectionsComposer
                 typeStore.state,
                 satellite.staleSatelliteIds,
                 bt.staleBtIds,
-            ) { args -> unwrapAndBuild(args) }
-
-        @Suppress("UNCHECKED_CAST")
-        private fun unwrapAndBuild(args: Array<*>): List<ConnectionSummary> {
-            val satMap = args[0] as Map<String, SatelliteConnection>
-            val btStates = args[1] as Map<String, BluetoothGamepadRegistry.SlotState>
-            val discovered = args[2] as List<DiscoveredServer>
-            val bindings = args[3] as Map<String, String>
-            val satTypes = args[4] as Map<Pair<String, String>, Int>
-            val staleSat = args[5] as Set<String>
-            val staleBtMap = args[6] as Map<String, *>
-            return buildSummaries(
-                satMap = satMap,
-                btStates = btStates,
-                discoveredIds = discoveredIdSet(discovered),
-                bindings = bindings,
-                satTypes = satTypes,
-                staleSatIds = staleSat,
-                staleBtIds = staleBtMap.keys,
-            )
-        }
+            ) { satMap, btStates, discovered, bindings, satTypes, staleSat, staleBt ->
+                buildSummaries(
+                    satMap = satMap,
+                    btStates = btStates,
+                    discoveredIds = discoveredIdSet(discovered),
+                    bindings = bindings,
+                    satTypes = satTypes,
+                    staleSatIds = staleSat,
+                    staleBtIds = staleBt.keys,
+                )
+            }
 
         private fun discoveredIdSet(discovered: List<DiscoveredServer>): Set<String> =
             discovered.mapTo(mutableSetOf()) { SatelliteConnection.idFor(it) }
-
-        /** Pure list build — exposed so `ConnectionHub` can rebuild on demand after mutations. */
-        fun buildSummariesNow(): List<ConnectionSummary> =
-            buildSummaries(
-                satMap = satellite.connections.value,
-                btStates = bt.states.value,
-                discoveredIds = discoveredIdSet(satellite.discoveredServers.value),
-                bindings = bindingStore.state.value,
-                satTypes = typeStore.state.value,
-                staleSatIds = satellite.staleSatelliteIds.value,
-                staleBtIds = bt.staleBtIds.value.keys,
-            )
 
         private fun buildSummaries(
             satMap: Map<String, SatelliteConnection>,
