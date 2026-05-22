@@ -329,7 +329,6 @@ class GamepadTouchView
             canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paintBg)
             val l = layout ?: return
             val s = recognizer.state
-
             drawDpad(canvas, l, s)
             drawAbxy(canvas, l, s)
             drawStick(canvas, l.leftStickCx, l.leftStickCy, recognizer.leftStickDx, recognizer.leftStickDy, l.stickRadius, "L")
@@ -537,9 +536,16 @@ class GamepadTouchView
         @SuppressLint("ClickableViewAccessibility")
         override fun onTouchEvent(event: MotionEvent): Boolean {
             val l = layout ?: return false
-            recognizer.onTouchEvent(event, l)
+            // Notify the listener per *sample* — for ACTION_MOVE the
+            // recognizer drains every historical sample carried by the
+            // MotionEvent, so each intermediate finger position becomes its
+            // own report instead of being collapsed into the latest. The
+            // single invalidate() at the end is intentional: the view only
+            // ever needs to repaint the final state once per OS event.
+            recognizer.onTouchEvent(event, l) {
+                listener?.onGamepadStateChanged(recognizer.state)
+            }
             invalidate()
-            listener?.onGamepadStateChanged(recognizer.state)
             return true
         }
     }
