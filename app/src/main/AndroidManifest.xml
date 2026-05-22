@@ -80,6 +80,13 @@
             android:configChanges="orientation|screenSize|keyboardHidden" />
 
         <activity
+            android:name=".ui.main.TouchpadOverlayActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Dish"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <activity
             android:name=".ui.connections.ConnectionsActivity"
             android:exported="false"
             android:theme="@style/Theme.Dish"

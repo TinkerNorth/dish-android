@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Full-screen landscape overlay for the on-screen touchpad. Sibling to
+     activity_gamepad_overlay.xml — same scaffolding (CoordinatorLayout root,
+     status pill, exit button), different input surface. -->
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/colorBackground">
+
+    <com.tinkernorth.dish.ui.common.TouchpadSurfaceView
+        android:id="@+id/touchpadSurfaceView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Top-center status pill — mirrors the gamepad overlay so the two
+         overlays feel like siblings. -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="8dp"
+        android:orientation="vertical"
+        android:gravity="center_horizontal">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_pill"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="6dp"
+            android:gravity="center_vertical"
+            android:alpha="0.85">
+
+            <View
+                android:id="@+id/dotTouchpadOverlay"
+                android:layout_width="6dp"
+                android:layout_height="6dp"
+                android:layout_marginEnd="8dp" />
+
+            <TextView
+                android:id="@+id/tvTouchpadOverlayStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/overlay_status_streaming"
+                android:textColor="@color/colorOnSurface"
+                android:textSize="11sp"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnExitTouchpad"
+        style="@style/Widget.Dish.Button.Outlined"
+        android:layout_width="wrap_content"
+        android:layout_height="32dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="12dp"
+        android:text="@string/overlay_action_back"
+        android:textSize="11sp"
+        android:minWidth="64dp" />
+
+    <!-- Low-power overlays (countdown banner + dim screen). Same include
+         the gamepad overlay uses; the dim FrameLayout sits on top of the
+         touchpad and consumes the wake-tap. -->
+    <include layout="@layout/overlay_low_power" />
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

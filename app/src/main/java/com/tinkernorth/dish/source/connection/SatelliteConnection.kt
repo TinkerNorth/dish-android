@@ -546,6 +546,50 @@ class SatelliteConnection(
         controllerRepo.sendBattery(snap.handle, info.controllerIndex, level, status)
     }
 
+    /**
+     * Forward a touchpad sample for [slotId] (`MSG_TOUCHPAD`). Receiver
+     * routes by its per-device `touchpadMode` (Off drops, Pad feeds virtual
+     * DS4, Mouse synthesises desktop pointer); this method is mode-agnostic
+     * on the wire. Tracking ids are caller-assigned and monotonic per
+     * finger contact — see [com.tinkernorth.dish.ui.common.TouchpadSurfaceView].
+     *
+     * Same `registered`-gate + atomic [live] snapshot discipline as
+     * [sendReport] / [sendMotion] / [sendBattery]: reports captured during
+     * the brief window after auto-reconnect but before the slot's ACK
+     * lands are dropped client-side instead of going on the wire as an
+     * "unknown controller" packet the satellite would reject anyway.
+     */
+    @Suppress("LongParameterList")
+    fun sendTouchpad(
+        slotId: String,
+        finger0Active: Boolean,
+        finger1Active: Boolean,
+        buttonPressed: Boolean,
+        finger0TrackingId: Int,
+        finger0X: Short,
+        finger0Y: Short,
+        finger1TrackingId: Int,
+        finger1X: Short,
+        finger1Y: Short,
+    ) {
+        val snap = live ?: return
+        val info = _slots.value[slotId] ?: return
+        if (!info.registered) return
+        controllerRepo.sendTouchpad(
+            snap.handle,
+            info.controllerIndex,
+            finger0Active,
+            finger1Active,
+            buttonPressed,
+            finger0TrackingId,
+            finger0X,
+            finger0Y,
+            finger1TrackingId,
+            finger1X,
+            finger1Y,
+        )
+    }
+
     companion object {
         private const val ALIVE_POLL_MS = 1000L
         private const val ACK_WAIT_ATTEMPTS = 20

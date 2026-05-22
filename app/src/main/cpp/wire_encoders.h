@@ -64,6 +64,38 @@ inline void encodeBatteryPayload(uint8_t out[3], uint8_t ctrlIdx, uint8_t level,
     out[2] = status;
 }
 
+// MSG_TOUCHPAD (0x000C) inner payload — 12 bytes total (after the 2-byte
+// outer msgType/msgLen header; this encoder fills the inner bytes that ride
+// inside MSG_TOUCHPAD).
+//
+// Layout — must round-trip with satellite/src/core/types.h::decodeTouchpadReport:
+//   [0]      ctrlIdx (u8)
+//   [1]      flags (u8): bit0=finger0_active, bit1=finger1_active,
+//                        bit2=button_pressed (the clicky DS4/DualSense trackpad
+//                        button — independent of touches)
+//   [2]      finger0_trackingId (u8)   monotonic per-finger id, wraps freely
+//   [3..4]   finger0_x (i16 LE)        -32768..32767, resolution-independent
+//   [5..6]   finger0_y (i16 LE)        +y is DOWN (matches the wire convention)
+//   [7]      finger1_trackingId (u8)
+//   [8..9]   finger1_x (i16 LE)
+//   [10..11] finger1_y (i16 LE)
+inline void encodeTouchpadPayload(uint8_t out[12], uint8_t ctrlIdx, bool f0Active,
+                                  bool f1Active, bool buttonPressed, uint8_t f0Id, int16_t f0x,
+                                  int16_t f0y, uint8_t f1Id, int16_t f1x, int16_t f1y) {
+    out[0] = ctrlIdx;
+    uint8_t flags = 0;
+    if (f0Active) flags |= 0x01;
+    if (f1Active) flags |= 0x02;
+    if (buttonPressed) flags |= 0x04;
+    out[1] = flags;
+    out[2] = f0Id;
+    putLE16(out + 3, static_cast<uint16_t>(f0x));
+    putLE16(out + 5, static_cast<uint16_t>(f0y));
+    out[7] = f1Id;
+    putLE16(out + 8, static_cast<uint16_t>(f1x));
+    putLE16(out + 10, static_cast<uint16_t>(f1y));
+}
+
 // MSG_LIGHTBAR (0x000D) inner payload — 4 bytes, satellite → sender.
 //
 //   [0] ctrlIdx (u8)

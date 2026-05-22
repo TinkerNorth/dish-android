@@ -77,6 +77,7 @@ static constexpr uint16_t MSG_CONTROLLER_CAPS_UPDATE = 0x000E;
 static constexpr uint16_t MSG_RUMBLE = 0x0009;
 static constexpr uint16_t MSG_MOTION = 0x000A;
 static constexpr uint16_t MSG_BATTERY = 0x000B;
+static constexpr uint16_t MSG_TOUCHPAD = 0x000C;
 static constexpr uint16_t MSG_LIGHTBAR = 0x000D;
 
 #pragma pack(push, 1)
@@ -739,6 +740,29 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendBa
     dish_wire::encodeBatteryPayload(payload, (uint8_t)(controllerIndex & 0xFF),
                                     (uint8_t)(level & 0xFF), (uint8_t)(status & 0xFF));
     sendEncrypted(s.get(), MSG_BATTERY, payload, sizeof(payload));
+}
+
+/* ── Touchpad (DS4 / DualSense trackpad — synthesized from a virtual on-screen
+ *  touchpad surface in the Android UI). 250 Hz cadence pacing happens in
+ *  Kotlin (same deadline-based loop as the gamepad overlay); this JNI export
+ *  is one encode + one encrypted send.
+ *
+ *  Coordinates are pre-normalized int16 by the caller (-32768..32767).
+ *  trackingId is per-finger and monotonic (Kotlin assigns; the wire just
+ *  carries it). */
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendTouchpad(
+    JNIEnv*, jobject, jint handle, jint controllerIndex, jboolean f0Active, jboolean f1Active,
+    jboolean buttonPressed, jint f0TrackingId, jshort f0x, jshort f0y, jint f1TrackingId,
+    jshort f1x, jshort f1y) {
+    auto s = getSession(handle);
+    if (!s) return;
+    uint8_t payload[12];
+    dish_wire::encodeTouchpadPayload(payload, (uint8_t)(controllerIndex & 0xFF),
+                                     f0Active == JNI_TRUE, f1Active == JNI_TRUE,
+                                     buttonPressed == JNI_TRUE,
+                                     (uint8_t)(f0TrackingId & 0xFF), (int16_t)f0x, (int16_t)f0y,
+                                     (uint8_t)(f1TrackingId & 0xFF), (int16_t)f1x, (int16_t)f1y);
+    sendEncrypted(s.get(), MSG_TOUCHPAD, payload, sizeof(payload));
 }
 
 /* ── Heartbeat start/stop ──────────────────────────────────────────────────── */

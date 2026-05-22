@@ -6,47 +6,28 @@ package com.tinkernorth.dish.ui.main
 import android.content.Context
 import android.graphics.drawable.GradientDrawable
 import android.hardware.SensorManager
-import android.os.Build
 import android.os.Bundle
-import android.view.KeyEvent
-import android.view.MotionEvent
-import android.view.Surface
 import android.view.View
-import android.view.WindowInsets
-import android.view.WindowInsetsController
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.composer.ConnectionHub
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.MotionCapability
 import com.tinkernorth.dish.composer.MotionCapabilityComposer
-import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.input.hidToXusb
-import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.databinding.ActivityGamepadOverlayBinding
-import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
-import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
-import com.tinkernorth.dish.source.connection.ConnectionEvent
-import com.tinkernorth.dish.source.connection.SatelliteConnection
-import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
-import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.sensor.MotionStreamState
 import com.tinkernorth.dish.source.sensor.PhoneBatterySource
 import com.tinkernorth.dish.source.sensor.PhoneMotionSource
 import com.tinkernorth.dish.ui.common.GamepadTouchView
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -65,25 +46,19 @@ import javax.inject.Inject
  */
 @AndroidEntryPoint
 class GamepadOverlayActivity :
-    AppCompatActivity(),
+    BaseInputOverlayActivity(),
     GamepadTouchView.Listener {
     @Inject lateinit var btRegistry: BluetoothGamepadRegistry
-
-    @Inject lateinit var satellite: SatelliteConnectionManager
-
-    @Inject lateinit var hub: ConnectionHub
-
-    @Inject lateinit var wakeState: WakeStateController
-
-    @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
-
-    @Inject lateinit var notifications: DishNotifications
 
     @Inject lateinit var motionCapability: MotionCapabilityComposer
 
     private lateinit var binding: ActivityGamepadOverlayBinding
-    private lateinit var gamepadHost: GamepadActivityHost
-    private var connectionId: String = ""
+
+    // hub, satellite, wakeState, gamepadRegistry, notifications, gamepadHost,
+    // and `connectionId` are inherited from BaseInputOverlayActivity.
+
+    override fun rootView(): View = binding.root
+    override val resendIntervalNs: Long = BaseInputOverlayActivity.RESEND_INTERVAL_NS_DEFAULT
 
     /**
      * Most recent gamepad state surfaced by [onGamepadStateChanged]. The touch
@@ -114,12 +89,11 @@ class GamepadOverlayActivity :
         super.onCreate(savedInstanceState)
         binding = ActivityGamepadOverlayBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        gamepadHost =
-            GamepadActivityHost(this, binding.root, wakeState, gamepadRegistry)
-                .also { it.install(notifications) }
-        hideSystemBars()
+        // Base owns gamepad-host install, system-bar hide, connection-id parse,
+        // connection-summary collector, connection-events collector, and the
+        // 250 Hz resend loop. All gamepad-specific wiring runs after.
+        installBaseScaffolding()
 
-        connectionId = intent.getStringExtra(EXTRA_CONNECTION_ID).orEmpty()
         binding.gamepadTouchView.listener = this
         binding.gamepadTouchView.usePlayStation = intent.getBooleanExtra(EXTRA_USE_PS_LAYOUT, false)
         binding.dotOverlay.background =
@@ -198,116 +172,25 @@ class GamepadOverlayActivity :
             }
         }
 
-        // Mid-game connection events: with the SatelliteConnectionManager's
-        // SharedFlow buffered, errors emitted from the alive-poll's onDead
-        // path can now reach this activity. Previously they were silently
-        // dropped because the overlay didn't collect.
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                satellite.events.collect(::handleConnectionEvent)
-            }
-        }
-        // Periodic resend of the latest virtual-gamepad state to the satellite.
-        //
-        // Physical pads route through `gamepadMotionFilter` →
-        // `consumePublishIfChanged` (see `satellite_jni.cpp`), which is also
-        // change-driven — but the kernel HID poll plus the analog sticks'
-        // hardware noise keep producing fresh samples even when the user's
-        // thumb is steady, so the wire stays warm and any single dropped UDP
-        // packet is recovered within a few ms by the next sample.
-        //
-        // The touch panel filters sub-pixel jitter, so a finger held still
-        // emits ZERO `ACTION_MOVE` events; the listener never re-fires; the
-        // wire goes completely silent. If the *last* packet before stillness
-        // is the one UDP drops, the host's virtual gamepad sits on stale
-        // state until the user moves their finger again — the visible "gap"
-        // / "stuck stick" feeling. Resending the latest state every
-        // RESEND_INTERVAL_MS replicates the physical-pad's continuous-refresh
-        // behaviour and recovers from single-packet loss within one tick.
-        //
-        // Bluetooth is intentionally excluded: BT-HID has its own polling
-        // discipline (the host queries the slave at the negotiated rate),
-        // and the bounded native BT dispatch queue would just fill up with
-        // redundant reports.
-        // Run on Dispatchers.Default — JNI sendReport doesn't need the main
-        // thread, and competing with touch dispatch / vsync / layout on
-        // Dispatchers.Main.immediate was producing 14 ms tick-interval tails
-        // (measured via GpTrace) where the configured rate was 4 ms.
-        lifecycleScope.launch(Dispatchers.Default) {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                // Deadline-based pacing — each iteration targets an absolute
-                // `nextTickNs` deadline instead of "sleep N ms from now."
-                // Without this, work time (sendSatelliteReport + JNI +
-                // encrypt + sendto) leaks into the cycle, so a 4 ms config
-                // produces ≈ 6 ms cycles → 168 Hz, not the requested 250 Hz.
-                // With drift correction, the long-term rate matches the
-                // configured interval exactly; a slow tick is followed by a
-                // shorter wait, not a permanent slip.
-                var nextTickNs = System.nanoTime() + RESEND_INTERVAL_NS
-                while (isActive) {
-                    val now = System.nanoTime()
-                    // Guard against runaway catch-up: if we somehow fell more
-                    // than a few intervals behind (process throttled, dispatcher
-                    // starved), reset rather than burning CPU spamming back-
-                    // dated reports the host has already aged past.
-                    if (now - nextTickNs > RESEND_INTERVAL_NS * MAX_BACKLOG_FACTOR) {
-                        nextTickNs = now + RESEND_INTERVAL_NS
-                    }
-                    val waitNs = nextTickNs - now
-                    if (waitNs > 0) {
-                        val waitMs = waitNs / 1_000_000L
-                        if (waitMs > 0) delay(waitMs)
-                    }
-                    nextTickNs += RESEND_INTERVAL_NS
-                    // Send only when every prerequisite is satisfied. Folded
-                    // into one positive condition (rather than four guards
-                    // each followed by `continue`) so the loop body has a
-                    // single linear path — detekt's LoopWithTooManyJumpStatements
-                    // was correctly flagging the cluster of early-exits.
-                    val state = lastReportedState
-                    val summary = hub.summary(connectionId)
-                    if (state != null &&
-                        summary != null &&
-                        summary.kind == ConnectionKind.SATELLITE &&
-                        summary.live == LinkState.Connected
-                    ) {
-                        sendSatelliteReport(state)
-                    }
-                }
-            }
-        }
+        // Connection-events collector + resend-loop coroutine live in
+        // BaseInputOverlayActivity.installBaseScaffolding(). This activity
+        // only owns the gamepad-specific motion/battery combine above.
     }
 
     /**
-     * Mid-game connection events: with [SatelliteConnectionManager]'s
-     * SharedFlow buffered, errors emitted from the alive-poll's onDead path
-     * can now reach this activity. Previously they were silently dropped —
-     * the overlay didn't collect events at all. We can't pop a PIN dialog
-     * here (full-screen landscape, no dialog host), so [PairingRequired]
-     * also routes through the banner with a "return to Connections" action.
+     * Resend-loop tick — pulled out of the inline coroutine so the shared
+     * 250 Hz pacing lives in [BaseInputOverlayActivity.runResendLoop]. Only
+     * fires the wire when (a) the user has touched the pad at least once,
+     * and (b) the bound connection is a Connected satellite. Bluetooth is
+     * intentionally excluded — BT-HID has its own polling discipline and
+     * a bounded native dispatch queue.
      */
-    private fun handleConnectionEvent(event: ConnectionEvent) {
-        when (event) {
-            is ConnectionEvent.Error ->
-                notifications.error(
-                    title = event.message,
-                    glyph = R.drawable.ic_satellite_off,
-                )
-            is ConnectionEvent.PairingRequired ->
-                notifications.warn(
-                    glyph = R.drawable.ic_satellite_off,
-                    title = getString(R.string.notif_pairing_needed_title),
-                    body =
-                        getString(
-                            R.string.notif_pairing_needed_body,
-                            event.server.name.ifEmpty { event.server.ip },
-                        ),
-                    action =
-                        DishNotification.Action(
-                            label = getString(R.string.action_open),
-                        ) { finish() },
-                )
-        }
+    override fun resendOneIfReady() {
+        val state = lastReportedState ?: return
+        val summary = hub.summary(connectionId) ?: return
+        if (summary.kind != ConnectionKind.SATELLITE) return
+        if (summary.live != LinkState.Connected) return
+        sendSatelliteReport(state)
     }
 
     override fun onResume() {
@@ -331,10 +214,9 @@ class GamepadOverlayActivity :
         // combine collector; no explicit refresh here.
     }
 
-    override fun onStop() {
-        super.onStop()
-        gamepadHost.cancelDimOnStop()
-    }
+    // onStop / dispatchKeyEvent / dispatchGenericMotionEvent / dispatchTouchEvent
+    // / onWindowFocusChanged / hideSystemBars / currentRotation —
+    // all live in BaseInputOverlayActivity now.
 
     /**
      * One coherent snapshot of the three inputs that drive both the motion
@@ -534,82 +416,14 @@ class GamepadOverlayActivity :
         )
     }
 
-    /**
-     * Live display rotation as a `Surface.ROTATION_*` value, for the IMU axis
-     * remap in [PhoneMotionSource]. `Activity.display` is the API 30+ path;
-     * `windowManager.defaultDisplay` is the deprecated fallback below R.
-     * Defaults to [Surface.ROTATION_0] if no display is attached.
-     */
-    private fun currentRotation(): Int =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            display?.rotation ?: Surface.ROTATION_0
-        } else {
-            @Suppress("DEPRECATION")
-            windowManager.defaultDisplay?.rotation ?: Surface.ROTATION_0
-        }
-
-    private fun hideSystemBars() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            window.insetsController?.let {
-                it.hide(WindowInsets.Type.systemBars())
-                it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            }
-        } else {
-            @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility = (
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                    or View.SYSTEM_UI_FLAG_FULLSCREEN
-                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-            )
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════
-    //  INPUT DISPATCH — forwarded to GamepadActivityHost
-    // ═══════════════════════════════════════════════════════════════════════
-
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean = gamepadHost.dispatchKeyEvent(event) || super.dispatchKeyEvent(event)
-
-    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean =
-        gamepadHost.dispatchGenericMotionEvent(event) || super.dispatchGenericMotionEvent(event)
-
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean = gamepadHost.dispatchTouchEvent(ev) || super.dispatchTouchEvent(ev)
-
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        gamepadHost.onWindowFocusChanged(hasFocus)
-    }
-
     companion object {
-        const val EXTRA_CONNECTION_ID = "extra_connection_id"
+        /**
+         * Re-export of [BaseInputOverlayActivity.EXTRA_CONNECTION_ID] so
+         * existing callers (e.g. `MainActivity`) keep their qualified
+         * reference. Kotlin companion-object members aren't inherited; this
+         * forward keeps the call sites untouched.
+         */
+        const val EXTRA_CONNECTION_ID = BaseInputOverlayActivity.EXTRA_CONNECTION_ID
         const val EXTRA_USE_PS_LAYOUT = "extra_use_ps_layout"
-
-        /**
-         * Interval between periodic resends of the last virtual-gamepad
-         * state to a satellite. 4 ms ≈ 250 Hz matches the polling rate of a
-         * typical wired Xbox/PS controller — the rate the host's virtual
-         * gamepad backend (ViGEm / equivalent) is implicitly tuned for.
-         * Faster than the 60 Hz Steam Remote Play / Moonlight default, but
-         * the wire cost is still trivial (~17 KB/s of encrypted UDP) and the
-         * recovery window after a dropped packet shrinks to ≤ 4 ms instead
-         * of ≤ 16 ms — invisible at 60 Hz host displays, perceptibly
-         * smoother on 120/240 Hz panels and twitch genres.
-         *
-         * The resend loop uses [RESEND_INTERVAL_NS] for deadline arithmetic;
-         * this ms value is preserved as the human-facing knob.
-         */
-        private const val RESEND_INTERVAL_MS = 4L
-        private const val RESEND_INTERVAL_NS = RESEND_INTERVAL_MS * 1_000_000L
-
-        /**
-         * If the resend loop falls more than this many intervals behind
-         * `nextTickNs` (e.g. because the dispatcher was starved or the
-         * process was throttled), we reset the deadline to `now + INTERVAL`
-         * instead of issuing back-dated catch-up sends. The host has already
-         * aged past those states; sending them adds wire chatter without
-         * benefit. Five intervals (~20 ms at 250 Hz) is wider than any
-         * normal scheduler hiccup but narrow enough to recover quickly.
-         */
-        private const val MAX_BACKLOG_FACTOR = 5L
     }
 }

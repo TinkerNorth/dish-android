@@ -120,6 +120,52 @@ internal object SatelliteHttpClient {
         )
 
     /**
+     * POST /api/devices/touchpad-mode — push the client's touchpad routing
+     * choice. Server validates against its supported modes (probed via
+     * `/api/server/capabilities`) and hot-applies to the live connection
+     * (no re-pair). The mode is also persisted server-side so a re-connect
+     * picks up the same routing without another round-trip.
+     *
+     * `mode` is one of `"off"`, `"ds4"`, `"mouse"`. The server responds
+     * `{"ok":true,"hotApplied":bool}` on success, or `{"error":...}` on
+     * unknown device / unsupported mode (409) / bad payload (400).
+     */
+    fun setTouchpadMode(
+        ip: String,
+        port: Int,
+        deviceId: String,
+        mode: String,
+    ): String =
+        request(
+            method = "POST",
+            ip = ip,
+            port = port,
+            path = "/api/devices/touchpad-mode",
+            body =
+                """{"id":"${jsonEscape(deviceId)}",""" +
+                    """"mode":"${jsonEscape(mode)}"}""",
+        )
+
+    /**
+     * GET /api/server/capabilities — query the satellite host's touchpad
+     * capabilities (which of `off`, `ds4`, `mouse` it can honour). Used to
+     * grey out unsupported modes in the client picker. The server response
+     * shape is:
+     *   `{"touchpad":{"supportedModes":[...],"defaultMode":"off"},"backend":...}`
+     */
+    fun getCapabilities(
+        ip: String,
+        port: Int,
+    ): String =
+        request(
+            method = "GET",
+            ip = ip,
+            port = port,
+            path = "/api/server/capabilities",
+            body = null,
+        )
+
+    /**
      * POST /api/pair — PIN pairing handshake.
      *
      * Pairing used to be a bespoke raw-TCP JSON line protocol on a separate
@@ -134,8 +180,15 @@ internal object SatelliteHttpClient {
         deviceId: String,
         deviceName: String,
         pin: String,
-    ): String =
-        request(
+        initialTouchpadMode: String? = null,
+    ): String {
+        val touchpadField =
+            if (initialTouchpadMode != null) {
+                ""","touchpadMode":"${jsonEscape(initialTouchpadMode)}""""
+            } else {
+                ""
+            }
+        return request(
             method = "POST",
             ip = ip,
             port = port,
@@ -143,8 +196,9 @@ internal object SatelliteHttpClient {
             body =
                 """{"deviceId":"${jsonEscape(deviceId)}",""" +
                     """"deviceName":"${jsonEscape(deviceName)}",""" +
-                    """"pin":"${jsonEscape(pin)}"}""",
+                    """"pin":"${jsonEscape(pin)}"$touchpadField}""",
         )
+    }
 
     /**
      * Perform one HTTPS request against the satellite and return the response

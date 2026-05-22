@@ -62,7 +62,19 @@
     <string name="action_unbind">Unbind</string>
     <string name="action_open_gamepad">Open Gamepad</string>
     <string name="desc_open_gamepad">Open gamepad</string>
+    <string name="action_open_touchpad">Open Touchpad</string>
+    <string name="desc_open_touchpad">Open touchpad</string>
     <string name="desc_expand">Expand</string>
+
+    <!-- Touchpad mode picker — client-side. Wire values match satellite/src/core/types.h. -->
+    <string name="touchpad_mode_label">Touchpad mode</string>
+    <string name="touchpad_mode_off">Off</string>
+    <string name="touchpad_mode_pad">Pad</string>
+    <string name="touchpad_mode_mouse">Mouse</string>
+    <string name="touchpad_mode_off_desc">Touchpad routing turned off — no touch samples are sent.</string>
+    <string name="touchpad_mode_pad_desc">Route the on-screen touchpad to the host\'s virtual DualShock 4 trackpad surface.</string>
+    <string name="touchpad_mode_mouse_desc">Synthesize host desktop mouse movement from the on-screen touchpad.</string>
+    <string name="touchpad_mode_unsupported_here">This receiver host doesn\'t support this mode.</string>
 
     <!-- ControllerAdapter slot-status text (renders below the slot name). -->
     <string name="slot_status_disconnecting">Disconnecting… %1$ds</string>
