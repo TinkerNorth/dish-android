@@ -122,7 +122,12 @@ class MainActivity :
                 liveCount == 0 -> getString(R.string.status_remembered, totalCount)
                 else -> getString(R.string.status_connected_of, liveCount, totalCount)
             }
-        controllerAdapter.submitSlots(s.slots, s.connections, s.motionCapabilities)
+        controllerAdapter.submitSlots(
+            s.slots,
+            s.connections,
+            s.motionCapabilities,
+            s.touchpadModesBySatellite,
+        )
     }
 
     private fun handleEvent(event: MainEvent) {
@@ -184,6 +189,23 @@ class MainActivity :
         slotId: String,
         enabled: Boolean,
     ) = viewModel.setMotionEnabled(slotId, enabled)
+
+    override fun onChangeTouchpadMode(
+        connectionId: String,
+        mode: String,
+    ) = viewModel.setSatelliteTouchpadMode(connectionId, mode)
+
+    override fun onOpenTouchpad(
+        connectionId: String,
+        mode: String,
+    ) {
+        startActivity(
+            Intent(this, TouchpadOverlayActivity::class.java).apply {
+                putExtra(TouchpadOverlayActivity.EXTRA_CONNECTION_ID, connectionId)
+                putExtra(TouchpadOverlayActivity.EXTRA_TOUCHPAD_MODE, mode)
+            },
+        )
+    }
 
     override fun onOpenGamepad() {
         val v = viewModel.uiState.value.virtualSlot

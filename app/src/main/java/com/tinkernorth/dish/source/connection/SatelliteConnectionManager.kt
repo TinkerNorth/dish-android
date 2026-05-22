@@ -548,6 +548,33 @@ class SatelliteConnectionManager
             _connections.update { it - id }
         }
 
+        // ── Touchpad routing ──────────────────────────────────────────────────
+
+        /**
+         * Push the client-side touchpad-mode pick to the satellite owning
+         * [connectionId]. Server hot-applies to the live session AND persists
+         * the choice per-device, so a re-connect resumes the same routing
+         * without a follow-up round-trip. The raw JSON body is returned so the
+         * caller can distinguish `{"ok":true,…}` from `{"error":"…"}` (e.g. a
+         * macOS receiver answering 409 to a `ds4` pick because its only
+         * advertised mode is `off`).
+         *
+         * No-op (returns `{"error":"…"}` JSON) if the connection isn't known
+         * locally — the typical call site only invokes this for a satellite the
+         * user just picked a mode on, so an unknown id signals a UI race we
+         * surface rather than swallow silently.
+         */
+        suspend fun setTouchpadMode(
+            connectionId: String,
+            mode: String,
+        ): String {
+            val conn =
+                _connections.value[connectionId]
+                    ?: return """{"error":"unknown connection $connectionId"}"""
+            val server = conn.server.value
+            return discoveryRepo.setTouchpadMode(server.ip, server.httpPort, deviceId, mode)
+        }
+
         // ── Prefs ─────────────────────────────────────────────────────────────
 
         private fun getOrCreateDeviceId(): String {

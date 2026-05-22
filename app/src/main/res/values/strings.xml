@@ -71,9 +71,6 @@
     <string name="touchpad_mode_off">Off</string>
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Mouse</string>
-    <string name="touchpad_mode_off_desc">Touchpad routing turned off — no touch samples are sent.</string>
-    <string name="touchpad_mode_pad_desc">Route the on-screen touchpad to the host\'s virtual DualShock 4 trackpad surface.</string>
-    <string name="touchpad_mode_mouse_desc">Synthesize host desktop mouse movement from the on-screen touchpad.</string>
     <string name="touchpad_mode_unsupported_here">This receiver host doesn\'t support this mode.</string>
 
     <!-- ControllerAdapter slot-status text (renders below the slot name). -->

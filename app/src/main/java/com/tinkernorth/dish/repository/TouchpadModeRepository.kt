@@ -7,6 +7,9 @@ import android.content.Context
 import android.util.Log
 import com.tinkernorth.dish.architecture.interfaces.KeyedRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -56,6 +59,23 @@ class TouchpadModeRepository
         }
         private val writeLock = Any()
 
+        /**
+         * Reactive `satelliteId -> mode` map mirroring the on-disk JSON list.
+         * Hydrated lazily on first read of [state] from the persisted prefs
+         * so a cold subscriber renders yesterday's pick with no first-frame
+         * flicker, and every [put] / [remove] / [clear] write-through
+         * republishes here.
+         *
+         * Mirrors the [com.tinkernorth.dish.source.store.MotionEnabledStore]
+         * shape so the dashboard's `combine(hub.connections, repo.state)`
+         * derivation re-fires the moment the user picks a new mode — no
+         * polling, no Activity reload.
+         */
+        private val _state by lazy {
+            MutableStateFlow(all().associate { it.satelliteId to it.mode })
+        }
+        val state: StateFlow<Map<String, String>> get() = _state.asStateFlow()
+
         override fun keyOf(value: TouchpadModePreference): String = value.satelliteId
 
         override fun get(key: String): TouchpadModePreference? = all().firstOrNull { it.satelliteId == key }
@@ -102,12 +122,17 @@ class TouchpadModeRepository
         override fun clear() {
             synchronized(writeLock) {
                 prefs.edit().remove(KEY_LIST).apply()
+                _state.value = emptyMap()
             }
         }
 
         private fun persist(list: List<TouchpadModePreference>) {
             val raw = json.encodeToString(ListSerializer(TouchpadModePreference.serializer()), list)
             prefs.edit().putString(KEY_LIST, raw).apply()
+            // Republish the in-memory mirror under the same write lock so a
+            // concurrent reader can't observe the prefs edit landing without
+            // the corresponding StateFlow emission.
+            _state.value = list.associate { it.satelliteId to it.mode }
         }
 
         private companion object {

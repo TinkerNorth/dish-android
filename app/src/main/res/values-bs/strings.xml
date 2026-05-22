@@ -59,7 +59,16 @@
     <string name="action_unbind">Odveži</string>
     <string name="action_open_gamepad">Otvori kontroler</string>
     <string name="desc_open_gamepad">Otvori kontroler</string>
+    <string name="action_open_touchpad">Otvori dodirnu ploču</string>
+    <string name="desc_open_touchpad">Otvori dodirnu ploču</string>
     <string name="desc_expand">Proširi</string>
+
+    <!-- Birač režima dodirne ploče. -->
+    <string name="touchpad_mode_label">Režim dodirne ploče</string>
+    <string name="touchpad_mode_off">Isključeno</string>
+    <string name="touchpad_mode_pad">Pad</string>
+    <string name="touchpad_mode_mouse">Miš</string>
+    <string name="touchpad_mode_unsupported_here">Ovaj prijemnik ne podržava ovaj režim.</string>
 
     <!-- Tekst statusa slota u ControllerAdapter (ispod imena). -->
     <string name="slot_status_disconnecting">Prekidanje veze… %1$ds</string>

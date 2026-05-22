@@ -60,7 +60,16 @@
     <string name="action_unbind">Desenlazar</string>
     <string name="action_open_gamepad">Abrir el mando</string>
     <string name="desc_open_gamepad">Abrir el mando</string>
+    <string name="action_open_touchpad">Abrir el panel táctil</string>
+    <string name="desc_open_touchpad">Abrir el panel táctil</string>
     <string name="desc_expand">Expandir</string>
+
+    <!-- Selector de modo del panel táctil. -->
+    <string name="touchpad_mode_label">Modo del panel táctil</string>
+    <string name="touchpad_mode_off">Apagado</string>
+    <string name="touchpad_mode_pad">Pad</string>
+    <string name="touchpad_mode_mouse">Ratón</string>
+    <string name="touchpad_mode_unsupported_here">Este receptor no admite este modo.</string>
 
     <!-- Texto de estado del slot en ControllerAdapter (bajo el nombre). -->
     <string name="slot_status_disconnecting">Desconectando… %1$ds</string>

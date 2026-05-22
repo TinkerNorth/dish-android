@@ -24,6 +24,7 @@ import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.MotionCapability
 import com.tinkernorth.dish.databinding.ItemControllerBinding
+import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.ui.common.glyphForConnection
 
@@ -57,6 +58,30 @@ interface SlotActionListener {
     fun onMotionEnabledChanged(
         slotId: String,
         enabled: Boolean,
+    )
+
+    /**
+     * User picked a touchpad routing mode on the virtual slot's satellite
+     * row. [mode] is a [com.tinkernorth.dish.repository.TouchpadModeValue]
+     * string (`"off"` / `"ds4"` / `"mouse"`). The ViewModel persists the
+     * pick locally and pushes it to the satellite — server rejections are
+     * surfaced as toasts so the user understands an unsupported pick.
+     */
+    fun onChangeTouchpadMode(
+        connectionId: String,
+        mode: String,
+    )
+
+    /**
+     * User tapped "Open Touchpad" on the virtual slot's satellite row.
+     * Implementation launches [com.tinkernorth.dish.ui.main.TouchpadOverlayActivity]
+     * with the connection id and the current mode (so the surface paints
+     * the right visual — Pad vs Mouse). Only fires when the resolved mode
+     * is non-Off; the button is hidden in Off.
+     */
+    fun onOpenTouchpad(
+        connectionId: String,
+        mode: String,
     )
 }
 
@@ -106,6 +131,16 @@ class ControllerAdapter(
          * lookup.
          */
         val motionCap: MotionCapability = MotionCapability.Off,
+        /**
+         * Resolved per-satellite touchpad routing mode (connectionId →
+         * [TouchpadModeValue]). Drives the touchpad-mode picker chips on
+         * the virtual slot's satellite row AND whether the "Open Touchpad"
+         * button is visible (hidden when the mode is Off). Empty until the
+         * ViewModel's composer has emitted — a row built before then reads
+         * every connection as Off, so the picker is shown with Off selected
+         * but the launch button stays hidden.
+         */
+        val touchpadModes: Map<String, String> = emptyMap(),
     )
 
     private val expandedIds = mutableSetOf(VIRTUAL_SLOT_ID)
@@ -114,6 +149,7 @@ class ControllerAdapter(
         slots: List<ControllerSlot>,
         connections: List<ConnectionSummary>,
         motionCapabilities: Map<String, MotionCapability> = emptyMap(),
+        touchpadModes: Map<String, String> = emptyMap(),
     ) {
         submitList(
             slots.map { slot ->
@@ -122,6 +158,7 @@ class ControllerAdapter(
                     connections = connections,
                     expanded = expandedIds.contains(slot.id),
                     motionCap = motionCapabilities[slot.id] ?: MotionCapability.Off,
+                    touchpadModes = touchpadModes,
                 )
             },
         )
@@ -222,7 +259,14 @@ class ControllerAdapter(
                     )
                 else ->
                     visible.forEach { summary ->
-                        addConnectionRow(b.llConnectionList, dp, slot, summary, row.motionCap)
+                        addConnectionRow(
+                            b.llConnectionList,
+                            dp,
+                            slot,
+                            summary,
+                            row.motionCap,
+                            row.touchpadModes[summary.id] ?: TouchpadModeValue.OFF,
+                        )
                     }
             }
 
@@ -241,6 +285,7 @@ class ControllerAdapter(
             slot: ControllerSlot,
             c: ConnectionSummary,
             motionCap: MotionCapability,
+            touchpadMode: String,
         ) {
             val ctx = parent.context
             val bound = slot.boundConnectionId == c.id
@@ -276,6 +321,20 @@ class ControllerAdapter(
                 // because Bluetooth-HID has no motion channel and motion
                 // is a satellite-path feature.
                 row.addView(buildMotionToggle(ctx, dp, slot, motionCap))
+                // Touchpad UI is a virtual-slot-only feature: the on-screen
+                // TouchpadSurfaceView (the only sender on dish-android) emits
+                // under VIRTUAL_SLOT_ID, so showing it under a physical slot's
+                // row would mislead the user about what is actually being
+                // routed. Gated on Connected because the launch button is
+                // useless against a session that can't carry touchpad bytes.
+                if (slot.inputType == SlotInputType.VIRTUAL &&
+                    c.live == LinkState.Connected
+                ) {
+                    row.addView(buildTouchpadModePicker(ctx, dp, c, touchpadMode))
+                    if (touchpadMode != TouchpadModeValue.OFF) {
+                        row.addView(buildOpenTouchpadButton(ctx, dp, c, touchpadMode))
+                    }
+                }
             }
             parent.addView(row)
         }
@@ -545,6 +604,115 @@ class ControllerAdapter(
             )
             return container
         }
+
+        /**
+         * Touchpad routing-mode picker — three chips (Off / Pad / Mouse)
+         * rendered under the motion toggle on the virtual slot's satellite
+         * row. The selected chip mirrors the resolved mode in the row's
+         * [Row.touchpadModes] map; tapping a chip fires
+         * [SlotActionListener.onChangeTouchpadMode] which persists locally
+         * and pushes to the server.
+         *
+         * Same visual shape as [buildTypeToggle] (label + chips, 8dp
+         * top-margin) so the three rows in a card — Type, Motion, Touchpad
+         * — read as a stack of equal-weight controls.
+         */
+        private fun buildTouchpadModePicker(
+            ctx: android.content.Context,
+            dp: Float,
+            c: ConnectionSummary,
+            currentMode: String,
+        ): View {
+            val container =
+                LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    layoutParams =
+                        LinearLayout
+                            .LayoutParams(
+                                LinearLayout.LayoutParams.MATCH_PARENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT,
+                            ).apply { topMargin = (8 * dp).toInt() }
+                }
+            container.addView(
+                TextView(ctx).apply {
+                    text = ctx.getString(R.string.touchpad_mode_label)
+                    setTextColor(ctx.getColor(R.color.colorMuted))
+                    textSize = 11f
+                    typeface = Typeface.MONOSPACE
+                    layoutParams =
+                        LinearLayout
+                            .LayoutParams(
+                                LinearLayout.LayoutParams.WRAP_CONTENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT,
+                            ).apply {
+                                gravity = android.view.Gravity.CENTER_VERTICAL
+                                marginEnd = (10 * dp).toInt()
+                            }
+                },
+            )
+            container.addView(
+                typeChip(
+                    ctx,
+                    dp,
+                    label = ctx.getString(R.string.touchpad_mode_off),
+                    selected = currentMode == TouchpadModeValue.OFF,
+                ) { listener.onChangeTouchpadMode(c.id, TouchpadModeValue.OFF) },
+            )
+            container.addView(
+                typeChip(
+                    ctx,
+                    dp,
+                    label = ctx.getString(R.string.touchpad_mode_pad),
+                    selected = currentMode == TouchpadModeValue.DS4,
+                ) { listener.onChangeTouchpadMode(c.id, TouchpadModeValue.DS4) },
+            )
+            container.addView(
+                typeChip(
+                    ctx,
+                    dp,
+                    label = ctx.getString(R.string.touchpad_mode_mouse),
+                    selected = currentMode == TouchpadModeValue.MOUSE,
+                ) { listener.onChangeTouchpadMode(c.id, TouchpadModeValue.MOUSE) },
+            )
+            return container
+        }
+
+        /**
+         * "Open Touchpad" launch button — shown only when the resolved mode
+         * is not Off, since launching the overlay in Off mode would route
+         * touch samples nowhere. Padding/colours mirror the existing
+         * `btnOpenGamepad` (Material outlined button feel) so the two
+         * input-overlay launch buttons read as siblings.
+         */
+        private fun buildOpenTouchpadButton(
+            ctx: android.content.Context,
+            dp: Float,
+            c: ConnectionSummary,
+            mode: String,
+        ): View =
+            TextView(ctx).apply {
+                text = ctx.getString(R.string.action_open_touchpad)
+                contentDescription = ctx.getString(R.string.desc_open_touchpad)
+                textSize = 12f
+                setTextColor(ctx.getColor(R.color.colorOnPrimary))
+                val padH = (14 * dp).toInt()
+                val padV = (6 * dp).toInt()
+                setPadding(padH, padV, padH, padV)
+                background =
+                    GradientDrawable().apply {
+                        setColor(ctx.getColor(R.color.colorPrimary))
+                        cornerRadius = 4 * dp
+                    }
+                gravity = android.view.Gravity.CENTER
+                layoutParams =
+                    LinearLayout
+                        .LayoutParams(
+                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                        ).apply { topMargin = (8 * dp).toInt() }
+                isClickable = true
+                setOnClickListener { listener.onOpenTouchpad(c.id, mode) }
+            }
 
         private fun typeChip(
             ctx: android.content.Context,

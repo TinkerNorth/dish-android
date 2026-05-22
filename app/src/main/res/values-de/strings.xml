@@ -60,7 +60,16 @@
     <string name="action_unbind">Trennen</string>
     <string name="action_open_gamepad">Controller öffnen</string>
     <string name="desc_open_gamepad">Controller öffnen</string>
+    <string name="action_open_touchpad">Touchpad öffnen</string>
+    <string name="desc_open_touchpad">Touchpad öffnen</string>
     <string name="desc_expand">Aufklappen</string>
+
+    <!-- Touchpad-Modus-Picker. -->
+    <string name="touchpad_mode_label">Touchpad-Modus</string>
+    <string name="touchpad_mode_off">Aus</string>
+    <string name="touchpad_mode_pad">Pad</string>
+    <string name="touchpad_mode_mouse">Maus</string>
+    <string name="touchpad_mode_unsupported_here">Dieser Empfänger unterstützt diesen Modus nicht.</string>
 
     <!-- Slot-Statustext im ControllerAdapter (unter dem Namen). -->
     <string name="slot_status_disconnecting">Trennt… %1$ds</string>

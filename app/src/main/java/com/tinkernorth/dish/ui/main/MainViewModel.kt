@@ -8,10 +8,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.MotionCapabilityComposer
+import com.tinkernorth.dish.composer.TouchpadModeComposer
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
+import com.tinkernorth.dish.repository.TouchpadModeRepository
+import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.connection.ConnectionEvent
-import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
@@ -26,6 +29,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -49,6 +54,8 @@ class MainViewModel
         private val batteryStatusStore: BatteryStatusStore,
         private val motionEnabledStore: MotionEnabledStore,
         private val motionCapability: MotionCapabilityComposer,
+        private val touchpadModeComposer: TouchpadModeComposer,
+        private val touchpadModeRepository: TouchpadModeRepository,
     ) : ViewModel() {
         /**
          * Reactive `slotId -> enabled` map for the per-slot motion toggle.
@@ -105,8 +112,21 @@ class MainViewModel
                                 },
                         )
                     }
-                MainUiState(slots = slots, connections = conns, motionCapabilities = motionCaps)
-            }.onEach { _uiState.value = it }.launchIn(viewModelScope)
+                Triple(slots, conns, motionCaps)
+            }.onEach { (slots, conns, motionCaps) ->
+                // `.update` (not `.value =`) so the parallel touchpad-mode
+                // collector below can patch its single field without losing
+                // it whenever this combine re-fires (a fresh MainUiState
+                // would default touchpadModesBySatellite to emptyMap and
+                // wipe a value the touchpad collector just wrote).
+                _uiState.update { prev ->
+                    prev.copy(
+                        slots = slots,
+                        connections = conns,
+                        motionCapabilities = motionCaps,
+                    )
+                }
+            }.launchIn(viewModelScope)
 
             satellite.events
                 .onEach { event ->
@@ -121,6 +141,29 @@ class MainViewModel
                         is ConnectionEvent.Error -> _events.emit(MainEvent.ShowToast(event.message))
                     }
                 }.launchIn(viewModelScope)
+
+            // Per-satellite touchpad mode: resolved from the user's saved
+            // pick (if any) collapsed onto the server-advertised supported
+            // modes. The capabilities probe isn't wired yet so the assumed
+            // support set is the full one — the server-side validation in
+            // `setTouchpadMode` rejects an unsupported pick and we surface
+            // that as a toast. A separate collector (rather than folding into
+            // the main combine above) keeps the typed-combine arity at 5 and
+            // mutates only this single field via `_uiState.update`.
+            combine(hub.connections, touchpadModeRepository.state) { conns, _ ->
+                conns
+                    .filter { it.kind == ConnectionKind.SATELLITE }
+                    .associate { c ->
+                        c.id to
+                            touchpadModeComposer.resolve(
+                                satelliteId = c.id,
+                                serverSupports = ASSUMED_SUPPORTED_TOUCHPAD_MODES,
+                                hasLocalTouchpadCapture = true,
+                            )
+                    }
+            }.onEach { map ->
+                _uiState.update { it.copy(touchpadModesBySatellite = map) }
+            }.launchIn(viewModelScope)
         }
 
         // ── Slot binding ──────────────────────────────────────────────────────
@@ -178,4 +221,48 @@ class MainViewModel
          * but the same thing to the user.
          */
         fun isMotionEnabled(slotId: String): Boolean = motionEnabledStore.isEnabled(slotId)
+
+        // ── Touchpad mode ─────────────────────────────────────────────────────
+
+        /**
+         * Persist [mode] for [connectionId] locally and push to the satellite.
+         * The local write happens first and unconditionally — even if the
+         * server rejects, the user's pick survives so a re-connect against a
+         * recovered server picks it up. A `{"error":…}` reply surfaces as a
+         * toast so the user understands an unsupported pick (e.g. choosing
+         * `ds4` against a macOS receiver whose only mode is `off`).
+         */
+        fun setSatelliteTouchpadMode(
+            connectionId: String,
+            mode: String,
+        ) {
+            if (!TouchpadModeValue.isValid(mode)) return
+            touchpadModeComposer.persist(connectionId, mode)
+            viewModelScope.launch {
+                val reply = satellite.setTouchpadMode(connectionId, mode)
+                // Positive-shape check: the server replies `{"ok":true,...}` on
+                // success and `{"error":"..."}` (or a transport error) on
+                // failure. Treating "missing ok:true" as failure is more robust
+                // than substring-matching "error" — a future server response
+                // might mention "error" in a non-error context.
+                if (!reply.contains("\"ok\":true")) {
+                    _events.emit(
+                        MainEvent.ShowToast(context.getString(R.string.touchpad_mode_unsupported_here)),
+                    )
+                }
+            }
+        }
+
+        private companion object {
+            /**
+             * Touchpad modes we assume every satellite supports until the
+             * `/api/server/capabilities` probe lands (follow-up). Windows +
+             * Linux receivers honour all three; macOS only honours `off`, but
+             * a macOS satellite bails at `MSG_CONTROLLER_ADD` with
+             * `ACK_ERR_BACKEND_UNAVAIL` so the touchpad UI is never reachable
+             * against one. Picking an unsupported mode falls back to the
+             * server's HTTP error response, surfaced as a toast.
+             */
+            val ASSUMED_SUPPORTED_TOUCHPAD_MODES: Set<String> = TouchpadModeValue.ALL.toSet()
+        }
     }

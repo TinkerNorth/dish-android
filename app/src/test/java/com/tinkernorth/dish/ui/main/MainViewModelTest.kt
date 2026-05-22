@@ -9,7 +9,9 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.MotionCapabilityComposer
+import com.tinkernorth.dish.composer.TouchpadModeComposer
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
+import com.tinkernorth.dish.repository.TouchpadModeRepository
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.sensor.BatteryValidator
@@ -49,6 +51,8 @@ class MainViewModelTest {
     private lateinit var batteryStore: BatteryStatusStore
     private lateinit var motionEnabledStore: MotionEnabledStore
     private lateinit var motionCapabilityComposer: MotionCapabilityComposer
+    private lateinit var touchpadModeComposer: TouchpadModeComposer
+    private lateinit var touchpadModeRepository: TouchpadModeRepository
     private lateinit var vm: MainViewModel
 
     private val connectionsFlow = MutableStateFlow<List<ConnectionSummary>>(emptyList())
@@ -82,6 +86,15 @@ class MainViewModelTest {
                         emptyMap<String, com.tinkernorth.dish.composer.MotionCapability>(),
                     )
             }
+        // The VM observes touchpadModeRepository.state and reads from
+        // touchpadModeComposer; both are stubbed because these tests focus on
+        // slot-wiring, not touchpad picker derivation.
+        touchpadModeRepository =
+            mockk(relaxed = true) {
+                every { state } returns
+                    kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, String>())
+            }
+        touchpadModeComposer = mockk(relaxed = true)
         every { hub.connections } returns connectionsFlow
         every { hub.bindings } returns bindingsFlow
         every { gamepadRegistry.devices } returns devicesFlow
@@ -99,6 +112,8 @@ class MainViewModelTest {
                 batteryStore,
                 motionEnabledStore,
                 motionCapabilityComposer,
+                touchpadModeComposer,
+                touchpadModeRepository,
             )
     }
 

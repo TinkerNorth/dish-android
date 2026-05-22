@@ -60,7 +60,16 @@
     <string name="action_unbind">Desvincular</string>
     <string name="action_open_gamepad">Abrir o controle</string>
     <string name="desc_open_gamepad">Abrir o controle</string>
+    <string name="action_open_touchpad">Abrir o touchpad</string>
+    <string name="desc_open_touchpad">Abrir o touchpad</string>
     <string name="desc_expand">Expandir</string>
+
+    <!-- Seletor de modo do touchpad. -->
+    <string name="touchpad_mode_label">Modo do touchpad</string>
+    <string name="touchpad_mode_off">Desligado</string>
+    <string name="touchpad_mode_pad">Pad</string>
+    <string name="touchpad_mode_mouse">Mouse</string>
+    <string name="touchpad_mode_unsupported_here">Este receptor não oferece suporte a este modo.</string>
 
     <!-- Texto de status do slot no ControllerAdapter (abaixo do nome). -->
     <string name="slot_status_disconnecting">Desconectando… %1$ds</string>

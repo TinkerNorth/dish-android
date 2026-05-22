@@ -58,6 +58,7 @@ class TouchpadOverlayActivity :
     @Volatile private var lastReportedState: TouchpadSurfaceView.TouchpadState? = null
 
     override fun rootView(): View = binding.root
+
     override val resendIntervalNs: Long = BaseInputOverlayActivity.RESEND_INTERVAL_NS_DEFAULT
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -113,7 +114,10 @@ class TouchpadOverlayActivity :
         val connected = summary?.live == LinkState.Connected
         binding.tvTouchpadOverlayStatus.text =
             when {
-                connected -> summary?.label ?: getString(R.string.overlay_status_streaming)
+                // `connected` true implies summary is non-null (`summary?.live ==
+                // LinkState.Connected` can't match a null summary), so the
+                // compiler smart-casts the receiver — no safe-call needed.
+                connected -> summary.label
                 summary?.live == LinkState.Connecting -> getString(R.string.chip_status_connecting)
                 summary == null -> getString(R.string.overlay_status_unknown)
                 else -> getString(R.string.overlay_status_not_connected)
