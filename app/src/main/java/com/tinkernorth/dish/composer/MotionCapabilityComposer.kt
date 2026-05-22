@@ -7,6 +7,8 @@ import com.tinkernorth.dish.architecture.abstracts.AbstractComposer
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.sensor.PhoneMotionAvailability
 import com.tinkernorth.dish.source.store.MotionEnabledStore
+import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatus
+import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -72,8 +74,27 @@ data class MotionCapability(
      * false for Xbox-typed slots (XInput has no IMU). Defaulted true so
      * a slot with no type yet — or a non-satellite connection — doesn't
      * spuriously raise the "no host sink" warning.
+     *
+     * This is the *dish-side heuristic* — derived from the chosen type,
+     * accurate for every shipping backend, available even before the
+     * controller has registered. The satellite's authoritative answer
+     * lives on [satelliteBackendStatus] when an ACK has been observed.
      */
     val hostHasSinkForType: Boolean = true,
+    /**
+     * The receiver's truth about whether motion bytes will land on the
+     * virtual gamepad's IMU surface for this slot. Null until the slot
+     * has been registered and an extended ACK has been observed —
+     * pre-extension satellites never set this, so a null here means
+     * "the dish heuristic above is the best we have, defer to it."
+     *
+     * When non-null, [SatelliteMotionBackendStatus.backendOk] becomes
+     * the load-bearing signal for the
+     * [com.tinkernorth.dish.ui.main.MotionIndicatorState.BACKEND_BROKEN]
+     * pill state — the case the dish couldn't compute on its own (the
+     * receiver's kernel rejected the IMU sink for this serial).
+     */
+    val satelliteBackendStatus: SatelliteMotionBackendStatus? = null,
 ) {
     /**
      * True iff motion samples should both be captured AND would actually reach
@@ -114,6 +135,34 @@ data class MotionCapability(
  * it. A slot absent from the map means the registry doesn't see it (e.g. a
  * physical pad in the disconnect-grace window after a USB jiggle).
  */
+/**
+ * Typed 6-arity combine — the stdlib's typed overload tops out at 5 flows, and
+ * the bare `combine(vararg)` form would force `Array<*>` casting at the call
+ * site. Same pattern (and reasoning) as `combine7` in
+ * [ConnectionsComposer] — keep the unchecked cast in one place so changing an
+ * upstream flow's value type reshapes the [transform] lambda at compile time.
+ */
+@Suppress("UNCHECKED_CAST", "LongParameterList")
+private inline fun <T1, T2, T3, T4, T5, T6, R> combine6(
+    f1: Flow<T1>,
+    f2: Flow<T2>,
+    f3: Flow<T3>,
+    f4: Flow<T4>,
+    f5: Flow<T5>,
+    f6: Flow<T6>,
+    crossinline transform: suspend (T1, T2, T3, T4, T5, T6) -> R,
+): Flow<R> =
+    combine(f1, f2, f3, f4, f5, f6) { args ->
+        transform(
+            args[0] as T1,
+            args[1] as T2,
+            args[2] as T3,
+            args[3] as T4,
+            args[4] as T5,
+            args[5] as T6,
+        )
+    }
+
 @Singleton
 class MotionCapabilityComposer
     @Inject
@@ -122,16 +171,18 @@ class MotionCapabilityComposer
         private val registry: PhysicalGamepadRegistry,
         private val hub: ConnectionHub,
         private val motionEnabledStore: MotionEnabledStore,
+        private val satelliteMotionBackendStatusStore: SatelliteMotionBackendStatusStore,
         scope: CoroutineScope,
     ) : AbstractComposer<Map<String, MotionCapability>>(scope, emptyMap()) {
         override fun upstream(): Flow<Map<String, MotionCapability>> =
-            combine(
+            combine6(
                 phoneAvailability.state,
                 registry.devices,
                 hub.bindings,
                 hub.connections,
                 motionEnabledStore.state,
-            ) { phoneHasGyro, devices, bindings, summaries, enabledMap ->
+                satelliteMotionBackendStatusStore.state,
+            ) { phoneHasGyro, devices, bindings, summaries, enabledMap, backendStatusMap ->
                 val byId = summaries.associateBy { it.id }
                 val out = HashMap<String, MotionCapability>(devices.size + 1)
 
@@ -143,6 +194,8 @@ class MotionCapabilityComposer
                         carriesOnConnection = carriesMotion(VIRTUAL_SLOT_ID, bindings, byId),
                         userEnabled = enabledMap[VIRTUAL_SLOT_ID] ?: MotionEnabledStore.DEFAULT_ENABLED,
                         hostHasSinkForType = hostSinkForType(VIRTUAL_SLOT_ID, bindings, byId),
+                        satelliteBackendStatus =
+                            satelliteStatus(VIRTUAL_SLOT_ID, bindings, backendStatusMap),
                     )
 
                 // Physical pads.
@@ -154,6 +207,8 @@ class MotionCapabilityComposer
                             carriesOnConnection = carriesMotion(slotId, bindings, byId),
                             userEnabled = enabledMap[slotId] ?: MotionEnabledStore.DEFAULT_ENABLED,
                             hostHasSinkForType = hostSinkForType(slotId, bindings, byId),
+                            satelliteBackendStatus =
+                                satelliteStatus(slotId, bindings, backendStatusMap),
                         )
                 }
                 out
@@ -231,5 +286,26 @@ class MotionCapabilityComposer
             if (summary.kind != ConnectionKind.SATELLITE) return true // BT-HID, irrelevant
             val type = summary.satelliteControllerTypes[slotId] ?: return true // unknown — assume yes
             return type == CONTROLLER_TYPE_PLAYSTATION
+        }
+
+        /**
+         * Resolve the receiver's last-told motion-sink truth for [slotId].
+         * Returns null when:
+         *   - the slot is unbound or bound to a non-satellite, OR
+         *   - the bound satellite hasn't replied with an extended ACK yet
+         *     (pre-extension build, or the slot hasn't registered).
+         *
+         * Null is the signal for "defer to the dish's own
+         * [hostHasSinkForType] heuristic." Non-null wins over the
+         * heuristic in the pill state machine — see
+         * [com.tinkernorth.dish.ui.main.MotionIndicatorState.of].
+         */
+        private fun satelliteStatus(
+            slotId: String,
+            bindings: Map<String, String>,
+            backendStatusMap: Map<Pair<String, String>, SatelliteMotionBackendStatus>,
+        ): SatelliteMotionBackendStatus? {
+            val cid = bindings[slotId] ?: return null
+            return backendStatusMap[cid to slotId]
         }
     }

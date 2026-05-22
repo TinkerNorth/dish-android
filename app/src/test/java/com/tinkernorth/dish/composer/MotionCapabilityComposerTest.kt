@@ -8,6 +8,8 @@ import com.tinkernorth.dish.architecture.testing.probe
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.sensor.PhoneMotionAvailability
 import com.tinkernorth.dish.source.store.MotionEnabledStore
+import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatus
+import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import io.mockk.every
 import io.mockk.mockk
@@ -69,6 +71,8 @@ class MotionCapabilityComposerTest {
         connections: MutableStateFlow<List<ConnectionSummary>>,
         scope: CoroutineScope,
         motionEnabled: MutableStateFlow<Map<String, Boolean>> = MutableStateFlow(emptyMap()),
+        satelliteBackendStatus: MutableStateFlow<Map<Pair<String, String>, SatelliteMotionBackendStatus>> =
+            MutableStateFlow(emptyMap()),
     ): MotionCapabilityComposer {
         val availability: PhoneMotionAvailability =
             mockk { every { state } returns phoneAvailable }
@@ -81,7 +85,9 @@ class MotionCapabilityComposerTest {
             }
         val store: MotionEnabledStore =
             mockk { every { state } returns motionEnabled }
-        return MotionCapabilityComposer(availability, registry, hub, store, scope)
+        val backendStatusStore: SatelliteMotionBackendStatusStore =
+            mockk { every { state } returns satelliteBackendStatus }
+        return MotionCapabilityComposer(availability, registry, hub, store, backendStatusStore, scope)
     }
 
     // ── Pure data-class invariants ──────────────────────────────────────
@@ -526,4 +532,149 @@ class MotionCapabilityComposerTest {
 
             assertEquals(true, probe.latest[VIRTUAL_SLOT_ID]?.hostHasSinkForType)
         }
+
+    // ── satelliteBackendStatus — receiver-truth threading ──────────────────
+
+    @Test
+    fun `satelliteBackendStatus is null when no observation has landed`() =
+        composerTest {
+            // Bound to a satellite but the store has no entry yet — the
+            // composer must surface null (unknown), NOT a default value.
+            // Anything else would mis-read a pre-extension satellite or a
+            // pre-registration moment as a positive observation.
+            val phoneAvail = MutableStateFlow(true)
+            val devices = MutableStateFlow<Map<Int, PhysicalGamepadRegistry.Device>>(emptyMap())
+            val bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A"))
+            val conns = MutableStateFlow(listOf(summary("sat-A")))
+            val probe = composerFor(phoneAvail, devices, bindings, conns, backgroundScope).probe(this)
+            testScheduler.runCurrent()
+
+            assertNull(probe.latest[VIRTUAL_SLOT_ID]?.satelliteBackendStatus)
+        }
+
+    @Test
+    fun `satelliteBackendStatus propagates from the store for the bound connection`() =
+        composerTest {
+            val phoneAvail = MutableStateFlow(true)
+            val devices = MutableStateFlow<Map<Int, PhysicalGamepadRegistry.Device>>(emptyMap())
+            val bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A"))
+            val conns = MutableStateFlow(listOf(summary("sat-A")))
+            val status = SatelliteMotionBackendStatus(sinkSupportedForType = true, backendOk = false)
+            val backendStatus =
+                MutableStateFlow<Map<Pair<String, String>, SatelliteMotionBackendStatus>>(
+                    mapOf(("sat-A" to VIRTUAL_SLOT_ID) to status),
+                )
+            val probe =
+                composerFor(
+                    phoneAvail,
+                    devices,
+                    bindings,
+                    conns,
+                    backgroundScope,
+                    satelliteBackendStatus = backendStatus,
+                ).probe(this)
+            testScheduler.runCurrent()
+
+            assertEquals(status, probe.latest[VIRTUAL_SLOT_ID]?.satelliteBackendStatus)
+        }
+
+    @Test
+    fun `satelliteBackendStatus is keyed on the bound connection — wrong-connection entries are ignored`() =
+        composerTest {
+            // The slot is bound to "sat-A" but the store also carries an
+            // (unrelated) status under "sat-B". A leaky implementation
+            // could collapse on slotId alone and pick up the wrong entry —
+            // pin that the composer only reads the bound connection's
+            // entry.
+            val phoneAvail = MutableStateFlow(true)
+            val devices = MutableStateFlow<Map<Int, PhysicalGamepadRegistry.Device>>(emptyMap())
+            val bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A"))
+            val conns = MutableStateFlow(listOf(summary("sat-A")))
+            val wrongStatus = SatelliteMotionBackendStatus(sinkSupportedForType = false, backendOk = false)
+            val backendStatus =
+                MutableStateFlow<Map<Pair<String, String>, SatelliteMotionBackendStatus>>(
+                    mapOf(("sat-B" to VIRTUAL_SLOT_ID) to wrongStatus),
+                )
+            val probe =
+                composerFor(
+                    phoneAvail,
+                    devices,
+                    bindings,
+                    conns,
+                    backgroundScope,
+                    satelliteBackendStatus = backendStatus,
+                ).probe(this)
+            testScheduler.runCurrent()
+
+            assertNull(probe.latest[VIRTUAL_SLOT_ID]?.satelliteBackendStatus)
+        }
+
+    @Test
+    fun `satelliteBackendStatus updates reactively when the store re-emits`() =
+        composerTest {
+            // The pill needs to repaint when the receiver's truth flips.
+            // Simulate a backend that initially reports broken, then the
+            // operator fixes /dev/uinput and a re-registration succeeds —
+            // the new status flows through the composer.
+            val phoneAvail = MutableStateFlow(true)
+            val devices = MutableStateFlow<Map<Int, PhysicalGamepadRegistry.Device>>(emptyMap())
+            val bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A"))
+            val conns = MutableStateFlow(listOf(summary("sat-A")))
+            val broken = SatelliteMotionBackendStatus(sinkSupportedForType = true, backendOk = false)
+            val fixed = SatelliteMotionBackendStatus(sinkSupportedForType = true, backendOk = true)
+            val backendStatus =
+                MutableStateFlow<Map<Pair<String, String>, SatelliteMotionBackendStatus>>(
+                    mapOf(("sat-A" to VIRTUAL_SLOT_ID) to broken),
+                )
+            val probe =
+                composerFor(
+                    phoneAvail,
+                    devices,
+                    bindings,
+                    conns,
+                    backgroundScope,
+                    satelliteBackendStatus = backendStatus,
+                ).probe(this)
+            testScheduler.runCurrent()
+            assertEquals(broken, probe.latest[VIRTUAL_SLOT_ID]?.satelliteBackendStatus)
+
+            backendStatus.value = mapOf(("sat-A" to VIRTUAL_SLOT_ID) to fixed)
+            testScheduler.runCurrent()
+            assertEquals(fixed, probe.latest[VIRTUAL_SLOT_ID]?.satelliteBackendStatus)
+        }
+
+    @Test
+    fun `toCapBits is unaffected by satelliteBackendStatus — dish honesty is independent of receiver health`() {
+        // Even if the receiver tells us its sink is broken, the dish is
+        // still capable of streaming motion (the bytes will just not
+        // land). toCapBits must keep advertising CAP_MOTION so that a
+        // satellite that recovers (operator fixes /dev/uinput) doesn't
+        // require a re-handshake to get motion flowing again.
+        val cap =
+            MotionCapability(
+                hasGyro = true,
+                carriesOnConnection = true,
+                userEnabled = true,
+                satelliteBackendStatus =
+                    SatelliteMotionBackendStatus(sinkSupportedForType = true, backendOk = false),
+            )
+        assertEquals(MotionCapability.CAP_MOTION_BIT, cap.toCapBits())
+    }
+
+    @Test
+    fun `effective is unaffected by satelliteBackendStatus — local listener gating doesn't change`() {
+        // effective is the dish's own gate: "should I capture and stream
+        // gyro samples?" That's a dish-local question — the receiver's
+        // sink health is irrelevant. The listener stays on so a recovered
+        // receiver picks up bytes immediately.
+        val cap =
+            MotionCapability(
+                hasGyro = true,
+                carriesOnConnection = true,
+                userEnabled = true,
+                satelliteBackendStatus =
+                    SatelliteMotionBackendStatus(sinkSupportedForType = true, backendOk = false),
+            )
+        assertTrue(cap.effective)
+    }
 }

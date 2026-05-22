@@ -572,4 +572,199 @@ class SatelliteConnectionTest {
         verify(exactly = 0) { repo.stopHeartbeat(any()) }
         verify(exactly = 0) { repo.closeSocket(any()) }
     }
+
+    // ── Reactive cap-word refresh (MSG_CONTROLLER_CAPS_UPDATE / 0x000E) ──────
+    //
+    // Composer→wire reactivity: when the composer's `toCapBits(slotId)`
+    // changes after a slot has been registered, the connection pushes a
+    // mid-session caps update so the receiver's web-UI snapshot stays
+    // honest about what the dish is advertising right now.
+
+    @Test
+    fun `refreshCapsIfChanged sends a caps update when the lambda returns a new value`() =
+        runTest {
+            every { repo.resetControllerAck(any()) } just Runs
+            every { repo.startHeartbeat(any()) } just Runs
+            every { repo.isConnectionAlive(any()) } returns false
+            every { repo.getLastControllerAck(any()) } returns 0
+
+            // Start the lambda returning the legacy "motion on" word. After
+            // the slot has registered we flip the lambda to "motion off" and
+            // refresh — the diff against lastAdvertisedCaps fires the wire
+            // update.
+            var capsBit = 0x0004
+            val reactive =
+                SatelliteConnection(
+                    id = SatelliteConnection.idFor(server),
+                    server = server,
+                    scope = scope,
+                    controllerRepo = repo,
+                    motionCapsBitsFor = { capsBit },
+                )
+            reactive.markConnecting()
+            reactive.markConnected(handle = 8, connectionId = "c") {}
+            reactive.attachSlot(slotId = "slot-1", controllerType = 0)
+
+            // Sanity: the slot registered with CAP_MOTION.
+            coVerify {
+                repo.addController(8, 0, match { (it and 0x0004) != 0 })
+            }
+
+            // User toggles motion off — the composer would emit a new state
+            // and the manager would call refreshCapsIfChanged.
+            capsBit = 0
+            reactive.refreshCapsIfChanged()
+
+            // Wire update fires with the new (motion-off) caps word; non-motion
+            // bits (analog triggers + rumble) remain set.
+            coVerify {
+                repo.sendControllerCapsUpdate(
+                    8,
+                    0,
+                    match { (it and 0x0004) == 0 && (it and 0x0001) != 0 && (it and 0x0002) != 0 },
+                )
+            }
+
+            reactive.markDisconnected()
+        }
+
+    @Test
+    fun `refreshCapsIfChanged is idempotent when the lambda hasn't moved`() =
+        runTest {
+            every { repo.resetControllerAck(any()) } just Runs
+            every { repo.startHeartbeat(any()) } just Runs
+            every { repo.isConnectionAlive(any()) } returns false
+            every { repo.getLastControllerAck(any()) } returns 0
+
+            val steady =
+                SatelliteConnection(
+                    id = SatelliteConnection.idFor(server),
+                    server = server,
+                    scope = scope,
+                    controllerRepo = repo,
+                    motionCapsBitsFor = { 0x0004 },
+                )
+            steady.markConnecting()
+            steady.markConnected(handle = 8, connectionId = "c") {}
+            steady.attachSlot(slotId = "slot-1", controllerType = 0)
+
+            // Call refresh multiple times with no upstream change. The
+            // diff against lastAdvertisedCaps short-circuits so no wire
+            // packets fire — important because composer emissions are
+            // frequent (hub.bindings churn re-runs the composer's combine).
+            steady.refreshCapsIfChanged()
+            steady.refreshCapsIfChanged()
+            steady.refreshCapsIfChanged()
+
+            coVerify(exactly = 0) {
+                repo.sendControllerCapsUpdate(any(), any(), any())
+            }
+
+            steady.markDisconnected()
+        }
+
+    @Test
+    fun `refreshCapsIfChanged skips unregistered slots`() =
+        runTest {
+            // The slot is attached but not registered (e.g. mid-handshake).
+            // Sending a caps update for an unregistered slot would tell the
+            // receiver about a controller it doesn't know — wasted packet
+            // at best, undefined behaviour at worst.
+            every { repo.resetControllerAck(any()) } just Runs
+            every { repo.startHeartbeat(any()) } just Runs
+            every { repo.isConnectionAlive(any()) } returns false
+            // Never ACK — registration stays pending forever.
+            every { repo.getLastControllerAck(any()) } returns -1
+
+            var capsBit = 0x0004
+            val pending =
+                SatelliteConnection(
+                    id = SatelliteConnection.idFor(server),
+                    server = server,
+                    scope = scope,
+                    controllerRepo = repo,
+                    motionCapsBitsFor = { capsBit },
+                )
+            pending.markConnecting()
+            pending.markConnected(handle = 8, connectionId = "c") {}
+            pending.attachSlot(slotId = "slot-pending", controllerType = 0)
+
+            // Flip caps while registration is still in flight (would-be-
+            // emitted via composer).
+            capsBit = 0
+            pending.refreshCapsIfChanged()
+
+            // No caps-update sent — the registration handshake will pick up
+            // the fresh value via motionCapsBitsFor on its own.
+            coVerify(exactly = 0) {
+                repo.sendControllerCapsUpdate(any(), any(), any())
+            }
+
+            pending.markDisconnected()
+        }
+
+    @Test
+    fun `refreshCapsIfChanged is a no-op when the session is idle`() =
+        runTest {
+            // No live handle → no wire send is even possible. Pin this so
+            // a composer emission landing during an Idle session doesn't
+            // attempt to push bytes through a closed socket.
+            conn.refreshCapsIfChanged()
+            coVerify(exactly = 0) {
+                repo.sendControllerCapsUpdate(any(), any(), any())
+            }
+        }
+
+    @Test
+    fun `registration closes the race when composer emits new caps mid-handshake`() =
+        runTest {
+            // Sequence the test forces:
+            //   t=0  motionCapsBitsFor returns A (legacy on)
+            //   t=1  registerController reads A, calls addController(...,A)
+            //   t=2  composer emits B (motion off) BEFORE the ACK lands
+            //   t=3  ACK lands; registerController re-reads motionCapsBitsFor
+            //         and sees B; sends a caps-update with B; sets
+            //         lastAdvertisedCaps = B.
+            //
+            // Without this catch-up, the manager's later refreshCapsIfChanged
+            // would see lastAdvertisedCaps = A and newCaps from composer = B,
+            // fire the update… but only if composer emits AGAIN. If it
+            // doesn't, the slot stays with stale A on the wire forever.
+            every { repo.resetControllerAck(any()) } just Runs
+            every { repo.startHeartbeat(any()) } just Runs
+            every { repo.isConnectionAlive(any()) } returns false
+            every { repo.getLastControllerAck(any()) } returns 0
+
+            var capsBit = 0x0004 // value the lambda will return on the first call
+            var callCount = 0
+            val race =
+                SatelliteConnection(
+                    id = SatelliteConnection.idFor(server),
+                    server = server,
+                    scope = scope,
+                    controllerRepo = repo,
+                    motionCapsBitsFor = {
+                        callCount++
+                        // First call (at addController build time): A. Subsequent
+                        // calls (the post-ACK reconciliation read): B.
+                        if (callCount == 1) capsBit else 0
+                    },
+                )
+            race.markConnecting()
+            race.markConnected(handle = 8, connectionId = "c") {}
+            race.attachSlot(slotId = "slot-race", controllerType = 0)
+
+            // The post-ACK reconciliation must have fired a caps-update
+            // carrying the *new* value (motion off), even though no
+            // external refresh was called.
+            coVerify {
+                repo.sendControllerCapsUpdate(
+                    8,
+                    0,
+                    match { (it and 0x0004) == 0 },
+                )
+            }
+
+            race.markDisconnected()
+        }
 }

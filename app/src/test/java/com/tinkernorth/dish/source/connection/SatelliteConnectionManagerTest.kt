@@ -11,6 +11,7 @@ import com.tinkernorth.dish.core.jni.ControllerRepository
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.net.DiscoveryRepository
 import com.tinkernorth.dish.repository.ConnectionStore
+import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -96,6 +97,13 @@ class SatelliteConnectionManagerTest {
             }
         }
 
+    /**
+     * Real (singleton) store — these tests don't exercise the
+     * satellite-ack motion-flags path; a default-empty store is all the
+     * manager needs to construct + thread into each SatelliteConnection.
+     */
+    private val motionBackendStatusStore = SatelliteMotionBackendStatusStore()
+
     private fun manager(): SatelliteConnectionManager =
         SatelliteConnectionManager(
             context = context,
@@ -106,6 +114,7 @@ class SatelliteConnectionManagerTest {
             json = json,
             ioDispatcher = ioDispatcher,
             motionCapabilityProvider = motionCapabilityProvider,
+            motionBackendStatusStore = motionBackendStatusStore,
         )
 
     private fun runMgrTest(block: suspend (SatelliteConnectionManager, MutableList<ConnectionEvent>) -> Unit) =

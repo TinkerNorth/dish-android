@@ -9,6 +9,8 @@ import com.tinkernorth.dish.core.jni.ControllerRepository
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.source.sensor.BatteryValidator
 import com.tinkernorth.dish.source.sensor.MotionRateLimiter
+import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatus
+import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -64,6 +66,17 @@ class SatelliteConnection(
      * gyro samples would ever flow.
      */
     private val motionCapsBitsFor: (slotId: String) -> Int = { CAP_MOTION_BIT_LEGACY },
+    /**
+     * Per-(connection, slot) store of the satellite's truth about whether
+     * motion bytes will actually reach the virtual gamepad's IMU surface.
+     * Written after a successful controller-add ACK using the motion-status
+     * byte the receiver appends to the ACK payload — see
+     * [com.tinkernorth.dish.core.jni.ControllerRepository
+     * .getLastControllerMotionFlags]. Defaulted to `null` so tests that
+     * don't care about the satellite-truth path can keep constructing a
+     * connection without wiring it.
+     */
+    private val motionBackendStatusStore: SatelliteMotionBackendStatusStore? = null,
 ) {
     private val _server = MutableStateFlow(server)
     val server: StateFlow<DiscoveredServer> = _server.asStateFlow()
@@ -96,11 +109,21 @@ class SatelliteConnection(
      * [registered] flips true once `addController` has been ACKed and the type
      * has been pushed; reports for this slot are dropped until then so we don't
      * silently feed packets the server will reject as "unknown controller".
+     *
+     * [lastAdvertisedCaps] tracks the most recent capability word the dish has
+     * told the satellite about for this slot — either via the original
+     * `MSG_CONTROLLER_ADD` or a subsequent `MSG_CONTROLLER_CAPS_UPDATE`
+     * (0x000E). [refreshCapsIfChanged] uses this to de-dup composer emissions
+     * that don't actually change the wire word, so a churning composer
+     * (e.g. an unrelated slot's hub.bindings change re-emitting the same map)
+     * doesn't burn a UDP packet per tick. `null` means "no registration has
+     * happened yet" — we don't bother tracking caps for an unregistered slot.
      */
     data class SlotBinding(
         val controllerIndex: Int,
         val controllerType: Int,
         val registered: Boolean,
+        val lastAdvertisedCaps: Int? = null,
     )
 
     private val _slots = MutableStateFlow<Map<String, SlotBinding>>(emptyMap())
@@ -234,6 +257,12 @@ class SatelliteConnection(
             controllerRepo.closeSocket(snap.handle)
         }
         _slots.update { map -> map.mapValues { (_, v) -> v.copy(registered = false) } }
+        // Wipe the cached satellite-truth motion flags too — the slots will
+        // re-register on the next markConnected and write fresh statuses.
+        // Without this, a Connected → Idle → Connected sequence would have
+        // the pill briefly read the previous session's flags after the new
+        // session's first slot binds but before its ACK lands.
+        motionBackendStatusStore?.clearConnection(id)
         onRegistrationFailed = null
         _state.value = SatelliteSessionState.Idle
     }
@@ -322,10 +351,46 @@ class SatelliteConnection(
                 // or sendReport() would stream input the server silently drops.
                 val result = if (ack == -1) null else ack and ACK_RESULT_MASK
                 if (result == ACK_OK) {
+                    // Read the optional motion-flags byte the satellite
+                    // appended to the ACK (post-extension receivers). A
+                    // pre-extension satellite returns -1 here — leave the
+                    // store entry absent so the composer falls back to its
+                    // own `hostHasSinkForType` heuristic rather than reading
+                    // the missing flags as "permanently broken." Paired with
+                    // the same `getLastControllerAck` snapshot, so we know
+                    // the flags correspond to the ACK we just observed.
+                    val motionFlags = controllerRepo.getLastControllerMotionFlags(handle)
+                    if (motionFlags >= 0) {
+                        motionBackendStatusStore?.setStatus(
+                            id,
+                            slotId,
+                            SatelliteMotionBackendStatus.fromFlags(motionFlags),
+                        )
+                    } else {
+                        motionBackendStatusStore?.clear(id, slotId)
+                    }
                     controllerRepo.sendControllerType(handle, info.controllerIndex, info.controllerType)
+                    // Reconcile caps against the composer's *current* value
+                    // before flipping registered=true. If the composer
+                    // emitted a new value during our ACK window
+                    // (composer.state is a hot StateFlow), the manager's
+                    // post-registration subscriber would otherwise see
+                    // lastAdvertisedCaps == newCaps after our update below
+                    // and never send the catch-up MSG_CONTROLLER_CAPS_UPDATE.
+                    // Sending the diff here closes the registration-window
+                    // race in one place — the dish's lastAdvertisedCaps then
+                    // matches what's actually on the wire.
+                    val currentCaps = BASE_CAPABILITIES or motionCapsBitsFor(slotId)
+                    if (currentCaps != caps) {
+                        controllerRepo.sendControllerCapsUpdate(
+                            handle,
+                            info.controllerIndex,
+                            currentCaps,
+                        )
+                    }
                     _slots.update { map ->
                         val cur = map[slotId] ?: return@update map
-                        map + (slotId to cur.copy(registered = true))
+                        map + (slotId to cur.copy(registered = true, lastAdvertisedCaps = currentCaps))
                     }
                 } else {
                     // Leave the slot unregistered so sendReport() stays gated,
@@ -352,6 +417,50 @@ class SatelliteConnection(
             else -> "it rejected the controller"
         }
 
+    /**
+     * Reconcile per-slot wire capability against the composer's latest
+     * value. For each registered slot whose [SlotBinding.lastAdvertisedCaps]
+     * differs from `BASE_CAPABILITIES OR motionCapsBitsFor(slotId)`, send
+     * a `MSG_CONTROLLER_CAPS_UPDATE` so the receiver's cap-word matches
+     * what the dish would advertise today.
+     *
+     * Called by [SatelliteConnectionManager]'s composer subscription on
+     * every emission. Idempotent: emitting the same composer state twice
+     * results in zero wire packets because `lastAdvertisedCaps` already
+     * equals the recomputed value. Unregistered slots are skipped — their
+     * next `registerController` will pick up the fresh caps via the
+     * `motionCapsBitsFor` lambda directly.
+     *
+     * Runs on [ioDispatcher] so the JNI `sendControllerCapsUpdate` doesn't
+     * stall the manager's collector dispatcher.
+     */
+    internal suspend fun refreshCapsIfChanged() {
+        val snap = live ?: return
+        val updates = mutableListOf<Pair<String, Int>>()
+        // Compute the diff under a single _slots snapshot read so multiple
+        // mutations of slot info during the scan can't shear our decision.
+        for ((slotId, slotInfo) in _slots.value) {
+            if (!slotInfo.registered) continue
+            val newCaps = BASE_CAPABILITIES or motionCapsBitsFor(slotId)
+            if (slotInfo.lastAdvertisedCaps == newCaps) continue
+            updates += slotId to newCaps
+        }
+        if (updates.isEmpty()) return
+        withContext(ioDispatcher) {
+            for ((slotId, newCaps) in updates) {
+                val info = _slots.value[slotId] ?: continue
+                // Re-check registration: a parallel detach could have un-set
+                // it between our scan and our send. Cheap to re-read.
+                if (!info.registered) continue
+                controllerRepo.sendControllerCapsUpdate(snap.handle, info.controllerIndex, newCaps)
+                _slots.update { map ->
+                    val cur = map[slotId] ?: return@update map
+                    map + (slotId to cur.copy(lastAdvertisedCaps = newCaps))
+                }
+            }
+        }
+    }
+
     fun detachSlot(slotId: String) {
         var removed: SlotBinding? = null
         _slots.update { map ->
@@ -360,6 +469,10 @@ class SatelliteConnection(
             map - slotId
         }
         val info = removed ?: return
+        // Drop any cached satellite-side motion truth — the next add for
+        // this slot will write a fresh status, and leaving stale data here
+        // would mislead the pill in the meantime.
+        motionBackendStatusStore?.clear(id, slotId)
         if (handle >= 0 && info.registered) {
             controllerRepo.removeController(handle, info.controllerIndex)
         }
