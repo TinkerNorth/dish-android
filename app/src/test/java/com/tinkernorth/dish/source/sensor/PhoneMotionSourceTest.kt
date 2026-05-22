@@ -81,12 +81,21 @@ class PhoneMotionSourceTest {
         unmockkStatic(Log::class)
     }
 
+    /**
+     * Fake monotonic clock — JVM tests don't have a real Android
+     * SystemClock, so the production default `{ SystemClock.elapsedRealtime() }`
+     * throws "not mocked." Inject a controllable counter so each test
+     * can drive time deterministically.
+     */
+    private var fakeNowMs: Long = 1000L
+
     private fun source() =
         PhoneMotionSource(
             sensorManager = sensorManager,
             rotationSupplier = { 0 },
             rateLimiter = MotionRateLimiter(),
             sensorDispatch = dispatch,
+            nowMs = { fakeNowMs },
         )
 
     @Test
@@ -213,6 +222,50 @@ class PhoneMotionSourceTest {
         src.start { _, _ -> }
         src.stop()
         assertEquals(MotionStreamState.Stopped, src.state.value)
+    }
+
+    // ── First-sample accel-zero race (PR5) ───────────────────────────────
+
+    @Test
+    fun `first gyro callback before any accel is HELD until accel arrives`() {
+        // The bug this pins: the first MOTION packet on the wire previously
+        // shipped accel = (0, 0, 0) because the gyro callback fired before
+        // any accel callback. Hold the first gyro until accel reports, so
+        // downstream consumers don't read "stationary in zero gravity" as
+        // the opening frame. The internal onAccel/onGyro entry points are
+        // exposed for this test — see their KDoc.
+        val emissions = mutableListOf<Pair<MotionRateLimiter.MotionSample, Int>>()
+        val src = source()
+        src.start { sample, dt -> emissions += sample to dt }
+
+        // Fire ONLY a gyro callback first — the gate must drop it.
+        src.onGyro(floatArrayOf(0.1f, 0.2f, 0.3f))
+        assertEquals("first gyro alone must not emit", 0, emissions.size)
+
+        // Now an accel arrives, followed by another gyro — the second gyro
+        // should emit a sample with the now-real accel cache.
+        src.onAccel(floatArrayOf(0f, 9.80665f, 0f))
+        src.onGyro(floatArrayOf(0.1f, 0.2f, 0.3f))
+        assertEquals("emit after accel has reported", 1, emissions.size)
+        // The emitted accel triple is non-zero (1g along the remapped axis,
+        // scaled to wire int16). Strictly ≠ 0 on at least one axis pins
+        // that we are NOT shipping the stale-zero cache.
+        val emitted = emissions.single().first
+        val nonZero = emitted.accelX.toInt() != 0 || emitted.accelY.toInt() != 0 || emitted.accelZ.toInt() != 0
+        assertTrue("emitted accel must be non-zero", nonZero)
+    }
+
+    @Test
+    fun `pad with NO accelerometer still streams gyro — gate does not block`() {
+        // A device that reports a gyro but no accel (rare, but the test
+        // matrix must cover it). [accel] is null at construct time; the
+        // gate must short-circuit so gyro samples still flow.
+        every { sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) } returns null
+        val emissions = mutableListOf<Pair<MotionRateLimiter.MotionSample, Int>>()
+        val src = source()
+        src.start { sample, dt -> emissions += sample to dt }
+        src.onGyro(floatArrayOf(0.1f, 0.2f, 0.3f))
+        assertEquals("gyro must emit even with no accel sensor", 1, emissions.size)
     }
 
     // ── deriveState — pure decision table ────────────────────────────────

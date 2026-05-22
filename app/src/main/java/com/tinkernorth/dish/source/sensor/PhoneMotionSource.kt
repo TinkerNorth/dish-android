@@ -126,6 +126,24 @@ class PhoneMotionSource(
     @Volatile private var accelZ: Short = 0
 
     /**
+     * True once at least one accelerometer callback has arrived since
+     * [start]. The first gyro callback can otherwise fire before any accel
+     * (the dispatch thread serializes them, but the order is sensor-driven
+     * and not always gyro-then-accel) — without this gate the first MOTION
+     * packet on the wire would carry accel = (0, 0, 0), which downstream
+     * consumers read as "stationary in zero gravity." Holding the first
+     * gyro until accel has been seen costs at most one sensor period
+     * (≈ 5–20 ms at SENSOR_DELAY_GAME) and the gyro recovers the missed
+     * sample on the next callback via the rate-limiter's per-frame retry.
+     *
+     * Pads with no accel sensor (rare but possible) are handled by the
+     * separate `accel == null` short-circuit in [onGyro]: the gate is
+     * skipped entirely so the gyro stream is not stuck behind a sensor
+     * that will never report.
+     */
+    @Volatile private var accelSeen: Boolean = false
+
+    /**
      * Handler the stall tick is posted on. Set in [start] from the dispatch
      * thread's Handler so the tick lands on the same thread the gyro
      * callbacks do, avoiding a needless cross-thread state read. Cleared in
@@ -195,11 +213,18 @@ class PhoneMotionSource(
         accelX = 0
         accelY = 0
         accelZ = 0
+        accelSeen = false
         lastGyroMonoMs = 0L
         setState(if (gyro == null) MotionStreamState.Disabled else MotionStreamState.Stopped)
     }
 
-    private fun onAccel(values: FloatArray) {
+    /**
+     * Internal so unit tests can drive sensor callbacks without
+     * constructing an [android.hardware.SensorEvent] (its constructor is
+     * package-private and reflective construction is fragile). Production
+     * code reaches this only via the [SensorEventListener] dispatch above.
+     */
+    internal fun onAccel(values: FloatArray) {
         if (values.size < 3) return
         // Re-read the live rotation per sample: a runtime landscape flip is
         // swallowed by the activity's configChanges, so a once-per-start read
@@ -209,10 +234,19 @@ class PhoneMotionSource(
         accelX = MotionScaling.accelMssToWire(x)
         accelY = MotionScaling.accelMssToWire(y)
         accelZ = MotionScaling.accelMssToWire(z)
+        accelSeen = true
     }
 
-    private fun onGyro(values: FloatArray) {
+    /** See [onAccel] for why this is internal rather than private. */
+    internal fun onGyro(values: FloatArray) {
         if (values.size < 3) return
+        // Hold the first emission until accel has reported at least once,
+        // otherwise the first MOTION packet ships accel = (0, 0, 0) which
+        // downstream consumers read as "stationary in zero gravity." On
+        // pads with no accel sensor at all, [accel] is null at construct
+        // time and we skip the gate so the gyro stream is not blocked
+        // behind a sensor that will never tick.
+        if (accel != null && !accelSeen) return
         lastGyroMonoMs = nowMs()
         // Optimistic: every gyro callback proves we're streaming, so a
         // momentary Stalled flips back to Streaming without waiting for the

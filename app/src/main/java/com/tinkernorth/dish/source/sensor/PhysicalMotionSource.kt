@@ -116,6 +116,18 @@ class PhysicalMotionSource
             private var accelY: Short = 0
             private var accelZ: Short = 0
 
+            /**
+             * Whether the accelerometer has reported at least once since the
+             * listener was registered. The first gyro callback can otherwise
+             * fire before any accel callback, which would emit a MOTION
+             * packet with accel = (0, 0, 0) — downstream consumers read that
+             * as "stationary in zero gravity." Hold the first gyro until
+             * accel has reported. Same dispatch thread as the callbacks, no
+             * lock needed. Pads with no accel sensor have [accel] == null
+             * at registration time; the gate short-circuits in [onGyro].
+             */
+            private var accelSeen: Boolean = false
+
             private val listener =
                 object : SensorEventListener {
                     override fun onSensorChanged(event: SensorEvent) {
@@ -166,10 +178,16 @@ class PhysicalMotionSource
                 accelX = MotionScaling.accelMssToWire(values[0])
                 accelY = MotionScaling.accelMssToWire(values[1])
                 accelZ = MotionScaling.accelMssToWire(values[2])
+                accelSeen = true
             }
 
             private fun onGyro(values: FloatArray) {
                 if (values.size < 3) return
+                // Hold the first emission until accel has reported, otherwise
+                // the first MOTION packet for this pad ships accel = (0,0,0).
+                // Pads without an accel sensor (accel == null at registration)
+                // bypass the gate so the gyro stream is not stuck.
+                if (accel != null && !accelSeen) return
                 val conn = reachable[slotId] ?: return
                 val sample =
                     convertControllerSample(
