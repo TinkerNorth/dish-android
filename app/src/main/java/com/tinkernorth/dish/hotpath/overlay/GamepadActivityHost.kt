@@ -220,11 +220,21 @@ class GamepadActivityHost(
      * Reads the overlay-active state *before* notifying the manager so a
      * DOWN that dismisses the dim still wins the gate (and consumes the
      * rest of the gesture, so the underlying button doesn't get a click).
+     *
+     * Resets the inactivity timer on any non-CANCEL touch action — not just
+     * DOWN — so a user dragging a finger on the gamepad (a held stick
+     * stroke, a long ABXY swipe) keeps the screen awake. The pre-fix code
+     * only fired on DOWN, so a 15 s continuous stroke would let the
+     * inactivity timer expire mid-gesture. `onUserInteraction` is cheap
+     * (two Handler post/remove ops in the IDLE case), so calling it on
+     * every MOVE at the panel's sample rate (~120 Hz) is negligible.
      */
     fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         val overlayActive = lowPowerManager.state.value == LowPowerManager.State.ACTIVE
         val consume = lowPowerTouchGate.onDispatch(ev.action, overlayActive)
-        if (ev.action == MotionEvent.ACTION_DOWN && wakeState.shouldKeepScreenOn.value) {
+        if (wakeState.shouldKeepScreenOn.value &&
+            ev.actionMasked != MotionEvent.ACTION_CANCEL
+        ) {
             lowPowerManager.onUserInteraction()
         }
         return consume

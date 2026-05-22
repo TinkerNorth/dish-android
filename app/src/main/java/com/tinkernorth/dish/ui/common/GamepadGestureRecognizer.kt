@@ -72,25 +72,64 @@ internal class GamepadGestureRecognizer {
     /**
      * Process a [MotionEvent] against the supplied [layout]. Mutates [state]
      * and the per-stick displacement fields in place. The caller is
-     * responsible for invalidating the View and notifying its listener.
+     * responsible for invalidating the View.
+     *
+     * [onSampleApplied] fires after each *sample* has been applied so the
+     * caller can dispatch its listener per sample, not per event. For
+     * `ACTION_MOVE` this includes every historical sample carried by the
+     * `MotionEvent` plus the current one — Android coalesces multiple
+     * touch-panel reads at vsync, so a single `ACTION_MOVE` can carry several
+     * intermediate finger positions. Reading only `event.getX/getY` and
+     * notifying once would drop those intermediate positions, producing
+     * visible stutter on fast stick movements at the host (the in-between
+     * axis values never reach the wire). For non-MOVE actions the callback
+     * fires once. Pass `null` (the default) to suppress per-sample dispatch.
      */
     fun onTouchEvent(
         event: MotionEvent,
         layout: GamepadLayout,
+        onSampleApplied: (() -> Unit)? = null,
     ) {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                 handlePointerDown(event, event.actionIndex, layout)
+                onSampleApplied?.invoke()
             }
             MotionEvent.ACTION_MOVE -> {
-                for (i in 0 until event.pointerCount) {
-                    handlePointerMove(event, i, layout)
+                // Drain historical samples first (oldest → newest) and notify
+                // per sample so each intermediate finger position becomes its
+                // own wire report. Per Android, only ACTION_MOVE carries a
+                // history; getHistoricalX/Y for any other action is undefined.
+                val historySize = event.historySize
+                for (h in 0 until historySize) {
+                    for (i in 0 until event.pointerCount) {
+                        applyPointerMove(
+                            event.getHistoricalX(i, h),
+                            event.getHistoricalY(i, h),
+                            event.getPointerId(i),
+                            layout,
+                        )
+                    }
+                    onSampleApplied?.invoke()
                 }
+                for (i in 0 until event.pointerCount) {
+                    applyPointerMove(
+                        event.getX(i),
+                        event.getY(i),
+                        event.getPointerId(i),
+                        layout,
+                    )
+                }
+                onSampleApplied?.invoke()
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
                 handlePointerUp(event, event.actionIndex)
+                onSampleApplied?.invoke()
             }
-            MotionEvent.ACTION_CANCEL -> reset()
+            MotionEvent.ACTION_CANCEL -> {
+                reset()
+                onSampleApplied?.invoke()
+            }
         }
     }
 
@@ -200,16 +239,20 @@ internal class GamepadGestureRecognizer {
         }
     }
 
+    /**
+     * Apply a single (x, y) sample for [pid] against the current per-pointer
+     * tracking. Called once per finger position — including historical
+     * samples drained out of an [MotionEvent] by [onTouchEvent]. Pure: takes
+     * coordinates by value so the caller can reuse it for both
+     * `event.getHistoricalX/Y(idx, h)` and `event.getX/Y(idx)`.
+     */
     @Suppress("CyclomaticComplexMethod", "LongMethod")
-    private fun handlePointerMove(
-        event: MotionEvent,
-        idx: Int,
+    private fun applyPointerMove(
+        x: Float,
+        y: Float,
+        pid: Int,
         l: GamepadLayout,
     ) {
-        val x = event.getX(idx)
-        val y = event.getY(idx)
-        val pid = event.getPointerId(idx)
-
         if (pid == leftStickPointerId) {
             val r = computeStickAxes((x - l.leftStickCx) / l.stickRadius, (y - l.leftStickCy) / l.stickRadius)
             leftStickDx = r.dx

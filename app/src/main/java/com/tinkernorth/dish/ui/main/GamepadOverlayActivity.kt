@@ -37,6 +37,9 @@ import com.tinkernorth.dish.source.sensor.PhoneBatterySource
 import com.tinkernorth.dish.source.sensor.PhoneMotionSource
 import com.tinkernorth.dish.ui.common.GamepadTouchView
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -72,6 +75,22 @@ class GamepadOverlayActivity :
     private lateinit var binding: ActivityGamepadOverlayBinding
     private lateinit var gamepadHost: GamepadActivityHost
     private var connectionId: String = ""
+
+    /**
+     * Most recent gamepad state surfaced by [onGamepadStateChanged]. The touch
+     * view's recognizer mutates a single [GamepadTouchView.GamepadState] in
+     * place, so this holds the live reference — reading fields here always
+     * reflects the latest values. `null` until the user first touches the
+     * pad; the periodic-resend loop skips while it is still null.
+     *
+     * Written on the main thread (touch dispatch) and read from the resend
+     * coroutine which now runs on `Dispatchers.Default`, so the reference is
+     * `@Volatile` for cross-thread visibility. Per-field reads of the
+     * underlying [GamepadTouchView.GamepadState] may briefly see a torn
+     * snapshot if the recognizer is mid-update — acceptable for axis values
+     * (next tick corrects) and not a correctness hazard.
+     */
+    @Volatile private var lastReportedState: GamepadTouchView.GamepadState? = null
 
     /**
      * Phone IMU + battery sources for the on-screen touch controller. Created
@@ -137,6 +156,66 @@ class GamepadOverlayActivity :
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 satellite.events.collect(::handleConnectionEvent)
+            }
+        }
+        // Periodic resend of the latest virtual-gamepad state to the satellite.
+        //
+        // Physical pads route through `gamepadMotionFilter` →
+        // `consumePublishIfChanged` (see `satellite_jni.cpp`), which is also
+        // change-driven — but the kernel HID poll plus the analog sticks'
+        // hardware noise keep producing fresh samples even when the user's
+        // thumb is steady, so the wire stays warm and any single dropped UDP
+        // packet is recovered within a few ms by the next sample.
+        //
+        // The touch panel filters sub-pixel jitter, so a finger held still
+        // emits ZERO `ACTION_MOVE` events; the listener never re-fires; the
+        // wire goes completely silent. If the *last* packet before stillness
+        // is the one UDP drops, the host's virtual gamepad sits on stale
+        // state until the user moves their finger again — the visible "gap"
+        // / "stuck stick" feeling. Resending the latest state every
+        // RESEND_INTERVAL_MS replicates the physical-pad's continuous-refresh
+        // behaviour and recovers from single-packet loss within one tick.
+        //
+        // Bluetooth is intentionally excluded: BT-HID has its own polling
+        // discipline (the host queries the slave at the negotiated rate),
+        // and the bounded native BT dispatch queue would just fill up with
+        // redundant reports.
+        // Run on Dispatchers.Default — JNI sendReport doesn't need the main
+        // thread, and competing with touch dispatch / vsync / layout on
+        // Dispatchers.Main.immediate was producing 14 ms tick-interval tails
+        // (measured via GpTrace) where the configured rate was 4 ms.
+        lifecycleScope.launch(Dispatchers.Default) {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                // Deadline-based pacing — each iteration targets an absolute
+                // `nextTickNs` deadline instead of "sleep N ms from now."
+                // Without this, work time (sendSatelliteReport + JNI +
+                // encrypt + sendto) leaks into the cycle, so a 4 ms config
+                // produces ≈ 6 ms cycles → 168 Hz, not the requested 250 Hz.
+                // With drift correction, the long-term rate matches the
+                // configured interval exactly; a slow tick is followed by a
+                // shorter wait, not a permanent slip.
+                var nextTickNs = System.nanoTime() + RESEND_INTERVAL_NS
+                while (isActive) {
+                    val now = System.nanoTime()
+                    // Guard against runaway catch-up: if we somehow fell more
+                    // than a few intervals behind (process throttled, dispatcher
+                    // starved), reset rather than burning CPU spamming back-
+                    // dated reports the host has already aged past.
+                    if (now - nextTickNs > RESEND_INTERVAL_NS * MAX_BACKLOG_FACTOR) {
+                        nextTickNs = now + RESEND_INTERVAL_NS
+                    }
+                    val waitNs = nextTickNs - now
+                    if (waitNs > 0) {
+                        val waitMs = waitNs / 1_000_000L
+                        if (waitMs > 0) delay(waitMs)
+                    }
+                    nextTickNs += RESEND_INTERVAL_NS
+                    val state = lastReportedState ?: continue
+                    val summary = hub.summary(connectionId) ?: continue
+                    if (summary.kind != ConnectionKind.SATELLITE) continue
+                    if (summary.live != LinkState.Connected) continue
+                    sendSatelliteReport(state)
+                }
             }
         }
     }
@@ -269,6 +348,10 @@ class GamepadOverlayActivity :
     }
 
     override fun onGamepadStateChanged(state: GamepadTouchView.GamepadState) {
+        // Stored before the connection-status gate so input captured while
+        // the session is still Linking is replayed by the resend loop the
+        // moment it flips to Connected.
+        lastReportedState = state
         val summary = hub.summary(connectionId) ?: return
         if (summary.live != LinkState.Connected) return
         when (summary.kind) {
@@ -287,23 +370,29 @@ class GamepadOverlayActivity :
                     ) ?: return
                 btRegistry.sendReport(connectionId, report)
             }
-            ConnectionKind.SATELLITE -> {
-                // The touch view emits HID-layout button bits plus a
-                // separate hat-switch; the satellite path wants an XUSB
-                // wButtons with the d-pad folded back into the low nibble.
-                val wButtons = hidToXusb(state.buttons, state.hatSwitch)
-                satellite.get(connectionId)?.sendReport(
-                    VIRTUAL_SLOT_ID,
-                    wButtons,
-                    state.leftTrigger,
-                    state.rightTrigger,
-                    state.leftX.toInt(),
-                    state.leftY.toInt(),
-                    state.rightX.toInt(),
-                    state.rightY.toInt(),
-                )
-            }
+            ConnectionKind.SATELLITE -> sendSatelliteReport(state)
         }
+    }
+
+    /**
+     * Emit one MSG_GAMEPAD_DATA report to the bound satellite. The touch
+     * view emits HID-layout button bits plus a separate hat-switch; the
+     * satellite path wants an XUSB `wButtons` with the d-pad folded back
+     * into the low nibble. Shared between the touch-driven [onGamepadStateChanged]
+     * and the periodic resend loop in [onCreate].
+     */
+    private fun sendSatelliteReport(state: GamepadTouchView.GamepadState) {
+        val wButtons = hidToXusb(state.buttons, state.hatSwitch)
+        satellite.get(connectionId)?.sendReport(
+            VIRTUAL_SLOT_ID,
+            wButtons,
+            state.leftTrigger,
+            state.rightTrigger,
+            state.leftX.toInt(),
+            state.leftY.toInt(),
+            state.rightX.toInt(),
+            state.rightY.toInt(),
+        )
     }
 
     /**
@@ -355,5 +444,33 @@ class GamepadOverlayActivity :
     companion object {
         const val EXTRA_CONNECTION_ID = "extra_connection_id"
         const val EXTRA_USE_PS_LAYOUT = "extra_use_ps_layout"
+
+        /**
+         * Interval between periodic resends of the last virtual-gamepad
+         * state to a satellite. 4 ms ≈ 250 Hz matches the polling rate of a
+         * typical wired Xbox/PS controller — the rate the host's virtual
+         * gamepad backend (ViGEm / equivalent) is implicitly tuned for.
+         * Faster than the 60 Hz Steam Remote Play / Moonlight default, but
+         * the wire cost is still trivial (~17 KB/s of encrypted UDP) and the
+         * recovery window after a dropped packet shrinks to ≤ 4 ms instead
+         * of ≤ 16 ms — invisible at 60 Hz host displays, perceptibly
+         * smoother on 120/240 Hz panels and twitch genres.
+         *
+         * The resend loop uses [RESEND_INTERVAL_NS] for deadline arithmetic;
+         * this ms value is preserved as the human-facing knob.
+         */
+        private const val RESEND_INTERVAL_MS = 4L
+        private const val RESEND_INTERVAL_NS = RESEND_INTERVAL_MS * 1_000_000L
+
+        /**
+         * If the resend loop falls more than this many intervals behind
+         * `nextTickNs` (e.g. because the dispatcher was starved or the
+         * process was throttled), we reset the deadline to `now + INTERVAL`
+         * instead of issuing back-dated catch-up sends. The host has already
+         * aged past those states; sending them adds wire chatter without
+         * benefit. Five intervals (~20 ms at 250 Hz) is wider than any
+         * normal scheduler hiccup but narrow enough to recover quickly.
+         */
+        private const val MAX_BACKLOG_FACTOR = 5L
     }
 }

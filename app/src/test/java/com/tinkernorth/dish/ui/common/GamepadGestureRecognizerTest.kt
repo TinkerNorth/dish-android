@@ -104,6 +104,34 @@ class GamepadGestureRecognizerTest {
             every { getPointerId(0) } returns pid
             every { getX(0) } returns x
             every { getY(0) } returns y
+            // No historical samples — exercised in moveEventWithHistory below.
+            every { historySize } returns 0
+        }
+
+    /**
+     * Build a synthetic `ACTION_MOVE` event for a single pointer that carries
+     * [history] intermediate (x, y) samples followed by the current
+     * ([currentX], [currentY]) position. Used to exercise the recognizer's
+     * historical-sample draining path.
+     */
+    private fun moveEventWithHistory(
+        history: List<Pair<Float, Float>>,
+        currentX: Float,
+        currentY: Float,
+        pid: Int = POINTER_0,
+    ): MotionEvent =
+        mockk {
+            every { this@mockk.actionMasked } returns MotionEvent.ACTION_MOVE
+            every { this@mockk.actionIndex } returns 0
+            every { pointerCount } returns 1
+            every { getPointerId(0) } returns pid
+            every { getX(0) } returns currentX
+            every { getY(0) } returns currentY
+            every { historySize } returns history.size
+            history.forEachIndexed { h, (hx, hy) ->
+                every { getHistoricalX(0, h) } returns hx
+                every { getHistoricalY(0, h) } returns hy
+            }
         }
 
     // ── DOWN: octant resolution ─────────────────────────────────────────────
@@ -384,6 +412,63 @@ class GamepadGestureRecognizerTest {
             layout,
         )
         assertEquals(GamepadTouchView.BTN_B, recognizer.state.buttons and ABXY_MASK)
+    }
+
+    // ── History draining: coalesced ACTION_MOVE samples ────────────────────
+
+    @Test
+    fun `move with historical samples applies each intermediate position`() {
+        // Claim the d-pad in the east octant, then deliver a single MOVE
+        // event that coalesces three panel samples: S (south), W (west),
+        // current = N (north). Without history draining the recognizer
+        // would jump E → N and the south/west sweeps would never appear.
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 180f, y = 250f), layout)
+        assertEquals(GamepadTouchView.HAT_E, recognizer.state.hatSwitch)
+
+        val sweep =
+            moveEventWithHistory(
+                history = listOf(150f to 280f, 120f to 250f),
+                currentX = 150f,
+                currentY = 220f,
+            )
+        val seen = mutableListOf<Int>()
+        recognizer.onTouchEvent(sweep, layout) {
+            seen.add(recognizer.state.hatSwitch)
+        }
+
+        // Three callbacks: S (historical 0), W (historical 1), N (current).
+        assertEquals(listOf(GamepadTouchView.HAT_S, GamepadTouchView.HAT_W, GamepadTouchView.HAT_N), seen)
+        // Final state reflects the current sample.
+        assertEquals(GamepadTouchView.HAT_N, recognizer.state.hatSwitch)
+    }
+
+    @Test
+    fun `move with no historical samples still fires callback once`() {
+        // Existing behaviour: an ACTION_MOVE with historySize=0 must still
+        // produce exactly one callback so the listener can dispatch the
+        // current sample. Pins that the per-sample notification path
+        // collapses cleanly when there's no history to drain.
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 180f, y = 250f), layout)
+
+        var callbackCount = 0
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_MOVE, x = 150f, y = 220f), layout) {
+            callbackCount += 1
+        }
+
+        assertEquals(1, callbackCount)
+        assertEquals(GamepadTouchView.HAT_N, recognizer.state.hatSwitch)
+    }
+
+    @Test
+    fun `down fires callback exactly once`() {
+        // DOWN/UP/CANCEL don't carry history per Android contract, so the
+        // recognizer must fire the callback exactly once for those — the
+        // touch view relies on this to dispatch a single state update.
+        var callbackCount = 0
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 180f, y = 250f), layout) {
+            callbackCount += 1
+        }
+        assertEquals(1, callbackCount)
     }
 
     @Test
