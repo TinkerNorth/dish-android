@@ -92,12 +92,13 @@ enum class MotionIndicatorState(
 
     /** True for the states whose meaning warrants the one-line explanation. */
     val hasDetail: Boolean
-        get() = this == UNAVAILABLE ||
-            this == NOT_FORWARDED ||
-            this == STALLED ||
-            this == USER_DISABLED ||
-            this == NO_HOST_SINK ||
-            this == BACKEND_BROKEN
+        get() =
+            this == UNAVAILABLE ||
+                this == NOT_FORWARDED ||
+                this == STALLED ||
+                this == USER_DISABLED ||
+                this == NO_HOST_SINK ||
+                this == BACKEND_BROKEN
 
     companion object {
         /**

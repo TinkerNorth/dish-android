@@ -77,8 +77,7 @@ class ControllerRepository
          * .getLastControllerMotionFlags] for the bit definitions and the
          * `-1`-means-unknown semantics.
          */
-        fun getLastControllerMotionFlags(handle: Int): Int =
-            SatelliteNative.getLastControllerMotionFlags(handle)
+        fun getLastControllerMotionFlags(handle: Int): Int = SatelliteNative.getLastControllerMotionFlags(handle)
 
         fun sendControllerType(
             handle: Int,

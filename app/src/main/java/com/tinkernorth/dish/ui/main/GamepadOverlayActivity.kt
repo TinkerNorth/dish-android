@@ -22,9 +22,9 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionHub
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
+import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.MotionCapability
 import com.tinkernorth.dish.composer.MotionCapabilityComposer
-import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.input.hidToXusb
 import com.tinkernorth.dish.core.model.DishNotification
@@ -36,9 +36,9 @@ import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.notification.DishNotifications
+import com.tinkernorth.dish.source.sensor.MotionStreamState
 import com.tinkernorth.dish.source.sensor.PhoneBatterySource
 import com.tinkernorth.dish.source.sensor.PhoneMotionSource
-import com.tinkernorth.dish.source.sensor.MotionStreamState
 import com.tinkernorth.dish.ui.common.GamepadTouchView
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
@@ -259,11 +259,20 @@ class GamepadOverlayActivity :
                         if (waitMs > 0) delay(waitMs)
                     }
                     nextTickNs += RESEND_INTERVAL_NS
-                    val state = lastReportedState ?: continue
-                    val summary = hub.summary(connectionId) ?: continue
-                    if (summary.kind != ConnectionKind.SATELLITE) continue
-                    if (summary.live != LinkState.Connected) continue
-                    sendSatelliteReport(state)
+                    // Send only when every prerequisite is satisfied. Folded
+                    // into one positive condition (rather than four guards
+                    // each followed by `continue`) so the loop body has a
+                    // single linear path — detekt's LoopWithTooManyJumpStatements
+                    // was correctly flagging the cluster of early-exits.
+                    val state = lastReportedState
+                    val summary = hub.summary(connectionId)
+                    if (state != null &&
+                        summary != null &&
+                        summary.kind == ConnectionKind.SATELLITE &&
+                        summary.live == LinkState.Connected
+                    ) {
+                        sendSatelliteReport(state)
+                    }
                 }
             }
         }

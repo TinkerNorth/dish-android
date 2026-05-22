@@ -12,6 +12,7 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.appcompat.widget.SwitchCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -23,9 +24,8 @@ import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.MotionCapability
 import com.tinkernorth.dish.databinding.ItemControllerBinding
-import com.tinkernorth.dish.ui.common.glyphForConnection
 import com.tinkernorth.dish.source.store.MotionEnabledStore
-import androidx.appcompat.widget.SwitchCompat
+import com.tinkernorth.dish.ui.common.glyphForConnection
 
 interface SlotActionListener {
     fun onSlotTapped(slotId: String)

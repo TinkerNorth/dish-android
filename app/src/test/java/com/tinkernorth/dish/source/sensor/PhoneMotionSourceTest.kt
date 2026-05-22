@@ -360,22 +360,23 @@ class PhoneMotionSourceTest {
         // A regression that uses >= would flip prematurely on every device.
         assertEquals(
             MotionStreamState.Streaming,
-            PhoneMotionSource.deriveState(
-                gyroPresent = true,
-                started = true,
-                lastGyroMonoMs = 0L,
-                nowMonoMs = PhoneMotionSource.STALL_WINDOW_MS,
-            ).let {
-                // Special-case: deriveState treats lastGyroMonoMs == 0 as
-                // Stalled regardless of the window math. To exercise the
-                // strict-greater path, use a non-zero anchor.
-                PhoneMotionSource.deriveState(
+            PhoneMotionSource
+                .deriveState(
                     gyroPresent = true,
                     started = true,
-                    lastGyroMonoMs = 1L,
-                    nowMonoMs = 1L + PhoneMotionSource.STALL_WINDOW_MS,
-                )
-            },
+                    lastGyroMonoMs = 0L,
+                    nowMonoMs = PhoneMotionSource.STALL_WINDOW_MS,
+                ).let {
+                    // Special-case: deriveState treats lastGyroMonoMs == 0 as
+                    // Stalled regardless of the window math. To exercise the
+                    // strict-greater path, use a non-zero anchor.
+                    PhoneMotionSource.deriveState(
+                        gyroPresent = true,
+                        started = true,
+                        lastGyroMonoMs = 1L,
+                        nowMonoMs = 1L + PhoneMotionSource.STALL_WINDOW_MS,
+                    )
+                },
         )
     }
 }

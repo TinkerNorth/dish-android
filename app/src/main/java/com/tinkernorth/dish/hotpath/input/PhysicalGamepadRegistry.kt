@@ -111,7 +111,7 @@ class PhysicalGamepadRegistry
             cancelDisconnect(deviceId)
             _devices.value =
                 _devices.value +
-                    (deviceId to Device(deviceId, dev.name, hasGyro = PhysicalMotionProbe.hasGyro(deviceId)))
+                (deviceId to Device(deviceId, dev.name, hasGyro = PhysicalMotionProbe.hasGyro(deviceId)))
         }
 
         override fun onInputDeviceRemoved(deviceId: Int) {
@@ -139,7 +139,7 @@ class PhysicalGamepadRegistry
                 // change its sensor exposure — and the probe is cheap).
                 _devices.value =
                     _devices.value +
-                        (deviceId to Device(deviceId, dev.name, hasGyro = PhysicalMotionProbe.hasGyro(deviceId)))
+                    (deviceId to Device(deviceId, dev.name, hasGyro = PhysicalMotionProbe.hasGyro(deviceId)))
             }
         }
 

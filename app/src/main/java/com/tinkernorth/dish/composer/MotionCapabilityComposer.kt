@@ -128,14 +128,6 @@ data class MotionCapability(
 }
 
 /**
- * `Map<slotId, MotionCapability>` for every slot the user can currently see —
- * the virtual touch slot (always present) plus every attached physical pad.
- *
- * A slot present in the map means we have a coherent capability snapshot for
- * it. A slot absent from the map means the registry doesn't see it (e.g. a
- * physical pad in the disconnect-grace window after a USB jiggle).
- */
-/**
  * Typed 6-arity combine — the stdlib's typed overload tops out at 5 flows, and
  * the bare `combine(vararg)` form would force `Array<*>` casting at the call
  * site. Same pattern (and reasoning) as `combine7` in
@@ -223,8 +215,7 @@ class MotionCapabilityComposer
          * derived map, so no suspension is required on the registration
          * thread.
          */
-        fun capabilityFor(slotId: String): MotionCapability =
-            state.value[slotId] ?: MotionCapability.Off
+        fun capabilityFor(slotId: String): MotionCapability = state.value[slotId] ?: MotionCapability.Off
 
         /**
          * Resolve `slotId → bound-connection-summary → kind == SATELLITE &&

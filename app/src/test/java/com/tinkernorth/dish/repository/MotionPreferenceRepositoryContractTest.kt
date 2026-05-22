@@ -35,8 +35,7 @@ class MotionPreferenceRepositoryContractTest : AbstractRepositoryContract<String
     override fun newKey(): String = "slot-${Random.nextLong()}"
 
     /** Same key ⇒ same value. The contract test compares sets of values. */
-    override fun newValue(key: String): MotionPreference =
-        MotionPreference(slotId = key, enabled = key.hashCode() and 1 == 0)
+    override fun newValue(key: String): MotionPreference = MotionPreference(slotId = key, enabled = key.hashCode() and 1 == 0)
 
     private fun fakeContextBackedByMap(): Context {
         val store = mutableMapOf<String, Any?>()

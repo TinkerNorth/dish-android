@@ -118,6 +118,17 @@
     <string name="motion_unavailable_detail">Ce téléphone n\'a pas de gyroscope, le mouvement (visée gyro / inclinaison) n\'est pas transmis.</string>
     <string name="motion_not_forwarded_detail">Cette connexion Bluetooth n\'a pas de canal de mouvement. Utilisez une connexion satellite pour transmettre la visée gyro / inclinaison.</string>
     <string name="motion_stalled_detail">Capteur de mouvement bloqué — essayez d\'appuyer sur le bouton retour, ou redémarrez Dish.</string>
+    <string name="motion_user_disabled">Mouvement : désactivé</string>
+    <string name="motion_no_host_sink">Mouvement : l\'hôte ne peut pas recevoir</string>
+    <string name="motion_backend_broken">Mouvement : le serveur ne peut pas livrer</string>
+    <string name="motion_user_disabled_detail">Vous avez désactivé le mouvement pour cet emplacement. Activez le bouton Mouvement sur la ligne de la manette pour recommencer à envoyer le gyro.</string>
+    <string name="motion_no_host_sink_detail">Une manette virtuelle de style Xbox n\'a pas de surface de mouvement sur l\'hôte. Passez la manette en PlayStation pour la visée gyro / inclinaison.</string>
+    <string name="motion_backend_broken_detail">Le satellite a accepté cette manette mais n\'a pas pu créer son périphérique de mouvement — probablement un problème de permission ou de noyau sur le serveur. Redémarrez le satellite ou vérifiez ses journaux.</string>
+    <string name="controller_motion_toggle_label">Mouvement (gyro)</string>
+    <string name="controller_motion_toggle_subtitle_on">Envoie la visée gyro / inclinaison à l\'hôte.</string>
+    <string name="controller_motion_toggle_subtitle_off">Aucun échantillon gyro n\'est envoyé pour cet emplacement.</string>
+    <string name="controller_motion_toggle_subtitle_no_gyro">Cet appareil n\'a pas de gyroscope.</string>
+    <string name="controller_motion_toggle_subtitle_no_host_sink">L\'hôte ne peut pas recevoir le mouvement d\'une manette de style Xbox. Passez en PlayStation ci-dessus pour le gyro.</string>
 
     <!-- Indicateur de batterie par emplacement. -->
     <string name="battery_percent">%1$d %%</string>

@@ -3,6 +3,7 @@
 
 package com.tinkernorth.dish.source.sensor
 
+import android.annotation.SuppressLint
 import android.hardware.Sensor
 import android.os.Build
 import android.view.InputDevice
@@ -44,7 +45,15 @@ object PhysicalMotionProbe {
      * [InputDevice] is still queried (not a pure data class), but the SDK
      * gate is parameterised so unit tests can drive every branch from a JVM
      * without reflection on the system constants.
+     *
+     * `@SuppressLint("NewApi")` — the `InputDevice.getSensorManager()` call
+     * is API-31-gated by the first guard, but lint can't statically prove
+     * that because `sdkInt` is a runtime parameter, not `Build.VERSION
+     * .SDK_INT` directly. The runtime gate is explicit; the alternative
+     * (`@RequiresApi(S)`) would force every caller to gate too, defeating
+     * the parameterised-pure-function design.
      */
+    @SuppressLint("NewApi")
     fun evaluate(
         sdkInt: Int,
         device: InputDevice?,

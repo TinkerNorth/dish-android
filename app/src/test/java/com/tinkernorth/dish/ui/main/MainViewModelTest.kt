@@ -8,12 +8,12 @@ import com.tinkernorth.dish.composer.ConnectionHub
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
+import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.sensor.BatteryValidator
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
-import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import io.mockk.every

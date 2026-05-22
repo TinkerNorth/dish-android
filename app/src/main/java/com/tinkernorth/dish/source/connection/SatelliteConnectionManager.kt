@@ -177,7 +177,9 @@ class SatelliteConnectionManager
             // motionCapsBitsFor lambda uses Provider rather than direct
             // injection — see the Provider's KDoc above).
             scope.launch {
-                motionCapabilityProvider.get().state
+                motionCapabilityProvider
+                    .get()
+                    .state
                     .map { caps -> caps.mapValues { (_, mc) -> mc.toCapBits() } }
                     .distinctUntilChanged()
                     .collect {
@@ -236,17 +238,18 @@ class SatelliteConnectionManager
                     .updateAndGet { map ->
                         val cur = map[id]
                         if (cur != null) return@updateAndGet map
-                        val fresh = SatelliteConnection(
-                            id,
-                            server,
-                            scope,
-                            controllerRepo,
-                            ioDispatcher,
-                            motionCapsBitsFor = { slotId ->
-                                motionCapabilityProvider.get().capabilityFor(slotId).toCapBits()
-                            },
-                            motionBackendStatusStore = motionBackendStatusStore,
-                        )
+                        val fresh =
+                            SatelliteConnection(
+                                id,
+                                server,
+                                scope,
+                                controllerRepo,
+                                ioDispatcher,
+                                motionCapsBitsFor = { slotId ->
+                                    motionCapabilityProvider.get().capabilityFor(slotId).toCapBits()
+                                },
+                                motionBackendStatusStore = motionBackendStatusStore,
+                            )
                         created = fresh
                         map + (id to fresh)
                     }[id] ?: return
@@ -346,17 +349,20 @@ class SatelliteConnectionManager
                 _connections
                     .updateAndGet { map ->
                         if (map.containsKey(id)) return@updateAndGet map
-                        map + (id to SatelliteConnection(
-                            id,
-                            server,
-                            scope,
-                            controllerRepo,
-                            ioDispatcher,
-                            motionCapsBitsFor = { slotId ->
-                                motionCapabilityProvider.get().capabilityFor(slotId).toCapBits()
-                            },
-                            motionBackendStatusStore = motionBackendStatusStore,
-                        ))
+                        map + (
+                            id to
+                                SatelliteConnection(
+                                    id,
+                                    server,
+                                    scope,
+                                    controllerRepo,
+                                    ioDispatcher,
+                                    motionCapsBitsFor = { slotId ->
+                                        motionCapabilityProvider.get().capabilityFor(slotId).toCapBits()
+                                    },
+                                    motionBackendStatusStore = motionBackendStatusStore,
+                                )
+                        )
                     }[id] ?: return
             conn.markConnecting()
             scope.launch {

@@ -63,7 +63,9 @@ object MotionScaling {
     sealed interface RemapResult {
         data object Mapped : RemapResult
 
-        data class Fallback(val unknownRotation: Int) : RemapResult
+        data class Fallback(
+            val unknownRotation: Int,
+        ) : RemapResult
     }
 
     /**
@@ -105,23 +107,33 @@ object MotionScaling {
         require(out.size >= 3) { "out must have at least 3 elements; got ${out.size}" }
         return when (rotation) {
             ROTATION_0 -> {
-                out[0] = deviceX; out[1] = deviceY; out[2] = deviceZ
+                out[0] = deviceX
+                out[1] = deviceY
+                out[2] = deviceZ
                 RemapResult.Mapped
             }
             ROTATION_90 -> {
-                out[0] = deviceY; out[1] = -deviceX; out[2] = deviceZ
+                out[0] = deviceY
+                out[1] = -deviceX
+                out[2] = deviceZ
                 RemapResult.Mapped
             }
             ROTATION_180 -> {
-                out[0] = -deviceX; out[1] = -deviceY; out[2] = deviceZ
+                out[0] = -deviceX
+                out[1] = -deviceY
+                out[2] = deviceZ
                 RemapResult.Mapped
             }
             ROTATION_270 -> {
-                out[0] = -deviceY; out[1] = deviceX; out[2] = deviceZ
+                out[0] = -deviceY
+                out[1] = deviceX
+                out[2] = deviceZ
                 RemapResult.Mapped
             }
             else -> {
-                out[0] = deviceY; out[1] = -deviceX; out[2] = deviceZ
+                out[0] = deviceY
+                out[1] = -deviceX
+                out[2] = deviceZ
                 RemapResult.Fallback(rotation)
             }
         }
