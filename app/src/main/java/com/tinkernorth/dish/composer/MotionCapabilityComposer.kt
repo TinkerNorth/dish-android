@@ -6,6 +6,7 @@ package com.tinkernorth.dish.composer
 import com.tinkernorth.dish.architecture.abstracts.AbstractComposer
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.sensor.PhoneMotionAvailability
+import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -33,14 +34,15 @@ import javax.inject.Singleton
  *   - [MotionCapability.carriesOnConnection] — the bound connection has a
  *     `MSG_MOTION` channel. Satellite does; Bluetooth-HID does not.
  *   - [MotionCapability.userEnabled] — the user wants motion on for this
- *     slot. Defaults to true; flipped by the per-slot toggle wired in a
- *     subsequent PR (the `MotionEnabledStore`).
+ *     slot. Sourced from [MotionEnabledStore.isEnabled], which collapses
+ *     an absent entry onto the product default (`DEFAULT_ENABLED = true`).
  *
  * **Why a composer:** these are pure derivations from
  * [PhoneMotionAvailability], [PhysicalGamepadRegistry], [ConnectionHub]
- * `bindings` + `connections`. No new lifecycle, no events — exactly the shape
- * [AbstractComposer] exists for. Threading the same `MotionCapability` value
- * through every consumer keeps "is motion on for this slot" un-divergeable.
+ * `bindings` + `connections`, and [MotionEnabledStore]. No new lifecycle,
+ * no events — exactly the shape [AbstractComposer] exists for. Threading
+ * the same `MotionCapability` value through every consumer keeps "is
+ * motion on for this slot" un-divergeable.
  */
 data class MotionCapability(
     /** Hardware reports a gyroscope on the device backing this slot. */
@@ -48,9 +50,9 @@ data class MotionCapability(
     /** Bound connection is a satellite session (BT-HID has no `MSG_MOTION`). */
     val carriesOnConnection: Boolean,
     /**
-     * User has motion enabled for this slot. Stub-true until the
-     * `MotionEnabledStore` lands in the next PR; the field is here from the
-     * start so downstream call sites can already read it.
+     * User has motion enabled for this slot. Sourced from
+     * [MotionEnabledStore.isEnabled], so an absent slot in that store
+     * collapses to [MotionEnabledStore.DEFAULT_ENABLED] (true).
      */
     val userEnabled: Boolean = true,
 ) {
@@ -96,6 +98,7 @@ class MotionCapabilityComposer
         private val phoneAvailability: PhoneMotionAvailability,
         private val registry: PhysicalGamepadRegistry,
         private val hub: ConnectionHub,
+        private val motionEnabledStore: MotionEnabledStore,
         scope: CoroutineScope,
     ) : AbstractComposer<Map<String, MotionCapability>>(scope, emptyMap()) {
         override fun upstream(): Flow<Map<String, MotionCapability>> =
@@ -104,7 +107,8 @@ class MotionCapabilityComposer
                 registry.devices,
                 hub.bindings,
                 hub.connections,
-            ) { phoneHasGyro, devices, bindings, summaries ->
+                motionEnabledStore.state,
+            ) { phoneHasGyro, devices, bindings, summaries, enabledMap ->
                 val byId = summaries.associateBy { it.id }
                 val out = HashMap<String, MotionCapability>(devices.size + 1)
 
@@ -114,6 +118,7 @@ class MotionCapabilityComposer
                     MotionCapability(
                         hasGyro = phoneHasGyro,
                         carriesOnConnection = carriesMotion(VIRTUAL_SLOT_ID, bindings, byId),
+                        userEnabled = enabledMap[VIRTUAL_SLOT_ID] ?: MotionEnabledStore.DEFAULT_ENABLED,
                     )
 
                 // Physical pads.
@@ -123,10 +128,23 @@ class MotionCapabilityComposer
                         MotionCapability(
                             hasGyro = device.hasGyro,
                             carriesOnConnection = carriesMotion(slotId, bindings, byId),
+                            userEnabled = enabledMap[slotId] ?: MotionEnabledStore.DEFAULT_ENABLED,
                         )
                 }
                 out
             }
+
+        /**
+         * Resolve the [MotionCapability] for [slotId]. Returns
+         * [MotionCapability.Off] when the slot has not been seen yet (e.g.
+         * a controller-add fires before the composer's first emission). Use
+         * this from [com.tinkernorth.dish.source.connection.SatelliteConnection]
+         * at registration time — it's a synchronous read of the latest
+         * derived map, so no suspension is required on the registration
+         * thread.
+         */
+        fun capabilityFor(slotId: String): MotionCapability =
+            state.value[slotId] ?: MotionCapability.Off
 
         /**
          * Resolve `slotId → bound-connection-summary → kind == SATELLITE &&

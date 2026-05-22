@@ -3,7 +3,11 @@
 
 package com.tinkernorth.dish.source.sensor
 
+import com.tinkernorth.dish.composer.MotionCapability
+import com.tinkernorth.dish.source.connection.SatelliteConnection
+import io.mockk.mockk
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -94,6 +98,71 @@ class PhysicalMotionSourceTest {
         assertEquals(1234, s.accelX.toInt())
         assertEquals(-5678, s.accelY.toInt())
         assertEquals(8191, s.accelZ.toInt())
+    }
+
+    // ── filterByCapability — the gate added in PR3 ─────────────────────────
+
+    private fun fakeConn(): SatelliteConnection = mockk(relaxed = true)
+
+    @Test
+    fun `filterByCapability keeps a reachable slot that has gyro AND is user-enabled`() {
+        // The success path — both capability axes true, the slot stays in
+        // the reachable map and its sensor listener will register.
+        val conn = fakeConn()
+        val reachable = mapOf("9" to conn)
+        val caps = mapOf("9" to MotionCapability(hasGyro = true, carriesOnConnection = true, userEnabled = true))
+        assertEquals(reachable, PhysicalMotionSource.filterByCapability(reachable, caps))
+    }
+
+    @Test
+    fun `filterByCapability drops a reachable slot whose pad has NO gyro`() {
+        // A cheap Bluetooth pad on API 31+ exposes the per-device
+        // SensorManager but reports no TYPE_GYROSCOPE. Reachability still
+        // says "the slot is bound and the satellite is up"; the capability
+        // gate must drop it so listening doesn't burn battery on a sensor
+        // that will never fire.
+        val reachable = mapOf("9" to fakeConn())
+        val caps = mapOf("9" to MotionCapability(hasGyro = false, carriesOnConnection = true, userEnabled = true))
+        assertTrue(PhysicalMotionSource.filterByCapability(reachable, caps).isEmpty())
+    }
+
+    @Test
+    fun `filterByCapability drops a slot the user has toggled motion off for`() {
+        // The user-facing toggle is the headline PR2/PR3 deliverable —
+        // when off, the listener must NOT register, even though hardware
+        // and link are both ready. A regression that ignores userEnabled
+        // would leak gyro listeners on slots motion is off for, defeating
+        // the toggle.
+        val reachable = mapOf("9" to fakeConn())
+        val caps = mapOf("9" to MotionCapability(hasGyro = true, carriesOnConnection = true, userEnabled = false))
+        assertTrue(PhysicalMotionSource.filterByCapability(reachable, caps).isEmpty())
+    }
+
+    @Test
+    fun `filterByCapability drops a reachable slot that is missing from caps`() {
+        // Startup race: the reachability flow emits before the capability
+        // composer's first emission. Treat the unknown slot as "no motion"
+        // (safe default) — the next emission will reinstate it if it
+        // actually has gyro + is enabled.
+        val reachable = mapOf("9" to fakeConn())
+        val caps = emptyMap<String, MotionCapability>()
+        assertTrue(PhysicalMotionSource.filterByCapability(reachable, caps).isEmpty())
+    }
+
+    @Test
+    fun `filterByCapability per-slot — keeps the enabled one, drops the disabled one`() {
+        // Two pads, same satellite, different user toggles. Pin that the
+        // filter is per-slot and not "all-or-nothing."
+        val connA = fakeConn()
+        val connB = fakeConn()
+        val reachable = mapOf("A" to connA, "B" to connB)
+        val caps =
+            mapOf(
+                "A" to MotionCapability(hasGyro = true, carriesOnConnection = true, userEnabled = true),
+                "B" to MotionCapability(hasGyro = true, carriesOnConnection = true, userEnabled = false),
+            )
+        val result = PhysicalMotionSource.filterByCapability(reachable, caps)
+        assertEquals(mapOf("A" to connA), result)
     }
 
     @Test

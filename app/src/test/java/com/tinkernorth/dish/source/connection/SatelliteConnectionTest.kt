@@ -257,10 +257,117 @@ class SatelliteConnectionTest {
 
             // Post-Task-1.1 builds must set CAP_MOTION (0x0004) in the
             // MSG_CONTROLLER_ADD capability word so the server knows to expect
-            // the MSG_MOTION IMU stream from this client.
+            // the MSG_MOTION IMU stream from this client. Default-arg
+            // motionCapsBitsFor returns CAP_MOTION_BIT_LEGACY, exercising the
+            // pre-composer behaviour.
             coVerify {
                 repo.addController(8, 0, match { (it and 0x0004) != 0 })
             }
+        }
+
+    @Test
+    fun `controller add CLEARS CAP_MOTION when motionCapsBitsFor returns 0`() =
+        runTest {
+            // The headline PR3 fix: when the capability composer says "this
+            // slot has no gyro" OR "the user toggled motion off," the cap
+            // word on the wire must drop CAP_MOTION so the receiver's web
+            // UI is honest about which slots stream motion. A regression
+            // here is the existing bug (every controller silently advertises
+            // CAP_MOTION).
+            every { repo.resetControllerAck(any()) } just Runs
+            every { repo.startHeartbeat(any()) } just Runs
+            every { repo.isConnectionAlive(any()) } returns false
+            every { repo.getLastControllerAck(any()) } returns 0
+
+            val noMotion =
+                SatelliteConnection(
+                    id = SatelliteConnection.idFor(server),
+                    server = server,
+                    scope = scope,
+                    controllerRepo = repo,
+                    motionCapsBitsFor = { 0 },
+                )
+            noMotion.markConnecting()
+            noMotion.markConnected(handle = 8, connectionId = "c") {}
+            noMotion.attachSlot(slotId = "slot-1", controllerType = 0)
+
+            // Motion bit absent.
+            coVerify {
+                repo.addController(8, 0, match { (it and 0x0004) == 0 })
+            }
+            // Non-motion bits (analog triggers 0x0001 + rumble 0x0002) still set —
+            // the lambda only controls the motion bit, not the whole word.
+            coVerify {
+                repo.addController(8, 0, match { (it and 0x0001) != 0 && (it and 0x0002) != 0 })
+            }
+
+            noMotion.markDisconnected()
+        }
+
+    @Test
+    fun `controller add SETS CAP_MOTION when motionCapsBitsFor returns the bit`() =
+        runTest {
+            // The other side of the truth table: when the slot has motion
+            // (gyro present + user-enabled), the cap word must include
+            // CAP_MOTION. Pin the explicit-bit path (no default-arg
+            // accident).
+            every { repo.resetControllerAck(any()) } just Runs
+            every { repo.startHeartbeat(any()) } just Runs
+            every { repo.isConnectionAlive(any()) } returns false
+            every { repo.getLastControllerAck(any()) } returns 0
+
+            val withMotion =
+                SatelliteConnection(
+                    id = SatelliteConnection.idFor(server),
+                    server = server,
+                    scope = scope,
+                    controllerRepo = repo,
+                    motionCapsBitsFor = { 0x0004 },
+                )
+            withMotion.markConnecting()
+            withMotion.markConnected(handle = 8, connectionId = "c") {}
+            withMotion.attachSlot(slotId = "slot-1", controllerType = 0)
+
+            coVerify {
+                repo.addController(8, 0, match { (it and 0x0004) != 0 })
+            }
+            withMotion.markDisconnected()
+        }
+
+    @Test
+    fun `motionCapsBitsFor is called with the SAME slotId being registered`() =
+        runTest {
+            // Per-slot resolution is the whole point — two slots with
+            // different toggles must each see their own slotId. A regression
+            // that hardcodes a single slotId would silently apply slot-A's
+            // toggle to slot-B (or worse, return random results).
+            every { repo.resetControllerAck(any()) } just Runs
+            every { repo.startHeartbeat(any()) } just Runs
+            every { repo.isConnectionAlive(any()) } returns false
+            every { repo.getLastControllerAck(any()) } returns 0
+
+            val askedFor = mutableListOf<String>()
+            val perSlot =
+                SatelliteConnection(
+                    id = SatelliteConnection.idFor(server),
+                    server = server,
+                    scope = scope,
+                    controllerRepo = repo,
+                    motionCapsBitsFor = { slot ->
+                        askedFor += slot
+                        if (slot == "slot-A") 0x0004 else 0
+                    },
+                )
+            perSlot.markConnecting()
+            perSlot.markConnected(handle = 8, connectionId = "c") {}
+            perSlot.attachSlot("slot-A", controllerType = 0)
+            perSlot.attachSlot("slot-B", controllerType = 0)
+
+            assertTrue(askedFor.contains("slot-A"))
+            assertTrue(askedFor.contains("slot-B"))
+            coVerify { repo.addController(8, 0, match { (it and 0x0004) != 0 }) }
+            coVerify { repo.addController(8, 1, match { (it and 0x0004) == 0 }) }
+            perSlot.markDisconnected()
         }
 
     @Test

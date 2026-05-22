@@ -48,6 +48,22 @@ class SatelliteConnection(
     private val scope: CoroutineScope,
     private val controllerRepo: ControllerRepository,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    /**
+     * Resolves the per-slot `CAP_MOTION` (0x0004) bit for the wire
+     * capability word at `MSG_CONTROLLER_ADD` time. Defaulted to the
+     * always-on word ([DEFAULT_CAPABILITIES_WITHOUT_MOTION] OR
+     * [com.tinkernorth.dish.composer.MotionCapability.CAP_MOTION_BIT]) so
+     * pre-existing tests that don't care about the composer keep behaving
+     * the same.
+     *
+     * In production, [SatelliteConnectionManager] threads a closure that
+     * reads from [com.tinkernorth.dish.composer.MotionCapabilityComposer
+     * .capabilityFor] so the bit reflects the *user's* current toggle and
+     * the slot's *real* hardware. This makes the cap word honest —
+     * previously every controller advertised motion regardless of whether
+     * gyro samples would ever flow.
+     */
+    private val motionCapsBitsFor: (slotId: String) -> Int = { CAP_MOTION_BIT_LEGACY },
 ) {
     private val _server = MutableStateFlow(server)
     val server: StateFlow<DiscoveredServer> = _server.asStateFlow()
@@ -283,7 +299,15 @@ class SatelliteConnection(
                 if (info.registered) return@withContext
                 if (handle < 0) return@withContext
                 controllerRepo.resetControllerAck(handle)
-                controllerRepo.addController(handle, info.controllerIndex, DEFAULT_CAPABILITIES)
+                // Cap word: the non-motion bits are fixed (the dish always
+                // sends analog triggers and accepts rumble), motion comes
+                // from the composer so it reflects the slot's actual gyro
+                // hardware AND the user's toggle. A satellite re-connect
+                // does NOT re-handshake the cap word (toCapBits ignores the
+                // live link state), so a momentary network blip can't drop
+                // CAP_MOTION on the server side.
+                val caps = BASE_CAPABILITIES or motionCapsBitsFor(slotId)
+                controllerRepo.addController(handle, info.controllerIndex, caps)
                 var ack = -1
                 repeat(ACK_WAIT_ATTEMPTS) {
                     ack = controllerRepo.getLastControllerAck(handle)
@@ -432,20 +456,33 @@ class SatelliteConnection(
         private const val FALTER_TO_DEAD = 5
 
         // MSG_CONTROLLER_ADD capability word (2-byte big-endian): bit 0x0001
-        // analog triggers, 0x0002 rumble, 0x0004 motion (this client emits the
-        // MSG_MOTION IMU stream — see PhoneMotionSource, Task 1.1).
+        // analog triggers, 0x0002 rumble, 0x0004 motion (this client emits
+        // the MSG_MOTION IMU stream — see PhoneMotionSource, Task 1.1).
         //
         // CAP_LIGHTBAR (0x0008) is intentionally NOT set: Android exposes no
-        // controller-LED API, so dish-android cannot drive a controller's RGB
-        // lightbar. Leaving the bit clear tells a capability-aware satellite
-        // not to waste packets sending MSG_LIGHTBAR (0x000D) to this client.
-        // Any 0x000D that does arrive is decoded, logged, and dropped by the
-        // native receive loop (satellite_jni.cpp::receiveAck).
+        // controller-LED API, so dish-android cannot drive a controller's
+        // RGB lightbar. Leaving the bit clear tells a capability-aware
+        // satellite not to waste packets sending MSG_LIGHTBAR (0x000D) to
+        // this client. Any 0x000D that does arrive is decoded, logged, and
+        // dropped by the native receive loop (satellite_jni.cpp::receiveAck).
         private const val CAP_ANALOG_TRIGGERS = 0x0001
         private const val CAP_RUMBLE = 0x0002
-        private const val CAP_MOTION = 0x0004
-        private const val DEFAULT_CAPABILITIES =
-            CAP_ANALOG_TRIGGERS or CAP_RUMBLE or CAP_MOTION
+
+        /**
+         * The always-on slice of the capability word: analog triggers + rumble.
+         * Motion is per-slot via [motionCapsBitsFor]; lightbar is intentionally
+         * absent (no controller-LED API on Android).
+         */
+        private const val BASE_CAPABILITIES = CAP_ANALOG_TRIGGERS or CAP_RUMBLE
+
+        /**
+         * Legacy "all motion" word for the default-arg motion lambda. Pre-PR3
+         * code path: every controller advertised CAP_MOTION regardless of
+         * gyro hardware or user toggle. Tests that don't inject a composer
+         * still see this value so their assertions don't have to know about
+         * the new wiring.
+         */
+        internal const val CAP_MOTION_BIT_LEGACY = 0x0004
 
         // MSG_CONTROLLER_ACK result codes — wire values mirror the satellite's
         // core/types.h. getLastControllerAck() returns a packed word,

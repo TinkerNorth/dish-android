@@ -4,6 +4,7 @@
 package com.tinkernorth.dish.source.connection
 
 import android.content.Context
+import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.core.jni.ControllerRepository
 import com.tinkernorth.dish.core.model.ConnectResponse
 import com.tinkernorth.dish.core.model.DiscoveredServer
@@ -29,6 +30,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 
 /**
@@ -81,6 +83,14 @@ class SatelliteConnectionManager
         private val store: ConnectionStore,
         private val json: Json,
         @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+        /**
+         * `Provider` (not direct injection) breaks the Hilt construction cycle:
+         * [MotionCapabilityComposer] depends on [com.tinkernorth.dish.composer.ConnectionHub],
+         * which depends back on this manager. Using `Provider.get()` defers
+         * resolution until the cap word is actually needed (at controller-add
+         * time), at which point the singleton composer already exists.
+         */
+        private val motionCapabilityProvider: Provider<MotionCapabilityComposer>,
     ) {
         private val _connections = MutableStateFlow<Map<String, SatelliteConnection>>(emptyMap())
         val connections: StateFlow<Map<String, SatelliteConnection>> = _connections.asStateFlow()
@@ -182,7 +192,16 @@ class SatelliteConnectionManager
                     .updateAndGet { map ->
                         val cur = map[id]
                         if (cur != null) return@updateAndGet map
-                        val fresh = SatelliteConnection(id, server, scope, controllerRepo, ioDispatcher)
+                        val fresh = SatelliteConnection(
+                            id,
+                            server,
+                            scope,
+                            controllerRepo,
+                            ioDispatcher,
+                            motionCapsBitsFor = { slotId ->
+                                motionCapabilityProvider.get().capabilityFor(slotId).toCapBits()
+                            },
+                        )
                         created = fresh
                         map + (id to fresh)
                     }[id] ?: return
@@ -282,7 +301,16 @@ class SatelliteConnectionManager
                 _connections
                     .updateAndGet { map ->
                         if (map.containsKey(id)) return@updateAndGet map
-                        map + (id to SatelliteConnection(id, server, scope, controllerRepo, ioDispatcher))
+                        map + (id to SatelliteConnection(
+                            id,
+                            server,
+                            scope,
+                            controllerRepo,
+                            ioDispatcher,
+                            motionCapsBitsFor = { slotId ->
+                                motionCapabilityProvider.get().capabilityFor(slotId).toCapBits()
+                            },
+                        ))
                     }[id] ?: return
             conn.markConnecting()
             scope.launch {

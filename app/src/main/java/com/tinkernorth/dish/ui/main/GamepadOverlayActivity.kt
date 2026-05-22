@@ -21,6 +21,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionHub
 import com.tinkernorth.dish.composer.ConnectionKind
+import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.input.hidToXusb
@@ -71,6 +72,8 @@ class GamepadOverlayActivity :
     @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
 
     @Inject lateinit var notifications: DishNotifications
+
+    @Inject lateinit var motionCapability: MotionCapabilityComposer
 
     private lateinit var binding: ActivityGamepadOverlayBinding
     private lateinit var gamepadHost: GamepadActivityHost
@@ -146,6 +149,52 @@ class GamepadOverlayActivity :
                     // has no motion channel), so it must repaint when the
                     // bound connection's summary first resolves or changes.
                     refreshMotionStatus()
+                }
+            }
+        }
+
+        // Gate the gyro/accel listeners on the per-slot motion capability:
+        // start the source iff the slot is "effective" (gyro present AND
+        // bound to a Connected satellite AND the user toggle is on); stop
+        // otherwise. Replaces the previous always-on lifecycle in
+        // onResume/onPause, which burned battery on Bluetooth-HID
+        // connections (where motion can never flow) and ignored the user
+        // toggle entirely.
+        //
+        // The collector runs only while STARTED; repeatOnLifecycle cancels
+        // it on STOP, and the launched coroutine stops the source on
+        // cancellation so a backgrounded overlay never leaks listeners.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                try {
+                    motionCapability.state.collect { caps ->
+                        val effective = caps[VIRTUAL_SLOT_ID]?.effective == true
+                        if (effective && !motionSource.isStreaming) {
+                            motionSource.start { sample, deltaUs ->
+                                satellite.get(connectionId)?.sendMotion(
+                                    VIRTUAL_SLOT_ID,
+                                    sample.gyroX,
+                                    sample.gyroY,
+                                    sample.gyroZ,
+                                    sample.accelX,
+                                    sample.accelY,
+                                    sample.accelZ,
+                                    deltaUs,
+                                )
+                            }
+                        } else if (!effective && motionSource.isStreaming) {
+                            motionSource.stop()
+                        }
+                        // Repaint after every gate flip so the pill
+                        // (STREAMING / PAUSED / NOT_FORWARDED / UNAVAILABLE)
+                        // tracks reality without waiting for an unrelated
+                        // hub.connections emission.
+                        refreshMotionStatus()
+                    }
+                } finally {
+                    // Stop on collector cancellation (STOP / activity destroy)
+                    // so a backgrounded overlay never leaks sensor listeners.
+                    motionSource.stop()
                 }
             }
         }
@@ -254,33 +303,23 @@ class GamepadOverlayActivity :
 
     override fun onResume() {
         super.onResume()
-        // Stream the phone's gyro/accel + battery to the bound satellite
-        // session. `satellite.get(...)` is null for Bluetooth-HID connections,
-        // so these emits naturally no-op there — motion forwarding is a
-        // satellite-path feature.
-        motionSource.start { sample, deltaUs ->
-            satellite.get(connectionId)?.sendMotion(
-                VIRTUAL_SLOT_ID,
-                sample.gyroX,
-                sample.gyroY,
-                sample.gyroZ,
-                sample.accelX,
-                sample.accelY,
-                sample.accelZ,
-                deltaUs,
-            )
-        }
+        // Battery is unconditional — it has its own gating on the connection
+        // kind inside the satellite send path, and the cost of a slow battery
+        // poll is negligible.
         batterySource.start(lifecycleScope) { level, status ->
             satellite.get(connectionId)?.sendBattery(VIRTUAL_SLOT_ID, level, status)
         }
-        // motionSource is now started (or a no-op if there's no gyroscope) —
-        // repaint so the pill reads "streaming" rather than "paused".
+        // Note: motionSource start/stop is now lifecycle-scoped on the
+        // capability flow (see the collector launched in onCreate). The
+        // overlay no longer unconditionally registers sensor listeners on
+        // Bluetooth-HID connections where motion can't flow, or on slots
+        // the user has toggled motion off for — fixing a measurable
+        // gyro/accel battery drain that previously ran for nothing.
         refreshMotionStatus()
     }
 
     override fun onPause() {
         super.onPause()
-        motionSource.stop()
         batterySource.stop()
         // Source stopped to save battery; reflect "paused" (not "unavailable").
         refreshMotionStatus()

@@ -5,6 +5,8 @@ package com.tinkernorth.dish.source.connection
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.tinkernorth.dish.composer.MotionCapability
+import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.core.jni.ControllerRepository
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.net.DiscoveryRepository
@@ -82,6 +84,18 @@ class SatelliteConnectionManagerTest {
         every { store.satelliteSharedKey(any()) } returns null
     }
 
+    /**
+     * Provider that returns a fresh, always-off [MotionCapabilityComposer]
+     * stand-in. These tests don't exercise the cap-bit path; they just need
+     * the manager to construct successfully.
+     */
+    private val motionCapabilityProvider =
+        javax.inject.Provider<MotionCapabilityComposer> {
+            mockk(relaxed = true) {
+                every { capabilityFor(any()) } returns MotionCapability.Off
+            }
+        }
+
     private fun manager(): SatelliteConnectionManager =
         SatelliteConnectionManager(
             context = context,
@@ -91,6 +105,7 @@ class SatelliteConnectionManagerTest {
             store = store,
             json = json,
             ioDispatcher = ioDispatcher,
+            motionCapabilityProvider = motionCapabilityProvider,
         )
 
     private fun runMgrTest(block: suspend (SatelliteConnectionManager, MutableList<ConnectionEvent>) -> Unit) =

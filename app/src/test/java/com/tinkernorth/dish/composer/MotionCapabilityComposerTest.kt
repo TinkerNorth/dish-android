@@ -7,6 +7,7 @@ import com.tinkernorth.dish.architecture.testing.composerTest
 import com.tinkernorth.dish.architecture.testing.probe
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.sensor.PhoneMotionAvailability
+import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import io.mockk.every
 import io.mockk.mockk
@@ -65,6 +66,7 @@ class MotionCapabilityComposerTest {
         bindings: MutableStateFlow<Map<String, String>>,
         connections: MutableStateFlow<List<ConnectionSummary>>,
         scope: CoroutineScope,
+        motionEnabled: MutableStateFlow<Map<String, Boolean>> = MutableStateFlow(emptyMap()),
     ): MotionCapabilityComposer {
         val availability: PhoneMotionAvailability =
             mockk { every { state } returns phoneAvailable }
@@ -75,7 +77,9 @@ class MotionCapabilityComposerTest {
                 every { this@mockk.bindings } returns bindings
                 every { this@mockk.connections } returns connections
             }
-        return MotionCapabilityComposer(availability, registry, hub, scope)
+        val store: MotionEnabledStore =
+            mockk { every { state } returns motionEnabled }
+        return MotionCapabilityComposer(availability, registry, hub, store, scope)
     }
 
     // ── Pure data-class invariants ──────────────────────────────────────
@@ -258,6 +262,113 @@ class MotionCapabilityComposerTest {
             devices.value = emptyMap()
             testScheduler.runCurrent()
             assertNull(probe.latest["9"])
+        }
+
+    @Test
+    fun `userEnabled defaults to true for an unwritten slot`() =
+        composerTest {
+            // The store collapses an absent key onto DEFAULT_ENABLED = true.
+            // The composer must respect the same default — otherwise a fresh
+            // install would silently advertise CAP_MOTION = 0 for every slot
+            // until the user toggled each one. Pin the default through the
+            // composer's userEnabled field.
+            val phoneAvail = MutableStateFlow(true)
+            val devices = MutableStateFlow<Map<Int, PhysicalGamepadRegistry.Device>>(emptyMap())
+            val bindings = MutableStateFlow<Map<String, String>>(emptyMap())
+            val conns = MutableStateFlow<List<ConnectionSummary>>(emptyList())
+            val motionEnabled = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+
+            val probe =
+                composerFor(phoneAvail, devices, bindings, conns, backgroundScope, motionEnabled).probe(this)
+            testScheduler.runCurrent()
+
+            assertEquals(true, probe.latest[VIRTUAL_SLOT_ID]?.userEnabled)
+        }
+
+    @Test
+    fun `userEnabled flips when MotionEnabledStore writes false for a slot`() =
+        composerTest {
+            // The toggle is the user-visible switch — flipping it must
+            // immediately propagate to the composer (and from there to
+            // SatelliteConnection's cap bit and the listener gate). A
+            // regression where the store write doesn't reach the composer
+            // would make the toggle look broken in the UI.
+            val phoneAvail = MutableStateFlow(true)
+            val devices = MutableStateFlow<Map<Int, PhysicalGamepadRegistry.Device>>(emptyMap())
+            val bindings = MutableStateFlow<Map<String, String>>(emptyMap())
+            val conns = MutableStateFlow<List<ConnectionSummary>>(emptyList())
+            val motionEnabled = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+
+            val composer =
+                composerFor(phoneAvail, devices, bindings, conns, backgroundScope, motionEnabled)
+            val probe = composer.probe(this)
+            testScheduler.runCurrent()
+            assertTrue(probe.latest[VIRTUAL_SLOT_ID]?.userEnabled == true)
+
+            motionEnabled.value = mapOf(VIRTUAL_SLOT_ID to false)
+            testScheduler.runCurrent()
+            assertFalse(probe.latest[VIRTUAL_SLOT_ID]?.userEnabled == true)
+        }
+
+    @Test
+    fun `toCapBits is zero on a slot the user has disabled — even if hasGyro is true`() =
+        composerTest {
+            // End-to-end pin: phone has gyro, satellite is up, but the user
+            // toggled motion off — the cap bit on the wire must be zero so
+            // the receiver's web UI is honest about which slots stream motion.
+            val phoneAvail = MutableStateFlow(true)
+            val devices = MutableStateFlow<Map<Int, PhysicalGamepadRegistry.Device>>(emptyMap())
+            val bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A"))
+            val conns = MutableStateFlow(listOf(summary("sat-A")))
+            val motionEnabled = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to false))
+
+            val probe =
+                composerFor(phoneAvail, devices, bindings, conns, backgroundScope, motionEnabled).probe(this)
+            testScheduler.runCurrent()
+
+            assertEquals(0, probe.latest[VIRTUAL_SLOT_ID]?.toCapBits())
+        }
+
+    @Test
+    fun `capabilityFor returns the latest derived value for a slot`() =
+        composerTest {
+            // SatelliteConnection.registerController is synchronous on its IO
+            // dispatcher; the composer's state.collect would be awkward there.
+            // capabilityFor is the synchronous accessor — pin that it returns
+            // the latest derived value, not stale Initial.
+            val phoneAvail = MutableStateFlow(true)
+            val devices = MutableStateFlow<Map<Int, PhysicalGamepadRegistry.Device>>(emptyMap())
+            val bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A"))
+            val conns = MutableStateFlow(listOf(summary("sat-A")))
+
+            val composer =
+                composerFor(phoneAvail, devices, bindings, conns, backgroundScope)
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            val cap = composer.capabilityFor(VIRTUAL_SLOT_ID)
+            assertTrue(cap.hasGyro)
+            assertTrue(cap.carriesOnConnection)
+            assertEquals(MotionCapability.CAP_MOTION_BIT, cap.toCapBits())
+        }
+
+    @Test
+    fun `capabilityFor returns Off for a slot not in the map`() =
+        composerTest {
+            // A controller-add for an unknown slot (race with registry
+            // disconnect) must not NPE — capabilityFor returns Off so the
+            // cap word is 0, which is correct: we don't know that slot has
+            // motion, so don't advertise it.
+            val phoneAvail = MutableStateFlow(true)
+            val devices = MutableStateFlow<Map<Int, PhysicalGamepadRegistry.Device>>(emptyMap())
+            val bindings = MutableStateFlow<Map<String, String>>(emptyMap())
+            val conns = MutableStateFlow<List<ConnectionSummary>>(emptyList())
+
+            val composer = composerFor(phoneAvail, devices, bindings, conns, backgroundScope)
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            assertEquals(MotionCapability.Off, composer.capabilityFor("ghost-slot"))
         }
 
     @Test
