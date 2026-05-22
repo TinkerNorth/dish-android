@@ -40,18 +40,33 @@ class PairPinDialog(
 ) : Dialog(context, R.style.Theme_Dish_Dialog) {
     private lateinit var binding: DialogPairPinBinding
 
+    // Callers (see ConnectionsActivity.showPairingDialog) construct the dialog and
+    // assign dishTitle/dishSubtitle inside an `apply { ... }` block *before* calling
+    // show(); Dialog.onCreate — and therefore binding inflation — runs on first
+    // show(). We stash pre-show writes here and flush them once the views exist.
+    private var pendingTitle: CharSequence? = null
+    private var pendingSubtitle: CharSequence? = null
+
     /** Title displayed at the top — defaults to "Pair with satellite". */
     var dishTitle: CharSequence
-        get() = binding.tvPairTitle.text
+        get() = if (::binding.isInitialized) binding.tvPairTitle.text else pendingTitle ?: ""
         set(value) {
-            binding.tvPairTitle.text = value
+            if (::binding.isInitialized) {
+                binding.tvPairTitle.text = value
+            } else {
+                pendingTitle = value
+            }
         }
 
     /** Subtitle under the title — defaults to "Enter the PIN shown on your satellite." */
     var dishSubtitle: CharSequence
-        get() = binding.tvPairSubtitle.text
+        get() = if (::binding.isInitialized) binding.tvPairSubtitle.text else pendingSubtitle ?: ""
         set(value) {
-            binding.tvPairSubtitle.text = value
+            if (::binding.isInitialized) {
+                binding.tvPairSubtitle.text = value
+            } else {
+                pendingSubtitle = value
+            }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -59,6 +74,8 @@ class PairPinDialog(
         requestWindowFeature(Window.FEATURE_NO_TITLE)
         binding = DialogPairPinBinding.inflate(LayoutInflater.from(context))
         setContentView(binding.root)
+        pendingTitle?.let { binding.tvPairTitle.text = it }
+        pendingSubtitle?.let { binding.tvPairSubtitle.text = it }
         // Dim and centred — the dialog sits over a CardView-styled surface so
         // a transparent window keeps the bg_pill border crisp.
         window?.setBackgroundDrawableResource(android.R.color.transparent)
