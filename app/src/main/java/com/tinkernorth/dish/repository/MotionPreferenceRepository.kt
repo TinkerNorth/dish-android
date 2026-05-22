@@ -4,6 +4,7 @@
 package com.tinkernorth.dish.repository
 
 import android.content.Context
+import android.util.Log
 import com.tinkernorth.dish.architecture.interfaces.KeyedRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.serialization.Serializable
@@ -61,7 +62,22 @@ class MotionPreferenceRepository
             val raw = prefs.getString(KEY_LIST, null) ?: return emptyList()
             return runCatching {
                 json.decodeFromString(ListSerializer(MotionPreference.serializer()), raw)
-            }.getOrDefault(emptyList())
+            }.getOrElse { err ->
+                // Surface a one-line WARN when we can't parse what we
+                // previously wrote — without this the user silently loses
+                // every motion toggle they've configured and there's no
+                // breadcrumb pointing at the prefs file. The repository
+                // still falls back to emptyList() so app startup keeps
+                // working (the alternative — a crash on first read —
+                // would brick the dish on a corrupted prefs).
+                Log.w(
+                    TAG,
+                    "Failed to decode motion-preference list; treating as empty. " +
+                        "User-facing impact: all per-slot motion toggles reset to default. " +
+                        "Cause: ${err.javaClass.simpleName}: ${err.message}",
+                )
+                emptyList()
+            }
         }
 
         override fun put(
@@ -95,6 +111,7 @@ class MotionPreferenceRepository
         }
 
         private companion object {
+            const val TAG = "MotionPreferenceRepository"
             const val PREFS_NAME = "motion_preferences"
             const val KEY_LIST = "preferences"
         }

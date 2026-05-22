@@ -7,6 +7,7 @@ import com.tinkernorth.dish.composer.MotionCapability
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -147,6 +148,42 @@ class PhysicalMotionSourceTest {
         val reachable = mapOf("9" to fakeConn())
         val caps = emptyMap<String, MotionCapability>()
         assertTrue(PhysicalMotionSource.filterByCapability(reachable, caps).isEmpty())
+    }
+
+    // ── shouldEmitGyro — the per-pad first-sample stale-zero accel gate ───
+
+    @Test
+    fun `shouldEmitGyro returns true when the pad has no accelerometer`() {
+        // A device that exposes a gyro but no accel (rare in practice).
+        // The gate must short-circuit — gyro samples MUST flow even when
+        // the accel cache will remain at its zero default forever,
+        // because the alternative is an indefinitely silent gyro stream.
+        assertTrue(PhysicalMotionSource.shouldEmitGyro(hasAccelSensor = false, accelSeen = false))
+    }
+
+    @Test
+    fun `shouldEmitGyro returns false on the first gyro before accel has reported`() {
+        // The headline bug this gate exists for: the gyro fires before
+        // the accel does, so the first MOTION packet would ship
+        // accel=(0,0,0). Downstream consumers read that as "stationary
+        // in zero gravity." The gate drops the gyro until accel has been
+        // seen — at most one sensor period of latency.
+        assertFalse(PhysicalMotionSource.shouldEmitGyro(hasAccelSensor = true, accelSeen = false))
+    }
+
+    @Test
+    fun `shouldEmitGyro returns true once accel has reported`() {
+        // After the first accel callback flips accelSeen=true, the cache
+        // holds a real triple — gyro emissions are safe.
+        assertTrue(PhysicalMotionSource.shouldEmitGyro(hasAccelSensor = true, accelSeen = true))
+    }
+
+    @Test
+    fun `shouldEmitGyro accel-sensor-absent path ignores accelSeen for safety`() {
+        // Belt-and-suspenders: hasAccelSensor=false implies the device
+        // will never set accelSeen, but the gate must not deadlock on
+        // that combination. Returns true regardless of accelSeen.
+        assertTrue(PhysicalMotionSource.shouldEmitGyro(hasAccelSensor = false, accelSeen = true))
     }
 
     @Test

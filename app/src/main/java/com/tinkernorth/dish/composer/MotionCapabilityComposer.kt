@@ -22,9 +22,12 @@ import javax.inject.Singleton
  *   - whether [com.tinkernorth.dish.source.sensor.PhoneMotionSource] /
  *     [com.tinkernorth.dish.source.sensor.PhysicalMotionSource] register
  *     sensor listeners at all (gyro listeners are a measurable battery cost);
- *   - what the on-screen motion pill renders.
+ *   - what the on-screen motion pill renders, including the
+ *     "your Xbox virtual pad has no IMU surface on the host" warning state
+ *     ([MotionCapability.hostHasSinkForType]).
  *
- * Three orthogonal facts, combined into [MotionCapability.effective]:
+ * Four orthogonal facts combined into [MotionCapability.effective] /
+ * [MotionCapability.toCapBits] / the pill mapping:
  *
  *   - [MotionCapability.hasGyro] — the hardware exists. Virtual slot: the
  *     phone has a gyroscope (see [PhoneMotionAvailability]). Physical slot:
@@ -36,6 +39,13 @@ import javax.inject.Singleton
  *   - [MotionCapability.userEnabled] — the user wants motion on for this
  *     slot. Sourced from [MotionEnabledStore.isEnabled], which collapses
  *     an absent entry onto the product default (`DEFAULT_ENABLED = true`).
+ *   - [MotionCapability.hostHasSinkForType] — the receiving host's backend
+ *     has an IMU surface for the slot's controller type. Derived from
+ *     [com.tinkernorth.dish.composer.ConnectionSummary.satelliteControllerTypes]:
+ *     PlayStation = yes (DS4 emulation on Windows/Linux carries gyro/accel),
+ *     Xbox = no (XInput has no IMU surface; XUSB_REPORT has no gyro fields).
+ *     Universal across the Windows + Linux satellite platforms — no wire
+ *     protocol bump needed to learn it.
  *
  * **Why a composer:** these are pure derivations from
  * [PhoneMotionAvailability], [PhysicalGamepadRegistry], [ConnectionHub]
@@ -55,6 +65,15 @@ data class MotionCapability(
      * collapses to [MotionEnabledStore.DEFAULT_ENABLED] (true).
      */
     val userEnabled: Boolean = true,
+    /**
+     * Receiver's backend has an IMU surface for the slot's chosen
+     * controller type. Always true for PlayStation-typed slots (DS4
+     * emulation on Windows ViGEm + Linux uinput both carry gyro/accel),
+     * false for Xbox-typed slots (XInput has no IMU). Defaulted true so
+     * a slot with no type yet — or a non-satellite connection — doesn't
+     * spuriously raise the "no host sink" warning.
+     */
+    val hostHasSinkForType: Boolean = true,
 ) {
     /**
      * True iff motion samples should both be captured AND would actually reach
@@ -70,7 +89,11 @@ data class MotionCapability(
      * [carriesOnConnection]: the capability describes the *dish*, not the
      * link, and we want a satellite re-connect to recover motion without a
      * re-handshake. It IS gated on [userEnabled] because flipping the toggle
-     * is a meaningful change to what the dish will emit.
+     * is a meaningful change to what the dish will emit. It is NOT gated on
+     * [hostHasSinkForType] either — the dish is honest about what IT will
+     * stream, regardless of whether the host can sink it; the
+     * `motionSinkSupportedForType` field on the receiver's snapshot is the
+     * canonical "host can sink" signal.
      */
     fun toCapBits(): Int = if (hasGyro && userEnabled) CAP_MOTION_BIT else 0
 
@@ -119,6 +142,7 @@ class MotionCapabilityComposer
                         hasGyro = phoneHasGyro,
                         carriesOnConnection = carriesMotion(VIRTUAL_SLOT_ID, bindings, byId),
                         userEnabled = enabledMap[VIRTUAL_SLOT_ID] ?: MotionEnabledStore.DEFAULT_ENABLED,
+                        hostHasSinkForType = hostSinkForType(VIRTUAL_SLOT_ID, bindings, byId),
                     )
 
                 // Physical pads.
@@ -129,6 +153,7 @@ class MotionCapabilityComposer
                             hasGyro = device.hasGyro,
                             carriesOnConnection = carriesMotion(slotId, bindings, byId),
                             userEnabled = enabledMap[slotId] ?: MotionEnabledStore.DEFAULT_ENABLED,
+                            hostHasSinkForType = hostSinkForType(slotId, bindings, byId),
                         )
                 }
                 out
@@ -164,5 +189,47 @@ class MotionCapabilityComposer
             val summary = summariesById[cid] ?: return false
             return summary.kind == ConnectionKind.SATELLITE &&
                 summary.live == LinkState.Connected
+        }
+
+        /**
+         * Resolve whether the **host** has a motion sink for this slot's
+         * chosen controller type.
+         *
+         * The dish never actually sees the receiver's backend; the answer is
+         * a heuristic on the controller type, which is a known invariant of
+         * the available backends:
+         *
+         *  - **Xbox-typed slot** ⇒ false. XInput / Xbox 360 emulation has
+         *    no IMU surface anywhere (no gyro fields in `XUSB_REPORT`;
+         *    `vigem_adapter.cpp::submitMotion` short-circuits for non-DS4
+         *    serials; the Linux uinput motion node is only created in
+         *    `pluginDeviceDS4`).
+         *  - **PlayStation-typed slot** ⇒ true. The DS4_REPORT_EX path on
+         *    Windows ViGEm and the INPUT_PROP_ACCELEROMETER node on Linux
+         *    uinput both deliver motion.
+         *  - **Unknown type** (no entry in
+         *    [ConnectionSummary.satelliteControllerTypes]) ⇒ true.
+         *    Conservatively assume motion CAN sink so we don't raise a
+         *    false-alarm warning before the type even propagates.
+         *
+         * macOS satellite is a non-issue here: it returns
+         * `ACK_ERR_BACKEND_UNAVAIL` at `MSG_CONTROLLER_ADD` time so the slot
+         * never reaches `registered` — the pill resolves on `carriesOnConnection`
+         * (false) long before `hostHasSinkForType` matters.
+         *
+         * Non-satellite bindings (Bluetooth-HID) also short-circuit to true
+         * — the pill state machine already handles those with `NOT_FORWARDED`,
+         * which takes precedence over `NO_HOST_SINK`.
+         */
+        private fun hostSinkForType(
+            slotId: String,
+            bindings: Map<String, String>,
+            summariesById: Map<String, ConnectionSummary>,
+        ): Boolean {
+            val cid = bindings[slotId] ?: return true // unbound — irrelevant
+            val summary = summariesById[cid] ?: return true
+            if (summary.kind != ConnectionKind.SATELLITE) return true // BT-HID, irrelevant
+            val type = summary.satelliteControllerTypes[slotId] ?: return true // unknown — assume yes
+            return type == CONTROLLER_TYPE_PLAYSTATION
         }
     }

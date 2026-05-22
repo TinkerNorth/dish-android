@@ -187,7 +187,7 @@ class PhysicalMotionSource
                 // the first MOTION packet for this pad ships accel = (0,0,0).
                 // Pads without an accel sensor (accel == null at registration)
                 // bypass the gate so the gyro stream is not stuck.
-                if (accel != null && !accelSeen) return
+                if (!shouldEmitGyro(accel != null, accelSeen)) return
                 val conn = reachable[slotId] ?: return
                 val sample =
                     convertControllerSample(
@@ -323,6 +323,33 @@ class PhysicalMotionSource
 
         companion object {
             private const val TAG = "PhysicalMotionSource"
+
+            /**
+             * Pure decider for the first-sample stale-zero accel race
+             * (parallel to the same gate in [PhoneMotionSource.onGyro]):
+             *
+             *  - pad has no accelerometer at all
+             *    (`hasAccelSensor=false`) ⇒ always emit gyro, the gate
+             *    short-circuits so the gyro stream is not stuck behind a
+             *    sensor that will never fire.
+             *  - pad has an accelerometer and it has reported at least once
+             *    since the listener was registered (`accelSeen=true`)
+             *    ⇒ emit. The accel cache holds a real value, not the
+             *    zero-initialised default that would otherwise ship as
+             *    "stationary in zero gravity."
+             *  - otherwise ⇒ drop the gyro callback. The wire stays silent
+             *    for at most one sensor period (~5–20 ms at
+             *    `SENSOR_DELAY_GAME`); the rate-limiter's normal cadence
+             *    recovers on the next callback.
+             *
+             * Lifted out of the inner-class [PadListener] so the four-row
+             * truth table is JVM-unit-testable without an Android device
+             * or a real [SensorEventListener].
+             */
+            internal fun shouldEmitGyro(
+                hasAccelSensor: Boolean,
+                accelSeen: Boolean,
+            ): Boolean = !hasAccelSensor || accelSeen
 
             /**
              * Intersect the reachable-slot set (pads bound to a Connected

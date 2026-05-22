@@ -13,6 +13,7 @@ import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.sensor.BatteryValidator
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
+import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import io.mockk.every
@@ -47,6 +48,7 @@ class MainViewModelTest {
     private lateinit var gamepadRegistry: PhysicalGamepadRegistry
     private lateinit var batteryStore: BatteryStatusStore
     private lateinit var motionEnabledStore: MotionEnabledStore
+    private lateinit var motionCapabilityComposer: MotionCapabilityComposer
     private lateinit var vm: MainViewModel
 
     private val connectionsFlow = MutableStateFlow<List<ConnectionSummary>>(emptyList())
@@ -70,6 +72,16 @@ class MainViewModelTest {
             MotionEnabledStore(
                 mockk(relaxed = true) { every { all() } returns emptyList() },
             )
+        // MotionCapabilityComposer is exercised separately; the VM only
+        // forwards its state into MainUiState. A relaxed mock with an
+        // empty initial-state flow is enough to satisfy the constructor.
+        motionCapabilityComposer =
+            mockk(relaxed = true) {
+                every { state } returns
+                    kotlinx.coroutines.flow.MutableStateFlow(
+                        emptyMap<String, com.tinkernorth.dish.composer.MotionCapability>(),
+                    )
+            }
         every { hub.connections } returns connectionsFlow
         every { hub.bindings } returns bindingsFlow
         every { gamepadRegistry.devices } returns devicesFlow
@@ -78,7 +90,16 @@ class MainViewModelTest {
         // injected Context. A relaxed mock returns "" by default, which keeps
         // the existing assertions (focused on slot wiring, not the label) green.
         val context = mockk<Context>(relaxed = true)
-        vm = MainViewModel(context, satellite, hub, gamepadRegistry, batteryStore, motionEnabledStore)
+        vm =
+            MainViewModel(
+                context,
+                satellite,
+                hub,
+                gamepadRegistry,
+                batteryStore,
+                motionEnabledStore,
+                motionCapabilityComposer,
+            )
     }
 
     @After

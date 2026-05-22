@@ -377,12 +377,18 @@ class GamepadOverlayActivity :
         val summary = hub.summary(connectionId)
         val carriesMotion = summary?.kind != ConnectionKind.BLUETOOTH
         val connected = summary?.live == LinkState.Connected
+        // The composer is the single source of truth for the user toggle
+        // AND the per-type host-sink heuristic — keeps the pill text in
+        // sync with the cap-bit and listener-gate decisions made elsewhere.
+        val cap = motionCapability.capabilityFor(VIRTUAL_SLOT_ID)
         val state =
             MotionIndicatorState.of(
                 isAvailable = motionSource.isAvailable,
                 isStreaming = motionSource.isStreaming,
                 connectionCarriesMotion = carriesMotion,
                 connectionConnected = connected,
+                userEnabled = cap.userEnabled,
+                hostHasSinkForType = cap.hostHasSinkForType,
                 isStalled = motionSource.isStalled,
             )
         binding.tvMotionStatus.setText(state.labelRes)
@@ -395,6 +401,10 @@ class GamepadOverlayActivity :
                 binding.tvMotionDetail.setText(R.string.motion_not_forwarded_detail)
             MotionIndicatorState.STALLED ->
                 binding.tvMotionDetail.setText(R.string.motion_stalled_detail)
+            MotionIndicatorState.USER_DISABLED ->
+                binding.tvMotionDetail.setText(R.string.motion_user_disabled_detail)
+            MotionIndicatorState.NO_HOST_SINK ->
+                binding.tvMotionDetail.setText(R.string.motion_no_host_sink_detail)
             else -> Unit
         }
     }

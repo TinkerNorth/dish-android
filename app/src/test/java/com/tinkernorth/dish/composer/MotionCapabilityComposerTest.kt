@@ -45,6 +45,7 @@ class MotionCapabilityComposerTest {
         id: String,
         kind: ConnectionKind = ConnectionKind.SATELLITE,
         live: LinkState = LinkState.Connected,
+        satelliteControllerTypes: Map<String, Int> = emptyMap(),
     ) = ConnectionSummary(
         id = id,
         kind = kind,
@@ -52,6 +53,7 @@ class MotionCapabilityComposerTest {
         detail = "",
         live = live,
         boundSlotIds = emptyList(),
+        satelliteControllerTypes = satelliteControllerTypes,
     )
 
     private fun device(
@@ -390,5 +392,138 @@ class MotionCapabilityComposerTest {
             conns.value = listOf(summary("bt-A", kind = ConnectionKind.BLUETOOTH))
             testScheduler.runCurrent()
             assertFalse(probe.latest["9"]?.carriesOnConnection == true)
+        }
+
+    // ── hostHasSinkForType — the B.3 per-type sink heuristic ───────────────
+
+    @Test
+    fun `hostHasSinkForType is true for a PlayStation-typed satellite slot`() =
+        composerTest {
+            // PS-typed slot → DS4 emulation on Windows ViGEm / Linux uinput,
+            // both of which carry gyro/accel. Pin the positive case so a
+            // regression that flips the polarity (or accidentally returns
+            // false for all types) would fail.
+            val phoneAvail = MutableStateFlow(true)
+            val devices = MutableStateFlow<Map<Int, PhysicalGamepadRegistry.Device>>(emptyMap())
+            val bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A"))
+            val conns =
+                MutableStateFlow(
+                    listOf(
+                        summary(
+                            "sat-A",
+                            satelliteControllerTypes = mapOf(VIRTUAL_SLOT_ID to CONTROLLER_TYPE_PLAYSTATION),
+                        ),
+                    ),
+                )
+            val probe = composerFor(phoneAvail, devices, bindings, conns, backgroundScope).probe(this)
+            testScheduler.runCurrent()
+
+            assertEquals(true, probe.latest[VIRTUAL_SLOT_ID]?.hostHasSinkForType)
+        }
+
+    @Test
+    fun `hostHasSinkForType is false for an Xbox-typed satellite slot — the headline B3 case`() =
+        composerTest {
+            // The headline B.3 deliverable: Xbox-typed virtual pads have no
+            // IMU surface on any backend (XInput / XUSB_REPORT has no gyro
+            // fields). The dish needs to know this so the pill can warn the
+            // user up front instead of "streaming" while the bytes silently
+            // disappear at the receiver's virtual-gamepad layer.
+            val phoneAvail = MutableStateFlow(true)
+            val devices = MutableStateFlow<Map<Int, PhysicalGamepadRegistry.Device>>(emptyMap())
+            val bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A"))
+            val conns =
+                MutableStateFlow(
+                    listOf(
+                        summary(
+                            "sat-A",
+                            satelliteControllerTypes = mapOf(VIRTUAL_SLOT_ID to CONTROLLER_TYPE_XBOX),
+                        ),
+                    ),
+                )
+            val probe = composerFor(phoneAvail, devices, bindings, conns, backgroundScope).probe(this)
+            testScheduler.runCurrent()
+
+            assertEquals(false, probe.latest[VIRTUAL_SLOT_ID]?.hostHasSinkForType)
+        }
+
+    @Test
+    fun `hostHasSinkForType flips when the user changes the slot type mid-session`() =
+        composerTest {
+            // The toggle on the controller row (Xbox ↔ PS) must propagate to
+            // the composer the moment the ConnectionSummary re-emits. Without
+            // this, the pill stays on STREAMING after a user swaps to Xbox
+            // and motion silently stops working without a warning.
+            val phoneAvail = MutableStateFlow(true)
+            val devices = MutableStateFlow<Map<Int, PhysicalGamepadRegistry.Device>>(emptyMap())
+            val bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A"))
+            val conns =
+                MutableStateFlow(
+                    listOf(
+                        summary(
+                            "sat-A",
+                            satelliteControllerTypes = mapOf(VIRTUAL_SLOT_ID to CONTROLLER_TYPE_PLAYSTATION),
+                        ),
+                    ),
+                )
+
+            val probe = composerFor(phoneAvail, devices, bindings, conns, backgroundScope).probe(this)
+            testScheduler.runCurrent()
+            assertEquals(true, probe.latest[VIRTUAL_SLOT_ID]?.hostHasSinkForType)
+
+            // User flips Xbox.
+            conns.value =
+                listOf(
+                    summary(
+                        "sat-A",
+                        satelliteControllerTypes = mapOf(VIRTUAL_SLOT_ID to CONTROLLER_TYPE_XBOX),
+                    ),
+                )
+            testScheduler.runCurrent()
+            assertEquals(false, probe.latest[VIRTUAL_SLOT_ID]?.hostHasSinkForType)
+        }
+
+    @Test
+    fun `hostHasSinkForType is true for a slot with unknown type — no false warnings`() =
+        composerTest {
+            // ConnectionSummary.satelliteControllerTypes is empty until the
+            // user has explicitly chosen a type, OR for a connection that
+            // hasn't fully resolved yet. Returning false in that window
+            // would flash a "no host sink" warning that goes away on its
+            // own — bad UX. Conservatively assume yes.
+            val phoneAvail = MutableStateFlow(true)
+            val devices = MutableStateFlow<Map<Int, PhysicalGamepadRegistry.Device>>(emptyMap())
+            val bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A"))
+            val conns = MutableStateFlow(listOf(summary("sat-A"))) // empty satelliteControllerTypes
+            val probe = composerFor(phoneAvail, devices, bindings, conns, backgroundScope).probe(this)
+            testScheduler.runCurrent()
+
+            assertEquals(true, probe.latest[VIRTUAL_SLOT_ID]?.hostHasSinkForType)
+        }
+
+    @Test
+    fun `hostHasSinkForType is true for a Bluetooth-HID-bound slot — limit is connection kind`() =
+        composerTest {
+            // BT-HID is handled by NOT_FORWARDED, which has higher
+            // precedence in the pill. The composer's hostHasSinkForType
+            // returns true to avoid spurious NO_HOST_SINK noise stacked on
+            // top of the connection-kind limit.
+            val phoneAvail = MutableStateFlow(true)
+            val devices = MutableStateFlow<Map<Int, PhysicalGamepadRegistry.Device>>(emptyMap())
+            val bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "bt-A"))
+            val conns =
+                MutableStateFlow(
+                    listOf(
+                        summary(
+                            "bt-A",
+                            kind = ConnectionKind.BLUETOOTH,
+                            satelliteControllerTypes = mapOf(VIRTUAL_SLOT_ID to CONTROLLER_TYPE_XBOX),
+                        ),
+                    ),
+                )
+            val probe = composerFor(phoneAvail, devices, bindings, conns, backgroundScope).probe(this)
+            testScheduler.runCurrent()
+
+            assertEquals(true, probe.latest[VIRTUAL_SLOT_ID]?.hostHasSinkForType)
         }
 }

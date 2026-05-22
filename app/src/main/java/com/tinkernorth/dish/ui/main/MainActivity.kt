@@ -122,7 +122,7 @@ class MainActivity :
                 liveCount == 0 -> getString(R.string.status_remembered, totalCount)
                 else -> getString(R.string.status_connected_of, liveCount, totalCount)
             }
-        controllerAdapter.submitSlots(s.slots, s.connections)
+        controllerAdapter.submitSlots(s.slots, s.connections, s.motionCapabilities)
     }
 
     private fun handleEvent(event: MainEvent) {
@@ -179,6 +179,11 @@ class MainActivity :
         connectionId: String,
         type: Int,
     ) = viewModel.setSatelliteControllerType(connectionId, slotId, type)
+
+    override fun onMotionEnabledChanged(
+        slotId: String,
+        enabled: Boolean,
+    ) = viewModel.setMotionEnabled(slotId, enabled)
 
     override fun onOpenGamepad() {
         val v = viewModel.uiState.value.virtualSlot

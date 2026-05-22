@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnection
@@ -47,6 +48,7 @@ class MainViewModel
         private val gamepadRegistry: PhysicalGamepadRegistry,
         private val batteryStatusStore: BatteryStatusStore,
         private val motionEnabledStore: MotionEnabledStore,
+        private val motionCapability: MotionCapabilityComposer,
     ) : ViewModel() {
         /**
          * Reactive `slotId -> enabled` map for the per-slot motion toggle.
@@ -72,7 +74,8 @@ class MainViewModel
                 hub.bindings,
                 gamepadRegistry.devices,
                 batteryStatusStore.samples,
-            ) { conns, bindings, devices, batteries ->
+                motionCapability.state,
+            ) { conns, bindings, devices, batteries, motionCaps ->
                 val virtual =
                     ControllerSlot(
                         id = VIRTUAL_SLOT_ID,
@@ -102,7 +105,7 @@ class MainViewModel
                                 },
                         )
                     }
-                MainUiState(slots = slots, connections = conns)
+                MainUiState(slots = slots, connections = conns, motionCapabilities = motionCaps)
             }.onEach { _uiState.value = it }.launchIn(viewModelScope)
 
             satellite.events

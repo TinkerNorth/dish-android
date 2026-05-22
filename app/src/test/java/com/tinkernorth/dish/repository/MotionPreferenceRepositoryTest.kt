@@ -5,13 +5,19 @@ package com.tinkernorth.dish.repository
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
 import io.mockk.slot
+import io.mockk.unmockkStatic
+import io.mockk.verify
 import kotlinx.serialization.json.Json
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 
 /**
@@ -53,6 +59,17 @@ class MotionPreferenceRepositoryTest {
         assertNull(repo.get("never-written"))
     }
 
+    @Before
+    fun mockLog() {
+        mockkStatic(Log::class)
+        every { Log.w(any<String>(), any<String>()) } returns 0
+    }
+
+    @After
+    fun unmockLog() {
+        unmockkStatic(Log::class)
+    }
+
     @Test
     fun `corrupt JSON in prefs falls back to empty — does not crash app startup`() {
         // A crash during a previous write, or a sideloaded apk overwriting
@@ -64,6 +81,25 @@ class MotionPreferenceRepositoryTest {
         val repo = MotionPreferenceRepository(ctx, json)
         assertTrue(repo.all().isEmpty())
         assertNull(repo.get("anything"))
+    }
+
+    @Test
+    fun `corrupt JSON logs a WARN so the silent toggle-loss has a breadcrumb`() {
+        // The fall-through to emptyList() is silent without a log. A
+        // user reporting "all my motion toggles reset" would otherwise
+        // have nothing to point at; the WARN names the file + the
+        // decoder error so support has somewhere to start.
+        val (ctx, store) = fakePrefs()
+        store["preferences"] = "{not valid json"
+        val repo = MotionPreferenceRepository(ctx, json)
+        repo.all() // triggers the decode path
+
+        verify(atLeast = 1) {
+            Log.w(
+                eq("MotionPreferenceRepository"),
+                match<String> { it.contains("Failed to decode motion-preference list") },
+            )
+        }
     }
 
     @Test
