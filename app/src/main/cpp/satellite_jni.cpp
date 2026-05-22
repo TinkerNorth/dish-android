@@ -668,11 +668,16 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendCo
 
 /* ── Motion (gyro + accel) ────────────────────────────────────────────────── */
 //
-// Hot path. Caller is expected to have already scaled gyro to deg/s × 16.3835
-// (LSB = 2000/32767 deg/s) and accel to g × 8191.75 (LSB = 4/32767 g) — the
-// satellite docs §0x000A is the canonical spec. Caller is also responsible
-// for any per-controller rate-limiting (MotionRateLimiter.kt) before reaching
-// this method.
+// Hot path. The Kotlin caller (MotionScaling.gyroRadToWire /
+// accelMssToWire) has already done all the unit conversion — rad/s →
+// int16 with 1 LSB = 2000/32767 deg/s, and m/s² → int16 with 1 LSB =
+// 4/32767 g. This function does NO scaling; it only packs the int16
+// values into the 17-byte MSG_MOTION (0x000A) wire payload via
+// dish_wire::encodeMotionPayload. Per-controller rate-limiting also
+// happens up-stack (MotionRateLimiter.kt); reaching this method means
+// the caller has already passed the 250 Hz gate.
+//
+// The satellite docs §0x000A is the canonical spec for the wire layout.
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendMotion(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jshort gyroX, jshort gyroY, jshort gyroZ,
     jshort accelX, jshort accelY, jshort accelZ, jint timestampDeltaUs) {

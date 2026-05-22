@@ -154,6 +154,22 @@ class PhoneMotionSource(
     /** The currently-scheduled stall tick, kept so [stop] can cancel it. */
     @Volatile private var stallTickRunnable: Runnable? = null
 
+    /**
+     * Reusable 3-element output buffer for [MotionScaling.remapLandscape]
+     * to avoid allocating a fresh [FloatArray] on every sensor callback
+     * (250 Hz × 2 sensors = up to 500 allocations/sec on the hot path).
+     * Single-threaded use: both callbacks dispatch on the same
+     * [SensorDispatch] thread, so no lock needed.
+     */
+    private val remapScratch = FloatArray(3)
+
+    /**
+     * Rotation values that have already produced a [MotionScaling.RemapResult
+     * .Fallback] log line — kept so we log each unknown value once per
+     * source-lifetime rather than spamming the log at the sensor rate.
+     */
+    private val loggedUnknownRotations = HashSet<Int>()
+
     private val listener =
         object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
@@ -229,11 +245,12 @@ class PhoneMotionSource(
         // Re-read the live rotation per sample: a runtime landscape flip is
         // swallowed by the activity's configChanges, so a once-per-start read
         // would leave the remap stale (see the class KDoc).
-        val (x, y, z) =
-            MotionScaling.remapLandscape(values[0], values[1], values[2], rotationSupplier())
-        accelX = MotionScaling.accelMssToWire(x)
-        accelY = MotionScaling.accelMssToWire(y)
-        accelZ = MotionScaling.accelMssToWire(z)
+        val rotation = rotationSupplier()
+        val result = MotionScaling.remapLandscape(values[0], values[1], values[2], rotation, remapScratch)
+        if (result is MotionScaling.RemapResult.Fallback) onUnknownRotation(result.unknownRotation)
+        accelX = MotionScaling.accelMssToWire(remapScratch[0])
+        accelY = MotionScaling.accelMssToWire(remapScratch[1])
+        accelZ = MotionScaling.accelMssToWire(remapScratch[2])
         accelSeen = true
     }
 
@@ -255,13 +272,14 @@ class PhoneMotionSource(
             setState(MotionStreamState.Streaming)
         }
         val cb = emit ?: return
-        val (x, y, z) =
-            MotionScaling.remapLandscape(values[0], values[1], values[2], rotationSupplier())
+        val rotation = rotationSupplier()
+        val result = MotionScaling.remapLandscape(values[0], values[1], values[2], rotation, remapScratch)
+        if (result is MotionScaling.RemapResult.Fallback) onUnknownRotation(result.unknownRotation)
         val sample =
             MotionRateLimiter.MotionSample(
-                gyroX = MotionScaling.gyroRadToWire(x),
-                gyroY = MotionScaling.gyroRadToWire(y),
-                gyroZ = MotionScaling.gyroRadToWire(z),
+                gyroX = MotionScaling.gyroRadToWire(remapScratch[0]),
+                gyroY = MotionScaling.gyroRadToWire(remapScratch[1]),
+                gyroZ = MotionScaling.gyroRadToWire(remapScratch[2]),
                 accelX = accelX,
                 accelY = accelY,
                 accelZ = accelZ,
@@ -270,6 +288,24 @@ class PhoneMotionSource(
         // virtual controller, so the rate-limiter key is a constant.
         rateLimiter.publish(SINGLE_VIRTUAL_CONTROLLER, sample) { s, deltaUs ->
             cb.emit(s, deltaUs)
+        }
+    }
+
+    /**
+     * Log an unknown `Surface.ROTATION_*` value once per source-lifetime.
+     * Without this, a wrong rotation would silently fall through to the
+     * landscape default and ship a 180° sideways axis remap forever — the
+     * pure scaler can't log itself (it must stay framework-free), so the
+     * caller does it here. Same dispatch thread as the callbacks, no lock
+     * needed; the set is bounded by the number of distinct unknown
+     * rotations (vanishingly few).
+     */
+    private fun onUnknownRotation(rotation: Int) {
+        if (loggedUnknownRotations.add(rotation)) {
+            Log.w(
+                TAG,
+                "remapLandscape: unknown rotation=$rotation, falling back to ROTATION_90 remap",
+            )
         }
     }
 
