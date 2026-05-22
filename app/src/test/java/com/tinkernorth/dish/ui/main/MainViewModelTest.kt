@@ -8,12 +8,14 @@ import com.tinkernorth.dish.composer.ConnectionHub
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
+import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.sensor.BatteryValidator
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
 import com.tinkernorth.dish.source.store.BatteryStatusStore
+import com.tinkernorth.dish.source.store.MotionEnabledStore
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -45,6 +47,8 @@ class MainViewModelTest {
     private lateinit var satellite: SatelliteConnectionManager
     private lateinit var gamepadRegistry: PhysicalGamepadRegistry
     private lateinit var batteryStore: BatteryStatusStore
+    private lateinit var motionEnabledStore: MotionEnabledStore
+    private lateinit var motionCapabilityComposer: MotionCapabilityComposer
     private lateinit var vm: MainViewModel
 
     private val connectionsFlow = MutableStateFlow<List<ConnectionSummary>>(emptyList())
@@ -61,6 +65,23 @@ class MainViewModelTest {
         // BatteryStatusStore is a pure JVM holder (no Android deps) — use the
         // real thing so battery samples really thread through to the slots.
         batteryStore = BatteryStatusStore()
+        // MotionEnabledStore is hydrated from MotionPreferenceRepository at
+        // construction. Stub the repo so the store's init reads emptyMap()
+        // (the relevant default for these slot-wiring tests).
+        motionEnabledStore =
+            MotionEnabledStore(
+                mockk(relaxed = true) { every { all() } returns emptyList() },
+            )
+        // MotionCapabilityComposer is exercised separately; the VM only
+        // forwards its state into MainUiState. A relaxed mock with an
+        // empty initial-state flow is enough to satisfy the constructor.
+        motionCapabilityComposer =
+            mockk(relaxed = true) {
+                every { state } returns
+                    kotlinx.coroutines.flow.MutableStateFlow(
+                        emptyMap<String, com.tinkernorth.dish.composer.MotionCapability>(),
+                    )
+            }
         every { hub.connections } returns connectionsFlow
         every { hub.bindings } returns bindingsFlow
         every { gamepadRegistry.devices } returns devicesFlow
@@ -69,7 +90,16 @@ class MainViewModelTest {
         // injected Context. A relaxed mock returns "" by default, which keeps
         // the existing assertions (focused on slot wiring, not the label) green.
         val context = mockk<Context>(relaxed = true)
-        vm = MainViewModel(context, satellite, hub, gamepadRegistry, batteryStore)
+        vm =
+            MainViewModel(
+                context,
+                satellite,
+                hub,
+                gamepadRegistry,
+                batteryStore,
+                motionEnabledStore,
+                motionCapabilityComposer,
+            )
     }
 
     @After
@@ -143,6 +173,32 @@ class MainViewModelTest {
     fun `setSatelliteControllerType delegates to hub`() {
         vm.setSatelliteControllerType(connectionId = "s:1", slotId = "slot-X", type = 1)
         verify { hub.setSatelliteControllerType("s:1", "slot-X", 1) }
+    }
+
+    @Test
+    fun `setMotionEnabled writes through to the motion store`() {
+        // The dashboard's toggle should be a thin pass-through; the durable
+        // write happens in MotionEnabledStore. Pin that the VM does not
+        // accidentally short-circuit (e.g. only updating local state).
+        vm.setMotionEnabled(slotId = "9", enabled = false)
+        assertEquals(false, motionEnabledStore.state.value["9"])
+        assertEquals(false, motionEnabledStore.isEnabled("9"))
+    }
+
+    @Test
+    fun `isMotionEnabled defaults to true for a slot that has not been toggled`() {
+        // Product default — flip in MotionEnabledStore.DEFAULT_ENABLED if
+        // policy changes. Pinned here so a regression in the VM accessor
+        // (e.g. reading the raw map and treating null as false) fails.
+        assertTrue(vm.isMotionEnabled("never-touched"))
+    }
+
+    @Test
+    fun `motionEnabled flow forwards the underlying store state`() {
+        // Bind point for the dashboard adapter: a write through the VM
+        // must be observable on its motionEnabled flow.
+        vm.setMotionEnabled(slotId = "virtual", enabled = false)
+        assertEquals(false, vm.motionEnabled.value["virtual"])
     }
 
     @Test

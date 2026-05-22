@@ -119,6 +119,17 @@
     <string name="motion_unavailable_detail">Este teléfono no tiene giroscopio, por lo que el movimiento (puntería con giroscopio / inclinación) no se envía.</string>
     <string name="motion_not_forwarded_detail">Esta conexión Bluetooth no tiene canal de movimiento. Usa una conexión por satélite para enviar puntería con giroscopio / inclinación.</string>
     <string name="motion_stalled_detail">Sensor de movimiento bloqueado — prueba a pulsar el botón Atrás para reiniciarlo, o reinicia Dish.</string>
+    <string name="motion_user_disabled">Movimiento: desactivado</string>
+    <string name="motion_no_host_sink">Movimiento: el host no puede recibir</string>
+    <string name="motion_backend_broken">Movimiento: el servidor no puede entregar</string>
+    <string name="motion_user_disabled_detail">Has desactivado el movimiento para esta ranura. Activa el interruptor Movimiento en la fila del mando para volver a enviar gyro.</string>
+    <string name="motion_no_host_sink_detail">Un mando virtual estilo Xbox no tiene superficie de movimiento en el host. Cambia el mando a PlayStation para la puntería gyro / inclinación.</string>
+    <string name="motion_backend_broken_detail">El satélite aceptó este mando pero no pudo crear su dispositivo de movimiento — probablemente un problema de permisos o de kernel en el servidor. Reinicia el satélite o consulta sus registros.</string>
+    <string name="controller_motion_toggle_label">Movimiento (gyro)</string>
+    <string name="controller_motion_toggle_subtitle_on">Enviando puntería gyro / inclinación al host.</string>
+    <string name="controller_motion_toggle_subtitle_off">No se envían muestras gyro para esta ranura.</string>
+    <string name="controller_motion_toggle_subtitle_no_gyro">Este dispositivo no tiene giroscopio.</string>
+    <string name="controller_motion_toggle_subtitle_no_host_sink">El host no puede recibir movimiento de un mando estilo Xbox. Cambia arriba a PlayStation para el gyro.</string>
 
     <!-- Indicador de batería por slot. -->
     <string name="battery_percent">%1$d %%</string>

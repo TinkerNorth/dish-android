@@ -4,6 +4,7 @@
 package com.tinkernorth.dish.source.connection
 
 import android.content.Context
+import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.core.jni.ControllerRepository
 import com.tinkernorth.dish.core.model.ConnectResponse
 import com.tinkernorth.dish.core.model.DiscoveredServer
@@ -13,6 +14,7 @@ import com.tinkernorth.dish.core.net.hexToBytes
 import com.tinkernorth.dish.di.IoDispatcher
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedSatellite
+import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -23,12 +25,15 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 
 /**
@@ -81,6 +86,23 @@ class SatelliteConnectionManager
         private val store: ConnectionStore,
         private val json: Json,
         @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+        /**
+         * `Provider` (not direct injection) breaks the Hilt construction cycle:
+         * [MotionCapabilityComposer] depends on [com.tinkernorth.dish.composer.ConnectionHub],
+         * which depends back on this manager. Using `Provider.get()` defers
+         * resolution until the cap word is actually needed (at controller-add
+         * time), at which point the singleton composer already exists.
+         */
+        private val motionCapabilityProvider: Provider<MotionCapabilityComposer>,
+        /**
+         * Per-(connection, slot) store the receiver's truth about its motion
+         * sink lands in. Written from [SatelliteConnection.registerController]
+         * after a successful ACK using the motion-status byte the satellite
+         * appends to the ACK payload. The composer reads from it so the pill
+         * can surface "satellite kernel rejected the IMU sink" as a distinct
+         * state rather than falsely showing STREAMING.
+         */
+        private val motionBackendStatusStore: SatelliteMotionBackendStatusStore,
     ) {
         private val _connections = MutableStateFlow<Map<String, SatelliteConnection>>(emptyMap())
         val connections: StateFlow<Map<String, SatelliteConnection>> = _connections.asStateFlow()
@@ -134,6 +156,40 @@ class SatelliteConnectionManager
         private val deviceId by lazy { getOrCreateDeviceId() }
         private val deviceName by lazy { android.os.Build.MODEL ?: "Android" }
 
+        init {
+            // Reactive cap-word refresh — the third leg of the composer-as-
+            // single-source-of-truth pattern. UI consumers already read the
+            // composer (pill); the listener gate already reads the composer
+            // (motionSource.start/stop); now the WIRE cap word also reacts
+            // to composer changes, via a per-connection diff against
+            // SlotBinding.lastAdvertisedCaps.
+            //
+            // Why subscribe to `cap-bits-by-slot` (the projection), not
+            // `composer.state` directly: the composer's `MotionCapability`
+            // carries five fields, only one of which (toCapBits) affects the
+            // wire. Without the projection + distinctUntilChanged, every
+            // hub.connections emit (which the composer combine forwards)
+            // would push a no-op caps-update for every registered slot.
+            //
+            // Launched in `init`, but the `Provider.get()` doesn't run until
+            // the coroutine actually dispatches — at which point construction
+            // is complete and the Hilt cycle is resolved (same reason the
+            // motionCapsBitsFor lambda uses Provider rather than direct
+            // injection — see the Provider's KDoc above).
+            scope.launch {
+                motionCapabilityProvider
+                    .get()
+                    .state
+                    .map { caps -> caps.mapValues { (_, mc) -> mc.toCapBits() } }
+                    .distinctUntilChanged()
+                    .collect {
+                        _connections.value.values.forEach { conn ->
+                            conn.refreshCapsIfChanged()
+                        }
+                    }
+            }
+        }
+
         fun get(id: String): SatelliteConnection? = _connections.value[id]
 
         fun remembered(): List<RememberedSatellite> = store.remembered()
@@ -182,7 +238,18 @@ class SatelliteConnectionManager
                     .updateAndGet { map ->
                         val cur = map[id]
                         if (cur != null) return@updateAndGet map
-                        val fresh = SatelliteConnection(id, server, scope, controllerRepo, ioDispatcher)
+                        val fresh =
+                            SatelliteConnection(
+                                id,
+                                server,
+                                scope,
+                                controllerRepo,
+                                ioDispatcher,
+                                motionCapsBitsFor = { slotId ->
+                                    motionCapabilityProvider.get().capabilityFor(slotId).toCapBits()
+                                },
+                                motionBackendStatusStore = motionBackendStatusStore,
+                            )
                         created = fresh
                         map + (id to fresh)
                     }[id] ?: return
@@ -282,7 +349,20 @@ class SatelliteConnectionManager
                 _connections
                     .updateAndGet { map ->
                         if (map.containsKey(id)) return@updateAndGet map
-                        map + (id to SatelliteConnection(id, server, scope, controllerRepo, ioDispatcher))
+                        map + (
+                            id to
+                                SatelliteConnection(
+                                    id,
+                                    server,
+                                    scope,
+                                    controllerRepo,
+                                    ioDispatcher,
+                                    motionCapsBitsFor = { slotId ->
+                                        motionCapabilityProvider.get().capabilityFor(slotId).toCapBits()
+                                    },
+                                    motionBackendStatusStore = motionBackendStatusStore,
+                                )
+                        )
                     }[id] ?: return
             conn.markConnecting()
             scope.launch {

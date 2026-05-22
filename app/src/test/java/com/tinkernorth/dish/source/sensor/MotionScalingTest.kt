@@ -144,6 +144,74 @@ class MotionScalingTest {
         assertEquals(r90[2], fallback[2], 0f)
     }
 
+    // ── Out-param variant + RemapResult (PR6) ──────────────────────────────
+
+    @Test
+    fun `out-param variant writes into the caller's scratch and returns Mapped`() {
+        // The hot-path version: caller allocates once, the scaler writes
+        // into the scratch every sample. 250 Hz × 2 sensors otherwise leaks
+        // up to 500 FloatArray allocations per second.
+        val scratch = FloatArray(3)
+        val result =
+            MotionScaling.remapLandscape(
+                deviceX = 1f,
+                deviceY = 2f,
+                deviceZ = 3f,
+                rotation = ROTATION_90,
+                out = scratch,
+            )
+        assertEquals(MotionScaling.RemapResult.Mapped, result)
+        assertEquals(2f, scratch[0], 0f) // deviceY
+        assertEquals(-1f, scratch[1], 0f) // -deviceX
+        assertEquals(3f, scratch[2], 0f) // deviceZ
+    }
+
+    @Test
+    fun `out-param variant returns Fallback with the unknown rotation value`() {
+        // The caller (PhoneMotionSource) reads RemapResult.Fallback to log
+        // the unknown rotation once. Pin that the value is surfaced —
+        // a regression that always returns Mapped would silently lose the
+        // "wrong axes on half the fleet" signal.
+        val scratch = FloatArray(3)
+        val result = MotionScaling.remapLandscape(0f, 0f, 0f, rotation = 99, out = scratch)
+        assertEquals(MotionScaling.RemapResult.Fallback(99), result)
+        // And the scratch carries the ROTATION_90 fallback values.
+        val r90 = MotionScaling.remapLandscape(0f, 0f, 0f, ROTATION_90)
+        assertEquals(r90[0], scratch[0], 0f)
+        assertEquals(r90[1], scratch[1], 0f)
+        assertEquals(r90[2], scratch[2], 0f)
+    }
+
+    @Test
+    fun `out-param variant rejects a scratch smaller than 3 elements`() {
+        // Defensive: a 2-element scratch would corrupt the call site's
+        // neighbouring memory or silently produce wrong axes. The
+        // require() check should fail fast.
+        val tooSmall = FloatArray(2)
+        try {
+            MotionScaling.remapLandscape(0f, 0f, 0f, ROTATION_90, tooSmall)
+            org.junit.Assert.fail("expected IllegalArgumentException")
+        } catch (e: IllegalArgumentException) {
+            // expected
+            assertTrue(e.message?.contains("3") == true)
+        }
+    }
+
+    @Test
+    fun `out-param variant produces the same triple as the allocating shim`() {
+        // Equivalence pin: every rotation must produce identical output
+        // through both signatures so the array-returning shim stays a
+        // pure wrapper (no drift between the two paths).
+        for (rot in intArrayOf(ROTATION_0, ROTATION_90, ROTATION_180, ROTATION_270, 99)) {
+            val out = FloatArray(3)
+            MotionScaling.remapLandscape(1.25f, -3.5f, 0.75f, rot, out)
+            val viaShim = MotionScaling.remapLandscape(1.25f, -3.5f, 0.75f, rot)
+            assertEquals("rot=$rot X", viaShim[0], out[0], 0f)
+            assertEquals("rot=$rot Y", viaShim[1], out[1], 0f)
+            assertEquals("rot=$rot Z", viaShim[2], out[2], 0f)
+        }
+    }
+
     private companion object {
         // Mirror of android.view.Surface.ROTATION_* — kept literal so this
         // test stays a pure JVM test with no Android framework dependency.

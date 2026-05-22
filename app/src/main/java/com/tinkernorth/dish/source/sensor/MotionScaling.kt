@@ -48,14 +48,38 @@ object MotionScaling {
     }
 
     /**
-     * Remap a device-frame sensor vector into the screen frame, given the
-     * live display [rotation] (a `Surface.ROTATION_*` value).
+     * Result of a successful or fallback [remapLandscape] call. Wraps the
+     * out-array so the caller can write the remapped triple into a
+     * pre-allocated scratch buffer without seeing it as a heap allocation
+     * per sample (the hot path runs at 250 Hz × 2 sensors).
      *
-     * `GamepadOverlayActivity` declares `screenOrientation="landscape"`, which
-     * Android resolves to `ROTATION_90` on most phones but `ROTATION_270` on
-     * others (and many tablets) — the two are 180° apart, so a fixed remap is
-     * sideways-flipped on half the fleet. The transform is therefore keyed off
-     * the rotation the windowing system actually reports:
+     *  - [Mapped] — the rotation was one of the four `Surface.ROTATION_*`
+     *    constants and the remap applied cleanly.
+     *  - [Fallback] — the rotation value was unknown; the caller's scratch
+     *    array carries the `ROTATION_90` remap (sensible default for a
+     *    landscape activity) and the unknown value is reported back so
+     *    the caller can log-once-per-value at the framework layer.
+     */
+    sealed interface RemapResult {
+        data object Mapped : RemapResult
+
+        data class Fallback(
+            val unknownRotation: Int,
+        ) : RemapResult
+    }
+
+    /**
+     * Remap a device-frame sensor vector into the screen frame, writing the
+     * result into [out] (a 3-element scratch [FloatArray] held by the
+     * caller). Returns whether the remap matched a known rotation or fell
+     * back to the landscape default.
+     *
+     * `GamepadOverlayActivity` declares `screenOrientation="landscape"`,
+     * which Android resolves to `ROTATION_90` on most phones but
+     * `ROTATION_270` on others (and many tablets) — the two are 180° apart,
+     * so a fixed remap is sideways-flipped on half the fleet. The transform
+     * is therefore keyed off the rotation the windowing system actually
+     * reports:
      *
      *  - `ROTATION_0`   → ( deviceX,  deviceY, deviceZ)  — portrait, identity
      *  - `ROTATION_90`  → ( deviceY, -deviceX, deviceZ)  — CCW landscape
@@ -63,26 +87,74 @@ object MotionScaling {
      *  - `ROTATION_270` → (-deviceY,  deviceX, deviceZ)  — CW landscape
      *
      * The result is already in the DSU frame (+X right, +Y up, +Z toward
-     * player), so the receiver does no further rotation. Pure (takes a plain
-     * `Int`, no `Display`/`Context`) so it stays unit-testable; the caller
-     * ([PhoneMotionSource]) is responsible for reading the live rotation.
+     * player), so the receiver does no further rotation. Pure (takes a
+     * plain `Int`, no `Display`/`Context`) so it stays unit-testable; the
+     * caller ([PhoneMotionSource]) is responsible for reading the live
+     * rotation.
      *
-     * An unknown rotation falls back to the `ROTATION_90` landscape remap.
+     * An unknown rotation falls back to the `ROTATION_90` landscape remap
+     * AND returns [RemapResult.Fallback] so the caller can surface a
+     * one-time log at the framework layer rather than silently shipping
+     * the wrong axes.
      */
     fun remapLandscape(
         deviceX: Float,
         deviceY: Float,
         deviceZ: Float,
         rotation: Int,
-    ): FloatArray =
-        when (rotation) {
-            ROTATION_0 -> floatArrayOf(deviceX, deviceY, deviceZ)
-            ROTATION_90 -> floatArrayOf(deviceY, -deviceX, deviceZ)
-            ROTATION_180 -> floatArrayOf(-deviceX, -deviceY, deviceZ)
-            ROTATION_270 -> floatArrayOf(-deviceY, deviceX, deviceZ)
-            // Any unexpected value falls back to the ROTATION_90 landscape remap.
-            else -> floatArrayOf(deviceY, -deviceX, deviceZ)
+        out: FloatArray,
+    ): RemapResult {
+        require(out.size >= 3) { "out must have at least 3 elements; got ${out.size}" }
+        return when (rotation) {
+            ROTATION_0 -> {
+                out[0] = deviceX
+                out[1] = deviceY
+                out[2] = deviceZ
+                RemapResult.Mapped
+            }
+            ROTATION_90 -> {
+                out[0] = deviceY
+                out[1] = -deviceX
+                out[2] = deviceZ
+                RemapResult.Mapped
+            }
+            ROTATION_180 -> {
+                out[0] = -deviceX
+                out[1] = -deviceY
+                out[2] = deviceZ
+                RemapResult.Mapped
+            }
+            ROTATION_270 -> {
+                out[0] = -deviceY
+                out[1] = deviceX
+                out[2] = deviceZ
+                RemapResult.Mapped
+            }
+            else -> {
+                out[0] = deviceY
+                out[1] = -deviceX
+                out[2] = deviceZ
+                RemapResult.Fallback(rotation)
+            }
         }
+    }
+
+    /**
+     * Allocating shim for callers that don't keep their own scratch
+     * buffer (and for tests that prefer the old return-an-array signature).
+     * Production hot-path callers should use the [out]-param overload —
+     * 250 Hz × 2 sensors is up to 500 allocations/sec on the IMU pipeline.
+     */
+    fun remapLandscape(
+        deviceX: Float,
+        deviceY: Float,
+        deviceZ: Float,
+        rotation: Int,
+    ): FloatArray {
+        val out = FloatArray(3)
+        remapLandscape(deviceX, deviceY, deviceZ, rotation, out)
+        return out
+    }
 
     // Mirror of android.view.Surface.ROTATION_* — duplicated as plain ints so
     // remapLandscape has zero framework dependency and runs in a pure JVM test.

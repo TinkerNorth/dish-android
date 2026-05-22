@@ -111,19 +111,33 @@
     <string name="bt_transient_acquiring">Acquiring HID profile…</string>
     <string name="bt_transient_idle">Idle</string>
 
-    <!-- Touch-overlay phone-motion (gyro/accel) indicator. States: streaming,
-         paused (overlay backgrounded), not-forwarded (Bluetooth connection
-         has no motion channel), and not-available (no gyroscope). -->
+    <!-- Touch-overlay phone-motion (gyro/accel) indicator. States cover every
+         reason motion might or might not be flowing — hardware absent, user
+         toggled off, connection kind can't carry it, host backend can't sink
+         the slot's type, source paused, streaming live, or stalled. -->
     <string name="motion_streaming">Motion: streaming</string>
     <string name="motion_paused">Motion: paused</string>
     <string name="motion_stalled">Motion: stalled</string>
     <string name="motion_not_forwarded">Motion: not sent</string>
     <string name="motion_unavailable">Motion: no gyroscope</string>
+    <string name="motion_user_disabled">Motion: turned off</string>
+    <string name="motion_no_host_sink">Motion: host can\'t receive</string>
+    <string name="motion_backend_broken">Motion: server can\'t deliver</string>
     <!-- Detail lines, shown only for the states that need an explanation
          so the user understands the limit rather than seeing a bare label. -->
     <string name="motion_unavailable_detail">This phone has no gyroscope, so motion (gyro aim / tilt) is not sent.</string>
     <string name="motion_not_forwarded_detail">This Bluetooth connection has no motion channel. Use a satellite connection to send gyro aim / tilt.</string>
     <string name="motion_stalled_detail">Motion sensor stalled — try toggling the back button to reset, or restart Dish.</string>
+    <string name="motion_user_disabled_detail">You turned motion off for this slot. Enable the Motion switch on the controller row to start sending gyro again.</string>
+    <string name="motion_no_host_sink_detail">An Xbox-style virtual pad has no motion surface on the host. Switch the controller to PlayStation for gyro aim / tilt.</string>
+    <string name="motion_backend_broken_detail">The satellite accepted this controller but couldn\'t create its motion device — likely a permission or kernel issue on the server. Restart the satellite, or check its logs.</string>
+
+    <!-- Per-slot motion toggle switch on the controller list row. -->
+    <string name="controller_motion_toggle_label">Motion (gyro)</string>
+    <string name="controller_motion_toggle_subtitle_on">Sending gyro aim / tilt to the host.</string>
+    <string name="controller_motion_toggle_subtitle_off">Gyro samples are not being sent for this slot.</string>
+    <string name="controller_motion_toggle_subtitle_no_gyro">This device has no gyroscope.</string>
+    <string name="controller_motion_toggle_subtitle_no_host_sink">Host can\'t sink motion for an Xbox-style pad. Switch to PlayStation above for gyro.</string>
 
     <!-- Per-slot battery indicator on the controller list (Task 1.2). -->
     <!-- Battery percentage, e.g. "84%". -->

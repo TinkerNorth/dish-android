@@ -6,6 +6,7 @@ package com.tinkernorth.dish.ui.main
 import com.tinkernorth.dish.composer.ConnectionHub
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
+import com.tinkernorth.dish.composer.MotionCapability
 import com.tinkernorth.dish.source.sensor.BatteryValidator
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 
@@ -90,6 +91,18 @@ data class MainUiState(
             ControllerSlot(id = VIRTUAL_SLOT_ID, inputType = SlotInputType.VIRTUAL, name = ""),
         ),
     val connections: List<ConnectionSummary> = emptyList(),
+    /**
+     * Per-slot motion capability snapshot from
+     * [com.tinkernorth.dish.composer.MotionCapabilityComposer]. The adapter
+     * reads this to render the per-slot motion toggle (enabled state +
+     * subtitle text that explains why a slot can't currently stream
+     * motion — no gyro, host has no sink for the chosen type, etc.).
+     *
+     * Defaults to empty so a [MainUiState] constructed before the composer
+     * has emitted reads as "every slot's motion is unknown but assume
+     * default-on" — matches the composer's own startup behaviour.
+     */
+    val motionCapabilities: Map<String, MotionCapability> = emptyMap(),
 ) {
     val virtualSlot get() = slots.first { it.id == VIRTUAL_SLOT_ID }
     val physicalSlots get() = slots.filter { it.inputType == SlotInputType.PHYSICAL }

@@ -12,6 +12,7 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.appcompat.widget.SwitchCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -21,7 +22,9 @@ import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
+import com.tinkernorth.dish.composer.MotionCapability
 import com.tinkernorth.dish.databinding.ItemControllerBinding
+import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.ui.common.glyphForConnection
 
 interface SlotActionListener {
@@ -41,6 +44,19 @@ interface SlotActionListener {
         slotId: String,
         connectionId: String,
         type: Int,
+    )
+
+    /**
+     * User flipped the per-slot motion toggle on the controller row.
+     * Persisted by [com.tinkernorth.dish.source.store.MotionEnabledStore]
+     * via the ViewModel; the dish stops emitting motion samples for the
+     * slot (listener gate) and clears the `CAP_MOTION` bit at the next
+     * `MSG_CONTROLLER_ADD` for it (cap-word reflection — see
+     * [com.tinkernorth.dish.composer.MotionCapability.toCapBits]).
+     */
+    fun onMotionEnabledChanged(
+        slotId: String,
+        enabled: Boolean,
     )
 }
 
@@ -79,6 +95,17 @@ class ControllerAdapter(
         val slot: ControllerSlot,
         val connections: List<ConnectionSummary>,
         val expanded: Boolean,
+        /**
+         * The latest motion capability snapshot for this slot. Drives the
+         * per-slot motion toggle: the switch is checked iff
+         * [MotionCapability.userEnabled], and disabled iff
+         * `!hasGyro || !hostHasSinkForType` (with subtitle text explaining
+         * which limit is in effect). Defaults to [MotionCapability.Off] so
+         * a row built before the composer has emitted reads as
+         * "hardware-not-yet-confirmed" rather than crashing on a missing
+         * lookup.
+         */
+        val motionCap: MotionCapability = MotionCapability.Off,
     )
 
     private val expandedIds = mutableSetOf(VIRTUAL_SLOT_ID)
@@ -86,8 +113,18 @@ class ControllerAdapter(
     fun submitSlots(
         slots: List<ControllerSlot>,
         connections: List<ConnectionSummary>,
+        motionCapabilities: Map<String, MotionCapability> = emptyMap(),
     ) {
-        submitList(slots.map { Row(it, connections, expandedIds.contains(it.id)) })
+        submitList(
+            slots.map { slot ->
+                Row(
+                    slot = slot,
+                    connections = connections,
+                    expanded = expandedIds.contains(slot.id),
+                    motionCap = motionCapabilities[slot.id] ?: MotionCapability.Off,
+                )
+            },
+        )
     }
 
     fun toggleExpanded(slotId: String) {
@@ -185,7 +222,7 @@ class ControllerAdapter(
                     )
                 else ->
                     visible.forEach { summary ->
-                        addConnectionRow(b.llConnectionList, dp, slot, summary)
+                        addConnectionRow(b.llConnectionList, dp, slot, summary, row.motionCap)
                     }
             }
 
@@ -203,6 +240,7 @@ class ControllerAdapter(
             dp: Float,
             slot: ControllerSlot,
             c: ConnectionSummary,
+            motionCap: MotionCapability,
         ) {
             val ctx = parent.context
             val bound = slot.boundConnectionId == c.id
@@ -233,6 +271,11 @@ class ControllerAdapter(
             // we don't render a switcher there.
             if (bound && c.kind == ConnectionKind.SATELLITE) {
                 row.addView(buildTypeToggle(ctx, dp, slot, c))
+                // Per-slot motion (gyro) on/off switch. Same gating as the
+                // type toggle — only meaningful for a satellite-bound slot
+                // because Bluetooth-HID has no motion channel and motion
+                // is a satellite-path feature.
+                row.addView(buildMotionToggle(ctx, dp, slot, motionCap))
             }
             parent.addView(row)
         }
@@ -401,6 +444,104 @@ class ControllerAdapter(
                     label = ctx.getString(R.string.picker_type_playstation),
                     selected = current == CONTROLLER_TYPE_PLAYSTATION,
                 ) { listener.onChangeDeviceType(slot.id, c.id, CONTROLLER_TYPE_PLAYSTATION) },
+            )
+            return container
+        }
+
+        /**
+         * Build the per-slot motion (gyro) on/off row that lives under the
+         * Xbox/PS chips in the expanded controller card. The switch
+         * reflects [MotionCapability.userEnabled]; the subtitle text
+         * explains the gating in plain language whenever motion CAN'T flow
+         * (no gyro hardware, host has no sink for the chosen type, source
+         * paused for other reasons). The switch is **disabled** for hard
+         * limits the user can't fix by flipping it — no gyro and
+         * no-host-sink — so the user is steered toward the actionable
+         * remedy (different hardware, or change controller type) instead.
+         */
+        private fun buildMotionToggle(
+            ctx: android.content.Context,
+            dp: Float,
+            slot: ControllerSlot,
+            cap: MotionCapability,
+        ): View {
+            val container =
+                LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    layoutParams =
+                        LinearLayout
+                            .LayoutParams(
+                                LinearLayout.LayoutParams.MATCH_PARENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT,
+                            ).apply { topMargin = (8 * dp).toInt() }
+                }
+            // Title + subtitle column on the left.
+            val labelCol =
+                LinearLayout(ctx).apply {
+                    orientation = LinearLayout.VERTICAL
+                    layoutParams =
+                        LinearLayout
+                            .LayoutParams(
+                                0,
+                                LinearLayout.LayoutParams.WRAP_CONTENT,
+                                1f, // takes remaining width so the switch sits flush right
+                            ).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
+                }
+            labelCol.addView(
+                TextView(ctx).apply {
+                    text = ctx.getString(R.string.controller_motion_toggle_label)
+                    setTextColor(ctx.getColor(R.color.colorMuted))
+                    textSize = 11f
+                    typeface = Typeface.MONOSPACE
+                },
+            )
+            // Subtitle: the most relevant "why" for the current state. This
+            // mirrors the precedence in MotionIndicatorState.of() — hardware
+            // first, then host-sink, then "on / off" status — so the text
+            // here is consistent with what the overlay pill says.
+            val subtitleResId =
+                when {
+                    !cap.hasGyro -> R.string.controller_motion_toggle_subtitle_no_gyro
+                    !cap.hostHasSinkForType ->
+                        R.string.controller_motion_toggle_subtitle_no_host_sink
+                    cap.userEnabled -> R.string.controller_motion_toggle_subtitle_on
+                    else -> R.string.controller_motion_toggle_subtitle_off
+                }
+            labelCol.addView(
+                TextView(ctx).apply {
+                    setText(subtitleResId)
+                    setTextColor(ctx.getColor(R.color.colorMuted))
+                    textSize = 11f
+                },
+            )
+            container.addView(labelCol)
+
+            // The Switch itself. Disabled when there's nothing the user can
+            // do by flipping it — no hardware, or the host backend has no
+            // sink for the slot's controller type. The subtitle text above
+            // already explains the limit.
+            val enabledForUser = cap.hasGyro && cap.hostHasSinkForType
+            container.addView(
+                SwitchCompat(ctx).apply {
+                    isChecked = cap.userEnabled && enabledForUser
+                    isEnabled = enabledForUser
+                    // setOnCheckedChangeListener fires on programmatic
+                    // setChecked too; we set the listener AFTER the
+                    // initial state so the first paint doesn't ping the
+                    // store. The DiffUtil rebind path goes through the
+                    // same code, so this discipline applies on every
+                    // recycle. (RecyclerView reuses views.)
+                    setOnCheckedChangeListener(null)
+                    setOnCheckedChangeListener { _, isChecked ->
+                        listener.onMotionEnabledChanged(slot.id, isChecked)
+                    }
+                    layoutParams =
+                        LinearLayout
+                            .LayoutParams(
+                                LinearLayout.LayoutParams.WRAP_CONTENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT,
+                            ).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
+                },
             )
             return container
         }

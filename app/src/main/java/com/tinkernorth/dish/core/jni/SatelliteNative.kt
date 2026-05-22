@@ -95,6 +95,23 @@ object SatelliteNative {
         controllerType: Int,
     )
 
+    /**
+     * Send 0x000E Controller Caps Update — pushes a fresh capability word
+     * for an already-registered controller without unplugging it on the
+     * receiver. Same payload shape as `controllerAdd`'s caps field
+     * (ctrlIdx + caps BE16). Used when the dish's `MotionCapabilityComposer`
+     * emits a new `toCapBits` value mid-session (e.g. the user toggles
+     * motion off after the slot was registered with motion on). A
+     * pre-extension receiver silently drops the packet — the dish-side
+     * listener gate is the load-bearing correctness path; this wire
+     * update is purely for the receiver's web-UI snapshot honesty.
+     */
+    external fun sendControllerCapsUpdate(
+        handle: Int,
+        controllerIndex: Int,
+        capabilities: Int,
+    )
+
     // ── Motion + battery (0x000A, 0x000B) ───────────────────────────────────
 
     /**
@@ -156,6 +173,24 @@ object SatelliteNative {
 
     /** Reset the controller ACK state for [handle] to -1. */
     external fun resetControllerAck(handle: Int)
+
+    /**
+     * Motion-status byte from the most recent MSG_CONTROLLER_ACK on [handle],
+     * or -1 when no extended ACK has been observed (no ACK at all, or a
+     * pre-extension satellite that only sent the legacy 4-byte payload).
+     * Bits mirror the satellite's `ACK_MOTION_FLAG_*` constants:
+     *  - bit 0 (`0x01`): receiver's backend supports IMU for the slot's
+     *    chosen controller type (`supportsMotionForType`).
+     *  - bit 1 (`0x02`): receiver's backend successfully created the
+     *    per-serial IMU sink at plug-in (`motionBackendOk`).
+     *
+     * The Kotlin caller (`SatelliteConnection.registerController`) reads
+     * this immediately after a successful ACK and threads the result into
+     * the per-slot motion-backend store; the `-1` sentinel collapses to
+     * "unknown" so an old satellite is not misread as a permanent
+     * "backend broken" state.
+     */
+    external fun getLastControllerMotionFlags(handle: Int): Int
 
     /** ViGEm availability from the latest 0x0007 Server Status on [handle]. */
     external fun getVigemAvailable(handle: Int): Int

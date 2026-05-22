@@ -67,6 +67,13 @@ static constexpr uint16_t MSG_CONTROLLER_REMOVE = 0x0005;
 static constexpr uint16_t MSG_CONTROLLER_ACK = 0x0006;
 static constexpr uint16_t MSG_SERVER_STATUS = 0x0007;
 static constexpr uint16_t MSG_CONTROLLER_TYPE = 0x0008;
+// Mid-session capability update — same payload shape as the caps field
+// of MSG_CONTROLLER_ADD (ctrlIdx + caps BE16), but for an already-
+// registered controller. Lets the dish push e.g. a user-flipped motion
+// toggle without unplugging the controller on the receiver. See
+// `MSG_CONTROLLER_CAPS_UPDATE` in satellite/src/core/types.h for the
+// authoritative spec and the receiver's silent-drop fallback.
+static constexpr uint16_t MSG_CONTROLLER_CAPS_UPDATE = 0x000E;
 static constexpr uint16_t MSG_RUMBLE = 0x0009;
 static constexpr uint16_t MSG_MOTION = 0x000A;
 static constexpr uint16_t MSG_BATTERY = 0x000B;
@@ -110,6 +117,17 @@ struct Session {
     // Controller ACK tracking: (requestType << 16) | (ctrlIdx << 8) | result.
     // -1 means no ACK received yet.
     std::atomic<int32_t> lastControllerAck{-1};
+
+    // Motion-status byte from the most recent MSG_CONTROLLER_ACK (only present
+    // on MSG_CONTROLLER_ADD acks from a post-extension satellite — msgLen 5
+    // instead of 4). Bit 0: receiver's backend supports IMU for this slot's
+    // chosen type; bit 1: backend successfully created the per-serial IMU
+    // sink. -1 means no extended ACK has been observed for this session —
+    // either no ACK at all, or the satellite is a pre-extension build that
+    // only sent the legacy 4-byte payload. The dish-side store collapses
+    // -1 onto "unknown" so an old satellite doesn't get treated as a
+    // permanent failure.
+    std::atomic<int32_t> lastControllerAckMotionFlags{-1};
 
     std::atomic<int8_t> vigemAvailable{-1};
     std::atomic<int8_t> activeControllerCount{-1};
@@ -436,14 +454,12 @@ static bool sendEncrypted(Session* s, uint16_t msgType, const uint8_t* payload,
     // EAGAIN immediately instead; the next periodic-resend tick tries
     // again with the latest state. UDP is already lossy by contract, so
     // a buffer-full drop is no worse than any other packet loss.
-    ssize_t sent = sendto(s->udpSock, packet, totalLen, MSG_DONTWAIT,
-                          (struct sockaddr*)&s->dest, sizeof(s->dest));
+    ssize_t sent = sendto(s->udpSock, packet, totalLen, MSG_DONTWAIT, (struct sockaddr*)&s->dest,
+                          sizeof(s->dest));
     // EAGAIN / EWOULDBLOCK: kernel send buffer momentarily unavailable.
     // Treat as a soft drop, not a hard error — UDP semantics absorb it and
     // the next periodic tick will refresh the state.
-    if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-        return true;
-    }
+    if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) { return true; }
     return sent == (ssize_t)totalLen;
 }
 
@@ -666,13 +682,37 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendCo
          controllerType);
 }
 
+// Push a new capability word for an already-registered controller. Wire
+// payload mirrors the caps field of MSG_CONTROLLER_ADD: ctrlIdx(1) +
+// caps(2 BE) = 3 bytes. The Kotlin caller (SatelliteConnectionManager)
+// only sends this when the dish-side composer's `toCapBits(slotId)`
+// differs from what was last advertised — the receiver no-ops on
+// duplicates, so the de-dup is technically redundant, but the wire
+// saving + log-line saving is worth the cheap check.
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendControllerCapsUpdate(
+    JNIEnv*, jobject, jint handle, jint controllerIndex, jint capabilities) {
+    auto s = getSession(handle);
+    if (!s) return;
+    uint8_t payload[3];
+    payload[0] = (uint8_t)(controllerIndex & 0xFF);
+    putBE16(payload + 1, (uint16_t)(capabilities & 0xFFFF));
+    sendEncrypted(s.get(), MSG_CONTROLLER_CAPS_UPDATE, payload, 3);
+    LOGI("Session %d: sent controller caps update idx=%d caps=0x%04X", handle, controllerIndex,
+         capabilities);
+}
+
 /* ── Motion (gyro + accel) ────────────────────────────────────────────────── */
 //
-// Hot path. Caller is expected to have already scaled gyro to deg/s × 16.3835
-// (LSB = 2000/32767 deg/s) and accel to g × 8191.75 (LSB = 4/32767 g) — the
-// satellite docs §0x000A is the canonical spec. Caller is also responsible
-// for any per-controller rate-limiting (MotionRateLimiter.kt) before reaching
-// this method.
+// Hot path. The Kotlin caller (MotionScaling.gyroRadToWire /
+// accelMssToWire) has already done all the unit conversion — rad/s →
+// int16 with 1 LSB = 2000/32767 deg/s, and m/s² → int16 with 1 LSB =
+// 4/32767 g. This function does NO scaling; it only packs the int16
+// values into the 17-byte MSG_MOTION (0x000A) wire payload via
+// dish_wire::encodeMotionPayload. Per-controller rate-limiting also
+// happens up-stack (MotionRateLimiter.kt); reaching this method means
+// the caller has already passed the 250 Hz gate.
+//
+// The satellite docs §0x000A is the canonical spec for the wire layout.
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendMotion(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jshort gyroX, jshort gyroY, jshort gyroZ,
     jshort accelX, jshort accelY, jshort accelZ, jint timestampDeltaUs) {
@@ -741,6 +781,27 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_resetC
     auto s = getSession(handle);
     if (!s) return;
     s->lastControllerAck.store(-1, std::memory_order_release);
+    // Reset the motion-flags shadow too so a new registration doesn't read
+    // the previous slot's flags. Kept atomic-paired with lastControllerAck
+    // (same reset point) — divergence would mean a freshly-reset slot
+    // could spuriously read its predecessor's "kernel rejected" flag.
+    s->lastControllerAckMotionFlags.store(-1, std::memory_order_release);
+}
+
+// Latest MSG_CONTROLLER_ACK motion-flags byte for this session, or -1 if no
+// extended ACK has been observed. Bits as per ACK_MOTION_FLAG_* in the
+// satellite's core/types.h:
+//   bit 0 — receiver's backend supports IMU for the slot's chosen type
+//   bit 1 — backend successfully created the per-serial IMU sink
+// A pre-extension satellite leaves this at -1; the Kotlin side collapses
+// -1 onto "unknown" rather than treating either bit as false (which would
+// permanently disable motion against an old satellite).
+JNIEXPORT jint JNICALL
+Java_com_tinkernorth_dish_core_jni_SatelliteNative_getLastControllerMotionFlags(JNIEnv*, jobject,
+                                                                                jint handle) {
+    auto s = getSession(handle);
+    if (!s) return -1;
+    return s->lastControllerAckMotionFlags.load(std::memory_order_acquire);
 }
 
 JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getVigemAvailable(
@@ -805,8 +866,21 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiv
         uint8_t result = decrypted[7];
         int32_t packed = ((int32_t)reqType << 16) | ((int32_t)ctrlIdx << 8) | (int32_t)result;
         s->lastControllerAck.store(packed, std::memory_order_release);
-        LOGI("Session %d controller ACK: reqType=0x%04X idx=%d result=0x%02X", handle, reqType,
-             ctrlIdx, result);
+        // Optional motion-status byte (post-extension satellites). A
+        // pre-extension satellite sends only 4 bytes (msgLen == 4) and the
+        // extra byte is absent — leave the stored flags at whatever the
+        // prior ACK left, or -1 if never written, so a slot with no
+        // observation stays "unknown" rather than being misread as
+        // "backend broken." A post-extension satellite always sends the
+        // byte (zero or not), so msgLen >= 5 is the live-data branch.
+        if (msgLen >= 5 && decLen >= 9) {
+            s->lastControllerAckMotionFlags.store((int32_t)decrypted[8], std::memory_order_release);
+            LOGI("Session %d controller ACK: reqType=0x%04X idx=%d result=0x%02X motion=0x%02X",
+                 handle, reqType, ctrlIdx, result, decrypted[8]);
+        } else {
+            LOGI("Session %d controller ACK: reqType=0x%04X idx=%d result=0x%02X (legacy)", handle,
+                 reqType, ctrlIdx, result);
+        }
     } else if (msgType == MSG_SERVER_STATUS && msgLen >= 2 && decLen >= 6) {
         uint8_t vigem = decrypted[4];
         uint8_t count = decrypted[5];
