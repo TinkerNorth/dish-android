@@ -170,4 +170,159 @@ class PhoneMotionSourceTest {
             )
         }
     }
+
+    // ── MotionStreamState flow (PR4) ─────────────────────────────────────
+
+    @Test
+    fun `state is Disabled on a phone with no gyroscope, never flips on start`() {
+        // Hardware decision is permanent — the pill must read UNAVAILABLE
+        // even if the activity later calls start (which is a no-op).
+        every { sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE) } returns null
+        val src = source()
+
+        assertEquals(MotionStreamState.Disabled, src.state.value)
+        src.start { _, _ -> }
+        assertEquals(MotionStreamState.Disabled, src.state.value)
+    }
+
+    @Test
+    fun `state is Stopped on construction with a gyroscope, before start`() {
+        // Before the overlay calls start, the source has a gyro but isn't
+        // streaming. The pill must NOT read STREAMING; it should read PAUSED
+        // (mapped from Stopped + connected) or NOT_FORWARDED (BT-HID kind).
+        val src = source()
+        assertEquals(MotionStreamState.Stopped, src.state.value)
+    }
+
+    @Test
+    fun `start flips state to Streaming optimistically`() {
+        // The optimistic flip — the first stall tick re-evaluates after
+        // STALL_WINDOW_MS, but we want the pill to read STREAMING the
+        // instant the source starts so the user gets feedback.
+        val src = source()
+        src.start { _, _ -> }
+        assertEquals(MotionStreamState.Streaming, src.state.value)
+    }
+
+    @Test
+    fun `stop flips state back to Stopped, not Disabled`() {
+        // The hardware decision (Disabled vs Stopped) is permanent for the
+        // lifetime of the source. A stop after a start must not lose that
+        // distinction — stop on a gyro-equipped phone must read Stopped.
+        val src = source()
+        src.start { _, _ -> }
+        src.stop()
+        assertEquals(MotionStreamState.Stopped, src.state.value)
+    }
+
+    // ── deriveState — pure decision table ────────────────────────────────
+
+    @Test
+    fun `deriveState — no gyro present means Disabled regardless of started`() {
+        // Hardware permanence: no gyro ⇒ Disabled even if started is
+        // somehow true (defensive — the start() path defends, but the
+        // pure decider must too).
+        assertEquals(
+            MotionStreamState.Disabled,
+            PhoneMotionSource.deriveState(
+                gyroPresent = false,
+                started = false,
+                lastGyroMonoMs = 0L,
+                nowMonoMs = 0L,
+            ),
+        )
+        assertEquals(
+            MotionStreamState.Disabled,
+            PhoneMotionSource.deriveState(
+                gyroPresent = false,
+                started = true,
+                lastGyroMonoMs = 10_000L,
+                nowMonoMs = 10_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun `deriveState — gyro present but not started means Stopped`() {
+        assertEquals(
+            MotionStreamState.Stopped,
+            PhoneMotionSource.deriveState(
+                gyroPresent = true,
+                started = false,
+                lastGyroMonoMs = 0L,
+                nowMonoMs = 1000L,
+            ),
+        )
+    }
+
+    @Test
+    fun `deriveState — started with no gyro sample yet means Stalled`() {
+        // lastGyroMonoMs == 0L means "no sample ever arrived." Should
+        // surface as Stalled so the user gets a "is the sensor broken?"
+        // hint quickly, not "STREAMING" silently.
+        assertEquals(
+            MotionStreamState.Stalled,
+            PhoneMotionSource.deriveState(
+                gyroPresent = true,
+                started = true,
+                lastGyroMonoMs = 0L,
+                nowMonoMs = 1000L,
+            ),
+        )
+    }
+
+    @Test
+    fun `deriveState — last gyro within window means Streaming`() {
+        // 200 ms after the last sample, well inside the 1500 ms window.
+        assertEquals(
+            MotionStreamState.Streaming,
+            PhoneMotionSource.deriveState(
+                gyroPresent = true,
+                started = true,
+                lastGyroMonoMs = 800L,
+                nowMonoMs = 1000L,
+            ),
+        )
+    }
+
+    @Test
+    fun `deriveState — last gyro past stall window means Stalled`() {
+        // 2000 ms after the last sample, > 1500 ms window. The OEM-pauses-
+        // sensors case the original isStalled comment calls out.
+        assertEquals(
+            MotionStreamState.Stalled,
+            PhoneMotionSource.deriveState(
+                gyroPresent = true,
+                started = true,
+                lastGyroMonoMs = 1000L,
+                nowMonoMs = 3000L,
+            ),
+        )
+    }
+
+    @Test
+    fun `deriveState — exactly at window boundary is still Streaming`() {
+        // STALL_WINDOW_MS = 1500 ms; gap of exactly 1500 ms should be the
+        // last value that reads Streaming (strict greater-than for Stalled).
+        // A regression that uses >= would flip prematurely on every device.
+        assertEquals(
+            MotionStreamState.Streaming,
+            PhoneMotionSource.deriveState(
+                gyroPresent = true,
+                started = true,
+                lastGyroMonoMs = 0L,
+                nowMonoMs = PhoneMotionSource.STALL_WINDOW_MS,
+            ).let {
+                // Special-case: deriveState treats lastGyroMonoMs == 0 as
+                // Stalled regardless of the window math. To exercise the
+                // strict-greater path, use a non-zero anchor.
+                PhoneMotionSource.deriveState(
+                    gyroPresent = true,
+                    started = true,
+                    lastGyroMonoMs = 1L,
+                    nowMonoMs = 1L + PhoneMotionSource.STALL_WINDOW_MS,
+                )
+            },
+        )
+    }
 }

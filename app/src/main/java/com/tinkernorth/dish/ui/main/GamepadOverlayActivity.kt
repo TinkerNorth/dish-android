@@ -198,6 +198,19 @@ class GamepadOverlayActivity :
                 }
             }
         }
+        // Repaint the motion pill whenever the source's own state flips
+        // (Streaming ↔ Stalled in particular). Without this collector the
+        // 500 ms stall-detection tick lands inside the source but never
+        // reaches the UI — the pill claims STREAMING forever while no
+        // samples are actually arriving. Fixes the STALLED-never-repaints
+        // bug (the source's tick is the trigger; the activity's collector
+        // is what makes it visible).
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                motionSource.state.collect { refreshMotionStatus() }
+            }
+        }
+
         // Mid-game connection events: with the SatelliteConnectionManager's
         // SharedFlow buffered, errors emitted from the alive-poll's onDead
         // path can now reach this activity. Previously they were silently
