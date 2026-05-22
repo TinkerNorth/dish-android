@@ -50,11 +50,11 @@ class SatelliteConnection(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     /**
      * Resolves the per-slot `CAP_MOTION` (0x0004) bit for the wire
-     * capability word at `MSG_CONTROLLER_ADD` time. Defaulted to the
-     * always-on word ([DEFAULT_CAPABILITIES_WITHOUT_MOTION] OR
-     * [com.tinkernorth.dish.composer.MotionCapability.CAP_MOTION_BIT]) so
-     * pre-existing tests that don't care about the composer keep behaving
-     * the same.
+     * capability word at `MSG_CONTROLLER_ADD` time. Defaulted to
+     * [CAP_MOTION_BIT_LEGACY] so pre-existing tests that don't care
+     * about the composer keep behaving like the pre-PR3 always-on path
+     * (where every controller advertised motion regardless of hardware
+     * or toggle).
      *
      * In production, [SatelliteConnectionManager] threads a closure that
      * reads from [com.tinkernorth.dish.composer.MotionCapabilityComposer
