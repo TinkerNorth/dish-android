@@ -14,6 +14,8 @@ import android.view.InputDevice
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.composer.MotionCapability
+import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.composer.PhysicalReachability
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.PhysicalSlotBindingObserver
@@ -21,6 +23,7 @@ import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import javax.inject.Inject
@@ -87,6 +90,7 @@ class PhysicalMotionSource
         private val registry: PhysicalGamepadRegistry,
         private val hub: ConnectionHub,
         private val satellite: SatelliteConnectionManager,
+        private val motionCapability: MotionCapabilityComposer,
         private val scope: CoroutineScope,
     ) : DefaultLifecycleObserver {
         /**
@@ -111,6 +115,18 @@ class PhysicalMotionSource
             private var accelX: Short = 0
             private var accelY: Short = 0
             private var accelZ: Short = 0
+
+            /**
+             * Whether the accelerometer has reported at least once since the
+             * listener was registered. The first gyro callback can otherwise
+             * fire before any accel callback, which would emit a MOTION
+             * packet with accel = (0, 0, 0) — downstream consumers read that
+             * as "stationary in zero gravity." Hold the first gyro until
+             * accel has reported. Same dispatch thread as the callbacks, no
+             * lock needed. Pads with no accel sensor have [accel] == null
+             * at registration time; the gate short-circuits in [onGyro].
+             */
+            private var accelSeen: Boolean = false
 
             private val listener =
                 object : SensorEventListener {
@@ -162,10 +178,16 @@ class PhysicalMotionSource
                 accelX = MotionScaling.accelMssToWire(values[0])
                 accelY = MotionScaling.accelMssToWire(values[1])
                 accelZ = MotionScaling.accelMssToWire(values[2])
+                accelSeen = true
             }
 
             private fun onGyro(values: FloatArray) {
                 if (values.size < 3) return
+                // Hold the first emission until accel has reported, otherwise
+                // the first MOTION packet for this pad ships accel = (0,0,0).
+                // Pads without an accel sensor (accel == null at registration)
+                // bypass the gate so the gyro stream is not stuck.
+                if (!shouldEmitGyro(accel != null, accelSeen)) return
                 val conn = reachable[slotId] ?: return
                 val sample =
                     convertControllerSample(
@@ -219,6 +241,11 @@ class PhysicalMotionSource
         override fun onStart(owner: LifecycleOwner) {
             if (bindingsJob != null) return
             sensorHandler = sensorDispatch.acquire()
+            // Reachability tells us "a satellite is up and the slot is
+            // registered." The capability composer tells us "the user wants
+            // motion on for this slot AND the hardware supports it." Both
+            // must be true for the listener to register; otherwise we burn
+            // battery on a gyro stream nothing will ever forward.
             bindingsJob =
                 PhysicalReachability
                     .reachableSlots(
@@ -226,7 +253,8 @@ class PhysicalMotionSource
                         hub.bindings,
                         hub.connections,
                         satellite.connections,
-                    ).onEach(::onReachableChanged)
+                    ).combine(motionCapability.state, ::filterByCapability)
+                    .onEach(::onReachableChanged)
                     .launchIn(scope)
         }
 
@@ -295,6 +323,63 @@ class PhysicalMotionSource
 
         companion object {
             private const val TAG = "PhysicalMotionSource"
+
+            /**
+             * Pure decider for the first-sample stale-zero accel race
+             * (parallel to the same gate in [PhoneMotionSource.onGyro]):
+             *
+             *  - pad has no accelerometer at all
+             *    (`hasAccelSensor=false`) ⇒ always emit gyro, the gate
+             *    short-circuits so the gyro stream is not stuck behind a
+             *    sensor that will never fire.
+             *  - pad has an accelerometer and it has reported at least once
+             *    since the listener was registered (`accelSeen=true`)
+             *    ⇒ emit. The accel cache holds a real value, not the
+             *    zero-initialised default that would otherwise ship as
+             *    "stationary in zero gravity."
+             *  - otherwise ⇒ drop the gyro callback. The wire stays silent
+             *    for at most one sensor period (~5–20 ms at
+             *    `SENSOR_DELAY_GAME`); the rate-limiter's normal cadence
+             *    recovers on the next callback.
+             *
+             * Lifted out of the inner-class [PadListener] so the four-row
+             * truth table is JVM-unit-testable without an Android device
+             * or a real [SensorEventListener].
+             */
+            internal fun shouldEmitGyro(
+                hasAccelSensor: Boolean,
+                accelSeen: Boolean,
+            ): Boolean = !hasAccelSensor || accelSeen
+
+            /**
+             * Intersect the reachable-slot set (pads bound to a Connected
+             * satellite with a registered server-side controller) with the
+             * per-slot motion [MotionCapability]:
+             *
+             *  - drop slots whose pad has no gyroscope (`hasGyro == false`)
+             *    — listening would never produce a sample;
+             *  - drop slots the user has explicitly toggled motion off for
+             *    (`userEnabled == false`) — listening would burn battery
+             *    on samples that get dropped at the cap-bit / wire level.
+             *
+             * A slot present in `reachable` but ABSENT from `caps` is dropped:
+             * the capability composer is the source of truth for "this slot
+             * has motion," so an unknown slot is treated as no-motion (safe
+             * default). In practice this only happens during a startup race
+             * (reachability flow emits before the composer's first emission),
+             * and the composer's `Eagerly` sharing prevents that in production.
+             *
+             * Pure (no flow, no Android types) so the matrix can be pinned by
+             * a JVM unit test without the rest of the source.
+             */
+            internal fun filterByCapability(
+                reachable: Map<String, com.tinkernorth.dish.source.connection.SatelliteConnection>,
+                caps: Map<String, MotionCapability>,
+            ): Map<String, com.tinkernorth.dish.source.connection.SatelliteConnection> =
+                reachable.filterKeys { slotId ->
+                    val cap = caps[slotId] ?: return@filterKeys false
+                    cap.hasGyro && cap.userEnabled
+                }
 
             /**
              * Convert one fused controller IMU frame to a wire

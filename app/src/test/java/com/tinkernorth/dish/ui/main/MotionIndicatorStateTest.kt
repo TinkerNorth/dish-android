@@ -151,25 +151,34 @@ class MotionIndicatorStateTest {
     }
 
     @Test
-    fun `the three non-streaming states are all distinct`() {
-        // The whole point of the enum: "no hardware", "paused", and "this
-        // connection can't carry motion" must not be the same value.
+    fun `every non-streaming state is distinct`() {
+        // The whole point of the enum: every "motion is not going out"
+        // reason must read differently on the pill so the user knows the
+        // right next step. A regression that collapses any two of these
+        // back onto the same value would silently kill that signal.
         val nonStreaming =
             setOf(
                 MotionIndicatorState.PAUSED,
                 MotionIndicatorState.NOT_FORWARDED,
                 MotionIndicatorState.UNAVAILABLE,
+                MotionIndicatorState.USER_DISABLED,
+                MotionIndicatorState.NO_HOST_SINK,
+                MotionIndicatorState.STALLED,
             )
-        assertEquals(3, nonStreaming.size)
+        assertEquals(6, nonStreaming.size)
         assertNotEquals(MotionIndicatorState.STREAMING, MotionIndicatorState.PAUSED)
     }
 
     @Test
-    fun `only UNAVAILABLE and NOT_FORWARDED carry an explanatory detail line`() {
-        // STREAMING / PAUSED are self-explanatory; the two "motion won't
-        // leave the phone" states get a one-liner so the limit is clear.
+    fun `every limit state that needs an explanation carries a detail line`() {
+        // STREAMING / PAUSED are self-explanatory; every other state has a
+        // one-liner so the user understands the constraint (and where
+        // applicable, the actionable next step).
         assertTrue(MotionIndicatorState.UNAVAILABLE.hasDetail)
         assertTrue(MotionIndicatorState.NOT_FORWARDED.hasDetail)
+        assertTrue(MotionIndicatorState.STALLED.hasDetail)
+        assertTrue(MotionIndicatorState.USER_DISABLED.hasDetail)
+        assertTrue(MotionIndicatorState.NO_HOST_SINK.hasDetail)
         assertFalse(MotionIndicatorState.STREAMING.hasDetail)
         assertFalse(MotionIndicatorState.PAUSED.hasDetail)
     }
@@ -261,5 +270,291 @@ class MotionIndicatorStateTest {
         // this; pinning it explicitly so a future refactor that collapses
         // STALLED onto PAUSED's label fails loudly here.
         assertNotEquals(MotionIndicatorState.PAUSED.labelRes, MotionIndicatorState.STALLED.labelRes)
+    }
+
+    // ── USER_DISABLED — distinct from PAUSED (the user toggled motion off) ──
+
+    @Test
+    fun `userEnabled=false on a satellite connection maps to USER_DISABLED`() {
+        // The user actively turned motion off on this slot. PAUSED would
+        // imply the source is paused for lifecycle / link reasons, not a
+        // user choice — USER_DISABLED is the actionable label.
+        assertEquals(
+            MotionIndicatorState.USER_DISABLED,
+            MotionIndicatorState.of(
+                isAvailable = true,
+                isStreaming = false,
+                connectionCarriesMotion = true,
+                connectionConnected = true,
+                userEnabled = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `USER_DISABLED takes precedence over NOT_FORWARDED`() {
+        // BT connection AND user toggled off: show the toggle as the
+        // limit, not the connection kind — the toggle is the more
+        // actionable fact (flip it or use a satellite connection).
+        assertEquals(
+            MotionIndicatorState.USER_DISABLED,
+            MotionIndicatorState.of(
+                isAvailable = true,
+                isStreaming = false,
+                connectionCarriesMotion = false,
+                connectionConnected = true,
+                userEnabled = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `no gyroscope wins over USER_DISABLED`() {
+        // UNAVAILABLE is the highest-precedence terminal state — a phone
+        // without a gyro can't stream regardless of any toggle. Pin that
+        // the hardware absence reads correctly even if the toggle is off.
+        assertEquals(
+            MotionIndicatorState.UNAVAILABLE,
+            MotionIndicatorState.of(
+                isAvailable = false,
+                isStreaming = false,
+                connectionCarriesMotion = true,
+                connectionConnected = true,
+                userEnabled = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `userEnabled=true default keeps existing call sites unchanged`() {
+        // The new userEnabled parameter has a default of true so the
+        // pre-PR call sites (and tests above) continue to read as
+        // STREAMING / PAUSED / etc. Pin that explicitly.
+        assertEquals(
+            MotionIndicatorState.STREAMING,
+            MotionIndicatorState.of(
+                isAvailable = true,
+                isStreaming = true,
+                connectionCarriesMotion = true,
+                connectionConnected = true,
+                // userEnabled defaulted (true)
+            ),
+        )
+    }
+
+    // ── NO_HOST_SINK — slot's controller type can't carry motion on the host ──
+
+    @Test
+    fun `hostHasSinkForType=false on a satellite slot maps to NO_HOST_SINK`() {
+        // Xbox-typed virtual pad — the dish would otherwise stream, but
+        // the host's XInput backend has no IMU surface so samples would
+        // be silently dropped at the virtual gamepad layer. The pill
+        // warns up front to switch to PlayStation for gyro to land.
+        assertEquals(
+            MotionIndicatorState.NO_HOST_SINK,
+            MotionIndicatorState.of(
+                isAvailable = true,
+                isStreaming = true,
+                connectionCarriesMotion = true,
+                connectionConnected = true,
+                userEnabled = true,
+                hostHasSinkForType = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `USER_DISABLED takes precedence over NO_HOST_SINK`() {
+        // A user-toggled-off Xbox slot reads as USER_DISABLED — the user
+        // chose to turn it off and that's the most actionable next step
+        // (re-enable, or change the type to PS to make NO_HOST_SINK
+        // disappear on its own).
+        assertEquals(
+            MotionIndicatorState.USER_DISABLED,
+            MotionIndicatorState.of(
+                isAvailable = true,
+                isStreaming = false,
+                connectionCarriesMotion = true,
+                connectionConnected = true,
+                userEnabled = false,
+                hostHasSinkForType = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `NOT_FORWARDED takes precedence over NO_HOST_SINK`() {
+        // BT-HID connection AND an Xbox-typed slot. The BT limit is the
+        // more fundamental problem — fix the connection first; the host
+        // sink question only becomes meaningful on a satellite.
+        assertEquals(
+            MotionIndicatorState.NOT_FORWARDED,
+            MotionIndicatorState.of(
+                isAvailable = true,
+                isStreaming = true,
+                connectionCarriesMotion = false,
+                connectionConnected = true,
+                userEnabled = true,
+                hostHasSinkForType = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `hostHasSinkForType=true default keeps existing call sites unchanged`() {
+        // Same backwards-compat pin as for userEnabled — the new parameter
+        // has a default of true so legacy call sites still compute the
+        // correct state.
+        assertEquals(
+            MotionIndicatorState.PAUSED,
+            MotionIndicatorState.of(
+                isAvailable = true,
+                isStreaming = false,
+                connectionCarriesMotion = true,
+                connectionConnected = true,
+                // userEnabled, hostHasSinkForType both default true
+            ),
+        )
+    }
+
+    // ── BACKEND_BROKEN — receiver's own truth about its motion sink ─────
+
+    @Test
+    fun `BACKEND_BROKEN fires when satellite reports its sink failed`() {
+        // The satellite told us via the motion-status ACK byte that its
+        // backend couldn't create the per-serial IMU sink. The pill must
+        // surface this as a distinct state — the dish would otherwise
+        // happily read STREAMING while bytes silently vanish at the
+        // receiver.
+        assertEquals(
+            MotionIndicatorState.BACKEND_BROKEN,
+            MotionIndicatorState.of(
+                isAvailable = true,
+                isStreaming = true,
+                connectionCarriesMotion = true,
+                connectionConnected = true,
+                userEnabled = true,
+                hostHasSinkForType = true,
+                satelliteBackendOk = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `satelliteBackendOk=null stays out of the way`() {
+        // Null is the "unknown" sentinel — either no extended ACK was
+        // observed yet, or the satellite is a pre-extension build. The
+        // pill must NOT collapse to BACKEND_BROKEN; STREAMING is the
+        // correct reading when every other gate is open.
+        assertEquals(
+            MotionIndicatorState.STREAMING,
+            MotionIndicatorState.of(
+                isAvailable = true,
+                isStreaming = true,
+                connectionCarriesMotion = true,
+                connectionConnected = true,
+                userEnabled = true,
+                hostHasSinkForType = true,
+                satelliteBackendOk = null,
+            ),
+        )
+    }
+
+    @Test
+    fun `satelliteBackendOk=true is the normal happy-path branch`() {
+        // The satellite affirmed its sink — STREAMING (or whatever the
+        // other gates compute) is the right read; BACKEND_BROKEN does not
+        // fire.
+        assertEquals(
+            MotionIndicatorState.STREAMING,
+            MotionIndicatorState.of(
+                isAvailable = true,
+                isStreaming = true,
+                connectionCarriesMotion = true,
+                connectionConnected = true,
+                userEnabled = true,
+                hostHasSinkForType = true,
+                satelliteBackendOk = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `NO_HOST_SINK outranks BACKEND_BROKEN — the type-level reason is higher-order`() {
+        // If the slot type has no IMU surface at all (Xbox-typed), telling
+        // the user the per-serial kernel sink is broken is technically
+        // true but useless — switch to PlayStation is the right next step,
+        // not "restart the satellite." Precedence reflects that.
+        assertEquals(
+            MotionIndicatorState.NO_HOST_SINK,
+            MotionIndicatorState.of(
+                isAvailable = true,
+                isStreaming = true,
+                connectionCarriesMotion = true,
+                connectionConnected = true,
+                userEnabled = true,
+                hostHasSinkForType = false,
+                satelliteBackendOk = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `USER_DISABLED outranks BACKEND_BROKEN — user's choice is the actionable reason`() {
+        // The user turned motion off; whether or not the satellite's sink
+        // would have worked is irrelevant — show them their own toggle as
+        // the explanation.
+        assertEquals(
+            MotionIndicatorState.USER_DISABLED,
+            MotionIndicatorState.of(
+                isAvailable = true,
+                isStreaming = false,
+                connectionCarriesMotion = true,
+                connectionConnected = true,
+                userEnabled = false,
+                hostHasSinkForType = true,
+                satelliteBackendOk = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `NOT_FORWARDED outranks BACKEND_BROKEN — BT-HID never carried motion in the first place`() {
+        // A Bluetooth-HID connection has no motion channel at all; the
+        // satellite's sink status is irrelevant. The pill should read
+        // "this link can't carry motion," not "the satellite's broken."
+        assertEquals(
+            MotionIndicatorState.NOT_FORWARDED,
+            MotionIndicatorState.of(
+                isAvailable = true,
+                isStreaming = true,
+                connectionCarriesMotion = false,
+                connectionConnected = true,
+                userEnabled = true,
+                hostHasSinkForType = true,
+                satelliteBackendOk = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `BACKEND_BROKEN outranks STALLED — the receiver's reason beats the source's reason`() {
+        // If the receiver said its sink is broken AND the source happens to
+        // be stalled too, the operator-facing reason ("server can't
+        // deliver") is the higher-order one — the source stalling is moot
+        // because the bytes weren't being delivered anyway.
+        assertEquals(
+            MotionIndicatorState.BACKEND_BROKEN,
+            MotionIndicatorState.of(
+                isAvailable = true,
+                isStreaming = true,
+                connectionCarriesMotion = true,
+                connectionConnected = true,
+                userEnabled = true,
+                hostHasSinkForType = true,
+                satelliteBackendOk = false,
+                isStalled = true,
+            ),
+        )
     }
 }

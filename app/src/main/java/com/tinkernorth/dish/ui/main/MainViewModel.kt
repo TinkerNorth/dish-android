@@ -8,11 +8,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.store.BatteryStatusStore
+import com.tinkernorth.dish.source.store.MotionEnabledStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -45,7 +47,21 @@ class MainViewModel
         val hub: ConnectionHub,
         private val gamepadRegistry: PhysicalGamepadRegistry,
         private val batteryStatusStore: BatteryStatusStore,
+        private val motionEnabledStore: MotionEnabledStore,
+        private val motionCapability: MotionCapabilityComposer,
     ) : ViewModel() {
+        /**
+         * Reactive `slotId -> enabled` map for the per-slot motion toggle.
+         * Hydrated at process start from [MotionEnabledStore]'s durable
+         * backing repo, so the dashboard renders yesterday's toggle state
+         * with no first-frame flicker.
+         *
+         * Absence from the map means "user has not toggled" — call sites
+         * use [isMotionEnabled] to apply the default rather than reading
+         * the map directly.
+         */
+        val motionEnabled: StateFlow<Map<String, Boolean>> = motionEnabledStore.state
+
         private val _uiState = MutableStateFlow(MainUiState())
         val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
@@ -58,7 +74,8 @@ class MainViewModel
                 hub.bindings,
                 gamepadRegistry.devices,
                 batteryStatusStore.samples,
-            ) { conns, bindings, devices, batteries ->
+                motionCapability.state,
+            ) { conns, bindings, devices, batteries, motionCaps ->
                 val virtual =
                     ControllerSlot(
                         id = VIRTUAL_SLOT_ID,
@@ -88,7 +105,7 @@ class MainViewModel
                                 },
                         )
                     }
-                MainUiState(slots = slots, connections = conns)
+                MainUiState(slots = slots, connections = conns, motionCapabilities = motionCaps)
             }.onEach { _uiState.value = it }.launchIn(viewModelScope)
 
             satellite.events
@@ -131,4 +148,34 @@ class MainViewModel
         ) {
             hub.setSatelliteControllerType(connectionId, slotId, type)
         }
+
+        // ── Motion toggle ─────────────────────────────────────────────────────
+
+        /**
+         * Persist the user's per-slot motion preference. The store writes
+         * through to the durable [com.tinkernorth.dish.repository.MotionPreferenceRepository]
+         * AND republishes its state flow so the
+         * [com.tinkernorth.dish.composer.MotionCapabilityComposer] (wired
+         * in a follow-up PR) re-derives the slot's `CAP_MOTION` bit and
+         * the sensor-listener gate flips on the next emission.
+         *
+         * No-op semantics: writing the same value twice is harmless;
+         * the store still re-emits so any downstream observer that
+         * relies on identity equality (none today) is unaffected.
+         */
+        fun setMotionEnabled(
+            slotId: String,
+            enabled: Boolean,
+        ) {
+            motionEnabledStore.setEnabled(slotId, enabled)
+        }
+
+        /**
+         * Resolve the effective motion-enabled boolean for [slotId],
+         * collapsing an absent entry onto [MotionEnabledStore.DEFAULT_ENABLED].
+         * Use this in render code — never read [motionEnabled] directly,
+         * since absence and `false` mean different things in the store
+         * but the same thing to the user.
+         */
+        fun isMotionEnabled(slotId: String): Boolean = motionEnabledStore.isEnabled(slotId)
     }

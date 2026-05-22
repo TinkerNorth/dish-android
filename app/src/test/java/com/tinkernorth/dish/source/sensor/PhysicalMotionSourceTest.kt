@@ -3,7 +3,12 @@
 
 package com.tinkernorth.dish.source.sensor
 
+import com.tinkernorth.dish.composer.MotionCapability
+import com.tinkernorth.dish.source.connection.SatelliteConnection
+import io.mockk.mockk
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -94,6 +99,107 @@ class PhysicalMotionSourceTest {
         assertEquals(1234, s.accelX.toInt())
         assertEquals(-5678, s.accelY.toInt())
         assertEquals(8191, s.accelZ.toInt())
+    }
+
+    // ── filterByCapability — the gate added in PR3 ─────────────────────────
+
+    private fun fakeConn(): SatelliteConnection = mockk(relaxed = true)
+
+    @Test
+    fun `filterByCapability keeps a reachable slot that has gyro AND is user-enabled`() {
+        // The success path — both capability axes true, the slot stays in
+        // the reachable map and its sensor listener will register.
+        val conn = fakeConn()
+        val reachable = mapOf("9" to conn)
+        val caps = mapOf("9" to MotionCapability(hasGyro = true, carriesOnConnection = true, userEnabled = true))
+        assertEquals(reachable, PhysicalMotionSource.filterByCapability(reachable, caps))
+    }
+
+    @Test
+    fun `filterByCapability drops a reachable slot whose pad has NO gyro`() {
+        // A cheap Bluetooth pad on API 31+ exposes the per-device
+        // SensorManager but reports no TYPE_GYROSCOPE. Reachability still
+        // says "the slot is bound and the satellite is up"; the capability
+        // gate must drop it so listening doesn't burn battery on a sensor
+        // that will never fire.
+        val reachable = mapOf("9" to fakeConn())
+        val caps = mapOf("9" to MotionCapability(hasGyro = false, carriesOnConnection = true, userEnabled = true))
+        assertTrue(PhysicalMotionSource.filterByCapability(reachable, caps).isEmpty())
+    }
+
+    @Test
+    fun `filterByCapability drops a slot the user has toggled motion off for`() {
+        // The user-facing toggle is the headline PR2/PR3 deliverable —
+        // when off, the listener must NOT register, even though hardware
+        // and link are both ready. A regression that ignores userEnabled
+        // would leak gyro listeners on slots motion is off for, defeating
+        // the toggle.
+        val reachable = mapOf("9" to fakeConn())
+        val caps = mapOf("9" to MotionCapability(hasGyro = true, carriesOnConnection = true, userEnabled = false))
+        assertTrue(PhysicalMotionSource.filterByCapability(reachable, caps).isEmpty())
+    }
+
+    @Test
+    fun `filterByCapability drops a reachable slot that is missing from caps`() {
+        // Startup race: the reachability flow emits before the capability
+        // composer's first emission. Treat the unknown slot as "no motion"
+        // (safe default) — the next emission will reinstate it if it
+        // actually has gyro + is enabled.
+        val reachable = mapOf("9" to fakeConn())
+        val caps = emptyMap<String, MotionCapability>()
+        assertTrue(PhysicalMotionSource.filterByCapability(reachable, caps).isEmpty())
+    }
+
+    // ── shouldEmitGyro — the per-pad first-sample stale-zero accel gate ───
+
+    @Test
+    fun `shouldEmitGyro returns true when the pad has no accelerometer`() {
+        // A device that exposes a gyro but no accel (rare in practice).
+        // The gate must short-circuit — gyro samples MUST flow even when
+        // the accel cache will remain at its zero default forever,
+        // because the alternative is an indefinitely silent gyro stream.
+        assertTrue(PhysicalMotionSource.shouldEmitGyro(hasAccelSensor = false, accelSeen = false))
+    }
+
+    @Test
+    fun `shouldEmitGyro returns false on the first gyro before accel has reported`() {
+        // The headline bug this gate exists for: the gyro fires before
+        // the accel does, so the first MOTION packet would ship
+        // accel=(0,0,0). Downstream consumers read that as "stationary
+        // in zero gravity." The gate drops the gyro until accel has been
+        // seen — at most one sensor period of latency.
+        assertFalse(PhysicalMotionSource.shouldEmitGyro(hasAccelSensor = true, accelSeen = false))
+    }
+
+    @Test
+    fun `shouldEmitGyro returns true once accel has reported`() {
+        // After the first accel callback flips accelSeen=true, the cache
+        // holds a real triple — gyro emissions are safe.
+        assertTrue(PhysicalMotionSource.shouldEmitGyro(hasAccelSensor = true, accelSeen = true))
+    }
+
+    @Test
+    fun `shouldEmitGyro accel-sensor-absent path ignores accelSeen for safety`() {
+        // Belt-and-suspenders: hasAccelSensor=false implies the device
+        // will never set accelSeen, but the gate must not deadlock on
+        // that combination. Returns true regardless of accelSeen.
+        assertTrue(PhysicalMotionSource.shouldEmitGyro(hasAccelSensor = false, accelSeen = true))
+    }
+
+    @Test
+    fun `filterByCapability per-slot — keeps the enabled one, drops the disabled one`() {
+        // Two pads, same satellite, different user toggles. Pin that the
+        // filter is per-slot and not "all-or-nothing."
+        val connA = fakeConn()
+        val connB = fakeConn()
+        val reachable = mapOf("A" to connA, "B" to connB)
+        val caps =
+            mapOf(
+                "A" to MotionCapability(hasGyro = true, carriesOnConnection = true, userEnabled = true),
+                "B" to MotionCapability(hasGyro = true, carriesOnConnection = true, userEnabled = false),
+            )
+        val result = PhysicalMotionSource.filterByCapability(reachable, caps)
+        assertEquals(mapOf("A" to connA), result)
     }
 
     @Test

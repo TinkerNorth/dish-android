@@ -21,7 +21,10 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionHub
 import com.tinkernorth.dish.composer.ConnectionKind
+import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
+import com.tinkernorth.dish.composer.MotionCapability
+import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.input.hidToXusb
 import com.tinkernorth.dish.core.model.DishNotification
@@ -33,12 +36,16 @@ import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.notification.DishNotifications
+import com.tinkernorth.dish.source.sensor.MotionStreamState
 import com.tinkernorth.dish.source.sensor.PhoneBatterySource
 import com.tinkernorth.dish.source.sensor.PhoneMotionSource
 import com.tinkernorth.dish.ui.common.GamepadTouchView
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -71,6 +78,8 @@ class GamepadOverlayActivity :
     @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
 
     @Inject lateinit var notifications: DishNotifications
+
+    @Inject lateinit var motionCapability: MotionCapabilityComposer
 
     private lateinit var binding: ActivityGamepadOverlayBinding
     private lateinit var gamepadHost: GamepadActivityHost
@@ -133,22 +142,62 @@ class GamepadOverlayActivity :
         // dashboard indicator is fed separately, at process scope, by
         // VirtualBatterySource — so no statusStore is passed here.
         batterySource = PhoneBatterySource(applicationContext)
-        // Paint the motion pill once up front: on a phone with no gyroscope
-        // this is the only paint that ever runs (start/stop are no-ops), and
-        // the "no gyroscope" state must be visible without waiting for resume.
-        refreshMotionStatus()
+        // Paint the motion pill once up front from whatever the sources have
+        // already published. On a phone with no gyroscope the source's state
+        // is `Disabled` from construction, so this single paint surfaces the
+        // "no gyroscope" tile before any lifecycle work begins — important
+        // because the combine collector below only runs while STARTED.
+        repaintFrom(currentMotionPaint())
 
+        // Single combine collector — one StateFlow tuple drives the gate
+        // AND the pill paint AND the connection-status row, from one
+        // coherent snapshot per emission.
+        //
+        // Why fold the three previous collectors into one:
+        //   - `hub.connections` and `motionCapability.state` can both emit
+        //     for the same upstream event (a binding/connection change
+        //     re-runs the composer's combine). Two collectors mean two
+        //     repaints, the first reading one fresh / one stale field —
+        //     a visible flicker during reconnects.
+        //   - `motionSource.state` carries the Streaming ↔ Stalled flip
+        //     fired by the source's internal 500 ms stall tick; without a
+        //     collector it never reaches the UI.
+        //   - Combining the three lets the gate decision (start/stop the
+        //     IMU listener) and the pill paint read from the SAME snapshot,
+        //     so the pill can never display "STREAMING from a stopped
+        //     source" or similar half-state.
+        //
+        // The collector runs only while STARTED; repeatOnLifecycle cancels
+        // it on STOP. The finally clause stops the source on cancellation
+        // so a backgrounded overlay never leaks sensor listeners — even if
+        // the gate had just turned the source on.
+        //
+        // `distinctUntilChanged` is the simple deduper — two upstream
+        // emissions that collapse to the same paint shouldn't repaint the
+        // pill (Kotlin data-class equality handles the field-wise compare).
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                hub.connections.collect {
-                    refreshStatus()
-                    // The motion pill depends on connection *kind* (Bluetooth
-                    // has no motion channel), so it must repaint when the
-                    // bound connection's summary first resolves or changes.
-                    refreshMotionStatus()
+                try {
+                    combine(
+                        hub.connections.map { conns -> conns.firstOrNull { it.id == connectionId } },
+                        motionCapability.state.map {
+                            it[VIRTUAL_SLOT_ID] ?: MotionCapability.Off
+                        },
+                        motionSource.state,
+                    ) { summary, capability, sourceState ->
+                        OverlayMotionPaint(summary, capability, sourceState)
+                    }.distinctUntilChanged().collect { paint ->
+                        applyMotionGate(paint.capability)
+                        repaintFrom(paint)
+                    }
+                } finally {
+                    // Stop on collector cancellation (STOP / activity destroy)
+                    // so a backgrounded overlay never leaks sensor listeners.
+                    motionSource.stop()
                 }
             }
         }
+
         // Mid-game connection events: with the SatelliteConnectionManager's
         // SharedFlow buffered, errors emitted from the alive-poll's onDead
         // path can now reach this activity. Previously they were silently
@@ -210,11 +259,20 @@ class GamepadOverlayActivity :
                         if (waitMs > 0) delay(waitMs)
                     }
                     nextTickNs += RESEND_INTERVAL_NS
-                    val state = lastReportedState ?: continue
-                    val summary = hub.summary(connectionId) ?: continue
-                    if (summary.kind != ConnectionKind.SATELLITE) continue
-                    if (summary.live != LinkState.Connected) continue
-                    sendSatelliteReport(state)
+                    // Send only when every prerequisite is satisfied. Folded
+                    // into one positive condition (rather than four guards
+                    // each followed by `continue`) so the loop body has a
+                    // single linear path — detekt's LoopWithTooManyJumpStatements
+                    // was correctly flagging the cluster of early-exits.
+                    val state = lastReportedState
+                    val summary = hub.summary(connectionId)
+                    if (state != null &&
+                        summary != null &&
+                        summary.kind == ConnectionKind.SATELLITE &&
+                        summary.live == LinkState.Connected
+                    ) {
+                        sendSatelliteReport(state)
+                    }
                 }
             }
         }
@@ -254,36 +312,23 @@ class GamepadOverlayActivity :
 
     override fun onResume() {
         super.onResume()
-        // Stream the phone's gyro/accel + battery to the bound satellite
-        // session. `satellite.get(...)` is null for Bluetooth-HID connections,
-        // so these emits naturally no-op there — motion forwarding is a
-        // satellite-path feature.
-        motionSource.start { sample, deltaUs ->
-            satellite.get(connectionId)?.sendMotion(
-                VIRTUAL_SLOT_ID,
-                sample.gyroX,
-                sample.gyroY,
-                sample.gyroZ,
-                sample.accelX,
-                sample.accelY,
-                sample.accelZ,
-                deltaUs,
-            )
-        }
+        // Battery is unconditional — it has its own gating on the connection
+        // kind inside the satellite send path, and the cost of a slow battery
+        // poll is negligible.
         batterySource.start(lifecycleScope) { level, status ->
             satellite.get(connectionId)?.sendBattery(VIRTUAL_SLOT_ID, level, status)
         }
-        // motionSource is now started (or a no-op if there's no gyroscope) —
-        // repaint so the pill reads "streaming" rather than "paused".
-        refreshMotionStatus()
+        // motion source start/stop and pill paints are driven by the single
+        // combine collector in onCreate — repeatOnLifecycle re-subscribes on
+        // STARTED so the StateFlow tuple re-emits its current values and the
+        // collector handles the gate + repaint. No explicit work needed here.
     }
 
     override fun onPause() {
         super.onPause()
-        motionSource.stop()
         batterySource.stop()
-        // Source stopped to save battery; reflect "paused" (not "unavailable").
-        refreshMotionStatus()
+        // Pill repaint is driven by the source-state change inside the
+        // combine collector; no explicit refresh here.
     }
 
     override fun onStop() {
@@ -291,8 +336,75 @@ class GamepadOverlayActivity :
         gamepadHost.cancelDimOnStop()
     }
 
-    private fun refreshStatus() {
-        val summary = hub.summary(connectionId)
+    /**
+     * One coherent snapshot of the three inputs that drive both the motion
+     * pill and the gyro-listener gate. Composed from [hub.connections] +
+     * [motionCapability.state] + [motionSource.state] in one combine, so
+     * every paint reads from the same emission rather than racing three
+     * collectors against three independent reads (which could paint a
+     * transient inconsistent state during reconnects). See the combine
+     * collector in [onCreate].
+     */
+    private data class OverlayMotionPaint(
+        val summary: ConnectionSummary?,
+        val capability: MotionCapability,
+        val sourceState: MotionStreamState,
+    )
+
+    /**
+     * Build a [OverlayMotionPaint] from whatever values the underlying
+     * sources have already published. Used for the initial paint in
+     * [onCreate] before the lifecycle collector starts — the StateFlow
+     * tuple won't emit until something subscribes, but the "no gyroscope"
+     * tile must show up immediately so users on phones without an IMU
+     * don't see a blank pill before resume.
+     */
+    private fun currentMotionPaint(): OverlayMotionPaint =
+        OverlayMotionPaint(
+            summary = hub.summary(connectionId),
+            capability = motionCapability.capabilityFor(VIRTUAL_SLOT_ID),
+            sourceState = motionSource.state.value,
+        )
+
+    /**
+     * Listener-gate side-effect — start/stop the IMU listener so the
+     * sensor never runs when the slot is ineligible for motion (gyro
+     * absent, BT-HID, user toggled off, satellite not connected). Lives
+     * inside the combine collector so the gate decision and the pill paint
+     * share one snapshot.
+     */
+    private fun applyMotionGate(capability: MotionCapability) {
+        val effective = capability.effective
+        if (effective && !motionSource.isStreaming) {
+            motionSource.start { sample, deltaUs ->
+                satellite.get(connectionId)?.sendMotion(
+                    VIRTUAL_SLOT_ID,
+                    sample.gyroX,
+                    sample.gyroY,
+                    sample.gyroZ,
+                    sample.accelX,
+                    sample.accelY,
+                    sample.accelZ,
+                    deltaUs,
+                )
+            }
+        } else if (!effective && motionSource.isStreaming) {
+            motionSource.stop()
+        }
+    }
+
+    /**
+     * Atomic repaint: connection-status row + motion pill from the same
+     * [OverlayMotionPaint] snapshot. Both UI elements are touched here so
+     * they always reflect one logical moment — no possibility of the
+     * status row reading one combine output while the pill reads the next.
+     */
+    private fun repaintFrom(paint: OverlayMotionPaint) {
+        repaintConnectionRow(paint.summary)
+        repaintMotionPill(paint)
+    }
+
+    private fun repaintConnectionRow(summary: ConnectionSummary?) {
         val connected = summary?.live == LinkState.Connected
         binding.tvOverlayStatus.text =
             when {
@@ -307,31 +419,52 @@ class GamepadOverlayActivity :
     }
 
     /**
-     * Repaint the phone-motion pill. There is no motion on/off toggle in this
-     * slice, so the state is purely a function of four facts: whether the
-     * phone has a gyroscope ([PhoneMotionSource.isAvailable]), whether the
-     * source is currently started ([PhoneMotionSource.isStreaming]), whether
-     * the bound connection kind can carry `MSG_MOTION` at all (satellite can,
-     * Bluetooth-HID cannot), and whether that connection is actually CONNECTED
-     * — a "started" source over a down connection is not really streaming, so
-     * the pill must not claim it is. The two states that imply motion is *not*
-     * leaving the phone also show a one-line explanation, so a limitation is
-     * never mistaken for an off switch. See [MotionIndicatorState].
+     * Repaint the phone-motion pill from a single coherent [paint] tuple.
+     *
+     * The dish surfaces a state for every reason motion might or might not
+     * be flowing — hardware absent, user toggled off, link kind can't
+     * carry it, host-type has no sink, satellite reported its backend
+     * broken, source paused, streaming live, or stalled. The two states
+     * that imply motion is *not* leaving the phone (and the BACKEND_BROKEN
+     * case, where it leaves but doesn't land) carry a one-line
+     * explanation so a limitation is never mistaken for an off switch.
+     * See [MotionIndicatorState].
+     *
+     * Reading from [paint] — not from `motionSource.is*` or
+     * `motionCapability.capabilityFor(…)` directly — is the load-bearing
+     * change for the single-snapshot-per-paint contract: every field below
+     * comes from the same combine emission, so the pill cannot render the
+     * "user disabled but still streaming" half-states the old three-
+     * collector arrangement was prone to during reconnects.
      */
-    private fun refreshMotionStatus() {
+    private fun repaintMotionPill(paint: OverlayMotionPaint) {
+        val summary = paint.summary
         // A null summary (connection not resolved yet) is treated as
-        // motion-capable but not-yet-connected: the pill reads "paused" until
-        // the kind + liveness resolve, then self-corrects on the next refresh.
-        val summary = hub.summary(connectionId)
+        // motion-capable but not-yet-connected: the pill reads "paused"
+        // until the kind + liveness resolve, then self-corrects on the
+        // next paint.
         val carriesMotion = summary?.kind != ConnectionKind.BLUETOOTH
         val connected = summary?.live == LinkState.Connected
+        val cap = paint.capability
+        val sourceState = paint.sourceState
+        // Derived from sourceState — eliminates the previous three
+        // separate `motionSource.is*` reads, each of which could be at a
+        // different point in time than the others.
+        val isAvailable = sourceState != MotionStreamState.Disabled
+        val isStreaming =
+            sourceState == MotionStreamState.Streaming ||
+                sourceState == MotionStreamState.Stalled
+        val isStalled = sourceState == MotionStreamState.Stalled
         val state =
             MotionIndicatorState.of(
-                isAvailable = motionSource.isAvailable,
-                isStreaming = motionSource.isStreaming,
+                isAvailable = isAvailable,
+                isStreaming = isStreaming,
                 connectionCarriesMotion = carriesMotion,
                 connectionConnected = connected,
-                isStalled = motionSource.isStalled,
+                userEnabled = cap.userEnabled,
+                hostHasSinkForType = cap.hostHasSinkForType,
+                satelliteBackendOk = cap.satelliteBackendStatus?.backendOk,
+                isStalled = isStalled,
             )
         binding.tvMotionStatus.setText(state.labelRes)
         (binding.dotMotion.background as? GradientDrawable)?.setColor(getColor(state.dotColorRes))
@@ -343,6 +476,12 @@ class GamepadOverlayActivity :
                 binding.tvMotionDetail.setText(R.string.motion_not_forwarded_detail)
             MotionIndicatorState.STALLED ->
                 binding.tvMotionDetail.setText(R.string.motion_stalled_detail)
+            MotionIndicatorState.USER_DISABLED ->
+                binding.tvMotionDetail.setText(R.string.motion_user_disabled_detail)
+            MotionIndicatorState.NO_HOST_SINK ->
+                binding.tvMotionDetail.setText(R.string.motion_no_host_sink_detail)
+            MotionIndicatorState.BACKEND_BROKEN ->
+                binding.tvMotionDetail.setText(R.string.motion_backend_broken_detail)
             else -> Unit
         }
     }

@@ -70,12 +70,39 @@ class ControllerRepository
 
         fun getLastControllerAck(handle: Int): Int = SatelliteNative.getLastControllerAck(handle)
 
+        /**
+         * Motion-status byte from the most recent MSG_CONTROLLER_ACK on
+         * [handle], or -1 if no extended ACK was observed (pre-extension
+         * satellite, or no ACK at all). See [SatelliteNative
+         * .getLastControllerMotionFlags] for the bit definitions and the
+         * `-1`-means-unknown semantics.
+         */
+        fun getLastControllerMotionFlags(handle: Int): Int = SatelliteNative.getLastControllerMotionFlags(handle)
+
         fun sendControllerType(
             handle: Int,
             index: Int,
             type: Int,
         ) {
             SatelliteNative.sendControllerType(handle, index, type)
+        }
+
+        /**
+         * Send a fresh capability word for an already-registered
+         * controller (0x000E). Reactive replacement for the snapshot the
+         * dish-side took at addController time — used when the
+         * [com.tinkernorth.dish.composer.MotionCapabilityComposer]'s
+         * `toCapBits(slotId)` flips after registration (e.g. user toggle
+         * change). The receiver overwrites `Controller::caps` in place;
+         * no replug, no fresh ACK. See [SatelliteNative
+         * .sendControllerCapsUpdate].
+         */
+        fun sendControllerCapsUpdate(
+            handle: Int,
+            index: Int,
+            capabilities: Int,
+        ) {
+            SatelliteNative.sendControllerCapsUpdate(handle, index, capabilities)
         }
 
         /**

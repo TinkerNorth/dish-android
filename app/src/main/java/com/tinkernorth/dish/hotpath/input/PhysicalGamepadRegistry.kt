@@ -9,6 +9,7 @@ import android.util.Log
 import android.view.InputDevice
 import android.view.MotionEvent
 import com.tinkernorth.dish.core.jni.SatelliteNative
+import com.tinkernorth.dish.source.sensor.PhysicalMotionProbe
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -46,11 +47,21 @@ class PhysicalGamepadRegistry
          *   "false disconnect") doesn't free the server-side controller index
          *   and force a re-register. `null` means the device is currently
          *   present.
+         * @property hasGyro true iff the per-device sensor API
+         *   ([android.view.InputDevice.getSensorManager], API 31+) reports a
+         *   gyroscope for this pad. Computed once at add time via
+         *   [com.tinkernorth.dish.source.sensor.PhysicalMotionProbe] and read
+         *   by [com.tinkernorth.dish.composer.MotionCapabilityComposer] to
+         *   decide the per-slot `CAP_MOTION` bit, and by
+         *   [com.tinkernorth.dish.source.sensor.PhysicalMotionSource] to
+         *   decide whether to register sensor listeners. A controller without
+         *   a gyro keeps this `false` for its whole lifetime in the registry.
          */
         data class Device(
             val id: Int,
             val name: String,
             val disconnectingTimeLeftSec: Int? = null,
+            val hasGyro: Boolean = false,
         ) {
             val isDisconnecting: Boolean get() = disconnectingTimeLeftSec != null
         }
@@ -88,7 +99,7 @@ class PhysicalGamepadRegistry
                 val dev = InputDevice.getDevice(id) ?: continue
                 if (!isGamepad(dev)) continue
                 pushDeadzones(dev)
-                next[id] = Device(id, dev.name)
+                next[id] = Device(id, dev.name, hasGyro = PhysicalMotionProbe.hasGyro(id))
             }
             _devices.value = next
         }
@@ -98,7 +109,9 @@ class PhysicalGamepadRegistry
             if (!isGamepad(dev)) return
             pushDeadzones(dev)
             cancelDisconnect(deviceId)
-            _devices.value = _devices.value + (deviceId to Device(deviceId, dev.name))
+            _devices.value =
+                _devices.value +
+                (deviceId to Device(deviceId, dev.name, hasGyro = PhysicalMotionProbe.hasGyro(deviceId)))
         }
 
         override fun onInputDeviceRemoved(deviceId: Int) {
@@ -121,7 +134,12 @@ class PhysicalGamepadRegistry
             cancelDisconnect(deviceId)
             val current = _devices.value[deviceId]
             if (current == null || current.name != dev.name || current.isDisconnecting) {
-                _devices.value = _devices.value + (deviceId to Device(deviceId, dev.name))
+                // Re-probe in case capabilities changed (rare in practice, but
+                // a USB pad swapping firmware between detach/attach cycles can
+                // change its sensor exposure — and the probe is cheap).
+                _devices.value =
+                    _devices.value +
+                    (deviceId to Device(deviceId, dev.name, hasGyro = PhysicalMotionProbe.hasGyro(deviceId)))
             }
         }
 
