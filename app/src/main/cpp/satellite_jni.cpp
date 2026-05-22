@@ -757,11 +757,10 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendTo
     auto s = getSession(handle);
     if (!s) return;
     uint8_t payload[12];
-    dish_wire::encodeTouchpadPayload(payload, (uint8_t)(controllerIndex & 0xFF),
-                                     f0Active == JNI_TRUE, f1Active == JNI_TRUE,
-                                     buttonPressed == JNI_TRUE,
-                                     (uint8_t)(f0TrackingId & 0xFF), (int16_t)f0x, (int16_t)f0y,
-                                     (uint8_t)(f1TrackingId & 0xFF), (int16_t)f1x, (int16_t)f1y);
+    dish_wire::encodeTouchpadPayload(
+        payload, (uint8_t)(controllerIndex & 0xFF), f0Active == JNI_TRUE, f1Active == JNI_TRUE,
+        buttonPressed == JNI_TRUE, (uint8_t)(f0TrackingId & 0xFF), (int16_t)f0x, (int16_t)f0y,
+        (uint8_t)(f1TrackingId & 0xFF), (int16_t)f1x, (int16_t)f1y);
     sendEncrypted(s.get(), MSG_TOUCHPAD, payload, sizeof(payload));
 }
 

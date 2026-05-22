@@ -30,11 +30,12 @@ class TouchpadModeComposerTest {
         val repo = mockk<TouchpadModeRepository>()
         every { repo.get("sat-a") } returns TouchpadModePreference("sat-a", TouchpadModeValue.MOUSE)
         val composer = TouchpadModeComposer(repo)
-        val mode = composer.resolve(
-            "sat-a",
-            serverSupports = setOf("off", "ds4", "mouse"),
-            hasLocalTouchpadCapture = true,
-        )
+        val mode =
+            composer.resolve(
+                "sat-a",
+                serverSupports = setOf("off", "ds4", "mouse"),
+                hasLocalTouchpadCapture = true,
+            )
         assertEquals(TouchpadModeValue.MOUSE, mode)
     }
 
@@ -48,11 +49,12 @@ class TouchpadModeComposerTest {
         every { repo.get("sat-a") } returns TouchpadModePreference("sat-a", TouchpadModeValue.MOUSE)
         val composer = TouchpadModeComposer(repo)
         // Server only supports off (e.g. a Mac receiver).
-        val mode = composer.resolve(
-            "sat-a",
-            serverSupports = setOf("off"),
-            hasLocalTouchpadCapture = true,
-        )
+        val mode =
+            composer.resolve(
+                "sat-a",
+                serverSupports = setOf("off"),
+                hasLocalTouchpadCapture = true,
+            )
         assertEquals(TouchpadModeValue.OFF, mode)
     }
 
@@ -64,11 +66,12 @@ class TouchpadModeComposerTest {
         val repo = mockk<TouchpadModeRepository>()
         every { repo.get("sat-a") } returns null
         val composer = TouchpadModeComposer(repo)
-        val mode = composer.resolve(
-            "sat-a",
-            serverSupports = setOf("off", "ds4", "mouse"),
-            hasLocalTouchpadCapture = false,
-        )
+        val mode =
+            composer.resolve(
+                "sat-a",
+                serverSupports = setOf("off", "ds4", "mouse"),
+                hasLocalTouchpadCapture = false,
+            )
         assertEquals(TouchpadModeValue.OFF, mode)
     }
 
@@ -81,11 +84,12 @@ class TouchpadModeComposerTest {
         val repo = mockk<TouchpadModeRepository>()
         every { repo.get("sat-a") } returns null
         val composer = TouchpadModeComposer(repo)
-        val mode = composer.resolve(
-            "sat-a",
-            serverSupports = setOf("off", "ds4", "mouse"),
-            hasLocalTouchpadCapture = true,
-        )
+        val mode =
+            composer.resolve(
+                "sat-a",
+                serverSupports = setOf("off", "ds4", "mouse"),
+                hasLocalTouchpadCapture = true,
+            )
         assertEquals(TouchpadModeValue.DS4, mode)
     }
 
@@ -97,11 +101,12 @@ class TouchpadModeComposerTest {
         val repo = mockk<TouchpadModeRepository>()
         every { repo.get("sat-a") } returns null
         val composer = TouchpadModeComposer(repo)
-        val mode = composer.resolve(
-            "sat-a",
-            serverSupports = setOf("off", "mouse"),
-            hasLocalTouchpadCapture = true,
-        )
+        val mode =
+            composer.resolve(
+                "sat-a",
+                serverSupports = setOf("off", "mouse"),
+                hasLocalTouchpadCapture = true,
+            )
         assertEquals(TouchpadModeValue.MOUSE, mode)
     }
 
@@ -112,11 +117,12 @@ class TouchpadModeComposerTest {
         val repo = mockk<TouchpadModeRepository>()
         every { repo.get("sat-a") } returns null
         val composer = TouchpadModeComposer(repo)
-        val mode = composer.resolve(
-            "sat-a",
-            serverSupports = setOf("off"),
-            hasLocalTouchpadCapture = true,
-        )
+        val mode =
+            composer.resolve(
+                "sat-a",
+                serverSupports = setOf("off"),
+                hasLocalTouchpadCapture = true,
+            )
         assertEquals(TouchpadModeValue.OFF, mode)
     }
 
@@ -127,11 +133,12 @@ class TouchpadModeComposerTest {
         val repo = mockk<TouchpadModeRepository>()
         every { repo.get("sat-a") } returns null
         val composer = TouchpadModeComposer(repo)
-        val mode = composer.resolve(
-            "sat-a",
-            serverSupports = emptySet(),
-            hasLocalTouchpadCapture = true,
-        )
+        val mode =
+            composer.resolve(
+                "sat-a",
+                serverSupports = emptySet(),
+                hasLocalTouchpadCapture = true,
+            )
         assertEquals(TouchpadModeValue.OFF, mode)
     }
 

@@ -192,7 +192,11 @@ class TouchpadSurfaceView
             }
         }
 
-        private fun writePointerToState(event: MotionEvent, index: Int, pointerId: Int) {
+        private fun writePointerToState(
+            event: MotionEvent,
+            index: Int,
+            pointerId: Int,
+        ) {
             val slot = slotForPointerId[pointerId] ?: return
             val w = width.coerceAtLeast(1)
             val h = height.coerceAtLeast(1)
@@ -265,7 +269,11 @@ class TouchpadSurfaceView
             if (state.finger1Active) drawFinger(canvas, state.finger1X, state.finger1Y)
         }
 
-        private fun drawFinger(canvas: Canvas, x: Short, y: Short) {
+        private fun drawFinger(
+            canvas: Canvas,
+            x: Short,
+            y: Short,
+        ) {
             // Reverse the int16 normalisation to draw the dot at the right pixel.
             val px = ((x.toInt() + 32768).toFloat() / 65535f) * width
             val py = ((y.toInt() + 32768).toFloat() / 65535f) * height

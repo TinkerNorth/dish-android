@@ -72,7 +72,10 @@ class TouchpadModeComposer
          * failure can still leave the local pick visible until the next
          * connect (the live connection's mode is server-owned).
          */
-        fun persist(satelliteId: String, mode: String) {
+        fun persist(
+            satelliteId: String,
+            mode: String,
+        ) {
             require(TouchpadModeValue.isValid(mode)) {
                 "Invalid touchpad mode '$mode' — must be one of ${TouchpadModeValue.ALL}"
             }

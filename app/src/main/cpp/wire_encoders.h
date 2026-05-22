@@ -79,9 +79,9 @@ inline void encodeBatteryPayload(uint8_t out[3], uint8_t ctrlIdx, uint8_t level,
 //   [7]      finger1_trackingId (u8)
 //   [8..9]   finger1_x (i16 LE)
 //   [10..11] finger1_y (i16 LE)
-inline void encodeTouchpadPayload(uint8_t out[12], uint8_t ctrlIdx, bool f0Active,
-                                  bool f1Active, bool buttonPressed, uint8_t f0Id, int16_t f0x,
-                                  int16_t f0y, uint8_t f1Id, int16_t f1x, int16_t f1y) {
+inline void encodeTouchpadPayload(uint8_t out[12], uint8_t ctrlIdx, bool f0Active, bool f1Active,
+                                  bool buttonPressed, uint8_t f0Id, int16_t f0x, int16_t f0y,
+                                  uint8_t f1Id, int16_t f1x, int16_t f1y) {
     out[0] = ctrlIdx;
     uint8_t flags = 0;
     if (f0Active) flags |= 0x01;

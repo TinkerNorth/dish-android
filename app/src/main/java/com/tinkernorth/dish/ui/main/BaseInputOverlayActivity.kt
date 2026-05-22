@@ -4,7 +4,6 @@
 package com.tinkernorth.dish.ui.main
 
 import android.os.Build
-import android.os.Bundle
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.Surface
@@ -131,8 +130,9 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
      * on the same `hub.connections` source) should run after.
      */
     protected fun installBaseScaffolding() {
-        gamepadHost = GamepadActivityHost(this, rootView(), wakeState, gamepadRegistry)
-            .also { it.install(notifications) }
+        gamepadHost =
+            GamepadActivityHost(this, rootView(), wakeState, gamepadRegistry)
+                .also { it.install(notifications) }
         hideSystemBars()
         connectionId = intent.getStringExtra(EXTRA_CONNECTION_ID).orEmpty()
 
@@ -199,8 +199,7 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
      * synchronously — calling `isActive` directly inside `while (...)` would
      * leak the coroutine context into every test fixture.
      */
-    private fun currentCoroutineActive(): Boolean =
-        lifecycleScope.coroutineContext[kotlinx.coroutines.Job]?.isActive ?: true
+    private fun currentCoroutineActive(): Boolean = lifecycleScope.coroutineContext[kotlinx.coroutines.Job]?.isActive ?: true
 
     /**
      * Default connection-event handler — error + pairing-required surface
@@ -268,14 +267,12 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
 
     // ── Input dispatch — forwarded to GamepadActivityHost ───────────────────
 
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean =
-        gamepadHost.dispatchKeyEvent(event) || super.dispatchKeyEvent(event)
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean = gamepadHost.dispatchKeyEvent(event) || super.dispatchKeyEvent(event)
 
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean =
         gamepadHost.dispatchGenericMotionEvent(event) || super.dispatchGenericMotionEvent(event)
 
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean =
-        gamepadHost.dispatchTouchEvent(ev) || super.dispatchTouchEvent(ev)
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean = gamepadHost.dispatchTouchEvent(ev) || super.dispatchTouchEvent(ev)
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
