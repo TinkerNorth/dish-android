@@ -95,7 +95,12 @@ struct Session {
     uint8_t token[4] = {};
     uint8_t key[32] = {};
     std::atomic<uint32_t> counter{0};
-    std::mutex sendMtx; // protects sendto for this session
+    // No userspace sendMtx: Linux UDP `sendto` is thread-safe per-socket
+    // (kernel serialises via the socket's own lock), and our protocol is
+    // tolerant of slight reordering across producers (each packet carries
+    // its own counter-as-nonce; the host's virtual gamepad applies state
+    // idempotently). Adding a userspace lock here would only propagate
+    // any one thread's kernel-side stall to every other producer.
 
     std::thread heartbeatThread;
     std::atomic<bool> heartbeatRunning{false};
@@ -423,9 +428,22 @@ static bool sendEncrypted(Session* s, uint16_t msgType, const uint8_t* payload,
     memcpy(packet + 8, ciphertext, (size_t)cipherLen);
 
     size_t totalLen = 8 + (size_t)cipherLen;
-    std::lock_guard<std::mutex> lock(s->sendMtx);
-    ssize_t sent =
-        sendto(s->udpSock, packet, totalLen, 0, (struct sockaddr*)&s->dest, sizeof(s->dest));
+    // MSG_DONTWAIT: make sendto non-blocking. Without this, when the Wi-Fi
+    // power-save state transitions or the radio TX buffer fills, sendto
+    // could block in the kernel for hundreds of ms (worst observed during
+    // diagnosis: 1.56 s, with that latency propagating to every other
+    // thread waiting to send). With MSG_DONTWAIT the call returns -1 /
+    // EAGAIN immediately instead; the next periodic-resend tick tries
+    // again with the latest state. UDP is already lossy by contract, so
+    // a buffer-full drop is no worse than any other packet loss.
+    ssize_t sent = sendto(s->udpSock, packet, totalLen, MSG_DONTWAIT,
+                          (struct sockaddr*)&s->dest, sizeof(s->dest));
+    // EAGAIN / EWOULDBLOCK: kernel send buffer momentarily unavailable.
+    // Treat as a soft drop, not a hard error — UDP semantics absorb it and
+    // the next periodic tick will refresh the state.
+    if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+        return true;
+    }
     return sent == (ssize_t)totalLen;
 }
 

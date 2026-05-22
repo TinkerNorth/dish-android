@@ -123,10 +123,14 @@ class ConnectionsActivity : AppCompatActivity() {
         registerForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions(),
         ) { results ->
+            // The OS doesn't broadcast permission changes, and the process
+            // never backgrounds during the system dialog, so the observer's
+            // ProcessLifecycleOwner.onStart re-poll never fires. Re-poll
+            // here so applyBtPermissionBanner dismisses on grant (and
+            // re-confirms the still-DENIED state on deny).
+            btPermissionState.refresh()
             if (results.values.all { it }) {
                 showProfilePicker()
-            } else {
-                notifyBtPermissionDenied()
             }
         }
 
@@ -629,13 +633,6 @@ class ConnectionsActivity : AppCompatActivity() {
             title = getString(R.string.notif_server_unreachable_title, pairing?.name ?: getString(R.string.satellite_fallback_name)),
             body = message,
         )
-    }
-
-    private fun notifyBtPermissionDenied() {
-        // Refresh the permission observer so the persistent banner from
-        // applyBtPermissionBanner fires straight away (it normally only
-        // refreshes on foreground entry).
-        btPermissionState.refresh()
     }
 
     private fun notifyDiscoverabilityDenied() {
