@@ -3,14 +3,10 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/cardRoot"
+    style="@style/Widget.Dish.Card"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="@dimen/card_margin_bottom"
-    app:cardBackgroundColor="@color/colorSurface"
-    app:cardCornerRadius="@dimen/corner_card"
-    app:cardElevation="0dp"
-    app:strokeColor="@color/colorCardStroke"
-    app:strokeWidth="@dimen/border_thin">
+    android:layout_marginBottom="@dimen/card_margin_bottom">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -41,18 +37,15 @@
 
                 <TextView
                     android:id="@+id/tvControllerName"
+                    style="@style/TextAppearance.Dish.Title"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textColor="@color/colorOnSurface"
-                    android:textSize="@dimen/text_title_sm"
-                    android:textStyle="bold" />
+                    android:layout_height="wrap_content" />
 
                 <TextView
                     android:id="@+id/tvSlotStatus"
+                    style="@style/TextAppearance.Dish.BodySmall"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textColor="@color/colorMuted"
-                    android:textSize="@dimen/text_body_sm" />
+                    android:layout_height="wrap_content" />
             </LinearLayout>
 
             <!-- ── Battery indicator (Task 1.2): icon + percentage ── -->
@@ -80,11 +73,10 @@
 
                 <TextView
                     android:id="@+id/tvBattery"
+                    style="@style/TextAppearance.Dish.BodySmall"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="@dimen/size_3"
-                    android:textColor="@color/colorMuted"
-                    android:textSize="@dimen/text_body_sm" />
+                    android:layout_marginStart="@dimen/size_3" />
             </LinearLayout>
 
             <!-- v6 brand connection-target glyph. Mirrors the row this slot
@@ -103,10 +95,8 @@
 
             <View
                 android:id="@+id/dotStatus"
-                android:layout_width="@dimen/icon_dot_lg"
-                android:layout_height="@dimen/icon_dot_lg"
-                android:layout_marginEnd="@dimen/spacing_xl"
-                android:background="@drawable/dot_circle" />
+                style="@style/Widget.Dish.StatusDot.Large"
+                android:layout_marginEnd="@dimen/spacing_xl" />
 
             <ImageView
                 android:id="@+id/ivOpenGamepadQuick"
@@ -142,13 +132,10 @@
             android:visibility="gone">
 
             <TextView
+                style="@style/TextAppearance.Dish.Label"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/slot_output_to_label"
-                android:textColor="@color/colorMuted"
-                android:textSize="@dimen/text_label"
-                android:fontFamily="monospace"
-                android:letterSpacing="0.12"
                 android:paddingBottom="@dimen/picker_section_padding_bottom" />
 
             <LinearLayout

@@ -32,19 +32,16 @@
 
             <View
                 android:id="@+id/dotOverlay"
-                android:layout_width="@dimen/icon_dot"
-                android:layout_height="@dimen/icon_dot"
-                android:layout_marginEnd="@dimen/spacing_md"
-                android:background="@drawable/dot_circle" />
+                style="@style/Widget.Dish.StatusDot.Small"
+                android:layout_marginEnd="@dimen/spacing_md" />
 
             <TextView
                 android:id="@+id/tvOverlayStatus"
+                style="@style/TextAppearance.Dish.Label"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/overlay_status_streaming"
-                android:textColor="@color/colorOnSurface"
-                android:textSize="@dimen/text_label"
-                android:fontFamily="monospace" />
+                android:textColor="@color/colorOnSurface" />
         </LinearLayout>
 
         <!-- Phone-motion (gyro/accel) indicator. Always visible so the
@@ -63,10 +60,8 @@
 
             <View
                 android:id="@+id/dotMotion"
-                android:layout_width="@dimen/icon_dot"
-                android:layout_height="@dimen/icon_dot"
-                android:layout_marginEnd="@dimen/spacing_md"
-                android:background="@drawable/dot_circle" />
+                style="@style/Widget.Dish.StatusDot.Small"
+                android:layout_marginEnd="@dimen/spacing_md" />
 
             <!-- No contentDescription: a TextView is announced by its own
                  text, so a screen reader reads the live "Motion: streaming /
@@ -74,24 +69,22 @@
                  static contentDescription would mask that live state. -->
             <TextView
                 android:id="@+id/tvMotionStatus"
+                style="@style/TextAppearance.Dish.Label"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/motion_unavailable"
-                android:textColor="@color/colorOnSurface"
-                android:textSize="@dimen/text_label"
-                android:fontFamily="monospace" />
+                android:textColor="@color/colorOnSurface" />
         </LinearLayout>
 
         <TextView
             android:id="@+id/tvMotionDetail"
+            style="@style/TextAppearance.Dish.Caption"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/spacing_xs"
             android:maxWidth="@dimen/dialog_inline_max_width"
             android:gravity="center_horizontal"
             android:text="@string/motion_unavailable_detail"
-            android:textColor="@color/colorMuted"
-            android:textSize="@dimen/text_caption"
             android:visibility="gone" />
     </LinearLayout>
 

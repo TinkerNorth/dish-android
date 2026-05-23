@@ -34,22 +34,18 @@
 
         <TextView
             android:id="@+id/tvPickerTitle"
+            style="@style/TextAppearance.Dish.BodyLarge.Bold"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:textColor="@color/colorOnSurface"
-            android:textSize="@dimen/text_body_lg"
-            android:textStyle="bold" />
+            android:layout_weight="1" />
     </LinearLayout>
 
     <!-- Detail line ("<ip:port> · bound here" / · in use). -->
     <TextView
         android:id="@+id/tvPickerDetail"
+        style="@style/TextAppearance.Dish.Label"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="@color/colorMuted"
-        android:textSize="@dimen/text_label"
-        android:fontFamily="monospace" />
+        android:layout_height="wrap_content" />
 
     <!-- Inline controls (Type chips, Motion toggle, Touchpad chips) get
          inflated into this stub by the adapter when the slot is bound to

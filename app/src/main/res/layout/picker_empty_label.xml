@@ -5,8 +5,4 @@
      right now"). Width / margins / text size / color are all baked here —
      the adapter only sets `.text`. -->
 <TextView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:layout_marginTop="@dimen/spacing_xs"
-    android:textColor="@color/colorMuted"
-    android:textSize="@dimen/text_body_sm" />
+    style="@style/Widget.Dish.EmptyStateText" />

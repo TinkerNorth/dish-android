@@ -3,7 +3,11 @@
      Touchpad mode: Off/Pad/Mouse). Selected/unselected styling is driven by
      android:selected via @drawable/chip_pickable_bg + @color/chip_pickable_text;
      the adapter sets isSelected + setOnClickListener at bind time. -->
+<!-- Adopts TextAppearance.Dish.BodySmall and overrides textColor with the
+     state-list color (chip_pickable_text) — the selected/unselected switch is
+     callsite intent, not a typography concern. -->
 <TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/TextAppearance.Dish.BodySmall"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
     android:layout_marginEnd="@dimen/chip_margin_end"
@@ -11,6 +15,5 @@
     android:paddingVertical="@dimen/chip_padding_vertical"
     android:background="@drawable/chip_pickable_bg"
     android:textColor="@color/chip_pickable_text"
-    android:textSize="@dimen/text_body_sm"
     android:clickable="true"
     android:focusable="true" />

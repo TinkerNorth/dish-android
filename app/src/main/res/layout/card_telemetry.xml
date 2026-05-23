@@ -3,15 +3,11 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/cardTelemetry"
+    style="@style/Widget.Dish.Card.Telemetry"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginTop="@dimen/spacing_3xl"
-    android:visibility="gone"
-    app:cardBackgroundColor="@color/colorSurface"
-    app:strokeColor="@color/colorCardStroke"
-    app:strokeWidth="@dimen/border_thin"
-    app:cardElevation="0dp"
-    app:cardCornerRadius="@dimen/corner_picker_row">
+    android:visibility="gone">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -19,43 +15,58 @@
         android:orientation="vertical"
         android:padding="@dimen/card_padding">
 
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="@string/telemetry_title" android:textColor="@color/colorMuted" android:textSize="@dimen/text_caption"
-            android:letterSpacing="0.1" android:layout_marginBottom="@dimen/spacing_md" />
+        <TextView
+            style="@style/TextAppearance.Dish.Caption"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/telemetry_title"
+            android:layout_marginBottom="@dimen/spacing_md" />
 
         <!-- Rates row -->
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
             android:orientation="horizontal" android:layout_marginBottom="@dimen/spacing_xs">
-            <TextView android:id="@+id/tvTelEventRate" android:layout_width="0dp" android:layout_height="wrap_content"
-                android:layout_weight="1" android:text="@string/telemetry_evt_placeholder" android:textColor="@color/colorMuted" android:textSize="@dimen/text_label" android:fontFamily="monospace" />
-            <TextView android:id="@+id/tvTelSampleRate" android:layout_width="0dp" android:layout_height="wrap_content"
-                android:layout_weight="1" android:text="@string/telemetry_smp_placeholder" android:textColor="@color/colorMuted" android:textSize="@dimen/text_label" android:fontFamily="monospace" />
-            <TextView android:id="@+id/tvTelSendRate" android:layout_width="0dp" android:layout_height="wrap_content"
-                android:layout_weight="1" android:text="@string/telemetry_snd_placeholder" android:textColor="@color/colorMuted" android:textSize="@dimen/text_label" android:fontFamily="monospace" />
+            <TextView android:id="@+id/tvTelEventRate" style="@style/TextAppearance.Dish.Label"
+                android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="@string/telemetry_evt_placeholder" />
+            <TextView android:id="@+id/tvTelSampleRate" style="@style/TextAppearance.Dish.Label"
+                android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="@string/telemetry_smp_placeholder" />
+            <TextView android:id="@+id/tvTelSendRate" style="@style/TextAppearance.Dish.Label"
+                android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="@string/telemetry_snd_placeholder" />
         </LinearLayout>
-        <TextView android:id="@+id/tvTelTotalSent" android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="@string/telemetry_total_placeholder" android:textColor="@color/colorMuted" android:textSize="@dimen/text_label" android:fontFamily="monospace" android:layout_marginBottom="@dimen/spacing_sm" />
+        <TextView android:id="@+id/tvTelTotalSent" style="@style/TextAppearance.Dish.Label"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="@string/telemetry_total_placeholder"
+            android:layout_marginBottom="@dimen/spacing_sm" />
 
         <!-- Axes row -->
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
             android:orientation="horizontal" android:layout_marginBottom="@dimen/size_2">
-            <TextView android:id="@+id/tvTelLX" android:layout_width="0dp" android:layout_height="wrap_content"
-                android:layout_weight="1" android:text="@string/telemetry_lx_placeholder" android:textColor="@color/colorMuted" android:textSize="@dimen/text_label" android:fontFamily="monospace" />
-            <TextView android:id="@+id/tvTelLY" android:layout_width="0dp" android:layout_height="wrap_content"
-                android:layout_weight="1" android:text="@string/telemetry_ly_placeholder" android:textColor="@color/colorMuted" android:textSize="@dimen/text_label" android:fontFamily="monospace" />
-            <TextView android:id="@+id/tvTelRX" android:layout_width="0dp" android:layout_height="wrap_content"
-                android:layout_weight="1" android:text="@string/telemetry_rx_placeholder" android:textColor="@color/colorMuted" android:textSize="@dimen/text_label" android:fontFamily="monospace" />
-            <TextView android:id="@+id/tvTelRY" android:layout_width="0dp" android:layout_height="wrap_content"
-                android:layout_weight="1" android:text="@string/telemetry_ry_placeholder" android:textColor="@color/colorMuted" android:textSize="@dimen/text_label" android:fontFamily="monospace" />
+            <TextView android:id="@+id/tvTelLX" style="@style/TextAppearance.Dish.Label"
+                android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="@string/telemetry_lx_placeholder" />
+            <TextView android:id="@+id/tvTelLY" style="@style/TextAppearance.Dish.Label"
+                android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="@string/telemetry_ly_placeholder" />
+            <TextView android:id="@+id/tvTelRX" style="@style/TextAppearance.Dish.Label"
+                android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="@string/telemetry_rx_placeholder" />
+            <TextView android:id="@+id/tvTelRY" style="@style/TextAppearance.Dish.Label"
+                android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="@string/telemetry_ry_placeholder" />
         </LinearLayout>
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
             android:orientation="horizontal">
-            <TextView android:id="@+id/tvTelLT" android:layout_width="0dp" android:layout_height="wrap_content"
-                android:layout_weight="1" android:text="@string/telemetry_lt_placeholder" android:textColor="@color/colorMuted" android:textSize="@dimen/text_label" android:fontFamily="monospace" />
-            <TextView android:id="@+id/tvTelRT" android:layout_width="0dp" android:layout_height="wrap_content"
-                android:layout_weight="1" android:text="@string/telemetry_rt_placeholder" android:textColor="@color/colorMuted" android:textSize="@dimen/text_label" android:fontFamily="monospace" />
-            <TextView android:id="@+id/tvTelBtns" android:layout_width="0dp" android:layout_height="wrap_content"
-                android:layout_weight="2" android:text="@string/telemetry_btn_placeholder" android:textColor="@color/colorMuted" android:textSize="@dimen/text_label" android:fontFamily="monospace" />
+            <TextView android:id="@+id/tvTelLT" style="@style/TextAppearance.Dish.Label"
+                android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="@string/telemetry_lt_placeholder" />
+            <TextView android:id="@+id/tvTelRT" style="@style/TextAppearance.Dish.Label"
+                android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="@string/telemetry_rt_placeholder" />
+            <TextView android:id="@+id/tvTelBtns" style="@style/TextAppearance.Dish.Label"
+                android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="2" android:text="@string/telemetry_btn_placeholder" />
         </LinearLayout>
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

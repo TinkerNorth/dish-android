@@ -19,30 +19,24 @@
     android:background="@color/colorBackground">
 
     <TextView
+        style="@style/TextAppearance.Dish.Display.Large"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/brand_name"
-        android:textColor="@color/colorPrimary"
-        android:textSize="@dimen/text_display_lg"
-        android:textStyle="bold"
-        android:letterSpacing="0.12" />
+        android:text="@string/brand_name" />
 
     <TextView
+        style="@style/TextAppearance.Dish.Title.Large"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/spacing_5xl"
         android:text="@string/fatal_native_title"
-        android:textColor="@color/colorOnSurface"
-        android:textSize="@dimen/text_title"
-        android:textStyle="bold"
         android:gravity="center" />
 
     <TextView
+        style="@style/TextAppearance.Dish.Body"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/spacing_lg"
         android:text="@string/fatal_native_body"
-        android:textColor="@color/colorMuted"
-        android:textSize="@dimen/text_body"
         android:gravity="center" />
 </LinearLayout>

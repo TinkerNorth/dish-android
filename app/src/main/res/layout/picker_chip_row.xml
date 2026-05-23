@@ -12,13 +12,11 @@
 
     <TextView
         android:id="@+id/tvChipRowLabel"
+        style="@style/TextAppearance.Dish.Label"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center_vertical"
-        android:layout_marginEnd="@dimen/picker_label_margin_end"
-        android:textColor="@color/colorMuted"
-        android:textSize="@dimen/text_label"
-        android:fontFamily="monospace" />
+        android:layout_marginEnd="@dimen/picker_label_margin_end" />
 
     <LinearLayout
         android:id="@+id/llChips"

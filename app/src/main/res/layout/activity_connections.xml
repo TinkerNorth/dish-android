@@ -18,12 +18,9 @@
 
         <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/toolbar"
+            style="@style/Widget.Dish.Toolbar"
             android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize"
-            android:background="@color/colorBackground"
-            app:title="@string/title_connections"
-            app:titleTextColor="@color/colorOnSurface"
-            app:navigationIcon="@drawable/ic_chevron_left" />
+            app:title="@string/title_connections" />
 
         <androidx.core.widget.NestedScrollView
             android:layout_width="match_parent"
@@ -48,21 +45,17 @@
                          satellite/web dashboard and dish-mac SectionHeader so a
                          user moving between clients sees the same iconography. -->
                     <ImageView
-                        android:layout_width="@dimen/icon_section_header"
-                        android:layout_height="@dimen/icon_section_header"
+                        style="@style/Widget.Dish.Icon.Section"
                         android:layout_marginEnd="@dimen/spacing_sm"
                         android:contentDescription="@null"
                         android:src="@drawable/ic_satellite" />
 
                     <TextView
+                        style="@style/TextAppearance.Dish.Label.Accent"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="@string/section_satellites"
-                        android:textColor="@color/colorPrimary"
-                        android:textSize="@dimen/text_label"
-                        android:fontFamily="monospace"
-                        android:letterSpacing="0.12" />
+                        android:text="@string/section_satellites" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnSatelliteScan"
@@ -82,11 +75,10 @@
 
                 <TextView
                     android:id="@+id/tvSatelliteEmpty"
+                    style="@style/TextAppearance.Dish.BodySmall"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/discovery_empty_never_scanned"
-                    android:textColor="@color/colorMuted"
-                    android:textSize="@dimen/text_body_sm"
                     android:paddingVertical="@dimen/spacing_xl"
                     android:visibility="gone" />
 
@@ -104,21 +96,17 @@
                     android:gravity="center_vertical">
 
                     <ImageView
-                        android:layout_width="@dimen/icon_section_header"
-                        android:layout_height="@dimen/icon_section_header"
+                        style="@style/Widget.Dish.Icon.Section"
                         android:layout_marginEnd="@dimen/spacing_sm"
                         android:contentDescription="@null"
                         android:src="@drawable/ic_bluetooth" />
 
                     <TextView
+                        style="@style/TextAppearance.Dish.Label.Accent"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="@string/section_bluetooth_hosts"
-                        android:textColor="@color/colorPrimary"
-                        android:textSize="@dimen/text_label"
-                        android:fontFamily="monospace"
-                        android:letterSpacing="0.12" />
+                        android:text="@string/section_bluetooth_hosts" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnBtAdd"
@@ -138,11 +126,10 @@
 
                 <TextView
                     android:id="@+id/tvBtEmpty"
+                    style="@style/TextAppearance.Dish.BodySmall"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/bt_hosts_empty"
-                    android:textColor="@color/colorMuted"
-                    android:textSize="@dimen/text_body_sm"
                     android:paddingVertical="@dimen/spacing_xl" />
 
             </LinearLayout>

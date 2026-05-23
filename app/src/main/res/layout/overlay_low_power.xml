@@ -21,34 +21,26 @@
         android:visibility="gone">
 
         <TextView
+            style="@style/TextAppearance.Dish.Label"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/low_power_in"
-            android:textColor="@color/colorMuted"
-            android:textSize="@dimen/text_body_sm"
-            android:fontFamily="monospace"
-            android:letterSpacing="0.12"
             android:layout_marginEnd="@dimen/spacing_lg" />
 
         <TextView
             android:id="@+id/tvCountdownSeconds"
+            style="@style/TextAppearance.Dish.Display"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:minWidth="@dimen/size_24"
             android:gravity="center"
-            android:text="@string/low_power_countdown_placeholder"
-            android:textColor="@color/colorPrimary"
-            android:textSize="@dimen/text_display"
-            android:textStyle="bold"
-            android:fontFamily="monospace" />
+            android:text="@string/low_power_countdown_placeholder" />
 
         <TextView
+            style="@style/TextAppearance.Dish.BodyLarge"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/low_power_seconds_suffix"
-            android:textColor="@color/colorMuted"
-            android:textSize="@dimen/text_body_lg"
-            android:fontFamily="monospace"
             android:layout_marginStart="@dimen/size_2" />
     </LinearLayout>
 
@@ -71,13 +63,11 @@
             android:gravity="center_horizontal">
 
             <TextView
+                style="@style/TextAppearance.Dish.Label.Accent"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/low_power"
-                android:textColor="@color/colorPrimary"
-                android:textSize="@dimen/text_label"
                 android:textStyle="bold"
-                android:fontFamily="monospace"
                 android:letterSpacing="0.32" />
 
             <!-- Thin cyan-tinted rule under the section label. -->
@@ -89,15 +79,11 @@
 
             <TextView
                 android:id="@+id/tvLowPowerTime"
+                style="@style/TextAppearance.Dish.Hero"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_2xl"
-                android:text="@string/low_power_clock_placeholder"
-                android:textColor="@color/colorPrimary"
-                android:textSize="@dimen/text_hero"
-                android:textStyle="bold"
-                android:fontFamily="monospace"
-                android:letterSpacing="0.04" />
+                android:text="@string/low_power_clock_placeholder" />
 
             <!-- Twin to the rule above the clock; brackets the time visually. -->
             <View
@@ -108,19 +94,17 @@
 
             <TextView
                 android:id="@+id/tvLowPowerStatus"
+                style="@style/TextAppearance.Dish.Label"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_2xl"
-                android:text="@string/low_power_status_idle"
-                android:textColor="@color/colorMuted"
-                android:textSize="@dimen/text_body_sm"
-                android:fontFamily="monospace"
-                android:letterSpacing="0.08" />
+                android:text="@string/low_power_status_idle" />
         </LinearLayout>
 
         <!-- Faint affordance — screen is dimmed to ~1% brightness so this
              reads as a hint, not a CTA. -->
         <TextView
+            style="@style/TextAppearance.Dish.Caption"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="bottom|center_horizontal"
@@ -129,10 +113,6 @@
             android:background="@drawable/bg_pill"
             android:paddingHorizontal="@dimen/spacing_4xl"
             android:paddingVertical="@dimen/spacing_md"
-            android:text="@string/low_power_tap_to_wake"
-            android:textColor="@color/colorMuted"
-            android:textSize="@dimen/text_label"
-            android:fontFamily="monospace"
-            android:letterSpacing="0.18" />
+            android:text="@string/low_power_tap_to_wake" />
     </FrameLayout>
 </merge>

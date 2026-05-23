@@ -33,14 +33,11 @@
                 android:layout_marginBottom="@dimen/size_2">
 
                 <TextView
+                    style="@style/TextAppearance.Dish.Display.Large"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="@string/brand_name"
-                    android:textColor="@color/colorPrimary"
-                    android:textSize="@dimen/text_display_lg"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.12" />
+                    android:text="@string/brand_name" />
 
                 <ImageButton
                     android:id="@+id/btnSettings"
@@ -56,14 +53,10 @@
             <!-- Connections summary card -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/cardConnections"
+                style="@style/Widget.Dish.Card"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_xl"
-                app:cardBackgroundColor="@color/colorSurface"
-                app:cardCornerRadius="@dimen/corner_card"
-                app:cardElevation="0dp"
-                app:strokeColor="@color/colorCardStroke"
-                app:strokeWidth="@dimen/border_thin">
+                android:layout_marginTop="@dimen/spacing_xl">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -79,21 +72,17 @@
                         android:orientation="vertical">
 
                         <TextView
+                            style="@style/TextAppearance.Dish.Label.Accent"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="@string/section_connections"
-                            android:textColor="@color/colorPrimary"
-                            android:textSize="@dimen/text_label"
-                            android:fontFamily="monospace"
-                            android:letterSpacing="0.12" />
+                            android:text="@string/section_connections" />
 
                         <TextView
                             android:id="@+id/tvConnectionsSummary"
+                            style="@style/TextAppearance.Dish.BodyLarge.Bold"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/dashboard_connections_empty"
-                            android:textColor="@color/colorOnSurface"
-                            android:textSize="@dimen/text_body_lg"
                             android:layout_marginTop="@dimen/size_2" />
                     </LinearLayout>
 
@@ -107,10 +96,13 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="@string/section_controllers" android:textColor="@color/colorPrimary"
-                android:textSize="@dimen/text_label" android:fontFamily="monospace" android:letterSpacing="0.12"
-                android:paddingTop="@dimen/spacing_2xl" android:paddingBottom="@dimen/spacing_md" />
+            <TextView
+                style="@style/TextAppearance.Dish.Label.Accent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/section_controllers"
+                android:paddingTop="@dimen/spacing_2xl"
+                android:paddingBottom="@dimen/spacing_md" />
         </LinearLayout>
 
         <!-- Scrollable slot list + telemetry -->

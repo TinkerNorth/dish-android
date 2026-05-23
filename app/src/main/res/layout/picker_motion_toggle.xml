@@ -20,19 +20,16 @@
 
         <TextView
             android:id="@+id/tvMotionLabel"
+            style="@style/TextAppearance.Dish.Label"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/controller_motion_toggle_label"
-            android:textColor="@color/colorMuted"
-            android:textSize="@dimen/text_label"
-            android:fontFamily="monospace" />
+            android:text="@string/controller_motion_toggle_label" />
 
         <TextView
             android:id="@+id/tvMotionSubtitle"
+            style="@style/TextAppearance.Dish.Label.Plain"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="@color/colorMuted"
-            android:textSize="@dimen/text_label" />
+            android:layout_height="wrap_content" />
     </LinearLayout>
 
     <androidx.appcompat.widget.SwitchCompat

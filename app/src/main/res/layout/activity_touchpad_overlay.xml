@@ -33,19 +33,16 @@
 
             <View
                 android:id="@+id/dotTouchpadOverlay"
-                android:layout_width="@dimen/icon_dot"
-                android:layout_height="@dimen/icon_dot"
-                android:layout_marginEnd="@dimen/spacing_md"
-                android:background="@drawable/dot_circle" />
+                style="@style/Widget.Dish.StatusDot.Small"
+                android:layout_marginEnd="@dimen/spacing_md" />
 
             <TextView
                 android:id="@+id/tvTouchpadOverlayStatus"
+                style="@style/TextAppearance.Dish.Label"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/overlay_status_streaming"
-                android:textColor="@color/colorOnSurface"
-                android:textSize="@dimen/text_label"
-                android:fontFamily="monospace" />
+                android:textColor="@color/colorOnSurface" />
         </LinearLayout>
 
     </LinearLayout>
