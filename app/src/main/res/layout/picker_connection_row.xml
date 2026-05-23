@@ -13,8 +13,8 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginTop="6dp"
-    android:padding="10dp"
+    android:layout_marginTop="@dimen/picker_row_margin_top"
+    android:padding="@dimen/picker_row_padding"
     android:orientation="vertical"
     android:background="@drawable/picker_row_bg">
 
@@ -27,9 +27,9 @@
 
         <ImageView
             android:id="@+id/ivPickerGlyph"
-            android:layout_width="22dp"
-            android:layout_height="22dp"
-            android:layout_marginEnd="8dp"
+            android:layout_width="@dimen/icon_picker_glyph"
+            android:layout_height="@dimen/icon_picker_glyph"
+            android:layout_marginEnd="@dimen/spacing_md"
             android:contentDescription="@null" />
 
         <TextView
@@ -38,7 +38,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:textColor="@color/colorOnSurface"
-            android:textSize="14sp"
+            android:textSize="@dimen/text_body_lg"
             android:textStyle="bold" />
     </LinearLayout>
 
@@ -48,7 +48,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textColor="@color/colorMuted"
-        android:textSize="11sp"
+        android:textSize="@dimen/text_label"
         android:fontFamily="monospace" />
 
     <!-- Inline controls (Type chips, Motion toggle, Touchpad chips) get

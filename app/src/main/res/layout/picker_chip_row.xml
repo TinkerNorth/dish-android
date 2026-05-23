@@ -7,7 +7,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginTop="8dp"
+    android:layout_marginTop="@dimen/picker_section_margin_top"
     android:orientation="horizontal">
 
     <TextView
@@ -15,9 +15,9 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center_vertical"
-        android:layout_marginEnd="10dp"
+        android:layout_marginEnd="@dimen/picker_label_margin_end"
         android:textColor="@color/colorMuted"
-        android:textSize="11sp"
+        android:textSize="@dimen/text_label"
         android:fontFamily="monospace" />
 
     <LinearLayout

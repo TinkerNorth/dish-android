@@ -29,8 +29,8 @@
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:paddingHorizontal="20dp"
-            android:paddingVertical="16dp">
+            android:paddingHorizontal="@dimen/spacing_5xl"
+            android:paddingVertical="@dimen/spacing_3xl">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -48,9 +48,9 @@
                          satellite/web dashboard and dish-mac SectionHeader so a
                          user moving between clients sees the same iconography. -->
                     <ImageView
-                        android:layout_width="18dp"
-                        android:layout_height="18dp"
-                        android:layout_marginEnd="6dp"
+                        android:layout_width="@dimen/icon_section_header"
+                        android:layout_height="@dimen/icon_section_header"
+                        android:layout_marginEnd="@dimen/spacing_sm"
                         android:contentDescription="@null"
                         android:src="@drawable/ic_satellite" />
 
@@ -60,7 +60,7 @@
                         android:layout_weight="1"
                         android:text="@string/section_satellites"
                         android:textColor="@color/colorPrimary"
-                        android:textSize="11sp"
+                        android:textSize="@dimen/text_label"
                         android:fontFamily="monospace"
                         android:letterSpacing="0.12" />
 
@@ -78,7 +78,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:paddingTop="8dp" />
+                    android:paddingTop="@dimen/spacing_md" />
 
                 <TextView
                     android:id="@+id/tvSatelliteEmpty"
@@ -86,14 +86,14 @@
                     android:layout_height="wrap_content"
                     android:text="@string/discovery_empty_never_scanned"
                     android:textColor="@color/colorMuted"
-                    android:textSize="12sp"
-                    android:paddingVertical="12dp"
+                    android:textSize="@dimen/text_body_sm"
+                    android:paddingVertical="@dimen/spacing_xl"
                     android:visibility="gone" />
 
                 <View
                     android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginVertical="20dp"
+                    android:layout_height="@dimen/divider_height"
+                    android:layout_marginVertical="@dimen/spacing_5xl"
                     android:background="@color/colorOutline" />
 
                 <!-- ── Bluetooth section ── -->
@@ -104,9 +104,9 @@
                     android:gravity="center_vertical">
 
                     <ImageView
-                        android:layout_width="18dp"
-                        android:layout_height="18dp"
-                        android:layout_marginEnd="6dp"
+                        android:layout_width="@dimen/icon_section_header"
+                        android:layout_height="@dimen/icon_section_header"
+                        android:layout_marginEnd="@dimen/spacing_sm"
                         android:contentDescription="@null"
                         android:src="@drawable/ic_bluetooth" />
 
@@ -116,7 +116,7 @@
                         android:layout_weight="1"
                         android:text="@string/section_bluetooth_hosts"
                         android:textColor="@color/colorPrimary"
-                        android:textSize="11sp"
+                        android:textSize="@dimen/text_label"
                         android:fontFamily="monospace"
                         android:letterSpacing="0.12" />
 
@@ -134,7 +134,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:paddingTop="8dp" />
+                    android:paddingTop="@dimen/spacing_md" />
 
                 <TextView
                     android:id="@+id/tvBtEmpty"
@@ -142,8 +142,8 @@
                     android:layout_height="wrap_content"
                     android:text="@string/bt_hosts_empty"
                     android:textColor="@color/colorMuted"
-                    android:textSize="12sp"
-                    android:paddingVertical="12dp" />
+                    android:textSize="@dimen/text_body_sm"
+                    android:paddingVertical="@dimen/spacing_xl" />
 
             </LinearLayout>
         </androidx.core.widget.NestedScrollView>

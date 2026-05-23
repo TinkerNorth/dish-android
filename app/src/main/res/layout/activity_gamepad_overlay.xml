@@ -17,7 +17,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|center_horizontal"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="@dimen/spacing_md"
         android:orientation="vertical"
         android:gravity="center_horizontal">
 
@@ -25,16 +25,16 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:background="@drawable/bg_pill"
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="6dp"
+            android:paddingHorizontal="@dimen/spacing_3xl"
+            android:paddingVertical="@dimen/spacing_sm"
             android:gravity="center_vertical"
             android:alpha="0.85">
 
             <View
                 android:id="@+id/dotOverlay"
-                android:layout_width="6dp"
-                android:layout_height="6dp"
-                android:layout_marginEnd="8dp"
+                android:layout_width="@dimen/icon_dot"
+                android:layout_height="@dimen/icon_dot"
+                android:layout_marginEnd="@dimen/spacing_md"
                 android:background="@drawable/dot_circle" />
 
             <TextView
@@ -43,7 +43,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/overlay_status_streaming"
                 android:textColor="@color/colorOnSurface"
-                android:textSize="11sp"
+                android:textSize="@dimen/text_label"
                 android:fontFamily="monospace" />
         </LinearLayout>
 
@@ -54,18 +54,18 @@
             android:id="@+id/motionPill"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
+            android:layout_marginTop="@dimen/spacing_sm"
             android:background="@drawable/bg_pill"
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="6dp"
+            android:paddingHorizontal="@dimen/spacing_3xl"
+            android:paddingVertical="@dimen/spacing_sm"
             android:gravity="center_vertical"
             android:alpha="0.85">
 
             <View
                 android:id="@+id/dotMotion"
-                android:layout_width="6dp"
-                android:layout_height="6dp"
-                android:layout_marginEnd="8dp"
+                android:layout_width="@dimen/icon_dot"
+                android:layout_height="@dimen/icon_dot"
+                android:layout_marginEnd="@dimen/spacing_md"
                 android:background="@drawable/dot_circle" />
 
             <!-- No contentDescription: a TextView is announced by its own
@@ -78,7 +78,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/motion_unavailable"
                 android:textColor="@color/colorOnSurface"
-                android:textSize="11sp"
+                android:textSize="@dimen/text_label"
                 android:fontFamily="monospace" />
         </LinearLayout>
 
@@ -86,12 +86,12 @@
             android:id="@+id/tvMotionDetail"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:maxWidth="280dp"
+            android:layout_marginTop="@dimen/spacing_xs"
+            android:maxWidth="@dimen/dialog_inline_max_width"
             android:gravity="center_horizontal"
             android:text="@string/motion_unavailable_detail"
             android:textColor="@color/colorMuted"
-            android:textSize="10sp"
+            android:textSize="@dimen/text_caption"
             android:visibility="gone" />
     </LinearLayout>
 
@@ -99,13 +99,13 @@
         android:id="@+id/btnExitGamepad"
         style="@style/Widget.Dish.Button.Outlined"
         android:layout_width="wrap_content"
-        android:layout_height="32dp"
+        android:layout_height="@dimen/touch_target_min"
         android:layout_gravity="top|end"
-        android:layout_marginTop="8dp"
-        android:layout_marginEnd="12dp"
+        android:layout_marginTop="@dimen/spacing_md"
+        android:layout_marginEnd="@dimen/spacing_xl"
         android:text="@string/overlay_action_back"
-        android:textSize="11sp"
-        android:minWidth="64dp" />
+        android:textSize="@dimen/text_label"
+        android:minWidth="@dimen/button_min_width" />
 
     <!-- Low-power overlays (countdown banner + dim screen). Included last so
          the dim FrameLayout sits on top of the gamepad and consumes the

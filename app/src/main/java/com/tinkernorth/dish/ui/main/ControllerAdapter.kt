@@ -5,6 +5,7 @@ package com.tinkernorth.dish.ui.main
 
 import android.graphics.drawable.Animatable
 import android.graphics.drawable.GradientDrawable
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -174,7 +175,6 @@ class ControllerAdapter(
         fun bind(row: Row) {
             val slot = row.slot
             val ctx = b.root.context
-            val dp = ctx.resources.displayMetrics.density
             val isVirtual = slot.inputType == SlotInputType.VIRTUAL
 
             b.ivControllerType.setImageResource(
@@ -245,14 +245,12 @@ class ControllerAdapter(
                 row.connections.isEmpty() ->
                     addLabel(
                         b.llConnectionList,
-                        dp,
                         ctx.getString(R.string.picker_empty_no_connections),
                         R.color.colorMuted,
                     )
                 visible.isEmpty() ->
                     addLabel(
                         b.llConnectionList,
-                        dp,
                         ctx.getString(R.string.picker_empty_no_available),
                         R.color.colorMuted,
                     )
@@ -661,22 +659,24 @@ class ControllerAdapter(
 
     private fun addLabel(
         parent: LinearLayout,
-        dp: Float,
         text: String,
         colorRes: Int,
     ) {
         val ctx = parent.context
+        val res = ctx.resources
         parent.addView(
             TextView(ctx).apply {
                 this.text = text
                 setTextColor(ctx.getColor(colorRes))
-                textSize = 12f
+                // Body-small text size from the design system, applied as
+                // already-scaled px so density × fontScale tracks the dimen.
+                setTextSize(TypedValue.COMPLEX_UNIT_PX, res.getDimension(R.dimen.text_body_sm))
                 layoutParams =
                     LinearLayout
                         .LayoutParams(
                             LinearLayout.LayoutParams.MATCH_PARENT,
                             LinearLayout.LayoutParams.WRAP_CONTENT,
-                        ).apply { topMargin = (4 * dp).toInt() }
+                        ).apply { topMargin = res.getDimensionPixelSize(R.dimen.spacing_xs) }
             },
         )
     }

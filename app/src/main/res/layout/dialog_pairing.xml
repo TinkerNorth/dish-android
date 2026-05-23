@@ -3,7 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="24dp"
+    android:padding="@dimen/spacing_6xl"
     android:background="@color/colorSurface">
 
     <TextView
@@ -12,14 +12,14 @@
         android:layout_height="wrap_content"
         android:text="@string/pairing_dialog_legacy_title"
         android:textColor="@color/colorOnSurface"
-        android:textSize="20sp"
+        android:textSize="@dimen/text_display_sm"
         android:textStyle="bold" />
 
     <TextView
         android:id="@+id/tv_message"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="@dimen/spacing_md"
         android:text="@string/pairing_dialog_legacy_message"
         android:textColor="@color/colorMuted" />
 
@@ -27,12 +27,12 @@
         android:id="@+id/et_pin"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="@dimen/spacing_3xl"
         android:hint="@string/pairing_dialog_legacy_pin_hint"
         android:inputType="number"
         android:maxLength="4"
         android:gravity="center"
-        android:textSize="24sp"
+        android:textSize="@dimen/text_display_lg"
         android:textColor="@color/colorOnSurface"
         android:textColorHint="@color/colorMuted"
         android:letterSpacing="0.5"

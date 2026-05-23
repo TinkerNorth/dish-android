@@ -5,12 +5,12 @@
     android:id="@+id/cardRoot"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="10dp"
+    android:layout_marginBottom="@dimen/card_margin_bottom"
     app:cardBackgroundColor="@color/colorSurface"
-    app:cardCornerRadius="8dp"
+    app:cardCornerRadius="@dimen/corner_card"
     app:cardElevation="0dp"
     app:strokeColor="@color/colorCardStroke"
-    app:strokeWidth="1dp">
+    app:strokeWidth="@dimen/border_thin">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -22,13 +22,13 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:padding="14dp"
+            android:padding="@dimen/card_padding"
             android:gravity="center_vertical">
 
             <ImageView
                 android:id="@+id/ivControllerType"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="@dimen/icon_controller"
+                android:layout_height="@dimen/icon_controller"
                 android:src="@drawable/ic_gamepad"
                 app:tint="@color/colorPrimary" />
 
@@ -36,7 +36,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginStart="14dp"
+                android:layout_marginStart="@dimen/spacing_2xl"
                 android:orientation="vertical">
 
                 <TextView
@@ -44,7 +44,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="@color/colorOnSurface"
-                    android:textSize="15sp"
+                    android:textSize="@dimen/text_title_sm"
                     android:textStyle="bold" />
 
                 <TextView
@@ -52,7 +52,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="@color/colorMuted"
-                    android:textSize="12sp" />
+                    android:textSize="@dimen/text_body_sm" />
             </LinearLayout>
 
             <!-- ── Battery indicator (Task 1.2): icon + percentage ── -->
@@ -60,7 +60,7 @@
                 android:id="@+id/llBattery"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="10dp"
+                android:layout_marginEnd="@dimen/spacing_lg"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
                 android:visibility="gone">
@@ -73,8 +73,8 @@
                      charge-ladder rung; only the percentage text goes red. -->
                 <ImageView
                     android:id="@+id/ivBattery"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
+                    android:layout_width="@dimen/icon_battery"
+                    android:layout_height="@dimen/icon_battery"
                     android:src="@drawable/ic_battery"
                     tools:ignore="ContentDescription" />
 
@@ -82,9 +82,9 @@
                     android:id="@+id/tvBattery"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="3dp"
+                    android:layout_marginStart="@dimen/size_3"
                     android:textColor="@color/colorMuted"
-                    android:textSize="12sp" />
+                    android:textSize="@dimen/text_body_sm" />
             </LinearLayout>
 
             <!-- v6 brand connection-target glyph. Mirrors the row this slot
@@ -94,25 +94,25 @@
                  slot's boundStatus; hidden when unbound. -->
             <ImageView
                 android:id="@+id/ivBoundKind"
-                android:layout_width="22dp"
-                android:layout_height="22dp"
-                android:layout_marginEnd="8dp"
+                android:layout_width="@dimen/icon_brand_sm"
+                android:layout_height="@dimen/icon_brand_sm"
+                android:layout_marginEnd="@dimen/spacing_md"
                 android:contentDescription="@null"
                 android:visibility="gone"
                 android:src="@drawable/ic_satellite" />
 
             <View
                 android:id="@+id/dotStatus"
-                android:layout_width="8dp"
-                android:layout_height="8dp"
-                android:layout_marginEnd="12dp"
+                android:layout_width="@dimen/icon_dot_lg"
+                android:layout_height="@dimen/icon_dot_lg"
+                android:layout_marginEnd="@dimen/spacing_xl"
                 android:background="@drawable/dot_circle" />
 
             <ImageView
                 android:id="@+id/ivOpenGamepadQuick"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:padding="2dp"
+                android:layout_width="@dimen/icon_action"
+                android:layout_height="@dimen/icon_action"
+                android:padding="@dimen/size_2"
                 android:src="@drawable/ic_open_gamepad"
                 android:contentDescription="@string/desc_open_gamepad"
                 android:background="?attr/selectableItemBackgroundBorderless"
@@ -123,9 +123,9 @@
 
             <ImageView
                 android:id="@+id/ivChevron"
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:layout_marginStart="6dp"
+                android:layout_width="@dimen/icon_chevron_lg"
+                android:layout_height="@dimen/icon_chevron_lg"
+                android:layout_marginStart="@dimen/spacing_sm"
                 android:src="@drawable/ic_chevron_down"
                 android:contentDescription="@string/desc_expand"
                 app:tint="@color/colorMuted" />
@@ -137,8 +137,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingHorizontal="14dp"
-            android:paddingBottom="14dp"
+            android:paddingHorizontal="@dimen/card_padding_horizontal"
+            android:paddingBottom="@dimen/card_padding_bottom"
             android:visibility="gone">
 
             <TextView
@@ -146,10 +146,10 @@
                 android:layout_height="wrap_content"
                 android:text="@string/slot_output_to_label"
                 android:textColor="@color/colorMuted"
-                android:textSize="11sp"
+                android:textSize="@dimen/text_label"
                 android:fontFamily="monospace"
                 android:letterSpacing="0.12"
-                android:paddingBottom="6dp" />
+                android:paddingBottom="@dimen/picker_section_padding_bottom" />
 
             <LinearLayout
                 android:id="@+id/llConnectionList"
@@ -162,7 +162,7 @@
                 style="@style/Widget.Dish.Button.Outlined"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="@dimen/picker_section_margin_top"
                 android:text="@string/action_unbind"
                 android:textAllCaps="false"
                 android:visibility="gone" />
@@ -172,7 +172,7 @@
                 style="@style/Widget.Dish.Button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="@dimen/picker_section_margin_top"
                 android:text="@string/action_open_gamepad"
                 android:textAllCaps="false"
                 app:icon="@drawable/ic_open_gamepad"
@@ -185,7 +185,7 @@
                 style="@style/Widget.Dish.Button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="@dimen/picker_section_margin_top"
                 android:text="@string/action_open_touchpad"
                 android:textAllCaps="false"
                 app:icon="@drawable/ic_open_touchpad"

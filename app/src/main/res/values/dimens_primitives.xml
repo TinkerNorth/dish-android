@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    PRIMITIVE TOKENS — the raw scale. Every unique dp/sp value used as a
+    layout dimension lives here exactly once. Consumers must NOT reference
+    these directly from XML or Kotlin; they consume the semantic names in
+    `dimens.xml` instead.
+
+    Naming convention: `size_N` for dp where N is the value in dp. `text_N`
+    for sp where N is the value in sp. The name is value-encoded so a stale
+    grep against the literal number still finds the token, and a future
+    redesign that changes "spacing_md" from 8dp to 12dp can repoint the
+    semantic name to a different primitive without renaming every callsite.
+
+    What's NOT here:
+      - `0dp` (special: idiomatic Android for weight-distributed children).
+      - Vector drawable intrinsic `width`/`height` (those are canvas sizes
+        on the source artwork, not layout dimensions — they get scaled at
+        every callsite to whatever the ImageView width is).
+-->
+<resources>
+    <!-- ===== dp scale ===== -->
+    <dimen name="size_1">1dp</dimen>
+    <dimen name="size_2">2dp</dimen>
+    <dimen name="size_3">3dp</dimen>
+    <dimen name="size_4">4dp</dimen>
+    <dimen name="size_6">6dp</dimen>
+    <dimen name="size_8">8dp</dimen>
+    <dimen name="size_10">10dp</dimen>
+    <dimen name="size_11">11dp</dimen>
+    <dimen name="size_12">12dp</dimen>
+    <dimen name="size_14">14dp</dimen>
+    <dimen name="size_16">16dp</dimen>
+    <dimen name="size_18">18dp</dimen>
+    <dimen name="size_20">20dp</dimen>
+    <dimen name="size_22">22dp</dimen>
+    <dimen name="size_24">24dp</dimen>
+    <dimen name="size_28">28dp</dimen>
+    <dimen name="size_32">32dp</dimen>
+    <dimen name="size_36">36dp</dimen>
+    <dimen name="size_40">40dp</dimen>
+    <dimen name="size_56">56dp</dimen>
+    <dimen name="size_64">64dp</dimen>
+    <dimen name="size_280">280dp</dimen>
+
+    <!-- ===== sp scale ===== -->
+    <dimen name="text_10">10sp</dimen>
+    <dimen name="text_11">11sp</dimen>
+    <dimen name="text_12">12sp</dimen>
+    <dimen name="text_13">13sp</dimen>
+    <dimen name="text_14">14sp</dimen>
+    <dimen name="text_15">15sp</dimen>
+    <dimen name="text_16">16sp</dimen>
+    <dimen name="text_18">18sp</dimen>
+    <dimen name="text_20">20sp</dimen>
+    <dimen name="text_22">22sp</dimen>
+    <dimen name="text_24">24sp</dimen>
+    <dimen name="text_64">64sp</dimen>
+</resources>

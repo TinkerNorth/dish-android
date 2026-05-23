@@ -10,15 +10,15 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:background="@drawable/bg_pill"
-    android:paddingHorizontal="24dp"
-    android:paddingVertical="22dp">
+    android:paddingHorizontal="@dimen/spacing_6xl"
+    android:paddingVertical="@dimen/size_22">
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/pair_dialog_submit"
         android:textColor="@color/colorPrimary"
-        android:textSize="11sp"
+        android:textSize="@dimen/text_label"
         android:fontFamily="monospace"
         android:letterSpacing="0.18" />
 
@@ -26,37 +26,37 @@
         android:id="@+id/tvPairTitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="@dimen/spacing_sm"
         android:text="@string/pair_dialog_title"
         android:textColor="@color/colorOnSurface"
-        android:textSize="18sp"
+        android:textSize="@dimen/text_title_lg"
         android:textStyle="bold" />
 
     <TextView
         android:id="@+id/tvPairSubtitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="@dimen/spacing_sm"
         android:text="@string/pair_dialog_subtitle"
         android:textColor="@color/colorMuted"
-        android:textSize="12sp" />
+        android:textSize="@dimen/text_body_sm" />
 
     <EditText
         android:id="@+id/etPin"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="18dp"
+        android:layout_marginTop="@dimen/spacing_4xl"
         android:hint="@string/pair_dialog_pin_hint"
         android:inputType="number"
         android:maxLength="8"
         android:gravity="center"
-        android:textSize="22sp"
+        android:textSize="@dimen/text_display"
         android:textColor="@color/colorOnSurface"
         android:textColorHint="@color/colorMuted"
         android:letterSpacing="0.30"
         android:fontFamily="monospace"
         android:background="@drawable/bg_pair_pin_field"
-        android:padding="14dp"
+        android:padding="@dimen/card_padding"
         android:autofillHints="@null"
         android:importantForAutofill="no" />
 
@@ -66,16 +66,16 @@
         android:id="@+id/tvPairError"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="@dimen/spacing_md"
         android:textColor="@color/colorError"
-        android:textSize="12sp"
+        android:textSize="@dimen/text_body_sm"
         android:fontFamily="monospace"
         android:visibility="gone" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
+        android:layout_marginTop="@dimen/spacing_5xl"
         android:orientation="horizontal">
 
         <com.google.android.material.button.MaterialButton
@@ -92,7 +92,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="10dp"
+            android:layout_marginStart="@dimen/spacing_lg"
             android:text="@string/pair_dialog_submit"
             android:textAllCaps="true" />
     </LinearLayout>

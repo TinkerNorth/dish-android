@@ -3,18 +3,18 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="10dp"
+    android:layout_marginBottom="@dimen/card_margin_bottom"
     app:cardBackgroundColor="@color/colorSurface"
-    app:cardCornerRadius="8dp"
+    app:cardCornerRadius="@dimen/corner_card"
     app:cardElevation="0dp"
     app:strokeColor="@color/colorCardStroke"
-    app:strokeWidth="1dp">
+    app:strokeWidth="@dimen/border_thin">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="14dp">
+        android:padding="@dimen/card_padding">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -30,19 +30,19 @@
             <FrameLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="10dp">
+                android:layout_marginEnd="@dimen/spacing_lg">
 
                 <ImageView
                     android:id="@+id/ivRowGlyph"
-                    android:layout_width="28dp"
-                    android:layout_height="28dp"
+                    android:layout_width="@dimen/icon_row_glyph"
+                    android:layout_height="@dimen/icon_row_glyph"
                     android:contentDescription="@null"
                     android:src="@drawable/ic_satellite" />
 
                 <View
                     android:id="@+id/dotRow"
-                    android:layout_width="8dp"
-                    android:layout_height="8dp"
+                    android:layout_width="@dimen/icon_dot_lg"
+                    android:layout_height="@dimen/icon_dot_lg"
                     android:layout_gravity="bottom|end"
                     android:background="@drawable/dot_circle" />
             </FrameLayout>
@@ -58,7 +58,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="@color/colorOnSurface"
-                    android:textSize="15sp"
+                    android:textSize="@dimen/text_title_sm"
                     android:textStyle="bold" />
 
                 <TextView
@@ -66,7 +66,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="@color/colorMuted"
-                    android:textSize="12sp"
+                    android:textSize="@dimen/text_body_sm"
                     android:fontFamily="monospace" />
             </LinearLayout>
 
@@ -75,7 +75,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textColor="@color/colorMuted"
-                android:textSize="11sp"
+                android:textSize="@dimen/text_label"
                 android:fontFamily="monospace" />
         </LinearLayout>
 
@@ -83,7 +83,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="10dp">
+            android:layout_marginTop="@dimen/spacing_lg">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnRowAction"
@@ -99,7 +99,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginStart="8dp"
+                android:layout_marginStart="@dimen/spacing_md"
                 android:textAllCaps="false"
                 android:text="@string/action_forget_short"
                 android:visibility="gone" />
