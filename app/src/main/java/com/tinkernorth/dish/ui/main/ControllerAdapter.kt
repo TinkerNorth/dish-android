@@ -3,16 +3,13 @@
 
 package com.tinkernorth.dish.ui.main
 
-import android.graphics.Typeface
 import android.graphics.drawable.Animatable
 import android.graphics.drawable.GradientDrawable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.appcompat.widget.SwitchCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -23,9 +20,12 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.MotionCapability
+import com.tinkernorth.dish.databinding.ChipPickableBinding
 import com.tinkernorth.dish.databinding.ItemControllerBinding
+import com.tinkernorth.dish.databinding.PickerChipRowBinding
+import com.tinkernorth.dish.databinding.PickerConnectionRowBinding
+import com.tinkernorth.dish.databinding.PickerMotionToggleBinding
 import com.tinkernorth.dish.repository.TouchpadModeValue
-import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.ui.common.glyphForConnection
 
 interface SlotActionListener {
@@ -184,7 +184,8 @@ class ControllerAdapter(
             b.tvSlotStatus.text = slotStatusText(slot)
             bindBattery(slot.battery)
 
-            initDot(b.dotStatus)
+            // dotStatus's oval shape comes from `background="@drawable/dot_circle"`
+            // in item_controller.xml — only the colour mutates at runtime.
             setDot(
                 b.dotStatus,
                 when {
@@ -259,7 +260,6 @@ class ControllerAdapter(
                     visible.forEach { summary ->
                         addConnectionRow(
                             b.llConnectionList,
-                            dp,
                             slot,
                             summary,
                             row.motionCap,
@@ -322,13 +322,14 @@ class ControllerAdapter(
 
         private fun addConnectionRow(
             parent: LinearLayout,
-            dp: Float,
             slot: ControllerSlot,
             c: ConnectionSummary,
             motionCap: MotionCapability,
             touchpadMode: String,
         ) {
             val ctx = parent.context
+            val inflater = LayoutInflater.from(ctx)
+            val rb = PickerConnectionRowBinding.inflate(inflater, parent, false)
             val bound = slot.boundConnectionId == c.id
             // Bluetooth is single-host: another slot already bound to this BT
             // connection blocks this slot from claiming it. Satellites accept
@@ -340,140 +341,84 @@ class ControllerAdapter(
             // a click (the explicit Unbind button below is the action surface).
             val unreachable = !c.live.isAvailableForPicker()
 
-            val row =
-                buildConnectionRowContainer(ctx, dp, bound, ownedByOther, unreachable) {
-                    if (!ownedByOther && !unreachable) listener.onBind(slot.id, c.id)
+            // Selected drives the picker_row_bg state-list so the border flips
+            // to colorPrimary when this slot is bound to this connection.
+            rb.root.isSelected = bound
+            rb.root.alpha =
+                when {
+                    ownedByOther -> 0.5f
+                    unreachable -> 0.6f
+                    else -> 1f
                 }
-            // Leading v6 brand glyph + stacked title/detail column. Mirrors
-            // ConnectionsActivity row_connection.xml and dish-mac SlotCard's
-            // expanded picker so the same connection looks the same wherever
-            // it surfaces. The glyph reads the kind+live state straight from
-            // [ConnectionSummary], so a row's silhouette tracks the live
-            // SSE update without a separate refresh.
-            row.addView(buildConnectionHeader(ctx, dp, c))
-            row.addView(buildConnectionDetail(ctx, c, bound, ownedByOther))
+            val clickable = !ownedByOther && !unreachable
+            rb.root.isClickable = clickable
+            if (clickable) {
+                rb.root.setOnClickListener { listener.onBind(slot.id, c.id) }
+            } else {
+                rb.root.setOnClickListener(null)
+            }
+
+            bindConnectionHeader(rb, c)
+            bindConnectionDetail(rb, ctx, c, bound, ownedByOther)
             // Per-slot Xbox/PS toggle for the satellite this slot is bound to.
             // Bluetooth's controller type is fixed by the remembered host so
             // we don't render a switcher there.
             if (bound && c.kind == ConnectionKind.SATELLITE) {
-                row.addView(buildTypeToggle(ctx, dp, slot, c))
+                rb.llPickerControls.addView(buildTypeToggle(inflater, rb.llPickerControls, slot, c))
                 // Per-slot motion (gyro) on/off switch. Same gating as the
                 // type toggle — only meaningful for a satellite-bound slot
                 // because Bluetooth-HID has no motion channel and motion
                 // is a satellite-path feature.
-                row.addView(buildMotionToggle(ctx, dp, slot, motionCap))
+                rb.llPickerControls.addView(buildMotionToggle(inflater, rb.llPickerControls, slot, motionCap))
                 // Touchpad routing-mode picker — applies to both the on-screen
                 // virtual touchpad AND any physical slot bound here, since the
                 // satellite's per-device mode is shared across all of this
                 // dish's slots. The launch button itself lives in the card's
                 // static action stack (under Unbind), not here.
                 if (c.live == LinkState.Connected) {
-                    row.addView(buildTouchpadModePicker(ctx, dp, c, touchpadMode))
+                    rb.llPickerControls.addView(
+                        buildTouchpadModePicker(inflater, rb.llPickerControls, c, touchpadMode),
+                    )
                 }
             }
-            parent.addView(row)
+            parent.addView(rb.root)
         }
-
-        private fun buildConnectionRowContainer(
-            ctx: android.content.Context,
-            dp: Float,
-            bound: Boolean,
-            ownedByOther: Boolean,
-            unreachable: Boolean,
-            onClick: () -> Unit,
-        ): LinearLayout =
-            LinearLayout(ctx).apply {
-                orientation = LinearLayout.VERTICAL
-                val pad = (10 * dp).toInt()
-                setPadding(pad, pad, pad, pad)
-                background =
-                    GradientDrawable().apply {
-                        setColor(ctx.getColor(R.color.colorBackground))
-                        cornerRadius = 6 * dp
-                        setStroke(
-                            (1 * dp).toInt(),
-                            ctx.getColor(if (bound) R.color.colorPrimary else R.color.colorOutline),
-                        )
-                    }
-                layoutParams =
-                    LinearLayout
-                        .LayoutParams(
-                            LinearLayout.LayoutParams.MATCH_PARENT,
-                            LinearLayout.LayoutParams.WRAP_CONTENT,
-                        ).apply { topMargin = (6 * dp).toInt() }
-                alpha =
-                    when {
-                        ownedByOther -> 0.5f
-                        unreachable -> 0.6f
-                        else -> 1f
-                    }
-                val clickable = !ownedByOther && !unreachable
-                isClickable = clickable
-                if (clickable) setOnClickListener { onClick() }
-            }
 
         /**
          * Header row inside a bind-picker entry: 22dp v6 brand glyph on the
-         * leading edge, bold title to its right. The glyph replaces the old
-         * "📡 "/"🔗 " emoji prefix so the picker shares the same icon family
-         * as the Connections page rows and the slot card's bound-kind glyph
-         * — `boundKindGlyph()` is the single source of truth for kind+state
-         * → drawable.
+         * leading edge, bold title to its right. The glyph reads the kind+live
+         * state straight from [ConnectionSummary], so a row's silhouette
+         * tracks live SSE updates without a separate refresh path.
          */
-        private fun buildConnectionHeader(
-            ctx: android.content.Context,
-            dp: Float,
+        private fun bindConnectionHeader(
+            rb: PickerConnectionRowBinding,
             c: ConnectionSummary,
-        ): LinearLayout {
+        ) {
+            rb.ivPickerGlyph.setImageResource(glyphForConnection(c.kind, c.live))
             // Saved/Stale only reach this picker when the slot is currently
             // bound to that connection — surface "offline"/"needs pairing"
             // so the bound row reads as disconnected rather than silent.
+            val ctx = rb.root.context
             val statusSuffix =
                 when (c.live) {
-                    LinkState.Connected, LinkState.Unstable -> ctx.getString(R.string.picker_status_online)
+                    LinkState.Connected, LinkState.Unstable ->
+                        ctx.getString(R.string.picker_status_online)
                     LinkState.Connecting -> ctx.getString(R.string.picker_status_connecting)
                     LinkState.Saved -> ctx.getString(R.string.picker_status_offline)
                     LinkState.Stale -> ctx.getString(R.string.picker_status_needs_pairing)
                     LinkState.Found, LinkState.Ready -> ""
                 }
-            val title =
-                TextView(ctx).apply {
-                    text = "${c.label}$statusSuffix"
-                    setTextColor(ctx.getColor(R.color.colorOnSurface))
-                    textSize = 14f
-                    typeface = Typeface.DEFAULT_BOLD
-                    layoutParams =
-                        LinearLayout
-                            .LayoutParams(
-                                0,
-                                LinearLayout.LayoutParams.WRAP_CONTENT,
-                                1f,
-                            )
-                }
-            val glyph =
-                ImageView(ctx).apply {
-                    setImageResource(glyphForConnection(c.kind, c.live))
-                    layoutParams =
-                        LinearLayout
-                            .LayoutParams((22 * dp).toInt(), (22 * dp).toInt())
-                            .apply { marginEnd = (8 * dp).toInt() }
-                    contentDescription = null
-                }
-            return LinearLayout(ctx).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = android.view.Gravity.CENTER_VERTICAL
-                addView(glyph)
-                addView(title)
-            }
+            rb.tvPickerTitle.text = "${c.label}$statusSuffix"
         }
 
-        private fun buildConnectionDetail(
+        private fun bindConnectionDetail(
+            rb: PickerConnectionRowBinding,
             ctx: android.content.Context,
             c: ConnectionSummary,
             bound: Boolean,
             ownedByOther: Boolean,
-        ): TextView {
-            val detail =
+        ) {
+            rb.tvPickerDetail.text =
                 buildString {
                     append(c.detail)
                     when {
@@ -481,69 +426,39 @@ class ControllerAdapter(
                         ownedByOther -> append(ctx.getString(R.string.picker_detail_in_use))
                     }
                 }
-            return TextView(ctx).apply {
-                text = detail
-                setTextColor(ctx.getColor(R.color.colorMuted))
-                textSize = 11f
-                typeface = Typeface.MONOSPACE
-            }
         }
 
         private fun buildTypeToggle(
-            ctx: android.content.Context,
-            dp: Float,
+            inflater: LayoutInflater,
+            parent: ViewGroup,
             slot: ControllerSlot,
             c: ConnectionSummary,
         ): View {
             val current = c.satelliteControllerTypes[slot.id] ?: CONTROLLER_TYPE_XBOX
-            val container =
-                LinearLayout(ctx).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    layoutParams =
-                        LinearLayout
-                            .LayoutParams(
-                                LinearLayout.LayoutParams.MATCH_PARENT,
-                                LinearLayout.LayoutParams.WRAP_CONTENT,
-                            ).apply { topMargin = (8 * dp).toInt() }
-                }
-            container.addView(
-                TextView(ctx).apply {
-                    text = ctx.getString(R.string.picker_type_label)
-                    setTextColor(ctx.getColor(R.color.colorMuted))
-                    textSize = 11f
-                    typeface = Typeface.MONOSPACE
-                    layoutParams =
-                        LinearLayout
-                            .LayoutParams(
-                                LinearLayout.LayoutParams.WRAP_CONTENT,
-                                LinearLayout.LayoutParams.WRAP_CONTENT,
-                            ).apply {
-                                gravity = android.view.Gravity.CENTER_VERTICAL
-                                marginEnd = (10 * dp).toInt()
-                            }
-                },
-            )
-            container.addView(
-                typeChip(
-                    ctx,
-                    dp,
+            val rb = PickerChipRowBinding.inflate(inflater, parent, false)
+            val ctx = rb.root.context
+            rb.tvChipRowLabel.text = ctx.getString(R.string.picker_type_label)
+            rb.llChips.addView(
+                buildChip(
+                    inflater,
+                    rb.llChips,
                     label = ctx.getString(R.string.picker_type_xbox),
                     selected = current == CONTROLLER_TYPE_XBOX,
                 ) { listener.onChangeDeviceType(slot.id, c.id, CONTROLLER_TYPE_XBOX) },
             )
-            container.addView(
-                typeChip(
-                    ctx,
-                    dp,
+            rb.llChips.addView(
+                buildChip(
+                    inflater,
+                    rb.llChips,
                     label = ctx.getString(R.string.picker_type_playstation),
                     selected = current == CONTROLLER_TYPE_PLAYSTATION,
                 ) { listener.onChangeDeviceType(slot.id, c.id, CONTROLLER_TYPE_PLAYSTATION) },
             )
-            return container
+            return rb.root
         }
 
         /**
-         * Build the per-slot motion (gyro) on/off row that lives under the
+         * Bind the per-slot motion (gyro) on/off row that lives under the
          * Xbox/PS chips in the expanded controller card. The switch
          * reflects [MotionCapability.userEnabled]; the subtitle text
          * explains the gating in plain language whenever motion CAN'T flow
@@ -554,45 +469,16 @@ class ControllerAdapter(
          * remedy (different hardware, or change controller type) instead.
          */
         private fun buildMotionToggle(
-            ctx: android.content.Context,
-            dp: Float,
+            inflater: LayoutInflater,
+            parent: ViewGroup,
             slot: ControllerSlot,
             cap: MotionCapability,
         ): View {
-            val container =
-                LinearLayout(ctx).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    layoutParams =
-                        LinearLayout
-                            .LayoutParams(
-                                LinearLayout.LayoutParams.MATCH_PARENT,
-                                LinearLayout.LayoutParams.WRAP_CONTENT,
-                            ).apply { topMargin = (8 * dp).toInt() }
-                }
-            // Title + subtitle column on the left.
-            val labelCol =
-                LinearLayout(ctx).apply {
-                    orientation = LinearLayout.VERTICAL
-                    layoutParams =
-                        LinearLayout
-                            .LayoutParams(
-                                0,
-                                LinearLayout.LayoutParams.WRAP_CONTENT,
-                                1f, // takes remaining width so the switch sits flush right
-                            ).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
-                }
-            labelCol.addView(
-                TextView(ctx).apply {
-                    text = ctx.getString(R.string.controller_motion_toggle_label)
-                    setTextColor(ctx.getColor(R.color.colorMuted))
-                    textSize = 11f
-                    typeface = Typeface.MONOSPACE
-                },
-            )
-            // Subtitle: the most relevant "why" for the current state. This
-            // mirrors the precedence in MotionIndicatorState.of() — hardware
-            // first, then host-sink, then "on / off" status — so the text
-            // here is consistent with what the overlay pill says.
+            val rb = PickerMotionToggleBinding.inflate(inflater, parent, false)
+            // Subtitle: the most relevant "why" for the current state. Mirrors
+            // the precedence in MotionIndicatorState.of() — hardware first,
+            // then host-sink, then "on / off" status — so the text here is
+            // consistent with what the overlay pill says.
             val subtitleResId =
                 when {
                     !cap.hasGyro -> R.string.controller_motion_toggle_subtitle_no_gyro
@@ -601,152 +487,94 @@ class ControllerAdapter(
                     cap.userEnabled -> R.string.controller_motion_toggle_subtitle_on
                     else -> R.string.controller_motion_toggle_subtitle_off
                 }
-            labelCol.addView(
-                TextView(ctx).apply {
-                    setText(subtitleResId)
-                    setTextColor(ctx.getColor(R.color.colorMuted))
-                    textSize = 11f
-                },
-            )
-            container.addView(labelCol)
+            rb.tvMotionSubtitle.setText(subtitleResId)
 
             // The Switch itself. Disabled when there's nothing the user can
             // do by flipping it — no hardware, or the host backend has no
             // sink for the slot's controller type. The subtitle text above
             // already explains the limit.
             val enabledForUser = cap.hasGyro && cap.hostHasSinkForType
-            container.addView(
-                SwitchCompat(ctx).apply {
-                    isChecked = cap.userEnabled && enabledForUser
-                    isEnabled = enabledForUser
-                    // setOnCheckedChangeListener fires on programmatic
-                    // setChecked too; we set the listener AFTER the
-                    // initial state so the first paint doesn't ping the
-                    // store. The DiffUtil rebind path goes through the
-                    // same code, so this discipline applies on every
-                    // recycle. (RecyclerView reuses views.)
-                    setOnCheckedChangeListener(null)
-                    setOnCheckedChangeListener { _, isChecked ->
-                        listener.onMotionEnabledChanged(slot.id, isChecked)
-                    }
-                    layoutParams =
-                        LinearLayout
-                            .LayoutParams(
-                                LinearLayout.LayoutParams.WRAP_CONTENT,
-                                LinearLayout.LayoutParams.WRAP_CONTENT,
-                            ).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
-                },
-            )
-            return container
+            // setOnCheckedChangeListener fires on programmatic setChecked
+            // too — null it before the assignment so the first paint (and
+            // every DiffUtil rebind through this same code) doesn't ping
+            // the store. RecyclerView reuses views.
+            rb.swMotion.setOnCheckedChangeListener(null)
+            rb.swMotion.isChecked = cap.userEnabled && enabledForUser
+            rb.swMotion.isEnabled = enabledForUser
+            rb.swMotion.setOnCheckedChangeListener { _, isChecked ->
+                listener.onMotionEnabledChanged(slot.id, isChecked)
+            }
+            return rb.root
         }
 
         /**
          * Touchpad routing-mode picker — three chips (Off / Pad / Mouse)
-         * rendered under the motion toggle on the virtual slot's satellite
-         * row. The selected chip mirrors the resolved mode in the row's
+         * rendered under the motion toggle on a satellite-bound slot's row.
+         * The selected chip mirrors the resolved mode in the row's
          * [Row.touchpadModes] map; tapping a chip fires
          * [SlotActionListener.onChangeTouchpadMode] which persists locally
          * and pushes to the server.
-         *
-         * Same visual shape as [buildTypeToggle] (label + chips, 8dp
-         * top-margin) so the three rows in a card — Type, Motion, Touchpad
-         * — read as a stack of equal-weight controls.
          */
         private fun buildTouchpadModePicker(
-            ctx: android.content.Context,
-            dp: Float,
+            inflater: LayoutInflater,
+            parent: ViewGroup,
             c: ConnectionSummary,
             currentMode: String,
         ): View {
-            val container =
-                LinearLayout(ctx).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    layoutParams =
-                        LinearLayout
-                            .LayoutParams(
-                                LinearLayout.LayoutParams.MATCH_PARENT,
-                                LinearLayout.LayoutParams.WRAP_CONTENT,
-                            ).apply { topMargin = (8 * dp).toInt() }
-                }
-            container.addView(
-                TextView(ctx).apply {
-                    text = ctx.getString(R.string.touchpad_mode_label)
-                    setTextColor(ctx.getColor(R.color.colorMuted))
-                    textSize = 11f
-                    typeface = Typeface.MONOSPACE
-                    layoutParams =
-                        LinearLayout
-                            .LayoutParams(
-                                LinearLayout.LayoutParams.WRAP_CONTENT,
-                                LinearLayout.LayoutParams.WRAP_CONTENT,
-                            ).apply {
-                                gravity = android.view.Gravity.CENTER_VERTICAL
-                                marginEnd = (10 * dp).toInt()
-                            }
-                },
-            )
-            container.addView(
-                typeChip(
-                    ctx,
-                    dp,
+            val rb = PickerChipRowBinding.inflate(inflater, parent, false)
+            val ctx = rb.root.context
+            rb.tvChipRowLabel.text = ctx.getString(R.string.touchpad_mode_label)
+            rb.llChips.addView(
+                buildChip(
+                    inflater,
+                    rb.llChips,
                     label = ctx.getString(R.string.touchpad_mode_off),
                     selected = currentMode == TouchpadModeValue.OFF,
                 ) { listener.onChangeTouchpadMode(c.id, TouchpadModeValue.OFF) },
             )
-            container.addView(
-                typeChip(
-                    ctx,
-                    dp,
+            rb.llChips.addView(
+                buildChip(
+                    inflater,
+                    rb.llChips,
                     label = ctx.getString(R.string.touchpad_mode_pad),
                     selected = currentMode == TouchpadModeValue.DS4,
                 ) { listener.onChangeTouchpadMode(c.id, TouchpadModeValue.DS4) },
             )
-            container.addView(
-                typeChip(
-                    ctx,
-                    dp,
+            rb.llChips.addView(
+                buildChip(
+                    inflater,
+                    rb.llChips,
                     label = ctx.getString(R.string.touchpad_mode_mouse),
                     selected = currentMode == TouchpadModeValue.MOUSE,
                 ) { listener.onChangeTouchpadMode(c.id, TouchpadModeValue.MOUSE) },
             )
-            return container
+            return rb.root
         }
 
-        private fun typeChip(
-            ctx: android.content.Context,
-            dp: Float,
+        /**
+         * Inflate one [chip_pickable.xml] chip, bind its label + selected
+         * state + click handler. Selected/unselected styling is driven by
+         * `view.isSelected` via @drawable/chip_pickable_bg +
+         * @color/chip_pickable_text — no hand-rolled GradientDrawable.
+         */
+        private fun buildChip(
+            inflater: LayoutInflater,
+            parent: ViewGroup,
             label: String,
             selected: Boolean,
             onClick: () -> Unit,
-        ): TextView =
-            TextView(ctx).apply {
-                text = label
-                textSize = 12f
-                setTextColor(
-                    ctx.getColor(if (selected) R.color.colorOnPrimary else R.color.colorOnSurface),
-                )
-                val padH = (10 * dp).toInt()
-                val padV = (4 * dp).toInt()
-                setPadding(padH, padV, padH, padV)
-                background =
-                    GradientDrawable().apply {
-                        setColor(
-                            ctx.getColor(
-                                if (selected) R.color.colorPrimary else R.color.colorBackground,
-                            ),
-                        )
-                        cornerRadius = 4 * dp
-                        setStroke((1 * dp).toInt(), ctx.getColor(R.color.colorOutline))
-                    }
-                layoutParams =
-                    LinearLayout
-                        .LayoutParams(
-                            LinearLayout.LayoutParams.WRAP_CONTENT,
-                            LinearLayout.LayoutParams.WRAP_CONTENT,
-                        ).apply { marginEnd = (6 * dp).toInt() }
-                isClickable = !selected
-                if (!selected) setOnClickListener { onClick() }
+        ): TextView {
+            val chip = ChipPickableBinding.inflate(inflater, parent, false).root
+            chip.text = label
+            chip.isSelected = selected
+            chip.isClickable = !selected
+            if (selected) {
+                chip.setOnClickListener(null)
+            } else {
+                chip.setOnClickListener { onClick() }
             }
+            return chip
+        }
 
         private fun bindBattery(battery: BatteryUi?) {
             val ctx = b.root.context
@@ -821,15 +649,6 @@ class ControllerAdapter(
                 s.boundConnectionId != null -> ctx.getString(R.string.slot_status_bound)
                 else -> ctx.getString(R.string.slot_status_tap_to_bind)
             }
-        }
-
-        private fun initDot(v: View) {
-            if (v.background is GradientDrawable) return
-            v.background =
-                GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    setColor(v.context.getColor(R.color.colorMuted))
-                }
         }
 
         private fun setDot(

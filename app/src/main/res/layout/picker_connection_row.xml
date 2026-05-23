@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Per-connection row inside the slot card's expanded body. Mirrors the
+     shape ConnectionsActivity uses for its top-level rows (`row_connection
+     .xml`) but at picker scale: smaller padding, no action buttons (the
+     parent card's btnUnbind / btnOpenGamepad / btnOpenTouchpad cover those).
+
+     Selected styling (border flips to colorPrimary) is driven by
+     android:selected via @drawable/picker_row_bg — the adapter sets
+     `view.isSelected = bound`. Alpha for ownedByOther / unreachable rows
+     is set by the adapter at bind time because those states are
+     mutually-exclusive scalar values not captured by Android's state-list
+     machinery. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="6dp"
+    android:padding="10dp"
+    android:orientation="vertical"
+    android:background="@drawable/picker_row_bg">
+
+    <!-- Header: brand glyph + title. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <ImageView
+            android:id="@+id/ivPickerGlyph"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:layout_marginEnd="8dp"
+            android:contentDescription="@null" />
+
+        <TextView
+            android:id="@+id/tvPickerTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@color/colorOnSurface"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Detail line ("<ip:port> · bound here" / · in use). -->
+    <TextView
+        android:id="@+id/tvPickerDetail"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/colorMuted"
+        android:textSize="11sp"
+        android:fontFamily="monospace" />
+
+    <!-- Inline controls (Type chips, Motion toggle, Touchpad chips) get
+         inflated into this stub by the adapter when the slot is bound to
+         a satellite. Empty for Bluetooth bindings. -->
+    <LinearLayout
+        android:id="@+id/llPickerControls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical" />
+</LinearLayout>

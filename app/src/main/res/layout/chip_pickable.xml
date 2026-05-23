@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Single pickable chip — reused by every inline picker (Type: Xbox/PS,
+     Touchpad mode: Off/Pad/Mouse). Selected/unselected styling is driven by
+     android:selected via @drawable/chip_pickable_bg + @color/chip_pickable_text;
+     the adapter sets isSelected + setOnClickListener at bind time. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_marginEnd="6dp"
+    android:paddingHorizontal="10dp"
+    android:paddingVertical="4dp"
+    android:background="@drawable/chip_pickable_bg"
+    android:textColor="@color/chip_pickable_text"
+    android:textSize="12sp"
+    android:clickable="true"
+    android:focusable="true" />
