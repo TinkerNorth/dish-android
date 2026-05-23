@@ -195,14 +195,16 @@ class MainActivity :
         mode: String,
     ) = viewModel.setSatelliteTouchpadMode(connectionId, mode)
 
-    override fun onOpenTouchpad(
-        connectionId: String,
-        mode: String,
-    ) {
+    override fun onOpenTouchpad(slotId: String) {
+        val state = viewModel.uiState.value
+        val slot = state.slots.firstOrNull { it.id == slotId } ?: return
+        val cid = slot.boundConnectionId ?: return
+        val mode = state.touchpadModesBySatellite[cid] ?: return
         startActivity(
             Intent(this, TouchpadOverlayActivity::class.java).apply {
-                putExtra(TouchpadOverlayActivity.EXTRA_CONNECTION_ID, connectionId)
+                putExtra(TouchpadOverlayActivity.EXTRA_CONNECTION_ID, cid)
                 putExtra(TouchpadOverlayActivity.EXTRA_TOUCHPAD_MODE, mode)
+                putExtra(TouchpadOverlayActivity.EXTRA_SLOT_ID, slotId)
             },
         )
     }

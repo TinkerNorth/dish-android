@@ -73,16 +73,14 @@ interface SlotActionListener {
     )
 
     /**
-     * User tapped "Open Touchpad" on the virtual slot's satellite row.
-     * Implementation launches [com.tinkernorth.dish.ui.main.TouchpadOverlayActivity]
-     * with the connection id and the current mode (so the surface paints
-     * the right visual — Pad vs Mouse). Only fires when the resolved mode
-     * is non-Off; the button is hidden in Off.
+     * User tapped "Open Touchpad" on the slot card. Implementation launches
+     * [com.tinkernorth.dish.ui.main.TouchpadOverlayActivity] with the slot's
+     * bound connection id + current touchpad mode (so the surface paints the
+     * right Pad/Mouse visual, and the wire payload is sent under the slot's
+     * own controllerIndex). Only fires when the slot is bound to a Connected
+     * satellite and the mode is non-Off; the button is hidden otherwise.
      */
-    fun onOpenTouchpad(
-        connectionId: String,
-        mode: String,
-    )
+    fun onOpenTouchpad(slotId: String)
 }
 
 /**
@@ -270,12 +268,55 @@ class ControllerAdapter(
                     }
             }
 
-            // Virtual-only: open gamepad button
+            bindOverlayLaunchButtons(row, isVirtual)
+        }
+
+        /**
+         * Paint the two static overlay-launch buttons under Unbind: Open
+         * Gamepad and Open Touchpad. Pulled out of [bind] so the per-row
+         * action stack is one cohesive read — and to keep [bind]'s line
+         * count under the detekt LongMethod threshold.
+         *
+         * Open Gamepad is virtual-only — the on-screen touch gamepad is the
+         * only sender, so a physical slot would mislead the user.
+         *
+         * Open Touchpad is available for any slot bound to a Connected
+         * satellite when the satellite's resolved touchpad mode is non-Off.
+         * That covers the virtual slot AND physical pads without their own
+         * touchpad surface (Xbox, Switch Pro, generic HID) — the user gets
+         * an on-screen touchpad driven under the *slot's* controllerIndex,
+         * so the receiver routes through whichever virtual device was
+         * registered for it.
+         */
+        private fun bindOverlayLaunchButtons(
+            row: Row,
+            isVirtual: Boolean,
+        ) {
+            val slot = row.slot
             if (isVirtual && slot.boundStatus?.live == LinkState.Connected) {
                 b.btnOpenGamepad.visibility = View.VISIBLE
                 b.btnOpenGamepad.setOnClickListener { listener.onOpenGamepad() }
             } else {
                 b.btnOpenGamepad.visibility = View.GONE
+            }
+
+            val boundCid = slot.boundConnectionId
+            val boundConn = slot.boundStatus
+            val touchpadModeForBound =
+                if (boundCid != null) {
+                    row.touchpadModes[boundCid] ?: TouchpadModeValue.OFF
+                } else {
+                    TouchpadModeValue.OFF
+                }
+            val canOpenTouchpad =
+                boundConn?.live == LinkState.Connected &&
+                    boundConn.kind == ConnectionKind.SATELLITE &&
+                    touchpadModeForBound != TouchpadModeValue.OFF
+            if (canOpenTouchpad) {
+                b.btnOpenTouchpad.visibility = View.VISIBLE
+                b.btnOpenTouchpad.setOnClickListener { listener.onOpenTouchpad(slot.id) }
+            } else {
+                b.btnOpenTouchpad.visibility = View.GONE
             }
         }
 
@@ -321,19 +362,13 @@ class ControllerAdapter(
                 // because Bluetooth-HID has no motion channel and motion
                 // is a satellite-path feature.
                 row.addView(buildMotionToggle(ctx, dp, slot, motionCap))
-                // Touchpad UI is a virtual-slot-only feature: the on-screen
-                // TouchpadSurfaceView (the only sender on dish-android) emits
-                // under VIRTUAL_SLOT_ID, so showing it under a physical slot's
-                // row would mislead the user about what is actually being
-                // routed. Gated on Connected because the launch button is
-                // useless against a session that can't carry touchpad bytes.
-                if (slot.inputType == SlotInputType.VIRTUAL &&
-                    c.live == LinkState.Connected
-                ) {
+                // Touchpad routing-mode picker — applies to both the on-screen
+                // virtual touchpad AND any physical slot bound here, since the
+                // satellite's per-device mode is shared across all of this
+                // dish's slots. The launch button itself lives in the card's
+                // static action stack (under Unbind), not here.
+                if (c.live == LinkState.Connected) {
                     row.addView(buildTouchpadModePicker(ctx, dp, c, touchpadMode))
-                    if (touchpadMode != TouchpadModeValue.OFF) {
-                        row.addView(buildOpenTouchpadButton(ctx, dp, c, touchpadMode))
-                    }
                 }
             }
             parent.addView(row)
@@ -676,43 +711,6 @@ class ControllerAdapter(
             )
             return container
         }
-
-        /**
-         * "Open Touchpad" launch button — shown only when the resolved mode
-         * is not Off, since launching the overlay in Off mode would route
-         * touch samples nowhere. Padding/colours mirror the existing
-         * `btnOpenGamepad` (Material outlined button feel) so the two
-         * input-overlay launch buttons read as siblings.
-         */
-        private fun buildOpenTouchpadButton(
-            ctx: android.content.Context,
-            dp: Float,
-            c: ConnectionSummary,
-            mode: String,
-        ): View =
-            TextView(ctx).apply {
-                text = ctx.getString(R.string.action_open_touchpad)
-                contentDescription = ctx.getString(R.string.desc_open_touchpad)
-                textSize = 12f
-                setTextColor(ctx.getColor(R.color.colorOnPrimary))
-                val padH = (14 * dp).toInt()
-                val padV = (6 * dp).toInt()
-                setPadding(padH, padV, padH, padV)
-                background =
-                    GradientDrawable().apply {
-                        setColor(ctx.getColor(R.color.colorPrimary))
-                        cornerRadius = 4 * dp
-                    }
-                gravity = android.view.Gravity.CENTER
-                layoutParams =
-                    LinearLayout
-                        .LayoutParams(
-                            LinearLayout.LayoutParams.WRAP_CONTENT,
-                            LinearLayout.LayoutParams.WRAP_CONTENT,
-                        ).apply { topMargin = (8 * dp).toInt() }
-                isClickable = true
-                setOnClickListener { listener.onOpenTouchpad(c.id, mode) }
-            }
 
         private fun typeChip(
             ctx: android.content.Context,

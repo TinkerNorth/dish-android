@@ -57,6 +57,14 @@ class TouchpadOverlayActivity :
      */
     @Volatile private var lastReportedState: TouchpadSurfaceView.TouchpadState? = null
 
+    /**
+     * The slot whose controllerIndex the touchpad samples ride under. Defaulted
+     * to [VIRTUAL_SLOT_ID] so a launch without [EXTRA_SLOT_ID] (e.g. the prior
+     * virtual-only flow) still works; physical-slot launches pass the slot id
+     * so the receiver routes touchpad bytes through the right virtual device.
+     */
+    private var slotId: String = VIRTUAL_SLOT_ID
+
     override fun rootView(): View = binding.root
 
     override val resendIntervalNs: Long = BaseInputOverlayActivity.RESEND_INTERVAL_NS_DEFAULT
@@ -66,6 +74,7 @@ class TouchpadOverlayActivity :
         binding = ActivityTouchpadOverlayBinding.inflate(layoutInflater)
         setContentView(binding.root)
         installBaseScaffolding()
+        slotId = intent.getStringExtra(EXTRA_SLOT_ID) ?: VIRTUAL_SLOT_ID
 
         // Status pill — same shape as the gamepad overlay's connection chip,
         // painted on every connection-summary emission via the base's hook.
@@ -140,7 +149,7 @@ class TouchpadOverlayActivity :
      */
     private fun sendSatelliteTouchpadReport(state: TouchpadSurfaceView.TouchpadState) {
         satellite.get(connectionId)?.sendTouchpad(
-            VIRTUAL_SLOT_ID,
+            slotId,
             state.finger0Active,
             state.finger1Active,
             state.buttonPressed,
@@ -162,6 +171,15 @@ class TouchpadOverlayActivity :
          * activity is never launched in that state.
          */
         const val EXTRA_TOUCHPAD_MODE = "extra_touchpad_mode"
+
+        /**
+         * Slot id whose controllerIndex the wire payload rides under. Defaults
+         * to [VIRTUAL_SLOT_ID] when absent — keeps the prior virtual-only
+         * launch path working unchanged. A physical-slot launch passes the
+         * physical InputDevice id so the receiver routes touchpad bytes
+         * through the virtual device registered for that slot.
+         */
+        const val EXTRA_SLOT_ID = "extra_slot_id"
 
         /**
          * Re-export of [BaseInputOverlayActivity.EXTRA_CONNECTION_ID] for

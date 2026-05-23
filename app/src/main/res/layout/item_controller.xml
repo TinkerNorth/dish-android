@@ -178,6 +178,19 @@
                 app:iconGravity="textStart"
                 app:iconTint="@color/colorOnSurface"
                 android:visibility="gone" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnOpenTouchpad"
+                style="@style/Widget.Dish.Button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/action_open_touchpad"
+                android:textAllCaps="false"
+                app:icon="@drawable/ic_open_touchpad"
+                app:iconGravity="textStart"
+                app:iconTint="@color/colorOnSurface"
+                android:visibility="gone" />
         </LinearLayout>
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>
