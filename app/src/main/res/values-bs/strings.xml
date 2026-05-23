@@ -69,6 +69,10 @@
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Miš</string>
     <string name="touchpad_mode_unsupported_here">Ovaj prijemnik ne podržava ovaj režim.</string>
+    <string name="touchpad_mode_error_not_paired">Satelit ne prepoznaje ovaj uređaj — ponovo upari za primjenu.</string>
+    <string name="touchpad_mode_error_unauthorized">Satelit je odbio zahtjev — ponovo upari za primjenu.</string>
+    <string name="touchpad_mode_error_transport">Nije moguće doseći satelit — da li je pokrenut?</string>
+    <string name="touchpad_mode_error_unknown">Nije moguće postaviti režim dodirne ploče: %1$s</string>
 
     <!-- Tekst statusa slota u ControllerAdapter (ispod imena). -->
     <string name="slot_status_disconnecting">Prekidanje veze… %1$ds</string>

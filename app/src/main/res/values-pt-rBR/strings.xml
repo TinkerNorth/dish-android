@@ -70,6 +70,10 @@
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Mouse</string>
     <string name="touchpad_mode_unsupported_here">Este receptor não oferece suporte a este modo.</string>
+    <string name="touchpad_mode_error_not_paired">O satélite não reconhece este dispositivo — pareie novamente para aplicar.</string>
+    <string name="touchpad_mode_error_unauthorized">O satélite rejeitou a solicitação — pareie novamente para aplicar.</string>
+    <string name="touchpad_mode_error_transport">Não foi possível contatar o satélite — ele está em execução?</string>
+    <string name="touchpad_mode_error_unknown">Não foi possível definir o modo do touchpad: %1$s</string>
 
     <!-- Texto de status do slot no ControllerAdapter (abaixo do nome). -->
     <string name="slot_status_disconnecting">Desconectando… %1$ds</string>

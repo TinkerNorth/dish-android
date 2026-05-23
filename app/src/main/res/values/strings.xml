@@ -72,6 +72,22 @@
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Mouse</string>
     <string name="touchpad_mode_unsupported_here">This receiver host doesn\'t support this mode.</string>
+    <!-- Shown when the satellite returns 404 from /api/devices/touchpad-mode —
+         the satellite no longer has this dish in its paired-devices list (e.g.
+         after the satellite was reinstalled or its config was wiped). Tells the
+         user the actionable remedy. -->
+    <string name="touchpad_mode_error_not_paired">Satellite doesn\'t recognize this device — re-pair to apply.</string>
+    <!-- Shown when the satellite returns 401 unauthorized from
+         /api/devices/touchpad-mode. Surfaces the same way 404 does (re-pair),
+         since the practical user remedy is identical. -->
+    <string name="touchpad_mode_error_unauthorized">Satellite rejected the request — re-pair to apply.</string>
+    <!-- Shown when the HTTPS POST itself failed (satellite unreachable, TLS
+         handshake error, connection refused). Distinct from a satellite-side
+         rejection so the user knows to check the satellite is running. -->
+    <string name="touchpad_mode_error_transport">Couldn\'t reach satellite — is it running?</string>
+    <!-- Fallback for any other error shape the dish doesn't recognize. The
+         %1$s is the satellite's raw error string so the user can report it. -->
+    <string name="touchpad_mode_error_unknown">Couldn\'t set touchpad mode: %1$s</string>
 
     <!-- ControllerAdapter slot-status text (renders below the slot name). -->
     <string name="slot_status_disconnecting">Disconnecting… %1$ds</string>

@@ -98,6 +98,7 @@ internal object SatelliteHttpClient {
             ip = ip,
             port = port,
             path = "/api/connections",
+            deviceId = deviceId,
             body = """{"deviceId":"${jsonEscape(deviceId)}"}""",
         )
 
@@ -116,6 +117,7 @@ internal object SatelliteHttpClient {
             ip = ip,
             port = port,
             path = "/api/connections/$connectionId",
+            deviceId = deviceId,
             body = """{"deviceId":"${jsonEscape(deviceId)}"}""",
         )
 
@@ -129,6 +131,10 @@ internal object SatelliteHttpClient {
      * `mode` is one of `"off"`, `"ds4"`, `"mouse"`. The server responds
      * `{"ok":true,"hotApplied":bool}` on success, or `{"error":...}` on
      * unknown device / unsupported mode (409) / bad payload (400).
+     *
+     * The body field is `"id"` (matches the handler's route-param name); the
+     * device id used for auth is sent separately as the `X-Device-Id` header
+     * via [request] so it doesn't collide semantically with the route param.
      */
     fun setTouchpadMode(
         ip: String,
@@ -141,6 +147,7 @@ internal object SatelliteHttpClient {
             ip = ip,
             port = port,
             path = "/api/devices/touchpad-mode",
+            deviceId = deviceId,
             body =
                 """{"id":"${jsonEscape(deviceId)}",""" +
                     """"mode":"${jsonEscape(mode)}"}""",
@@ -154,6 +161,10 @@ internal object SatelliteHttpClient {
      * request/response JSON shapes are unchanged — only the transport differs.
      * The satellite always answers HTTP 200 with
      * `{"ok":bool,"error"?,"sharedKey"?,"message"?}`.
+     *
+     * No `X-Device-Id` header — pairing is the bootstrap that establishes the
+     * device's authorization, and the server's `/api/pair` route is the one
+     * client API endpoint that intentionally skips `clientAuthorized`.
      */
     fun pair(
         ip: String,
@@ -167,6 +178,7 @@ internal object SatelliteHttpClient {
             ip = ip,
             port = port,
             path = "/api/pair",
+            deviceId = null,
             body =
                 """{"deviceId":"${jsonEscape(deviceId)}",""" +
                     """"deviceName":"${jsonEscape(deviceName)}",""" +
@@ -182,6 +194,15 @@ internal object SatelliteHttpClient {
      * `/api/pair` always replies 200, and the connection API encodes its own
      * failures as JSON `{error}` bodies, so the body is the useful payload
      * regardless of status code.
+     *
+     * When [deviceId] is non-null it is sent as the `X-Device-Id` header,
+     * satisfying the satellite's `clientAuthorized` middleware for every
+     * route except `/api/pair` (which is intentionally unauthenticated —
+     * pairing is what creates the authorization in the first place). The
+     * header path is what the middleware prefers; the body-field fallback
+     * exists only as a legacy backstop and is fragile because the route's
+     * payload schema may use the `id` field for its own purposes (see
+     * `/api/devices/touchpad-mode`, which 401'd before this was wired up).
      */
     @Suppress("NestedBlockDepth")
     private fun request(
@@ -189,6 +210,7 @@ internal object SatelliteHttpClient {
         ip: String,
         port: Int,
         path: String,
+        deviceId: String?,
         body: String?,
     ): String {
         val url = URL("https", ip, port, path)
@@ -206,6 +228,9 @@ internal object SatelliteHttpClient {
                     readTimeout = READ_TIMEOUT_MS
                     setRequestProperty("Content-Type", "application/json")
                     setRequestProperty("Connection", "close")
+                    if (deviceId != null) {
+                        setRequestProperty("X-Device-Id", deviceId)
+                    }
                     if (body != null) {
                         doOutput = true
                         outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }

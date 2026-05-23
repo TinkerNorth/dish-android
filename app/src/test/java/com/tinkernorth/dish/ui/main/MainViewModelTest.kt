@@ -9,15 +9,14 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.MotionCapabilityComposer
-import com.tinkernorth.dish.composer.TouchpadModeComposer
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
-import com.tinkernorth.dish.repository.TouchpadModeRepository
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.sensor.BatteryValidator
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
+import com.tinkernorth.dish.source.store.TouchpadModeStore
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -51,8 +50,7 @@ class MainViewModelTest {
     private lateinit var batteryStore: BatteryStatusStore
     private lateinit var motionEnabledStore: MotionEnabledStore
     private lateinit var motionCapabilityComposer: MotionCapabilityComposer
-    private lateinit var touchpadModeComposer: TouchpadModeComposer
-    private lateinit var touchpadModeRepository: TouchpadModeRepository
+    private lateinit var touchpadModeStore: TouchpadModeStore
     private lateinit var vm: MainViewModel
 
     private val connectionsFlow = MutableStateFlow<List<ConnectionSummary>>(emptyList())
@@ -86,15 +84,16 @@ class MainViewModelTest {
                         emptyMap<String, com.tinkernorth.dish.composer.MotionCapability>(),
                     )
             }
-        // The VM observes touchpadModeRepository.state and reads from
-        // touchpadModeComposer; both are stubbed because these tests focus on
-        // slot-wiring, not touchpad picker derivation.
-        touchpadModeRepository =
-            mockk(relaxed = true) {
-                every { state } returns
-                    kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, String>())
-            }
-        touchpadModeComposer = mockk(relaxed = true)
+        // TouchpadModeStore wraps a TouchpadModeRepository — stub the repo
+        // so the store's `init` block reads emptyList() (so `state.value`
+        // starts as emptyMap, the relevant default for slot-wiring tests).
+        // The dashboard's combine collector subscribes to `store.state`;
+        // its emissions drive the chip selection updates the VM forwards
+        // into MainUiState.touchpadModesBySatellite.
+        touchpadModeStore =
+            TouchpadModeStore(
+                mockk(relaxed = true) { every { all() } returns emptyList() },
+            )
         every { hub.connections } returns connectionsFlow
         every { hub.bindings } returns bindingsFlow
         every { gamepadRegistry.devices } returns devicesFlow
@@ -112,8 +111,7 @@ class MainViewModelTest {
                 batteryStore,
                 motionEnabledStore,
                 motionCapabilityComposer,
-                touchpadModeComposer,
-                touchpadModeRepository,
+                touchpadModeStore,
             )
     }
 

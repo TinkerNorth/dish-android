@@ -69,6 +69,10 @@
     <string name="touchpad_mode_pad">Pavé</string>
     <string name="touchpad_mode_mouse">Souris</string>
     <string name="touchpad_mode_unsupported_here">Ce récepteur ne prend pas en charge ce mode.</string>
+    <string name="touchpad_mode_error_not_paired">Le satellite ne reconnaît pas cet appareil — réappairer pour appliquer.</string>
+    <string name="touchpad_mode_error_unauthorized">Le satellite a rejeté la requête — réappairer pour appliquer.</string>
+    <string name="touchpad_mode_error_transport">Impossible de joindre le satellite — est-il en cours d\'exécution ?</string>
+    <string name="touchpad_mode_error_unknown">Impossible de définir le mode pavé tactile : %1$s</string>
 
     <!-- Texte du statut de l\'emplacement dans ControllerAdapter (sous le nom). -->
     <string name="slot_status_disconnecting">Déconnexion… %1$ds</string>
