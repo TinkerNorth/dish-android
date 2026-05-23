@@ -96,13 +96,13 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <TextView
-                style="@style/TextAppearance.Dish.Label.Accent"
+            <include
+                android:id="@+id/sectionControllers"
+                layout="@layout/section_header"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/section_controllers"
-                android:paddingTop="@dimen/spacing_2xl"
-                android:paddingBottom="@dimen/spacing_md" />
+                android:layout_marginTop="@dimen/spacing_2xl"
+                android:layout_marginBottom="@dimen/spacing_md" />
         </LinearLayout>
 
         <!-- Scrollable slot list + telemetry -->

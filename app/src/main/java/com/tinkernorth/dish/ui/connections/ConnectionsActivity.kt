@@ -51,9 +51,12 @@ import com.tinkernorth.dish.source.system.BluetoothPermissionState
 import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
 import com.tinkernorth.dish.source.system.NetworkState
 import com.tinkernorth.dish.source.system.NetworkStateObserver
+import com.tinkernorth.dish.ui.common.applyDishSystemBars
+import com.tinkernorth.dish.ui.common.attachGamepadHost
 import com.tinkernorth.dish.ui.common.dotColorForState
 import com.tinkernorth.dish.ui.common.glyphForConnection
 import com.tinkernorth.dish.ui.common.setLoading
+import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.common.statusChipText
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -156,14 +159,10 @@ class ConnectionsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityConnectionsBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        gamepadHost =
-            GamepadActivityHost(this, binding.root, wakeState, gamepadRegistry)
-                .also { it.install(notifications) }
-        setSupportActionBar(binding.toolbar)
-        binding.toolbar.setNavigationOnClickListener { finish() }
-
-        binding.btnSatelliteScan.setOnClickListener { satellite.startDiscovery() }
-        binding.btnBtAdd.setOnClickListener { requestBtPermissions() }
+        gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications)
+        setupDishToolbar(binding.toolbar)
+        applyDishSystemBars()
+        bindSectionHeaders()
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -192,7 +191,7 @@ class ConnectionsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 satellite.isScanning.collect { scanning ->
-                    binding.btnSatelliteScan.setLoading(
+                    binding.sectionSatellites.btnSectionAction.setLoading(
                         loading = scanning,
                         loadingText = getString(R.string.action_scanning),
                         restingText = getString(R.string.action_scan),
@@ -286,6 +285,32 @@ class ConnectionsActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
         gamepadHost.cancelDimOnStop()
+    }
+
+    /**
+     * Populate the two section-header includes (Satellites + Bluetooth) with
+     * the icon + label + trailing-button content this screen needs. Both
+     * sections show all three sub-views; the composite defaults them to
+     * `gone` so eyebrow-only callsites (dashboard, settings) leave them
+     * hidden and only this activity flips them visible.
+     */
+    private fun bindSectionHeaders() {
+        with(binding.sectionSatellites) {
+            iconSection.visibility = View.VISIBLE
+            iconSection.setImageResource(R.drawable.ic_satellite)
+            labelSection.setText(R.string.section_satellites)
+            btnSectionAction.visibility = View.VISIBLE
+            btnSectionAction.setText(R.string.action_scan)
+            btnSectionAction.setOnClickListener { satellite.startDiscovery() }
+        }
+        with(binding.sectionBluetooth) {
+            iconSection.visibility = View.VISIBLE
+            iconSection.setImageResource(R.drawable.ic_bluetooth)
+            labelSection.setText(R.string.section_bluetooth_hosts)
+            btnSectionAction.visibility = View.VISIBLE
+            btnSectionAction.setText(R.string.action_add)
+            btnSectionAction.setOnClickListener { requestBtPermissions() }
+        }
     }
 
     // ── Rendering ─────────────────────────────────────────────────────────

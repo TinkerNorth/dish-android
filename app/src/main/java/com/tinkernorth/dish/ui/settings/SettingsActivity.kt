@@ -6,6 +6,7 @@ package com.tinkernorth.dish.ui.settings
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.text.TextUtils
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -15,6 +16,8 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivitySettingsBinding
 import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.store.CrashReportingStore
+import com.tinkernorth.dish.ui.common.applyDishSystemBars
+import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -44,8 +47,35 @@ class SettingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivitySettingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        setSupportActionBar(binding.toolbar)
-        binding.toolbar.setNavigationOnClickListener { finish() }
+        setupDishToolbar(binding.toolbar)
+        applyDishSystemBars()
+
+        // Section header labels live in `section_header.xml` and are
+        // populated here so the include's TextView (id `labelSection`) can
+        // be shared across the dashboard, connections, and settings screens
+        // without duplicating XML.
+        binding.sectionDiagnostics.labelSection.setText(R.string.settings_section_diagnostics)
+        binding.sectionAbout.labelSection.setText(R.string.settings_section_about)
+
+        // Crash-reporting card — composite `card_row_icon_label_value.xml`
+        // owns the leading icon + title/subtitle column; the Switch sits
+        // alongside in `activity_settings.xml` as a sibling so this card's
+        // multi-line gravity stays at the callsite.
+        binding.cardRowCrash.cardRowIcon.setImageResource(R.drawable.ic_bug)
+        binding.cardRowCrash.cardRowTitle.setText(R.string.settings_crash_reporting_title)
+        binding.cardRowCrash.cardRowSubtitle.setText(R.string.settings_crash_reporting_body)
+
+        // Privacy-policy card — same composite, but the subtitle adopts
+        // `Body.Mono` (on-surface mono URL tone) instead of the composite's
+        // default `Body`. Single-line + end-ellipsize because the URL can
+        // exceed the row width on narrow devices.
+        binding.cardRowPrivacy.cardRowIcon.setImageResource(R.drawable.ic_shield)
+        binding.cardRowPrivacy.cardRowTitle.setText(R.string.menu_privacy_policy)
+        binding.cardRowPrivacy.cardRowSubtitle.apply {
+            setTextAppearance(R.style.TextAppearance_Dish_Body_Mono)
+            isSingleLine = true
+            ellipsize = TextUtils.TruncateAt.END
+        }
 
         // The toggle is observed-then-bound: render the persisted state, then
         // attach the listener. Doing it in the opposite order would re-write
@@ -70,7 +100,7 @@ class SettingsActivity : AppCompatActivity() {
         // Display the privacy URL minus the scheme — the row title says
         // "Privacy policy", the subtitle is just the host+path so users can
         // see where the link actually points before tapping.
-        binding.tvPrivacyPolicySubtitle.text =
+        binding.cardRowPrivacy.cardRowSubtitle.text =
             getString(R.string.url_privacy_policy)
                 .removePrefix("https://")
                 .removePrefix("http://")

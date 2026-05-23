@@ -22,28 +22,11 @@
         android:orientation="vertical"
         android:gravity="center_horizontal">
 
-        <LinearLayout
+        <include
+            android:id="@+id/statusPillTouchpad"
+            layout="@layout/status_pill"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:background="@drawable/bg_pill"
-            android:paddingHorizontal="@dimen/spacing_3xl"
-            android:paddingVertical="@dimen/spacing_sm"
-            android:gravity="center_vertical"
-            android:alpha="0.85">
-
-            <View
-                android:id="@+id/dotTouchpadOverlay"
-                style="@style/Widget.Dish.StatusDot.Small"
-                android:layout_marginEnd="@dimen/spacing_md" />
-
-            <TextView
-                android:id="@+id/tvTouchpadOverlayStatus"
-                style="@style/TextAppearance.Dish.Label"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/overlay_status_streaming"
-                android:textColor="@color/colorOnSurface" />
-        </LinearLayout>
+            android:layout_height="wrap_content" />
 
     </LinearLayout>
 

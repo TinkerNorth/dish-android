@@ -118,7 +118,7 @@ class TouchpadOverlayActivity :
 
     override fun onConnectionSummaryChanged(summary: ConnectionSummary?) {
         val connected = summary?.live == LinkState.Connected
-        binding.tvTouchpadOverlayStatus.text =
+        binding.statusPillTouchpad.statusPillLabel.text =
             when {
                 // `connected` true implies summary is non-null (`summary?.live ==
                 // LinkState.Connected` can't match a null summary), so the
@@ -128,7 +128,7 @@ class TouchpadOverlayActivity :
                 summary == null -> getString(R.string.overlay_status_unknown)
                 else -> getString(R.string.overlay_status_not_connected)
             }
-        (binding.dotTouchpadOverlay.background as? GradientDrawable)?.setColor(
+        (binding.statusPillTouchpad.statusPillDot.background as? GradientDrawable)?.setColor(
             getColor(if (connected) R.color.colorSuccess else R.color.colorMuted),
         )
     }

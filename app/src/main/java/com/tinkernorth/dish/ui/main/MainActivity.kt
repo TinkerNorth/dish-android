@@ -23,6 +23,8 @@ import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.notification.DishNotifications
+import com.tinkernorth.dish.ui.common.applyDishSystemBars
+import com.tinkernorth.dish.ui.common.attachGamepadHost
 import com.tinkernorth.dish.ui.connections.ConnectionsActivity
 import com.tinkernorth.dish.ui.settings.SettingsActivity
 import dagger.hilt.android.AndroidEntryPoint
@@ -70,13 +72,12 @@ class MainActivity :
         }
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        // `install(notifications)` wires the wake-state collectors AND the
-        // themed notification host in one call — the manual findViewById +
-        // bindLifecycle dance lived in three activities before; folding it
-        // into the host eliminates the boilerplate.
-        gamepadHost =
-            GamepadActivityHost(this, binding.root, wakeState, gamepadRegistry)
-                .also { it.install(notifications) }
+        // `attachGamepadHost` centralises the construct-and-install dance
+        // every Dish activity used to inline (see ActivityExtensions.kt).
+        // `install(notifications)` inside it wires the wake-state collectors
+        // AND the themed notification host in one call.
+        gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications)
+        applyDishSystemBars()
         controllerAdapter = ControllerAdapter(this)
         setupUI()
         observeViewModel()
@@ -95,6 +96,11 @@ class MainActivity :
     // ═══════════════════════════════════════════════════════════════════════
 
     private fun setupUI() {
+        // Section header label lives in `section_header.xml` and is set
+        // here so the include's TextView (id `labelSection`) carries the
+        // dashboard's "CONTROLLERS" string. Icon + trailing-button slots
+        // stay hidden by default for this eyebrow-only callsite.
+        binding.sectionControllers.labelSection.setText(R.string.section_controllers)
         binding.rvControllers.adapter = controllerAdapter
         binding.btnManageConnections.setOnClickListener {
             startActivity(Intent(this, ConnectionsActivity::class.java))

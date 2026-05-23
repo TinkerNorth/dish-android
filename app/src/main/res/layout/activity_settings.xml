@@ -56,14 +56,16 @@
                 android:orientation="vertical">
 
                 <!-- ═══ DIAGNOSTICS ════════════════════════════════════════
-                     Eyebrow adopts Label.Accent (canonical 0.12 letterSpacing,
-                     superseding the previous 0.14 drift across Settings). -->
-                <TextView
-                    style="@style/TextAppearance.Dish.Label.Accent"
-                    android:layout_width="wrap_content"
+                     Eyebrow uses the canonical `section_header.xml` include
+                     with icon + button hidden by default (`Label.Accent`
+                     label only). SettingsActivity.onCreate sets the label
+                     text. -->
+                <include
+                    android:id="@+id/sectionDiagnostics"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/settings_section_diagnostics"
-                    android:paddingBottom="@dimen/spacing_lg" />
+                    android:layout_marginBottom="@dimen/spacing_lg" />
 
                 <com.google.android.material.card.MaterialCardView
                     style="@style/Widget.Dish.Card"
@@ -77,38 +79,18 @@
                         android:gravity="top"
                         android:padding="@dimen/card_padding">
 
-                        <FrameLayout
-                            android:layout_width="@dimen/icon_card_container"
-                            android:layout_height="@dimen/icon_card_container"
-                            android:background="@drawable/bg_icon_container">
-
-                            <ImageView
-                                style="@style/Widget.Dish.Icon.Card"
-                                android:layout_gravity="center"
-                                android:src="@drawable/ic_bug"
-                                android:importantForAccessibility="no" />
-                        </FrameLayout>
-
-                        <LinearLayout
+                        <!-- Leading icon + title/subtitle column. Icon
+                             (`ic_bug`) + title + subtitle text are set in
+                             SettingsActivity.onCreate. The Switch sits as a
+                             sibling so this card keeps the multi-line
+                             gravity=top alignment without the composite
+                             knowing about the trailing affordance. -->
+                        <include
+                            android:id="@+id/cardRowCrash"
+                            layout="@layout/card_row_icon_label_value"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:layout_marginStart="@dimen/spacing_2xl"
-                            android:orientation="vertical">
-
-                            <TextView
-                                style="@style/TextAppearance.Dish.Title"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/settings_crash_reporting_title" />
-
-                            <TextView
-                                style="@style/TextAppearance.Dish.Body"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:text="@string/settings_crash_reporting_body"
-                                android:layout_marginTop="@dimen/spacing_xs" />
-                        </LinearLayout>
+                            android:layout_weight="1" />
 
                         <com.google.android.material.switchmaterial.SwitchMaterial
                             android:id="@+id/switchCrashReporting"
@@ -122,14 +104,15 @@
                 </com.google.android.material.card.MaterialCardView>
 
                 <!-- ═══ ABOUT ══════════════════════════════════════════════
-                     Eyebrow adopts Label.Accent (canonical 0.12 letterSpacing). -->
-                <TextView
-                    style="@style/TextAppearance.Dish.Label.Accent"
-                    android:layout_width="wrap_content"
+                     Eyebrow uses the canonical `section_header.xml` include.
+                     SettingsActivity.onCreate sets the label text. -->
+                <include
+                    android:id="@+id/sectionAbout"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/settings_section_about"
                     android:layout_marginTop="@dimen/size_22"
-                    android:paddingBottom="@dimen/spacing_lg" />
+                    android:layout_marginBottom="@dimen/spacing_lg" />
 
                 <com.google.android.material.card.MaterialCardView
                     android:id="@+id/cardPrivacyPolicy"
@@ -147,46 +130,21 @@
                         android:gravity="center_vertical"
                         android:padding="@dimen/card_padding">
 
-                        <FrameLayout
-                            android:layout_width="@dimen/icon_card_container"
-                            android:layout_height="@dimen/icon_card_container"
-                            android:background="@drawable/bg_icon_container">
-
-                            <ImageView
-                                style="@style/Widget.Dish.Icon.Card"
-                                android:layout_gravity="center"
-                                android:src="@drawable/ic_shield"
-                                android:importantForAccessibility="no" />
-                        </FrameLayout>
-
-                        <LinearLayout
+                        <!-- Leading icon + title/subtitle column. Icon
+                             (`ic_shield`), title, and subtitle URL text +
+                             single-line ellipsizing are wired in
+                             SettingsActivity.onCreate. The subtitle's
+                             TextAppearance is swapped from the composite
+                             default `Body` to `Body.Mono` so the URL renders
+                             in the on-surface mono tone the version row uses
+                             (preserves the Phase 2 drift resolution; see
+                             PHASE_2_HANDOFF.md). -->
+                        <include
+                            android:id="@+id/cardRowPrivacy"
+                            layout="@layout/card_row_icon_label_value"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:layout_marginStart="@dimen/spacing_2xl"
-                            android:orientation="vertical">
-
-                            <TextView
-                                style="@style/TextAppearance.Dish.Title"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/menu_privacy_policy" />
-
-                            <!-- URL subtitle adopts Body.Mono — renders the
-                                 link target in the same on-surface mono tone
-                                 the version row uses. Previously rendered
-                                 colorMuted + 0.02 letterSpacing; both drifts
-                                 are dropped in favour of the canonical
-                                 Body.Mono. -->
-                            <TextView
-                                android:id="@+id/tvPrivacyPolicySubtitle"
-                                style="@style/TextAppearance.Dish.Body.Mono"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:singleLine="true"
-                                android:ellipsize="end"
-                                android:layout_marginTop="@dimen/spacing_xs" />
-                        </LinearLayout>
+                            android:layout_weight="1" />
 
                         <ImageView
                             android:layout_width="@dimen/icon_card_glyph"

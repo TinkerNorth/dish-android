@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    SECTION HEADER — icon + label + optional trailing button.
+
+    Single canonical layout for every section header in the app. Five
+    callsites:
+      - Dashboard CONTROLLERS eyebrow      (label only)
+      - Connections SATELLITES with scan   (icon + label + button)
+      - Connections BLUETOOTH with add     (icon + label + button)
+      - Settings DIAGNOSTICS eyebrow       (label only)
+      - Settings ABOUT eyebrow             (label only)
+
+    Eyebrow-only callsites leave the icon and button at their default
+    `visibility="gone"`. Callsites that need an icon and/or button flip
+    visibility + assign content from Activity code (icon resource, label
+    text, button text, button onClick).
+
+    Per-callsite vertical spacing is layered via the `<include>` tag's
+    `android:layout_marginTop` / `android:layout_marginBottom` attrs — those
+    are the only spacing knobs needed (no padding overrides on this root,
+    so it stays a clean "header" shape).
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical">
+
+    <!-- Leading icon. Defaults to `gone` so eyebrow callsites don't need
+         to set any visibility; callsites with an icon flip visibility and
+         set src from code (e.g. ic_satellite, ic_bluetooth). -->
+    <ImageView
+        android:id="@+id/iconSection"
+        style="@style/Widget.Dish.Icon.Section"
+        android:layout_marginEnd="@dimen/spacing_sm"
+        android:contentDescription="@null"
+        android:visibility="gone"
+        tools:src="@drawable/ic_satellite"
+        tools:visibility="visible" />
+
+    <TextView
+        android:id="@+id/labelSection"
+        style="@style/TextAppearance.Dish.Label.Accent"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        tools:text="SECTION" />
+
+    <!-- Trailing affordance. Defaults to `gone`; callsites that need a
+         scan / add / etc. button flip visibility and set text + click
+         handler from code. -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnSectionAction"
+        style="@style/Widget.Dish.Button.Outlined"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textAllCaps="false"
+        android:visibility="gone"
+        tools:text="Action"
+        tools:visibility="visible" />
+</LinearLayout>

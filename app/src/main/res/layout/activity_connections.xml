@@ -34,37 +34,17 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
-                <!-- ── Satellite section ── -->
-                <LinearLayout
+                <!-- ── Satellite section ──
+                     Icon, label, and scan-button content live in
+                     ConnectionsActivity.onCreate (the include's children are
+                     reachable via View Binding on `sectionSatellites`). v6
+                     brand satellite glyph (`ic_satellite`) keeps parity with
+                     the web dashboard and dish-mac SectionHeader. -->
+                <include
+                    android:id="@+id/sectionSatellites"
+                    layout="@layout/section_header"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <!-- v6 brand satellite glyph — same icon family used in the
-                         satellite/web dashboard and dish-mac SectionHeader so a
-                         user moving between clients sees the same iconography. -->
-                    <ImageView
-                        style="@style/Widget.Dish.Icon.Section"
-                        android:layout_marginEnd="@dimen/spacing_sm"
-                        android:contentDescription="@null"
-                        android:src="@drawable/ic_satellite" />
-
-                    <TextView
-                        style="@style/TextAppearance.Dish.Label.Accent"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/section_satellites" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnSatelliteScan"
-                        style="@style/Widget.Dish.Button.Outlined"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/action_scan"
-                        android:textAllCaps="false" />
-                </LinearLayout>
+                    android:layout_height="wrap_content" />
 
                 <LinearLayout
                     android:id="@+id/llSatelliteList"
@@ -88,34 +68,14 @@
                     android:layout_marginVertical="@dimen/spacing_5xl"
                     android:background="@color/colorOutline" />
 
-                <!-- ── Bluetooth section ── -->
-                <LinearLayout
+                <!-- ── Bluetooth section ──
+                     Icon, label, and add-button content live in
+                     ConnectionsActivity.onCreate. -->
+                <include
+                    android:id="@+id/sectionBluetooth"
+                    layout="@layout/section_header"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <ImageView
-                        style="@style/Widget.Dish.Icon.Section"
-                        android:layout_marginEnd="@dimen/spacing_sm"
-                        android:contentDescription="@null"
-                        android:src="@drawable/ic_bluetooth" />
-
-                    <TextView
-                        style="@style/TextAppearance.Dish.Label.Accent"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/section_bluetooth_hosts" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnBtAdd"
-                        style="@style/Widget.Dish.Button.Outlined"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/action_add"
-                        android:textAllCaps="false" />
-                </LinearLayout>
+                    android:layout_height="wrap_content" />
 
                 <LinearLayout
                     android:id="@+id/llBtList"

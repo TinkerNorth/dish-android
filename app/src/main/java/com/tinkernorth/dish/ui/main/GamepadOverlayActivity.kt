@@ -97,8 +97,10 @@ class GamepadOverlayActivity :
 
         binding.gamepadTouchView.listener = this
         binding.gamepadTouchView.usePlayStation = intent.getBooleanExtra(EXTRA_USE_PS_LAYOUT, false)
-        // Both dotOverlay and dotMotion declare `background="@drawable/dot_circle"`
-        // in activity_gamepad_overlay.xml — the colour is mutated at runtime via
+        // Both status pills (`statusPillConnection`, `statusPillMotion`) use
+        // the shared `status_pill.xml` composite — the `statusPillDot` View
+        // inside each carries `background="@drawable/dot_circle"`, and the
+        // colour is mutated at runtime via
         // (view.background as GradientDrawable).setColor(...).
         binding.btnExitGamepad.setOnClickListener { finish() }
 
@@ -285,7 +287,7 @@ class GamepadOverlayActivity :
 
     private fun repaintConnectionRow(summary: ConnectionSummary?) {
         val connected = summary?.live == LinkState.Connected
-        binding.tvOverlayStatus.text =
+        binding.statusPillConnection.statusPillLabel.text =
             when {
                 // `connected` true implies summary is non-null (`summary?.live ==
                 // LinkState.Connected` can't match a null summary), so the
@@ -295,7 +297,7 @@ class GamepadOverlayActivity :
                 summary == null -> getString(R.string.overlay_status_unknown)
                 else -> getString(R.string.overlay_status_not_connected)
             }
-        (binding.dotOverlay.background as? GradientDrawable)?.setColor(
+        (binding.statusPillConnection.statusPillDot.background as? GradientDrawable)?.setColor(
             getColor(if (connected) R.color.colorSuccess else R.color.colorMuted),
         )
     }
@@ -348,8 +350,8 @@ class GamepadOverlayActivity :
                 satelliteBackendOk = cap.satelliteBackendStatus?.backendOk,
                 isStalled = isStalled,
             )
-        binding.tvMotionStatus.setText(state.labelRes)
-        (binding.dotMotion.background as? GradientDrawable)?.setColor(getColor(state.dotColorRes))
+        binding.statusPillMotion.statusPillLabel.setText(state.labelRes)
+        (binding.statusPillMotion.statusPillDot.background as? GradientDrawable)?.setColor(getColor(state.dotColorRes))
         binding.tvMotionDetail.visibility = if (state.hasDetail) View.VISIBLE else View.GONE
         when (state) {
             MotionIndicatorState.UNAVAILABLE ->

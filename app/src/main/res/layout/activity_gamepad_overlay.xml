@@ -21,60 +21,24 @@
         android:orientation="vertical"
         android:gravity="center_horizontal">
 
-        <LinearLayout
+        <include
+            android:id="@+id/statusPillConnection"
+            layout="@layout/status_pill"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:background="@drawable/bg_pill"
-            android:paddingHorizontal="@dimen/spacing_3xl"
-            android:paddingVertical="@dimen/spacing_sm"
-            android:gravity="center_vertical"
-            android:alpha="0.85">
-
-            <View
-                android:id="@+id/dotOverlay"
-                style="@style/Widget.Dish.StatusDot.Small"
-                android:layout_marginEnd="@dimen/spacing_md" />
-
-            <TextView
-                android:id="@+id/tvOverlayStatus"
-                style="@style/TextAppearance.Dish.Label"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/overlay_status_streaming"
-                android:textColor="@color/colorOnSurface" />
-        </LinearLayout>
+            android:layout_height="wrap_content" />
 
         <!-- Phone-motion (gyro/accel) indicator. Always visible so the
              three states — streaming / paused / no-gyroscope — are never
-             ambiguous; the detail line below appears only for no-gyroscope. -->
-        <LinearLayout
-            android:id="@+id/motionPill"
+             ambiguous; the detail line below appears only for no-gyroscope.
+             The pill's text is set live by refreshMotionStatus() so a
+             screen reader reads the current state instead of a stale
+             contentDescription. -->
+        <include
+            android:id="@+id/statusPillMotion"
+            layout="@layout/status_pill"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/spacing_sm"
-            android:background="@drawable/bg_pill"
-            android:paddingHorizontal="@dimen/spacing_3xl"
-            android:paddingVertical="@dimen/spacing_sm"
-            android:gravity="center_vertical"
-            android:alpha="0.85">
-
-            <View
-                android:id="@+id/dotMotion"
-                style="@style/Widget.Dish.StatusDot.Small"
-                android:layout_marginEnd="@dimen/spacing_md" />
-
-            <!-- No contentDescription: a TextView is announced by its own
-                 text, so a screen reader reads the live "Motion: streaming /
-                 paused / no gyroscope" label set by refreshMotionStatus(). A
-                 static contentDescription would mask that live state. -->
-            <TextView
-                android:id="@+id/tvMotionStatus"
-                style="@style/TextAppearance.Dish.Label"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/motion_unavailable"
-                android:textColor="@color/colorOnSurface" />
-        </LinearLayout>
+            android:layout_marginTop="@dimen/spacing_sm" />
 
         <TextView
             android:id="@+id/tvMotionDetail"
