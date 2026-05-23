@@ -4,12 +4,16 @@
 package com.tinkernorth.dish.ui.main
 
 import android.graphics.drawable.Animatable
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.annotation.DimenRes
+import androidx.annotation.DrawableRes
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -383,7 +387,15 @@ class ControllerAdapter(
             rb: PickerConnectionRowBinding,
             c: ConnectionSummary,
         ) {
-            rb.ivPickerGlyph.setImageResource(glyphForConnection(c.kind, c.live))
+            // Glyph rides on tvPickerTitle as a leading compound drawable
+            // (collapsed from the prior ivPickerGlyph ImageView for perf in
+            // this RecyclerView item). Sized to @dimen/icon_picker_glyph
+            // rather than the vector's intrinsic 24dp.
+            setStartCompoundDrawable(
+                rb.tvPickerTitle,
+                glyphForConnection(c.kind, c.live),
+                R.dimen.icon_picker_glyph,
+            )
             // Saved/Stale only reach this picker when the slot is currently
             // bound to that connection — surface "offline"/"needs pairing"
             // so the bound row reads as disconnected rather than silent.
@@ -397,7 +409,7 @@ class ControllerAdapter(
                     LinkState.Stale -> ctx.getString(R.string.picker_status_needs_pairing)
                     LinkState.Found, LinkState.Ready -> ""
                 }
-            rb.tvPickerTitle.text = "${c.label}$statusSuffix"
+            rb.tvPickerTitle.text = ctx.getString(R.string.picker_title_with_status, c.label, statusSuffix)
         }
 
         private fun bindConnectionDetail(
@@ -565,18 +577,51 @@ class ControllerAdapter(
             return chip
         }
 
+        /**
+         * Set [resId] as the leading (start) compound drawable on [tv],
+         * sized to [sizeDimen] and with no tint (callers that need a tint
+         * should wrap the drawable themselves — none currently do because
+         * both the battery glyph and the connection-kind glyph are
+         * deliberately two-tone and self-coloured).
+         *
+         * Returns the resolved drawable so animated-vector callers can
+         * `start()` it without re-fetching from the TextView.
+         *
+         * Uses explicit bounds via [Drawable.setBounds] then
+         * `setCompoundDrawablesRelative` because the icon dimens
+         * (`icon_battery` = 20dp, `icon_picker_glyph` = 22dp) intentionally
+         * differ from the vectors' intrinsic 24dp; the wrap-with-bounds
+         * helper would render them at the wrong size.
+         */
+        private fun setStartCompoundDrawable(
+            tv: TextView,
+            @DrawableRes resId: Int,
+            @DimenRes sizeDimen: Int,
+        ): Drawable? {
+            val drawable = AppCompatResources.getDrawable(tv.context, resId) ?: return null
+            val size = tv.resources.getDimensionPixelSize(sizeDimen)
+            drawable.setBounds(0, 0, size, size)
+            tv.setCompoundDrawablesRelative(drawable, null, null, null)
+            return drawable
+        }
+
         private fun bindBattery(battery: BatteryUi?) {
             val ctx = b.root.context
             if (battery == null) {
-                b.llBattery.visibility = View.GONE
+                b.tvBattery.visibility = View.GONE
                 return
             }
-            b.llBattery.visibility = View.VISIBLE
-            b.ivBattery.setImageResource(batteryIcon(battery))
+            b.tvBattery.visibility = View.VISIBLE
+            // Battery glyph rides on the TextView as a leading compound
+            // drawable (collapsed from the prior ivBattery ImageView for
+            // perf in this RecyclerView item). The glyph is two-tone and
+            // intentionally not tinted; size comes from @dimen/icon_battery
+            // (not the drawable's intrinsic 24dp) so we set explicit bounds.
+            val glyph = setStartCompoundDrawable(b.tvBattery, batteryIcon(battery), R.dimen.icon_battery)
             // ic_battery_charging is an AnimatedVectorDrawable — kick off its
             // fill-ramp / bolt-pulse loop. The other rungs are static, so for
             // them this is a harmless no-op.
-            (b.ivBattery.drawable as? Animatable)?.start()
+            (glyph as? Animatable)?.start()
             b.tvBattery.text =
                 battery.level?.let { ctx.getString(R.string.battery_percent, it) }
                     ?: ctx.getString(R.string.battery_unknown_level)
@@ -584,7 +629,9 @@ class ControllerAdapter(
             // left its own teal (a flat tint would collapse the white overlay).
             val colorRes = if (battery.isLow) R.color.colorError else R.color.colorMuted
             b.tvBattery.setTextColor(ctx.getColor(colorRes))
-            b.ivBattery.contentDescription = batteryDescription(ctx, battery)
+            // contentDescription lives on the TextView now that the icon is a
+            // compound drawable; the announcement still tracks the live state.
+            b.tvBattery.contentDescription = batteryDescription(ctx, battery)
         }
 
         /**

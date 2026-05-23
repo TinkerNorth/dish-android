@@ -43,7 +43,6 @@
          STROKES + CORNER RADII
          ============================================================ -->
     <dimen name="border_thin">@dimen/size_1</dimen>
-    <dimen name="border_rail">@dimen/size_4</dimen>
     <dimen name="divider_height">@dimen/size_1</dimen>
 
     <dimen name="corner_chip">@dimen/size_4</dimen>
@@ -61,7 +60,6 @@
     <dimen name="icon_battery">@dimen/size_20</dimen>      <!-- battery glyph in slot card -->
     <dimen name="icon_picker_glyph">@dimen/size_22</dimen> <!-- glyph in expanded picker row -->
     <dimen name="icon_brand_sm">@dimen/size_22</dimen>     <!-- header brand glyph (small) -->
-    <dimen name="icon_brand">@dimen/size_24</dimen>        <!-- header brand glyph (regular) -->
     <dimen name="icon_section_header">@dimen/size_18</dimen> <!-- section-title brand glyph -->
     <dimen name="icon_card_container">@dimen/size_36</dimen> <!-- rounded-square icon container (Settings cards) -->
     <dimen name="icon_card_glyph">@dimen/size_18</dimen>     <!-- icon nested inside icon_card_container -->
@@ -70,7 +68,6 @@
     <dimen name="icon_controller">@dimen/size_36</dimen>   <!-- slot-card controller icon -->
     <dimen name="icon_chevron_lg">@dimen/size_20</dimen>   <!-- expand/collapse caret on slot card -->
     <dimen name="icon_settings_button">@dimen/size_40</dimen> <!-- header settings ImageButton -->
-    <dimen name="icon_top_bar_size">@dimen/size_56</dimen>    <!-- ConnectionsActivity top-bar avatar/icon slot -->
 
     <!-- ============================================================
          TOUCH TARGETS + COMPONENT HEIGHTS
@@ -110,7 +107,6 @@
     <!-- ============================================================
          NOTIFICATION SNACKBAR (DishNotifications)
          ============================================================ -->
-    <dimen name="notification_corner_radius">@dimen/size_10</dimen>
     <dimen name="notification_rail_width">@dimen/size_4</dimen>
     <dimen name="notification_elevation">@dimen/elevation_floating</dimen>
     <dimen name="notification_padding_horizontal">@dimen/size_4</dimen>
@@ -126,9 +122,7 @@
     <dimen name="text_body">@dimen/text_13</dimen>
     <dimen name="text_body_lg">@dimen/text_14</dimen>      <!-- picker row title -->
     <dimen name="text_title_sm">@dimen/text_15</dimen>
-    <dimen name="text_title">@dimen/text_16</dimen>
     <dimen name="text_title_lg">@dimen/text_18</dimen>
-    <dimen name="text_display_sm">@dimen/text_20</dimen>
     <dimen name="text_display">@dimen/text_22</dimen>
     <dimen name="text_display_lg">@dimen/text_24</dimen>
     <dimen name="text_hero">@dimen/text_64</dimen>         <!-- pair-dialog PIN entry -->

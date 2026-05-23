@@ -13,7 +13,7 @@
       Widget.Dish.<Component>[.<Variant>]
         Component = Card / Toolbar / StatusDot / EmptyStateText / Switch /
                     EditText / Icon
-        Variant   = Telemetry / Large / Section / Card / Pin
+        Variant   = Large / Section / Card / Pin / Overlay
 
     Visual no-op invariant: each callsite migrating to a Widget.Dish.* style
     is byte-identical in rendering. Inline attribute removal is mechanical;
@@ -24,10 +24,7 @@
 
     <!-- ============================================================
          CARDS
-         All MaterialCardView callsites share five attributes; the
-         Telemetry variant only differs in corner radius (smaller, to
-         match the picker_row_bg geometry it sits among on the
-         dashboard).
+         All MaterialCardView callsites share five attributes.
          ============================================================ -->
     <style name="Widget.Dish.Card" parent="Widget.MaterialComponents.CardView">
         <item name="cardBackgroundColor">@color/colorSurface</item>
@@ -35,12 +32,6 @@
         <item name="cardElevation">@dimen/elevation_none</item>
         <item name="strokeColor">@color/colorCardStroke</item>
         <item name="strokeWidth">@dimen/border_thin</item>
-    </style>
-
-    <!-- Telemetry card sits inside the slot card's expanded body, so its
-         shorter corner radius matches the picker row geometry next to it. -->
-    <style name="Widget.Dish.Card.Telemetry">
-        <item name="cardCornerRadius">@dimen/corner_picker_row</item>
     </style>
 
     <!-- ============================================================
@@ -103,8 +94,11 @@
 
     <!-- ============================================================
          EDIT TEXT — pair-dialog PIN field. Centred, monospace, widely
-         tracked for legibility of long digit groups. The hint text
-         and maxLength are per-callsite.
+         tracked for legibility of long digit groups. The hint text,
+         maxLength, and inputType=numberPassword are per-callsite (the
+         style keeps a sane `number` default; callsites that want the
+         masked PIN treatment override inline alongside their
+         autofillHints suppression — see `dialog_pair_pin.xml`).
          ============================================================ -->
     <!-- autofillHints + importantForAutofill are NOT in this style because
          they're API-26+ attributes and style items can't carry a
@@ -144,6 +138,20 @@
         <item name="android:layout_width">@dimen/icon_card_glyph</item>
         <item name="android:layout_height">@dimen/icon_card_glyph</item>
         <item name="tint">@color/colorPrimary</item>
+    </style>
+
+    <!-- ============================================================
+         BUTTON OVERLAY VARIANT — the gamepad + touchpad overlay
+         "BACK" exit buttons share the same compact label-size +
+         narrower min-width treatment that distinguishes them from
+         the dashboard / connections MaterialButtons. Two callsites
+         today; carving the closure into a style retires the prior
+         inline `android:textSize` + `android:minWidth` overrides.
+         ============================================================ -->
+    <style name="Widget.Dish.Button.Outlined.Overlay" parent="Widget.Dish.Button.Outlined">
+        <item name="android:textSize">@dimen/text_label</item>
+        <item name="android:minWidth">@dimen/button_min_width</item>
+        <item name="android:layout_height">@dimen/touch_target_min</item>
     </style>
 
 </resources>

@@ -43,6 +43,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/spacing_4xl"
         android:hint="@string/pair_dialog_pin_hint"
+        android:inputType="numberPassword"
         android:maxLength="8"
         android:autofillHints="@null"
         android:importantForAutofill="no"
@@ -73,7 +74,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="@string/pair_dialog_cancel"
+            android:text="@android:string/cancel"
             android:textAllCaps="true" />
 
         <com.google.android.material.button.MaterialButton

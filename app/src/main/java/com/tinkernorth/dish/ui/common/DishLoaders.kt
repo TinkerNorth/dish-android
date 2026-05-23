@@ -14,6 +14,7 @@ import android.graphics.RectF
 import android.graphics.drawable.Animatable
 import android.graphics.drawable.Drawable
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.withClip
 import com.tinkernorth.dish.R
 import kotlin.math.abs
 
@@ -359,10 +360,9 @@ class DishBarDrawable(
         sliderRect.set(b.left + x, top, b.left + x + sliderWidth, bottom)
         // Clip to the track so the slider doesn't visually spill past the
         // rounded ends — matches the SVG's container behaviour.
-        val save = canvas.save()
-        canvas.clipRect(trackRect)
-        canvas.drawRoundRect(sliderRect, rx, rx, sliderPaint)
-        canvas.restoreToCount(save)
+        canvas.withClip(trackRect) {
+            drawRoundRect(sliderRect, rx, rx, sliderPaint)
+        }
     }
 
     override fun setAlpha(alpha: Int) {

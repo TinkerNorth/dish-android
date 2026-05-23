@@ -66,12 +66,12 @@ val resolvedVersion = resolveVersion()
 
 android {
     namespace = "com.tinkernorth.dish"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.tinkernorth.dish"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 37
         versionCode = resolvedVersion.code
         versionName = resolvedVersion.name
 

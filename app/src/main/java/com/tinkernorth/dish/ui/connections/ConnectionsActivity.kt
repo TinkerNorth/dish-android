@@ -9,7 +9,6 @@ import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.GradientDrawable
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -20,6 +19,8 @@ import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
+import androidx.core.view.isNotEmpty
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -164,6 +165,23 @@ class ConnectionsActivity : AppCompatActivity() {
         applyDishSystemBars()
         bindSectionHeaders()
 
+        observeSatelliteHub()
+        observeSystemStateBanners()
+        observeBluetoothRegistry()
+
+        // Deep-link from MainActivity when an auto-reconnect lands on Stale:
+        // open the PIN dialog directly for that satellite so the user can
+        // re-enter their PIN without scrolling to find the row.
+        handlePairPromptIntent(intent)
+    }
+
+    /**
+     * Wire the satellite + hub-side flows: connection summaries, the
+     * discovered-server overlay, the scan button's loading state, the
+     * last-scan timestamp (drives empty-state copy), and one-shot
+     * connection events (errors + pairing prompts).
+     */
+    private fun observeSatelliteHub() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 hub.connections.collect { conns ->
@@ -214,6 +232,14 @@ class ConnectionsActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * Wire the three system-state banners (BT adapter on/off, BT runtime
+     * permission, network type). Each collector translates a state flow
+     * into a persistent themed banner that dismisses itself on recovery.
+     */
+    private fun observeSystemStateBanners() {
         // Bluetooth adapter on/off. The banner is persistent until the user
         // toggles BT on, at which point we dismiss it.
         lifecycleScope.launch {
@@ -236,6 +262,15 @@ class ConnectionsActivity : AppCompatActivity() {
                 networkState.state.collect { state -> applyNetworkBanner(state) }
             }
         }
+    }
+
+    /**
+     * Wire the Bluetooth-registry flows: KEY_MISSING / BOND_REMOVED stale
+     * bond surfacing (one persistent banner per affected host) and the
+     * registry's one-shot error stream (each error gets its own banner so
+     * the user sees the full context rather than a silent replacement).
+     */
+    private fun observeBluetoothRegistry() {
         // KEY_MISSING / BOND_NONE on a remembered host. BluetoothBondMonitor
         // marks the registry's staleBtIds; we render the banner here so it
         // re-derives from live state on each activity bind instead of
@@ -263,11 +298,6 @@ class ConnectionsActivity : AppCompatActivity() {
                 }
             }
         }
-
-        // Deep-link from MainActivity when an auto-reconnect lands on Stale:
-        // open the PIN dialog directly for that satellite so the user can
-        // re-enter their PIN without scrolling to find the row.
-        handlePairPromptIntent(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -344,7 +374,7 @@ class ConnectionsActivity : AppCompatActivity() {
      *    feedback is current or stale.
      */
     private fun renderEmptyState() {
-        val hasRows = binding.llSatelliteList.childCount > 0
+        val hasRows = binding.llSatelliteList.isNotEmpty()
         if (hasRows) {
             binding.tvSatelliteEmpty.visibility = View.GONE
             return
@@ -527,7 +557,7 @@ class ConnectionsActivity : AppCompatActivity() {
         val deepLink =
             Intent("android.settings.BLUETOOTH_DEVICE_DETAILS_SETTINGS").apply {
                 putExtra("device_address", mac)
-                data = Uri.parse("bt-mac:$mac")
+                data = "bt-mac:$mac".toUri()
             }
         runCatching { startActivity(deepLink) }
             .onFailure { startActivity(fallback) }

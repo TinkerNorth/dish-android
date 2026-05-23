@@ -4,8 +4,7 @@
      the touch-view stack are unchanged. -->
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@color/colorBackground">
+    android:layout_height="match_parent">
 
     <com.tinkernorth.dish.ui.common.GamepadTouchView
         android:id="@+id/gamepadTouchView"
@@ -54,15 +53,12 @@
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnExitGamepad"
-        style="@style/Widget.Dish.Button.Outlined"
+        style="@style/Widget.Dish.Button.Outlined.Overlay"
         android:layout_width="wrap_content"
-        android:layout_height="@dimen/touch_target_min"
         android:layout_gravity="top|end"
         android:layout_marginTop="@dimen/spacing_md"
         android:layout_marginEnd="@dimen/spacing_xl"
-        android:text="@string/overlay_action_back"
-        android:textSize="@dimen/text_label"
-        android:minWidth="@dimen/button_min_width" />
+        android:text="@string/overlay_action_back" />
 
     <!-- Low-power overlays (countdown banner + dim screen). Included last so
          the dim FrameLayout sits on top of the gamepad and consumes the

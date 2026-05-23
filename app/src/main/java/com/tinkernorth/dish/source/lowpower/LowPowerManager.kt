@@ -113,12 +113,13 @@ class LowPowerManager(
         setState(State.COUNTDOWN)
         val v = views ?: return
         v.llCountdownBanner.visibility = View.VISIBLE
-        v.tvCountdownSeconds.text = COUNTDOWN_SECONDS.toString()
+        v.tvCountdownSeconds.text = String.format(Locale.getDefault(), "%d", COUNTDOWN_SECONDS)
         countdownTimer?.cancel()
         countdownTimer =
             object : CountDownTimer(COUNTDOWN_SECONDS * 1000L, 1000L) {
                 override fun onTick(millisUntilFinished: Long) {
-                    v.tvCountdownSeconds.text = ((millisUntilFinished / 1000) + 1).toString()
+                    val secondsRemaining = (millisUntilFinished / 1000) + 1
+                    v.tvCountdownSeconds.text = String.format(Locale.getDefault(), "%d", secondsRemaining)
                 }
 
                 override fun onFinish() {

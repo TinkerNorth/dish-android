@@ -18,27 +18,18 @@
     android:orientation="vertical"
     android:background="@drawable/picker_row_bg">
 
-    <!-- Header: brand glyph + title. -->
-    <LinearLayout
+    <!-- Header: brand glyph (compound drawable) + title. Collapsed from
+         LinearLayout > ImageView + TextView to a single TextView so the
+         picker row carries one fewer view in the RecyclerView item.
+         The glyph drawable is set per-row in
+         ControllerAdapter.bindConnectionHeader(). -->
+    <TextView
+        android:id="@+id/tvPickerTitle"
+        style="@style/TextAppearance.Dish.BodyLarge.Bold"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
-
-        <ImageView
-            android:id="@+id/ivPickerGlyph"
-            android:layout_width="@dimen/icon_picker_glyph"
-            android:layout_height="@dimen/icon_picker_glyph"
-            android:layout_marginEnd="@dimen/spacing_md"
-            android:contentDescription="@null" />
-
-        <TextView
-            android:id="@+id/tvPickerTitle"
-            style="@style/TextAppearance.Dish.BodyLarge.Bold"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1" />
-    </LinearLayout>
+        android:gravity="center_vertical"
+        android:drawablePadding="@dimen/spacing_md" />
 
     <!-- Detail line ("<ip:port> · bound here" / · in use). -->
     <TextView

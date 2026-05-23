@@ -15,8 +15,7 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:gravity="center"
-    android:padding="@dimen/spacing_6xl"
-    android:background="@color/colorBackground">
+    android:padding="@dimen/spacing_6xl">
 
     <TextView
         style="@style/TextAppearance.Dish.Display.Large"

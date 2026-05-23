@@ -125,8 +125,12 @@ class MainActivity :
         binding.tvConnectionsSummary.text =
             when {
                 liveCount == 0 && totalCount == 0 -> getString(R.string.status_tap_manage)
-                liveCount == 0 -> getString(R.string.status_remembered, totalCount)
-                else -> getString(R.string.status_connected_of, liveCount, totalCount)
+                liveCount == 0 -> resources.getQuantityString(R.plurals.status_remembered, totalCount, totalCount)
+                // Quantity is selected on the *total* count (the "of N" number):
+                // "1 of 1 online" is singular, "2 of 5 online" plural — the
+                // positional args are still (liveCount, totalCount) in that
+                // order to match the %1$d / %2$d format slots.
+                else -> resources.getQuantityString(R.plurals.status_connected_of, totalCount, liveCount, totalCount)
             }
         controllerAdapter.submitSlots(
             s.slots,

@@ -11,7 +11,7 @@
         500 = full saturation in the cyan/green/red/amber scales.
       - `<family>_<weight>_a<percent>` for alpha-derived siblings of an
         opaque entry. The value is the same RGB with the alpha byte set
-        from the percent (e.g. `_a40` ≈ 0x66, `_a80` ≈ 0xCC).
+        from the percent (e.g. `_a80` ≈ 0xCC).
 
     What's NOT here:
       - Multi-tone vector drawable artwork (battery glyph, gamepad button
@@ -38,27 +38,19 @@
     <color name="navy_800">#FF0C1027</color>
     <color name="navy_700">#FF131A3A</color>
 
-    <!-- ===== Slate — muted text + secondary chrome. =====
-         _a40 is the 40%-alpha sibling used for disabled affordances. -->
+    <!-- ===== Slate — muted text + secondary chrome. ===== -->
     <color name="slate_300">#FF93A0C8</color>
-    <color name="slate_300_a40">#6693A0C8</color>
 
-    <!-- ===== Paper — high-contrast on-surface text. =====
-         _a40 is the 40%-alpha sibling used for disabled-state text in
-         state-list selectors (see res/color/text_disabled.xml). -->
+    <!-- ===== Paper — high-contrast on-surface text. ===== -->
     <color name="paper_50">#FFE6ECFF</color>
-    <color name="paper_50_a40">#66E6ECFF</color>
 
-    <!-- ===== Severity palette — used for notification rails + status. ===== -->
+    <!-- ===== Severity palette — used for status indicators. ===== -->
     <color name="green_500">#FF22C55E</color>
     <color name="red_500">#FFE74C3C</color>
     <color name="amber_500">#FFF59E0B</color>
 
-    <!-- ===== Absolutes + scrim. =====
-         ink_900 is pure black; ink_900_a80 is the full-screen dim used in
-         low-power mode (≈80% alpha). paper_pure is opaque white, kept for
-         legacy `@color/white` references. -->
-    <color name="ink_900">#FF000000</color>
+    <!-- ===== Scrim. =====
+         ink_900_a80 is the full-screen dim used in low-power mode
+         (black at ≈80% alpha). -->
     <color name="ink_900_a80">#CC000000</color>
-    <color name="paper_pure">#FFFFFFFF</color>
 </resources>

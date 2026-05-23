@@ -4,6 +4,7 @@
 package com.tinkernorth.dish.source.connection
 
 import android.content.Context
+import androidx.core.content.edit
 import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.core.jni.ControllerRepository
 import com.tinkernorth.dish.core.model.ConnectResponse
@@ -583,7 +584,7 @@ class SatelliteConnectionManager
                 .randomUUID()
                 .toString()
                 .replace("-", "")
-                .also { p.edit().putString("deviceId", it).apply() }
+                .also { p.edit { putString("deviceId", it) } }
         }
 
         /**
@@ -599,7 +600,7 @@ class SatelliteConnectionManager
             val legacyPrefs = context.getSharedPreferences(LEGACY_PREFS, Context.MODE_PRIVATE)
             val legacy = legacyPrefs.getString(LEGACY_KEY_SHARED, null) ?: return null
             store.setSatelliteSharedKey(id, legacy)
-            legacyPrefs.edit().remove(LEGACY_KEY_SHARED).apply()
+            legacyPrefs.edit { remove(LEGACY_KEY_SHARED) }
             return legacy
         }
 

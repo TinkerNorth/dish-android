@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/cardRoot"
     style="@style/Widget.Dish.Card"
     android:layout_width="match_parent"
@@ -26,6 +25,7 @@
                 android:layout_width="@dimen/icon_controller"
                 android:layout_height="@dimen/icon_controller"
                 android:src="@drawable/ic_gamepad"
+                android:importantForAccessibility="no"
                 app:tint="@color/colorPrimary" />
 
             <LinearLayout
@@ -48,36 +48,23 @@
                     android:layout_height="wrap_content" />
             </LinearLayout>
 
-            <!-- ── Battery indicator (Task 1.2): icon + percentage ── -->
-            <LinearLayout
-                android:id="@+id/llBattery"
+            <!-- ── Battery indicator (Task 1.2): icon + percentage ──
+                 Collapsed to a single TextView with a leading compound
+                 drawable (perf: avoids an ImageView+LinearLayout in a
+                 RecyclerView item). The drawable is swapped per state and
+                 the contentDescription is set dynamically in
+                 ControllerAdapter.bindBattery(); no tint is applied — the
+                 battery glyphs are intentionally two-tone (teal hull +
+                 white overlay) and a flat tint would collapse the overlay. -->
+            <TextView
+                android:id="@+id/tvBattery"
+                style="@style/TextAppearance.Dish.BodySmall"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="@dimen/spacing_lg"
-                android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:visibility="gone">
-
-                <!-- contentDescription is set dynamically in ControllerAdapter
-                     (level + charging state) so screen readers announce the
-                     actual value; tools:ignore silences the static-text lint. -->
-                <!-- No tint: the battery glyphs are intentionally two-tone
-                     (teal hull + white overlay). bindBattery() swaps in the
-                     charge-ladder rung; only the percentage text goes red. -->
-                <ImageView
-                    android:id="@+id/ivBattery"
-                    android:layout_width="@dimen/icon_battery"
-                    android:layout_height="@dimen/icon_battery"
-                    android:src="@drawable/ic_battery"
-                    tools:ignore="ContentDescription" />
-
-                <TextView
-                    android:id="@+id/tvBattery"
-                    style="@style/TextAppearance.Dish.BodySmall"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="@dimen/size_3" />
-            </LinearLayout>
+                android:drawablePadding="@dimen/size_3"
+                android:visibility="gone" />
 
             <!-- v6 brand connection-target glyph. Mirrors the row this slot
                  is bound to over on activity_connections.xml — a satellite

@@ -4,10 +4,10 @@
 package com.tinkernorth.dish.ui.settings
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.text.TextUtils
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -121,7 +121,7 @@ class SettingsActivity : AppCompatActivity() {
      *  a stripped-down device with no browser installed). */
     private fun openExternalUrl(url: String) {
         val intent =
-            Intent(Intent.ACTION_VIEW, Uri.parse(url))
+            Intent(Intent.ACTION_VIEW, url.toUri())
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         runCatching { startActivity(intent) }
             .onFailure {

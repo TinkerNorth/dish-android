@@ -1,0 +1,46 @@
+<!-- Monochrome launcher layer for Android 13+ themed icons.
+     Single-color silhouette of the TinkerNorth dish glyph; the system
+     applies the user's accent tint at render time, so the fill MUST be
+     opaque black and no other colors / alpha overlays should appear.
+     Geometry mirrors drawable/ic_dish.xml, scaled into the adaptive-icon
+     108dp viewport with the brand dish centered inside the ~66dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Translate + scale the 64-unit dish glyph into the 108-unit
+         adaptive-icon viewport: scale 0.9 (~58 units) centered at (54,54). -->
+    <group
+        android:translateX="25.2"
+        android:translateY="25.2"
+        android:scaleX="0.9"
+        android:scaleY="0.9">
+        <!-- base plate -->
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="M15,56 H49 A1,1 0 0 1 50,57 V59 A1,1 0 0 1 49,60 H15 A1,1 0 0 1 14,59 V57 A1,1 0 0 1 15,56 Z" />
+        <!-- pole -->
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="M30,42 H34 V56 H30 Z" />
+        <!-- reflector group, tilted -28° around (32,28) -->
+        <group
+            android:pivotX="32"
+            android:pivotY="28"
+            android:rotation="-28">
+            <!-- outer dish -->
+            <path
+                android:fillColor="#FF000000"
+                android:pathData="M8,28 A24,8 0 1 0 56,28 A24,8 0 1 0 8,28 Z" />
+            <!-- feed horn -->
+            <path
+                android:fillColor="#FF000000"
+                android:pathData="M29,28 A3,3 0 1 0 35,28 A3,3 0 1 0 29,28 Z" />
+            <!-- mast -->
+            <path
+                android:fillColor="#FF000000"
+                android:pathData="M30,14 H34 V28 H30 Z" />
+        </group>
+    </group>
+</vector>

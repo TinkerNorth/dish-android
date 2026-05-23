@@ -4,27 +4,22 @@
     rhythm they create. Use these from XML (`android:duration="@integer/…"`)
     and from Kotlin (`context.resources.getInteger(R.integer.…).toLong()`).
 
-    Speed scale (use these for ordinary UI transitions):
-      - instant — barely-perceived flicker (chip press feedback, ripples).
-      - short   — local affordance fades (button state, tooltip fade).
-      - medium  — Snackbar reveal, dialog enter/exit, screen-element move.
-      - long    — meaningful narrative animations (onboarding pulses).
-
     Named (off-scale, tied to a specific asset's design rhythm):
-      - spinner — loop period for DishLoaders' spinner + dots drawables.
-      - bar     — loop period for DishLoaders' bar drawable (intentionally
-                  longer than the spinner to read as a different cadence).
-      - battery — full fill ramp of the charging-battery animated vector.
+      - spinner    — loop period for DishLoaders' spinner + dots drawables.
+      - bar        — loop period for DishLoaders' bar drawable (intentionally
+                     longer than the spinner to read as a different cadence).
+      - battery    — full fill ramp of the charging-battery animated vector.
+      - bolt_pulse — independent sinusoidal opacity loop on the bolt overlay
+                     of the charging-battery animated vector.
+
+    The canonical UI speed scale (instant / short / medium / long) was
+    removed in the post-Phase-4 cleanup — no animation in the app currently
+    rides on it. Re-introduce when a transition needs to pin to a shared
+    rhythm (see DESIGN_SYSTEM.md "When to add a new token").
 -->
 <resources>
-    <!-- Speed scale -->
-    <integer name="motion_duration_instant">75</integer>
-    <integer name="motion_duration_short">150</integer>
-    <integer name="motion_duration_medium">300</integer>
-    <integer name="motion_duration_long">500</integer>
-
-    <!-- Named, asset-specific -->
     <integer name="motion_duration_spinner">1200</integer>
     <integer name="motion_duration_bar">1400</integer>
     <integer name="motion_duration_battery">3600</integer>
+    <integer name="motion_duration_bolt_pulse">750</integer>
 </resources>

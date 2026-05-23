@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Ease-out — fast start, slow finish. Cubic-bezier(0.0, 0.0, 0.2, 1.0).
-     Use when an element is entering from off-screen and settling into
-     place: the fast start telegraphs the arrival, the slow finish lands
-     it gently. Not the default — see dish_ease_standard. -->
-<pathInterpolator xmlns:android="http://schemas.android.com/apk/res/android"
-    android:pathData="M 0.0,0.0 C 0.0,0.0 0.2,1.0 1.0,1.0" />

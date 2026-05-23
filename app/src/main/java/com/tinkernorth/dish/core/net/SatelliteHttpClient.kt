@@ -54,10 +54,19 @@ internal object SatelliteHttpClient {
      * SSL socket factory that trusts every certificate. Built once and reused
      * — constructing an [SSLContext] per request is needless work and would
      * defeat connection pooling.
+     *
+     * The `@Suppress("CustomX509TrustManager")` is intentional and matches the
+     * KDoc on this object: the satellite presents a self-signed cert over a
+     * user-discovered LAN IP, so there is no CA chain to validate or hostname
+     * to pin. The UDP gamepad channel layers its own ChaCha20-Poly1305
+     * authentication on top, so a MITM on this HTTPS channel cannot forge
+     * input. Removing this trust manager would break the documented design.
      */
+    @Suppress("CustomX509TrustManager")
     private val insecureSocketFactory by lazy {
         val trustAll =
             arrayOf<TrustManager>(
+                @Suppress("TrustAllX509TrustManager")
                 object : X509TrustManager {
                     override fun checkClientTrusted(
                         chain: Array<out X509Certificate>?,

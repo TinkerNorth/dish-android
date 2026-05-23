@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Per-slot motion (gyro) on/off row inside the expanded controller card.
-     Label column on the left (title + dynamic subtitle), SwitchCompat on the
+     Label column on the left (title + dynamic subtitle), SwitchMaterial on the
      right. The adapter binds tvMotionSubtitle to whichever motion-capability
      state-derived string applies (no gyro / no host sink / on / off) and
      disables swMotion when the limit is hardware/host-side (not user-fixable
@@ -32,8 +32,9 @@
             android:layout_height="wrap_content" />
     </LinearLayout>
 
-    <androidx.appcompat.widget.SwitchCompat
+    <com.google.android.material.switchmaterial.SwitchMaterial
         android:id="@+id/swMotion"
+        style="@style/Widget.Dish.Switch"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center_vertical" />

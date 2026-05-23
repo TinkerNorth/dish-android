@@ -150,10 +150,25 @@ class TouchpadSurfaceView
                     val pointerId = event.getPointerId(index)
                     releaseSlot(pointerId)
                     updateButton(event)
+                    // ACTION_UP completing a tap also represents a "click" for
+                    // accessibility — invoke performClick so screen-reader
+                    // gestures (double-tap on TalkBack) reach any registered
+                    // OnClickListener. Returning the original `true` keeps the
+                    // existing gesture path unchanged.
+                    if (event.actionMasked == MotionEvent.ACTION_UP) performClick()
                     emit()
                 }
                 else -> return false
             }
+            return true
+        }
+
+        override fun performClick(): Boolean {
+            // The touchpad has no host-defined click action — touches are
+            // streamed as samples. Honour the contract anyway so accessibility
+            // services and any future OnClickListener attached by callers fire
+            // through the standard path.
+            super.performClick()
             return true
         }
 

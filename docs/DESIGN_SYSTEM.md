@@ -18,8 +18,8 @@ Two layers, every time:
 1. **Primitives** — raw values (hex, dp, sp, ms). Lives in `*_primitives.xml`.
    Never referenced directly from layouts, drawables, or Kotlin.
 2. **Semantic** — names by role (`colorPrimary`, `spacing_md`, `card_padding`,
-   `corner_card`, `text_label`, `elevation_floating`, `motion_duration_short`).
-   The only names callsites use.
+   `corner_card`, `text_label`, `elevation_floating`,
+   `motion_duration_spinner`). The only names callsites use.
 
 Why the indirection: a future redesign that wants `spacing_md` to be 12dp
 instead of 8dp repoints the semantic name to a different primitive without
@@ -46,15 +46,11 @@ token.
 | `navy_800` | `#FF0C1027` | elevated surface (cards, dialogs) |
 | `navy_700` | `#FF131A3A` | empty-state surface variant |
 | `slate_300` | `#FF93A0C8` | muted text + secondary chrome |
-| `slate_300_a40` | `#6693A0C8` | 40% alpha — disabled affordances |
 | `paper_50` | `#FFE6ECFF` | high-contrast on-surface text |
-| `paper_50_a40` | `#66E6ECFF` | 40% alpha — disabled-state text |
 | `green_500` | `#FF22C55E` | success severity |
 | `red_500` | `#FFE74C3C` | error severity |
 | `amber_500` | `#FFF59E0B` | warning severity |
-| `ink_900` | `#FF000000` | pure black |
 | `ink_900_a80` | `#CC000000` | ~80% alpha scrim |
-| `paper_pure` | `#FFFFFFFF` | opaque white |
 
 **Semantic** (what layouts and Kotlin reference):
 
@@ -73,10 +69,7 @@ token.
 | `colorSurfaceTint` | `signal_cyan_100` | subtle fills (6%) |
 | `colorSurfaceDim` | `navy_700` | empty-state surfaces |
 | `colorSuccess` / `colorError` / `colorWarning` | severity primitives | status |
-| `colorRail_info / _success / _warn / _error` | severity primitives | notification leading-rail |
-| `colorDisabled` | `slate_300_a40` | disabled icons + chips |
 | `colorOverlayScrim` | `ink_900_a80` | low-power dim |
-| `black` / `white` | `ink_900` / `paper_pure` | absolutes |
 
 ### State-list colors → `values/colors_state.xml` + `color/*.xml`
 
@@ -86,15 +79,12 @@ values file holds the registry index + any state-list-only semantic aliases.
 | Selector (`res/color/`) | Default → State |
 |---|---|
 | `chip_pickable_text.xml` | `colorOnSurface` → `state_selected` `colorOnPrimary` |
-| `text_disabled.xml` | `colorOnSurface` → `state_enabled=false` `colorTextDisabled` |
-| `icon_interactive.xml` | `colorPrimary` → `state_enabled=false` `colorMuted` |
 | `icon_secondary.xml` | always `colorMuted` (selector-shaped for naming clarity) |
 
-**State-list aliases** in `values/colors_state.xml`:
-
-- `colorTextDisabled` → `paper_50_a40` (the on-surface tone at 40% alpha that
-  `text_disabled.xml` uses; aliased so a future "subdued caption" surface
-  reaches the same token).
+Disabled-state selectors (`text_disabled.xml` / `icon_interactive.xml`) are
+intentionally absent — they were dropped in the post-Phase-4 cleanup. Add
+them back the first time a layout actually needs to toggle `isEnabled` on a
+text/icon view (the recipe is a one-line `<selector>` in `res/color/`).
 
 ### Spacing / sizing → `values/dimens_primitives.xml` + `values/dimens.xml`
 
@@ -111,27 +101,30 @@ values file holds the registry index + any state-list-only semantic aliases.
 | Group | Names |
 |---|---|
 | spacing T-shirt scale | `spacing_xs` (4) → `spacing_6xl` (24) in 10 steps |
-| strokes + corners | `border_thin`, `border_rail`, `divider_height`, `corner_chip`, `corner_picker_row`, `corner_button`, `corner_card`, `corner_notification`, `corner_pill` |
-| icon sizes | `icon_dot[_lg]`, `icon_battery`, `icon_picker_glyph`, `icon_brand[_sm]`, `icon_section_header`, `icon_card_container`, `icon_card_glyph`, `icon_action`, `icon_row_glyph`, `icon_controller`, `icon_chevron_lg`, `icon_settings_button`, `icon_top_bar_size` |
+| strokes + corners | `border_thin`, `divider_height`, `corner_chip`, `corner_picker_row`, `corner_button`, `corner_card`, `corner_notification`, `corner_pill` |
+| icon sizes | `icon_dot[_lg]`, `icon_battery`, `icon_picker_glyph`, `icon_brand_sm`, `icon_section_header`, `icon_card_container`, `icon_card_glyph`, `icon_action`, `icon_row_glyph`, `icon_controller`, `icon_chevron_lg`, `icon_settings_button` |
 | touch targets | `touch_target_min`, `button_min_width` |
 | card | `card_padding[_horizontal/_bottom]`, `card_margin_bottom` |
 | inline picker row | `picker_row_padding`, `picker_row_margin_top`, `picker_section_margin_top`, `picker_section_padding_bottom`, `picker_label_margin_end` |
 | chip | `chip_padding_horizontal/_vertical`, `chip_margin_end` |
 | dialog / overlay | `dialog_inline_max_width` |
-| notification | `notification_corner_radius`, `notification_rail_width`, `notification_elevation`, `notification_padding_horizontal/_vertical`, `notification_text_leading_indent`, `notification_text_title/_body/_action` |
+| notification | `notification_rail_width`, `notification_elevation`, `notification_padding_horizontal/_vertical`, `notification_text_leading_indent`, `notification_text_title/_body/_action` |
 | text sizes (role-named sp) | `text_caption` (10) → `text_hero` (64) — see `text_appearance.xml` for the canonical mapping into TextAppearance styles |
 
 ### Elevation → `values/elevations.xml`
 
-Four resting heights. Layouts and styles reference these instead of raw dp
+Two resting heights. Layouts and styles reference these instead of raw dp
 values so a global shadow-depth adjustment is one file.
 
 | Token | Value | Use |
 |---|---|---|
 | `elevation_none` | 0dp | flat surfaces (cards on a page, list rows) |
-| `elevation_raised` | 2dp | subtle lift |
 | `elevation_floating` | 6dp | Snackbars, FABs (`notification_elevation` aliases this) |
-| `elevation_modal` | 12dp | dialogs, sheets |
+
+`elevation_raised` (2dp) and `elevation_modal` (12dp) used to exist but
+were dropped in the post-Phase-4 cleanup — no current callsite needed
+them. Re-introduce when a surface needs to pin to the canonical scale
+(see "When to add a new token").
 
 ### Motion → `values/motion.xml` + `interpolator/*.xml`
 
@@ -141,25 +134,27 @@ values so a global shadow-depth adjustment is one file.
 
 | Token | Value | Use |
 |---|---|---|
-| `motion_duration_instant` | 75 ms | chip press feedback, ripples |
-| `motion_duration_short` | 150 ms | button state, tooltip fade |
-| `motion_duration_medium` | 300 ms | Snackbar reveal, dialog enter/exit |
-| `motion_duration_long` | 500 ms | onboarding pulses |
 | `motion_duration_spinner` | 1200 ms | DishLoaders spinner + dots loop |
 | `motion_duration_bar` | 1400 ms | DishLoaders bar loop (intentional different cadence) |
 | `motion_duration_battery` | 3600 ms | charging-battery AVD full ramp |
+| `motion_duration_bolt_pulse` | 750 ms | charging-battery bolt sinusoidal opacity loop |
 
-The bottom three are **named, off-scale** — tied to a specific asset's design
-rhythm. Don't repurpose them for other UI.
+These tokens are **named, off-scale** — each tied to a specific asset's
+design rhythm. The canonical UI speed scale (instant / short / medium /
+long) was dropped in the post-Phase-4 cleanup because no animation in the
+app currently rides on it. Re-introduce when a new transition needs to pin
+to a shared rhythm (see "When to add a new token").
 
 **Interpolators** (referenceable from AVDs + ObjectAnimators):
 
 | File | Curve | Use |
 |---|---|---|
-| `dish_ease_standard.xml` | cubic-bezier(0.4, 0.0, 0.2, 1.0) | default UI transitions |
-| `dish_ease_in.xml` | cubic-bezier(0.4, 0.0, 1.0, 1.0) | element exit (slow start, fast finish) |
-| `dish_ease_out.xml` | cubic-bezier(0.0, 0.0, 0.2, 1.0) | element entry (fast start, slow finish) |
-| `dish_ease_linear.xml` | identity (linear) | indeterminate loops |
+| `dish_ease_standard.xml` | cubic-bezier(0.4, 0.0, 0.2, 1.0) | default UI transitions (used by `ic_battery_charging` bolt-pulse loop) |
+
+The `dish_ease_in.xml` / `dish_ease_out.xml` / `dish_ease_linear.xml`
+interpolators were dropped in the post-Phase-4 cleanup — no animation
+consumes them today. Re-introduce when an AVD or ObjectAnimator needs
+a curve other than the standard easing.
 
 ### Typography → `values/text_appearance.xml`
 
@@ -226,7 +221,6 @@ wires `materialButtonStyle = Widget.Dish.Button` as the global default):
 | Style | Parent | Adds | When to use |
 |---|---|---|---|
 | `Widget.Dish.Card` | `Widget.MaterialComponents.CardView` | `colorSurface` bg, `corner_card` radius, `elevation_none`, `colorCardStroke` stroke (`border_thin`) | every `MaterialCardView` in the app |
-| `Widget.Dish.Card.Telemetry` | (inherits Card) | `corner_picker_row` radius override | telemetry card inside the slot's expanded body (matches the picker-row geometry next to it) |
 | `Widget.Dish.Toolbar` | `Widget.MaterialComponents.Toolbar` | `colorBackground` bg, `colorOnSurface` title, `ic_chevron_left` nav icon, action-bar height | both Activity toolbars (Settings + Connections) |
 | `Widget.Dish.StatusDot.Small` | `""` | `icon_dot` size + `dot_circle` background | overlay status indicators |
 | `Widget.Dish.StatusDot.Large` | `""` | `icon_dot_lg` size + `dot_circle` background | slot-card / row status indicators |
@@ -305,6 +299,12 @@ loop) is a bigger interface than these three pieces centralise.
 4. Always primitive **then** semantic. Never reference a primitive from a
    callsite — the indirection is what lets a future redesign repoint without
    renaming.
+5. **Disabled-state selectors are added when first needed**, not pre-baked.
+   A `text_disabled.xml` / `icon_interactive.xml` selector lives in
+   `res/color/` only when a real layout toggles `isEnabled` on a view it
+   would catch. The same rule covers any other state-list resource:
+   carry the cost of the selector + its alpha-primitive only after a
+   callsite exists to consume it.
 
 ### When to add a new style
 
@@ -385,13 +385,15 @@ A new TextView in the app:
   carry a `tools:targetApi` annotation), so callsites apply them inline next
   to `tools:targetApi="26"`. See `Widget.Dish.EditText.Pin`'s callsite in
   `dialog_pair_pin.xml`.
-- **Per-callsite state-list adoptions for never-disabled views**. The
-  `text_disabled.xml` / `icon_interactive.xml` selectors are kept in
-  `res/color/` as opt-in tokens. Layout sites adopt them only when Kotlin
-  actually toggles `isEnabled` on the view; static branding glyphs and
-  overlay-contrast text keep their literal colors. The chevron in
-  `item_controller.xml` adopts `icon_secondary` (always-muted) for naming
-  clarity even though the value is the same as inline `colorMuted`.
+- **Pre-baked disabled-state selectors**. The `text_disabled.xml` /
+  `icon_interactive.xml` opt-in selectors were dropped in the post-Phase-4
+  cleanup — nothing in the app currently toggles `isEnabled` on a text or
+  icon view in a way the selectors would catch. Re-add them when the first
+  real callsite needs the fade (one-line `<selector>` in `res/color/` plus
+  the alpha primitive + `colorTextDisabled` alias if the selector reaches
+  for one). The chevron in `item_controller.xml` adopts `icon_secondary`
+  (always-muted) for naming clarity even though the value is the same as
+  inline `colorMuted`.
 - **`scaffold_toolbar_scroll.xml`**. The Phase 4 spec offered this as a
   deferred composite shared between Settings and Connections. Their bodies
   have diverged enough — Connections has an inter-section divider + a

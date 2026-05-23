@@ -3,12 +3,17 @@
 
     <!-- MainActivity kontrolna tabla. Rječnik prati LinkState čipove:
          zapamćeni/upareni unos je „uparen"; Connected unos je „na vezi". -->
-    <string name="status_remembered">%1$d upareno</string>
+    <plurals name="status_remembered">
+        <item quantity="one">%1$d uparen</item>
+        <item quantity="few">%1$d uparena</item>
+        <item quantity="other">%1$d uparenih</item>
+    </plurals>
     <string name="status_tap_manage">Dodirnite Upravljanje da dodate vezu</string>
-    <string name="status_connected_of">%1$d od %2$d na vezi</string>
-    <string name="toast_pairing_needed">Potrebno uparivanje — otvorite Veze</string>
-    <string name="toast_bind_first">Prvo povežite jednu vezu</string>
-
+    <plurals name="status_connected_of">
+        <item quantity="one">%1$d od %2$d na vezi</item>
+        <item quantity="few">%1$d od %2$d na vezi</item>
+        <item quantity="other">%1$d od %2$d na vezi</item>
+    </plurals>
     <!-- Hrom kontrolne table (activity_main.xml). -->
     <string name="section_connections">VEZE</string>
     <string name="section_controllers">KONTROLERI</string>
@@ -60,7 +65,6 @@
     <string name="action_open_gamepad">Otvori kontroler</string>
     <string name="desc_open_gamepad">Otvori kontroler</string>
     <string name="action_open_touchpad">Otvori dodirnu ploču</string>
-    <string name="desc_open_touchpad">Otvori dodirnu ploču</string>
     <string name="desc_expand">Proširi</string>
 
     <!-- Birač režima dodirne ploče. -->
@@ -83,6 +87,7 @@
     <!-- Redovi izbora po slotu u ControllerAdapter. -->
     <string name="picker_empty_no_connections">Još nema veza — dodirnite Upravljanje iznad</string>
     <string name="picker_empty_no_available">Trenutno nema dostupnih veza</string>
+    <string name="picker_title_with_status">%1$s%2$s</string>
     <string name="picker_status_online"> • na vezi</string>
     <string name="picker_status_connecting"> • povezivanje…</string>
     <string name="picker_status_offline"> • van veze</string>
@@ -164,10 +169,7 @@
     <!-- Oznake akcija Dish obavještenja. -->
     <string name="action_open_settings">PODEŠAVANJA</string>
     <string name="action_retry">POKUŠAJ PONOVO</string>
-    <string name="action_reconnect">PONOVO POVEŽI</string>
-    <string name="action_repair">PONOVO UPARI</string>
     <string name="action_open">OTVORI</string>
-    <string name="action_forget">ZABORAVI</string>
     <string name="action_turn_on">UKLJUČI</string>
     <string name="action_grant">DOZVOLI</string>
 
@@ -192,11 +194,6 @@
     <string name="notif_pairing_needed_title">Potrebno uparivanje</string>
     <string name="notif_pairing_needed_body">Otvorite Veze da unesete PIN za %1$s.</string>
     <string name="notif_server_unreachable_title">%1$s ne odgovara</string>
-    <string name="notif_server_unreachable_body">Provjerite da je uključen i na istom Wi-Fi-u.</string>
-    <string name="notif_registration_failed_title">Registracija kontrolera nije uspjela</string>
-    <string name="notif_pair_pin_failed_title">PIN se ne poklapa</string>
-    <string name="notif_session_lost_title">Veza sa %1$s je izgubljena</string>
-    <string name="notif_session_lost_body">Ponovno povezivanje…</string>
 
     <!-- Dinamičko prazno stanje liste satelita. -->
     <string name="discovery_empty_never_scanned">Dodirnite Skeniraj da pronađete satelite na vašoj mreži</string>
@@ -207,7 +204,6 @@
     <string name="pair_dialog_subtitle">Unesite PIN prikazan na satelitu.</string>
     <string name="pair_dialog_pin_hint">PIN</string>
     <string name="pair_dialog_submit">UPARI</string>
-    <string name="pair_dialog_cancel">OTKAŽI</string>
     <string name="pair_dialog_pairing">UPARIVANJE…</string>
     <string name="pair_dialog_error_empty">Unesite PIN prikazan na satelitu.</string>
 
@@ -215,8 +211,11 @@
     <string name="streaming_channel_name">Sesija strimanja</string>
     <string name="streaming_channel_description">Drži Dish aktivnim dok kontroler strima.</string>
     <string name="streaming_notification_title">Dish · Striming</string>
-    <string name="streaming_notification_body">%1$d kontroler strima na %2$s</string>
-    <string name="streaming_notification_body_plural">%1$d kontrolera strima</string>
+    <plurals name="streaming_notification_body">
+        <item quantity="one">%1$d kontroler strima na %2$s</item>
+        <item quantity="few">%1$d kontrolera strimaju na %2$s</item>
+        <item quantity="other">%1$d kontrolera strima na %2$s</item>
+    </plurals>
     <string name="streaming_notification_stop">Zaustavi</string>
 
     <!-- Rezervni ekran kada nativno učitavanje ne uspije. -->
@@ -236,10 +235,6 @@
         <item quantity="few">Vezano · %1$d kontrolera</item>
         <item quantity="other">Vezano · %1$d kontrolera</item>
     </plurals>
-
-    <!-- Stringovi naslijeđeni iz starog izgleda uparivanja. -->
-    <string name="pairing_dialog_legacy_title">Upari sa serverom</string>
-    <string name="pairing_dialog_legacy_message">Unesite PIN prikazan na ekranu vašeg računara:</string>
 
     <!-- Link na politiku privatnosti (u Postavkama) i zajednička poruka greške. -->
     <string name="menu_privacy_policy">Politika privatnosti</string>
