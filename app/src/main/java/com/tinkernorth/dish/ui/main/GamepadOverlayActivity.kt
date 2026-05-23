@@ -97,13 +97,9 @@ class GamepadOverlayActivity :
 
         binding.gamepadTouchView.listener = this
         binding.gamepadTouchView.usePlayStation = intent.getBooleanExtra(EXTRA_USE_PS_LAYOUT, false)
-        binding.dotOverlay.background =
-            GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(getColor(R.color.colorMuted))
-            }
-        binding.dotMotion.background =
-            GradientDrawable().apply { shape = GradientDrawable.OVAL }
+        // Both dotOverlay and dotMotion declare `background="@drawable/dot_circle"`
+        // in activity_gamepad_overlay.xml — the colour is mutated at runtime via
+        // (view.background as GradientDrawable).setColor(...).
         binding.btnExitGamepad.setOnClickListener { finish() }
 
         val sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager

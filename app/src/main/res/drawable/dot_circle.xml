@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Solid-fill oval used as the background for every small status indicator
+     dot on the dashboard, overlay activities, and connections list. The
+     paint colour is set at runtime via `(view.background as GradientDrawable)
+     .setColor(...)`; pinning the shape here lets the layout XML reference
+     it once and drops the hand-rolled GradientDrawable construction from
+     every Activity / ViewHolder. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="@color/colorMuted" />
+</shape>

@@ -43,7 +43,8 @@
                     android:id="@+id/dotRow"
                     android:layout_width="8dp"
                     android:layout_height="8dp"
-                    android:layout_gravity="bottom|end" />
+                    android:layout_gravity="bottom|end"
+                    android:background="@drawable/dot_circle" />
             </FrameLayout>
 
             <LinearLayout

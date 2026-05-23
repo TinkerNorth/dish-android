@@ -520,7 +520,8 @@ class ConnectionsActivity : AppCompatActivity() {
         rb.tvRowTitle.text = title
         rb.tvRowDetail.text = detail
         rb.tvRowStatus.text = status
-        rb.dotRow.background = GradientDrawable().apply { shape = GradientDrawable.OVAL }
+        // dotRow's oval shape comes from `background="@drawable/dot_circle"`
+        // in row_connection.xml — only the colour is mutated at runtime.
         (rb.dotRow.background as GradientDrawable).setColor(getColor(dotColorForState(state)))
         rb.ivRowGlyph.setImageResource(glyphForConnection(kind, state))
         return rb

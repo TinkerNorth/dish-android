@@ -35,7 +35,8 @@
                 android:id="@+id/dotTouchpadOverlay"
                 android:layout_width="6dp"
                 android:layout_height="6dp"
-                android:layout_marginEnd="8dp" />
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/dot_circle" />
 
             <TextView
                 android:id="@+id/tvTouchpadOverlayStatus"

@@ -76,13 +76,10 @@ class TouchpadOverlayActivity :
         installBaseScaffolding()
         slotId = intent.getStringExtra(EXTRA_SLOT_ID) ?: VIRTUAL_SLOT_ID
 
-        // Status pill — same shape as the gamepad overlay's connection chip,
-        // painted on every connection-summary emission via the base's hook.
-        binding.dotTouchpadOverlay.background =
-            GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(getColor(R.color.colorMuted))
-            }
+        // Status pill — `dotTouchpadOverlay` declares
+        // `background="@drawable/dot_circle"` in the layout; the colour is
+        // mutated at runtime via the GradientDrawable cast below in
+        // onConnectionSummaryChanged.
         binding.btnExitTouchpad.setOnClickListener { finish() }
 
         // Apply the user-picked mode to the surface — purely visual; the
