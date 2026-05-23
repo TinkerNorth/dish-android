@@ -118,7 +118,7 @@
                 android:layout_marginStart="@dimen/spacing_sm"
                 android:src="@drawable/ic_chevron_down"
                 android:contentDescription="@string/desc_expand"
-                app:tint="@color/colorMuted" />
+                app:tint="@color/icon_secondary" />
         </LinearLayout>
 
         <!-- ── Expandable body: bind-to-connection picker + actions ── -->
