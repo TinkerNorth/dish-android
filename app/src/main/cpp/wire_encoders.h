@@ -64,7 +64,7 @@ inline void encodeBatteryPayload(uint8_t out[3], uint8_t ctrlIdx, uint8_t level,
     out[2] = status;
 }
 
-// MSG_TOUCHPAD (0x000C) inner payload — 12 bytes total (after the 2-byte
+// MSG_TOUCHPAD (0x000C) inner payload — 16 bytes total (after the 2-byte
 // outer msgType/msgLen header; this encoder fills the inner bytes that ride
 // inside MSG_TOUCHPAD).
 //
@@ -79,9 +79,23 @@ inline void encodeBatteryPayload(uint8_t out[3], uint8_t ctrlIdx, uint8_t level,
 //   [7]      finger1_trackingId (u8)
 //   [8..9]   finger1_x (i16 LE)
 //   [10..11] finger1_y (i16 LE)
-inline void encodeTouchpadPayload(uint8_t out[12], uint8_t ctrlIdx, bool f0Active, bool f1Active,
+//   [12..15] eventTimeMs (u32 LE)      Android MotionEvent.getEventTime()
+//                                       truncated to u32. The satellite computes
+//                                       dt between consecutive samples and
+//                                       scales the relative-mouse delta by
+//                                       REFERENCE_MS / dt so cursor velocity is
+//                                       proportional to finger velocity even
+//                                       when Android delivers the first MOVE
+//                                       event after a full input-frame batch
+//                                       (~16 ms on 60 Hz, the "first-touch
+//                                       jump" cause). Same role as
+//                                       MSG_MOTION's timestampDeltaUs field.
+//                                       Resends carry the SAME eventTimeMs as
+//                                       the last position change (dt==0 →
+//                                       receiver treats as duplicate, dx=0).
+inline void encodeTouchpadPayload(uint8_t out[16], uint8_t ctrlIdx, bool f0Active, bool f1Active,
                                   bool buttonPressed, uint8_t f0Id, int16_t f0x, int16_t f0y,
-                                  uint8_t f1Id, int16_t f1x, int16_t f1y) {
+                                  uint8_t f1Id, int16_t f1x, int16_t f1y, uint32_t eventTimeMs) {
     out[0] = ctrlIdx;
     uint8_t flags = 0;
     if (f0Active) flags |= 0x01;
@@ -94,6 +108,7 @@ inline void encodeTouchpadPayload(uint8_t out[12], uint8_t ctrlIdx, bool f0Activ
     out[7] = f1Id;
     putLE16(out + 8, static_cast<uint16_t>(f1x));
     putLE16(out + 10, static_cast<uint16_t>(f1y));
+    putLE32(out + 12, eventTimeMs);
 }
 
 // MSG_LIGHTBAR (0x000D) inner payload — 4 bytes, satellite → sender.

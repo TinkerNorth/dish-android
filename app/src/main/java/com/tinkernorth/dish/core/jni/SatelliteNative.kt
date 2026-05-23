@@ -177,6 +177,7 @@ object SatelliteNative {
         finger1TrackingId: Int,
         finger1X: Short,
         finger1Y: Short,
+        eventTimeMs: Long,
     )
 
     // ── Heartbeat ───────────────────────────────────────────────────────────

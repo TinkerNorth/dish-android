@@ -166,6 +166,7 @@ class ControllerRepository
             finger1TrackingId: Int,
             finger1X: Short,
             finger1Y: Short,
+            eventTimeMs: Long,
         ) {
             SatelliteNative.sendTouchpad(
                 handle,
@@ -179,6 +180,7 @@ class ControllerRepository
                 finger1TrackingId,
                 finger1X,
                 finger1Y,
+                eventTimeMs,
             )
         }
 

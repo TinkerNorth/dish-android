@@ -261,3 +261,15 @@ tasks.register<Exec>("nativeTest") {
 tasks.named("check") {
     dependsOn("nativeTest")
 }
+
+// ── JVM heap for unit-test workers ─────────────────────────────────────────
+// The default Gradle test worker runs at -Xmx512m, which is too tight for
+// the heavier MockK-based suites (SatelliteConnectionTest in particular
+// allocates enough reflection-cached metadata to OOM the worker partway
+// through the full suite, even though every test passes individually).
+// Bumping to 2g covers comfortably; matches the daemon heap from
+// gradle.properties so we don't accidentally starve the daemon when both
+// run in the same machine session.
+tasks.withType<Test>().configureEach {
+    maxHeapSize = "2g"
+}

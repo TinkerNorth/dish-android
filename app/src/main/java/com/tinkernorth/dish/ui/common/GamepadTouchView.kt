@@ -536,6 +536,25 @@ class GamepadTouchView
         @SuppressLint("ClickableViewAccessibility")
         override fun onTouchEvent(event: MotionEvent): Boolean {
             val l = layout ?: return false
+            // On touchdown, opt the rest of this gesture out of the input
+            // dispatcher's default vsync coalescing. Without this, MOVE
+            // events for this gesture are batched to display refresh rate
+            // (~16 ms on 60 Hz) regardless of how fast the touch sensor
+            // underneath is actually sampling. Unbuffered dispatch
+            // delivers each touch sensor sample as it arrives (~4–8 ms
+            // on most modern phones), tightening the input → wire latency
+            // for stick/button responsiveness.
+            //
+            // The recognizer already drains ACTION_MOVE history (see
+            // below), so unbuffered dispatch is purely additive — fewer
+            // samples per batch, batches arrive sooner. Same trick the
+            // touchpad overlay uses, and what stylus drawing apps use
+            // for low-latency ink. Added in API 21.
+            if (event.actionMasked == MotionEvent.ACTION_DOWN ||
+                event.actionMasked == MotionEvent.ACTION_POINTER_DOWN
+            ) {
+                requestUnbufferedDispatch(event)
+            }
             // Notify the listener per *sample* — for ACTION_MOVE the
             // recognizer drains every historical sample carried by the
             // MotionEvent, so each intermediate finger position becomes its

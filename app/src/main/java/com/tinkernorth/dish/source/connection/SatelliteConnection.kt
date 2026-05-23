@@ -571,6 +571,7 @@ class SatelliteConnection(
         finger1TrackingId: Int,
         finger1X: Short,
         finger1Y: Short,
+        eventTimeMs: Long,
     ) {
         val snap = live ?: return
         val info = _slots.value[slotId] ?: return
@@ -587,6 +588,7 @@ class SatelliteConnection(
             finger1TrackingId,
             finger1X,
             finger1Y,
+            eventTimeMs,
         )
     }
 

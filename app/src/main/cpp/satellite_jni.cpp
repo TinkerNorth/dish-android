@@ -753,14 +753,20 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendBa
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendTouchpad(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jboolean f0Active, jboolean f1Active,
     jboolean buttonPressed, jint f0TrackingId, jshort f0x, jshort f0y, jint f1TrackingId,
-    jshort f1x, jshort f1y) {
+    jshort f1x, jshort f1y, jlong eventTimeMs) {
     auto s = getSession(handle);
     if (!s) return;
-    uint8_t payload[12];
+    uint8_t payload[16];
+    // eventTimeMs is Android's MotionEvent.getEventTime() (uptime ms,
+    // monotonic). Truncate to u32 for the wire — 49 days of range, plenty
+    // for a session. The satellite computes dt between consecutive samples
+    // for the relative-mouse time-scaling that fixes the first-touch jump
+    // (see wire_encoders.h and the satellite's session_service.cpp).
     dish_wire::encodeTouchpadPayload(
         payload, (uint8_t)(controllerIndex & 0xFF), f0Active == JNI_TRUE, f1Active == JNI_TRUE,
         buttonPressed == JNI_TRUE, (uint8_t)(f0TrackingId & 0xFF), (int16_t)f0x, (int16_t)f0y,
-        (uint8_t)(f1TrackingId & 0xFF), (int16_t)f1x, (int16_t)f1y);
+        (uint8_t)(f1TrackingId & 0xFF), (int16_t)f1x, (int16_t)f1y,
+        (uint32_t)(eventTimeMs & 0xFFFFFFFFLL));
     sendEncrypted(s.get(), MSG_TOUCHPAD, payload, sizeof(payload));
 }
 

@@ -1,67 +1,102 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- CoordinatorLayout root so Snackbar swipe-to-dismiss works while the
-     gamepad overlay is foreground. The full-screen landscape posture and
-     the touch-view stack are unchanged. -->
+<!--
+    GAMEPAD OVERLAY — full-screen landscape host for the on-screen touch
+    gamepad. Mirrors the touchpad overlay's chrome (shared overlay_header
+    + same content-frame padding) so the two input surfaces feel like
+    siblings of the same app and match the rest-of-app toolbar shape
+    (Connections, Settings).
+
+    CoordinatorLayout root so Snackbar swipe-to-dismiss + the low-power
+    dim overlay work while the gamepad overlay is foreground. The vertical
+    LinearLayout inside it stacks toolbar on top, gamepad surface below;
+    the surface gets padding from the screen edges per the design-system
+    "no bleed-to-edge" rule.
+-->
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <com.tinkernorth.dish.ui.common.GamepadTouchView
-        android:id="@+id/gamepadTouchView"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent" />
-
-    <!-- Top-center status stack: connection pill + phone-motion pill. -->
     <LinearLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top|center_horizontal"
-        android:layout_marginTop="@dimen/spacing_md"
-        android:orientation="vertical"
-        android:gravity="center_horizontal">
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
-        <include
-            android:id="@+id/statusPillConnection"
-            layout="@layout/status_pill"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
+        <!-- Toolbar: left-chevron back + page title. Style
+             Widget.Dish.Toolbar is the shared piece — same chevron,
+             same background, same height as the Connections + Settings
+             toolbars. Title is set at runtime in onCreate so a layout
+             diff can't accidentally show "Gamepad" on the touchpad
+             overlay or vice versa. -->
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/overlayToolbar"
+            style="@style/Widget.Dish.Toolbar"
+            android:layout_width="match_parent" />
 
-        <!-- Phone-motion (gyro/accel) indicator. Always visible so the
-             three states — streaming / paused / no-gyroscope — are never
-             ambiguous; the detail line below appears only for no-gyroscope.
-             The pill's text is set live by refreshMotionStatus() so a
-             screen reader reads the current state instead of a stale
-             contentDescription. -->
-        <include
-            android:id="@+id/statusPillMotion"
-            layout="@layout/status_pill"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/spacing_sm" />
+        <!-- Content area: gamepad surface fills, status pills float at
+             top|end. Same FrameLayout shape as the touchpad overlay so
+             the two screens lay out identically. -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
 
-        <TextView
-            android:id="@+id/tvMotionDetail"
-            style="@style/TextAppearance.Dish.Caption"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/spacing_xs"
-            android:maxWidth="@dimen/dialog_inline_max_width"
-            android:gravity="center_horizontal"
-            android:text="@string/motion_unavailable_detail"
-            android:visibility="gone" />
+            <com.tinkernorth.dish.ui.common.GamepadTouchView
+                android:id="@+id/gamepadTouchView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:paddingHorizontal="@dimen/spacing_2xl"
+                android:paddingTop="@dimen/spacing_lg"
+                android:paddingBottom="@dimen/spacing_2xl" />
+
+            <!-- Status pills + motion detail stack, floating top|end.
+                 Two pills (connection + motion) plus the motion-detail
+                 caption only show their stack when motion is unavailable;
+                 vertical orientation lets all three sit cleanly aligned. -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|end"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:layout_marginEnd="@dimen/spacing_xl"
+                android:orientation="vertical"
+                android:gravity="end">
+
+                <include
+                    android:id="@+id/statusPillConnection"
+                    layout="@layout/status_pill"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+
+                <!-- Phone-motion (gyro/accel) indicator. Always visible
+                     so the three states — streaming / paused / no-
+                     gyroscope — are never ambiguous; the detail line
+                     below appears only for no-gyroscope. The pill's
+                     text is set live by refreshMotionStatus() so a
+                     screen reader reads the current state instead of a
+                     stale contentDescription. -->
+                <include
+                    android:id="@+id/statusPillMotion"
+                    layout="@layout/status_pill"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_sm" />
+
+                <TextView
+                    android:id="@+id/tvMotionDetail"
+                    style="@style/TextAppearance.Dish.Caption"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_xs"
+                    android:maxWidth="@dimen/dialog_inline_max_width"
+                    android:gravity="end"
+                    android:text="@string/motion_unavailable_detail"
+                    android:visibility="gone" />
+            </LinearLayout>
+        </FrameLayout>
     </LinearLayout>
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnExitGamepad"
-        style="@style/Widget.Dish.Button.Outlined.Overlay"
-        android:layout_width="wrap_content"
-        android:layout_gravity="top|end"
-        android:layout_marginTop="@dimen/spacing_md"
-        android:layout_marginEnd="@dimen/spacing_xl"
-        android:text="@string/overlay_action_back" />
-
-    <!-- Low-power overlays (countdown banner + dim screen). Included last so
-         the dim FrameLayout sits on top of the gamepad and consumes the
-         wake-tap, identical to activity_main.xml. -->
+    <!-- Low-power overlays (countdown banner + dim screen). Included last
+         so the dim FrameLayout sits on top of the gamepad and consumes
+         the wake-tap, identical to activity_main.xml. -->
     <include layout="@layout/overlay_low_power" />
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

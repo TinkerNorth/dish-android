@@ -24,6 +24,7 @@ import com.tinkernorth.dish.source.sensor.MotionStreamState
 import com.tinkernorth.dish.source.sensor.PhoneBatterySource
 import com.tinkernorth.dish.source.sensor.PhoneMotionSource
 import com.tinkernorth.dish.ui.common.GamepadTouchView
+import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -102,7 +103,14 @@ class GamepadOverlayActivity :
         // inside each carries `background="@drawable/dot_circle"`, and the
         // colour is mutated at runtime via
         // (view.background as GradientDrawable).setColor(...).
-        binding.btnExitGamepad.setOnClickListener { finish() }
+        //
+        // Shared toolbar: left-chevron back wired to finish(), page title
+        // on the right of the chevron. Same `setupDishToolbar` plumbing
+        // Connections + Settings use, so the chevron's tap behaviour,
+        // ripple, and content description all match the rest of the app
+        // for free.
+        setupDishToolbar(binding.overlayToolbar)
+        binding.overlayToolbar.setTitle(R.string.overlay_title_gamepad)
 
         val sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         // The IMU axis remap depends on whether `screenOrientation=landscape`

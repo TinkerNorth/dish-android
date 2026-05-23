@@ -13,36 +13,49 @@ import android.view.View
 import kotlin.math.roundToInt
 
 /**
- * Custom view that captures up to two simultaneous finger contacts and a
- * tap-to-click on the surface, mirroring the DS4 / DualSense touchpad.
+ * Custom view that captures up to two simultaneous finger contacts on a
+ * trackpad surface and emits a [TouchpadState] snapshot to its [Listener].
  *
- * Two routing modes change *only* the visual styling and on-screen hint;
- * the wire payload (`MSG_TOUCHPAD`) is identical regardless. The receiver
- * applies its configured `touchpadMode` to decide whether to feed a
- * virtual DS4 surface, synthesize a relative mouse pointer, or drop the
- * sample. See `satellite/src/core/session_service.cpp::handleTouchpadData`.
+ * **Click semantics — explicit, not heuristic.** The view's [clickWhenTouched]
+ * property decides whether a finger contact also asserts the touchpad's
+ * "click" button (the clicky-pad button on a DS4/DualSense, or the left
+ * mouse button in MOUSE mode):
  *
- *   [Mode.Pad]   — the surface is drawn as a stylised DS4 touchpad. Best
- *                  when the receiver's mode is set to "Pad".
- *   [Mode.Mouse] — the surface is drawn as a generic trackpad with a
- *                  cursor-style cue. Best when the receiver's mode is set
- *                  to "Mouse".
+ *   - [clickWhenTouched] `= true`  — every contact sets `state.buttonPressed`
+ *     while the finger is down. Used for the "Click + Move" pad in the
+ *     touchpad overlay, the one you drag for text selection or drag-and-drop.
+ *   - [clickWhenTouched] `= false` — touches never assert the button.
+ *     Used for the pure "Move" pad in the touchpad overlay, the one you
+ *     drag for plain cursor navigation.
  *
- * The view never decides routing — the user picks on the connection card
- * (the satellite advertises which modes it supports, the client pushes the
- * selection). This view's only job is honest signalling about *what the
- * sample will do downstream*, and lossless capture of the touches.
+ * The previous implementation used `event.getPressure() > 0.75f` as a
+ * proxy for "the user is pressing hard enough to mean a click." Most
+ * Android touchscreens report `pressure == 1.0f` for every contact (no
+ * force sensor), so the heuristic collapsed to "every touch = button
+ * held," which meant the trackpad couldn't be used for plain cursor
+ * navigation without accidentally text-selecting or dragging windows.
+ * Splitting into two surfaces gates the click on intent, not on a
+ * proxy the hardware can't deliver.
  *
- * Coordinates emitted on the listener are pre-normalized int16
+ * **Mutual exclusion across paired surfaces.** When two of these are
+ * mounted side-by-side (the touchpad overlay's Click + Move pair), the
+ * activity sets [accepting] `= false` on the inactive pad while the
+ * active pad has a finger down. Touches on a non-accepting surface are
+ * ignored at [onTouchEvent], the surface paints itself dim, and the
+ * wire never sees a sample from the locked pad — the receiver only
+ * tracks finger 0 in mouse mode, so two simultaneously emitting pads
+ * would race.
+ *
+ * Coordinates emitted on the listener are pre-normalised int16
  * (`-32768..32767`) so the wire payload encoder doesn't have to rescale.
- * Y is flipped to "down is positive" before normalisation — matches the
- * satellite wire convention.
+ * +Y is DOWN on the wire (matches the satellite convention and Android's
+ * own +Y-down convention; no flip).
  *
- * Per-finger tracking IDs are monotonic per controller, wrap freely; a new
- * id is assigned each time a finger lands on an empty slot. Continuous-
- * contact frames share an id; lift + re-touch bumps it. The receiver uses
- * this id to decide whether to interpolate cursor motion across the
- * frame.
+ * Per-finger tracking IDs are monotonic per surface, wrap freely at 256
+ * (the wire byte width); a new id is assigned each time a finger lands on
+ * an empty slot. The receiver uses this id to decide whether to
+ * interpolate cursor motion across the frame or treat a contact change as
+ * a re-anchor.
  */
 class TouchpadSurfaceView
     @JvmOverloads
@@ -51,8 +64,6 @@ class TouchpadSurfaceView
         attrs: AttributeSet? = null,
         defStyleAttr: Int = 0,
     ) : View(context, attrs, defStyleAttr) {
-        enum class Mode { Pad, Mouse }
-
         /**
          * Snapshot of the live touchpad state. The view mutates a single
          * instance in place; the resend loop reads fields directly. Fields
@@ -71,17 +82,97 @@ class TouchpadSurfaceView
             var finger1TrackingId: Int = 0,
             var finger1X: Short = 0,
             var finger1Y: Short = 0,
-        )
+            /**
+             * Android `MotionEvent.getEventTime()` of the most-recent position
+             * write — i.e. the timestamp at which the current finger
+             * coordinates were sampled by the touch sensor. The wire packet
+             * carries this so the satellite can compute dt between consecutive
+             * samples and time-scale the relative-mouse delta (fixes the
+             * first-touch-jump that happens because Android delivers the
+             * first MOVE event up to a full input-frame after touchdown).
+             *
+             * Resends carry the SAME value as the last position write — when
+             * the satellite sees two consecutive samples with identical
+             * eventTimeMs it treats them as duplicate (dx=0). Position
+             * changes always bump this field via [writePointerToState].
+             */
+            var eventTimeMs: Long = 0L,
+        ) {
+            /** True iff at least one finger is currently in contact with this surface. */
+            fun anyFingerDown(): Boolean = finger0Active || finger1Active
+        }
 
         interface Listener {
+            /**
+             * Fires on every state change — touch down, move, lift. The
+             * receiving activity is expected to (a) cache the snapshot for
+             * its resend loop and (b) decide whether to forward it on the
+             * wire (e.g. only the active pad of a mutually-exclusive pair).
+             */
             fun onTouchpadStateChanged(state: TouchpadState)
+
+            /**
+             * Fires when this surface transitions from "no fingers" to "any
+             * fingers down" (`active=true`) or back (`active=false`). The
+             * activity uses this to flip the mutual-exclusion lock without
+             * having to inspect each state change.
+             */
+            fun onTouchActivityChanged(active: Boolean) = Unit
         }
 
         var listener: Listener? = null
 
-        var mode: Mode = Mode.Pad
+        /**
+         * Whether a finger contact on this surface also asserts the
+         * touchpad's clicky-pad button (mouse button 1 in MOUSE mode, the
+         * DS4 trackpad-click in PAD mode). See the class docstring for the
+         * rationale behind making this an explicit per-surface property
+         * instead of the previous pressure heuristic.
+         */
+        var clickWhenTouched: Boolean = true
             set(value) {
                 field = value
+                // Live update: if the user toggles this while a finger is
+                // already down (e.g. via the in-app picker), the next emit
+                // should reflect the new mode. Recompute and republish.
+                state.buttonPressed = value && state.anyFingerDown()
+                if (state.anyFingerDown()) emit()
+            }
+
+        /**
+         * When `false`, the surface ignores every touch event and paints a
+         * dim veil so the user can see they're locked out. The paired-pad
+         * coordinator (in the overlay activity) flips this so only one of
+         * two side-by-side surfaces is live at a time — preventing both
+         * pads from racing to write `finger0` on the wire, which only one
+         * can usefully own.
+         *
+         * Toggling this back to `true` while a finger is down has no
+         * effect — Android won't synthesise a new ACTION_DOWN for an
+         * already-tracking pointer. Toggling it to `false` while a finger
+         * is down forces an immediate release (so the receiver gets a
+         * clean lift signal and the click button drops if it was set).
+         */
+        var accepting: Boolean = true
+            set(value) {
+                if (field == value) return
+                field = value
+                if (!value && state.anyFingerDown()) {
+                    // Yank: clear all touch state, fire one final emit so
+                    // the receiver sees the lift, and toggle the
+                    // activity-changed callback off.
+                    slotForPointerId.clear()
+                    state.finger0Active = false
+                    state.finger1Active = false
+                    state.finger0X = 0
+                    state.finger0Y = 0
+                    state.finger1X = 0
+                    state.finger1Y = 0
+                    state.buttonPressed = false
+                    listener?.onTouchActivityChanged(false)
+                    emit()
+                }
+                alpha = if (value) ACCEPTING_ALPHA else DIM_ALPHA
                 invalidate()
             }
 
@@ -112,26 +203,84 @@ class TouchpadSurfaceView
                 color = Color.argb(220, 0x4F, 0xE3, 0xFF)
                 style = Paint.Style.FILL
             }
+        private val labelPaint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.argb(220, 0xFF, 0xFF, 0xFF)
+                textSize = 56f
+                textAlign = Paint.Align.CENTER
+            }
         private val hintPaint =
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.argb(140, 0xFF, 0xFF, 0xFF)
-                textSize = 36f
+                textSize = 28f
                 textAlign = Paint.Align.CENTER
             }
 
+        /**
+         * Big centred label drawn on the surface so the user knows which pad
+         * does what without leaving the overlay. Activity sets this from a
+         * string resource after inflation (e.g. "Click + Move", "Move").
+         */
+        var label: String = ""
+            set(value) {
+                field = value
+                invalidate()
+            }
+
+        /**
+         * One-line hint under the label (e.g. "Drag to click and move",
+         * "Drag to move cursor"). Optional — empty string hides it.
+         */
+        var hint: String = ""
+            set(value) {
+                field = value
+                invalidate()
+            }
+
+        init {
+            alpha = ACCEPTING_ALPHA
+        }
+
         override fun onTouchEvent(event: MotionEvent): Boolean {
-            // Same dispatch table as `GamepadTouchView` — handle every
-            // multi-touch action that introduces or retires a pointer, plus
-            // ACTION_MOVE for in-flight tracking. Fall through to `false` on
-            // anything else so the gesture dispatcher can still drive a
-            // long-press for the button affordance.
+            // Dim/locked surface — pass the event back up so the activity can
+            // route it elsewhere or let the OS handle it. Returning false on
+            // ACTION_DOWN means we won't see any subsequent events for this
+            // gesture, which is the desired "locked out" behaviour.
+            if (!accepting) return false
+            // Defensive: a touch arriving before the view has been laid out
+            // (width/height = 0) would normalise to int16 saturation in
+            // writePointerToState, sending a bogus first position to the
+            // receiver and poisoning every subsequent delta. Reject the
+            // gesture; the user's next touch (post-layout) starts fresh.
+            if (width <= 0 || height <= 0) return false
+
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
+                    // Opt this gesture out of the Android input dispatcher's
+                    // default vsync coalescing. Without this, MOVE events
+                    // for this gesture are batched to display refresh rate
+                    // (~16 ms on 60 Hz) — and the FIRST MOVE's delta
+                    // therefore covers a full input-frame of finger travel,
+                    // ~4× larger than every subsequent ~4 ms-per-frame
+                    // delta. The receiver's relative-mouse integration
+                    // turns that into the visible first-touch jump.
+                    //
+                    // Unbuffered dispatch tells the system to deliver each
+                    // touch sensor sample as it arrives (~4–8 ms on most
+                    // modern phones), so the first MOVE's delta is the same
+                    // size as every other MOVE's delta and the cursor moves
+                    // uniformly from the start. Same trick stylus drawing
+                    // apps use for low-latency ink. Added in API 21.
+                    requestUnbufferedDispatch(event)
+                    val wasIdle = !state.anyFingerDown()
                     val index = event.actionIndex
                     val pointerId = event.getPointerId(index)
                     assignSlot(pointerId)
                     writePointerToState(event, index, pointerId)
-                    updateButton(event)
+                    updateButton()
+                    if (wasIdle && state.anyFingerDown()) {
+                        listener?.onTouchActivityChanged(true)
+                    }
                     emit()
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -149,26 +298,14 @@ class TouchpadSurfaceView
                     val index = event.actionIndex
                     val pointerId = event.getPointerId(index)
                     releaseSlot(pointerId)
-                    updateButton(event)
-                    // ACTION_UP completing a tap also represents a "click" for
-                    // accessibility — invoke performClick so screen-reader
-                    // gestures (double-tap on TalkBack) reach any registered
-                    // OnClickListener. Returning the original `true` keeps the
-                    // existing gesture path unchanged.
-                    if (event.actionMasked == MotionEvent.ACTION_UP) performClick()
+                    updateButton()
                     emit()
+                    if (!state.anyFingerDown()) {
+                        listener?.onTouchActivityChanged(false)
+                    }
                 }
                 else -> return false
             }
-            return true
-        }
-
-        override fun performClick(): Boolean {
-            // The touchpad has no host-defined click action — touches are
-            // streamed as samples. Honour the contract anyway so accessibility
-            // services and any future OnClickListener attached by callers fire
-            // through the standard path.
-            super.performClick()
             return true
         }
 
@@ -236,26 +373,23 @@ class TouchpadSurfaceView
                 state.finger1X = xNorm
                 state.finger1Y = yNorm
             }
+            // Capture the sensor timestamp of THIS sample. Resends will reuse
+            // it (cached state, no fresh write); the receiver uses the
+            // dt between consecutive samples to time-scale the cursor delta
+            // so the first MOVE event after touchdown (which Android
+            // delivers up to a full input-frame later) doesn't produce a
+            // visibly larger cursor jump than subsequent per-frame samples.
+            state.eventTimeMs = event.eventTime
         }
 
-        private fun updateButton(event: MotionEvent) {
-            // The DS4 / DualSense touchpad has a single clicky surface — we
-            // model "button pressed" as: any finger is currently down with a
-            // forceful press (`pressure > 0.75f`) OR the user has invoked
-            // the on-screen click affordance (long-press triggers it via
-            // dispatcher; for now we keep it simple and tie to high-pressure
-            // contact only). Most touchscreens report `pressure == 1.0f` so
-            // this defaults to "button held while touching" — close enough
-            // to a DS4 hold-and-drag for now; future work can split this
-            // out behind a button surface like GamepadTouchView's L3/R3.
-            var anyPressed = false
-            for (i in 0 until event.pointerCount) {
-                if (event.getPressure(i) > BUTTON_PRESSURE_THRESHOLD) {
-                    anyPressed = true
-                    break
-                }
-            }
-            state.buttonPressed = anyPressed
+        /**
+         * Recompute [TouchpadState.buttonPressed] from the surface's mode and
+         * the live finger state. Called whenever finger state changes; the
+         * click is asserted iff this surface is in "click" mode AND a finger
+         * is currently down.
+         */
+        private fun updateButton() {
+            state.buttonPressed = clickWhenTouched && state.anyFingerDown()
         }
 
         private fun emit() {
@@ -269,15 +403,12 @@ class TouchpadSurfaceView
             canvas.drawRect(8f, 8f, width - 8f, height - 8f, bgPaint)
             canvas.drawRect(8f, 8f, width - 8f, height - 8f, outlinePaint)
 
-            // Mode label hint — only difference between Pad and Mouse visuals
-            // for v1. A future iteration can show cursor trails for Mouse and
-            // a stylised DS4 touchpad layout for Pad.
-            val hint =
-                when (mode) {
-                    Mode.Pad -> "PAD — touchpad → virtual DS4"
-                    Mode.Mouse -> "MOUSE — touchpad → host pointer"
-                }
-            canvas.drawText(hint, width / 2f, 60f, hintPaint)
+            // Centred label + hint. Drawn before the finger dots so an
+            // active touch visually sits on top of the label.
+            val cx = width / 2f
+            val labelY = height / 2f - 8f
+            if (label.isNotEmpty()) canvas.drawText(label, cx, labelY, labelPaint)
+            if (hint.isNotEmpty()) canvas.drawText(hint, cx, labelY + 44f, hintPaint)
 
             // Draw any active fingers.
             if (state.finger0Active) drawFinger(canvas, state.finger0X, state.finger0Y)
@@ -296,11 +427,21 @@ class TouchpadSurfaceView
         }
 
         companion object {
-            // Most capacitive touchscreens normalise pressure to 1.0f; a
-            // dedicated stylus or force-touch panel might report fractional
-            // values. The threshold is set high enough that a regular tap
-            // does not accidentally trigger the click button on phones that
-            // do report fractional pressure.
-            private const val BUTTON_PRESSURE_THRESHOLD = 0.75f
+            /**
+             * Full opacity when the surface is the active pad of a pair (or
+             * when it's mounted alone). 1.0 is intentional — even a small
+             * dim on the active pad reads as "broken" because the user is
+             * actively interacting with it.
+             */
+            const val ACCEPTING_ALPHA: Float = 1.0f
+
+            /**
+             * Reduced opacity when the surface is locked out by its pair.
+             * 0.4 is dim enough to read as "not the one in use" but bright
+             * enough that the label is still legible — the user can still
+             * see what the locked pad would do, so the choice between
+             * pads stays obvious mid-session.
+             */
+            const val DIM_ALPHA: Float = 0.4f
         }
     }
