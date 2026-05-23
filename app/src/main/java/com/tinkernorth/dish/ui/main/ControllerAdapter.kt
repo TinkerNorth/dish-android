@@ -5,7 +5,6 @@ package com.tinkernorth.dish.ui.main
 
 import android.graphics.drawable.Animatable
 import android.graphics.drawable.GradientDrawable
-import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -243,17 +242,9 @@ class ControllerAdapter(
             val visible = connectionsVisibleInPicker(row.connections, slot.boundConnectionId)
             when {
                 row.connections.isEmpty() ->
-                    addLabel(
-                        b.llConnectionList,
-                        ctx.getString(R.string.picker_empty_no_connections),
-                        R.color.colorMuted,
-                    )
+                    addEmptyLabel(b.llConnectionList, R.string.picker_empty_no_connections)
                 visible.isEmpty() ->
-                    addLabel(
-                        b.llConnectionList,
-                        ctx.getString(R.string.picker_empty_no_available),
-                        R.color.colorMuted,
-                    )
+                    addEmptyLabel(b.llConnectionList, R.string.picker_empty_no_available)
                 else ->
                     visible.forEach { summary ->
                         addConnectionRow(
@@ -657,28 +648,19 @@ class ControllerAdapter(
         }
     }
 
-    private fun addLabel(
+    /**
+     * Inflate the empty-state label into the picker's connection-list
+     * container. Width, top margin, text color, and text size all live in
+     * `@layout/picker_empty_label`; this helper only binds the message.
+     */
+    private fun addEmptyLabel(
         parent: LinearLayout,
-        text: String,
-        colorRes: Int,
+        @androidx.annotation.StringRes messageRes: Int,
     ) {
-        val ctx = parent.context
-        val res = ctx.resources
-        parent.addView(
-            TextView(ctx).apply {
-                this.text = text
-                setTextColor(ctx.getColor(colorRes))
-                // Body-small text size from the design system, applied as
-                // already-scaled px so density × fontScale tracks the dimen.
-                setTextSize(TypedValue.COMPLEX_UNIT_PX, res.getDimension(R.dimen.text_body_sm))
-                layoutParams =
-                    LinearLayout
-                        .LayoutParams(
-                            LinearLayout.LayoutParams.MATCH_PARENT,
-                            LinearLayout.LayoutParams.WRAP_CONTENT,
-                        ).apply { topMargin = res.getDimensionPixelSize(R.dimen.spacing_xs) }
-            },
-        )
+        val inflater = LayoutInflater.from(parent.context)
+        val label = inflater.inflate(R.layout.picker_empty_label, parent, false) as TextView
+        label.setText(messageRes)
+        parent.addView(label)
     }
 
     override fun onCreateViewHolder(
