@@ -5,9 +5,6 @@ package com.tinkernorth.dish.source.notification
 
 import android.content.Context
 import android.graphics.Typeface
-import android.graphics.drawable.Drawable
-import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.LayerDrawable
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.AbsoluteSizeSpan
@@ -15,7 +12,6 @@ import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import android.text.style.TypefaceSpan
 import android.util.TypedValue
-import android.view.Gravity
 import android.view.View
 import android.widget.TextView
 import androidx.annotation.DrawableRes
@@ -434,7 +430,7 @@ private fun buildStyledText(
 private fun Snackbar.applyDishTheme(severity: DishNotification.Severity): Snackbar {
     val ctx = view.context
     val res = ctx.resources
-    view.background = buildBackground(ctx, severity)
+    view.setBackgroundResource(backgroundForSeverity(severity))
     view.elevation = res.getDimension(R.dimen.notification_elevation)
     val horizontalPad = res.getDimensionPixelSize(R.dimen.notification_padding_horizontal)
     val verticalPad = res.getDimensionPixelSize(R.dimen.notification_padding_vertical)
@@ -467,50 +463,22 @@ private fun Snackbar.applyDishTheme(severity: DishNotification.Severity): Snackb
     return this
 }
 
-private fun buildBackground(
-    ctx: Context,
-    severity: DishNotification.Severity,
-): Drawable {
-    val res = ctx.resources
-    val cornerRadiusPx = res.getDimension(R.dimen.notification_corner_radius)
-    val surface =
-        GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = cornerRadiusPx
-            setColor(ctx.getColor(R.color.colorSurface))
-            setStroke(
-                res.getDimensionPixelSize(R.dimen.border_thin),
-                ctx.getColor(R.color.colorOutline),
-            )
-        }
-    val railColorRes =
-        when (severity) {
-            DishNotification.Severity.INFO -> R.color.colorPrimary
-            DishNotification.Severity.SUCCESS -> R.color.colorSuccess
-            DishNotification.Severity.WARN -> R.color.colorWarning
-            DishNotification.Severity.ERROR -> R.color.colorError
-        }
-    val rail =
-        GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            setColor(ctx.getColor(railColorRes))
-            cornerRadii =
-                floatArrayOf(
-                    cornerRadiusPx,
-                    cornerRadiusPx,
-                    0f,
-                    0f,
-                    0f,
-                    0f,
-                    cornerRadiusPx,
-                    cornerRadiusPx,
-                )
-        }
-    val layers = LayerDrawable(arrayOf(surface, rail))
-    layers.setLayerWidth(1, res.getDimensionPixelSize(R.dimen.notification_rail_width))
-    layers.setLayerGravity(1, Gravity.START or Gravity.FILL_VERTICAL)
-    return layers
-}
+/**
+ * Pick the severity-keyed layer-list drawable that paints the Snackbar's
+ * rounded surface + leading colour rail. Each severity has its own static
+ * XML resource (`notification_bg_info / _success / _warn / _error`) so the
+ * surface shape, stroke, and rail width live in one place instead of being
+ * rebuilt as a `LayerDrawable(GradientDrawable(), GradientDrawable())` per
+ * notification.
+ */
+@androidx.annotation.DrawableRes
+private fun backgroundForSeverity(severity: DishNotification.Severity): Int =
+    when (severity) {
+        DishNotification.Severity.INFO -> R.drawable.notification_bg_info
+        DishNotification.Severity.SUCCESS -> R.drawable.notification_bg_success
+        DishNotification.Severity.WARN -> R.drawable.notification_bg_warn
+        DishNotification.Severity.ERROR -> R.drawable.notification_bg_error
+    }
 
 private const val ACTION_LETTER_SPACING = 0.04f
 
