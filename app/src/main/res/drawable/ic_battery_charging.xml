@@ -57,7 +57,7 @@
                 android:valueFrom="0.0"
                 android:valueTo="1.0"
                 android:valueType="floatType"
-                android:duration="3600"
+                android:duration="@integer/motion_duration_battery"
                 android:repeatCount="infinite"
                 android:interpolator="@interpolator/battery_fill" />
         </aapt:attr>

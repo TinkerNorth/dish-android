@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    ELEVATION TOKENS — semantic names for the four resting heights in the
+    Dish design system. Layouts and styles reference these instead of raw
+    dp values so a global shadow-depth adjustment is a one-file change.
+
+    The values resolve through the `size_N` primitive scale in
+    `dimens_primitives.xml` (except `elevation_none`, which is the
+    idiomatic literal 0dp — primitives intentionally exclude it; see the
+    rationale at the top of `dimens_primitives.xml`).
+
+    Tier guide:
+      - none      — flat surfaces (cards on a page, list rows).
+      - raised    — subtle lift to separate a card from the background.
+      - floating  — Snackbars, FABs, transient floating affordances.
+      - modal     — dialogs, sheets, fully-modal overlays.
+-->
+<resources>
+    <dimen name="elevation_none">0dp</dimen>
+    <dimen name="elevation_raised">@dimen/size_2</dimen>
+    <dimen name="elevation_floating">@dimen/size_6</dimen>
+    <dimen name="elevation_modal">@dimen/size_12</dimen>
+</resources>

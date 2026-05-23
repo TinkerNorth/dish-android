@@ -112,7 +112,7 @@
          ============================================================ -->
     <dimen name="notification_corner_radius">@dimen/size_10</dimen>
     <dimen name="notification_rail_width">@dimen/size_4</dimen>
-    <dimen name="notification_elevation">@dimen/size_6</dimen>
+    <dimen name="notification_elevation">@dimen/elevation_floating</dimen>
     <dimen name="notification_padding_horizontal">@dimen/size_4</dimen>
     <dimen name="notification_padding_vertical">@dimen/size_2</dimen>
     <dimen name="notification_text_leading_indent">@dimen/size_12</dimen>

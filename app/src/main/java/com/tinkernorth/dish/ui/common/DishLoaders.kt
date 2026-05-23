@@ -47,21 +47,22 @@ import kotlin.math.abs
  * animatable icons automatically. Callers that mount on an `ImageView` should
  * either call `start()` directly or rely on `ImageView.setImageDrawable` doing
  * the start dance via [Animatable].
+ *
+ * Durations resolve from R.integer.motion_duration_* at construction time
+ * so a future timing tweak in motion.xml lands in every loader without a
+ * recompile or a touched constant here. Spinner + dots share the same
+ * period (1.2 s in the spec); the bar runs slightly slower (1.4 s) on
+ * purpose to read as a different cadence than the spinner.
  */
 
-private const val SPINNER_DURATION_MS = 1200L
-private const val DOTS_DURATION_MS = 1200L
-private const val BAR_DURATION_MS = 1400L
-
-// Common helper: a repeating linear ValueAnimator that drives a Drawable
-// invalidation each frame for [durationMs]. The 0..1 fraction is passed
-// into [onFrame] each tick — keeping the timing math inside the drawable
-// means `Drawable.setBounds` resizes are reflected immediately without
-// having to re-parameterise the animator.
 private fun linearLoop(
     durationMs: Long,
     onFrame: (phase: Float) -> Unit,
 ): ValueAnimator =
+    // Repeating linear ValueAnimator that drives a Drawable invalidation each
+    // frame for [durationMs]. The 0..1 fraction is passed into [onFrame] each
+    // tick — keeping the timing math inside the drawable means setBounds
+    // resizes are reflected immediately without re-parameterising the animator.
     ValueAnimator.ofFloat(0f, 1f).apply {
         duration = durationMs
         repeatCount = ValueAnimator.INFINITE
@@ -108,7 +109,7 @@ class DishSpinnerDrawable(
 
     private var phase: Float = 0f
     private val animator =
-        linearLoop(SPINNER_DURATION_MS) { p ->
+        linearLoop(context.resources.getInteger(R.integer.motion_duration_spinner).toLong()) { p ->
             phase = p
             invalidateSelf()
         }
@@ -218,7 +219,7 @@ class DishDotsDrawable(
 
     private var phase: Float = 0f
     private val animator =
-        linearLoop(DOTS_DURATION_MS) { p ->
+        linearLoop(context.resources.getInteger(R.integer.motion_duration_spinner).toLong()) { p ->
             phase = p
             invalidateSelf()
         }
@@ -327,7 +328,7 @@ class DishBarDrawable(
 
     private var phase: Float = 0f
     private val animator =
-        linearLoop(BAR_DURATION_MS) { p ->
+        linearLoop(context.resources.getInteger(R.integer.motion_duration_bar).toLong()) { p ->
             phase = p
             invalidateSelf()
         }

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Linear — constant velocity, no easing. Use for indeterminate loops
+     (spinners, marquees) where any easing would create a visible rhythm
+     change at the loop boundary. Pin to this when the spec's source SMIL
+     uses a default linear `<animate>`; see DishLoaders.kt for examples. -->
+<pathInterpolator xmlns:android="http://schemas.android.com/apk/res/android"
+    android:pathData="M 0.0,0.0 L 1.0,1.0" />

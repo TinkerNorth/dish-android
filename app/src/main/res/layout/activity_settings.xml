@@ -18,11 +18,11 @@
       Brand footer (mono micro-eyebrow) caps the bottom of the screen.
 
     Token mapping per colors_and_type.css → app/src/main/res/values/colors.xml:
-      C.signal (#4FE3FF) → @color/colorPrimary
-      C.body   (#E6ECFF) → @color/colorOnSurface
-      C.muted  (#93A0C8) → @color/colorMuted
-      C.night  (#0C1027) → @color/colorSurface
-      C.cardStroke (rgba 0.12) → @color/colorCardStroke (#1F4FE3FF)
+      C.signal     → @color/signal_cyan_500 → @color/colorPrimary
+      C.body       → @color/paper_50        → @color/colorOnSurface
+      C.muted      → @color/slate_300       → @color/colorMuted
+      C.night      → @color/navy_800        → @color/colorSurface
+      C.cardStroke → @color/signal_cyan_200 → @color/colorCardStroke  (~12% alpha)
 -->
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
