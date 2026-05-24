@@ -187,6 +187,18 @@
          tightened from M3's default 32dp to 24dp to match the prior
          hand-rolled drawable chip's footprint inside the controller card
          picker row.
+
+         a11y trade-off — DELIBERATE WCAG DEVIATION:
+           ensureMinTouchTargetSize=false flips off M3's automatic 48dp
+           tap-target inflation. The chip renders at its 24dp visual size
+           with a 24dp effective tap target, below WCAG 2.5.5 Level AAA's
+           44x44 minimum. This matches the prior hand-rolled chip's
+           density (it had no min touch target either) so this isn't a
+           regression — but it's now documented because the M3 chip flag
+           makes the trade-off explicit instead of implicit. Re-evaluate
+           by flipping the flag to true (gives 24dp visual + 48dp tap
+           area) if the picker becomes thumb-driven enough to warrant
+           the vertical-space cost.
          ============================================================ -->
     <style name="Widget.Dish.Chip" parent="Widget.Material3.Chip.Filter">
         <item name="android:textAppearance">@style/TextAppearance.Dish.BodySmall</item>

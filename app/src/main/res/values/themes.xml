@@ -233,9 +233,15 @@
          dim behind so the activity recedes (matches the dim-on-low-power
          scrim alpha for a consistent floating-element treatment). Used by
          PairPinDialog.
+
          Parented at the M3 dialog theme so MaterialButton children inside
          pick up M3 ripple/state-layer treatments consistent with the rest
-         of the app. -->
+         of the app. The full M3 attr family from Theme.Dish is re-pinned
+         here (the parent is Theme.Material3.DayNight.Dialog, not Theme.Dish,
+         so attrs don't propagate through inheritance — without the
+         re-pin, MaterialButton / Chip / Snackbar / divider widgets inside
+         the dialog would read M3-default tonal-palette values for
+         surfaceContainer*, tertiary, and the inverse family). -->
     <style name="Theme.Dish.Dialog" parent="Theme.Material3.DayNight.Dialog">
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowIsFloating">true</item>
@@ -243,10 +249,43 @@
         <item name="android:windowNoTitle">true</item>
         <item name="android:backgroundDimEnabled">true</item>
         <item name="android:backgroundDimAmount">0.6</item>
+
+        <!-- Core colour slots -->
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorOnPrimary">@color/colorOnPrimary</item>
         <item name="colorSurface">@color/colorSurface</item>
         <item name="colorOnSurface">@color/colorOnSurface</item>
+        <item name="colorError">@color/colorError</item>
+
+        <!-- M3 surface + outline variants and tonal containers -->
+        <item name="colorSurfaceVariant">@color/colorSurfaceVariant</item>
+        <item name="colorOnSurfaceVariant">@color/colorOnSurfaceVariant</item>
+        <item name="colorOutline">@color/colorOutline</item>
+        <item name="colorOutlineVariant">@color/colorOutlineVariant</item>
+        <item name="colorPrimaryContainer">@color/colorPrimaryContainer</item>
+        <item name="colorOnPrimaryContainer">@color/colorOnPrimaryContainer</item>
+        <item name="colorErrorContainer">@color/colorErrorContainer</item>
+        <item name="colorOnErrorContainer">@color/colorOnErrorContainer</item>
+        <item name="elevationOverlayEnabled">false</item>
+
+        <!-- M3 surface container hierarchy -->
+        <item name="colorSurfaceContainerLowest">@color/colorSurfaceContainerLowest</item>
+        <item name="colorSurfaceContainerLow">@color/colorSurfaceContainerLow</item>
+        <item name="colorSurfaceContainer">@color/colorSurfaceContainer</item>
+        <item name="colorSurfaceContainerHigh">@color/colorSurfaceContainerHigh</item>
+        <item name="colorSurfaceContainerHighest">@color/colorSurfaceContainerHighest</item>
+        <item name="colorSurfaceDim">@color/colorM3SurfaceDim</item>
+        <item name="colorSurfaceBright">@color/colorSurfaceBright</item>
+
+        <!-- M3 inverse + tertiary -->
+        <item name="colorSurfaceInverse">@color/colorSurfaceInverse</item>
+        <item name="colorOnSurfaceInverse">@color/colorOnSurfaceInverse</item>
+        <item name="colorPrimaryInverse">@color/colorPrimaryInverse</item>
+        <item name="colorTertiary">@color/colorTertiary</item>
+        <item name="colorOnTertiary">@color/colorOnTertiary</item>
+        <item name="colorTertiaryContainer">@color/colorTertiaryContainer</item>
+        <item name="colorOnTertiaryContainer">@color/colorOnTertiaryContainer</item>
+
         <item name="materialButtonStyle">@style/Widget.Dish.Button</item>
     </style>
 
