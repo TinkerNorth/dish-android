@@ -19,6 +19,17 @@
     `android:layout_marginTop` / `android:layout_marginBottom` attrs — those
     are the only spacing knobs needed (no padding overrides on this root,
     so it stays a clean "header" shape).
+
+    Canonical rhythm — use the semantic tokens, not raw spacing_*:
+      layout_marginTop    = @dimen/section_header_gap_above   (14dp)
+      layout_marginBottom = @dimen/section_header_gap_below   (8dp)
+
+    Omit gap_above when the eyebrow is the first child of its container,
+    or when a sibling above (divider with marginVertical, prior card
+    with marginBottom) already carries the gap. Omit gap_below when the
+    next sibling has a `paddingTop` that already provides it (e.g.
+    `llSatelliteList` / `llBtList` in Connections use spacing_md
+    paddingTop, so the eyebrows above them set no bottom margin).
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"

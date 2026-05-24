@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Emphasized ease — M3's signature top-level navigation curve.
+     cubic-bezier(0.2, 0.0, 0, 1.0): sharper acceleration into the move
+     than the dish_ease_standard curve (M3 "standard" / 0.4,0,0.2,1) and
+     a long decelerating tail. Reach for this on activity transitions and
+     other "hero" motion that should feel like a deliberate move, not a
+     calm cross-fade. -->
+<pathInterpolator xmlns:android="http://schemas.android.com/apk/res/android"
+    android:pathData="M 0.0,0.0 C 0.2,0.0 0.0,1.0 1.0,1.0" />

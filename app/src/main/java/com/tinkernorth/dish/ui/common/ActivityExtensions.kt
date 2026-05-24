@@ -4,8 +4,11 @@
 package com.tinkernorth.dish.ui.common
 
 import android.app.Activity
+import android.graphics.Color
 import android.os.Build
+import android.provider.Settings
 import android.view.View
+import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
@@ -82,10 +85,18 @@ fun AppCompatActivity.attachGamepadHost(
  * padding on [root]. Required for `targetSdk` ≥ 35 (Android 15 enforces
  * edge-to-edge regardless of the deprecated `fitsSystemWindows` flag).
  *
- * The default [enableEdgeToEdge] call uses [androidx.activity.SystemBarStyle.auto]
- * for both bars — on the dark Dish palette that resolves to a dark
- * transparent scrim, which keeps the existing visual identity while
- * satisfying the platform contract.
+ * Both bars use [SystemBarStyle.dark] with a transparent scrim. The
+ * `dark` style forces light bar icons regardless of the device's day /
+ * night mode — required because Theme.Dish renders the same dark navy
+ * chrome in both modes. The default [SystemBarStyle.auto] would key off
+ * `UI_MODE_NIGHT_NO` in light mode and pick light scrim + dark icons,
+ * which would render invisibly against our dark window background.
+ *
+ * The theme-level `android:windowLightStatusBar` /
+ * `windowLightNavigationBar` attrs are NOT used for this — the runtime
+ * SystemBarStyle takes precedence, works across the full minSdk range
+ * (the windowLight* attrs require API 23 / 27 respectively), and keeps
+ * the day / night theme files identical.
  *
  * [root] receives `systemBars` insets as padding so content doesn't draw
  * under the status / navigation bars. Callers should pass the binding root
@@ -99,7 +110,8 @@ fun AppCompatActivity.attachGamepadHost(
  * is for the standard chrome screens (dashboard, connections, settings).
  */
 fun AppCompatActivity.applyDishSystemBars(root: View) {
-    enableEdgeToEdge()
+    val barStyle = SystemBarStyle.dark(Color.TRANSPARENT)
+    enableEdgeToEdge(statusBarStyle = barStyle, navigationBarStyle = barStyle)
     ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
         val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
         v.updatePadding(bars.left, bars.top, bars.right, bars.bottom)
@@ -111,10 +123,18 @@ fun AppCompatActivity.applyDishSystemBars(root: View) {
  * Install Dish's fade-through transition for both the OPEN and CLOSE
  * directions of this activity. Read off `fade_through_enter` + `fade_through_exit`
  * which both ride on `motion_duration_medium` (250 ms) and
- * `dish_ease_standard`.
+ * `dish_ease_emphasized` (M3's top-level navigation curve).
  *
  * Call from `onCreate` (before or after `setContentView` is fine — the
  * platform caches the override and applies it to the next transition).
+ *
+ * Honors the system "remove animations" setting (developer options /
+ * accessibility): when [Settings.Global.ANIMATOR_DURATION_SCALE] is 0,
+ * the override is skipped and the platform default cut runs. Material
+ * widgets honor this scale automatically; the activity-transition path
+ * uses fixed-duration anim resources so we have to check it ourselves.
+ * Without this, a user with "remove animations" enabled still sees the
+ * 250 ms fade on every screen change.
  *
  * API gating:
  *  - **34+**: uses [Activity.overrideActivityTransition] for both OPEN and
@@ -131,6 +151,7 @@ fun AppCompatActivity.applyDishSystemBars(root: View) {
  * faster than a 250 ms fade.
  */
 fun AppCompatActivity.applyDishActivityTransitions() {
+    if (animationsDisabled()) return
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
         overrideActivityTransition(
             Activity.OVERRIDE_TRANSITION_OPEN,
@@ -147,3 +168,20 @@ fun AppCompatActivity.applyDishActivityTransitions() {
         overridePendingTransition(R.anim.fade_through_enter, R.anim.fade_through_exit)
     }
 }
+
+/**
+ * True when the system-wide animator duration scale is 0 — the "remove
+ * animations" toggle in Settings → Accessibility (and Developer Options).
+ * Material widgets check this internally; the activity-transition path
+ * uses fixed-duration anim resources, so we have to gate it ourselves.
+ *
+ * Defaults to "animations enabled" on any error or unexpected float
+ * format (Settings.Global.getFloat throws SettingNotFoundException on a
+ * missing key; older OS images sometimes do).
+ */
+private fun Activity.animationsDisabled(): Boolean =
+    try {
+        Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE) == 0f
+    } catch (_: Settings.SettingNotFoundException) {
+        false
+    }

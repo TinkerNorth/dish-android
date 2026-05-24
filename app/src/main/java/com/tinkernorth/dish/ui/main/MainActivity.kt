@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.view.KeyEvent
 import android.view.MotionEvent
 import androidx.activity.viewModels
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -56,6 +57,17 @@ class MainActivity :
     // "extra missing" branch. See DishNavigator's KDoc for the rationale.
     private val nav by lazy { DishNavigator(this) }
 
+    // Flipped to false by either the first MainUiState emission rendered
+    // by updateUI() or the SPLASH_HOLD_MAX_MS safety timer below — whichever
+    // wins. While true, installSplashScreen()'s keep-on-screen condition
+    // holds the system splash, so the user sees the branded splash until
+    // first content is ready instead of a flash of empty MainActivity
+    // chrome. The 1500ms cap exists because a stalled ViewModel (e.g. the
+    // connection hub waiting on a slow DataStore read on cold boot) must
+    // not pin the splash forever.
+    @Volatile
+    private var splashHoldUntilFirstRender = true
+
     // ═══════════════════════════════════════════════════════════════════════
     //  LIFECYCLE
     //
@@ -66,11 +78,22 @@ class MainActivity :
     // ═══════════════════════════════════════════════════════════════════════
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Must run before super.onCreate so core-splashscreen can flip the
+        // activity theme from Theme.App.Starting (declared in the manifest)
+        // back to Theme.Dish (postSplashScreenTheme) before any content view
+        // inflates against the wrong attrs. Same call also wires the system
+        // splash window so the launcher icon stays on screen until the
+        // keep-on-screen condition below releases it.
+        val splash = installSplashScreen()
+        splash.setKeepOnScreenCondition { splashHoldUntilFirstRender }
         super.onCreate(savedInstanceState)
         // Native-library load failed in DishApplication.onCreate — route the
         // user to the themed fallback screen instead of crashing the moment
         // we touch any JNI surface (GameActivity itself loads native code).
         if (com.tinkernorth.dish.DishApplication.nativeLoadFailed) {
+            // Release the splash hold immediately: this activity is finishing
+            // and the NativeUnavailable screen needs to draw itself.
+            splashHoldUntilFirstRender = false
             nav.toNativeUnavailable()
             finish()
             return
@@ -90,6 +113,13 @@ class MainActivity :
         // Auto-reconnect is driven exclusively by ConnectionForegroundObserver
         // (ProcessLifecycleOwner) so the cold-start and return-to-foreground
         // paths share one entry point.
+
+        // Splash safety net: if the first MainUiState never arrives (slow
+        // DataStore on a cold boot, ViewModel stalled, etc.) release the
+        // splash anyway after SPLASH_HOLD_MAX_MS so the user is never
+        // staring at a held splash indefinitely. updateUI()'s release runs
+        // first in the happy path; this is the fallback.
+        binding.root.postDelayed({ splashHoldUntilFirstRender = false }, SPLASH_HOLD_MAX_MS)
     }
 
     override fun onStop() {
@@ -122,6 +152,11 @@ class MainActivity :
     }
 
     private fun updateUI(s: MainUiState) {
+        // First emission has been rendered: release the splash hold so the
+        // system splash exits and MainActivity becomes interactive. Idempotent
+        // (the postDelayed safety net may also flip this) so subsequent
+        // emissions are no-ops.
+        splashHoldUntilFirstRender = false
         val liveCount = s.connections.count { it.live == LinkState.Connected }
         val totalCount = s.connections.size
         binding.tvConnectionsSummary.text =
@@ -250,5 +285,14 @@ class MainActivity :
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         gamepadHost.onWindowFocusChanged(hasFocus)
+    }
+
+    private companion object {
+        // Upper bound on how long the system splash is held past the
+        // installSplashScreen() call, even if the first MainUiState never
+        // arrives. Chosen for "feels like an intro, not a hang" — long
+        // enough that the splash is perceived on a healthy device, short
+        // enough that a stalled cold boot doesn't trap the user.
+        const val SPLASH_HOLD_MAX_MS = 1500L
     }
 }

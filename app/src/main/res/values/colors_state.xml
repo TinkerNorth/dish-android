@@ -8,9 +8,10 @@
     naturally belong in `colors.xml` or `colors_primitives.xml`.
 
     Selectors in res/color/:
-      - chip_pickable_text.xml — flips on state_selected (chip label).
-      - icon_secondary.xml     — always muted, kept selector-shaped for
-                                 callsite consistency.
+      - chip_dish_background.xml — flips on state_checked (MaterialChip bg).
+      - chip_dish_text.xml       — flips on state_checked (chip label).
+      - icon_secondary.xml       — always muted, kept selector-shaped for
+                                   callsite consistency.
 
     When adding a new state-list color: create the selector in res/color/,
     add a one-line entry in the list above. Add a semantic alias here only

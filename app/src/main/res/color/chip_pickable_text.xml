@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Text colour for the pickable chip — flips with android:selected so the
-     chip's label stays legible against both the colorPrimary (selected) and
-     colorBackground (unselected) fills set by @drawable/chip_pickable_bg. -->
-<selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:state_selected="true" android:color="@color/colorOnPrimary" />
-    <item android:color="@color/colorOnSurface" />
-</selector>

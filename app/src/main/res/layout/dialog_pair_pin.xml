@@ -3,9 +3,17 @@
      Pair button can host an in-flight DishSpinner and the dialog doesn't
      auto-dismiss on submit (the old behaviour reset the user's PIN typing on
      every retry). Surface is bg_pill — matches every other floating banner /
-     dim-overlay pill in the v6 theme — and the title/subtitle/error labels
-     all follow the monospace + letter-spaced chrome convention. -->
+     dim-overlay pill in the v6 theme — and the title/subtitle labels all
+     follow the monospace + letter-spaced chrome convention.
+
+     PIN input is a TextInputLayout (OutlinedBox via Widget.Dish.TextInputLayout.Pin)
+     wrapping a TextInputEditText. The inline error TextView that used to
+     live under the field was retired during the M3 audit — TextInputLayout's
+     own .setError(msg) drives the error stroke + the helper-text row + the
+     a11y live-region announcement in one call, which is both spec-correct
+     and announces failures to TalkBack users (the prior TextView did not). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -36,31 +44,25 @@
         android:layout_marginTop="@dimen/spacing_sm"
         android:text="@string/pair_dialog_subtitle" />
 
-    <EditText
-        android:id="@+id/etPin"
-        style="@style/Widget.Dish.EditText.Pin"
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/tilPin"
+        style="@style/Widget.Dish.TextInputLayout.Pin"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/spacing_4xl"
-        android:hint="@string/pair_dialog_pin_hint"
-        android:inputType="numberPassword"
-        android:maxLength="8"
-        android:autofillHints="@null"
-        android:importantForAutofill="no"
-        tools:targetApi="26" />
+        android:layout_marginTop="@dimen/spacing_4xl">
 
-    <!-- Inline error surface: hidden until the server rejects the PIN, then
-         shown under the field with the same error red used elsewhere.
-         Adopts BodySmall and overrides textColor to colorError — the
-         severity colour is callsite intent, not a style-wide concern. -->
-    <TextView
-        android:id="@+id/tvPairError"
-        style="@style/TextAppearance.Dish.BodySmall"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/spacing_md"
-        android:textColor="@color/colorError"
-        android:visibility="gone" />
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etPin"
+            style="@style/Widget.Dish.EditText.Pin"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/pair_dialog_pin_hint"
+            android:inputType="numberPassword"
+            android:maxLength="8"
+            android:autofillHints="@null"
+            android:importantForAutofill="no"
+            tools:targetApi="26" />
+    </com.google.android.material.textfield.TextInputLayout>
 
     <LinearLayout
         android:layout_width="match_parent"

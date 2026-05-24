@@ -98,8 +98,8 @@
                 layout="@layout/section_header"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_2xl"
-                android:layout_marginBottom="@dimen/spacing_md" />
+                android:layout_marginTop="@dimen/section_header_gap_above"
+                android:layout_marginBottom="@dimen/section_header_gap_below" />
         </LinearLayout>
 
         <!-- Scrollable slot list + telemetry -->

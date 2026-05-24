@@ -17,6 +17,7 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.chip.Chip
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
@@ -553,10 +554,19 @@ class ControllerAdapter(
         }
 
         /**
-         * Inflate one [chip_pickable.xml] chip, bind its label + selected
-         * state + click handler. Selected/unselected styling is driven by
-         * `view.isSelected` via @drawable/chip_pickable_bg +
-         * @color/chip_pickable_text — no hand-rolled GradientDrawable.
+         * Inflate one [chip_pickable.xml] chip, bind its label + checked
+         * state + click handler. MaterialChip (FilterChip variant) drives
+         * the selected/unselected fill, stroke, text colour, ripple, and
+         * state layer via Widget.Dish.Chip — the adapter only flips
+         * `isChecked` and wires the click handler.
+         *
+         * `isClickable = !checked` keeps the prior UX where the selected
+         * chip can't be tapped again (single-choice picker: re-selecting
+         * the current pick is a no-op). The OnClickListener path triggers
+         * the listener which causes a row rebind that re-renders both
+         * sibling chips with the new checked state — so the FilterChip's
+         * built-in toggle-on-tap behaviour ends up consistent with the
+         * single-choice semantics.
          */
         private fun buildChip(
             inflater: LayoutInflater,
@@ -564,10 +574,10 @@ class ControllerAdapter(
             label: String,
             selected: Boolean,
             onClick: () -> Unit,
-        ): TextView {
+        ): Chip {
             val chip = ChipPickableBinding.inflate(inflater, parent, false).root
             chip.text = label
-            chip.isSelected = selected
+            chip.isChecked = selected
             chip.isClickable = !selected
             if (selected) {
                 chip.setOnClickListener(null)

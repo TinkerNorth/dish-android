@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Chip label text colour for Widget.Dish.Chip. Flips on state_checked so
+     the label stays legible against both the colorPrimary (checked) and the
+     colorBackground (unchecked) fills set by chip_dish_background.xml.
+     Replaces @color/chip_pickable_text which keyed on state_selected — the
+     MaterialChip swap means we read state_checked instead. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_checked="true" android:color="@color/colorOnPrimary" />
+    <item android:color="@color/colorOnSurface" />
+</selector>

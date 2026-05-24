@@ -26,10 +26,22 @@
       `lineSpacingMultiplier`; the `android:textAppearance` attribute only
       picks up a narrower subset and silently drops line spacing.
 
-    Letter-spacing canon:
+    Letter-spacing canon (smaller glyphs → more tracking, an inverse-size
+    ladder):
+      0.02 — Body / BodySmall / BodyLarge and their variants (Body.Mono,
+             BodyLarge.Bold). Sits at the low end of the M3 spec's body
+             tracking range (0.018em–0.033em) — enough to avoid the
+             un-tracked-body "M2-era tight" look without overriding the
+             brand's overall density.
       0.04 — Hero (subtle tracking on giant numerals)
       0.12 — Label / Label.Accent / Display.Large (eyebrow + brand wordmark)
       0.18 — Caption (small mono eyebrow / footer)
+
+      Title / Title.Large / Display intentionally stay at the platform
+      default (0): M3 spec for titleLarge / displayLarge is 0sp tracking,
+      and the brand title voice already reads correctly tight at 15sp /
+      18sp / 22sp.
+
       All other spacing is callsite-specific override (overlay HUD treatments
       in `overlay_low_power.xml` ride on top of the Label/Body styles).
 
@@ -90,6 +102,7 @@
         <item name="android:textColor">@color/colorMuted</item>
         <item name="android:fontFamily">sans-serif</item>
         <item name="android:textStyle">normal</item>
+        <item name="android:letterSpacing">0.02</item>
     </style>
 
     <!-- ============================================================
@@ -103,6 +116,7 @@
         <item name="android:fontFamily">sans-serif</item>
         <item name="android:textStyle">normal</item>
         <item name="android:lineSpacingMultiplier">1.35</item>
+        <item name="android:letterSpacing">0.02</item>
     </style>
 
     <!-- Mono / on-surface variant — version string, URL display. -->
@@ -111,6 +125,7 @@
         <item name="android:textColor">@color/colorOnSurface</item>
         <item name="android:fontFamily">monospace</item>
         <item name="android:textStyle">normal</item>
+        <item name="android:letterSpacing">0.02</item>
     </style>
 
     <!-- ============================================================
@@ -122,6 +137,7 @@
         <item name="android:textColor">@color/colorMuted</item>
         <item name="android:fontFamily">monospace</item>
         <item name="android:textStyle">normal</item>
+        <item name="android:letterSpacing">0.02</item>
     </style>
 
     <style name="TextAppearance.Dish.BodyLarge.Bold" parent="">
@@ -129,6 +145,7 @@
         <item name="android:textColor">@color/colorOnSurface</item>
         <item name="android:fontFamily">sans-serif</item>
         <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.02</item>
     </style>
 
     <!-- ============================================================
