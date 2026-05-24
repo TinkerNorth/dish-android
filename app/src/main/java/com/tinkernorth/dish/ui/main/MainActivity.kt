@@ -3,7 +3,6 @@
 
 package com.tinkernorth.dish.ui.main
 
-import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -23,8 +22,10 @@ import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.notification.DishNotifications
-import com.tinkernorth.dish.ui.connections.ConnectionsActivity
-import com.tinkernorth.dish.ui.settings.SettingsActivity
+import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
+import com.tinkernorth.dish.ui.common.applyDishSystemBars
+import com.tinkernorth.dish.ui.common.attachGamepadHost
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -49,6 +50,12 @@ class MainActivity :
 
     private lateinit var gamepadHost: GamepadActivityHost
 
+    // Typed navigation surface over res/navigation/nav_graph.xml. Replaces
+    // raw startActivity(Intent) calls with named, typed-args methods so a
+    // mistyped extra is a compile error rather than a silent runtime
+    // "extra missing" branch. See DishNavigator's KDoc for the rationale.
+    private val nav by lazy { DishNavigator(this) }
+
     // ═══════════════════════════════════════════════════════════════════════
     //  LIFECYCLE
     //
@@ -64,19 +71,19 @@ class MainActivity :
         // user to the themed fallback screen instead of crashing the moment
         // we touch any JNI surface (GameActivity itself loads native code).
         if (com.tinkernorth.dish.DishApplication.nativeLoadFailed) {
-            startActivity(Intent(this, NativeUnavailableActivity::class.java))
+            nav.toNativeUnavailable()
             finish()
             return
         }
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        // `install(notifications)` wires the wake-state collectors AND the
-        // themed notification host in one call — the manual findViewById +
-        // bindLifecycle dance lived in three activities before; folding it
-        // into the host eliminates the boilerplate.
-        gamepadHost =
-            GamepadActivityHost(this, binding.root, wakeState, gamepadRegistry)
-                .also { it.install(notifications) }
+        // `attachGamepadHost` centralises the construct-and-install dance
+        // every Dish activity used to inline (see ActivityExtensions.kt).
+        // `install(notifications)` inside it wires the wake-state collectors
+        // AND the themed notification host in one call.
+        gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications)
+        applyDishSystemBars(binding.root)
+        applyDishActivityTransitions()
         controllerAdapter = ControllerAdapter(this)
         setupUI()
         observeViewModel()
@@ -95,13 +102,14 @@ class MainActivity :
     // ═══════════════════════════════════════════════════════════════════════
 
     private fun setupUI() {
+        // Section header label lives in `section_header.xml` and is set
+        // here so the include's TextView (id `labelSection`) carries the
+        // dashboard's "CONTROLLERS" string. Icon + trailing-button slots
+        // stay hidden by default for this eyebrow-only callsite.
+        binding.sectionControllers.labelSection.setText(R.string.section_controllers)
         binding.rvControllers.adapter = controllerAdapter
-        binding.btnManageConnections.setOnClickListener {
-            startActivity(Intent(this, ConnectionsActivity::class.java))
-        }
-        binding.btnSettings.setOnClickListener {
-            startActivity(Intent(this, SettingsActivity::class.java))
-        }
+        binding.btnManageConnections.setOnClickListener { nav.toConnections() }
+        binding.btnSettings.setOnClickListener { nav.toSettings() }
     }
 
     private fun observeViewModel() {
@@ -119,10 +127,19 @@ class MainActivity :
         binding.tvConnectionsSummary.text =
             when {
                 liveCount == 0 && totalCount == 0 -> getString(R.string.status_tap_manage)
-                liveCount == 0 -> getString(R.string.status_remembered, totalCount)
-                else -> getString(R.string.status_connected_of, liveCount, totalCount)
+                liveCount == 0 -> resources.getQuantityString(R.plurals.status_remembered, totalCount, totalCount)
+                // Quantity is selected on the *total* count (the "of N" number):
+                // "1 of 1 online" is singular, "2 of 5 online" plural — the
+                // positional args are still (liveCount, totalCount) in that
+                // order to match the %1$d / %2$d format slots.
+                else -> resources.getQuantityString(R.plurals.status_connected_of, totalCount, liveCount, totalCount)
             }
-        controllerAdapter.submitSlots(s.slots, s.connections, s.motionCapabilities)
+        controllerAdapter.submitSlots(
+            s.slots,
+            s.connections,
+            s.motionCapabilities,
+            s.touchpadModesBySatellite,
+        )
     }
 
     private fun handleEvent(event: MainEvent) {
@@ -154,11 +171,7 @@ class MainActivity :
     }
 
     private fun openConnectionsForPairing(connectionId: String) {
-        startActivity(
-            Intent(this, ConnectionsActivity::class.java).apply {
-                putExtra(ConnectionsActivity.EXTRA_PAIR_PROMPT_FOR_ID, connectionId)
-            },
-        )
+        nav.toConnectionsForPairing(connectionId)
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -185,6 +198,19 @@ class MainActivity :
         enabled: Boolean,
     ) = viewModel.setMotionEnabled(slotId, enabled)
 
+    override fun onChangeTouchpadMode(
+        connectionId: String,
+        mode: String,
+    ) = viewModel.setSatelliteTouchpadMode(connectionId, mode)
+
+    override fun onOpenTouchpad(slotId: String) {
+        val state = viewModel.uiState.value
+        val slot = state.slots.firstOrNull { it.id == slotId } ?: return
+        val cid = slot.boundConnectionId ?: return
+        val mode = state.touchpadModesBySatellite[cid] ?: return
+        nav.toTouchpad(connectionId = cid, touchpadMode = mode, slotId = slotId)
+    }
+
     override fun onOpenGamepad() {
         val v = viewModel.uiState.value.virtualSlot
         val cid =
@@ -207,12 +233,7 @@ class MainActivity :
             summary?.btProfile == "PlayStation" ||
                 summary?.satelliteControllerTypes?.get(VIRTUAL_SLOT_ID) ==
                 com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
-        val intent =
-            Intent(this, GamepadOverlayActivity::class.java).apply {
-                putExtra(GamepadOverlayActivity.EXTRA_CONNECTION_ID, cid)
-                putExtra(GamepadOverlayActivity.EXTRA_USE_PS_LAYOUT, usePs)
-            }
-        startActivity(intent)
+        nav.toGamepad(connectionId = cid, usePsLayout = usePs)
     }
 
     // ═══════════════════════════════════════════════════════════════════════

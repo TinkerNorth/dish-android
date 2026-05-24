@@ -4,6 +4,7 @@
 package com.tinkernorth.dish.repository
 
 import android.content.Context
+import androidx.core.content.edit
 import com.tinkernorth.dish.architecture.interfaces.Repository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -41,19 +42,19 @@ class SatelliteSharedKeyRepository
             key: String,
             value: String,
         ) {
-            prefs.edit().putString(keyPref(key), value).apply()
+            prefs.edit { putString(keyPref(key), value) }
         }
 
         override fun remove(key: String) {
-            prefs.edit().remove(keyPref(key)).apply()
+            prefs.edit { remove(keyPref(key)) }
         }
 
         override fun clear() {
-            val editor = prefs.edit()
-            for (k in prefs.all.keys.filter { it.startsWith(KEY_PREFIX) }) {
-                editor.remove(k)
+            prefs.edit {
+                for (k in prefs.all.keys.filter { it.startsWith(KEY_PREFIX) }) {
+                    remove(k)
+                }
             }
-            editor.apply()
         }
 
         private fun keyPref(id: String): String = "$KEY_PREFIX$id"

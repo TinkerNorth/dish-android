@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    TOUCHPAD OVERLAY — two side-by-side trackpads (Click + Move) under a
+    shared MaterialToolbar header (back chevron + page title). Mirrors the
+    gamepad overlay's chrome and the rest-of-app top bar (Connections,
+    Settings) so all top-level destinations feel like one app.
+
+    The two trackpads are mutually exclusive at runtime: once one has an
+    active finger, the other dims via TouchpadSurfaceView.accepting=false
+    until the active pad releases. The wire payload only carries one
+    finger0 in mouse mode, so two simultaneously emitting pads would
+    fight; explicit lock is cheaper than racing.
+
+    Padding (spacing_2xl on left/right/bottom of the trackpad row,
+    spacing_lg below the toolbar) keeps the surfaces away from the screen
+    edges per the design-system "no bleed-to-edge" rule. The gap between
+    the two pads is twice spacing_md so the visual gutter reads cleanly.
+-->
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- Vertical stack: toolbar on top, trackpad row fills the rest.
+         Nested inside CoordinatorLayout so the low-power dim overlay
+         (included below) can still float over everything. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <!-- Toolbar: left-chevron back + page title. Style
+             Widget.Dish.Toolbar is the shared piece — same chevron,
+             same background, same height as the Connections + Settings
+             toolbars. Title is set at runtime in onCreate so a layout
+             diff can't accidentally show "Touchpad" on the gamepad
+             overlay or vice versa. -->
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/overlayToolbar"
+            style="@style/Widget.Dish.Toolbar"
+            android:layout_width="match_parent" />
+
+        <!-- Content area: trackpads fill the surface, status pill floats
+             at top|end. FrameLayout because the pill and trackpads share
+             the same region — pills can't live in the toolbar (toolbar is
+             actionBarSize tall, pills with a vertical stack would push
+             that). -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <!-- Trackpad row. Horizontal LinearLayout with weightSum=2
+                 splits 50/50 between the two pads; margin_md on each
+                 inside edge produces a clear gutter without bleeding
+                 into the surface area. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="horizontal"
+                android:weightSum="2"
+                android:paddingHorizontal="@dimen/spacing_2xl"
+                android:paddingTop="@dimen/spacing_lg"
+                android:paddingBottom="@dimen/spacing_2xl">
+
+                <com.tinkernorth.dish.ui.common.TouchpadSurfaceView
+                    android:id="@+id/touchpadClickPad"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="@dimen/spacing_md" />
+
+                <com.tinkernorth.dish.ui.common.TouchpadSurfaceView
+                    android:id="@+id/touchpadMovePad"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_marginStart="@dimen/spacing_md" />
+            </LinearLayout>
+
+            <!-- Status pill floats over the top-right corner of the
+                 content area, just below the toolbar. spacing_xl margin
+                 keeps it off the trackpad's outline. -->
+            <include
+                android:id="@+id/statusPillTouchpad"
+                layout="@layout/status_pill"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|end"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:layout_marginEnd="@dimen/spacing_xl" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <!-- Low-power overlays (countdown banner + dim screen). Same include
+         the gamepad overlay uses; the dim FrameLayout sits on top of the
+         trackpads and consumes the wake-tap. -->
+    <include layout="@layout/overlay_low_power" />
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

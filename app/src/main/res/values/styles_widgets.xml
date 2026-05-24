@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    WIDGET STYLES — component-level closure for repeated Material widget
+    configurations. Every MaterialCardView, MaterialToolbar, status dot,
+    section/card icon, switch, and PIN field in the project adopts one
+    of these via `style="@style/Widget.Dish.X"`.
+
+    Two Button styles (`Widget.Dish.Button`, `Widget.Dish.Button.Outlined`)
+    are kept in `themes.xml` next to `Theme.Dish` because the theme wires
+    `materialButtonStyle = Widget.Dish.Button` as the global default.
+
+    Naming convention:
+      Widget.Dish.<Component>[.<Variant>]
+        Component = Card / Toolbar / StatusDot / EmptyStateText / Switch /
+                    EditText / Icon
+        Variant   = Large / Section / Card / Pin / Overlay
+
+    Visual no-op invariant: each callsite migrating to a Widget.Dish.* style
+    is byte-identical in rendering. Inline attribute removal is mechanical;
+    if a callsite still needs a different value, override that specific
+    attribute inline and document why.
+-->
+<resources>
+
+    <!-- ============================================================
+         CARDS
+         All MaterialCardView callsites share five attributes.
+         ============================================================ -->
+    <style name="Widget.Dish.Card" parent="Widget.Material3.CardView.Outlined">
+        <item name="cardBackgroundColor">@color/colorSurface</item>
+        <item name="cardCornerRadius">@dimen/corner_card</item>
+        <item name="cardElevation">@dimen/elevation_none</item>
+        <item name="strokeColor">@color/colorCardStroke</item>
+        <item name="strokeWidth">@dimen/border_thin</item>
+    </style>
+
+    <!-- ============================================================
+         TOOLBAR
+         The two Activity toolbars (Connections, Settings) only differ
+         in `app:title`. Background, title colour, and navigation icon
+         collapse into the style.
+         ============================================================ -->
+    <style name="Widget.Dish.Toolbar" parent="Widget.Material3.Toolbar">
+        <item name="android:background">@color/colorBackground</item>
+        <item name="titleTextColor">@color/colorOnSurface</item>
+        <item name="navigationIcon">@drawable/ic_chevron_left</item>
+        <item name="android:layout_height">?attr/actionBarSize</item>
+    </style>
+
+    <!-- ============================================================
+         STATUS DOT — bare View with the dot_circle drawable, sized to
+         the icon_dot / icon_dot_lg semantic dimens. The drawable's fill
+         is set programmatically (live/connecting/idle/error) by the
+         hosting Activity/Adapter; the style owns geometry + background.
+         ============================================================ -->
+    <style name="Widget.Dish.StatusDot.Small" parent="">
+        <item name="android:layout_width">@dimen/icon_dot</item>
+        <item name="android:layout_height">@dimen/icon_dot</item>
+        <item name="android:background">@drawable/dot_circle</item>
+    </style>
+
+    <style name="Widget.Dish.StatusDot.Large" parent="">
+        <item name="android:layout_width">@dimen/icon_dot_lg</item>
+        <item name="android:layout_height">@dimen/icon_dot_lg</item>
+        <item name="android:background">@drawable/dot_circle</item>
+    </style>
+
+    <!-- ============================================================
+         EMPTY STATE TEXT — three-style ramp: base (geometry + text
+         appearance) plus two context variants. The base is never used
+         on its own; callsites pick either Picker or Section so the
+         empty-state row carries the right breathing room for its
+         surroundings.
+           - Picker: nested inside a slot card body — small top margin
+             so it sits just under the prior picker row.
+           - Section: standalone empty-state row inside a section (no
+             surrounding card) — vertical padding so the section
+             divider above/below doesn't crowd it.
+         ============================================================ -->
+    <style name="Widget.Dish.EmptyStateText" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textAppearance">@style/TextAppearance.Dish.BodySmall</item>
+    </style>
+
+    <!-- Used by `picker_empty_label.xml`, inflated by ControllerAdapter
+         when the slot picker has no connections to show. -->
+    <style name="Widget.Dish.EmptyStateText.Picker">
+        <item name="android:layout_marginTop">@dimen/spacing_xs</item>
+    </style>
+
+    <!-- Used by `activity_connections.xml`'s tvSatelliteEmpty + tvBtEmpty.
+         Vertical padding (instead of margin) keeps the empty-state row's
+         click area the full height so the inter-section divider above/
+         below visually separates it from the section header / next
+         section, not from the text bounds.
+         paddingTop + paddingBottom (not paddingVertical) because
+         android:paddingVertical is API 26+ and style items can't carry
+         a tools:targetApi annotation — same rule that pinned autofill
+         attributes inline on `Widget.Dish.EditText.Pin`. -->
+    <style name="Widget.Dish.EmptyStateText.Section">
+        <item name="android:paddingTop">@dimen/spacing_xl</item>
+        <item name="android:paddingBottom">@dimen/spacing_xl</item>
+    </style>
+
+    <!-- ============================================================
+         SWITCH — Material 3 MaterialSwitch with the empty-label /
+         no-side-text configuration the design uses everywhere a
+         switch shows up. Thumb + track colors are picked up from
+         the Material theme's colorPrimary / colorOnSurface so no
+         explicit thumbTint / trackTint here.
+         Callsites use `com.google.android.material.materialswitch.MaterialSwitch`
+         (the M3 switch widget) — different class from the older
+         `SwitchMaterial` (M2) the codebase used pre-migration.
+         ============================================================ -->
+    <style name="Widget.Dish.Switch" parent="Widget.Material3.CompoundButton.MaterialSwitch">
+        <item name="android:textOn"></item>
+        <item name="android:textOff"></item>
+        <item name="showText">false</item>
+    </style>
+
+    <!-- ============================================================
+         EDIT TEXT — pair-dialog PIN field. Centred, monospace, widely
+         tracked for legibility of long digit groups. The hint text,
+         maxLength, and inputType=numberPassword are per-callsite (the
+         style keeps a sane `number` default; callsites that want the
+         masked PIN treatment override inline alongside their
+         autofillHints suppression — see `dialog_pair_pin.xml`).
+         ============================================================ -->
+    <!-- autofillHints + importantForAutofill are NOT in this style because
+         they're API-26+ attributes and style items can't carry a
+         tools:targetApi annotation. Callsites apply them inline next to
+         a tools:targetApi="26" when they need the autofill suppression
+         (see `dialog_pair_pin.xml`). -->
+    <style name="Widget.Dish.EditText.Pin" parent="Widget.AppCompat.EditText">
+        <item name="android:inputType">number</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textSize">@dimen/text_display</item>
+        <item name="android:textColor">@color/colorOnSurface</item>
+        <item name="android:textColorHint">@color/colorMuted</item>
+        <item name="android:letterSpacing">0.30</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:background">@drawable/bg_pair_pin_field</item>
+        <item name="android:padding">@dimen/card_padding</item>
+    </style>
+
+    <!-- ============================================================
+         ICONS — geometry-only styles for the section-header icons
+         and leading card glyphs.
+           - Icon.Section stays untinted so multi-tone artwork
+             (ic_satellite, ic_bluetooth) keeps its embedded palette.
+           - Icon.Card applies tint=colorPrimary; both current
+             leading card glyphs (ic_bug, ic_shield) render cyan,
+             matching the design.
+         The trailing chevron on the privacy-policy card
+         (ic_open_in_new) is intentionally muted and so does NOT
+         adopt Icon.Card — it stays inline with no tint.
+         ============================================================ -->
+    <style name="Widget.Dish.Icon.Section" parent="">
+        <item name="android:layout_width">@dimen/icon_section_header</item>
+        <item name="android:layout_height">@dimen/icon_section_header</item>
+    </style>
+
+    <style name="Widget.Dish.Icon.Card" parent="">
+        <item name="android:layout_width">@dimen/icon_card_glyph</item>
+        <item name="android:layout_height">@dimen/icon_card_glyph</item>
+        <item name="tint">@color/colorPrimary</item>
+    </style>
+
+    <!-- Widget.Dish.Button.Outlined.Overlay (and its supporting
+         `touch_target_min` / `button_min_width` / `size_64` /
+         `overlay_action_back` resources) was retired when the overlay
+         activities adopted the shared `overlay_header.xml` composite —
+         the back affordance is now the toolbar chevron, not an
+         explicit BACK button. Re-introduce the style when an overlay
+         button comes back. -->
+
+</resources>

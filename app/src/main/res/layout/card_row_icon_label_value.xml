@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    CARD ROW — leading 36dp icon container + title/subtitle column.
+
+    The shared sub-structure of every Settings-style card row: a tinted
+    rounded-square holding the leading glyph, then a vertical text column
+    with the row's title over a subtitle.
+
+    What's INSIDE the composite:
+      - FrameLayout (`bg_icon_container`, 36dp) hosting a `Widget.Dish.Icon.Card`
+        ImageView (`cardRowIcon`)
+      - Vertical LinearLayout with `cardRowTitle` (`TextAppearance.Dish.Title`)
+        above `cardRowSubtitle` (`TextAppearance.Dish.Body`)
+
+    What's NOT inside (varies too much across callsites to consolidate):
+      - The `MaterialCardView` wrapper (some callsites add `clickable` /
+        `foreground=selectableItemBackground` for the ripple, others don't)
+      - The row's outer horizontal `LinearLayout` (callsites pick `gravity`:
+        `top` for the multi-line crash card vs `center_vertical` for the
+        single-line privacy card)
+      - The trailing affordance (Switch vs chevron ImageView vs nothing)
+
+    Two callsites today: the Settings DIAGNOSTICS "Crash reporting" card and
+    the Settings ABOUT "Privacy policy" card.
+
+    `item_controller.xml`'s slot-card header deliberately does NOT adopt
+    this composite — its leading icon is a bare 36dp tinted ImageView (no
+    `bg_icon_container` square), its subtitle uses `Dish.BodySmall`, and
+    its trailing zone is five siblings (battery group, bound-kind glyph,
+    status dot, quick-launch chevron, expansion chevron) rather than a
+    single affordance. Forcing it into this composite would either bloat
+    the composite with controller-specific visibility-gone defaults or
+    strip out affordances the adapter then re-adds. Documented in
+    PHASE_3_HANDOFF.md.
+
+    Include sites set per-callsite content from code (icon src, title +
+    subtitle text). The Privacy card additionally swaps its subtitle's
+    TextAppearance to `Body.Mono` in onCreate to preserve the on-surface
+    URL tone the Phase 2 handoff established.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:baselineAligned="false">
+
+    <FrameLayout
+        android:layout_width="@dimen/icon_card_container"
+        android:layout_height="@dimen/icon_card_container"
+        android:background="@drawable/bg_icon_container">
+
+        <ImageView
+            android:id="@+id/cardRowIcon"
+            style="@style/Widget.Dish.Icon.Card"
+            android:layout_gravity="center"
+            android:importantForAccessibility="no"
+            tools:src="@drawable/ic_bug" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="@dimen/spacing_2xl"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/cardRowTitle"
+            style="@style/TextAppearance.Dish.Title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            tools:text="Row title" />
+
+        <TextView
+            android:id="@+id/cardRowSubtitle"
+            style="@style/TextAppearance.Dish.Body"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_xs"
+            tools:text="Row subtitle copy that can wrap to two lines." />
+    </LinearLayout>
+</LinearLayout>

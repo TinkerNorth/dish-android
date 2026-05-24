@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    PRIMITIVE COLOR TOKENS — the raw palette. Every unique hex value used by
+    the app appears here exactly once. Consumers must NOT reference these
+    directly from layouts or Kotlin; they consume the semantic names in
+    `colors.xml` (and, where needed, the alpha-derived state-list colors).
+
+    Naming convention:
+      - `<family>_<weight>` for opaque tonal entries (`signal_cyan_500`,
+        `navy_900`, `slate_300`). Higher numbers darker in the navy scale;
+        500 = full saturation in the cyan/green/red/amber scales.
+      - `<family>_<weight>_a<percent>` for alpha-derived siblings of an
+        opaque entry. The value is the same RGB with the alpha byte set
+        from the percent (e.g. `_a80` ≈ 0xCC).
+
+    What's NOT here:
+      - Multi-tone vector drawable artwork (battery glyph, gamepad button
+        icons, dish/satellite/bluetooth illustrations). Those carry their
+        own embedded palette and are intentionally out of the design system.
+-->
+<resources>
+    <!-- ===== Signal cyan — brand accent. =====
+         500 is colorPrimary / full saturation. 700 is the darker tonal
+         used for filled-button backgrounds and primary-dim states.
+         100/200/300 are alpha-derived from 500 for surface tints
+         (6%), card strokes (12%), and outlines (18%) respectively. -->
+    <color name="signal_cyan_500">#FF4FE3FF</color>
+    <color name="signal_cyan_700">#FF2C93AD</color>
+    <color name="signal_cyan_100">#0F4FE3FF</color>
+    <color name="signal_cyan_200">#1F4FE3FF</color>
+    <color name="signal_cyan_300">#2E4FE3FF</color>
+
+    <!-- ===== Navy — deep-space surface scale. =====
+         900 is the app background (darkest); 800 is the elevated surface
+         (cards, dialogs); 700 is a slightly lifted variant for empty-state
+         surfaces. -->
+    <color name="navy_900">#FF060818</color>
+    <color name="navy_800">#FF0C1027</color>
+    <color name="navy_700">#FF131A3A</color>
+
+    <!-- ===== Slate — muted text + secondary chrome. ===== -->
+    <color name="slate_300">#FF93A0C8</color>
+
+    <!-- ===== Paper — high-contrast on-surface text. ===== -->
+    <color name="paper_50">#FFE6ECFF</color>
+
+    <!-- ===== Severity palette — used for status indicators. ===== -->
+    <color name="green_500">#FF22C55E</color>
+    <color name="red_500">#FFE74C3C</color>
+    <color name="amber_500">#FFF59E0B</color>
+
+    <!-- ===== Scrim. =====
+         ink_900_a80 is the full-screen dim used in low-power mode
+         (black at ≈80% alpha). -->
+    <color name="ink_900_a80">#CC000000</color>
+</resources>

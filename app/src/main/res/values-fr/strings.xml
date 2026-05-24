@@ -3,12 +3,17 @@
 
     <!-- Tableau de bord MainActivity. Vocabulaire aligné avec les puces LinkState :
          une entrée mémorisée/appairée est « appairée » ; une entrée Connected est « en ligne ». -->
-    <string name="status_remembered">%1$d appairée(s)</string>
+    <plurals name="status_remembered">
+        <item quantity="one">%1$d appairée</item>
+        <item quantity="many">%1$d appairées</item>
+        <item quantity="other">%1$d appairées</item>
+    </plurals>
     <string name="status_tap_manage">Touchez Gérer pour en ajouter une</string>
-    <string name="status_connected_of">%1$d sur %2$d en ligne</string>
-    <string name="toast_pairing_needed">Appairage requis — ouvrir Connexions</string>
-    <string name="toast_bind_first">Liez d\'abord une connexion</string>
-
+    <plurals name="status_connected_of">
+        <item quantity="one">%1$d sur %2$d en ligne</item>
+        <item quantity="many">%1$d sur %2$d en ligne</item>
+        <item quantity="other">%1$d sur %2$d en ligne</item>
+    </plurals>
     <!-- Chrome du tableau de bord (activity_main.xml). -->
     <string name="section_connections">CONNEXIONS</string>
     <string name="section_controllers">MANETTES</string>
@@ -59,7 +64,19 @@
     <string name="action_unbind">Délier</string>
     <string name="action_open_gamepad">Ouvrir la manette</string>
     <string name="desc_open_gamepad">Ouvrir la manette</string>
+    <string name="action_open_touchpad">Ouvrir le pavé tactile</string>
     <string name="desc_expand">Développer</string>
+
+    <!-- Sélecteur du mode pavé tactile. -->
+    <string name="touchpad_mode_label">Mode pavé tactile</string>
+    <string name="touchpad_mode_off">Désactivé</string>
+    <string name="touchpad_mode_pad">Pavé</string>
+    <string name="touchpad_mode_mouse">Souris</string>
+    <string name="touchpad_mode_unsupported_here">Ce récepteur ne prend pas en charge ce mode.</string>
+    <string name="touchpad_mode_error_not_paired">Le satellite ne reconnaît pas cet appareil — réappairer pour appliquer.</string>
+    <string name="touchpad_mode_error_unauthorized">Le satellite a rejeté la requête — réappairer pour appliquer.</string>
+    <string name="touchpad_mode_error_transport">Impossible de joindre le satellite — est-il en cours d\'exécution ?</string>
+    <string name="touchpad_mode_error_unknown">Impossible de définir le mode pavé tactile : %1$s</string>
 
     <!-- Texte du statut de l\'emplacement dans ControllerAdapter (sous le nom). -->
     <string name="slot_status_disconnecting">Déconnexion… %1$ds</string>
@@ -70,6 +87,7 @@
     <!-- Lignes du sélecteur par emplacement dans ControllerAdapter. -->
     <string name="picker_empty_no_connections">Aucune connexion — touchez Gérer ci-dessus</string>
     <string name="picker_empty_no_available">Aucune connexion disponible pour l\'instant</string>
+    <string name="picker_title_with_status">%1$s%2$s</string>
     <string name="picker_status_online"> • en ligne</string>
     <string name="picker_status_connecting"> • connexion…</string>
     <string name="picker_status_offline"> • hors ligne</string>
@@ -93,7 +111,12 @@
     <string name="overlay_status_streaming">Diffusion en cours</string>
     <string name="overlay_status_unknown">Connexion inconnue</string>
     <string name="overlay_status_not_connected">Non connectée</string>
-    <string name="overlay_action_back">RETOUR</string>
+    <string name="overlay_title_gamepad">Manette</string>
+    <string name="overlay_title_touchpad">Pavé tactile</string>
+    <string name="touchpad_pad_click_label">Clic + Déplacer</string>
+    <string name="touchpad_pad_move_label">Déplacer</string>
+    <string name="touchpad_pad_click_hint">Glissez pour cliquer et déplacer</string>
+    <string name="touchpad_pad_move_hint">Glissez pour déplacer le curseur</string>
 
     <!-- Libellés par défaut pour les emplacements / connexions. -->
     <string name="default_virtual_controller_name">Manette virtuelle</string>
@@ -151,14 +174,11 @@
     <string name="discovery_source_both">mDNS + diffusion</string>
 
     <!-- Libellés d\'action des notifications Dish. -->
-    <string name="action_open_settings">PARAMÈTRES</string>
-    <string name="action_retry">RÉESSAYER</string>
-    <string name="action_reconnect">RECONNECTER</string>
-    <string name="action_repair">RÉAPPAIRER</string>
-    <string name="action_open">OUVRIR</string>
-    <string name="action_forget">OUBLIER</string>
-    <string name="action_turn_on">ACTIVER</string>
-    <string name="action_grant">AUTORISER</string>
+    <string name="action_open_settings">Paramètres</string>
+    <string name="action_retry">Réessayer</string>
+    <string name="action_open">Ouvrir</string>
+    <string name="action_turn_on">Activer</string>
+    <string name="action_grant">Autoriser</string>
 
     <!-- Texte des notifications Dish. -->
     <string name="notif_bt_permission_title">Autorisation Bluetooth nécessaire</string>
@@ -181,11 +201,6 @@
     <string name="notif_pairing_needed_title">Appairage requis</string>
     <string name="notif_pairing_needed_body">Ouvrez Connexions pour saisir le PIN de %1$s.</string>
     <string name="notif_server_unreachable_title">%1$s ne répond pas</string>
-    <string name="notif_server_unreachable_body">Vérifiez qu\'il est allumé et sur le même Wi-Fi.</string>
-    <string name="notif_registration_failed_title">Échec de l\'enregistrement de la manette</string>
-    <string name="notif_pair_pin_failed_title">PIN incorrect</string>
-    <string name="notif_session_lost_title">Connexion à %1$s perdue</string>
-    <string name="notif_session_lost_body">Reconnexion…</string>
 
     <!-- État vide dynamique de la liste satellite. -->
     <string name="discovery_empty_never_scanned">Touchez Scanner pour trouver des satellites sur votre réseau</string>
@@ -195,17 +210,20 @@
     <string name="pair_dialog_title">Appairer avec un satellite</string>
     <string name="pair_dialog_subtitle">Saisissez le PIN affiché sur votre satellite.</string>
     <string name="pair_dialog_pin_hint">PIN</string>
-    <string name="pair_dialog_submit">APPAIRER</string>
-    <string name="pair_dialog_cancel">ANNULER</string>
-    <string name="pair_dialog_pairing">APPAIRAGE…</string>
+    <string name="pair_dialog_eyebrow">APPAIRER</string>
+    <string name="pair_dialog_submit">Appairer</string>
+    <string name="pair_dialog_pairing">Appairage…</string>
     <string name="pair_dialog_error_empty">Saisissez le PIN affiché sur votre satellite.</string>
 
     <!-- Notification du service au premier plan. -->
     <string name="streaming_channel_name">Session de diffusion</string>
     <string name="streaming_channel_description">Maintient Dish actif pendant qu\'une manette diffuse.</string>
     <string name="streaming_notification_title">Dish · Diffusion</string>
-    <string name="streaming_notification_body">%1$d manette diffuse vers %2$s</string>
-    <string name="streaming_notification_body_plural">%1$d manettes diffusent</string>
+    <plurals name="streaming_notification_body">
+        <item quantity="one">%1$d manette diffuse vers %2$s</item>
+        <item quantity="many">%1$d manettes diffusent vers %2$s</item>
+        <item quantity="other">%1$d manettes diffusent vers %2$s</item>
+    </plurals>
     <string name="streaming_notification_stop">Arrêter</string>
 
     <!-- Écran de repli quand le chargement natif échoue. -->
@@ -223,10 +241,6 @@
         <item quantity="many">Liées · %1$d manettes</item>
         <item quantity="other">Liées · %1$d manettes</item>
     </plurals>
-
-    <!-- Chaînes héritées de l\'ancienne mise en page d\'appairage. -->
-    <string name="pairing_dialog_legacy_title">Appairer avec un serveur</string>
-    <string name="pairing_dialog_legacy_message">Saisissez le PIN affiché sur l\'écran de votre PC :</string>
 
     <!-- Lien Politique de confidentialité (dans Paramètres) et message d\'erreur partagé. -->
     <string name="menu_privacy_policy">Politique de confidentialité</string>

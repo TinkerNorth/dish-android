@@ -142,7 +142,10 @@ class WakeStateControllerTest {
             verify(exactly = 1) {
                 powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, any())
             }
-            verify(exactly = 1) { wakeLock.acquire() }
+            // The controller calls the timeout-bearing overload to satisfy
+            // lint's WakelockTimeout safety check; the no-arg `acquire()` is
+            // never used.
+            verify(exactly = 1) { wakeLock.acquire(any<Long>()) }
         }
 
     @Test
@@ -223,7 +226,7 @@ class WakeStateControllerTest {
             assertEquals(2, controller.streamingSlotCount.value)
             assertTrue(controller.shouldKeepScreenOn.value)
             verify(exactly = 1) { powerManager.newWakeLock(any(), any()) }
-            verify(exactly = 1) { wakeLock.acquire() }
+            verify(exactly = 1) { wakeLock.acquire(any<Long>()) }
         }
 
     // ── ON_STOP ────────────────────────────────────────────────────────────

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Snackbar background for WARN severity — see notification_bg_info.xml for
+     the layer-list rationale. Rail uses colorWarning. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/colorSurface" />
+            <corners android:radius="@dimen/corner_notification" />
+            <stroke android:width="@dimen/border_thin" android:color="@color/colorOutline" />
+        </shape>
+    </item>
+
+    <item
+        android:width="@dimen/notification_rail_width"
+        android:gravity="start">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/colorWarning" />
+            <corners
+                android:topLeftRadius="@dimen/corner_notification"
+                android:bottomLeftRadius="@dimen/corner_notification"
+                android:topRightRadius="0dp"
+                android:bottomRightRadius="0dp" />
+        </shape>
+    </item>
+</layer-list>

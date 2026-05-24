@@ -5,16 +5,13 @@ package com.tinkernorth.dish.source.notification
 
 import android.content.Context
 import android.graphics.Typeface
-import android.graphics.drawable.Drawable
-import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.LayerDrawable
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.AbsoluteSizeSpan
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import android.text.style.TypefaceSpan
-import android.view.Gravity
+import android.util.TypedValue
 import android.view.View
 import android.widget.TextView
 import androidx.annotation.DrawableRes
@@ -415,7 +412,7 @@ private fun buildStyledText(
             Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
         )
         builder.setSpan(
-            AbsoluteSizeSpan(spToPx(ctx, BODY_SP)),
+            AbsoluteSizeSpan(ctx.resources.getDimensionPixelSize(R.dimen.notification_text_body)),
             bodyStart,
             builder.length,
             Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
@@ -432,17 +429,32 @@ private fun buildStyledText(
 
 private fun Snackbar.applyDishTheme(severity: DishNotification.Severity): Snackbar {
     val ctx = view.context
-    view.background = buildBackground(ctx, severity)
-    view.elevation = dpToPx(ctx, ELEVATION_DP)
-    val horizontalPad = dpToPxInt(ctx, HORIZONTAL_PAD_DP)
-    val verticalPad = dpToPxInt(ctx, VERTICAL_PAD_DP)
+    val res = ctx.resources
+    view.setBackgroundResource(backgroundForSeverity(severity))
+    // The M3 Snackbar style (Widget.Material3.Snackbar, inherited from
+    // Theme.Material3) applies backgroundTint=colorInverseSurface — M3's
+    // high-contrast "inverse" colour that's LIGHT on dark themes — to
+    // whatever drawable sits on the snackbar view. Without clearing the
+    // tint here, our dark notification_bg_<severity>.xml layer-list gets
+    // its colorSurface fill re-tinted to the M3 inverse light colour, so
+    // the toast paints light instead of the intended dark navy. Setting
+    // the tint list to null disables the tint operation entirely and the
+    // drawable's own solid colours render through.
+    view.backgroundTintList = null
+    view.elevation = res.getDimension(R.dimen.notification_elevation)
+    val horizontalPad = res.getDimensionPixelSize(R.dimen.notification_padding_horizontal)
+    val verticalPad = res.getDimensionPixelSize(R.dimen.notification_padding_vertical)
     view.setPadding(horizontalPad, verticalPad, horizontalPad, verticalPad)
     setTextColor(ctx.getColor(R.color.colorOnSurface))
     view.findViewById<TextView>(com.google.android.material.R.id.snackbar_text)?.apply {
         maxLines = MAX_TEXT_LINES
-        textSize = TITLE_SP
+        // setTextSize(COMPLEX_UNIT_PX, …) consumes the already-scaled value
+        // getDimension returns for an sp dimen (density × fontScale × value),
+        // so this lands on the user's actual sp size without the textSize=Sp
+        // implicit conversion that would re-scale.
+        setTextSize(TypedValue.COMPLEX_UNIT_PX, res.getDimension(R.dimen.notification_text_title))
         typeface = Typeface.DEFAULT_BOLD
-        setPadding(dpToPxInt(ctx, TEXT_LEADING_INDENT_DP), 0, 0, 0)
+        setPadding(res.getDimensionPixelSize(R.dimen.notification_text_leading_indent), 0, 0, 0)
     }
     val actionColor =
         when (severity) {
@@ -455,67 +467,29 @@ private fun Snackbar.applyDishTheme(severity: DishNotification.Severity): Snackb
     setActionTextColor(ctx.getColor(actionColor))
     view.findViewById<TextView>(com.google.android.material.R.id.snackbar_action)?.apply {
         typeface = Typeface.DEFAULT_BOLD
-        textSize = ACTION_SP
+        setTextSize(TypedValue.COMPLEX_UNIT_PX, res.getDimension(R.dimen.notification_text_action))
         letterSpacing = ACTION_LETTER_SPACING
     }
     return this
 }
 
-private fun buildBackground(
-    ctx: Context,
-    severity: DishNotification.Severity,
-): Drawable {
-    val surface =
-        GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = dpToPx(ctx, CORNER_RADIUS_DP)
-            setColor(ctx.getColor(R.color.colorSurface))
-            setStroke(dpToPxInt(ctx, 1f), ctx.getColor(R.color.colorOutline))
-        }
-    val railColorRes =
-        when (severity) {
-            DishNotification.Severity.INFO -> R.color.colorPrimary
-            DishNotification.Severity.SUCCESS -> R.color.colorSuccess
-            DishNotification.Severity.WARN -> R.color.colorWarning
-            DishNotification.Severity.ERROR -> R.color.colorError
-        }
-    val rail =
-        GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            setColor(ctx.getColor(railColorRes))
-            val r = dpToPx(ctx, CORNER_RADIUS_DP)
-            cornerRadii = floatArrayOf(r, r, 0f, 0f, 0f, 0f, r, r)
-        }
-    val layers = LayerDrawable(arrayOf(surface, rail))
-    layers.setLayerWidth(1, dpToPxInt(ctx, RAIL_WIDTH_DP))
-    layers.setLayerGravity(1, Gravity.START or Gravity.FILL_VERTICAL)
-    return layers
-}
+/**
+ * Pick the severity-keyed layer-list drawable that paints the Snackbar's
+ * rounded surface + leading colour rail. Each severity has its own static
+ * XML resource (`notification_bg_info / _success / _warn / _error`) so the
+ * surface shape, stroke, and rail width live in one place instead of being
+ * rebuilt as a `LayerDrawable(GradientDrawable(), GradientDrawable())` per
+ * notification.
+ */
+@androidx.annotation.DrawableRes
+private fun backgroundForSeverity(severity: DishNotification.Severity): Int =
+    when (severity) {
+        DishNotification.Severity.INFO -> R.drawable.notification_bg_info
+        DishNotification.Severity.SUCCESS -> R.drawable.notification_bg_success
+        DishNotification.Severity.WARN -> R.drawable.notification_bg_warn
+        DishNotification.Severity.ERROR -> R.drawable.notification_bg_error
+    }
 
-private fun dpToPx(
-    ctx: Context,
-    dp: Float,
-): Float = dp * ctx.resources.displayMetrics.density
-
-private fun dpToPxInt(
-    ctx: Context,
-    dp: Float,
-): Int = dpToPx(ctx, dp).toInt()
-
-private fun spToPx(
-    ctx: Context,
-    sp: Float,
-): Int = (sp * ctx.resources.displayMetrics.scaledDensity).toInt()
-
-private const val CORNER_RADIUS_DP = 10f
-private const val RAIL_WIDTH_DP = 4f
-private const val ELEVATION_DP = 6f
-private const val HORIZONTAL_PAD_DP = 4f
-private const val VERTICAL_PAD_DP = 2f
-private const val TEXT_LEADING_INDENT_DP = 12f
-private const val TITLE_SP = 13f
-private const val BODY_SP = 11f
-private const val ACTION_SP = 12f
 private const val ACTION_LETTER_SPACING = 0.04f
 
 /** Title (1 line) + body (up to 2 lines) — Material default is 2 total. */

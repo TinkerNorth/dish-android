@@ -151,6 +151,35 @@ object SatelliteNative {
         status: Int,
     )
 
+    // ── Touchpad (0x000C) ───────────────────────────────────────────────────
+
+    /**
+     * Send 0x000C Touchpad on [handle]. Coordinates are normalized int16
+     * (`-32768..32767`); the receiver maps to whichever virtual device
+     * coordinate space the active touchpad mode demands (DS4 1920×943 for
+     * `Pad`, host screen pixels for `Mouse`). `trackingId` is per-finger
+     * monotonic — bump it when a finger lifts and a new one lands so the
+     * receiver knows not to interpolate cursor motion across the gap. The
+     * pacing (≤250 Hz, deadline-based) is the caller's job, same as the
+     * gamepad overlay's resend loop — this JNI call is one encode + one
+     * encrypted `sendto`.
+     */
+    @Suppress("LongParameterList")
+    external fun sendTouchpad(
+        handle: Int,
+        controllerIndex: Int,
+        finger0Active: Boolean,
+        finger1Active: Boolean,
+        buttonPressed: Boolean,
+        finger0TrackingId: Int,
+        finger0X: Short,
+        finger0Y: Short,
+        finger1TrackingId: Int,
+        finger1X: Short,
+        finger1Y: Short,
+        eventTimeMs: Long,
+    )
+
     // ── Heartbeat ───────────────────────────────────────────────────────────
 
     /** Start the heartbeat sender thread for [handle] (sends 0x0002 every 2s). */

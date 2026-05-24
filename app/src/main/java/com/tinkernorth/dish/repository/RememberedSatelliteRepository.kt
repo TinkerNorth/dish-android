@@ -4,6 +4,7 @@
 package com.tinkernorth.dish.repository
 
 import android.content.Context
+import androidx.core.content.edit
 import com.tinkernorth.dish.architecture.interfaces.KeyedRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.serialization.builtins.ListSerializer
@@ -67,13 +68,13 @@ class RememberedSatelliteRepository
 
         override fun clear() {
             synchronized(writeLock) {
-                prefs.edit().remove(KEY_SATELLITES).apply()
+                prefs.edit { remove(KEY_SATELLITES) }
             }
         }
 
         private fun persist(list: List<RememberedSatellite>) {
             val raw = json.encodeToString(ListSerializer(RememberedSatellite.serializer()), list)
-            prefs.edit().putString(KEY_SATELLITES, raw).apply()
+            prefs.edit { putString(KEY_SATELLITES, raw) }
         }
 
         private companion object {

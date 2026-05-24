@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fatal-but-actionable screen shown when the satellite native library fails
+     to load (most often an ABI mismatch on a sideloaded build). Replaces the
+     System.loadLibrary crash with a themed message the user can read and
+     forward to support. Routed to by DishApplication when the loader throws,
+     before MainActivity gets a chance to bind.
+
+     Pure resources, no injected dependencies — Hilt may not have initialised
+     by the time this activity runs (the native load failure happens during
+     ContentProvider init, before the Application.onCreate that triggers the
+     Hilt graph). `setContentView(R.layout.…)` works regardless because it
+     only needs the Activity context. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="@dimen/spacing_6xl">
+
+    <TextView
+        style="@style/TextAppearance.Dish.Display.Large"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/brand_name" />
+
+    <TextView
+        style="@style/TextAppearance.Dish.Title.Large"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_5xl"
+        android:text="@string/fatal_native_title"
+        android:gravity="center" />
+
+    <TextView
+        style="@style/TextAppearance.Dish.Body"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_lg"
+        android:text="@string/fatal_native_body"
+        android:gravity="center" />
+</LinearLayout>

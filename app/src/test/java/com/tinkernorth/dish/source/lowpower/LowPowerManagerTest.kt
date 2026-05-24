@@ -116,8 +116,11 @@ class LowPowerManagerTest {
 
     private fun setStateDirect(state: LowPowerManager.State) {
         // `_state` now lives on the [com.tinkernorth.dish.architecture.abstracts.AbstractStateSource] base
-        // class — reflect through the superclass.
-        val field = LowPowerManager::class.java.superclass.getDeclaredField("_state")
+        // class — reflect through the superclass. The `!!` is safe: LowPowerManager
+        // extends AbstractStateSource, so `superclass` is never null here (only
+        // `Object::class.java.superclass` would be null).
+        val superClass = LowPowerManager::class.java.superclass!!
+        val field = superClass.getDeclaredField("_state")
         field.isAccessible = true
         @Suppress("UNCHECKED_CAST")
         val flow = field.get(lpm) as kotlinx.coroutines.flow.MutableStateFlow<LowPowerManager.State>

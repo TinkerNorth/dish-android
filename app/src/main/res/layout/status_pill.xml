@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    STATUS PILL — dot + label inside the bg_pill background.
+
+    Single canonical layout for every "status pill" in the overlay screens.
+    Three callsites:
+      - Gamepad overlay: connection-status pill (id `statusPillConnection`)
+      - Gamepad overlay: phone-motion pill      (id `statusPillMotion`)
+      - Touchpad overlay: connection-status pill (id `statusPillTouchpad`)
+
+    `<include>` overrides only support the root view's id + layout_*
+    attributes — child ids cannot be aliased per include. So the canonical
+    child ids (`statusPillDot`, `statusPillLabel`) are baked in here; each
+    include site reaches them through the include's root id via View
+    Binding (`binding.statusPillConnection.statusPillDot`, etc.).
+
+    The label adopts `TextAppearance.Dish.Label` but overrides textColor
+    to `colorOnSurface` — `Label`'s default `colorMuted` reads too dimly
+    inside the cyan-tinted pill. This is intentional per-component
+    contrast, the same drift the Phase 2 handoff documented for the three
+    overlay pills.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_pill"
+    android:paddingHorizontal="@dimen/spacing_3xl"
+    android:paddingVertical="@dimen/spacing_sm"
+    android:gravity="center_vertical"
+    android:alpha="0.85">
+
+    <View
+        android:id="@+id/statusPillDot"
+        style="@style/Widget.Dish.StatusDot.Small"
+        android:layout_marginEnd="@dimen/spacing_md" />
+
+    <!-- Default `overlay_status_streaming` text preserves the
+         pre-Phase-3 first-frame string for the two connection pills
+         (gamepad + touchpad). The gamepad's motion pill repaints
+         synchronously from `currentMotionPaint()` in onCreate, so its
+         initial label is set before the first frame regardless of the
+         default here. -->
+    <TextView
+        android:id="@+id/statusPillLabel"
+        style="@style/TextAppearance.Dish.Label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/overlay_status_streaming"
+        android:textColor="@color/colorOnSurface" />
+</LinearLayout>

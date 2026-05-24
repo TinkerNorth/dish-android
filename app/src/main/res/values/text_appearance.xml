@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    CANONICAL TYPOGRAPHY — 14 TextAppearance.Dish.* styles. Every TextView
+    in `res/layout/*.xml` adopts one of these via `style="@style/…"`.
+
+    Two-tier model (matches the dimens / colors layout):
+      - 12 truly canonical roles (Caption, Label, BodySmall, Body, BodyLarge,
+        Title, Display, Hero, plus their .Accent / .Plain / .Mono color/family
+        variants).
+      - 2 one-off display states (.Large) for the brand header + pair-dialog
+        title.
+
+    Naming:
+      TextAppearance.Dish.<Role>[.<Modifier>]
+        Role     = Caption / Label / BodySmall / Body / BodyLarge /
+                   Title / Display / Hero
+        Modifier = Accent  (cyan)
+                   Plain   (sans-serif, otherwise mirrors the role)
+                   Mono    (monospace override on a default-family role)
+                   Bold    (textStyle bold)
+                   Large   (next-step-up textSize)
+
+    Application:
+      `style="@style/TextAppearance.Dish.X"` — NOT `android:textAppearance`.
+      The `style="…"` form applies every attribute including
+      `lineSpacingMultiplier`; the `android:textAppearance` attribute only
+      picks up a narrower subset and silently drops line spacing.
+
+    Letter-spacing canon:
+      0.04 — Hero (subtle tracking on giant numerals)
+      0.12 — Label / Label.Accent / Display.Large (eyebrow + brand wordmark)
+      0.18 — Caption (small mono eyebrow / footer)
+      All other spacing is callsite-specific override (overlay HUD treatments
+      in `overlay_low_power.xml` ride on top of the Label/Body styles).
+
+    Every style has `parent=""` so the canonical attribute list is fully
+    enumerated here — no surprise inheritance from Material or AppCompat
+    text-appearance defaults.
+-->
+<resources>
+
+    <!-- ============================================================
+         CAPTION — smallest mono eyebrow (footer, brand chrome).
+         ============================================================ -->
+    <style name="TextAppearance.Dish.Caption" parent="">
+        <item name="android:textSize">@dimen/text_caption</item>
+        <item name="android:textColor">@color/colorMuted</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:letterSpacing">0.18</item>
+    </style>
+
+    <!-- ============================================================
+         LABEL — muted mono eyebrow above cards, section headers,
+         picker rows. Canonical letterSpacing is 0.12.
+         ============================================================ -->
+    <style name="TextAppearance.Dish.Label" parent="">
+        <item name="android:textSize">@dimen/text_label</item>
+        <item name="android:textColor">@color/colorMuted</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:letterSpacing">0.12</item>
+    </style>
+
+    <!-- Cyan-accent variant — section eyebrow that names a region
+         (CONNECTIONS, CONTROLLERS, SATELLITES, BLUETOOTH HOSTS). -->
+    <style name="TextAppearance.Dish.Label.Accent" parent="">
+        <item name="android:textSize">@dimen/text_label</item>
+        <item name="android:textColor">@color/colorPrimary</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:letterSpacing">0.12</item>
+    </style>
+
+    <!-- Sans-serif variant — used where the design wants the muted
+         label tone but proportional letters (motion-subtitle one-liner). -->
+    <style name="TextAppearance.Dish.Label.Plain" parent="">
+        <item name="android:textSize">@dimen/text_label</item>
+        <item name="android:textColor">@color/colorMuted</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textStyle">normal</item>
+    </style>
+
+    <!-- ============================================================
+         BODY SMALL — secondary copy under titles (slot status, empty
+         hints, dialog subtitles).
+         ============================================================ -->
+    <style name="TextAppearance.Dish.BodySmall" parent="">
+        <item name="android:textSize">@dimen/text_body_sm</item>
+        <item name="android:textColor">@color/colorMuted</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textStyle">normal</item>
+    </style>
+
+    <!-- ============================================================
+         BODY — multi-line prose. lineSpacingMultiplier 1.35 keeps
+         multi-line strings (e.g. Settings card body, fatal-screen
+         description) breathing.
+         ============================================================ -->
+    <style name="TextAppearance.Dish.Body" parent="">
+        <item name="android:textSize">@dimen/text_body</item>
+        <item name="android:textColor">@color/colorMuted</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:lineSpacingMultiplier">1.35</item>
+    </style>
+
+    <!-- Mono / on-surface variant — version string, URL display. -->
+    <style name="TextAppearance.Dish.Body.Mono" parent="">
+        <item name="android:textSize">@dimen/text_body</item>
+        <item name="android:textColor">@color/colorOnSurface</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textStyle">normal</item>
+    </style>
+
+    <!-- ============================================================
+         BODY LARGE — picker row title (mono) + dashboard connection
+         summary (bold variant).
+         ============================================================ -->
+    <style name="TextAppearance.Dish.BodyLarge" parent="">
+        <item name="android:textSize">@dimen/text_body_lg</item>
+        <item name="android:textColor">@color/colorMuted</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textStyle">normal</item>
+    </style>
+
+    <style name="TextAppearance.Dish.BodyLarge.Bold" parent="">
+        <item name="android:textSize">@dimen/text_body_lg</item>
+        <item name="android:textColor">@color/colorOnSurface</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- ============================================================
+         TITLE — card heading. sans-serif-medium + 1.3 lineSpacing for
+         a calm weight under the brighter cyan eyebrow.
+         ============================================================ -->
+    <style name="TextAppearance.Dish.Title" parent="">
+        <item name="android:textSize">@dimen/text_title_sm</item>
+        <item name="android:textColor">@color/colorOnSurface</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:lineSpacingMultiplier">1.3</item>
+    </style>
+
+    <!-- One-off display state — pair-dialog title; one step larger
+         than Title, bold for prominence above the PIN field. -->
+    <style name="TextAppearance.Dish.Title.Large" parent="">
+        <item name="android:textSize">@dimen/text_title_lg</item>
+        <item name="android:textColor">@color/colorOnSurface</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- ============================================================
+         DISPLAY — countdown numerals + brand wordmark.
+         ============================================================ -->
+    <style name="TextAppearance.Dish.Display" parent="">
+        <item name="android:textSize">@dimen/text_display</item>
+        <item name="android:textColor">@color/colorPrimary</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- One-off display state — brand wordmark ("DISH") at the top
+         of the dashboard + the fatal-native screen. -->
+    <style name="TextAppearance.Dish.Display.Large" parent="">
+        <item name="android:textSize">@dimen/text_display_lg</item>
+        <item name="android:textColor">@color/colorPrimary</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.12</item>
+    </style>
+
+    <!-- ============================================================
+         HERO — low-power HUD clock (largest type in the app).
+         ============================================================ -->
+    <style name="TextAppearance.Dish.Hero" parent="">
+        <item name="android:textSize">@dimen/text_hero</item>
+        <item name="android:textColor">@color/colorPrimary</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.04</item>
+    </style>
+
+</resources>

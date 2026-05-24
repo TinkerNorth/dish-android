@@ -6,76 +6,66 @@
      dim-overlay pill in the v6 theme — and the title/subtitle/error labels
      all follow the monospace + letter-spaced chrome convention. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:background="@drawable/bg_pill"
-    android:paddingHorizontal="24dp"
-    android:paddingVertical="22dp">
+    android:paddingHorizontal="@dimen/spacing_6xl"
+    android:paddingVertical="@dimen/size_22">
 
     <TextView
+        style="@style/TextAppearance.Dish.Label.Accent"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/pair_dialog_submit"
-        android:textColor="@color/colorPrimary"
-        android:textSize="11sp"
-        android:fontFamily="monospace"
-        android:letterSpacing="0.18" />
+        android:text="@string/pair_dialog_eyebrow" />
 
     <TextView
         android:id="@+id/tvPairTitle"
+        style="@style/TextAppearance.Dish.Title.Large"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:text="@string/pair_dialog_title"
-        android:textColor="@color/colorOnSurface"
-        android:textSize="18sp"
-        android:textStyle="bold" />
+        android:layout_marginTop="@dimen/spacing_sm"
+        android:text="@string/pair_dialog_title" />
 
     <TextView
         android:id="@+id/tvPairSubtitle"
+        style="@style/TextAppearance.Dish.BodySmall"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:text="@string/pair_dialog_subtitle"
-        android:textColor="@color/colorMuted"
-        android:textSize="12sp" />
+        android:layout_marginTop="@dimen/spacing_sm"
+        android:text="@string/pair_dialog_subtitle" />
 
     <EditText
         android:id="@+id/etPin"
+        style="@style/Widget.Dish.EditText.Pin"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="18dp"
+        android:layout_marginTop="@dimen/spacing_4xl"
         android:hint="@string/pair_dialog_pin_hint"
-        android:inputType="number"
+        android:inputType="numberPassword"
         android:maxLength="8"
-        android:gravity="center"
-        android:textSize="22sp"
-        android:textColor="@color/colorOnSurface"
-        android:textColorHint="@color/colorMuted"
-        android:letterSpacing="0.30"
-        android:fontFamily="monospace"
-        android:background="@drawable/bg_pair_pin_field"
-        android:padding="14dp"
         android:autofillHints="@null"
-        android:importantForAutofill="no" />
+        android:importantForAutofill="no"
+        tools:targetApi="26" />
 
     <!-- Inline error surface: hidden until the server rejects the PIN, then
-         shown under the field with the same error red used elsewhere. -->
+         shown under the field with the same error red used elsewhere.
+         Adopts BodySmall and overrides textColor to colorError — the
+         severity colour is callsite intent, not a style-wide concern. -->
     <TextView
         android:id="@+id/tvPairError"
+        style="@style/TextAppearance.Dish.BodySmall"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="@dimen/spacing_md"
         android:textColor="@color/colorError"
-        android:textSize="12sp"
-        android:fontFamily="monospace"
         android:visibility="gone" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
+        android:layout_marginTop="@dimen/spacing_5xl"
         android:orientation="horizontal">
 
         <com.google.android.material.button.MaterialButton
@@ -84,16 +74,15 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="@string/pair_dialog_cancel"
-            android:textAllCaps="true" />
+            android:text="@android:string/cancel" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnPairSubmit"
+            style="@style/Widget.Dish.Button"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="10dp"
-            android:text="@string/pair_dialog_submit"
-            android:textAllCaps="true" />
+            android:layout_marginStart="@dimen/spacing_lg"
+            android:text="@string/pair_dialog_submit" />
     </LinearLayout>
 </LinearLayout>

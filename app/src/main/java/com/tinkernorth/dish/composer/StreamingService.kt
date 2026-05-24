@@ -158,12 +158,13 @@ class StreamingService : Service() {
                 Intent(this, StreamingService::class.java).apply { action = ACTION_STOP_ALL },
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
-        val body =
-            if (primaryLabel != null) {
-                getString(R.string.streaming_notification_body, count, primaryLabel)
-            } else {
-                getString(R.string.streaming_notification_body_plural, count)
-            }
+        // Single plurals resource picks "1 controller streaming to <host>" vs
+        // "N controllers streaming to <host>" off the count. When no connected
+        // satellite is known yet (initial start-foreground, or a transient gap
+        // between count and connections emissions), fall back to a localised
+        // generic name so the format always has a host string to render.
+        val hostLabel = primaryLabel ?: getString(R.string.satellite_fallback_name)
+        val body = resources.getQuantityString(R.plurals.streaming_notification_body, count, count, hostLabel)
         return NotificationCompat
             .Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_dish_connected)

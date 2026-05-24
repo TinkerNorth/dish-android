@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    NAV GRAPH — single source of truth for in-app navigation between the
+    six chrome / overlay activities. Used through DishNavigator
+    (app/src/main/java/com/tinkernorth/dish/ui/common/DishNavigator.kt),
+    which exposes typed `navigateToX` methods over a NavController seeded
+    with this graph.
+
+    Activity-only graph: every destination is an <activity>, no <fragment>.
+    Activity destinations are TERMINAL in the navigation library's model —
+    they cannot carry <action> children. NavController instead navigates
+    directly to a destination id (the navigate(R.id.xActivity) overload),
+    which the runtime resolves through ActivityNavigator into
+    `startActivity(Intent(xActivityClass))` with the supplied bundle as
+    intent extras. Argument names declared on each destination map 1:1
+    to the receiving Activity's `intent.getXxxExtra(name)` calls.
+
+    Deep links: NOT declared in this graph. The navigation runtime's lint
+    check (DeepLinkInActivityDestination) flags <deepLink> on <activity>
+    destinations because the back-stack behaviour is wrong for cross-app
+    implicit-intent flows — system back should return to the calling app,
+    but Activity-destination deep links land the user inside this app's
+    own task. Real external deep linking requires either Fragment
+    destinations or a manual <intent-filter> on the receiving Activity.
+    Today's "pairing-required" notification routes through MainActivity's
+    in-app callback (DishNavigator.toConnectionsForPairing), not a deep
+    link, so the lint check stays clean.
+-->
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/mainActivity">
+
+    <!-- ═══ DASHBOARD ═════════════════════════════════════════════════ -->
+    <activity
+        android:id="@+id/mainActivity"
+        android:name="com.tinkernorth.dish.ui.main.MainActivity"
+        android:label="@string/app_name" />
+
+    <!-- ═══ CONNECTIONS ═══════════════════════════════════════════════ -->
+    <activity
+        android:id="@+id/connectionsActivity"
+        android:name="com.tinkernorth.dish.ui.connections.ConnectionsActivity"
+        android:label="@string/title_connections">
+
+        <!-- Argument matches ConnectionsActivity.EXTRA_PAIR_PROMPT_FOR_ID
+             (intent extra of the same name). Nullable so the same
+             destination handles both "manage list" (no extra) and the
+             pairing-deep-link flow (extra set). -->
+        <argument
+            android:name="extra_pair_prompt_for_id"
+            app:argType="string"
+            app:nullable="true"
+            android:defaultValue="@null" />
+    </activity>
+
+    <!-- ═══ SETTINGS ══════════════════════════════════════════════════ -->
+    <activity
+        android:id="@+id/settingsActivity"
+        android:name="com.tinkernorth.dish.ui.settings.SettingsActivity"
+        android:label="@string/settings_title" />
+
+    <!-- ═══ INPUT OVERLAYS ════════════════════════════════════════════ -->
+    <activity
+        android:id="@+id/touchpadOverlayActivity"
+        android:name="com.tinkernorth.dish.ui.main.TouchpadOverlayActivity"
+        android:label="@string/overlay_title_touchpad">
+
+        <argument
+            android:name="extra_connection_id"
+            app:argType="string" />
+        <argument
+            android:name="extra_touchpad_mode"
+            app:argType="string" />
+        <argument
+            android:name="extra_slot_id"
+            app:argType="string" />
+    </activity>
+
+    <activity
+        android:id="@+id/gamepadOverlayActivity"
+        android:name="com.tinkernorth.dish.ui.main.GamepadOverlayActivity"
+        android:label="@string/overlay_title_gamepad">
+
+        <argument
+            android:name="extra_connection_id"
+            app:argType="string" />
+        <argument
+            android:name="extra_use_ps_layout"
+            app:argType="boolean"
+            android:defaultValue="false" />
+    </activity>
+
+    <!-- ═══ FATAL FALLBACK ════════════════════════════════════════════ -->
+    <activity
+        android:id="@+id/nativeUnavailableActivity"
+        android:name="com.tinkernorth.dish.ui.main.NativeUnavailableActivity"
+        android:label="@string/fatal_native_title" />
+
+</navigation>
