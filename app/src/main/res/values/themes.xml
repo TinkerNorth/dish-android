@@ -1,11 +1,18 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <style name="Theme.Dish" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+    <!-- Material 3 base. The M2 `colorPrimaryVariant` / `colorSecondaryVariant`
+         attributes intentionally dropped — they don't exist in the M3 token
+         system (replaced by `colorPrimaryContainer` / `colorSecondaryContainer`
+         which we don't currently consume; reintroduce only when a callsite
+         needs the container colour ramp). -->
+    <style name="Theme.Dish" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/colorPrimary</item>
-        <item name="colorPrimaryVariant">@color/colorPrimaryDark</item>
         <item name="colorOnPrimary">@color/colorOnPrimary</item>
         <item name="colorSecondary">@color/colorPrimaryMid</item>
-        <item name="colorSecondaryVariant">@color/colorPrimaryDark</item>
-        <item name="colorOnSecondary">@color/colorOnSurface</item>
+        <!-- colorOnSecondary mirrors colorOnPrimary because colorSecondary
+             (cyan_700) has the same luminance as colorPrimaryDark — any
+             future widget reading the Material on/bg pair gets 5.6:1
+             contrast, well above WCAG AA's 4.5:1. -->
+        <item name="colorOnSecondary">@color/colorOnPrimary</item>
         <item name="colorSurface">@color/colorSurface</item>
         <item name="colorOnSurface">@color/colorOnSurface</item>
         <item name="colorError">@color/colorError</item>
@@ -17,10 +24,16 @@
         <item name="materialButtonStyle">@style/Widget.Dish.Button</item>
     </style>
 
-    <!-- Filled button: dark-amber background, light text, full-width friendly -->
-    <style name="Widget.Dish.Button" parent="Widget.MaterialComponents.Button">
+    <!-- Filled button: cyan-dark background, dark navy text (colorOnPrimary).
+         Text colour switched from colorOnSurface (paper_50, white) to
+         colorOnPrimary (navy_900, dark) so the button label clears WCAG AA
+         contrast against the cyan-dark fill (5.6:1, vs. 3.0:1 with white
+         text — the prior treatment was below the 4.5:1 normal-text
+         threshold). Matches the M3 convention of pairing colorOnPrimary
+         text with primary-family fills. -->
+    <style name="Widget.Dish.Button" parent="Widget.Material3.Button">
         <item name="backgroundTint">@color/colorPrimaryDark</item>
-        <item name="android:textColor">@color/colorOnSurface</item>
+        <item name="android:textColor">@color/colorOnPrimary</item>
         <item name="android:textAllCaps">true</item>
         <item name="android:letterSpacing">0.04</item>
         <item name="cornerRadius">@dimen/corner_button</item>
@@ -30,7 +43,7 @@
     </style>
 
     <!-- Outlined button: transparent bg, subtle border, light text -->
-    <style name="Widget.Dish.Button.Outlined" parent="Widget.MaterialComponents.Button.OutlinedButton">
+    <style name="Widget.Dish.Button.Outlined" parent="Widget.Material3.Button.OutlinedButton">
         <item name="backgroundTint">@android:color/transparent</item>
         <item name="android:textColor">@color/colorOnSurface</item>
         <item name="strokeColor">@color/colorOutline</item>
@@ -47,8 +60,11 @@
          surface's rounded corners + cyan outline are the only visible shape,
          dim behind so the activity recedes (matches the dim-on-low-power
          scrim alpha for a consistent floating-element treatment). Used by
-         PairPinDialog. -->
-    <style name="Theme.Dish.Dialog" parent="Theme.AppCompat.Dialog">
+         PairPinDialog.
+         Parented at the M3 dialog theme so MaterialButton children inside
+         pick up M3 ripple/state-layer treatments consistent with the rest
+         of the app. -->
+    <style name="Theme.Dish.Dialog" parent="Theme.Material3.DayNight.Dialog">
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowIsFloating">true</item>
         <item name="android:windowContentOverlay">@null</item>
@@ -56,7 +72,6 @@
         <item name="android:backgroundDimEnabled">true</item>
         <item name="android:backgroundDimAmount">0.6</item>
         <item name="colorPrimary">@color/colorPrimary</item>
-        <item name="colorPrimaryVariant">@color/colorPrimaryDark</item>
         <item name="colorOnPrimary">@color/colorOnPrimary</item>
         <item name="colorSurface">@color/colorSurface</item>
         <item name="colorOnSurface">@color/colorOnSurface</item>

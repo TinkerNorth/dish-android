@@ -70,12 +70,6 @@
     <dimen name="icon_settings_button">@dimen/size_40</dimen> <!-- header settings ImageButton -->
 
     <!-- ============================================================
-         TOUCH TARGETS + COMPONENT HEIGHTS
-         ============================================================ -->
-    <dimen name="touch_target_min">@dimen/size_32</dimen>     <!-- exit-overlay button height -->
-    <dimen name="button_min_width">@dimen/size_64</dimen>     <!-- shared min-width on dish buttons -->
-
-    <!-- ============================================================
          CARD (item_controller, row_connection)
          ============================================================ -->
     <dimen name="card_padding">@dimen/size_14</dimen>

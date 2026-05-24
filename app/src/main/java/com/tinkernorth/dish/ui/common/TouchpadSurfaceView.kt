@@ -302,10 +302,27 @@ class TouchpadSurfaceView
                     emit()
                     if (!state.anyFingerDown()) {
                         listener?.onTouchActivityChanged(false)
+                        // performClick() satisfies the View accessibility
+                        // contract — when an a11y service (TalkBack) routes
+                        // a tap through the accessibility shadow, View.dispatch
+                        // invokes performClick() and our override returns
+                        // true so the service knows the tap was handled.
+                        // The actual touch-driven gesture state is already
+                        // settled above (releaseSlot + emit); performClick
+                        // is the per-gesture commit notification, called
+                        // once after the last finger lifts.
+                        if (event.actionMasked != MotionEvent.ACTION_CANCEL) {
+                            performClick()
+                        }
                     }
                 }
                 else -> return false
             }
+            return true
+        }
+
+        override fun performClick(): Boolean {
+            super.performClick()
             return true
         }
 

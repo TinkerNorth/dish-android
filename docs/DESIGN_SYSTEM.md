@@ -103,7 +103,6 @@ text/icon view (the recipe is a one-line `<selector>` in `res/color/`).
 | spacing T-shirt scale | `spacing_xs` (4) → `spacing_6xl` (24) in 10 steps |
 | strokes + corners | `border_thin`, `divider_height`, `corner_chip`, `corner_picker_row`, `corner_button`, `corner_card`, `corner_notification`, `corner_pill` |
 | icon sizes | `icon_dot[_lg]`, `icon_battery`, `icon_picker_glyph`, `icon_brand_sm`, `icon_section_header`, `icon_card_container`, `icon_card_glyph`, `icon_action`, `icon_row_glyph`, `icon_controller`, `icon_chevron_lg`, `icon_settings_button` |
-| touch targets | `touch_target_min`, `button_min_width` |
 | card | `card_padding[_horizontal/_bottom]`, `card_margin_bottom` |
 | inline picker row | `picker_row_padding`, `picker_row_margin_top`, `picker_section_margin_top`, `picker_section_padding_bottom`, `picker_label_margin_end` |
 | chip | `chip_padding_horizontal/_vertical`, `chip_margin_end` |
@@ -197,10 +196,16 @@ surprise inheritance from Material/AppCompat text-appearance defaults.
 
 ### Theme
 
+Parented at **Material 3** (`Theme.Material3.DayNight.NoActionBar`). M2's
+`colorPrimaryVariant` / `colorSecondaryVariant` are intentionally not set —
+the M3 token system replaces them with `colorPrimaryContainer` /
+`colorSecondaryContainer`, which no callsite currently consumes. Re-introduce
+the container colours only when a real component needs them.
+
 | Style | Where | Role |
 |---|---|---|
 | `Theme.Dish` | `values/themes.xml`, `values-night/themes.xml` | App + activity theme. Wires Material color slots to `colorPrimary` / `colorOnSurface` / etc., sets `windowBackground` + `statusBarColor` + `navigationBarColor` to `colorBackground`, and pins `materialButtonStyle = Widget.Dish.Button` as the global default. |
-| `Theme.Dish.Dialog` | `values/themes.xml` | Pair-PIN dialog overlay. Transparent `windowBackground` (so `bg_pill`'s rounded corners + cyan outline are the only visible shape), 60% backgroundDim, no title. |
+| `Theme.Dish.Dialog` | `values/themes.xml` | Pair-PIN dialog overlay (parented at `Theme.Material3.DayNight.Dialog`). Transparent `windowBackground` (so `bg_pill`'s rounded corners + cyan outline are the only visible shape), 60% backgroundDim, no title. |
 
 ### `Widget.Dish.*` styles
 
@@ -213,19 +218,21 @@ wires `materialButtonStyle = Widget.Dish.Button` as the global default):
 
 | Style | Parent | Adds |
 |---|---|---|
-| `Widget.Dish.Button` | `Widget.MaterialComponents.Button` | filled: `colorPrimaryDark` bg, `colorOnSurface` text, uppercase, 0.04 spacing, `corner_button`, zero insets, `colorPrimaryMid` ripple |
-| `Widget.Dish.Button.Outlined` | `Widget.MaterialComponents.Button.OutlinedButton` | transparent bg, `colorOnSurface` text, `colorOutline` stroke (`border_thin`), uppercase, 0.04 spacing, `corner_button`, zero insets, `colorPrimaryDark` ripple |
+| `Widget.Dish.Button` | `Widget.Material3.Button` | filled: `colorPrimaryDark` bg, `colorOnSurface` text, uppercase, 0.04 spacing, `corner_button`, zero insets, `colorPrimaryMid` ripple |
+| `Widget.Dish.Button.Outlined` | `Widget.Material3.Button.OutlinedButton` | transparent bg, `colorOnSurface` text, `colorOutline` stroke (`border_thin`), uppercase, 0.04 spacing, `corner_button`, zero insets, `colorPrimaryDark` ripple |
 
 **Everything else** (in `values/styles_widgets.xml`):
 
 | Style | Parent | Adds | When to use |
 |---|---|---|---|
-| `Widget.Dish.Card` | `Widget.MaterialComponents.CardView` | `colorSurface` bg, `corner_card` radius, `elevation_none`, `colorCardStroke` stroke (`border_thin`) | every `MaterialCardView` in the app |
-| `Widget.Dish.Toolbar` | `Widget.MaterialComponents.Toolbar` | `colorBackground` bg, `colorOnSurface` title, `ic_chevron_left` nav icon, action-bar height | both Activity toolbars (Settings + Connections) |
+| `Widget.Dish.Card` | `Widget.Material3.CardView.Outlined` | `colorSurface` bg, `corner_card` radius, `elevation_none`, `colorCardStroke` stroke (`border_thin`) | every `MaterialCardView` in the app |
+| `Widget.Dish.Toolbar` | `Widget.Material3.Toolbar` | `colorBackground` bg, `colorOnSurface` title, `ic_chevron_left` nav icon, action-bar height | both Activity toolbars (Settings + Connections) |
 | `Widget.Dish.StatusDot.Small` | `""` | `icon_dot` size + `dot_circle` background | overlay status indicators |
 | `Widget.Dish.StatusDot.Large` | `""` | `icon_dot_lg` size + `dot_circle` background | slot-card / row status indicators |
-| `Widget.Dish.EmptyStateText` | `""` | `match_parent` width, `spacing_xs` top margin, `TextAppearance.Dish.BodySmall` | `picker_empty_label.xml` (single callsite; other empty-state TextViews have per-context padding and adopt `BodySmall` directly) |
-| `Widget.Dish.Switch` | `Widget.MaterialComponents.CompoundButton.Switch` | hides side labels (`textOn`/`textOff` empty, `showText=false`); thumb + track colors come from the Material theme | every `SwitchMaterial` in the app |
+| `Widget.Dish.EmptyStateText` | `""` | base: `match_parent` width, `TextAppearance.Dish.BodySmall` | never used directly — pick a variant |
+| `Widget.Dish.EmptyStateText.Picker` | `Widget.Dish.EmptyStateText` | + `spacing_xs` top margin | `picker_empty_label.xml` (slot-card empty picker) |
+| `Widget.Dish.EmptyStateText.Section` | `Widget.Dish.EmptyStateText` | + `spacing_xl` vertical padding | `tvSatelliteEmpty` + `tvBtEmpty` in `activity_connections.xml` (standalone empty-state row inside a section, no surrounding card) |
+| `Widget.Dish.Switch` | `Widget.Material3.CompoundButton.MaterialSwitch` | hides side labels (`textOn`/`textOff` empty, `showText=false`); thumb + track colors come from the Material theme | every `com.google.android.material.materialswitch.MaterialSwitch` in the app (M3 widget class — different from the M2 `SwitchMaterial` the codebase used pre-migration) |
 | `Widget.Dish.EditText.Pin` | `Widget.AppCompat.EditText` | numeric input, center gravity, `text_display` size, `colorOnSurface`, monospace, 0.30 spacing, `bg_pair_pin_field` drawable, `card_padding` padding | pair-PIN entry field (API 26+ `autofillHints` + `importantForAutofill` stay inline at the callsite; style items can't carry `tools:targetApi`) |
 | `Widget.Dish.Icon.Section` | `""` | `icon_section_header` size, no tint | leading multi-tone icons on section headers (ic_satellite, ic_bluetooth) |
 | `Widget.Dish.Icon.Card` | `""` | `icon_card_glyph` size + `colorPrimary` tint | leading single-tone glyphs on Settings card rows (ic_bug, ic_shield) |
@@ -402,6 +409,77 @@ A new TextView in the app:
   flags or strip out the screen-specific geometry. The two toolbars already
   share `Widget.Dish.Toolbar`; that's the shared part. The rest is
   intentional per-screen geometry.
+
+---
+
+## Accessibility (WCAG AA contrast)
+
+Every semantic foreground/background pair the app actually paints was
+computed against the WCAG 2.1 relative-luminance formula. Targets:
+
+- **Normal text** (any size below 18sp regular / 14sp bold): **≥ 4.5:1** (AA)
+- **Large text** (≥18sp regular / ≥14sp bold): **≥ 3:1** (AA)
+- **UI components** identifiable only by their boundary (button outlines,
+  status dots, dividers, etc.): **≥ 3:1**
+
+### Text pairs
+
+| Foreground | Background | Ratio | Grade |
+|---|---|---|---|
+| `colorOnSurface` (paper_50) | `colorBackground` (navy_900) | **16.85 : 1** | AAA |
+| `colorOnSurface` (paper_50) | `colorSurface` (navy_800) | **16.0 : 1** | AAA |
+| `colorOnSurface` (paper_50) | `colorSurfaceDim` (navy_700) | **14.8 : 1** | AAA |
+| `colorMuted` (slate_300) | `colorBackground` (navy_900) | **7.77 : 1** | AAA |
+| `colorMuted` (slate_300) | `colorSurface` (navy_800) | **7.38 : 1** | AAA |
+| `colorPrimary` (cyan_500) | `colorBackground` (navy_900) | **13.0 : 1** | AAA |
+| `colorPrimary` (cyan_500) | `colorSurface` (navy_800) | **12.4 : 1** | AAA |
+| `colorOnPrimary` (navy_900) | `colorPrimaryDark` (cyan_700) | **5.57 : 1** | AA |
+| `colorOnPrimary` (navy_900) | `colorPrimary` (cyan_500) | **13.0 : 1** | AAA |
+| `colorSuccess` (green_500) | `colorBackground` (navy_900) | **8.72 : 1** | AAA |
+| `colorError` (red_500) | `colorBackground` (navy_900) | **5.21 : 1** | AA |
+| `colorError` (red_500) | `colorSurface` (navy_800) | **4.94 : 1** | AA (margin: 0.44) |
+| `colorWarning` (amber_500) | `colorBackground` (navy_900) | **9.27 : 1** | AAA |
+
+**Notable history**: filled-button text previously used `colorOnSurface`
+(paper_50, white) on `colorPrimaryDark` (cyan_700) — that pair is **3.02:1**,
+below the WCAG AA normal-text threshold. Migration to `colorOnPrimary`
+(navy_900) gives 5.57:1. The M3 convention of pairing `colorOnPrimary` text
+with primary-family fills exists exactly for this reason.
+
+### Borderline UI element contrasts (intentional)
+
+Three tokens sit below the WCAG 3:1 UI-component minimum **on purpose** —
+they paint a visual texture rather than carry meaning that has to be read
+in isolation:
+
+| Token | Approx ratio on `colorBackground` | Why it's intentional |
+|---|---|---|
+| `colorOutline` (cyan @ 18%) | **~1.43 : 1** | Outlined-button border. The button is identified by its label (16.85:1 contrast) — the border is a calm visual cue, not the affordance. |
+| `colorCardStroke` (cyan @ 12%) | **~1.25 : 1** | Card stroke. The card is identified by its `colorSurface` background fill + the content inside; the stroke is a brand hairline. |
+| `colorSurfaceTint` (cyan @ 6%) | **~1.10 : 1** | Subtle surface tint behind the Settings-row icon container. Decorative — never used to convey state. |
+
+If any of these tokens is ever used to carry meaning on its own (e.g. a
+border that *signals* a selected state without a paired colour or icon
+change), it must be revisited.
+
+### Severity colours on tinted surfaces
+
+`colorError` on `colorSurface` is 4.94:1 — comfortably above the AA
+threshold, but with the smallest margin of any text pair in the system.
+If a future card adopts a darker surface variant (`colorSurfaceDim` or
+deeper), the error red can drop below AA. Compute before adopting.
+
+### What this audit does **not** cover
+
+- **Multi-tone vector drawables** (battery glyph, gamepad button icons,
+  satellite/Bluetooth illustrations). Their embedded palettes are not in
+  the token system, and they're decorative — text labels accompany every
+  meaningful glyph. No contrast obligation.
+- **`DishLoaders` and other custom-paint views** that draw with hard-coded
+  hex values internal to the view's drawing contract.
+- **Dynamic states** (focus rings, pressed-state ripples) — these inherit
+  M3 defaults sized to the underlying widget colours, and the M3 defaults
+  themselves are designed to meet AA against their host palette.
 
 ---
 

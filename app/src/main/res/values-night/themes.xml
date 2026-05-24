@@ -1,12 +1,12 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Night theme is identical — the palette is already dark-first -->
-    <style name="Theme.Dish" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+    <!-- Night theme is identical — the palette is already dark-first.
+         Material 3 base; M2-only `colorPrimaryVariant` / `colorSecondaryVariant`
+         intentionally dropped (see the day-theme equivalent). -->
+    <style name="Theme.Dish" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/colorPrimary</item>
-        <item name="colorPrimaryVariant">@color/colorPrimaryDark</item>
         <item name="colorOnPrimary">@color/colorOnPrimary</item>
         <item name="colorSecondary">@color/colorPrimaryMid</item>
-        <item name="colorSecondaryVariant">@color/colorPrimaryDark</item>
-        <item name="colorOnSecondary">@color/colorOnSurface</item>
+        <item name="colorOnSecondary">@color/colorOnPrimary</item>
         <item name="colorSurface">@color/colorSurface</item>
         <item name="colorOnSurface">@color/colorOnSurface</item>
         <item name="colorError">@color/colorError</item>
@@ -17,9 +17,9 @@
         <item name="materialButtonStyle">@style/Widget.Dish.Button</item>
     </style>
 
-    <style name="Widget.Dish.Button" parent="Widget.MaterialComponents.Button">
+    <style name="Widget.Dish.Button" parent="Widget.Material3.Button">
         <item name="backgroundTint">@color/colorPrimaryDark</item>
-        <item name="android:textColor">@color/colorOnSurface</item>
+        <item name="android:textColor">@color/colorOnPrimary</item>
         <item name="android:textAllCaps">true</item>
         <item name="android:letterSpacing">0.04</item>
         <item name="cornerRadius">@dimen/corner_button</item>
@@ -28,7 +28,7 @@
         <item name="rippleColor">@color/colorPrimaryMid</item>
     </style>
 
-    <style name="Widget.Dish.Button.Outlined" parent="Widget.MaterialComponents.Button.OutlinedButton">
+    <style name="Widget.Dish.Button.Outlined" parent="Widget.Material3.Button.OutlinedButton">
         <item name="backgroundTint">@android:color/transparent</item>
         <item name="android:textColor">@color/colorOnSurface</item>
         <item name="strokeColor">@color/colorOutline</item>

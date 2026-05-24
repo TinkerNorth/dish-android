@@ -91,7 +91,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1" />
 
-                        <com.google.android.material.switchmaterial.SwitchMaterial
+                        <com.google.android.material.materialswitch.MaterialSwitch
                             android:id="@+id/switchCrashReporting"
                             style="@style/Widget.Dish.Switch"
                             android:layout_width="wrap_content"

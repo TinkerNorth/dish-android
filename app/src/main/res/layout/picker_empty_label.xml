@@ -5,4 +5,4 @@
      right now"). Width / margins / text size / color are all baked here —
      the adapter only sets `.text`. -->
 <TextView xmlns:android="http://schemas.android.com/apk/res/android"
-    style="@style/Widget.Dish.EmptyStateText" />
+    style="@style/Widget.Dish.EmptyStateText.Picker" />

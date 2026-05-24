@@ -54,11 +54,8 @@
 
                 <TextView
                     android:id="@+id/tvSatelliteEmpty"
-                    style="@style/TextAppearance.Dish.BodySmall"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    style="@style/Widget.Dish.EmptyStateText.Section"
                     android:text="@string/discovery_empty_never_scanned"
-                    android:paddingVertical="@dimen/spacing_xl"
                     android:visibility="gone" />
 
                 <View
@@ -85,11 +82,8 @@
 
                 <TextView
                     android:id="@+id/tvBtEmpty"
-                    style="@style/TextAppearance.Dish.BodySmall"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/bt_hosts_empty"
-                    android:paddingVertical="@dimen/spacing_xl" />
+                    style="@style/Widget.Dish.EmptyStateText.Section"
+                    android:text="@string/bt_hosts_empty" />
 
             </LinearLayout>
         </androidx.core.widget.NestedScrollView>
