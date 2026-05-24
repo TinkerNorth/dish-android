@@ -53,6 +53,27 @@
         <item name="strokeWidth">@dimen/border_thin</item>
     </style>
 
+    <!-- Inner LinearLayout wrapper for a Settings-style card row: the
+         horizontal slot that hosts a `card_row_icon_label_value` include
+         alongside a trailing affordance (MaterialSwitch, chevron ImageView,
+         etc.) inside a Widget.Dish.Card. Captures the orientation +
+         card_padding the two Settings card wrappers (Crash, Privacy) share.
+
+         Gravity is left to the callsite: `top` for multi-line rows whose
+         subtitle wraps and whose trailing affordance should align to the
+         title baseline (Crash); `center_vertical` for single-line rows
+         where the trailing chevron sits beside the centred text (Privacy).
+
+         Not adopted by the Settings version row — its padding is asymmetric
+         (`card_padding_horizontal` + `size_11` vertical) because the row is
+         a single-line label/value pair, not an icon-plus-text composite. -->
+    <style name="Widget.Dish.Card.RowContainer" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:padding">@dimen/card_padding</item>
+    </style>
+
     <!-- ============================================================
          TOOLBAR
          The two Activity toolbars (Connections, Settings) only differ
