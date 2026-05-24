@@ -397,4 +397,37 @@
         <item name="colorSurface">@color/colorSurface</item>
         <item name="colorOnSurface">@color/colorOnSurface</item>
     </style>
+
+    <!-- ============================================================
+         SPLASH SCREEN — Theme.App.Starting
+
+         Backed by `androidx.core:core-splashscreen`, which provides:
+           - On Android 12+ (API 31+): a thin wrapper around the platform
+             SplashScreen API. Background + icon are honoured by the
+             system splash window directly.
+           - On Android 5-11 (API 24-30): a faithful backport rendered
+             by the library so cold-launch looks the same across the
+             full minSdk range, instead of the pre-12 navy-flash that
+             happened before any splash setup existed.
+
+         Only MainActivity uses this theme (it's the LAUNCHER target);
+         every other activity stays on Theme.Dish and never triggers a
+         splash. `postSplashScreenTheme` flips the activity to Theme.Dish
+         the moment installSplashScreen() runs in MainActivity.onCreate,
+         so the rest of the screen renders with Dish chrome — not the
+         stripped-down Theme.SplashScreen parent.
+
+         Icon: points at the existing adaptive launcher icon. The
+         SplashScreen API extracts the foreground layer and masks it to
+         a circle (240dp viewport, 160dp inner content area). The current
+         ic_launcher_foreground.png was designed for the launcher's
+         broader safe zone, so a future pass may want a dedicated
+         ic_splash drawable optimised for the splash mask — see the
+         comment in MainActivity.onCreate.
+         ============================================================ -->
+    <style name="Theme.App.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/colorBackground</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@style/Theme.Dish</item>
+    </style>
 </resources>
