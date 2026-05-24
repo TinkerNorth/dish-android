@@ -112,7 +112,7 @@ class WakeStateController
             wakeLock =
                 powerManager
                     .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
-                    .apply { acquire() }
+                    .apply { acquire(WAKE_LOCK_TIMEOUT_MS) }
         }
 
         /** Call under [lock] only. */
@@ -123,5 +123,16 @@ class WakeStateController
 
         private companion object {
             const val WAKE_LOCK_TAG = "Dish::ControllerStream"
+
+            // Safety-net timeout: the OS auto-releases the wake lock after
+            // [WAKE_LOCK_TIMEOUT_MS] even if [release] never fires. The
+            // foreground service is the actual keep-alive for streaming, so
+            // an expiration mid-stream doesn't drop the session — it just
+            // means CPU can sleep with the screen between samples. 60 minutes
+            // covers the longest realistic single-session stream without
+            // refreshing; if a session runs past it, the composer's next
+            // emission will re-acquire on the same code path that drives the
+            // window flag.
+            const val WAKE_LOCK_TIMEOUT_MS = 60L * 60L * 1000L
         }
     }

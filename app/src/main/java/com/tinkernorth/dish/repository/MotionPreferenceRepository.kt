@@ -5,6 +5,7 @@ package com.tinkernorth.dish.repository
 
 import android.content.Context
 import android.util.Log
+import androidx.core.content.edit
 import com.tinkernorth.dish.architecture.interfaces.KeyedRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.serialization.Serializable
@@ -101,13 +102,13 @@ class MotionPreferenceRepository
 
         override fun clear() {
             synchronized(writeLock) {
-                prefs.edit().remove(KEY_LIST).apply()
+                prefs.edit { remove(KEY_LIST) }
             }
         }
 
         private fun persist(list: List<MotionPreference>) {
             val raw = json.encodeToString(ListSerializer(MotionPreference.serializer()), list)
-            prefs.edit().putString(KEY_LIST, raw).apply()
+            prefs.edit { putString(KEY_LIST, raw) }
         }
 
         private companion object {

@@ -5,6 +5,7 @@ package com.tinkernorth.dish.source.store
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.core.content.edit
 import com.tinkernorth.dish.architecture.abstracts.AbstractStateSource
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -43,7 +44,7 @@ class CrashReportingStore
 
         /** Persist [enabled] and emit it on [state]. Safe to call from any thread. */
         fun setEnabled(enabled: Boolean) {
-            prefs.edit().putBoolean(KEY_COLLECTION_ENABLED, enabled).apply()
+            prefs.edit { putBoolean(KEY_COLLECTION_ENABLED, enabled) }
             setState(enabled)
         }
 

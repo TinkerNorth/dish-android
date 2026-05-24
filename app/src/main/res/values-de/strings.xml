@@ -4,12 +4,15 @@
     <!-- MainActivity-Dashboard. Begriffe folgen den LinkState-Chips:
          ein gemerkter/gekoppelter Eintrag ist „gekoppelt"; ein
          Connected-Eintrag ist „online". -->
-    <string name="status_remembered">%1$d gekoppelt</string>
+    <plurals name="status_remembered">
+        <item quantity="one">%1$d gekoppelt</item>
+        <item quantity="other">%1$d gekoppelt</item>
+    </plurals>
     <string name="status_tap_manage">Auf Verwalten tippen, um eine hinzuzufügen</string>
-    <string name="status_connected_of">%1$d von %2$d online</string>
-    <string name="toast_pairing_needed">Kopplung nötig — Verbindungen öffnen</string>
-    <string name="toast_bind_first">Erst eine Verbindung verknüpfen</string>
-
+    <plurals name="status_connected_of">
+        <item quantity="one">%1$d von %2$d online</item>
+        <item quantity="other">%1$d von %2$d online</item>
+    </plurals>
     <!-- Dashboard-Chrome (activity_main.xml). -->
     <string name="section_connections">VERBINDUNGEN</string>
     <string name="section_controllers">CONTROLLER</string>
@@ -60,7 +63,19 @@
     <string name="action_unbind">Trennen</string>
     <string name="action_open_gamepad">Controller öffnen</string>
     <string name="desc_open_gamepad">Controller öffnen</string>
+    <string name="action_open_touchpad">Touchpad öffnen</string>
     <string name="desc_expand">Aufklappen</string>
+
+    <!-- Touchpad-Modus-Picker. -->
+    <string name="touchpad_mode_label">Touchpad-Modus</string>
+    <string name="touchpad_mode_off">Aus</string>
+    <string name="touchpad_mode_pad">Pad</string>
+    <string name="touchpad_mode_mouse">Maus</string>
+    <string name="touchpad_mode_unsupported_here">Dieser Empfänger unterstützt diesen Modus nicht.</string>
+    <string name="touchpad_mode_error_not_paired">Satellit erkennt dieses Gerät nicht — erneut koppeln, um anzuwenden.</string>
+    <string name="touchpad_mode_error_unauthorized">Satellit hat die Anfrage abgelehnt — erneut koppeln, um anzuwenden.</string>
+    <string name="touchpad_mode_error_transport">Satellit nicht erreichbar — läuft er?</string>
+    <string name="touchpad_mode_error_unknown">Touchpad-Modus konnte nicht gesetzt werden: %1$s</string>
 
     <!-- Slot-Statustext im ControllerAdapter (unter dem Namen). -->
     <string name="slot_status_disconnecting">Trennt… %1$ds</string>
@@ -71,6 +86,7 @@
     <!-- Slot-Picker-Zeilen im ControllerAdapter. -->
     <string name="picker_empty_no_connections">Noch keine Verbindungen — oben auf Verwalten tippen</string>
     <string name="picker_empty_no_available">Aktuell keine Verbindungen verfügbar</string>
+    <string name="picker_title_with_status">%1$s%2$s</string>
     <string name="picker_status_online"> • online</string>
     <string name="picker_status_connecting"> • verbindet…</string>
     <string name="picker_status_offline"> • offline</string>
@@ -94,7 +110,12 @@
     <string name="overlay_status_streaming">Streamt</string>
     <string name="overlay_status_unknown">Unbekannte Verbindung</string>
     <string name="overlay_status_not_connected">Nicht verbunden</string>
-    <string name="overlay_action_back">ZURÜCK</string>
+    <string name="overlay_title_gamepad">Gamepad</string>
+    <string name="overlay_title_touchpad">Touchpad</string>
+    <string name="touchpad_pad_click_label">Klicken + Bewegen</string>
+    <string name="touchpad_pad_move_label">Bewegen</string>
+    <string name="touchpad_pad_click_hint">Ziehen zum Klicken und Bewegen</string>
+    <string name="touchpad_pad_move_hint">Ziehen zum Bewegen des Cursors</string>
 
     <!-- Standardbezeichnungen für Slot/Verbindung. -->
     <string name="default_virtual_controller_name">Virtueller Controller</string>
@@ -152,14 +173,11 @@
     <string name="discovery_source_both">mDNS + Broadcast</string>
 
     <!-- Aktionsbeschriftungen der Dish-Benachrichtigungen. -->
-    <string name="action_open_settings">EINSTELLUNGEN</string>
-    <string name="action_retry">ERNEUT VERSUCHEN</string>
-    <string name="action_reconnect">NEU VERBINDEN</string>
-    <string name="action_repair">NEU KOPPELN</string>
-    <string name="action_open">ÖFFNEN</string>
-    <string name="action_forget">ENTFERNEN</string>
-    <string name="action_turn_on">EINSCHALTEN</string>
-    <string name="action_grant">ERLAUBEN</string>
+    <string name="action_open_settings">Einstellungen</string>
+    <string name="action_retry">Erneut versuchen</string>
+    <string name="action_open">Öffnen</string>
+    <string name="action_turn_on">Einschalten</string>
+    <string name="action_grant">Erlauben</string>
 
     <!-- Text der Dish-Benachrichtigungen. -->
     <string name="notif_bt_permission_title">Bluetooth-Berechtigung nötig</string>
@@ -182,11 +200,6 @@
     <string name="notif_pairing_needed_title">Kopplung nötig</string>
     <string name="notif_pairing_needed_body">Öffne Verbindungen, um den PIN für %1$s einzugeben.</string>
     <string name="notif_server_unreachable_title">%1$s antwortet nicht</string>
-    <string name="notif_server_unreachable_body">Prüfe, ob er eingeschaltet ist und im selben WLAN.</string>
-    <string name="notif_registration_failed_title">Controller-Registrierung fehlgeschlagen</string>
-    <string name="notif_pair_pin_failed_title">PIN nicht korrekt</string>
-    <string name="notif_session_lost_title">Verbindung zu %1$s verloren</string>
-    <string name="notif_session_lost_body">Verbindet neu…</string>
 
     <!-- Dynamischer Leer­zustand für die Satellitenliste. -->
     <string name="discovery_empty_never_scanned">Tippe auf Suchen, um Satelliten in deinem Netzwerk zu finden</string>
@@ -196,17 +209,19 @@
     <string name="pair_dialog_title">Mit Satellit koppeln</string>
     <string name="pair_dialog_subtitle">Gib den PIN ein, der auf deinem Satelliten angezeigt wird.</string>
     <string name="pair_dialog_pin_hint">PIN</string>
-    <string name="pair_dialog_submit">KOPPELN</string>
-    <string name="pair_dialog_cancel">ABBRECHEN</string>
-    <string name="pair_dialog_pairing">KOPPELT…</string>
+    <string name="pair_dialog_eyebrow">KOPPELN</string>
+    <string name="pair_dialog_submit">Koppeln</string>
+    <string name="pair_dialog_pairing">Koppelt…</string>
     <string name="pair_dialog_error_empty">Gib den PIN ein, der auf deinem Satelliten angezeigt wird.</string>
 
     <!-- Vordergrund-Service-Benachrichtigung. -->
     <string name="streaming_channel_name">Streaming-Sitzung</string>
     <string name="streaming_channel_description">Hält Dish aktiv, während ein Controller streamt.</string>
     <string name="streaming_notification_title">Dish · Streamt</string>
-    <string name="streaming_notification_body">%1$d Controller streamt an %2$s</string>
-    <string name="streaming_notification_body_plural">%1$d Controller streamen</string>
+    <plurals name="streaming_notification_body">
+        <item quantity="one">%1$d Controller streamt an %2$s</item>
+        <item quantity="other">%1$d Controller streamen an %2$s</item>
+    </plurals>
     <string name="streaming_notification_stop">Stoppen</string>
 
     <!-- Fallback-Bildschirm, wenn das native Laden fehlschlägt. -->
@@ -223,10 +238,6 @@
         <item quantity="one">Verknüpft · %1$d Controller</item>
         <item quantity="other">Verknüpft · %1$d Controller</item>
     </plurals>
-
-    <!-- Altlasten aus dem alten Kopplungs-Layout. -->
-    <string name="pairing_dialog_legacy_title">Mit Server koppeln</string>
-    <string name="pairing_dialog_legacy_message">Gib den PIN ein, der auf deinem PC-Bildschirm angezeigt wird:</string>
 
     <!-- Datenschutzerklärung-Link (in den Einstellungen) und gemeinsame Fehlermeldung. -->
     <string name="menu_privacy_policy">Datenschutzerklärung</string>

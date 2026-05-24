@@ -132,14 +132,34 @@ class PhysicalGamepadRegistry
             // Name or sources may have changed — refresh in place so the slot
             // row picks up the new label without a phantom add/remove cycle.
             cancelDisconnect(deviceId)
+            // Always re-probe `hasGyro` on every change event, not only on
+            // a name change. Some pads (notably Bluetooth-paired Switch Pro
+            // Controllers) finish enumerating their per-device sensor list
+            // *after* the initial `onInputDeviceAdded` fires — the first
+            // probe sees no gyro, the cached false stuck forever before this
+            // fix, and the motion-capability composer then gated the listener
+            // off so the wire never saw a single sample. Android does fire
+            // `onInputDeviceChanged` once the late-enumerated sensors land,
+            // so refreshing the cache here is the targeted hook. The probe
+            // is a single `getDefaultSensor` call — cheap to re-run.
+            val nextHasGyro = PhysicalMotionProbe.hasGyro(deviceId)
             val current = _devices.value[deviceId]
-            if (current == null || current.name != dev.name || current.isDisconnecting) {
-                // Re-probe in case capabilities changed (rare in practice, but
-                // a USB pad swapping firmware between detach/attach cycles can
-                // change its sensor exposure — and the probe is cheap).
+            val needsUpdate =
+                current == null ||
+                    current.name != dev.name ||
+                    current.isDisconnecting ||
+                    current.hasGyro != nextHasGyro
+            if (needsUpdate) {
+                if (current?.hasGyro != nextHasGyro) {
+                    Log.i(
+                        TAG,
+                        "pad $deviceId (${dev.name}) hasGyro re-probed: " +
+                            "${current?.hasGyro} -> $nextHasGyro",
+                    )
+                }
                 _devices.value =
                     _devices.value +
-                    (deviceId to Device(deviceId, dev.name, hasGyro = PhysicalMotionProbe.hasGyro(deviceId)))
+                    (deviceId to Device(deviceId, dev.name, hasGyro = nextHasGyro))
             }
         }
 
@@ -254,6 +274,8 @@ class PhysicalGamepadRegistry
         private fun isGamepad(d: InputDevice): Boolean = isGamepadDeviceFromCapabilities(d.sources, d.keyboardType)
 
         private companion object {
+            const val TAG = "PhysicalGamepadRegistry"
+
             /**
              * Grace period before a removed [InputDevice] is dropped from the
              * registry. Within this window the slot row reads "Disconnecting…

@@ -1,28 +1,51 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    SEMANTIC COLOR TOKENS — names by role, mapped to primitives in
+    `colors_primitives.xml`. This is the file every layout XML, drawable,
+    style, and Kotlin source should reference.
+
+    Two families:
+      - Material slots (`colorPrimary`, `colorOnSurface`, etc.) — consumed
+        by the Theme.Dish theme + every Material widget.
+      - Dish-specific roles (`colorMuted`, `colorCardStroke`,
+        `colorOverlayScrim`, `colorSurfaceTint`) — named for the visual
+        intent at the callsite.
+
+    If you're tempted to put a literal `#…` in a layout, look here first.
+    A new semantic name with a primitive ref behind it is almost always
+    the right answer.
+-->
 <resources>
-    <!-- Dish marketing palette (cyan / deep-space). Mirrors dish-website's
-         deep-space tokens (tn-ink, tn-night, tn-deep, tn-signal, etc.). -->
-    <color name="colorBackground">#060818</color>
-    <color name="colorSurface">#0C1027</color>
-    <color name="colorPrimary">#4FE3FF</color>
-    <color name="colorPrimaryDark">#2C93AD</color>
-    <color name="colorPrimaryMid">#2C93AD</color>
-    <color name="colorOnPrimary">#060818</color>
-    <color name="colorOnSurface">#E6ECFF</color>
-    <color name="colorMuted">#93A0C8</color>
+    <!-- ===== Material surface + on-surface ===== -->
+    <color name="colorBackground">@color/navy_900</color>
+    <color name="colorSurface">@color/navy_800</color>
+    <color name="colorOnPrimary">@color/navy_900</color>
+    <color name="colorOnSurface">@color/paper_50</color>
+
+    <!-- ===== Primary + variants ===== -->
+    <color name="colorPrimary">@color/signal_cyan_500</color>
+    <color name="colorPrimaryDark">@color/signal_cyan_700</color>
+    <color name="colorPrimaryMid">@color/signal_cyan_700</color>
+
+    <!-- ===== Secondary chrome ===== -->
+    <color name="colorMuted">@color/slate_300</color>
     <!-- Web uses rgba(79,227,255,0.18) for the outline; ARGB equivalent is
-         signal cyan at ~12% alpha rounded to nearest byte (0.18*255≈46=0x2E). -->
-    <color name="colorOutline">#2E4FE3FF</color>
-    <color name="colorSuccess">#22C55E</color>
-    <color name="colorError">#E74C3C</color>
-    <color name="colorWarning">#F59E0B</color>
-    <!-- Primary at ~12% alpha for card stroke -->
-    <color name="colorCardStroke">#1F4FE3FF</color>
+         signal cyan at ~18% alpha (signal_cyan_300). -->
+    <color name="colorOutline">@color/signal_cyan_300</color>
+    <!-- Primary at ~12% alpha for card stroke. -->
+    <color name="colorCardStroke">@color/signal_cyan_200</color>
+    <!-- Primary at ~6% alpha — fill for the Settings-row icon container
+         and other subtle surface tints. -->
+    <color name="colorSurfaceTint">@color/signal_cyan_100</color>
     <!-- Subtle surface variant for empty states (mirrors tn-deep). -->
-    <color name="colorSurfaceDim">#131A3A</color>
-    <!-- Full-screen dim overlay (e.g. low-power mode) — black @ ~80% alpha -->
-    <color name="colorOverlayScrim">#CC000000</color>
-    <!-- Keep these for any legacy references -->
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
+    <color name="colorSurfaceDim">@color/navy_700</color>
+
+    <!-- ===== Severity ===== -->
+    <color name="colorSuccess">@color/green_500</color>
+    <color name="colorError">@color/red_500</color>
+    <color name="colorWarning">@color/amber_500</color>
+
+    <!-- ===== Scrim =====
+         Full-screen dim overlay (e.g. low-power mode) — black @ ~80% alpha. -->
+    <color name="colorOverlayScrim">@color/ink_900_a80</color>
 </resources>

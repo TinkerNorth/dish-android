@@ -4,12 +4,17 @@
     <!-- Panel principal MainActivity. El vocabulario sigue las etiquetas de
          LinkState: una entrada recordada/emparejada está «emparejada»;
          una entrada Connected está «en línea». -->
-    <string name="status_remembered">%1$d emparejada(s)</string>
+    <plurals name="status_remembered">
+        <item quantity="one">%1$d emparejada</item>
+        <item quantity="many">%1$d emparejadas</item>
+        <item quantity="other">%1$d emparejadas</item>
+    </plurals>
     <string name="status_tap_manage">Toca Gestionar para añadir una</string>
-    <string name="status_connected_of">%1$d de %2$d en línea</string>
-    <string name="toast_pairing_needed">Emparejamiento necesario — abrir Conexiones</string>
-    <string name="toast_bind_first">Enlaza una conexión primero</string>
-
+    <plurals name="status_connected_of">
+        <item quantity="one">%1$d de %2$d en línea</item>
+        <item quantity="many">%1$d de %2$d en línea</item>
+        <item quantity="other">%1$d de %2$d en línea</item>
+    </plurals>
     <!-- Cabecera del panel principal (activity_main.xml). -->
     <string name="section_connections">CONEXIONES</string>
     <string name="section_controllers">MANDOS</string>
@@ -60,7 +65,19 @@
     <string name="action_unbind">Desenlazar</string>
     <string name="action_open_gamepad">Abrir el mando</string>
     <string name="desc_open_gamepad">Abrir el mando</string>
+    <string name="action_open_touchpad">Abrir el panel táctil</string>
     <string name="desc_expand">Expandir</string>
+
+    <!-- Selector de modo del panel táctil. -->
+    <string name="touchpad_mode_label">Modo del panel táctil</string>
+    <string name="touchpad_mode_off">Apagado</string>
+    <string name="touchpad_mode_pad">Pad</string>
+    <string name="touchpad_mode_mouse">Ratón</string>
+    <string name="touchpad_mode_unsupported_here">Este receptor no admite este modo.</string>
+    <string name="touchpad_mode_error_not_paired">El satélite no reconoce este dispositivo — vuelve a emparejar para aplicar.</string>
+    <string name="touchpad_mode_error_unauthorized">El satélite rechazó la solicitud — vuelve a emparejar para aplicar.</string>
+    <string name="touchpad_mode_error_transport">No se pudo contactar al satélite — ¿está en ejecución?</string>
+    <string name="touchpad_mode_error_unknown">No se pudo establecer el modo del panel táctil: %1$s</string>
 
     <!-- Texto de estado del slot en ControllerAdapter (bajo el nombre). -->
     <string name="slot_status_disconnecting">Desconectando… %1$ds</string>
@@ -71,6 +88,7 @@
     <!-- Filas del selector por slot en ControllerAdapter. -->
     <string name="picker_empty_no_connections">No hay conexiones aún — toca Gestionar arriba</string>
     <string name="picker_empty_no_available">No hay conexiones disponibles ahora mismo</string>
+    <string name="picker_title_with_status">%1$s%2$s</string>
     <string name="picker_status_online"> • en línea</string>
     <string name="picker_status_connecting"> • conectando…</string>
     <string name="picker_status_offline"> • desconectada</string>
@@ -94,7 +112,12 @@
     <string name="overlay_status_streaming">Transmitiendo</string>
     <string name="overlay_status_unknown">Conexión desconocida</string>
     <string name="overlay_status_not_connected">Sin conexión</string>
-    <string name="overlay_action_back">VOLVER</string>
+    <string name="overlay_title_gamepad">Mando</string>
+    <string name="overlay_title_touchpad">Panel táctil</string>
+    <string name="touchpad_pad_click_label">Clic + Mover</string>
+    <string name="touchpad_pad_move_label">Mover</string>
+    <string name="touchpad_pad_click_hint">Arrastra para hacer clic y mover</string>
+    <string name="touchpad_pad_move_hint">Arrastra para mover el cursor</string>
 
     <!-- Etiquetas por defecto de slot/conexión. -->
     <string name="default_virtual_controller_name">Mando virtual</string>
@@ -152,14 +175,11 @@
     <string name="discovery_source_both">mDNS + difusión</string>
 
     <!-- Etiquetas de acción de las notificaciones Dish. -->
-    <string name="action_open_settings">AJUSTES</string>
-    <string name="action_retry">REINTENTAR</string>
-    <string name="action_reconnect">RECONECTAR</string>
-    <string name="action_repair">REEMPAREJAR</string>
-    <string name="action_open">ABRIR</string>
-    <string name="action_forget">OLVIDAR</string>
-    <string name="action_turn_on">ACTIVAR</string>
-    <string name="action_grant">PERMITIR</string>
+    <string name="action_open_settings">Ajustes</string>
+    <string name="action_retry">Reintentar</string>
+    <string name="action_open">Abrir</string>
+    <string name="action_turn_on">Activar</string>
+    <string name="action_grant">Permitir</string>
 
     <!-- Texto de las notificaciones Dish. -->
     <string name="notif_bt_permission_title">Permiso de Bluetooth necesario</string>
@@ -182,11 +202,6 @@
     <string name="notif_pairing_needed_title">Emparejamiento necesario</string>
     <string name="notif_pairing_needed_body">Abre Conexiones para introducir el PIN de %1$s.</string>
     <string name="notif_server_unreachable_title">%1$s no responde</string>
-    <string name="notif_server_unreachable_body">Comprueba que esté encendido y en la misma Wi-Fi.</string>
-    <string name="notif_registration_failed_title">Error al registrar el mando</string>
-    <string name="notif_pair_pin_failed_title">PIN incorrecto</string>
-    <string name="notif_session_lost_title">Conexión con %1$s perdida</string>
-    <string name="notif_session_lost_body">Reconectando…</string>
 
     <!-- Estado vacío dinámico para la lista de satélites. -->
     <string name="discovery_empty_never_scanned">Toca Buscar para encontrar satélites en tu red</string>
@@ -196,17 +211,20 @@
     <string name="pair_dialog_title">Emparejar con satélite</string>
     <string name="pair_dialog_subtitle">Introduce el PIN que aparece en tu satélite.</string>
     <string name="pair_dialog_pin_hint">PIN</string>
-    <string name="pair_dialog_submit">EMPAREJAR</string>
-    <string name="pair_dialog_cancel">CANCELAR</string>
-    <string name="pair_dialog_pairing">EMPAREJANDO…</string>
+    <string name="pair_dialog_eyebrow">EMPAREJAR</string>
+    <string name="pair_dialog_submit">Emparejar</string>
+    <string name="pair_dialog_pairing">Emparejando…</string>
     <string name="pair_dialog_error_empty">Introduce el PIN que aparece en tu satélite.</string>
 
     <!-- Notificación del servicio en primer plano. -->
     <string name="streaming_channel_name">Sesión de transmisión</string>
     <string name="streaming_channel_description">Mantiene Dish activo mientras un mando transmite.</string>
     <string name="streaming_notification_title">Dish · Transmitiendo</string>
-    <string name="streaming_notification_body">%1$d mando transmite a %2$s</string>
-    <string name="streaming_notification_body_plural">%1$d mandos transmitiendo</string>
+    <plurals name="streaming_notification_body">
+        <item quantity="one">%1$d mando transmite a %2$s</item>
+        <item quantity="many">%1$d mandos transmiten a %2$s</item>
+        <item quantity="other">%1$d mandos transmiten a %2$s</item>
+    </plurals>
     <string name="streaming_notification_stop">Detener</string>
 
     <!-- Pantalla de respaldo cuando falla la carga nativa. -->
@@ -224,10 +242,6 @@
         <item quantity="many">Enlazados · %1$d mandos</item>
         <item quantity="other">Enlazados · %1$d mandos</item>
     </plurals>
-
-    <!-- Cadenas heredadas del antiguo diseño de emparejamiento. -->
-    <string name="pairing_dialog_legacy_title">Emparejar con servidor</string>
-    <string name="pairing_dialog_legacy_message">Introduce el PIN que aparece en la pantalla de tu PC:</string>
 
     <!-- Enlace a la Política de privacidad (en Ajustes) y mensaje de error compartido. -->
     <string name="menu_privacy_policy">Política de privacidad</string>

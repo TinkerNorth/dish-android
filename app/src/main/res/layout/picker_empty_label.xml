@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Empty-state label for the connection picker inside the slot card.
+     Inflated by `ControllerAdapter.addLabel` when the picker has no
+     connections to show ("No connections yet" / "No connections available
+     right now"). Width / margins / text size / color are all baked here —
+     the adapter only sets `.text`. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.Dish.EmptyStateText.Picker" />

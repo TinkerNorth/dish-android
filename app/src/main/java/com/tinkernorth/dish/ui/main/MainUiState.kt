@@ -103,6 +103,21 @@ data class MainUiState(
      * default-on" — matches the composer's own startup behaviour.
      */
     val motionCapabilities: Map<String, MotionCapability> = emptyMap(),
+    /**
+     * Per-satellite touchpad routing mode, resolved by
+     * [com.tinkernorth.dish.composer.TouchpadModeComposer] from the user's
+     * saved pick (if any) collapsed onto the server-advertised supported
+     * modes. Keys are connection ids; values are
+     * [com.tinkernorth.dish.repository.TouchpadModeValue] strings
+     * (`"off"` / `"ds4"` / `"mouse"`).
+     *
+     * The adapter reads this to highlight the active chip in the touchpad
+     * mode picker AND to decide whether the "Open Touchpad" button is
+     * visible (hidden in Off). Defaults to empty — a row built before the
+     * map is populated treats the connection as Off, so the picker shows
+     * but the launch button stays hidden until the first resolution lands.
+     */
+    val touchpadModesBySatellite: Map<String, String> = emptyMap(),
 ) {
     val virtualSlot get() = slots.first { it.id == VIRTUAL_SLOT_ID }
     val physicalSlots get() = slots.filter { it.inputType == SlotInputType.PHYSICAL }

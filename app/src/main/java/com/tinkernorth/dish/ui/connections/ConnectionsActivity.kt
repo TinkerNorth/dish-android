@@ -9,7 +9,6 @@ import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.GradientDrawable
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -20,6 +19,8 @@ import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
+import androidx.core.view.isNotEmpty
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -51,9 +52,13 @@ import com.tinkernorth.dish.source.system.BluetoothPermissionState
 import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
 import com.tinkernorth.dish.source.system.NetworkState
 import com.tinkernorth.dish.source.system.NetworkStateObserver
+import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
+import com.tinkernorth.dish.ui.common.applyDishSystemBars
+import com.tinkernorth.dish.ui.common.attachGamepadHost
 import com.tinkernorth.dish.ui.common.dotColorForState
 import com.tinkernorth.dish.ui.common.glyphForConnection
 import com.tinkernorth.dish.ui.common.setLoading
+import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.common.statusChipText
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -156,15 +161,29 @@ class ConnectionsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityConnectionsBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        gamepadHost =
-            GamepadActivityHost(this, binding.root, wakeState, gamepadRegistry)
-                .also { it.install(notifications) }
-        setSupportActionBar(binding.toolbar)
-        binding.toolbar.setNavigationOnClickListener { finish() }
+        gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications)
+        setupDishToolbar(binding.toolbar)
+        applyDishSystemBars(binding.root)
+        applyDishActivityTransitions()
+        bindSectionHeaders()
 
-        binding.btnSatelliteScan.setOnClickListener { satellite.startDiscovery() }
-        binding.btnBtAdd.setOnClickListener { requestBtPermissions() }
+        observeSatelliteHub()
+        observeSystemStateBanners()
+        observeBluetoothRegistry()
 
+        // Deep-link from MainActivity when an auto-reconnect lands on Stale:
+        // open the PIN dialog directly for that satellite so the user can
+        // re-enter their PIN without scrolling to find the row.
+        handlePairPromptIntent(intent)
+    }
+
+    /**
+     * Wire the satellite + hub-side flows: connection summaries, the
+     * discovered-server overlay, the scan button's loading state, the
+     * last-scan timestamp (drives empty-state copy), and one-shot
+     * connection events (errors + pairing prompts).
+     */
+    private fun observeSatelliteHub() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 hub.connections.collect { conns ->
@@ -192,7 +211,7 @@ class ConnectionsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 satellite.isScanning.collect { scanning ->
-                    binding.btnSatelliteScan.setLoading(
+                    binding.sectionSatellites.btnSectionAction.setLoading(
                         loading = scanning,
                         loadingText = getString(R.string.action_scanning),
                         restingText = getString(R.string.action_scan),
@@ -215,6 +234,14 @@ class ConnectionsActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * Wire the three system-state banners (BT adapter on/off, BT runtime
+     * permission, network type). Each collector translates a state flow
+     * into a persistent themed banner that dismisses itself on recovery.
+     */
+    private fun observeSystemStateBanners() {
         // Bluetooth adapter on/off. The banner is persistent until the user
         // toggles BT on, at which point we dismiss it.
         lifecycleScope.launch {
@@ -237,6 +264,15 @@ class ConnectionsActivity : AppCompatActivity() {
                 networkState.state.collect { state -> applyNetworkBanner(state) }
             }
         }
+    }
+
+    /**
+     * Wire the Bluetooth-registry flows: KEY_MISSING / BOND_REMOVED stale
+     * bond surfacing (one persistent banner per affected host) and the
+     * registry's one-shot error stream (each error gets its own banner so
+     * the user sees the full context rather than a silent replacement).
+     */
+    private fun observeBluetoothRegistry() {
         // KEY_MISSING / BOND_NONE on a remembered host. BluetoothBondMonitor
         // marks the registry's staleBtIds; we render the banner here so it
         // re-derives from live state on each activity bind instead of
@@ -264,11 +300,6 @@ class ConnectionsActivity : AppCompatActivity() {
                 }
             }
         }
-
-        // Deep-link from MainActivity when an auto-reconnect lands on Stale:
-        // open the PIN dialog directly for that satellite so the user can
-        // re-enter their PIN without scrolling to find the row.
-        handlePairPromptIntent(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -286,6 +317,32 @@ class ConnectionsActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
         gamepadHost.cancelDimOnStop()
+    }
+
+    /**
+     * Populate the two section-header includes (Satellites + Bluetooth) with
+     * the icon + label + trailing-button content this screen needs. Both
+     * sections show all three sub-views; the composite defaults them to
+     * `gone` so eyebrow-only callsites (dashboard, settings) leave them
+     * hidden and only this activity flips them visible.
+     */
+    private fun bindSectionHeaders() {
+        with(binding.sectionSatellites) {
+            iconSection.visibility = View.VISIBLE
+            iconSection.setImageResource(R.drawable.ic_satellite)
+            labelSection.setText(R.string.section_satellites)
+            btnSectionAction.visibility = View.VISIBLE
+            btnSectionAction.setText(R.string.action_scan)
+            btnSectionAction.setOnClickListener { satellite.startDiscovery() }
+        }
+        with(binding.sectionBluetooth) {
+            iconSection.visibility = View.VISIBLE
+            iconSection.setImageResource(R.drawable.ic_bluetooth)
+            labelSection.setText(R.string.section_bluetooth_hosts)
+            btnSectionAction.visibility = View.VISIBLE
+            btnSectionAction.setText(R.string.action_add)
+            btnSectionAction.setOnClickListener { requestBtPermissions() }
+        }
     }
 
     // ── Rendering ─────────────────────────────────────────────────────────
@@ -319,7 +376,7 @@ class ConnectionsActivity : AppCompatActivity() {
      *    feedback is current or stale.
      */
     private fun renderEmptyState() {
-        val hasRows = binding.llSatelliteList.childCount > 0
+        val hasRows = binding.llSatelliteList.isNotEmpty()
         if (hasRows) {
             binding.tvSatelliteEmpty.visibility = View.GONE
             return
@@ -502,7 +559,7 @@ class ConnectionsActivity : AppCompatActivity() {
         val deepLink =
             Intent("android.settings.BLUETOOTH_DEVICE_DETAILS_SETTINGS").apply {
                 putExtra("device_address", mac)
-                data = Uri.parse("bt-mac:$mac")
+                data = "bt-mac:$mac".toUri()
             }
         runCatching { startActivity(deepLink) }
             .onFailure { startActivity(fallback) }
@@ -520,7 +577,8 @@ class ConnectionsActivity : AppCompatActivity() {
         rb.tvRowTitle.text = title
         rb.tvRowDetail.text = detail
         rb.tvRowStatus.text = status
-        rb.dotRow.background = GradientDrawable().apply { shape = GradientDrawable.OVAL }
+        // dotRow's oval shape comes from `background="@drawable/dot_circle"`
+        // in row_connection.xml — only the colour is mutated at runtime.
         (rb.dotRow.background as GradientDrawable).setColor(getColor(dotColorForState(state)))
         rb.ivRowGlyph.setImageResource(glyphForConnection(kind, state))
         return rb

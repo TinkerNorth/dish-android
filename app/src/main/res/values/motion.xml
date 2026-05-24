@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    MOTION DURATION TOKENS — millisecond budgets keyed by the visual
+    rhythm they create. Use these from XML (`android:duration="@integer/…"`)
+    and from Kotlin (`context.resources.getInteger(R.integer.…).toLong()`).
+
+    Named (off-scale, tied to a specific asset's design rhythm):
+      - spinner    — loop period for DishLoaders' spinner + dots drawables.
+      - bar        — loop period for DishLoaders' bar drawable (intentionally
+                     longer than the spinner to read as a different cadence).
+      - battery    — full fill ramp of the charging-battery animated vector.
+      - bolt_pulse — independent sinusoidal opacity loop on the bolt overlay
+                     of the charging-battery animated vector.
+
+    UI speed scale entries (short / medium / long): only `medium` is
+    currently consumed — by the activity-transition animations
+    (fade_through_enter / fade_through_exit). `short` and `long` are
+    intentionally NOT declared until a real consumer exists, per the
+    design-system YAGNI rule (see DESIGN_SYSTEM.md "When to add a new
+    token"). Re-introduce them as a paired set the moment a new in-screen
+    transition needs to pin to one of those rhythms.
+-->
+<resources>
+    <integer name="motion_duration_spinner">1200</integer>
+    <integer name="motion_duration_bar">1400</integer>
+    <integer name="motion_duration_battery">3600</integer>
+    <integer name="motion_duration_bolt_pulse">750</integer>
+
+    <integer name="motion_duration_medium">250</integer>
+</resources>

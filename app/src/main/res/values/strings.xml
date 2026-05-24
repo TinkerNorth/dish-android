@@ -6,12 +6,18 @@
 
     <!-- MainActivity dashboard. Vocabulary aligns with LinkState chips:
          a remembered/paired entry is "paired"; a Connected entry is "online". -->
-    <string name="status_remembered">%1$d paired</string>
+    <plurals name="status_remembered">
+        <item quantity="one">%1$d paired</item>
+        <item quantity="other">%1$d paired</item>
+    </plurals>
     <string name="status_tap_manage">Tap Manage to add one</string>
-    <string name="status_connected_of">%1$d of %2$d online</string>
-    <string name="toast_pairing_needed">Pairing needed — open Connections</string>
-    <string name="toast_bind_first">Bind a connection first</string>
-
+    <!-- Quantity is selected on the *total* count (the "of N" number): "1 of 1
+         online" reads singular, "2 of 5 online" reads plural. Pass total as the
+         quantity arg first, then both `online` and `total` as positional args. -->
+    <plurals name="status_connected_of">
+        <item quantity="one">%1$d of %2$d online</item>
+        <item quantity="other">%1$d of %2$d online</item>
+    </plurals>
     <!-- Dashboard chrome (activity_main.xml). -->
     <string name="section_connections">CONNECTIONS</string>
     <string name="section_controllers">CONTROLLERS</string>
@@ -62,7 +68,31 @@
     <string name="action_unbind">Unbind</string>
     <string name="action_open_gamepad">Open Gamepad</string>
     <string name="desc_open_gamepad">Open gamepad</string>
+    <string name="action_open_touchpad">Open Touchpad</string>
     <string name="desc_expand">Expand</string>
+
+    <!-- Touchpad mode picker — client-side. Wire values match satellite/src/core/types.h. -->
+    <string name="touchpad_mode_label">Touchpad mode</string>
+    <string name="touchpad_mode_off">Off</string>
+    <string name="touchpad_mode_pad">Pad</string>
+    <string name="touchpad_mode_mouse">Mouse</string>
+    <string name="touchpad_mode_unsupported_here">This receiver host doesn\'t support this mode.</string>
+    <!-- Shown when the satellite returns 404 from /api/devices/touchpad-mode —
+         the satellite no longer has this dish in its paired-devices list (e.g.
+         after the satellite was reinstalled or its config was wiped). Tells the
+         user the actionable remedy. -->
+    <string name="touchpad_mode_error_not_paired">Satellite doesn\'t recognize this device — re-pair to apply.</string>
+    <!-- Shown when the satellite returns 401 unauthorized from
+         /api/devices/touchpad-mode. Surfaces the same way 404 does (re-pair),
+         since the practical user remedy is identical. -->
+    <string name="touchpad_mode_error_unauthorized">Satellite rejected the request — re-pair to apply.</string>
+    <!-- Shown when the HTTPS POST itself failed (satellite unreachable, TLS
+         handshake error, connection refused). Distinct from a satellite-side
+         rejection so the user knows to check the satellite is running. -->
+    <string name="touchpad_mode_error_transport">Couldn\'t reach satellite — is it running?</string>
+    <!-- Fallback for any other error shape the dish doesn't recognize. The
+         %1$s is the satellite's raw error string so the user can report it. -->
+    <string name="touchpad_mode_error_unknown">Couldn\'t set touchpad mode: %1$s</string>
 
     <!-- ControllerAdapter slot-status text (renders below the slot name). -->
     <string name="slot_status_disconnecting">Disconnecting… %1$ds</string>
@@ -73,6 +103,9 @@
     <!-- ControllerAdapter per-slot picker rows: empty state + inline status. -->
     <string name="picker_empty_no_connections">No connections yet — tap Manage above</string>
     <string name="picker_empty_no_available">No connections available right now</string>
+    <!-- `%2$s` is one of picker_status_* (each carries its own leading " • "
+         separator) so simple concatenation reads correctly. -->
+    <string name="picker_title_with_status">%1$s%2$s</string>
     <string name="picker_status_online"> • online</string>
     <string name="picker_status_connecting"> • connecting…</string>
     <string name="picker_status_offline"> • offline</string>
@@ -98,7 +131,23 @@
     <string name="overlay_status_streaming">Streaming</string>
     <string name="overlay_status_unknown">Unknown connection</string>
     <string name="overlay_status_not_connected">Not connected</string>
-    <string name="overlay_action_back">BACK</string>
+
+    <!-- Shared overlay header titles. Sit next to the back chevron so the
+         user always sees which input surface they're on. -->
+    <string name="overlay_title_gamepad">Gamepad</string>
+    <string name="overlay_title_touchpad">Touchpad</string>
+
+    <!-- Labels for the two side-by-side trackpads in the touchpad overlay.
+         The "click" pad routes touches as click+position (drag, text
+         select); the "move" pad sends position only. Mutually exclusive
+         under the hood — once one pad has an active finger the other is
+         locked out until release. -->
+    <string name="touchpad_pad_click_label">Click + Move</string>
+    <string name="touchpad_pad_move_label">Move</string>
+    <!-- Subtitle under each pad's label hinting at what it does. Two lines
+         of caption type, short enough not to crowd the surface. -->
+    <string name="touchpad_pad_click_hint">Drag to click and move</string>
+    <string name="touchpad_pad_move_hint">Drag to move cursor</string>
 
     <!-- Default slot / connection labels. -->
     <string name="default_virtual_controller_name">Virtual Controller</string>
@@ -166,16 +215,13 @@
     <string name="discovery_source_mdns">mDNS</string>
     <string name="discovery_source_both">mDNS + broadcast</string>
 
-    <!-- DishNotification action labels. Short, imperative, allCaps + tracked
-         to match the v6 Outlined Button label conventions. -->
-    <string name="action_open_settings">SETTINGS</string>
-    <string name="action_retry">RETRY</string>
-    <string name="action_reconnect">RECONNECT</string>
-    <string name="action_repair">RE-PAIR</string>
-    <string name="action_open">OPEN</string>
-    <string name="action_forget">FORGET</string>
-    <string name="action_turn_on">TURN ON</string>
-    <string name="action_grant">GRANT</string>
+    <!-- DishNotification action labels. Short, imperative, sentence-case
+         to match the modern (M3) button label convention. -->
+    <string name="action_open_settings">Settings</string>
+    <string name="action_retry">Retry</string>
+    <string name="action_open">Open</string>
+    <string name="action_turn_on">Turn on</string>
+    <string name="action_grant">Grant</string>
 
     <!-- DishNotification copy. Hoisted to strings.xml so the wording can be
          tuned in one place (and localised later) rather than being scattered
@@ -200,11 +246,6 @@
     <string name="notif_pairing_needed_title">Pairing needed</string>
     <string name="notif_pairing_needed_body">Open Connections to enter the PIN for %1$s.</string>
     <string name="notif_server_unreachable_title">%1$s isn\'t responding</string>
-    <string name="notif_server_unreachable_body">Check it\'s powered on and on the same Wi-Fi.</string>
-    <string name="notif_registration_failed_title">Controller registration failed</string>
-    <string name="notif_pair_pin_failed_title">PIN didn\'t match</string>
-    <string name="notif_session_lost_title">Connection to %1$s lost</string>
-    <string name="notif_session_lost_body">Reconnecting…</string>
 
     <!-- Dynamic empty state for the satellites list. -->
     <string name="discovery_empty_never_scanned">Tap Scan to find satellites on your network</string>
@@ -214,17 +255,26 @@
     <string name="pair_dialog_title">Pair with satellite</string>
     <string name="pair_dialog_subtitle">Enter the PIN shown on your satellite.</string>
     <string name="pair_dialog_pin_hint">PIN</string>
-    <string name="pair_dialog_submit">PAIR</string>
-    <string name="pair_dialog_cancel">CANCEL</string>
-    <string name="pair_dialog_pairing">PAIRING…</string>
+    <!-- Eyebrow at the top of the pair dialog — rendered as Label.Accent
+         (mono / letter-spaced / cyan). Stays uppercase because the Label.Accent
+         family is the app-wide eyebrow shape; the button below uses
+         pair_dialog_submit (sentence-case). -->
+    <string name="pair_dialog_eyebrow">PAIR</string>
+    <string name="pair_dialog_submit">Pair</string>
+    <string name="pair_dialog_pairing">Pairing…</string>
     <string name="pair_dialog_error_empty">Enter the PIN shown on your satellite.</string>
 
     <!-- Foreground service notification. -->
     <string name="streaming_channel_name">Streaming session</string>
     <string name="streaming_channel_description">Keeps Dish running while a controller is streaming.</string>
     <string name="streaming_notification_title">Dish · Streaming</string>
-    <string name="streaming_notification_body">%1$d controller streaming to %2$s</string>
-    <string name="streaming_notification_body_plural">%1$d controllers streaming</string>
+    <!-- Both quantities take the same args (count, hostLabel) so the caller
+         can use a single getQuantityString. When no connected host is known
+         the caller passes a localised fallback (satellite_fallback_name). -->
+    <plurals name="streaming_notification_body">
+        <item quantity="one">%1$d controller streaming to %2$s</item>
+        <item quantity="other">%1$d controllers streaming to %2$s</item>
+    </plurals>
     <string name="streaming_notification_stop">Stop</string>
 
     <!-- Native-load fatal fallback. -->
@@ -247,27 +297,6 @@
          the runtime always overwrites them. -->
     <string name="low_power_countdown_placeholder" translatable="false">5</string>
     <string name="low_power_clock_placeholder" translatable="false">00:00</string>
-
-    <!-- Telemetry placeholder labels (debug card). Technical jargon, not translated. -->
-    <string name="telemetry_title" translatable="false">TELEMETRY</string>
-    <string name="telemetry_evt_placeholder" translatable="false">EVT —</string>
-    <string name="telemetry_smp_placeholder" translatable="false">SMP —</string>
-    <string name="telemetry_snd_placeholder" translatable="false">SND —</string>
-    <string name="telemetry_total_placeholder" translatable="false">TOTAL 0</string>
-    <string name="telemetry_lx_placeholder" translatable="false">LX —</string>
-    <string name="telemetry_ly_placeholder" translatable="false">LY —</string>
-    <string name="telemetry_rx_placeholder" translatable="false">RX —</string>
-    <string name="telemetry_ry_placeholder" translatable="false">RY —</string>
-    <string name="telemetry_lt_placeholder" translatable="false">LT —</string>
-    <string name="telemetry_rt_placeholder" translatable="false">RT —</string>
-    <string name="telemetry_btn_placeholder" translatable="false">BTN 0000</string>
-
-    <!-- Legacy / unused pairing layout strings — moved out of literals to keep
-         the layout tree clean. dialog_pairing.xml itself is not currently
-         inflated anywhere; kept until removed in a future cleanup. -->
-    <string name="pairing_dialog_legacy_title">Pair with Server</string>
-    <string name="pairing_dialog_legacy_message">Enter the PIN shown on your PC screen:</string>
-    <string name="pairing_dialog_legacy_pin_hint" translatable="false">0000</string>
 
     <!-- Connections screen overflow menu. -->
     <string name="menu_privacy_policy">Privacy policy</string>

@@ -104,6 +104,26 @@ class DiscoveryRepository
                 }
             }
 
+        /**
+         * POST /api/devices/touchpad-mode over HTTPS. Server hot-applies to the
+         * live session and persists per-device so a re-connect reuses the same
+         * routing. The raw JSON reply is returned so the caller can decode
+         * `{"ok":true,"hotApplied":bool}` vs `{"error":"…"}` and surface a
+         * server-rejected mode (e.g. picking `ds4` against a macOS receiver
+         * that only advertises `off`) to the UI.
+         */
+        suspend fun setTouchpadMode(
+            ip: String,
+            port: Int,
+            deviceId: String,
+            mode: String,
+        ): String =
+            withContext(ioDispatcher) {
+                mutex.withLock {
+                    SatelliteHttpClient.setTouchpadMode(ip, port, deviceId, mode)
+                }
+            }
+
         companion object {
             private const val TAG = "DiscoveryRepository"
 

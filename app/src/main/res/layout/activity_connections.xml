@@ -7,9 +7,7 @@
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@color/colorBackground"
-    android:fitsSystemWindows="true">
+    android:layout_height="match_parent">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -18,132 +16,73 @@
 
         <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/toolbar"
+            style="@style/Widget.Dish.Toolbar"
             android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize"
-            android:background="@color/colorBackground"
-            app:title="@string/title_connections"
-            app:titleTextColor="@color/colorOnSurface"
-            app:navigationIcon="@drawable/ic_chevron_left" />
+            app:title="@string/title_connections" />
 
         <androidx.core.widget.NestedScrollView
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:paddingHorizontal="20dp"
-            android:paddingVertical="16dp">
+            android:paddingHorizontal="@dimen/spacing_5xl"
+            android:paddingVertical="@dimen/spacing_3xl">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
-                <!-- ── Satellite section ── -->
-                <LinearLayout
+                <!-- ── Satellite section ──
+                     Icon, label, and scan-button content live in
+                     ConnectionsActivity.onCreate (the include's children are
+                     reachable via View Binding on `sectionSatellites`). v6
+                     brand satellite glyph (`ic_satellite`) keeps parity with
+                     the web dashboard and dish-mac SectionHeader. -->
+                <include
+                    android:id="@+id/sectionSatellites"
+                    layout="@layout/section_header"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <!-- v6 brand satellite glyph — same icon family used in the
-                         satellite/web dashboard and dish-mac SectionHeader so a
-                         user moving between clients sees the same iconography. -->
-                    <ImageView
-                        android:layout_width="18dp"
-                        android:layout_height="18dp"
-                        android:layout_marginEnd="6dp"
-                        android:contentDescription="@null"
-                        android:src="@drawable/ic_satellite" />
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/section_satellites"
-                        android:textColor="@color/colorPrimary"
-                        android:textSize="11sp"
-                        android:fontFamily="monospace"
-                        android:letterSpacing="0.12" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnSatelliteScan"
-                        style="@style/Widget.Dish.Button.Outlined"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/action_scan"
-                        android:textAllCaps="false" />
-                </LinearLayout>
+                    android:layout_height="wrap_content" />
 
                 <LinearLayout
                     android:id="@+id/llSatelliteList"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:paddingTop="8dp" />
+                    android:paddingTop="@dimen/spacing_md" />
 
                 <TextView
                     android:id="@+id/tvSatelliteEmpty"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    style="@style/Widget.Dish.EmptyStateText.Section"
                     android:text="@string/discovery_empty_never_scanned"
-                    android:textColor="@color/colorMuted"
-                    android:textSize="12sp"
-                    android:paddingVertical="12dp"
                     android:visibility="gone" />
 
                 <View
                     android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginVertical="20dp"
+                    android:layout_height="@dimen/divider_height"
+                    android:layout_marginVertical="@dimen/spacing_5xl"
                     android:background="@color/colorOutline" />
 
-                <!-- ── Bluetooth section ── -->
-                <LinearLayout
+                <!-- ── Bluetooth section ──
+                     Icon, label, and add-button content live in
+                     ConnectionsActivity.onCreate. -->
+                <include
+                    android:id="@+id/sectionBluetooth"
+                    layout="@layout/section_header"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <ImageView
-                        android:layout_width="18dp"
-                        android:layout_height="18dp"
-                        android:layout_marginEnd="6dp"
-                        android:contentDescription="@null"
-                        android:src="@drawable/ic_bluetooth" />
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/section_bluetooth_hosts"
-                        android:textColor="@color/colorPrimary"
-                        android:textSize="11sp"
-                        android:fontFamily="monospace"
-                        android:letterSpacing="0.12" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnBtAdd"
-                        style="@style/Widget.Dish.Button.Outlined"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/action_add"
-                        android:textAllCaps="false" />
-                </LinearLayout>
+                    android:layout_height="wrap_content" />
 
                 <LinearLayout
                     android:id="@+id/llBtList"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:paddingTop="8dp" />
+                    android:paddingTop="@dimen/spacing_md" />
 
                 <TextView
                     android:id="@+id/tvBtEmpty"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/bt_hosts_empty"
-                    android:textColor="@color/colorMuted"
-                    android:textSize="12sp"
-                    android:paddingVertical="12dp" />
+                    style="@style/Widget.Dish.EmptyStateText.Section"
+                    android:text="@string/bt_hosts_empty" />
 
             </LinearLayout>
         </androidx.core.widget.NestedScrollView>

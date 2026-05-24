@@ -4,6 +4,7 @@
 package com.tinkernorth.dish.repository
 
 import android.content.Context
+import androidx.core.content.edit
 import com.tinkernorth.dish.architecture.interfaces.KeyedRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.serialization.builtins.ListSerializer
@@ -63,13 +64,13 @@ class RememberedBtRepository
 
         override fun clear() {
             synchronized(writeLock) {
-                prefs.edit().remove(KEY_BT).apply()
+                prefs.edit { remove(KEY_BT) }
             }
         }
 
         private fun persist(list: List<RememberedBt>) {
             val raw = json.encodeToString(ListSerializer(RememberedBt.serializer()), list)
-            prefs.edit().putString(KEY_BT, raw).apply()
+            prefs.edit { putString(KEY_BT, raw) }
         }
 
         private companion object {

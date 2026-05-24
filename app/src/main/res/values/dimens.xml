@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    SEMANTIC TOKENS — names by use, mapped to primitives.
+
+    This is the file every layout XML and Kotlin source should reference.
+    Primitives are in `dimens_primitives.xml`; if a semantic token here
+    needs a value that doesn't yet have a primitive, add the primitive
+    first, then point the semantic name at it.
+
+    Three families:
+      - Generic SPACING tokens (T-shirt sizes) — for margins and gaps that
+        don't have a strong identity. New code defaults to spacing_md and
+        only reaches for sm/lg when there's a layout reason.
+      - PER-COMPONENT tokens (e.g. `card_padding`, `chip_corner_radius`) —
+        for sizes that are an integral part of a specific component's
+        visual identity. Changing card_padding moves cards in lockstep
+        without affecting unrelated rows.
+      - TEXT tokens — sp scale named by role (caption / label / body /
+        title / display) instead of pixel size, so a future type-scale
+        adjustment is one file.
+
+    If you're tempted to put a literal `8dp` in a layout, look here first.
+    Anything missing is either intentionally one-off (and probably should
+    join the scale) or genuinely orthogonal to the design system (e.g. a
+    vector drawable's canvas size).
+-->
+<resources>
+    <!-- ============================================================
+         SPACING (T-shirt scale for margins, gaps, and generic padding)
+         ============================================================ -->
+    <dimen name="spacing_xs">@dimen/size_4</dimen>
+    <dimen name="spacing_sm">@dimen/size_6</dimen>
+    <dimen name="spacing_md">@dimen/size_8</dimen>
+    <dimen name="spacing_lg">@dimen/size_10</dimen>
+    <dimen name="spacing_xl">@dimen/size_12</dimen>
+    <dimen name="spacing_2xl">@dimen/size_14</dimen>
+    <dimen name="spacing_3xl">@dimen/size_16</dimen>
+    <dimen name="spacing_4xl">@dimen/size_18</dimen>
+    <dimen name="spacing_5xl">@dimen/size_20</dimen>
+    <dimen name="spacing_6xl">@dimen/size_24</dimen>
+
+    <!-- ============================================================
+         STROKES + CORNER RADII
+         ============================================================ -->
+    <dimen name="border_thin">@dimen/size_1</dimen>
+    <dimen name="divider_height">@dimen/size_1</dimen>
+
+    <dimen name="corner_chip">@dimen/size_4</dimen>
+    <dimen name="corner_picker_row">@dimen/size_6</dimen>
+    <dimen name="corner_button">@dimen/size_6</dimen>
+    <dimen name="corner_card">@dimen/size_8</dimen>
+    <dimen name="corner_notification">@dimen/size_10</dimen>
+    <dimen name="corner_pill">@dimen/size_20</dimen>
+
+    <!-- ============================================================
+         ICON SIZES (in-layout — vector drawable canvases stay literal)
+         ============================================================ -->
+    <dimen name="icon_dot">@dimen/size_6</dimen>           <!-- overlay status indicator -->
+    <dimen name="icon_dot_lg">@dimen/size_8</dimen>        <!-- slot-card status indicator -->
+    <dimen name="icon_battery">@dimen/size_20</dimen>      <!-- battery glyph in slot card -->
+    <dimen name="icon_picker_glyph">@dimen/size_22</dimen> <!-- glyph in expanded picker row -->
+    <dimen name="icon_brand_sm">@dimen/size_22</dimen>     <!-- header brand glyph (small) -->
+    <dimen name="icon_section_header">@dimen/size_18</dimen> <!-- section-title brand glyph -->
+    <dimen name="icon_card_container">@dimen/size_36</dimen> <!-- rounded-square icon container (Settings cards) -->
+    <dimen name="icon_card_glyph">@dimen/size_18</dimen>     <!-- icon nested inside icon_card_container -->
+    <dimen name="icon_action">@dimen/size_28</dimen>       <!-- quick-launch overlay button -->
+    <dimen name="icon_row_glyph">@dimen/size_28</dimen>    <!-- connection-row brand glyph -->
+    <dimen name="icon_controller">@dimen/size_36</dimen>   <!-- slot-card controller icon -->
+    <dimen name="icon_chevron_lg">@dimen/size_20</dimen>   <!-- expand/collapse caret on slot card -->
+    <dimen name="icon_settings_button">@dimen/size_40</dimen> <!-- header settings ImageButton -->
+
+    <!-- ============================================================
+         CARD (item_controller, row_connection)
+         ============================================================ -->
+    <dimen name="card_padding">@dimen/size_14</dimen>
+    <dimen name="card_padding_horizontal">@dimen/size_14</dimen>
+    <dimen name="card_padding_bottom">@dimen/size_14</dimen>
+    <dimen name="card_margin_bottom">@dimen/size_10</dimen>
+
+    <!-- ============================================================
+         INLINE PICKER ROW (expanded slot card body)
+         ============================================================ -->
+    <dimen name="picker_row_padding">@dimen/size_10</dimen>
+    <dimen name="picker_row_margin_top">@dimen/size_6</dimen>
+    <dimen name="picker_section_margin_top">@dimen/size_8</dimen>     <!-- between Type / Motion / Touchpad rows -->
+    <dimen name="picker_section_padding_bottom">@dimen/size_6</dimen> <!-- "OUTPUT TO" label -->
+    <dimen name="picker_label_margin_end">@dimen/size_10</dimen>
+
+    <!-- ============================================================
+         CHIP (pickable Type / Touchpad-mode chips)
+         ============================================================ -->
+    <dimen name="chip_padding_horizontal">@dimen/size_10</dimen>
+    <dimen name="chip_padding_vertical">@dimen/size_4</dimen>
+    <dimen name="chip_margin_end">@dimen/size_6</dimen>
+
+    <!-- ============================================================
+         DIALOG / OVERLAY
+         ============================================================ -->
+    <dimen name="dialog_inline_max_width">@dimen/size_280</dimen>  <!-- gamepad overlay error banner -->
+
+    <!-- ============================================================
+         NOTIFICATION SNACKBAR (DishNotifications)
+         ============================================================ -->
+    <dimen name="notification_rail_width">@dimen/size_4</dimen>
+    <dimen name="notification_elevation">@dimen/elevation_floating</dimen>
+    <dimen name="notification_padding_horizontal">@dimen/size_4</dimen>
+    <dimen name="notification_padding_vertical">@dimen/size_2</dimen>
+    <dimen name="notification_text_leading_indent">@dimen/size_12</dimen>
+
+    <!-- ============================================================
+         TEXT SIZES — role-named, mapped to the sp scale
+         ============================================================ -->
+    <dimen name="text_caption">@dimen/text_10</dimen>
+    <dimen name="text_label">@dimen/text_11</dimen>        <!-- muted monospace labels -->
+    <dimen name="text_body_sm">@dimen/text_12</dimen>
+    <dimen name="text_body">@dimen/text_13</dimen>
+    <dimen name="text_body_lg">@dimen/text_14</dimen>      <!-- picker row title -->
+    <dimen name="text_title_sm">@dimen/text_15</dimen>
+    <dimen name="text_title_lg">@dimen/text_18</dimen>
+    <dimen name="text_display">@dimen/text_22</dimen>
+    <dimen name="text_display_lg">@dimen/text_24</dimen>
+    <dimen name="text_hero">@dimen/text_64</dimen>         <!-- pair-dialog PIN entry -->
+
+    <!-- ============================================================
+         NOTIFICATION TEXT SIZES (one-offs in DishNotifications)
+         ============================================================ -->
+    <dimen name="notification_text_title">@dimen/text_13</dimen>
+    <dimen name="notification_text_body">@dimen/text_11</dimen>
+    <dimen name="notification_text_action">@dimen/text_12</dimen>
+</resources>

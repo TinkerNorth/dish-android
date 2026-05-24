@@ -57,13 +57,16 @@
                 android:valueFrom="0.0"
                 android:valueTo="1.0"
                 android:valueType="floatType"
-                android:duration="3600"
+                android:duration="@integer/motion_duration_battery"
                 android:repeatCount="infinite"
                 android:interpolator="@interpolator/battery_fill" />
         </aapt:attr>
     </target>
 
-    <!-- Bolt pulse: independent 1.5s sinusoidal opacity loop on the overlay. -->
+    <!-- Bolt pulse: independent sinusoidal opacity loop on the overlay. The
+         pulse cadence lives in motion.xml under `motion_duration_bolt_pulse`
+         so a future timing tweak lands without touching this drawable. The
+         easing is the canonical Dish standard curve. -->
     <target android:name="bolt_overlay">
         <aapt:attr name="android:animation">
             <objectAnimator
@@ -71,10 +74,10 @@
                 android:valueFrom="0.55"
                 android:valueTo="0.95"
                 android:valueType="floatType"
-                android:duration="750"
+                android:duration="@integer/motion_duration_bolt_pulse"
                 android:repeatCount="infinite"
                 android:repeatMode="reverse"
-                android:interpolator="@android:interpolator/accelerate_decelerate" />
+                android:interpolator="@interpolator/dish_ease_standard" />
         </aapt:attr>
     </target>
 </animated-vector>

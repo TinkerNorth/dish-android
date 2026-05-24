@@ -140,3 +140,162 @@ TEST(DecodeLightbarPayload, DistinctChannelsAreNotAliased) {
     EXPECT_NE(lb.r, lb.g);
     EXPECT_NE(lb.g, lb.b);
 }
+
+// ── encodeTouchpadPayload ───────────────────────────────────────────────────
+//
+// MSG_TOUCHPAD (0x000C) inner payload — 16 bytes total, layout pinned in
+// satellite/src/core/types.h::decodeTouchpadReport. We re-verify the byte
+// layout here so a layout drift on the sender side is caught at the
+// dish-android unit-test boundary (the receiver decode tests guard the
+// other direction).
+
+// Helper reader for the u32 LE eventTimeMs field at the tail of the payload.
+static uint32_t readLe32(const uint8_t* p) {
+    return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) |
+           (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
+}
+
+TEST(EncodeTouchpadPayload, CtrlIdxAtByteZero) {
+    uint8_t out[16]{};
+    dish_wire::encodeTouchpadPayload(out, /*ctrlIdx=*/9, false, false, false, 0, 0, 0, 0, 0, 0, 0);
+    EXPECT_EQ(out[0], 9);
+}
+
+TEST(EncodeTouchpadPayload, FlagsBit0IsFinger0Active) {
+    uint8_t out[16]{};
+    dish_wire::encodeTouchpadPayload(out, 0, /*f0Active=*/true, /*f1Active=*/false,
+                                     /*buttonPressed=*/false, 0, 0, 0, 0, 0, 0, 0);
+    EXPECT_EQ(out[1] & 0x01, 0x01);
+    EXPECT_EQ(out[1] & 0x02, 0);
+    EXPECT_EQ(out[1] & 0x04, 0);
+}
+
+TEST(EncodeTouchpadPayload, FlagsBit1IsFinger1Active) {
+    uint8_t out[16]{};
+    dish_wire::encodeTouchpadPayload(out, 0, /*f0Active=*/false, /*f1Active=*/true,
+                                     /*buttonPressed=*/false, 0, 0, 0, 0, 0, 0, 0);
+    EXPECT_EQ(out[1] & 0x01, 0);
+    EXPECT_EQ(out[1] & 0x02, 0x02);
+    EXPECT_EQ(out[1] & 0x04, 0);
+}
+
+TEST(EncodeTouchpadPayload, FlagsBit2IsButtonPressed) {
+    uint8_t out[16]{};
+    dish_wire::encodeTouchpadPayload(out, 0, /*f0Active=*/false, /*f1Active=*/false,
+                                     /*buttonPressed=*/true, 0, 0, 0, 0, 0, 0, 0);
+    EXPECT_EQ(out[1] & 0x04, 0x04);
+}
+
+TEST(EncodeTouchpadPayload, AllFlagsSetTogether) {
+    uint8_t out[16]{};
+    dish_wire::encodeTouchpadPayload(out, 0, true, true, true, 0, 0, 0, 0, 0, 0, 0);
+    EXPECT_EQ(out[1], 0x07);
+}
+
+TEST(EncodeTouchpadPayload, Finger0TrackingIdAtByte2) {
+    uint8_t out[16]{};
+    dish_wire::encodeTouchpadPayload(out, 0, false, false, false,
+                                     /*f0Id=*/0x42, 0, 0, /*f1Id=*/0, 0, 0, 0);
+    EXPECT_EQ(out[2], 0x42);
+}
+
+TEST(EncodeTouchpadPayload, Finger1TrackingIdAtByte7) {
+    uint8_t out[16]{};
+    dish_wire::encodeTouchpadPayload(out, 0, false, false, false,
+                                     /*f0Id=*/0, 0, 0, /*f1Id=*/0xAB, 0, 0, 0);
+    EXPECT_EQ(out[7], 0xAB);
+}
+
+TEST(EncodeTouchpadPayload, Finger0CoordsAreLittleEndianInt16) {
+    uint8_t out[16]{};
+    dish_wire::encodeTouchpadPayload(out, 0, true, false, false, 0,
+                                     /*f0x=*/0x1234, /*f0y=*/static_cast<int16_t>(0xFEDC),
+                                     0, 0, 0, 0);
+    EXPECT_EQ(readLe16(out + 3), 0x1234);
+    EXPECT_EQ(readLe16(out + 5), static_cast<int16_t>(0xFEDC));
+}
+
+TEST(EncodeTouchpadPayload, Finger1CoordsAreLittleEndianInt16) {
+    uint8_t out[16]{};
+    dish_wire::encodeTouchpadPayload(out, 0, false, true, false, 0, 0, 0,
+                                     0, /*f1x=*/0x4321, /*f1y=*/static_cast<int16_t>(0x8765), 0);
+    EXPECT_EQ(readLe16(out + 8), 0x4321);
+    EXPECT_EQ(readLe16(out + 10), static_cast<int16_t>(0x8765));
+}
+
+TEST(EncodeTouchpadPayload, CoordExtrema) {
+    // INT16_MIN / INT16_MAX must survive the wire round-trip without
+    // sign-extension or clamping — the receiver carries signed int16
+    // through to the DS4 surface and the mouse-mode delta calc.
+    uint8_t out[16]{};
+    dish_wire::encodeTouchpadPayload(out, 0, true, true, false, 0,
+                                     /*f0x=*/INT16_MIN, /*f0y=*/INT16_MAX,
+                                     0, /*f1x=*/INT16_MAX, /*f1y=*/INT16_MIN, 0);
+    EXPECT_EQ(readLe16(out + 3), INT16_MIN);
+    EXPECT_EQ(readLe16(out + 5), INT16_MAX);
+    EXPECT_EQ(readLe16(out + 8), INT16_MAX);
+    EXPECT_EQ(readLe16(out + 10), INT16_MIN);
+}
+
+TEST(EncodeTouchpadPayload, EmptyStateProducesAllZeroFlagsAndZeroCoords) {
+    // A "no fingers, no button" frame must encode as flag=0 with both
+    // tracking-ids and both coordinate pairs at zero. The receiver uses
+    // this shape to detect a clean lift-off rather than a smear.
+    uint8_t out[16];
+    for (int i = 0; i < 16; ++i) out[i] = 0xCC; // poison
+    dish_wire::encodeTouchpadPayload(out, /*ctrlIdx=*/5, false, false, false,
+                                     0, 0, 0, 0, 0, 0, 0);
+    EXPECT_EQ(out[0], 5);
+    EXPECT_EQ(out[1], 0); // all flag bits clear
+    EXPECT_EQ(out[2], 0);
+    EXPECT_EQ(readLe16(out + 3), 0);
+    EXPECT_EQ(readLe16(out + 5), 0);
+    EXPECT_EQ(out[7], 0);
+    EXPECT_EQ(readLe16(out + 8), 0);
+    EXPECT_EQ(readLe16(out + 10), 0);
+    EXPECT_EQ(readLe32(out + 12), 0u);
+}
+
+TEST(EncodeTouchpadPayload, IndependentFingerSlots) {
+    // Guard against a copy-paste bug where one slot's id/coords overwrites
+    // the other's: explicit distinct values per slot and per axis.
+    uint8_t out[16]{};
+    dish_wire::encodeTouchpadPayload(out, 0, true, true, false,
+                                     /*f0Id=*/0x10, /*f0x=*/100, /*f0y=*/200,
+                                     /*f1Id=*/0x20, /*f1x=*/300, /*f1y=*/400, 0);
+    EXPECT_EQ(out[2], 0x10);
+    EXPECT_EQ(readLe16(out + 3), 100);
+    EXPECT_EQ(readLe16(out + 5), 200);
+    EXPECT_EQ(out[7], 0x20);
+    EXPECT_EQ(readLe16(out + 8), 300);
+    EXPECT_EQ(readLe16(out + 10), 400);
+}
+
+TEST(EncodeTouchpadPayload, EventTimeMsAtBytes12to15LittleEndian) {
+    // The satellite reads u32 LE at offset 12 and uses it as the per-sample
+    // timestamp for mouse-mode time-scaling (fixes the first-touch jump).
+    // A wrong endianness here would scramble dt completely and the cursor
+    // would behave wildly. Pin the layout.
+    uint8_t out[16]{};
+    dish_wire::encodeTouchpadPayload(out, 0, true, false, false, 0, 0, 0, 0, 0, 0,
+                                     /*eventTimeMs=*/0x12345678u);
+    EXPECT_EQ(out[12], 0x78);
+    EXPECT_EQ(out[13], 0x56);
+    EXPECT_EQ(out[14], 0x34);
+    EXPECT_EQ(out[15], 0x12);
+    EXPECT_EQ(readLe32(out + 12), 0x12345678u);
+}
+
+TEST(EncodeTouchpadPayload, EventTimeMsExtrema) {
+    // Both ends of the u32 range survive without sign-extension shenanigans.
+    // UINT32_MAX is what happens when Android's MotionEvent.getEventTime()
+    // (a Long uptime in ms) wraps past 49.7 days; the satellite handles the
+    // wrap with int32_t dt arithmetic.
+    uint8_t out[16]{};
+    dish_wire::encodeTouchpadPayload(out, 0, true, false, false, 0, 0, 0, 0, 0, 0,
+                                     /*eventTimeMs=*/UINT32_MAX);
+    EXPECT_EQ(readLe32(out + 12), UINT32_MAX);
+    dish_wire::encodeTouchpadPayload(out, 0, true, false, false, 0, 0, 0, 0, 0, 0,
+                                     /*eventTimeMs=*/0u);
+    EXPECT_EQ(readLe32(out + 12), 0u);
+}

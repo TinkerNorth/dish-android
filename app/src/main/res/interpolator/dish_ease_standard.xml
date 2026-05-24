@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Standard ease — gentle acceleration into the move, gentle deceleration
+     out. Cubic-bezier(0.4, 0.0, 0.2, 1.0), the Material baseline. Default
+     curve for the majority of UI transitions; reach for ease_in / ease_out
+     only when the motion has a clear start- or end-anchored character. -->
+<pathInterpolator xmlns:android="http://schemas.android.com/apk/res/android"
+    android:pathData="M 0.0,0.0 C 0.4,0.0 0.2,1.0 1.0,1.0" />

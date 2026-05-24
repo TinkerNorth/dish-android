@@ -7,9 +7,7 @@
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@color/colorBackground"
-    android:fitsSystemWindows="true">
+    android:layout_height="match_parent">
 
     <!-- ═══ DASHBOARD ═══ -->
     <LinearLayout
@@ -22,55 +20,48 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingHorizontal="20dp"
-            android:paddingTop="24dp">
+            android:paddingHorizontal="@dimen/spacing_5xl"
+            android:paddingTop="@dimen/spacing_6xl">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="2dp">
+                android:layout_marginBottom="@dimen/size_2">
 
                 <TextView
+                    style="@style/TextAppearance.Dish.Display.Large"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="@string/brand_name"
-                    android:textColor="@color/colorPrimary"
-                    android:textSize="24sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.12" />
+                    android:text="@string/brand_name" />
 
                 <ImageButton
                     android:id="@+id/btnSettings"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="@dimen/icon_settings_button"
+                    android:layout_height="@dimen/icon_settings_button"
                     android:src="@drawable/ic_settings"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/menu_settings"
-                    android:padding="8dp"
+                    android:padding="@dimen/spacing_md"
                     android:scaleType="fitCenter" />
             </LinearLayout>
 
             <!-- Connections summary card -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/cardConnections"
+                style="@style/Widget.Dish.Card"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                app:cardBackgroundColor="@color/colorSurface"
-                app:cardCornerRadius="8dp"
-                app:cardElevation="0dp"
-                app:strokeColor="@color/colorCardStroke"
-                app:strokeWidth="1dp">
+                android:layout_marginTop="@dimen/spacing_xl">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:padding="14dp">
+                    android:padding="@dimen/card_padding">
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -79,22 +70,18 @@
                         android:orientation="vertical">
 
                         <TextView
+                            style="@style/TextAppearance.Dish.Label.Accent"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="@string/section_connections"
-                            android:textColor="@color/colorPrimary"
-                            android:textSize="11sp"
-                            android:fontFamily="monospace"
-                            android:letterSpacing="0.12" />
+                            android:text="@string/section_connections" />
 
                         <TextView
                             android:id="@+id/tvConnectionsSummary"
+                            style="@style/TextAppearance.Dish.BodyLarge.Bold"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/dashboard_connections_empty"
-                            android:textColor="@color/colorOnSurface"
-                            android:textSize="14sp"
-                            android:layout_marginTop="2dp" />
+                            android:layout_marginTop="@dimen/size_2" />
                     </LinearLayout>
 
                     <com.google.android.material.button.MaterialButton
@@ -102,15 +89,17 @@
                         style="@style/Widget.Dish.Button.Outlined"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/action_manage"
-                        android:textAllCaps="false" />
+                        android:text="@string/action_manage" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="@string/section_controllers" android:textColor="@color/colorPrimary"
-                android:textSize="11sp" android:fontFamily="monospace" android:letterSpacing="0.12"
-                android:paddingTop="14dp" android:paddingBottom="8dp" />
+            <include
+                android:id="@+id/sectionControllers"
+                layout="@layout/section_header"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_2xl"
+                android:layout_marginBottom="@dimen/spacing_md" />
         </LinearLayout>
 
         <!-- Scrollable slot list + telemetry -->
@@ -120,8 +109,8 @@
             android:layout_height="0dp"
             android:layout_weight="1"
             android:clipToPadding="false"
-            android:paddingHorizontal="20dp"
-            android:paddingBottom="16dp"
+            android:paddingHorizontal="@dimen/spacing_5xl"
+            android:paddingBottom="@dimen/spacing_3xl"
             app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
     </LinearLayout>
 

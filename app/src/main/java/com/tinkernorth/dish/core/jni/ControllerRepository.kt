@@ -145,6 +145,45 @@ class ControllerRepository
             SatelliteNative.sendBattery(handle, index, level, status)
         }
 
+        /**
+         * Forward a touchpad sample (0x000C). The caller is responsible for
+         * normalising touchpad coordinates to int16 and for assigning a
+         * monotonic tracking ID per finger contact (bumped when a finger
+         * lifts and a new one lands). Pacing (≤250 Hz, deadline-based) is
+         * the caller's job — the JNI call is one encode + one encrypted
+         * `sendto`, no internal queue.
+         */
+        @Suppress("LongParameterList")
+        fun sendTouchpad(
+            handle: Int,
+            index: Int,
+            finger0Active: Boolean,
+            finger1Active: Boolean,
+            buttonPressed: Boolean,
+            finger0TrackingId: Int,
+            finger0X: Short,
+            finger0Y: Short,
+            finger1TrackingId: Int,
+            finger1X: Short,
+            finger1Y: Short,
+            eventTimeMs: Long,
+        ) {
+            SatelliteNative.sendTouchpad(
+                handle,
+                index,
+                finger0Active,
+                finger1Active,
+                buttonPressed,
+                finger0TrackingId,
+                finger0X,
+                finger0Y,
+                finger1TrackingId,
+                finger1X,
+                finger1Y,
+                eventTimeMs,
+            )
+        }
+
         fun resetControllerAck(handle: Int) {
             SatelliteNative.resetControllerAck(handle)
         }
