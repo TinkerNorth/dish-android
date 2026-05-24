@@ -5,11 +5,18 @@
     style, and Kotlin source should reference.
 
     Two families:
-      - Material slots (`colorPrimary`, `colorOnSurface`, etc.) — consumed
-        by the Theme.Dish theme + every Material widget.
+      - Material slots (`colorPrimary`, `colorOnSurface`, `colorSurfaceVariant`,
+        `colorPrimaryContainer`, etc.) — consumed by the Theme.Dish theme +
+        every Material widget. M3 widgets reach for the container / variant /
+        outline-variant family beyond the basic palette; pin them all so M3
+        defaults don't compute off-brand pastels from tonal-palette math.
       - Dish-specific roles (`colorMuted`, `colorCardStroke`,
-        `colorOverlayScrim`, `colorSurfaceTint`) — named for the visual
-        intent at the callsite.
+        `colorOverlayScrim`, `colorIconContainerFill`) — named for the visual
+        intent at the callsite. Note `colorIconContainerFill` was previously
+        named `colorSurfaceTint`; the rename was prompted by the M3 audit
+        because the old name implied the token backed Material's tonal
+        elevation overlay (it didn't, and Material 1.14's overlay is gated
+        by `elevationOverlayEnabled` — disabled in Theme.Dish).
 
     If you're tempted to put a literal `#…` in a layout, look here first.
     A new semantic name with a primitive ref behind it is almost always
@@ -22,10 +29,32 @@
     <color name="colorOnPrimary">@color/navy_900</color>
     <color name="colorOnSurface">@color/paper_50</color>
 
+    <!-- ===== M3 surface + outline variants =====
+         M3 widgets (dividers, switch tracks, alert dialog body bg,
+         MaterialDivider, LinearProgressIndicator track, …) reach for
+         these beyond the basic surface/onSurface/outline pair. Pinning
+         them keeps M3's defaults from computing pale neutrals that
+         don't match the navy palette. -->
+    <color name="colorSurfaceVariant">@color/navy_700</color>
+    <color name="colorOnSurfaceVariant">@color/slate_300</color>
+    <color name="colorOutlineVariant">@color/signal_cyan_200</color>
+
     <!-- ===== Primary + variants ===== -->
     <color name="colorPrimary">@color/signal_cyan_500</color>
     <color name="colorPrimaryDark">@color/signal_cyan_700</color>
     <color name="colorPrimaryMid">@color/signal_cyan_700</color>
+
+    <!-- ===== M3 tonal containers =====
+         The "container" companions to colorPrimary/colorError. Used by
+         tonal button variants, FAB extended labels, error chip surfaces,
+         and any widget that wants a less-saturated tint of the role
+         colour. We don't consume these directly today, but pinning
+         them keeps M3 from generating washed-out cyan/pink pastels
+         from its default tonal palette. -->
+    <color name="colorPrimaryContainer">@color/signal_cyan_200</color>
+    <color name="colorOnPrimaryContainer">@color/paper_50</color>
+    <color name="colorErrorContainer">@color/red_500_a12</color>
+    <color name="colorOnErrorContainer">@color/paper_50</color>
 
     <!-- ===== Secondary chrome ===== -->
     <color name="colorMuted">@color/slate_300</color>
@@ -34,9 +63,12 @@
     <color name="colorOutline">@color/signal_cyan_300</color>
     <!-- Primary at ~12% alpha for card stroke. -->
     <color name="colorCardStroke">@color/signal_cyan_200</color>
-    <!-- Primary at ~6% alpha — fill for the Settings-row icon container
-         and other subtle surface tints. -->
-    <color name="colorSurfaceTint">@color/signal_cyan_100</color>
+    <!-- Primary at ~6% alpha — fill for the Settings-row icon container.
+         Renamed from `colorSurfaceTint` to free up that name for M3's
+         elevation-overlay attribute, which the theme now pins to
+         transparent so elevated surfaces don't accidentally pick up
+         this cyan as a tonal overlay. -->
+    <color name="colorIconContainerFill">@color/signal_cyan_100</color>
     <!-- Subtle surface variant for empty states (mirrors tn-deep). -->
     <color name="colorSurfaceDim">@color/navy_700</color>
 

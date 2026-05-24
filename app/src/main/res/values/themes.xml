@@ -2,9 +2,23 @@
     <!-- Material 3 base. The M2 `colorPrimaryVariant` / `colorSecondaryVariant`
          attributes intentionally dropped — they don't exist in the M3 token
          system (replaced by `colorPrimaryContainer` / `colorSecondaryContainer`
-         which we don't currently consume; reintroduce only when a callsite
-         needs the container colour ramp). -->
+         which we now pin alongside the rest of the M3 container/variant
+         family so widgets don't compute off-brand pastels from M3's default
+         tonal palette).
+
+         The theme is organised in five blocks:
+           1. Core colour slots (primary/surface/error/background)
+           2. M3 surface + outline variants and tonal containers
+           3. Typography ramp (?attr/textAppearance*) — see the block-level
+              comment for why labelLarge/display*/headlineLarge* stay
+              unmapped.
+           4. Shape ramp (?attr/shapeAppearanceCorner*) — backed by the
+              ShapeAppearance.Dish.Corner.* styles defined at the bottom
+              of this file.
+           5. Window chrome + default widget styles (button + alert dialog
+              overlay). -->
     <style name="Theme.Dish" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- ── 1. Core colour slots ── -->
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorOnPrimary">@color/colorOnPrimary</item>
         <item name="colorSecondary">@color/colorPrimaryMid</item>
@@ -17,11 +31,100 @@
         <item name="colorOnSurface">@color/colorOnSurface</item>
         <item name="colorError">@color/colorError</item>
         <item name="android:colorBackground">@color/colorBackground</item>
+
+        <!-- ── 2. M3 surface + outline variants and tonal containers ──
+             Pinned so widgets that read these slots (dividers, switch
+             tracks, alert dialog body bg, tonal button variants, FAB
+             extended labels, error chip surfaces, MaterialDivider,
+             LinearProgressIndicator track) don't fall back to M3's
+             auto-derived greys/pastels. See colors.xml for the
+             palette mapping. -->
+        <item name="colorSurfaceVariant">@color/colorSurfaceVariant</item>
+        <item name="colorOnSurfaceVariant">@color/colorOnSurfaceVariant</item>
+        <item name="colorOutline">@color/colorOutline</item>
+        <item name="colorOutlineVariant">@color/colorOutlineVariant</item>
+        <item name="colorPrimaryContainer">@color/colorPrimaryContainer</item>
+        <item name="colorOnPrimaryContainer">@color/colorOnPrimaryContainer</item>
+        <item name="colorErrorContainer">@color/colorErrorContainer</item>
+        <item name="colorOnErrorContainer">@color/colorOnErrorContainer</item>
+        <!-- M3 elevation overlay disabled: the tonal overlay that
+             Material applies to elevated surfaces would tint our dark
+             navy cards with the cyan primary as their elevation rises,
+             producing an off-brand violet/cyan wash. Every Dish card
+             pins cardElevation to 0dp today, but disabling the
+             mechanism here keeps a future contributor from accidentally
+             surfacing the overlay by bumping elevation > 0.
+             (Material 1.14 doesn't expose colorSurfaceTint as a theme
+             attr — the mechanism is gated by elevationOverlayEnabled
+             instead. Our semantic "icon container fill" token was
+             renamed from colorSurfaceTint to colorIconContainerFill
+             during the M3 audit so the names don't suggest a wiring
+             that doesn't exist.) -->
+        <item name="elevationOverlayEnabled">false</item>
+
+        <!-- ── 3. Typography ramp ──
+             Route Material widgets that read ?attr/textAppearance* through
+             Dish typography so MaterialAlertDialog titles, Snackbar bodies,
+             chips, exposed-dropdown items, etc. render in the brand voice
+             instead of M3 defaults.
+
+             Intentionally unmapped:
+               - labelLarge: the button-text slot. MaterialButton text style
+                 is set directly via Widget.Dish.Button, and our Dish.Label
+                 is the 11sp mono eyebrow — mapping it would force eyebrow
+                 type onto Chip / NavigationBar / Menu widgets we'd want
+                 readable.
+               - display* + headlineLarge/Medium: we drive hero numerals
+                 + brand wordmarks via Dish.Hero / Dish.Display(.Large)
+                 applied at the callsite. No M3 widget we use reads these
+                 slots, so leaving them at the platform default avoids
+                 surprises if one is later introduced.
+
+             headlineSmall and titleLarge both map to Dish.Title.Large
+             because MaterialAlertDialog reads one or the other depending
+             on whether it's a centered/icon variant — unifying them
+             means both render the same. -->
+        <item name="textAppearanceBodyLarge">@style/TextAppearance.Dish.BodyLarge</item>
+        <item name="textAppearanceBodyMedium">@style/TextAppearance.Dish.Body</item>
+        <item name="textAppearanceBodySmall">@style/TextAppearance.Dish.BodySmall</item>
+        <item name="textAppearanceTitleLarge">@style/TextAppearance.Dish.Title.Large</item>
+        <item name="textAppearanceTitleMedium">@style/TextAppearance.Dish.Title</item>
+        <item name="textAppearanceTitleSmall">@style/TextAppearance.Dish.Title</item>
+        <item name="textAppearanceHeadlineSmall">@style/TextAppearance.Dish.Title.Large</item>
+        <item name="textAppearanceLabelMedium">@style/TextAppearance.Dish.Label</item>
+        <item name="textAppearanceLabelSmall">@style/TextAppearance.Dish.Caption</item>
+
+        <!-- ── 4. Shape ramp ──
+             Material 3 widgets read `?attr/shapeAppearanceCornerSmall` etc.
+             when picking corner radii — alert dialog corners, exposed
+             dropdown menus, bottom sheets, the Snackbar surface, and FAB
+             variants all flow through this ramp. Pinning the five slots
+             to Dish corner dimens means a new M3 surface adopted later
+             inherits our radii without a per-call override.
+
+             Material 1.14 also keeps the legacy
+             `shapeAppearanceSmallComponent` / `MediumComponent` /
+             `LargeComponent` attrs around, but Theme.Material3 already
+             defaults each of those to the corresponding Corner.* slot,
+             so we don't need to set them ourselves. -->
+        <item name="shapeAppearanceCornerExtraSmall">@style/ShapeAppearance.Dish.Corner.ExtraSmall</item>
+        <item name="shapeAppearanceCornerSmall">@style/ShapeAppearance.Dish.Corner.Small</item>
+        <item name="shapeAppearanceCornerMedium">@style/ShapeAppearance.Dish.Corner.Medium</item>
+        <item name="shapeAppearanceCornerLarge">@style/ShapeAppearance.Dish.Corner.Large</item>
+        <item name="shapeAppearanceCornerExtraLarge">@style/ShapeAppearance.Dish.Corner.ExtraLarge</item>
+
+        <!-- ── 5. Window chrome + default widget styles ── -->
         <item name="android:windowBackground">@color/colorBackground</item>
         <item name="android:statusBarColor">@color/colorBackground</item>
         <item name="android:navigationBarColor">@color/colorBackground</item>
         <!-- Default MaterialButton style for the entire app -->
         <item name="materialButtonStyle">@style/Widget.Dish.Button</item>
+        <!-- Branded chrome for MaterialAlertDialogBuilder so the two
+             remaining stock dialogs (ConnectionsActivity's forget-BT
+             confirmation + Bluetooth profile picker) match
+             PairPinDialog's brand language instead of rendering with
+             M3 default chrome. -->
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.Dish.MaterialAlertDialog</item>
     </style>
 
     <!-- Filled button: cyan-dark background, dark navy text (colorOnPrimary).
@@ -68,5 +171,71 @@
         <item name="colorSurface">@color/colorSurface</item>
         <item name="colorOnSurface">@color/colorOnSurface</item>
         <item name="materialButtonStyle">@style/Widget.Dish.Button</item>
+    </style>
+
+    <!-- ============================================================
+         SHAPE RAMP — backs the ?attr/shapeAppearanceCorner* attrs above.
+
+         Mapping rationale (size → semantic role):
+           ExtraSmall (4dp)  → chip surfaces (assist/filter)
+           Small      (6dp)  → button surfaces
+           Medium     (8dp)  → card surfaces, alert dialog corners
+           Large     (10dp)  → snackbar surface, large container
+           ExtraLarge (20dp) → pill / floating banner surfaces
+
+         Parented at the M3 ShapeAppearance.Material3.Corner.* styles so
+         we inherit M3's corner-family default (rounded) and override
+         only the size.
+         ============================================================ -->
+    <style name="ShapeAppearance.Dish.Corner.ExtraSmall" parent="ShapeAppearance.Material3.Corner.ExtraSmall">
+        <item name="cornerSize">@dimen/corner_chip</item>
+    </style>
+
+    <style name="ShapeAppearance.Dish.Corner.Small" parent="ShapeAppearance.Material3.Corner.Small">
+        <item name="cornerSize">@dimen/corner_button</item>
+    </style>
+
+    <style name="ShapeAppearance.Dish.Corner.Medium" parent="ShapeAppearance.Material3.Corner.Medium">
+        <item name="cornerSize">@dimen/corner_card</item>
+    </style>
+
+    <style name="ShapeAppearance.Dish.Corner.Large" parent="ShapeAppearance.Material3.Corner.Large">
+        <item name="cornerSize">@dimen/corner_notification</item>
+    </style>
+
+    <style name="ShapeAppearance.Dish.Corner.ExtraLarge" parent="ShapeAppearance.Material3.Corner.ExtraLarge">
+        <item name="cornerSize">@dimen/corner_pill</item>
+    </style>
+
+    <!-- ============================================================
+         MATERIAL ALERT DIALOG OVERLAY — registered on Theme.Dish above
+         via materialAlertDialogTheme. Applied to every
+         MaterialAlertDialogBuilder(this) constructed inside an Activity
+         that uses Theme.Dish.
+
+         Title / body text styles are TextAppearance overlays of the
+         M3 dialog text parents — preserves M3's spacing/letterSpacing
+         intent while swapping the textAppearance to a Dish style.
+         Positive button goes filled (primary action); negative and
+         neutral go outlined so multi-button bars (e.g. the forget-BT
+         confirmation, which has three buttons) read as three peer
+         choices rather than one "default" plus two text buttons.
+         ============================================================ -->
+    <style name="MaterialAlertDialog.Dish.Title" parent="MaterialAlertDialog.Material3.Title.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Dish.Title.Large</item>
+    </style>
+
+    <style name="MaterialAlertDialog.Dish.Body" parent="MaterialAlertDialog.Material3.Body.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Dish.Body</item>
+    </style>
+
+    <style name="ThemeOverlay.Dish.MaterialAlertDialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="materialAlertDialogTitleTextStyle">@style/MaterialAlertDialog.Dish.Title</item>
+        <item name="materialAlertDialogBodyTextStyle">@style/MaterialAlertDialog.Dish.Body</item>
+        <item name="buttonBarPositiveButtonStyle">@style/Widget.Dish.Button</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Widget.Dish.Button.Outlined</item>
+        <item name="buttonBarNeutralButtonStyle">@style/Widget.Dish.Button.Outlined</item>
+        <item name="colorSurface">@color/colorSurface</item>
+        <item name="colorOnSurface">@color/colorOnSurface</item>
     </style>
 </resources>

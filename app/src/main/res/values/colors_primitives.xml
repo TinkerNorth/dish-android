@@ -49,6 +49,12 @@
     <color name="red_500">#FFE74C3C</color>
     <color name="amber_500">#FFF59E0B</color>
 
+    <!-- Red at ~12% alpha — backs the M3 colorErrorContainer slot so widgets
+         that paint an error-container surface (e.g. the body of certain
+         AlertDialog variants) get a faint red wash rather than M3's default
+         pale-pink which doesn't belong on the deep-space navy palette. -->
+    <color name="red_500_a12">#1FE74C3C</color>
+
     <!-- ===== Scrim. =====
          ink_900_a80 is the full-screen dim used in low-power mode
          (black at ≈80% alpha). -->

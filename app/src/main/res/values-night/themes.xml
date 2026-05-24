@@ -1,8 +1,17 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Night theme is identical — the palette is already dark-first.
          Material 3 base; M2-only `colorPrimaryVariant` / `colorSecondaryVariant`
-         intentionally dropped (see the day-theme equivalent). -->
+         intentionally dropped (see the day-theme equivalent for the full
+         block-by-block rationale on each attr group). Mirrors the day theme
+         in lockstep so a night-mode user sees the same deep-space cyan
+         chrome as a day-mode user.
+
+         Resources that aren't day/night sensitive (ShapeAppearance.Dish.*,
+         MaterialAlertDialog.Dish.*, ThemeOverlay.Dish.MaterialAlertDialog,
+         Theme.Dish.Dialog) live only in values/themes.xml — Android's
+         resource fallback chain makes them visible to this night theme too. -->
     <style name="Theme.Dish" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- ── 1. Core colour slots ── -->
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorOnPrimary">@color/colorOnPrimary</item>
         <item name="colorSecondary">@color/colorPrimaryMid</item>
@@ -11,10 +20,42 @@
         <item name="colorOnSurface">@color/colorOnSurface</item>
         <item name="colorError">@color/colorError</item>
         <item name="android:colorBackground">@color/colorBackground</item>
+
+        <!-- ── 2. M3 surface + outline variants and tonal containers ── -->
+        <item name="colorSurfaceVariant">@color/colorSurfaceVariant</item>
+        <item name="colorOnSurfaceVariant">@color/colorOnSurfaceVariant</item>
+        <item name="colorOutline">@color/colorOutline</item>
+        <item name="colorOutlineVariant">@color/colorOutlineVariant</item>
+        <item name="colorPrimaryContainer">@color/colorPrimaryContainer</item>
+        <item name="colorOnPrimaryContainer">@color/colorOnPrimaryContainer</item>
+        <item name="colorErrorContainer">@color/colorErrorContainer</item>
+        <item name="colorOnErrorContainer">@color/colorOnErrorContainer</item>
+        <item name="elevationOverlayEnabled">false</item>
+
+        <!-- ── 3. Typography ramp ── -->
+        <item name="textAppearanceBodyLarge">@style/TextAppearance.Dish.BodyLarge</item>
+        <item name="textAppearanceBodyMedium">@style/TextAppearance.Dish.Body</item>
+        <item name="textAppearanceBodySmall">@style/TextAppearance.Dish.BodySmall</item>
+        <item name="textAppearanceTitleLarge">@style/TextAppearance.Dish.Title.Large</item>
+        <item name="textAppearanceTitleMedium">@style/TextAppearance.Dish.Title</item>
+        <item name="textAppearanceTitleSmall">@style/TextAppearance.Dish.Title</item>
+        <item name="textAppearanceHeadlineSmall">@style/TextAppearance.Dish.Title.Large</item>
+        <item name="textAppearanceLabelMedium">@style/TextAppearance.Dish.Label</item>
+        <item name="textAppearanceLabelSmall">@style/TextAppearance.Dish.Caption</item>
+
+        <!-- ── 4. Shape ramp ── -->
+        <item name="shapeAppearanceCornerExtraSmall">@style/ShapeAppearance.Dish.Corner.ExtraSmall</item>
+        <item name="shapeAppearanceCornerSmall">@style/ShapeAppearance.Dish.Corner.Small</item>
+        <item name="shapeAppearanceCornerMedium">@style/ShapeAppearance.Dish.Corner.Medium</item>
+        <item name="shapeAppearanceCornerLarge">@style/ShapeAppearance.Dish.Corner.Large</item>
+        <item name="shapeAppearanceCornerExtraLarge">@style/ShapeAppearance.Dish.Corner.ExtraLarge</item>
+
+        <!-- ── 5. Window chrome + default widget styles ── -->
         <item name="android:windowBackground">@color/colorBackground</item>
         <item name="android:statusBarColor">@color/colorBackground</item>
         <item name="android:navigationBarColor">@color/colorBackground</item>
         <item name="materialButtonStyle">@style/Widget.Dish.Button</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.Dish.MaterialAlertDialog</item>
     </style>
 
     <style name="Widget.Dish.Button" parent="Widget.Material3.Button">
