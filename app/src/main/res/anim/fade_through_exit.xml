@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- LEAVING activity fades to 0% alpha over motion_duration_medium with the
-     dish_ease_standard curve. Paired with fade_through_enter on the
-     incoming activity. -->
+     dish_ease_emphasized curve (M3's top-level navigation signature). Paired
+     with fade_through_enter on the incoming activity. -->
 <alpha xmlns:android="http://schemas.android.com/apk/res/android"
     android:fromAlpha="1.0"
     android:toAlpha="0.0"
     android:duration="@integer/motion_duration_medium"
-    android:interpolator="@interpolator/dish_ease_standard" />
+    android:interpolator="@interpolator/dish_ease_emphasized" />

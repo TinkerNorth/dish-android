@@ -63,7 +63,7 @@
                     layout="@layout/section_header"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="@dimen/spacing_lg" />
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
 
                 <com.google.android.material.card.MaterialCardView
                     style="@style/Widget.Dish.Card"
@@ -71,11 +71,8 @@
                     android:layout_height="wrap_content">
 
                     <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="top"
-                        android:padding="@dimen/card_padding">
+                        style="@style/Widget.Dish.Card.RowContainer"
+                        android:gravity="top">
 
                         <!-- Leading icon + title/subtitle column. Icon
                              (`ic_bug`) + title + subtitle text are set in
@@ -109,8 +106,8 @@
                     layout="@layout/section_header"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/size_22"
-                    android:layout_marginBottom="@dimen/spacing_lg" />
+                    android:layout_marginTop="@dimen/section_header_gap_above"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
 
                 <com.google.android.material.card.MaterialCardView
                     android:id="@+id/cardPrivacyPolicy"
@@ -122,11 +119,8 @@
                     android:foreground="?attr/selectableItemBackground">
 
                     <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:padding="@dimen/card_padding">
+                        style="@style/Widget.Dish.Card.RowContainer"
+                        android:gravity="center_vertical">
 
                         <!-- Leading icon + title/subtitle column. Icon
                              (`ic_shield`), title, and subtitle URL text +

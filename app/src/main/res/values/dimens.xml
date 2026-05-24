@@ -70,6 +70,29 @@
     <dimen name="icon_settings_button">@dimen/size_40</dimen> <!-- header settings ImageButton -->
 
     <!-- ============================================================
+         SECTION HEADER (section_header.xml)
+
+         Canonical rhythm for the eyebrow include:
+           gap_above — applied as `layout_marginTop` on the include when
+             the eyebrow sits between two stacked sections (typical:
+             card → eyebrow → card). Omit when the eyebrow is the first
+             child of its container, or when a divider/marginVertical
+             above already carries the gap.
+           gap_below — applied as `layout_marginBottom` on the include
+             when the next sibling does NOT carry its own top breathing
+             room. Omit when the next sibling has a `paddingTop` (e.g.
+             a list with `paddingTop=spacing_md`) that already provides
+             the gap.
+
+         The Settings ABOUT eyebrow previously used the icon primitive
+         `size_22` (22dp) as its top margin — that was drift, not intent.
+         The canonical above-gap is 14dp; the Settings card density
+         tolerates the tighter rhythm.
+         ============================================================ -->
+    <dimen name="section_header_gap_above">@dimen/spacing_2xl</dimen>
+    <dimen name="section_header_gap_below">@dimen/spacing_md</dimen>
+
+    <!-- ============================================================
          CARD (item_controller, row_connection)
          ============================================================ -->
     <dimen name="card_padding">@dimen/size_14</dimen>
@@ -88,10 +111,18 @@
 
     <!-- ============================================================
          CHIP (pickable Type / Touchpad-mode chips)
+
+         chip_min_height tightens MaterialChip's default 32dp footprint
+         to 24dp so a row of chips inside the controller-card picker
+         keeps the prior visual density. chip_padding_vertical is
+         retired now that Widget.Dish.Chip drives this through
+         chip_min_height + the parent's built-in vertical centring
+         (MaterialChip ignores android:paddingVertical; it manages
+         vertical layout from chipMinHeight).
          ============================================================ -->
     <dimen name="chip_padding_horizontal">@dimen/size_10</dimen>
-    <dimen name="chip_padding_vertical">@dimen/size_4</dimen>
     <dimen name="chip_margin_end">@dimen/size_6</dimen>
+    <dimen name="chip_min_height">@dimen/size_24</dimen>
 
     <!-- ============================================================
          DIALOG / OVERLAY
