@@ -12,7 +12,7 @@ import com.tinkernorth.dish.R
 /**
  * Typed navigation surface over the [androidx.navigation] graph at
  * `res/navigation/nav_graph.xml`. Constructed per-Activity (cheap — the
- * graph itself is static), then used to invoke navigation actions by name:
+ * graph itself is static), then used to invoke navigation by name:
  *
  * ```
  * private val nav = DishNavigator(this)
@@ -21,18 +21,25 @@ import com.tinkernorth.dish.R
  * ```
  *
  * Why a wrapper instead of calling [NavController.navigate] directly: the
- * action ids in the graph use raw strings for extras (e.g. `extra_slot_id`)
- * to match the receiving activities' `Intent.getStringExtra` calls. The
- * typed methods here give the call site Kotlin-level type-safety —
- * mistyping `connectionId` becomes a compiler error instead of a silent
- * "extra missing" at runtime.
+ * destination ids and argument names in the graph use raw strings for
+ * extras (e.g. `extra_slot_id`) to match the receiving activities'
+ * `Intent.getStringExtra` calls. The typed methods here give the call site
+ * Kotlin-level type-safety — mistyping `connectionId` becomes a compile
+ * error instead of a silent "extra missing" at runtime.
  *
- * Activity destinations only: `ActivityNavigator` translates each
- * `navigate(actionId, args)` call into `startActivity(Intent)` with the
- * args applied as intent extras (argument names map 1:1 to extras). The
- * navigation library does NOT manage the back stack for Activity
- * destinations — the OS does. So calling [Activity.finish] from within an
- * activity destination still pops back to whatever started it.
+ * Why navigate by destination id and not by action id: Activity destinations
+ * are TERMINAL in the navigation library's model — they can't carry
+ * `<action>` children (the runtime throws
+ * `UnsupportedOperationException: ... does not support actions` when you
+ * try to inflate one). `controller.navigate(destinationId)` works for any
+ * destination in the graph and resolves through [ActivityNavigator] into
+ * `startActivity(Intent(activityClass))` with the supplied bundle as intent
+ * extras.
+ *
+ * Activity destinations only: the navigation library does NOT manage the
+ * back stack for Activity destinations — the OS does. So calling
+ * [Activity.finish] from within an activity destination still pops back to
+ * whatever started it.
  *
  * Intentional non-coverage: `startActivity(Intent.ACTION_VIEW, uri)` calls
  * (privacy-policy URL, Bluetooth settings, etc.) stay as direct
@@ -51,7 +58,7 @@ class DishNavigator(
 
     /** Navigate to the Connections screen ("Manage" button). */
     fun toConnections() {
-        controller.navigate(R.id.action_main_to_connections)
+        controller.navigate(R.id.connectionsActivity)
     }
 
     /**
@@ -61,14 +68,14 @@ class DishNavigator(
      */
     fun toConnectionsForPairing(connectionId: String) {
         controller.navigate(
-            R.id.action_main_to_connections_for_pairing,
+            R.id.connectionsActivity,
             Bundle().apply { putString("extra_pair_prompt_for_id", connectionId) },
         )
     }
 
     /** Navigate to the Settings screen. */
     fun toSettings() {
-        controller.navigate(R.id.action_main_to_settings)
+        controller.navigate(R.id.settingsActivity)
     }
 
     /**
@@ -81,7 +88,7 @@ class DishNavigator(
         slotId: String,
     ) {
         controller.navigate(
-            R.id.action_main_to_touchpad,
+            R.id.touchpadOverlayActivity,
             Bundle().apply {
                 putString("extra_connection_id", connectionId)
                 putString("extra_touchpad_mode", touchpadMode)
@@ -99,7 +106,7 @@ class DishNavigator(
         usePsLayout: Boolean,
     ) {
         controller.navigate(
-            R.id.action_main_to_gamepad,
+            R.id.gamepadOverlayActivity,
             Bundle().apply {
                 putString("extra_connection_id", connectionId)
                 putBoolean("extra_use_ps_layout", usePsLayout)
@@ -109,6 +116,6 @@ class DishNavigator(
 
     /** Route to the themed fatal-fallback screen when the native library fails. */
     fun toNativeUnavailable() {
-        controller.navigate(R.id.action_main_to_native_unavailable)
+        controller.navigate(R.id.nativeUnavailableActivity)
     }
 }
