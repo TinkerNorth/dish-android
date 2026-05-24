@@ -309,8 +309,14 @@
          what *isn't* sent in plain language, avoids jargon. Layout mirrors
          the Claude Design "Settings" handoff. -->
     <string name="settings_title">Settings</string>
+    <string name="settings_section_appearance">APPEARANCE</string>
     <string name="settings_section_diagnostics">DIAGNOSTICS</string>
     <string name="settings_section_about">ABOUT</string>
+    <string name="settings_appearance_title">Theme</string>
+    <string name="settings_appearance_body">Choose how Dish looks. System matches your device\'s light or dark setting.</string>
+    <string name="settings_appearance_system">System</string>
+    <string name="settings_appearance_light">Light</string>
+    <string name="settings_appearance_dark">Dark</string>
     <string name="settings_crash_reporting_title">Share crash reports</string>
     <string name="settings_crash_reporting_body">Share anonymized crash logs and stack traces with TinkerNorth to help fix bugs. No gameplay or controller input is included.</string>
     <string name="settings_version_label">VERSION</string>

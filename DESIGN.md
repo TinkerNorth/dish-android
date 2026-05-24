@@ -1,7 +1,15 @@
 # dish-android — Design tokens
 
-All theme values live in [app/src/main/res/values/colors.xml](app/src/main/res/values/colors.xml)
-and [app/src/main/res/values/themes.xml](app/src/main/res/values/themes.xml).
+Theme values are split across:
+- [app/src/main/res/values/colors.xml](app/src/main/res/values/colors.xml) — **light-mode** semantic tokens.
+- [app/src/main/res/values-night/colors.xml](app/src/main/res/values-night/colors.xml) — **dark-mode** semantic tokens (overrides the light file when night qualifier wins).
+- [app/src/main/res/values/colors_primitives.xml](app/src/main/res/values/colors_primitives.xml) — the shared raw palette consumed by both modes.
+- [app/src/main/res/values/themes.xml](app/src/main/res/values/themes.xml) — the single Theme.Dish definition (DayNight-parented; one file, both modes).
+
+The user's in-app Appearance choice (Settings → Appearance: System / Light /
+Dark) flips Android's night-mode qualifier via `AppCompatDelegate.setDefaultNightMode`,
+which switches resource resolution between the two `colors.xml` files at runtime.
+See [`ThemePreferenceStore`](app/src/main/java/com/tinkernorth/dish/source/store/ThemePreferenceStore.kt).
 
 Token names follow the cross-repo schema documented in
 `d:\TinkerNorth\BRAND.md` (TinkerNorth design system). When updating a value,
@@ -10,23 +18,27 @@ Satellite local web UI.
 
 ## Available color tokens
 
-| Token | Value | Semantic role |
-|---|---|---|
-| `@color/colorBackground` | `#060818` | Body / window background (`--tn-ink`) |
-| `@color/colorSurface` | `#0C1027` | Card / raised panel (`--tn-night`) |
-| `@color/colorSurfaceDim` | `#131A3A` | Recessed / empty state (`--tn-deep`) |
-| `@color/colorPrimary` | `#4FE3FF` | Main accent — cyan (`--tn-signal`) |
-| `@color/colorPrimaryMid` | `#2C93AD` | Aliased to PrimaryDark — web has no mid |
-| `@color/colorPrimaryDark` | `#2C93AD` | Pressed / disabled primary (`--tn-signal-dim`) |
-| `@color/colorOnPrimary` | `#060818` | Text/icon on top of primary |
-| `@color/colorOnSurface` | `#E6ECFF` | Body text on surface (`--body-color`) |
-| `@color/colorMuted` | `#93A0C8` | Secondary text (`--muted`) |
-| `@color/colorOutline` | `#2E4FE3FF` | Borders — cyan @ ~18% alpha |
-| `@color/colorCardStroke` | `#1F4FE3FF` | Primary @ ~12% alpha for card borders |
-| `@color/colorSuccess` | `#22C55E` | Status — success |
-| `@color/colorError` | `#E74C3C` | Status — error |
-| `@color/colorWarning` | `#F59E0B` | Status — warning |
-| `@color/colorOverlayScrim` | `#CC000000` | Black @ ~80% alpha for full-screen dim overlays |
+Both modes share the same semantic names. The values below show the light /
+dark resolved pair for each role. The brand cyan (`colorPrimary` /
+`colorPrimaryDark` / `colorPrimaryMid`) and the severity tones are mode-neutral.
+
+| Token | Light value | Dark value | Semantic role |
+|---|---|---|---|
+| `@color/colorBackground` | `#F2F4F8` | `#060818` | Body / window background |
+| `@color/colorSurface` | `#FFFFFF` | `#0C1027` | Card / raised panel |
+| `@color/colorSurfaceDim` | `#E5E9F1` | `#131A3A` | Recessed / empty state |
+| `@color/colorPrimary` | `#4FE3FF` | `#4FE3FF` | Main accent — cyan (`--tn-signal`) |
+| `@color/colorPrimaryMid` | `#2C93AD` | `#2C93AD` | Aliased to PrimaryDark |
+| `@color/colorPrimaryDark` | `#2C93AD` | `#2C93AD` | Pressed / disabled primary |
+| `@color/colorOnPrimary` | `#060818` | `#060818` | Text/icon on top of primary |
+| `@color/colorOnSurface` | `#060818` | `#E6ECFF` | Body text on surface |
+| `@color/colorMuted` | `#6E7894` | `#93A0C8` | Secondary text |
+| `@color/colorOutline` | `#2E4FE3FF` | `#2E4FE3FF` | Borders — cyan @ ~18% alpha |
+| `@color/colorCardStroke` | `#1F4FE3FF` | `#1F4FE3FF` | Primary @ ~12% alpha for card borders |
+| `@color/colorSuccess` | `#22C55E` | `#22C55E` | Status — success |
+| `@color/colorError` | `#E74C3C` | `#E74C3C` | Status — error |
+| `@color/colorWarning` | `#F59E0B` | `#F59E0B` | Status — warning |
+| `@color/colorOverlayScrim` | `#CC000000` | `#CC000000` | Black @ ~80% alpha for full-screen dim overlays |
 
 Palette: **cyan / deep-space** — mirrors dish-website. Status colors
 (`Success` / `Error` / `Warning`) are deliberately the same across both
@@ -61,5 +73,12 @@ system's surface.
 
 - `#CC000000` in [overlay_low_power.xml](app/src/main/res/layout/overlay_low_power.xml)
   → `@color/colorOverlayScrim`
-- `#0D0F12` in [ic_launcher_background.xml](app/src/main/res/drawable/ic_launcher_background.xml)
-  → `@color/colorBackground`
+- `@color/colorBackground` in [ic_launcher_background.xml](app/src/main/res/drawable/ic_launcher_background.xml)
+  → `@color/navy_900` (pinned to a fixed primitive — see file header; the
+  semantic token resolves to the light cloud surface in day mode and would
+  render the launcher icon nearly invisible against light home screens).
+- Day/night colour split: `values/colors.xml` is now the light-mode
+  palette; `values-night/colors.xml` is the dark-mode override; the
+  redundant `values-night/themes.xml` was removed (the single
+  `values/themes.xml` is shared across both modes and references the
+  colour tokens that resolve per-qualifier).
