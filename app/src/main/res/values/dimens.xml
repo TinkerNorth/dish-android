@@ -88,10 +88,18 @@
 
     <!-- ============================================================
          CHIP (pickable Type / Touchpad-mode chips)
+
+         chip_min_height tightens MaterialChip's default 32dp footprint
+         to 24dp so a row of chips inside the controller-card picker
+         keeps the prior visual density. chip_padding_vertical is
+         retired now that Widget.Dish.Chip drives this through
+         chip_min_height + the parent's built-in vertical centring
+         (MaterialChip ignores android:paddingVertical; it manages
+         vertical layout from chipMinHeight).
          ============================================================ -->
     <dimen name="chip_padding_horizontal">@dimen/size_10</dimen>
-    <dimen name="chip_padding_vertical">@dimen/size_4</dimen>
     <dimen name="chip_margin_end">@dimen/size_6</dimen>
+    <dimen name="chip_min_height">@dimen/size_24</dimen>
 
     <!-- ============================================================
          DIALOG / OVERLAY

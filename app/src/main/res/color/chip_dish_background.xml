@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Chip background fill for Widget.Dish.Chip. Flips on state_checked so the
+     selected chip in an inline picker (Type / Touchpad mode) reads as a
+     filled cyan tile and the unselected siblings stay flat against the page
+     background. Replaces @drawable/chip_pickable_bg (selector-on-state-list
+     drawable) — MaterialChip consumes a ColorStateList directly, so the
+     shape/corner/stroke pieces now live on Widget.Dish.Chip itself. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_checked="true" android:color="@color/colorPrimary" />
+    <item android:color="@color/colorBackground" />
+</selector>

@@ -7,7 +7,7 @@
          chrome as a day-mode user.
 
          Resources that aren't day/night sensitive (ShapeAppearance.Dish.*,
-         MaterialAlertDialog.Dish.*, ThemeOverlay.Dish.MaterialAlertDialog,
+         TextAppearance.Dish.Dialog.*, ThemeOverlay.Dish.MaterialAlertDialog,
          Theme.Dish.Dialog) live only in values/themes.xml — Android's
          resource fallback chain makes them visible to this night theme too. -->
     <style name="Theme.Dish" parent="Theme.Material3.DayNight.NoActionBar">
@@ -32,7 +32,25 @@
         <item name="colorOnErrorContainer">@color/colorOnErrorContainer</item>
         <item name="elevationOverlayEnabled">false</item>
 
-        <!-- ── 3. Typography ramp ── -->
+        <!-- ── 3. M3 surface container hierarchy ── -->
+        <item name="colorSurfaceContainerLowest">@color/colorSurfaceContainerLowest</item>
+        <item name="colorSurfaceContainerLow">@color/colorSurfaceContainerLow</item>
+        <item name="colorSurfaceContainer">@color/colorSurfaceContainer</item>
+        <item name="colorSurfaceContainerHigh">@color/colorSurfaceContainerHigh</item>
+        <item name="colorSurfaceContainerHighest">@color/colorSurfaceContainerHighest</item>
+        <item name="colorSurfaceDim">@color/colorM3SurfaceDim</item>
+        <item name="colorSurfaceBright">@color/colorSurfaceBright</item>
+
+        <!-- ── 4. M3 inverse + tertiary ── -->
+        <item name="colorSurfaceInverse">@color/colorSurfaceInverse</item>
+        <item name="colorOnSurfaceInverse">@color/colorOnSurfaceInverse</item>
+        <item name="colorPrimaryInverse">@color/colorPrimaryInverse</item>
+        <item name="colorTertiary">@color/colorTertiary</item>
+        <item name="colorOnTertiary">@color/colorOnTertiary</item>
+        <item name="colorTertiaryContainer">@color/colorTertiaryContainer</item>
+        <item name="colorOnTertiaryContainer">@color/colorOnTertiaryContainer</item>
+
+        <!-- ── 5. Typography ramp ── -->
         <item name="textAppearanceBodyLarge">@style/TextAppearance.Dish.BodyLarge</item>
         <item name="textAppearanceBodyMedium">@style/TextAppearance.Dish.Body</item>
         <item name="textAppearanceBodySmall">@style/TextAppearance.Dish.BodySmall</item>
@@ -43,18 +61,17 @@
         <item name="textAppearanceLabelMedium">@style/TextAppearance.Dish.Label</item>
         <item name="textAppearanceLabelSmall">@style/TextAppearance.Dish.Caption</item>
 
-        <!-- ── 4. Shape ramp ── -->
+        <!-- ── 6. Shape ramp ── -->
         <item name="shapeAppearanceCornerExtraSmall">@style/ShapeAppearance.Dish.Corner.ExtraSmall</item>
         <item name="shapeAppearanceCornerSmall">@style/ShapeAppearance.Dish.Corner.Small</item>
         <item name="shapeAppearanceCornerMedium">@style/ShapeAppearance.Dish.Corner.Medium</item>
         <item name="shapeAppearanceCornerLarge">@style/ShapeAppearance.Dish.Corner.Large</item>
         <item name="shapeAppearanceCornerExtraLarge">@style/ShapeAppearance.Dish.Corner.ExtraLarge</item>
 
-        <!-- ── 5. Window chrome + default widget styles ── -->
+        <!-- ── 7. Window chrome + default widget styles ── -->
         <item name="android:windowBackground">@color/colorBackground</item>
-        <item name="android:statusBarColor">@color/colorBackground</item>
-        <item name="android:navigationBarColor">@color/colorBackground</item>
         <item name="materialButtonStyle">@style/Widget.Dish.Button</item>
+        <item name="chipStyle">@style/Widget.Dish.Chip</item>
         <item name="materialAlertDialogTheme">@style/ThemeOverlay.Dish.MaterialAlertDialog</item>
     </style>
 

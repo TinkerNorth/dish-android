@@ -23,9 +23,14 @@
          500 is colorPrimary / full saturation. 700 is the darker tonal
          used for filled-button backgrounds and primary-dim states.
          100/200/300 are alpha-derived from 500 for surface tints
-         (6%), card strokes (12%), and outlines (18%) respectively. -->
+         (6%), card strokes (12%), and outlines (18%) respectively.
+         900 is an opaque deep teal — used by colorPrimaryContainer so the
+         M3 container slot is opaque (alpha-composited container colors
+         break the on/container contrast guarantee under any non-default
+         surface). -->
     <color name="signal_cyan_500">#FF4FE3FF</color>
     <color name="signal_cyan_700">#FF2C93AD</color>
+    <color name="signal_cyan_900">#FF0C3D48</color>
     <color name="signal_cyan_100">#0F4FE3FF</color>
     <color name="signal_cyan_200">#1F4FE3FF</color>
     <color name="signal_cyan_300">#2E4FE3FF</color>
@@ -33,10 +38,21 @@
     <!-- ===== Navy — deep-space surface scale. =====
          900 is the app background (darkest); 800 is the elevated surface
          (cards, dialogs); 700 is a slightly lifted variant for empty-state
-         surfaces. -->
+         surfaces and the touchpad stick-recess background.
+
+         850 / 750 / 650 were added to back the M3 surface-container
+         hierarchy (Lowest → Highest) so widgets that read those slots
+         (alert dialog body, bottom sheet, navigation bar, menu popups)
+         get on-brand navy tones instead of M3's default tonal-palette
+         math computing off-brand greys/blues. 650 is also the new
+         colorOutlineVariant so dividers/switch tracks read as quiet
+         structure instead of brand-cyan-tinted. -->
     <color name="navy_900">#FF060818</color>
+    <color name="navy_850">#FF080C1E</color>
     <color name="navy_800">#FF0C1027</color>
+    <color name="navy_750">#FF0F1530</color>
     <color name="navy_700">#FF131A3A</color>
+    <color name="navy_650">#FF1B244B</color>
 
     <!-- ===== Slate — muted text + secondary chrome. ===== -->
     <color name="slate_300">#FF93A0C8</color>
@@ -44,19 +60,23 @@
     <!-- ===== Paper — high-contrast on-surface text. ===== -->
     <color name="paper_50">#FFE6ECFF</color>
 
-    <!-- ===== Severity palette — used for status indicators. ===== -->
+    <!-- ===== Severity palette — used for status indicators. =====
+         500s are the saturated severity colors used for foreground tints
+         (status dots, error text, warning text). The 900 tonals back the
+         M3 container slots (colorErrorContainer / colorTertiaryContainer)
+         opaquely — the same alpha-composition concern as
+         signal_cyan_900 / colorPrimaryContainer above. -->
     <color name="green_500">#FF22C55E</color>
     <color name="red_500">#FFE74C3C</color>
+    <color name="red_900">#FF491614</color>
     <color name="amber_500">#FFF59E0B</color>
-
-    <!-- Red at ~12% alpha — backs the M3 colorErrorContainer slot so widgets
-         that paint an error-container surface (e.g. the body of certain
-         AlertDialog variants) get a faint red wash rather than M3's default
-         pale-pink which doesn't belong on the deep-space navy palette. -->
-    <color name="red_500_a12">#1FE74C3C</color>
+    <color name="amber_900">#FF3D2606</color>
 
     <!-- ===== Scrim. =====
          ink_900_a80 is the full-screen dim used in low-power mode
-         (black at ≈80% alpha). -->
+         (black at ≈80% alpha). The opaque ink_900 sibling was dropped
+         when colorScrim couldn't be wired (Material 1.14 doesn't expose
+         the M3 scrim attr); re-introduce paired with colorScrim the
+         moment the library ships it. -->
     <color name="ink_900_a80">#CC000000</color>
 </resources>

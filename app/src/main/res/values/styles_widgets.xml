@@ -25,6 +25,25 @@
     <!-- ============================================================
          CARDS
          All MaterialCardView callsites share five attributes.
+
+         Variant choice — DELIBERATE M3 DEVIATION:
+           M3 spec recommends `Widget.Material3.CardView.Filled` with
+           `colorSurfaceContainerLow` for *ungrouped data cards* (the
+           slot cards on the dashboard, the Settings cards) and reserves
+           `Widget.Material3.CardView.Outlined` for *groups of cards on a
+           single surface* that need a lighter-weight separator.
+
+           Dish picks Outlined for everything because the brand language
+           is "deep-space flat" — every card stays at elevation 0, the
+           elevation overlay is disabled theme-wide (see Theme.Dish), and
+           the load-bearing visual signal is the 12%-alpha cyan stroke
+           (colorCardStroke). Switching to Filled would introduce a
+           tonal surface lift that conflicts with the brand intent.
+
+           Re-evaluate if a future surface needs to read as "elevated"
+           against the background — at that point M3 Filled +
+           colorSurfaceContainerLow is the right tool, and the surface
+           container hierarchy is now pinned in Theme.Dish for it.
          ============================================================ -->
     <style name="Widget.Dish.Card" parent="Widget.Material3.CardView.Outlined">
         <item name="cardBackgroundColor">@color/colorSurface</item>
@@ -142,6 +161,49 @@
         <item name="android:fontFamily">monospace</item>
         <item name="android:background">@drawable/bg_pair_pin_field</item>
         <item name="android:padding">@dimen/card_padding</item>
+    </style>
+
+    <!-- ============================================================
+         CHIP — the pickable chip used by the controller card's inline
+         pickers (Type: Xbox/PS, Touchpad mode: Off/Pad/Mouse). MaterialChip
+         in FilterChip mode (checkable=true, single-choice driven by the
+         adapter rebinding `isChecked` from the new state). Adopted as the
+         global default via `chipStyle` on Theme.Dish.
+
+         Visual: filled when checked (colorPrimary background, navy text);
+         flat with a subtle cyan stroke when unchecked (colorBackground
+         background, paper text). State layer (hover / focus / press) is
+         spec-correct M3 — driven by colorPrimary at the M3 ripple opacities.
+
+         Checked-icon + chip-icon + close-icon all suppressed: this chip is
+         a binary toggle indicator; the colour fill alone signals the
+         "selected" state and there's no leading glyph or close affordance
+         in the picker. textStart/EndPadding zeroed for the same reason
+         (the default values reserve space for the leading checked-icon
+         we don't show).
+
+         Shape inherits the M3 shapeAppearanceCornerExtraSmall slot via the
+         parent style — see Theme.Dish for the wiring. Min height is
+         tightened from M3's default 32dp to 24dp to match the prior
+         hand-rolled drawable chip's footprint inside the controller card
+         picker row.
+         ============================================================ -->
+    <style name="Widget.Dish.Chip" parent="Widget.Material3.Chip.Filter">
+        <item name="android:textAppearance">@style/TextAppearance.Dish.BodySmall</item>
+        <item name="android:textColor">@color/chip_dish_text</item>
+        <item name="chipBackgroundColor">@color/chip_dish_background</item>
+        <item name="chipStrokeColor">@color/colorOutline</item>
+        <item name="chipStrokeWidth">@dimen/border_thin</item>
+        <item name="rippleColor">@color/colorPrimary</item>
+        <item name="chipMinHeight">@dimen/chip_min_height</item>
+        <item name="chipStartPadding">@dimen/chip_padding_horizontal</item>
+        <item name="chipEndPadding">@dimen/chip_padding_horizontal</item>
+        <item name="textStartPadding">0dp</item>
+        <item name="textEndPadding">0dp</item>
+        <item name="chipIconVisible">false</item>
+        <item name="closeIconVisible">false</item>
+        <item name="checkedIconVisible">false</item>
+        <item name="ensureMinTouchTargetSize">false</item>
     </style>
 
     <!-- ============================================================
