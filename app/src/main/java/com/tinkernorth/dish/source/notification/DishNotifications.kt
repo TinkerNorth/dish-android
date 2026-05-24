@@ -431,6 +431,16 @@ private fun Snackbar.applyDishTheme(severity: DishNotification.Severity): Snackb
     val ctx = view.context
     val res = ctx.resources
     view.setBackgroundResource(backgroundForSeverity(severity))
+    // The M3 Snackbar style (Widget.Material3.Snackbar, inherited from
+    // Theme.Material3) applies backgroundTint=colorInverseSurface — M3's
+    // high-contrast "inverse" colour that's LIGHT on dark themes — to
+    // whatever drawable sits on the snackbar view. Without clearing the
+    // tint here, our dark notification_bg_<severity>.xml layer-list gets
+    // its colorSurface fill re-tinted to the M3 inverse light colour, so
+    // the toast paints light instead of the intended dark navy. Setting
+    // the tint list to null disables the tint operation entirely and the
+    // drawable's own solid colours render through.
+    view.backgroundTintList = null
     view.elevation = res.getDimension(R.dimen.notification_elevation)
     val horizontalPad = res.getDimensionPixelSize(R.dimen.notification_padding_horizontal)
     val verticalPad = res.getDimensionPixelSize(R.dimen.notification_padding_vertical)
