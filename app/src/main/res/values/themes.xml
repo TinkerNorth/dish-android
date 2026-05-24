@@ -1,7 +1,30 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Material 3 base. The M2 `colorPrimaryVariant` / `colorSecondaryVariant`
-         attributes intentionally dropped — they don't exist in the M3 token
-         system (replaced by `colorPrimaryContainer` / `colorSecondaryContainer`
+    <!-- Material 3 (Expressive + FocusRings) base. Material 1.14 ships a
+         four-axis grid of M3 parent themes; we sit at the corner that
+         enables:
+
+           - **Material3Expressive** over plain Material3 — pulls in the
+             expressive slider style (we don't render a slider today, so
+             this is a strict no-op at the moment, but it future-proofs
+             new affordances by reading from the expressive component
+             defaults instead of the original M3 baseline).
+           - **FocusRings** — swaps every `?attr/selectableItemBackground`
+             / `controlBackground` / `toolbarNavigationButtonBackground`
+             drawable for an M3 focus-ring layer-list, and re-styles the
+             platform `buttonStyle` / `imageButtonStyle` / `checkboxStyle`
+             / `radioButtonStyle` to their `.FocusRing` variants. The
+             practical effect: every focusable affordance — privacy-policy
+             card (uses `?attr/selectableItemBackground`), the toolbar
+             nav-icon, and any future platform button — draws a visible
+             focus ring when the user navigates with a hardware keyboard,
+             D-pad, or, critically for this app, a gamepad. The prior
+             M3 baseline rendered focus state as a near-invisible state
+             layer, which meant a controller user couldn't tell what was
+             focused.
+
+         The M2 `colorPrimaryVariant` / `colorSecondaryVariant` attributes
+         intentionally dropped — they don't exist in the M3 token system
+         (replaced by `colorPrimaryContainer` / `colorSecondaryContainer`
          which we now pin alongside the rest of the M3 container/variant
          family so widgets don't compute off-brand pastels from M3's default
          tonal palette).
@@ -19,7 +42,7 @@
               of this file.
            7. Window chrome + default widget styles (button + alert dialog
               overlay + chip). -->
-    <style name="Theme.Dish" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme.Dish" parent="Theme.Material3Expressive.DayNight.NoActionBar.FocusRings">
         <!-- ── 1. Core colour slots ── -->
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorOnPrimary">@color/colorOnPrimary</item>
@@ -242,7 +265,7 @@
          re-pin, MaterialButton / Chip / Snackbar / divider widgets inside
          the dialog would read M3-default tonal-palette values for
          surfaceContainer*, tertiary, and the inverse family). -->
-    <style name="Theme.Dish.Dialog" parent="Theme.Material3.DayNight.Dialog">
+    <style name="Theme.Dish.Dialog" parent="Theme.Material3Expressive.DayNight.Dialog.FocusRings">
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowIsFloating">true</item>
         <item name="android:windowContentOverlay">@null</item>

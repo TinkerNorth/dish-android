@@ -10,7 +10,7 @@
          TextAppearance.Dish.Dialog.*, ThemeOverlay.Dish.MaterialAlertDialog,
          Theme.Dish.Dialog) live only in values/themes.xml — Android's
          resource fallback chain makes them visible to this night theme too. -->
-    <style name="Theme.Dish" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme.Dish" parent="Theme.Material3Expressive.DayNight.NoActionBar.FocusRings">
         <!-- ── 1. Core colour slots ── -->
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorOnPrimary">@color/colorOnPrimary</item>

@@ -7,7 +7,6 @@ import android.app.Dialog
 import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
-import android.view.View
 import android.view.Window
 import android.widget.FrameLayout
 import com.tinkernorth.dish.R
@@ -21,8 +20,9 @@ import com.tinkernorth.dish.ui.common.setLoading
  *  - The dialog **does not auto-dismiss on submit**. The Pair button flips
  *    to an in-button [com.tinkernorth.dish.ui.common.DishSpinnerDrawable]
  *    while the round-trip is in flight; success closes the dialog, failure
- *    surfaces an inline error under the field so the user keeps their
- *    typed PIN.
+ *    surfaces an inline error through the TextInputLayout's setError() so
+ *    the user keeps their typed PIN AND the error gets announced to
+ *    TalkBack via the M3 live-region semantics.
  *  - The surface uses `bg_pill` — same idiom every other floating banner
  *    in the app uses — and the labels follow the v6 chrome conventions
  *    (mono / letter-spaced uppercase header, bold title, muted subtitle).
@@ -121,15 +121,12 @@ class PairPinDialog(
     }
 
     /**
-     * Show or clear the inline error under the PIN field. Passing null
-     * hides the error row entirely.
+     * Show or clear the inline error under the PIN field. Routed through
+     * TextInputLayout's setError() so the error stroke, the helper-text
+     * row, and the TalkBack live-region announcement are driven in one
+     * call. Passing null clears the error.
      */
     fun showError(message: CharSequence?) {
-        if (message.isNullOrBlank()) {
-            binding.tvPairError.visibility = View.GONE
-            return
-        }
-        binding.tvPairError.text = message
-        binding.tvPairError.visibility = View.VISIBLE
+        binding.tilPin.error = message
     }
 }

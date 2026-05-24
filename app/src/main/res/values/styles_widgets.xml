@@ -139,19 +139,51 @@
     </style>
 
     <!-- ============================================================
-         EDIT TEXT — pair-dialog PIN field. Centred, monospace, widely
-         tracked for legibility of long digit groups. The hint text,
-         maxLength, and inputType=numberPassword are per-callsite (the
-         style keeps a sane `number` default; callsites that want the
-         masked PIN treatment override inline alongside their
-         autofillHints suppression — see `dialog_pair_pin.xml`).
+         TEXT INPUT — pair-dialog PIN field. M3 TextInputLayout (Outlined
+         box variant) wrapping a TextInputEditText. The brand intent is a
+         field that "looks interactive even when not focused" — Material's
+         default OutlinedBox renders a faint stroke when unfocused that
+         doesn't match. Widget.Dish.TextInputLayout.Pin pins
+         `boxStrokeColor` to colorPrimary at full saturation in BOTH
+         resting and focused states, and keeps the stroke width constant
+         across states so the box doesn't visually "click in" on focus.
+
+         Error state: TextInputLayout.setError(msg) flips the stroke +
+         the helper-text below into colorError. The dialog used to host
+         a separate `tvPairError` TextView under the field for this; the
+         text-input-layout migration replaces that pattern with the
+         M3-native error affordance, which also announces the error
+         via a11y live-region semantics (the prior TextView did not).
+
+         Hint is disabled on the layout — the dialog renders its own
+         title above the field, so the floating-label affordance would
+         duplicate it. Counter is disabled — the PIN is a 4–8 digit
+         numeric secret; a visible "x / 8" counter would just leak the
+         max-length to the user.
          ============================================================ -->
-    <!-- autofillHints + importantForAutofill are NOT in this style because
-         they're API-26+ attributes and style items can't carry a
-         tools:targetApi annotation. Callsites apply them inline next to
-         a tools:targetApi="26" when they need the autofill suppression
-         (see `dialog_pair_pin.xml`). -->
-    <style name="Widget.Dish.EditText.Pin" parent="Widget.AppCompat.EditText">
+    <style name="Widget.Dish.TextInputLayout.Pin" parent="Widget.Material3.TextInputLayout.OutlinedBox">
+        <item name="boxStrokeColor">@color/colorPrimary</item>
+        <item name="boxStrokeWidth">@dimen/border_thin</item>
+        <item name="boxStrokeWidthFocused">@dimen/border_thin</item>
+        <item name="boxStrokeErrorColor">@color/colorError</item>
+        <item name="boxBackgroundColor">@color/colorBackground</item>
+        <item name="boxCornerRadiusTopStart">@dimen/corner_picker_row</item>
+        <item name="boxCornerRadiusTopEnd">@dimen/corner_picker_row</item>
+        <item name="boxCornerRadiusBottomStart">@dimen/corner_picker_row</item>
+        <item name="boxCornerRadiusBottomEnd">@dimen/corner_picker_row</item>
+        <item name="hintEnabled">false</item>
+        <item name="counterEnabled">false</item>
+        <item name="errorEnabled">true</item>
+        <item name="errorIconDrawable">@null</item>
+        <item name="errorTextColor">@color/colorError</item>
+    </style>
+
+    <!-- The TextInputEditText nested inside Widget.Dish.TextInputLayout.Pin.
+         autofillHints + importantForAutofill stay inline at the callsite
+         (API 26+; style items can't carry a tools:targetApi annotation).
+         No background drawable here — TextInputLayout draws the outlined
+         box around the EditText. -->
+    <style name="Widget.Dish.EditText.Pin" parent="Widget.Material3.TextInputEditText.OutlinedBox">
         <item name="android:inputType">number</item>
         <item name="android:gravity">center</item>
         <item name="android:textSize">@dimen/text_display</item>
@@ -159,8 +191,6 @@
         <item name="android:textColorHint">@color/colorMuted</item>
         <item name="android:letterSpacing">0.30</item>
         <item name="android:fontFamily">monospace</item>
-        <item name="android:background">@drawable/bg_pair_pin_field</item>
-        <item name="android:padding">@dimen/card_padding</item>
     </style>
 
     <!-- ============================================================
