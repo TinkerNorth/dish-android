@@ -3,7 +3,6 @@
 
 package com.tinkernorth.dish.ui.main
 
-import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -23,10 +22,10 @@ import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.notification.DishNotifications
+import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachGamepadHost
-import com.tinkernorth.dish.ui.connections.ConnectionsActivity
-import com.tinkernorth.dish.ui.settings.SettingsActivity
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -51,6 +50,12 @@ class MainActivity :
 
     private lateinit var gamepadHost: GamepadActivityHost
 
+    // Typed navigation surface over res/navigation/nav_graph.xml. Replaces
+    // raw startActivity(Intent) calls with named, typed-args methods so a
+    // mistyped extra is a compile error rather than a silent runtime
+    // "extra missing" branch. See DishNavigator's KDoc for the rationale.
+    private val nav by lazy { DishNavigator(this) }
+
     // ═══════════════════════════════════════════════════════════════════════
     //  LIFECYCLE
     //
@@ -66,7 +71,7 @@ class MainActivity :
         // user to the themed fallback screen instead of crashing the moment
         // we touch any JNI surface (GameActivity itself loads native code).
         if (com.tinkernorth.dish.DishApplication.nativeLoadFailed) {
-            startActivity(Intent(this, NativeUnavailableActivity::class.java))
+            nav.toNativeUnavailable()
             finish()
             return
         }
@@ -77,7 +82,8 @@ class MainActivity :
         // `install(notifications)` inside it wires the wake-state collectors
         // AND the themed notification host in one call.
         gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications)
-        applyDishSystemBars()
+        applyDishSystemBars(binding.root)
+        applyDishActivityTransitions()
         controllerAdapter = ControllerAdapter(this)
         setupUI()
         observeViewModel()
@@ -102,12 +108,8 @@ class MainActivity :
         // stay hidden by default for this eyebrow-only callsite.
         binding.sectionControllers.labelSection.setText(R.string.section_controllers)
         binding.rvControllers.adapter = controllerAdapter
-        binding.btnManageConnections.setOnClickListener {
-            startActivity(Intent(this, ConnectionsActivity::class.java))
-        }
-        binding.btnSettings.setOnClickListener {
-            startActivity(Intent(this, SettingsActivity::class.java))
-        }
+        binding.btnManageConnections.setOnClickListener { nav.toConnections() }
+        binding.btnSettings.setOnClickListener { nav.toSettings() }
     }
 
     private fun observeViewModel() {
@@ -169,11 +171,7 @@ class MainActivity :
     }
 
     private fun openConnectionsForPairing(connectionId: String) {
-        startActivity(
-            Intent(this, ConnectionsActivity::class.java).apply {
-                putExtra(ConnectionsActivity.EXTRA_PAIR_PROMPT_FOR_ID, connectionId)
-            },
-        )
+        nav.toConnectionsForPairing(connectionId)
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -210,13 +208,7 @@ class MainActivity :
         val slot = state.slots.firstOrNull { it.id == slotId } ?: return
         val cid = slot.boundConnectionId ?: return
         val mode = state.touchpadModesBySatellite[cid] ?: return
-        startActivity(
-            Intent(this, TouchpadOverlayActivity::class.java).apply {
-                putExtra(TouchpadOverlayActivity.EXTRA_CONNECTION_ID, cid)
-                putExtra(TouchpadOverlayActivity.EXTRA_TOUCHPAD_MODE, mode)
-                putExtra(TouchpadOverlayActivity.EXTRA_SLOT_ID, slotId)
-            },
-        )
+        nav.toTouchpad(connectionId = cid, touchpadMode = mode, slotId = slotId)
     }
 
     override fun onOpenGamepad() {
@@ -241,12 +233,7 @@ class MainActivity :
             summary?.btProfile == "PlayStation" ||
                 summary?.satelliteControllerTypes?.get(VIRTUAL_SLOT_ID) ==
                 com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
-        val intent =
-            Intent(this, GamepadOverlayActivity::class.java).apply {
-                putExtra(GamepadOverlayActivity.EXTRA_CONNECTION_ID, cid)
-                putExtra(GamepadOverlayActivity.EXTRA_USE_PS_LAYOUT, usePs)
-            }
-        startActivity(intent)
+        nav.toGamepad(connectionId = cid, usePsLayout = usePs)
     }
 
     // ═══════════════════════════════════════════════════════════════════════

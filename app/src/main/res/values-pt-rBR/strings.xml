@@ -175,11 +175,11 @@
     <string name="discovery_source_both">mDNS + transmissão</string>
 
     <!-- Rótulos de ação das notificações Dish. -->
-    <string name="action_open_settings">CONFIG.</string>
-    <string name="action_retry">TENTAR DE NOVO</string>
-    <string name="action_open">ABRIR</string>
-    <string name="action_turn_on">ATIVAR</string>
-    <string name="action_grant">PERMITIR</string>
+    <string name="action_open_settings">Config.</string>
+    <string name="action_retry">Tentar de novo</string>
+    <string name="action_open">Abrir</string>
+    <string name="action_turn_on">Ativar</string>
+    <string name="action_grant">Permitir</string>
 
     <!-- Texto das notificações Dish. -->
     <string name="notif_bt_permission_title">Permissão de Bluetooth necessária</string>
@@ -211,8 +211,9 @@
     <string name="pair_dialog_title">Parear com satélite</string>
     <string name="pair_dialog_subtitle">Digite o PIN exibido no seu satélite.</string>
     <string name="pair_dialog_pin_hint">PIN</string>
-    <string name="pair_dialog_submit">PAREAR</string>
-    <string name="pair_dialog_pairing">PAREANDO…</string>
+    <string name="pair_dialog_eyebrow">PAREAR</string>
+    <string name="pair_dialog_submit">Parear</string>
+    <string name="pair_dialog_pairing">Pareando…</string>
     <string name="pair_dialog_error_empty">Digite o PIN exibido no seu satélite.</string>
 
     <!-- Notificação de serviço em primeiro plano. -->

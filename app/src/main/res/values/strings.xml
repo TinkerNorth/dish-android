@@ -215,13 +215,13 @@
     <string name="discovery_source_mdns">mDNS</string>
     <string name="discovery_source_both">mDNS + broadcast</string>
 
-    <!-- DishNotification action labels. Short, imperative, allCaps + tracked
-         to match the v6 Outlined Button label conventions. -->
-    <string name="action_open_settings">SETTINGS</string>
-    <string name="action_retry">RETRY</string>
-    <string name="action_open">OPEN</string>
-    <string name="action_turn_on">TURN ON</string>
-    <string name="action_grant">GRANT</string>
+    <!-- DishNotification action labels. Short, imperative, sentence-case
+         to match the modern (M3) button label convention. -->
+    <string name="action_open_settings">Settings</string>
+    <string name="action_retry">Retry</string>
+    <string name="action_open">Open</string>
+    <string name="action_turn_on">Turn on</string>
+    <string name="action_grant">Grant</string>
 
     <!-- DishNotification copy. Hoisted to strings.xml so the wording can be
          tuned in one place (and localised later) rather than being scattered
@@ -255,8 +255,13 @@
     <string name="pair_dialog_title">Pair with satellite</string>
     <string name="pair_dialog_subtitle">Enter the PIN shown on your satellite.</string>
     <string name="pair_dialog_pin_hint">PIN</string>
-    <string name="pair_dialog_submit">PAIR</string>
-    <string name="pair_dialog_pairing">PAIRING…</string>
+    <!-- Eyebrow at the top of the pair dialog — rendered as Label.Accent
+         (mono / letter-spaced / cyan). Stays uppercase because the Label.Accent
+         family is the app-wide eyebrow shape; the button below uses
+         pair_dialog_submit (sentence-case). -->
+    <string name="pair_dialog_eyebrow">PAIR</string>
+    <string name="pair_dialog_submit">Pair</string>
+    <string name="pair_dialog_pairing">Pairing…</string>
     <string name="pair_dialog_error_empty">Enter the PIN shown on your satellite.</string>
 
     <!-- Foreground service notification. -->

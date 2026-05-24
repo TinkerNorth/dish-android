@@ -18,7 +18,7 @@
         style="@style/TextAppearance.Dish.Label.Accent"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/pair_dialog_submit" />
+        android:text="@string/pair_dialog_eyebrow" />
 
     <TextView
         android:id="@+id/tvPairTitle"
@@ -74,8 +74,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="@android:string/cancel"
-            android:textAllCaps="true" />
+            android:text="@android:string/cancel" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnPairSubmit"
@@ -84,7 +83,6 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:layout_marginStart="@dimen/spacing_lg"
-            android:text="@string/pair_dialog_submit"
-            android:textAllCaps="true" />
+            android:text="@string/pair_dialog_submit" />
     </LinearLayout>
 </LinearLayout>

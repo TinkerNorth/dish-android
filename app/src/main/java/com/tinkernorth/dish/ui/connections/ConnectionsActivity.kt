@@ -52,6 +52,7 @@ import com.tinkernorth.dish.source.system.BluetoothPermissionState
 import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
 import com.tinkernorth.dish.source.system.NetworkState
 import com.tinkernorth.dish.source.system.NetworkStateObserver
+import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachGamepadHost
 import com.tinkernorth.dish.ui.common.dotColorForState
@@ -162,7 +163,8 @@ class ConnectionsActivity : AppCompatActivity() {
         setContentView(binding.root)
         gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications)
         setupDishToolbar(binding.toolbar)
-        applyDishSystemBars()
+        applyDishSystemBars(binding.root)
+        applyDishActivityTransitions()
         bindSectionHeaders()
 
         observeSatelliteHub()

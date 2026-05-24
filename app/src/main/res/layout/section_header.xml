@@ -55,7 +55,6 @@
         style="@style/Widget.Dish.Button.Outlined"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textAllCaps="false"
         android:visibility="gone"
         tools:text="Action"
         tools:visibility="visible" />

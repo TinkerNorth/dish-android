@@ -20,8 +20,6 @@
     <style name="Widget.Dish.Button" parent="Widget.Material3.Button">
         <item name="backgroundTint">@color/colorPrimaryDark</item>
         <item name="android:textColor">@color/colorOnPrimary</item>
-        <item name="android:textAllCaps">true</item>
-        <item name="android:letterSpacing">0.04</item>
         <item name="cornerRadius">@dimen/corner_button</item>
         <item name="android:insetTop">0dp</item>
         <item name="android:insetBottom">0dp</item>
@@ -33,8 +31,6 @@
         <item name="android:textColor">@color/colorOnSurface</item>
         <item name="strokeColor">@color/colorOutline</item>
         <item name="strokeWidth">@dimen/border_thin</item>
-        <item name="android:textAllCaps">true</item>
-        <item name="android:letterSpacing">0.04</item>
         <item name="cornerRadius">@dimen/corner_button</item>
         <item name="android:insetTop">0dp</item>
         <item name="android:insetBottom">0dp</item>

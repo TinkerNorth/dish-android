@@ -131,6 +131,8 @@ them. Re-introduce when a surface needs to pin to the canonical scale
 `android:duration="@integer/…"` in AVDs and
 `context.resources.getInteger(R.integer.…).toLong()` from Kotlin):
 
+*Named, off-scale (each tied to a specific asset's design rhythm):*
+
 | Token | Value | Use |
 |---|---|---|
 | `motion_duration_spinner` | 1200 ms | DishLoaders spinner + dots loop |
@@ -138,22 +140,40 @@ them. Re-introduce when a surface needs to pin to the canonical scale
 | `motion_duration_battery` | 3600 ms | charging-battery AVD full ramp |
 | `motion_duration_bolt_pulse` | 750 ms | charging-battery bolt sinusoidal opacity loop |
 
-These tokens are **named, off-scale** — each tied to a specific asset's
-design rhythm. The canonical UI speed scale (instant / short / medium /
-long) was dropped in the post-Phase-4 cleanup because no animation in the
-app currently rides on it. Re-introduce when a new transition needs to pin
-to a shared rhythm (see "When to add a new token").
+*UI speed scale (medium only — short/long re-added when consumed):*
+
+| Token | Value | Use |
+|---|---|---|
+| `motion_duration_medium` | 250 ms | navigation transitions (activity fade-through rides on this) |
+
+`motion_duration_short` (150ms) and `motion_duration_long` (400ms) are the
+canonical short/long companions, but neither has a consumer in the
+codebase today. Per the YAGNI rule, they're not declared until a real
+in-screen transition pins to them. When you add one, re-introduce the
+sibling tokens together as a paired set so the scale stays coherent.
 
 **Interpolators** (referenceable from AVDs + ObjectAnimators):
 
 | File | Curve | Use |
 |---|---|---|
-| `dish_ease_standard.xml` | cubic-bezier(0.4, 0.0, 0.2, 1.0) | default UI transitions (used by `ic_battery_charging` bolt-pulse loop) |
+| `dish_ease_standard.xml` | cubic-bezier(0.4, 0.0, 0.2, 1.0) | default UI transitions (used by `ic_battery_charging` bolt-pulse loop + activity fade-through) |
 
 The `dish_ease_in.xml` / `dish_ease_out.xml` / `dish_ease_linear.xml`
 interpolators were dropped in the post-Phase-4 cleanup — no animation
 consumes them today. Re-introduce when an AVD or ObjectAnimator needs
 a curve other than the standard easing.
+
+**Activity transitions** — `app/src/main/res/anim/`:
+
+| File | Use |
+|---|---|
+| `fade_through_enter.xml` | OPEN/CLOSE enter half of the activity fade-through. Alpha 0 → 1 over `motion_duration_medium` with `dish_ease_standard`. |
+| `fade_through_exit.xml` | OPEN/CLOSE exit half. Alpha 1 → 0 over the same duration and curve. |
+
+Wired into chrome activities via `applyDishActivityTransitions()` — see
+the Activity Scaffolding table below. The Gamepad / Touchpad overlays
+intentionally do NOT call this (immersive input surfaces prioritise
+zero-latency display over a 250 ms fade).
 
 ### Typography → `values/text_appearance.xml`
 
@@ -169,6 +189,11 @@ Letter-spacing canon (single source of truth, do not drift):
 - `0.18` — Caption (small mono micro-eyebrow / footer).
 - Everything else is callsite-specific override (the low-power HUD treatments
   ride on top of Label/Body styles).
+
+`Widget.Dish.Button` + `Widget.Dish.Button.Outlined` are NOT in this canon —
+the M3 base sets `letterSpacing=0` (no tracking) and `textAllCaps=false`
+(sentence-case). Strings supply their own capitalisation. The old M2-era
+"tracked uppercase" treatment retired with the M3 migration.
 
 | Style | size | color | family | weight | spacing | line × |
 |---|---|---|---|---|---|---|
@@ -218,8 +243,8 @@ wires `materialButtonStyle = Widget.Dish.Button` as the global default):
 
 | Style | Parent | Adds |
 |---|---|---|
-| `Widget.Dish.Button` | `Widget.Material3.Button` | filled: `colorPrimaryDark` bg, `colorOnSurface` text, uppercase, 0.04 spacing, `corner_button`, zero insets, `colorPrimaryMid` ripple |
-| `Widget.Dish.Button.Outlined` | `Widget.Material3.Button.OutlinedButton` | transparent bg, `colorOnSurface` text, `colorOutline` stroke (`border_thin`), uppercase, 0.04 spacing, `corner_button`, zero insets, `colorPrimaryDark` ripple |
+| `Widget.Dish.Button` | `Widget.Material3.Button` | filled: `colorPrimaryDark` bg, `colorOnPrimary` text (sentence-case), `corner_button`, zero insets, `colorPrimaryMid` ripple |
+| `Widget.Dish.Button.Outlined` | `Widget.Material3.Button.OutlinedButton` | transparent bg, `colorOnSurface` text (sentence-case), `colorOutline` stroke (`border_thin`), `corner_button`, zero insets, `colorPrimaryDark` ripple |
 
 **Everything else** (in `values/styles_widgets.xml`):
 
@@ -272,17 +297,69 @@ specific visibility-gone defaults.
 
 ---
 
+## Navigation
+
+The chrome + overlay activities are wired through a single
+`androidx.navigation` graph at `app/src/main/res/navigation/nav_graph.xml`.
+All destinations are `<activity>` nodes (Dish uses per-Activity
+architecture); `ActivityNavigator` translates each `navigate(actionId)`
+call into `startActivity(Intent)` with the action's argument bundle
+applied as Intent extras (argument names map 1:1 to extras).
+
+The graph is consumed via `DishNavigator`
+(`app/src/main/java/com/tinkernorth/dish/ui/common/DishNavigator.kt`), a
+thin typed wrapper that gives every navigation site Kotlin-level
+type-safety — a mistyped extra is a compile error rather than a silent
+runtime "extra missing" branch:
+
+```kotlin
+private val nav by lazy { DishNavigator(this) }
+// ...
+nav.toConnections()
+nav.toConnectionsForPairing(connectionId)
+nav.toGamepad(connectionId = cid, usePsLayout = true)
+nav.toTouchpad(connectionId = cid, touchpadMode = mode, slotId = slotId)
+```
+
+| Destination | Activity | Args |
+|---|---|---|
+| `mainActivity` (start) | `MainActivity` | — |
+| `connectionsActivity` | `ConnectionsActivity` | `extra_pair_prompt_for_id` (nullable string) |
+| `settingsActivity` | `SettingsActivity` | — |
+| `gamepadOverlayActivity` | `GamepadOverlayActivity` | `extra_connection_id`, `extra_use_ps_layout` |
+| `touchpadOverlayActivity` | `TouchpadOverlayActivity` | `extra_connection_id`, `extra_touchpad_mode`, `extra_slot_id` |
+| `nativeUnavailableActivity` | `NativeUnavailableActivity` | — |
+
+**Deep links**: NOT declared in the graph. The navigation runtime's lint
+check (`DeepLinkInActivityDestination`) flags `<deepLink>` on `<activity>`
+destinations because the back-stack behaviour is wrong for cross-app
+implicit-intent flows — system back should return to the calling app, but
+Activity-destination deep links land the user inside this app's own task.
+External deep linking should land via a manual `<intent-filter>` on the
+receiving Activity in `AndroidManifest.xml`, or wait until a Fragment-
+destination migration unlocks the navigation runtime's deep-link wiring.
+The current "pairing needed" notification routes through MainActivity's
+in-app callback (`DishNavigator.toConnectionsForPairing`), not a deep
+link, so the lint check stays clean.
+
+**What stays outside the graph**: external `startActivity` calls that
+target other apps (browser `ACTION_VIEW`, Bluetooth settings, Wi-Fi
+settings) keep their direct `startActivity(Intent(...))` form. They're
+not Dish destinations and don't belong in the in-app graph.
+
+---
+
 ## Activity Scaffolding
 
-Three extension functions on `AppCompatActivity` + one optional interface,
-all in `app/src/main/java/com/tinkernorth/dish/ui/common/ActivityExtensions.kt`.
+Three extension functions on `AppCompatActivity`, all in
+`app/src/main/java/com/tinkernorth/dish/ui/common/ActivityExtensions.kt`.
 
 | Symbol | Use |
 |---|---|
 | `fun setupDishToolbar(toolbar: Toolbar)` | Installs `toolbar` as the support action bar and wires its navigation icon to `finish()`. Toolbar should already carry `style="@style/Widget.Dish.Toolbar"` from its layout. Call after `setContentView`. |
 | `fun attachGamepadHost(rootView, wakeState, gamepadRegistry, notifications): GamepadActivityHost` | Constructs + installs the gamepad host against `rootView`. Assign the returned host to a `lateinit var` on the activity so its lifecycle dispatches (`onStop`, `dispatchKeyEvent`, etc.) can reach it. Call after `setContentView`. |
-| `fun applyDishSystemBars()` | Documented no-op. Status- and navigation-bar colors are theme-owned by `Theme.Dish` in both `values/themes.xml` and `values-night/themes.xml`; this extension is the call-site marker that "the bars on this screen are intentional" and a future-proofing seam if per-screen edge-to-edge or contrast adjustments ever land. |
-| `interface GamepadHostLifecycle { gamepadHost; tearDownDimOnStop() }` | Opt-in interface for activities that hold a host and need the shared `onStop { gamepadHost.cancelDimOnStop() }` teardown. Defined but not yet wired — the three activities each call `gamepadHost.cancelDimOnStop()` directly. If teardown ever fans out beyond that one line, this is the seam. |
+| `fun applyDishSystemBars(root: View)` | Switches the activity into edge-to-edge mode (`enableEdgeToEdge()`) and applies `WindowInsetsCompat.Type.systemBars()` as padding on `root` (typically the binding root). Replaces the deprecated `fitsSystemWindows="true"` layout flag and is required for `targetSdk` ≥ 35. Skipped by the immersive Gamepad / Touchpad overlays, which handle their own bars via `hideSystemBars()`. |
+| `fun applyDishActivityTransitions()` | Installs Dish's fade-through transition for both OPEN and CLOSE directions. On API 34+ uses `overrideActivityTransition`; on API 24-33 falls back to the deprecated `overridePendingTransition` (OPEN only — pre-34 CLOSE is platform default). Skipped by the input overlays (they prioritise zero-latency display). |
 
 The input overlays (`GamepadOverlayActivity` + `TouchpadOverlayActivity`)
 deliberately go through `BaseInputOverlayActivity`'s inherited scaffolding,
@@ -349,9 +426,12 @@ A new button in the app:
    `materialButtonStyle = Widget.Dish.Button`, so any unstyled button gets
    the filled treatment for free.
 2. **For an outlined variant**, set `style="@style/Widget.Dish.Button.Outlined"`.
-3. **Only override inline** if the button needs a callsite-specific size or
-   layout param (`minWidth`, `layout_weight`, `textAllCaps="false"` for a
-   sentence-case button). Everything else inherits from the style.
+3. **String content carries capitalisation.** Sentence-case is the default
+   ("Reconnect", not "RECONNECT"). The style no longer applies
+   `textAllCaps`, so the string renders as-written.
+4. **Only override inline** if the button needs a callsite-specific size or
+   layout param (`minWidth`, `layout_weight`). Everything else inherits
+   from the style.
 
 A new TextView in the app:
 
@@ -501,3 +581,6 @@ deeper), the error red can drop below AA. Compute before adopting.
 | Button styles + themes | `app/src/main/res/values/themes.xml` (+ `values-night/themes.xml` for dark-mode overrides) |
 | Layout composites | `app/src/main/res/layout/section_header.xml`, `status_pill.xml`, `card_row_icon_label_value.xml`, `picker_empty_label.xml` |
 | Activity extensions | `app/src/main/java/com/tinkernorth/dish/ui/common/ActivityExtensions.kt` |
+| Activity transitions | `app/src/main/res/anim/fade_through_enter.xml`, `fade_through_exit.xml` |
+| Navigation graph | `app/src/main/res/navigation/nav_graph.xml` |
+| Navigation wrapper | `app/src/main/java/com/tinkernorth/dish/ui/common/DishNavigator.kt` |

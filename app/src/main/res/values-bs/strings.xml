@@ -172,11 +172,11 @@
     <string name="discovery_source_both">mDNS + emitovanje</string>
 
     <!-- Oznake akcija Dish obavještenja. -->
-    <string name="action_open_settings">PODEŠAVANJA</string>
-    <string name="action_retry">POKUŠAJ PONOVO</string>
-    <string name="action_open">OTVORI</string>
-    <string name="action_turn_on">UKLJUČI</string>
-    <string name="action_grant">DOZVOLI</string>
+    <string name="action_open_settings">Podešavanja</string>
+    <string name="action_retry">Pokušaj ponovo</string>
+    <string name="action_open">Otvori</string>
+    <string name="action_turn_on">Uključi</string>
+    <string name="action_grant">Dozvoli</string>
 
     <!-- Tekst Dish obavještenja. -->
     <string name="notif_bt_permission_title">Potrebna Bluetooth dozvola</string>
@@ -208,8 +208,9 @@
     <string name="pair_dialog_title">Upari sa satelitom</string>
     <string name="pair_dialog_subtitle">Unesite PIN prikazan na satelitu.</string>
     <string name="pair_dialog_pin_hint">PIN</string>
-    <string name="pair_dialog_submit">UPARI</string>
-    <string name="pair_dialog_pairing">UPARIVANJE…</string>
+    <string name="pair_dialog_eyebrow">UPARI</string>
+    <string name="pair_dialog_submit">Upari</string>
+    <string name="pair_dialog_pairing">Uparivanje…</string>
     <string name="pair_dialog_error_empty">Unesite PIN prikazan na satelitu.</string>
 
     <!-- Obavještenje servisa u prvom planu. -->

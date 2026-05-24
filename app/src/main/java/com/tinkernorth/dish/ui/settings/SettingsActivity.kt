@@ -16,6 +16,7 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivitySettingsBinding
 import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.store.CrashReportingStore
+import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
@@ -48,7 +49,8 @@ class SettingsActivity : AppCompatActivity() {
         binding = ActivitySettingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
         setupDishToolbar(binding.toolbar)
-        applyDishSystemBars()
+        applyDishSystemBars(binding.root)
+        applyDishActivityTransitions()
 
         // Section header labels live in `section_header.xml` and are
         // populated here so the include's TextView (id `labelSection`) can

@@ -173,11 +173,11 @@
     <string name="discovery_source_both">mDNS + Broadcast</string>
 
     <!-- Aktionsbeschriftungen der Dish-Benachrichtigungen. -->
-    <string name="action_open_settings">EINSTELLUNGEN</string>
-    <string name="action_retry">ERNEUT VERSUCHEN</string>
-    <string name="action_open">ÖFFNEN</string>
-    <string name="action_turn_on">EINSCHALTEN</string>
-    <string name="action_grant">ERLAUBEN</string>
+    <string name="action_open_settings">Einstellungen</string>
+    <string name="action_retry">Erneut versuchen</string>
+    <string name="action_open">Öffnen</string>
+    <string name="action_turn_on">Einschalten</string>
+    <string name="action_grant">Erlauben</string>
 
     <!-- Text der Dish-Benachrichtigungen. -->
     <string name="notif_bt_permission_title">Bluetooth-Berechtigung nötig</string>
@@ -209,8 +209,9 @@
     <string name="pair_dialog_title">Mit Satellit koppeln</string>
     <string name="pair_dialog_subtitle">Gib den PIN ein, der auf deinem Satelliten angezeigt wird.</string>
     <string name="pair_dialog_pin_hint">PIN</string>
-    <string name="pair_dialog_submit">KOPPELN</string>
-    <string name="pair_dialog_pairing">KOPPELT…</string>
+    <string name="pair_dialog_eyebrow">KOPPELN</string>
+    <string name="pair_dialog_submit">Koppeln</string>
+    <string name="pair_dialog_pairing">Koppelt…</string>
     <string name="pair_dialog_error_empty">Gib den PIN ein, der auf deinem Satelliten angezeigt wird.</string>
 
     <!-- Vordergrund-Service-Benachrichtigung. -->

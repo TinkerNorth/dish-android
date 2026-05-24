@@ -25,31 +25,23 @@
     </style>
 
     <!-- Filled button: cyan-dark background, dark navy text (colorOnPrimary).
-         Text colour switched from colorOnSurface (paper_50, white) to
-         colorOnPrimary (navy_900, dark) so the button label clears WCAG AA
-         contrast against the cyan-dark fill (5.6:1, vs. 3.0:1 with white
-         text — the prior treatment was below the 4.5:1 normal-text
-         threshold). Matches the M3 convention of pairing colorOnPrimary
-         text with primary-family fills. -->
+         Sentence-case + no letter-tracking — M3 dropped the all-caps button
+         convention universally. Strings supply their own capitalisation. -->
     <style name="Widget.Dish.Button" parent="Widget.Material3.Button">
         <item name="backgroundTint">@color/colorPrimaryDark</item>
         <item name="android:textColor">@color/colorOnPrimary</item>
-        <item name="android:textAllCaps">true</item>
-        <item name="android:letterSpacing">0.04</item>
         <item name="cornerRadius">@dimen/corner_button</item>
         <item name="android:insetTop">0dp</item>
         <item name="android:insetBottom">0dp</item>
         <item name="rippleColor">@color/colorPrimaryMid</item>
     </style>
 
-    <!-- Outlined button: transparent bg, subtle border, light text -->
+    <!-- Outlined button: transparent bg, subtle border, light text. -->
     <style name="Widget.Dish.Button.Outlined" parent="Widget.Material3.Button.OutlinedButton">
         <item name="backgroundTint">@android:color/transparent</item>
         <item name="android:textColor">@color/colorOnSurface</item>
         <item name="strokeColor">@color/colorOutline</item>
         <item name="strokeWidth">@dimen/border_thin</item>
-        <item name="android:textAllCaps">true</item>
-        <item name="android:letterSpacing">0.04</item>
         <item name="cornerRadius">@dimen/corner_button</item>
         <item name="android:insetTop">0dp</item>
         <item name="android:insetBottom">0dp</item>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ENTERING activity fades up from 0% alpha over motion_duration_medium with
+     the dish_ease_standard curve. Paired with fade_through_exit on the
+     leaving activity, this produces a calm cross-fade between screens that
+     reads as "into space" against the deep-navy palette — much less jarring
+     than the platform default cut. -->
+<alpha xmlns:android="http://schemas.android.com/apk/res/android"
+    android:fromAlpha="0.0"
+    android:toAlpha="1.0"
+    android:duration="@integer/motion_duration_medium"
+    android:interpolator="@interpolator/dish_ease_standard" />

@@ -166,6 +166,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.activity.ktx)
+    implementation(libs.androidx.navigation.runtime.ktx)
     implementation(libs.androidx.games.activity)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.hilt.android)

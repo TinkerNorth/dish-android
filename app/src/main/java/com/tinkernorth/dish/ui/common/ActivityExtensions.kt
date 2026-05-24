@@ -3,9 +3,16 @@
 
 package com.tinkernorth.dish.ui.common
 
+import android.app.Activity
+import android.os.Build
 import android.view.View
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
+import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
@@ -21,14 +28,10 @@ import com.tinkernorth.dish.source.notification.DishNotifications
 //      overlays via BaseInputOverlayActivity) all need identical
 //      `GamepadActivityHost(this, root, wakeState, gamepadRegistry)
 //      .also { it.install(notifications) }` wiring.
-//   3. applyDishSystemBars — documented no-op. Status- and navigation-bar
-//      colouring is owned by Theme.Dish across both day and night resource
-//      qualifiers; this extension is the call-site marker that "the bars
-//      on this screen are intentional" and a future-proofing seam if
-//      per-screen edge-to-edge or contrast adjustments ever land.
-//
-// The GamepadHostLifecycle interface is the opt-in companion for the
-// paired `onStop { gamepadHost.cancelDimOnStop() }` call — see its KDoc.
+//   3. applyDishSystemBars — switches the activity into edge-to-edge mode
+//      and applies system-bar insets as root padding. Replaces the
+//      deprecated `fitsSystemWindows="true"` layout attribute and is the
+//      single source of truth for chrome screens' bar handling.
 //
 // The input overlays (GamepadOverlayActivity + TouchpadOverlayActivity)
 // deliberately go through BaseInputOverlayActivity's inherited wiring
@@ -75,39 +78,72 @@ fun AppCompatActivity.attachGamepadHost(
     }
 
 /**
- * No-op marker for the activity's system-bar configuration. Status- and
- * navigation-bar colors are theme-owned (`@color/colorBackground` via
- * `Theme.Dish` in both `values/themes.xml` and `values-night/themes.xml`),
- * so there is nothing to do programmatically — calling this function from
- * an activity's `onCreate` documents the intent and keeps the call site
- * available if a future screen needs per-instance window-insets tuning.
+ * Switch the activity into edge-to-edge mode and wire system-bar insets as
+ * padding on [root]. Required for `targetSdk` ≥ 35 (Android 15 enforces
+ * edge-to-edge regardless of the deprecated `fitsSystemWindows` flag).
  *
- * The full-screen input overlays handle their own `hideSystemBars()` in
- * [BaseInputOverlayActivity][com.tinkernorth.dish.ui.main.BaseInputOverlayActivity];
- * this extension is for the standard chrome-on screens (dashboard,
- * connections, settings).
+ * The default [enableEdgeToEdge] call uses [androidx.activity.SystemBarStyle.auto]
+ * for both bars — on the dark Dish palette that resolves to a dark
+ * transparent scrim, which keeps the existing visual identity while
+ * satisfying the platform contract.
+ *
+ * [root] receives `systemBars` insets as padding so content doesn't draw
+ * under the status / navigation bars. Callers should pass the binding root
+ * (typically the [androidx.coordinatorlayout.widget.CoordinatorLayout]
+ * wrapping the screen content). Scrolling children that want their content
+ * to extend past the inset should still use `clipToPadding="false"` and
+ * apply their own bottom padding to the inset value if needed.
+ *
+ * The input overlays handle their own immersive bar treatment in
+ * [com.tinkernorth.dish.ui.main.BaseInputOverlayActivity]; this extension
+ * is for the standard chrome screens (dashboard, connections, settings).
  */
-@Suppress("UnusedReceiverParameter")
-fun AppCompatActivity.applyDishSystemBars() {
-    // Theme owns statusBarColor + navigationBarColor; nothing to apply.
+fun AppCompatActivity.applyDishSystemBars(root: View) {
+    enableEdgeToEdge()
+    ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+        val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+        v.updatePadding(bars.left, bars.top, bars.right, bars.bottom)
+        insets
+    }
 }
 
 /**
- * Opt-in interface for activities that hold a [GamepadActivityHost] and
- * need the shared `onStop { gamepadHost.cancelDimOnStop() }` teardown. The
- * activity exposes its host via [gamepadHost], and calls [tearDownDimOnStop]
- * from its `onStop` override.
+ * Install Dish's fade-through transition for both the OPEN and CLOSE
+ * directions of this activity. Read off `fade_through_enter` + `fade_through_exit`
+ * which both ride on `motion_duration_medium` (250 ms) and
+ * `dish_ease_standard`.
  *
- * The interface is a documentation seam — there is no base-class
- * inheritance and no kludged behaviour, just a one-line method the host
- * activity forwards to. If a future activity grows additional teardown,
- * the implementation can fan out without touching every existing override.
+ * Call from `onCreate` (before or after `setContentView` is fine — the
+ * platform caches the override and applies it to the next transition).
+ *
+ * API gating:
+ *  - **34+**: uses [Activity.overrideActivityTransition] for both OPEN and
+ *    CLOSE; the close transition fires when the activity is finished.
+ *  - **24..33**: falls back to the deprecated [Activity.overridePendingTransition]
+ *    which only replaces the OPEN transition. The close transition uses the
+ *    platform default cut on these older releases — acceptable trade-off,
+ *    since pre-34 devices are a shrinking minority and the close cut is
+ *    fast (not jarring like a misaligned open).
+ *
+ * The two input overlays (Gamepad / Touchpad) intentionally do NOT call
+ * this — they're input surfaces where every millisecond of perceived
+ * latency matters, and the standard platform cut delivers the gamepad
+ * faster than a 250 ms fade.
  */
-interface GamepadHostLifecycle {
-    val gamepadHost: GamepadActivityHost
-
-    /** Forward from `onStop` after `super.onStop()`. */
-    fun tearDownDimOnStop() {
-        gamepadHost.cancelDimOnStop()
+fun AppCompatActivity.applyDishActivityTransitions() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        overrideActivityTransition(
+            Activity.OVERRIDE_TRANSITION_OPEN,
+            R.anim.fade_through_enter,
+            R.anim.fade_through_exit,
+        )
+        overrideActivityTransition(
+            Activity.OVERRIDE_TRANSITION_CLOSE,
+            R.anim.fade_through_enter,
+            R.anim.fade_through_exit,
+        )
+    } else {
+        @Suppress("DEPRECATION")
+        overridePendingTransition(R.anim.fade_through_enter, R.anim.fade_through_exit)
     }
 }

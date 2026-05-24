@@ -138,7 +138,6 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/picker_section_margin_top"
                 android:text="@string/action_unbind"
-                android:textAllCaps="false"
                 android:visibility="gone" />
 
             <com.google.android.material.button.MaterialButton
@@ -148,10 +147,9 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/picker_section_margin_top"
                 android:text="@string/action_open_gamepad"
-                android:textAllCaps="false"
                 app:icon="@drawable/ic_open_gamepad"
                 app:iconGravity="textStart"
-                app:iconTint="@color/colorOnSurface"
+                app:iconTint="@color/colorOnPrimary"
                 android:visibility="gone" />
 
             <com.google.android.material.button.MaterialButton
@@ -161,10 +159,9 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/picker_section_margin_top"
                 android:text="@string/action_open_touchpad"
-                android:textAllCaps="false"
                 app:icon="@drawable/ic_open_touchpad"
                 app:iconGravity="textStart"
-                app:iconTint="@color/colorOnSurface"
+                app:iconTint="@color/colorOnPrimary"
                 android:visibility="gone" />
         </LinearLayout>
     </LinearLayout>

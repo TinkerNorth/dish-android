@@ -101,7 +101,7 @@
             android:exported="false"
             android:theme="@style/Theme.Dish"
             android:configChanges="orientation|screenSize|keyboardHidden"
-            android:parentActivityName=".ui.connections.ConnectionsActivity"
+            android:parentActivityName=".ui.main.MainActivity"
             tools:targetApi="p" />
 
         <!-- Foreground service for keeping the streaming session alive.
