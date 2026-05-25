@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.core.net
 
@@ -9,11 +8,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Unit tests for the Task 1.6 two-path discovery merge
- * ([DiscoveryRepository.mergeDiscovered]) — the broadcast / mDNS dedup and
- * the [DiscoverySource] tagging that drives the connections-list label.
- */
 class DiscoveryRepositoryTest {
     private fun server(
         name: String,
@@ -45,7 +39,6 @@ class DiscoveryRepositoryTest {
 
     @Test
     fun serverHeardOnBothPathsIsTaggedBoth() {
-        // Same ip + udpPort → one merged entry, tagged BOTH.
         val merged =
             DiscoveryRepository.mergeDiscovered(
                 broadcast = listOf(server("Sat", "10.0.0.9")),
@@ -69,7 +62,6 @@ class DiscoveryRepositoryTest {
 
     @Test
     fun samePairIpDifferentPortAreDistinctEntries() {
-        // Two satellites on one host (different udpPort) are distinct keys.
         val merged =
             DiscoveryRepository.mergeDiscovered(
                 broadcast = listOf(server("One", "10.0.0.1", udp = 9876)),
@@ -97,8 +89,6 @@ class DiscoveryRepositoryTest {
 
     @Test
     fun discoverySourceLabelResourcesAreSetAndDistinct() {
-        // Each path's connections-list label is a string resource; a 0 id is
-        // an unset/missing resource, and each path needs its own label.
         val labels =
             listOf(
                 DiscoverySource.BROADCAST.labelRes,

@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.connection
 
@@ -37,26 +36,7 @@ import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
 
-/**
- * Why a [connect] attempt was initiated. The same connect path is shared
- * between three callers with very different user-feedback expectations:
- *
- *  - [USER_INITIATED] — user tapped Connect / discovered satellite row.
- *    Failure SHOULD surface a notification (the user just took an action
- *    that's about to silently fail otherwise).
- *  - [AUTO_RECONNECT] — fired on app foreground / cold start by
- *    [ConnectionHub.autoReconnectAll], or after a network-changed event.
- *    Failure MUST be silent: the row chip's natural Connecting → Saved/Stale
- *    flip is the feedback. A toast / banner here would fire on every cold
- *    start the satellite is down — pure noise the user didn't ask for.
- *  - [RETRY_AFTER_DEATH] — fired by the alive-poll's onDead callback after a
- *    short backoff. Same silence policy as [AUTO_RECONNECT]: the chip flips
- *    to "Connecting…" and either recovers or lands on Saved/Stale, both of
- *    which the row renders without a separate notification.
- *
- * The intent is threaded through [pairAndConnect] / [openSession]; every
- * `_events.emit(ConnectionEvent.Error(...))` is gated on it.
- */
+// USER_INITIATED surfaces failures; the silent intents rely on the row chip for feedback.
 enum class ConnectIntent { USER_INITIATED, AUTO_RECONNECT, RETRY_AFTER_DEATH }
 
 sealed class ConnectionEvent {
@@ -69,13 +49,6 @@ sealed class ConnectionEvent {
     ) : ConnectionEvent()
 }
 
-/**
- * Owns the pool of live + remembered satellite sessions. Each session runs its
- * own native handle, heartbeat and ACK loop so multiple satellites can be
- * active in parallel. Slots bind to a specific connection via the hub and
- * their input is routed through the bound connection's
- * [SatelliteConnection.sendReport].
- */
 @Singleton
 class SatelliteConnectionManager
     @Inject
@@ -87,22 +60,8 @@ class SatelliteConnectionManager
         private val store: ConnectionStore,
         private val json: Json,
         @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
-        /**
-         * `Provider` (not direct injection) breaks the Hilt construction cycle:
-         * [MotionCapabilityComposer] depends on [com.tinkernorth.dish.composer.ConnectionHub],
-         * which depends back on this manager. Using `Provider.get()` defers
-         * resolution until the cap word is actually needed (at controller-add
-         * time), at which point the singleton composer already exists.
-         */
+        // Provider (not direct injection) breaks the Hilt cycle: composer → hub → this manager.
         private val motionCapabilityProvider: Provider<MotionCapabilityComposer>,
-        /**
-         * Per-(connection, slot) store the receiver's truth about its motion
-         * sink lands in. Written from [SatelliteConnection.registerController]
-         * after a successful ACK using the motion-status byte the satellite
-         * appends to the ACK payload. The composer reads from it so the pill
-         * can surface "satellite kernel rejected the IMU sink" as a distinct
-         * state rather than falsely showing STREAMING.
-         */
         private val motionBackendStatusStore: SatelliteMotionBackendStatusStore,
     ) {
         private val _connections = MutableStateFlow<Map<String, SatelliteConnection>>(emptyMap())
@@ -114,29 +73,10 @@ class SatelliteConnectionManager
         private val _isScanning = MutableStateFlow(false)
         val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
 
-        /**
-         * Wall-clock timestamp of the most recently completed discovery scan,
-         * or null if no scan has run yet this process. Drives the dynamic
-         * empty-state copy on Connections so the row never reads the same as
-         * "never scanned" + "scanned, found nothing".
-         */
         private val _lastScanAtMs = MutableStateFlow<Long?>(null)
         val lastScanAtMs: StateFlow<Long?> = _lastScanAtMs.asStateFlow()
 
-        // Fire-and-forget broadcast: every emission is delivered to currently-
-        // active subscribers and then forgotten. replay=0 is critical — a
-        // subscriber that pauses and re-subscribes (every activity-switch
-        // does this via repeatOnLifecycle(STARTED)) must NOT receive a stale
-        // event from a prior session, or the same banner would re-fire on
-        // every navigation. All three Dish activities collect events while
-        // STARTED, so the only emissions that could be lost are those firing
-        // in the microsecond window between one activity stopping and the
-        // next starting — vanishingly small.
-        //
-        // extraBufferCapacity is kept so emit() never suspends: the
-        // SatelliteConnection callbacks (onDead, onRegistrationFailed) come
-        // from short-lived launches that shouldn't block on a missing
-        // subscriber.
+        // replay=0 so activity-switch re-subscribers don't replay stale banners; buffer keeps emit non-suspending.
         private val _events =
             MutableSharedFlow<ConnectionEvent>(
                 replay = 0,
@@ -145,12 +85,6 @@ class SatelliteConnectionManager
             )
         val events: SharedFlow<ConnectionEvent> = _events.asSharedFlow()
 
-        // Client-side "Stale" markers. Set when an auto-reconnect's pair
-        // handshake comes back with ok=false (server forgot the pairing /
-        // rotated keys) — we can't bother the user with a dialog because the
-        // attempt wasn't user-initiated, but the row chip needs to read
-        // "Needs pairing" rather than "Offline" so the user knows tapping it
-        // will prompt for a fresh PIN. Cleared the moment a session opens.
         private val _staleSatelliteIds = MutableStateFlow<Set<String>>(emptySet())
         val staleSatelliteIds: StateFlow<Set<String>> = _staleSatelliteIds.asStateFlow()
 
@@ -158,25 +92,7 @@ class SatelliteConnectionManager
         private val deviceName by lazy { android.os.Build.MODEL ?: "Android" }
 
         init {
-            // Reactive cap-word refresh — the third leg of the composer-as-
-            // single-source-of-truth pattern. UI consumers already read the
-            // composer (pill); the listener gate already reads the composer
-            // (motionSource.start/stop); now the WIRE cap word also reacts
-            // to composer changes, via a per-connection diff against
-            // SlotBinding.lastAdvertisedCaps.
-            //
-            // Why subscribe to `cap-bits-by-slot` (the projection), not
-            // `composer.state` directly: the composer's `MotionCapability`
-            // carries five fields, only one of which (toCapBits) affects the
-            // wire. Without the projection + distinctUntilChanged, every
-            // hub.connections emit (which the composer combine forwards)
-            // would push a no-op caps-update for every registered slot.
-            //
-            // Launched in `init`, but the `Provider.get()` doesn't run until
-            // the coroutine actually dispatches — at which point construction
-            // is complete and the Hilt cycle is resolved (same reason the
-            // motionCapsBitsFor lambda uses Provider rather than direct
-            // injection — see the Provider's KDoc above).
+            // Project to cap-bits-by-slot so unrelated composer emissions don't fire no-op wire updates.
             scope.launch {
                 motionCapabilityProvider
                     .get()
@@ -195,44 +111,22 @@ class SatelliteConnectionManager
 
         fun remembered(): List<RememberedSatellite> = store.remembered()
 
-        // ── Discovery ─────────────────────────────────────────────────────────
-
         fun startDiscovery() {
-            // compareAndSet so two concurrent foreground kicks (MainActivity
-            // onCreate + ConnectionForegroundObserver) don't both clear the
-            // gate and launch parallel scans.
             if (!_isScanning.compareAndSet(expect = false, update = true)) return
             scope.launch {
                 val servers = discoveryRepo.discoverServers(DISC_PORT, DISC_TIMEOUT_MS)
                 _discoveredServers.value = servers
                 _lastScanAtMs.value = System.currentTimeMillis()
                 _isScanning.value = false
-                // No-op on empty: the row list + tvSatelliteEmpty already
-                // narrates "scanned, found nothing" via the lastScanAt
-                // timestamp. A notification would duplicate that message.
             }
         }
 
-        // ── Connect / Disconnect ──────────────────────────────────────────────
-
-        /**
-         * Open or re-open a session to [server]. [intent] decides whether
-         * downstream failures emit user-visible notifications:
-         *  - [ConnectIntent.USER_INITIATED] — emit on every failure (the user
-         *    just acted and would otherwise see no signal).
-         *  - [ConnectIntent.AUTO_RECONNECT] / [ConnectIntent.RETRY_AFTER_DEATH]
-         *    — emit nothing; the row chip already conveys the result.
-         */
         fun connect(
             server: DiscoveredServer,
             intent: ConnectIntent = ConnectIntent.USER_INITIATED,
         ) {
             val id = SatelliteConnection.idFor(server)
-            // Atomic find-or-create. Without `update` two concurrent first-time
-            // connects to the same id (foreground observer + a user tap landing
-            // in the same tick) could each enter the `existing == null` branch
-            // and construct competing SatelliteConnection instances; the loser
-            // would leak its scope/mutex references until GC.
+            // Atomic find-or-create: prevents two concurrent first-time connects allocating duplicates.
             var created: SatelliteConnection? = null
             val conn =
                 _connections
@@ -254,11 +148,7 @@ class SatelliteConnectionManager
                         created = fresh
                         map + (id to fresh)
                     }[id] ?: return
-            // Idempotent on live / in-flight sessions: the foreground observer
-            // and MainActivity both kick auto-reconnect on every return, so
-            // without this guard a CONNECTING session would have its pair/auth
-            // flow restarted mid-handshake, leaking sockets and confusing the
-            // server.
+            // Idempotent on live/in-flight: foreground kicks must not restart pair/auth mid-handshake.
             if (created == null) {
                 when (conn.state.value) {
                     SatelliteSessionState.Live,
@@ -274,13 +164,7 @@ class SatelliteConnectionManager
             conn.updateServer(server)
             conn.markConnecting()
             scope.launch {
-                // If we already have a pair-derived shared key for this server,
-                // skip the pairing handshake entirely. This shaves a network
-                // round-trip off every auto-reconnect and — more importantly —
-                // means a server that's silently moved networks fails fast in
-                // openSession with a clean "unreachable" error, instead of
-                // bouncing the user back to a pin dialog they can never satisfy
-                // (the dialog would re-pair against the dead IP).
+                // Skip pair handshake if we have a shared key — failure surfaces as unreachable, not bogus PIN dialog.
                 if (store.satelliteSharedKey(id) != null) {
                     openSession(conn, server, intent)
                 } else {

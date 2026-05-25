@@ -1,0 +1,298 @@
+# Architecture
+
+A map of the codebase aimed at people working in it. The wire-format
+reference is in [`wire-format.md`](wire-format.md); the design-system
+tokens are in [`design-system.md`](design-system.md).
+
+## Pipeline
+
+```
+gamepad / virtual pad / sensor
+        │
+        ▼
+  Kotlin UI (per-Activity)
+        │
+        ▼
+  hotpath/  ──── direct JNI calls, no allocations
+        │
+        ▼
+  satellite_jni.cpp (NDK)
+        │
+        ▼
+  encrypted UDP ───►  satellite server
+```
+
+Controller events enter through `MainActivity.dispatchKeyEvent` /
+`dispatchGenericMotionEvent` (or the on-screen virtual pad), get
+normalised on the JVM, and cross into the native layer via
+`SatelliteNative`. The native side runs the encoder + `sendto` on the
+same thread the event arrived on. Discovery, motion, battery, and
+touchpad take the same JNI path with their own opcodes.
+
+Pairing is the only network operation that **doesn't** go through JNI:
+TLS lives on the JVM (`SatelliteHttpClient`) so the NDK build doesn't
+need OpenSSL.
+
+## Top-level packages
+
+```
+com.tinkernorth.dish/
+  DishApplication           Hilt entry point
+  architecture/             base classes + interface contracts
+  composer/                 pure derivations from one or more sources
+  core/                     input mapping, JNI bindings, models, net helpers
+  di/                       Hilt modules
+  hotpath/                  per-event code that must not allocate or block
+  repository/               SharedPreferences-backed CRUD
+  source/                   stateful wrappers (sensors, sockets, BT, stores)
+  ui/                       Activities, adapters, custom views
+```
+
+`source/` and `composer/` together carry the state graph. `core/` is
+the boundary to the satellite (JNI, HTTPS, wire types). `hotpath/`
+holds the bits that have to honour the no-allocation rule.
+
+## The hot path
+
+The Kotlin → JNI → `sendto()` chain runs at gamepad polling rate
+(≤250 Hz on most controllers) and must never block. The rules:
+
+- No `withContext`, no `runBlocking`, no `Dispatchers.IO` on the
+  send path.
+- No allocations per event — the JNI uses a preallocated
+  `XUSB_REPORT` and a packed `Int` for HID button + hat (a `Pair`
+  would burn ~6 KB/s of garbage at 250 Hz).
+- The session map's `mutex` is the only lock the send path takes,
+  and it's released before the encrypted `sendto`.
+- `IP_TOS = 0xB8` (DSCP EF) and `MSG_NOSIGNAL` stay set on every
+  send.
+
+Anything that wants to ride the hot path lives in `hotpath/` (e.g.
+`GamepadInputProcessor`, `BluetoothGamepadBridge`); code outside that
+package is forbidden from making JNI calls from the input thread
+besides `sendReport`.
+
+## Base classes — what lives where
+
+The `architecture/` package fixes three contracts. Subclassing the
+wrong base is the most common architectural mistake in the codebase;
+the package name (`abstracts/` for base classes, `interfaces/` for
+pure contracts) is the first hint.
+
+### `AbstractStateSource<S>`
+
+Owns one piece of state, exposes it read-only as a `StateFlow<S>`,
+with optional lifecycle hooks.
+
+Use this for any class wrapping a sensor, socket, BroadcastReceiver,
+system service, timer, or in-memory cache. Provides:
+
+- `state: StateFlow<S>` — the only public read surface.
+- `protected setState(...)` — atomic updates via
+  `MutableStateFlow.update`.
+- `DefaultLifecycleObserver` integration — opt-in. Sources whose
+  lifecycle is registry-managed (e.g. `SatelliteConnection`) simply
+  don't override the hooks.
+
+Sources do **not** carry an event channel. Earlier iterations had a
+shared `events: SharedFlow<E>` alongside `state`; in practice only
+one class actually used it, and that class needed two flows, so the
+inheritance only covered half its surface. Rare event-emitting
+classes own their own `SharedFlow`s directly
+(`SatelliteConnectionManager`, `DishNotifications`). Keep the base
+tight: state + optional lifecycle.
+
+`S = Unit` is allowed when the class is purely a lifecycle hook with
+no observable state (e.g. `ConnectionForegroundObserver`). Most
+subclasses have a meaningful `S`.
+
+### `AbstractComposer<S>`
+
+Pure derivation from one or more upstream flows into a single
+`StateFlow<S>`. No external input, no events, no lifecycle of its
+own.
+
+The base provides:
+
+- a `StateFlow<S>` named `state`, started **eagerly** on the supplied
+  scope so consumers never see a one-frame flicker on Activity
+  resume;
+- exactly one extension point — `upstream: Flow<S>` — so subclasses
+  can't smuggle in extra surface;
+- explicit `initial: S` so the StateFlow has a sane value before the
+  first emission.
+
+If you find yourself reaching for an event channel inside a composer,
+you're not writing an `AbstractComposer` — you're writing an
+`AbstractStateSource` that happens to combine inputs. Switch base
+classes rather than add the field.
+
+The combine runs on whichever dispatcher `upstream` is collected on
+(by default the composer's `scope` dispatcher). UI consumers `collect`
+on `Main`.
+
+`ConnectionHub` is the coordinator over `SlotBindingStore`,
+`ControllerTypeStore`, and `ConnectionsComposer`. Its
+`connections` field is `composer.state` *directly* — no hub-local
+mirror, which would create a two-writer race between the composer's
+`onEach` and the hub's imperative `bind`/`unbind` paths.
+
+### `Repository<K, V>` / `KeyedRepository<K, V>`
+
+Synchronous CRUD over a single durable backing store. Lives in
+`interfaces/` because it's a pure contract — no inheritable state.
+
+- Shaped like `get / all / put / remove / clear`.
+- No flows, no lifecycle, no events, no scope. Repositories are dumb
+  storage.
+- Threading: implementations must be safe for concurrent calls from
+  any thread. The canonical pattern is a private `writeLock: Any`
+  serializing read-modify-write of the value list under a single
+  SharedPreferences key.
+- Every concrete repository extends `AbstractRepositoryContract` (in
+  `architecture/testing/`) to inherit the standard property checks.
+
+For reactive reads, wrap a repository in an `AbstractStateSource`
+that observes the backing store and republishes. Don't fold
+reactivity into the repository itself.
+
+`KeyedRepository<K, V>` is the variant where the value carries its
+own id (`keyOf(value: V): K`) — most real repos in this codebase
+look like this. The satellite id is `satellite:<ip>:<udpPort>`; the
+Bluetooth id is `bt:<MAC>`. The distinct `removeValue` name is
+deliberate: it avoids a JVM-erasure clash with `remove(K)`.
+
+## Multi-session model
+
+A session is a `(socket, token, key, counter, heartbeat)` tuple,
+identified by a positive integer `handle` returned from `openSocket`.
+Every other JNI call that touches a session takes that handle, so
+multiple satellites can run side-by-side with independent sockets,
+tokens, counters, and heartbeat threads.
+
+The session table lives in `satellite_jni.cpp` under
+`g_sessions: std::unordered_map<int, std::shared_ptr<Session>>` with
+its own mutex; the hot-path lookup is `getSession(handle)` returning
+a shared pointer, after which the lock is released.
+
+Slot bindings (physical Android `deviceId` → which session + which
+controller index) live in `g_slots`, also keyed by id, in
+`hotpath/input/`. The same physical pad can be reassigned between
+satellites without touching the per-slot deadzone configuration —
+deadzones are per-device, not per-event.
+
+## Bluetooth lifecycle
+
+Android's `BluetoothHidDevice` profile only allows **one registered
+app per process**. The `source/bluetooth/` package squeezes the
+multi-slot UI through that constraint without leaking framework
+state.
+
+```
+BluetoothHidSession (one per process)
+  └── AndroidHidProxyClient
+        └── BluetoothHidDevice profile proxy
+              └── one host at a time
+
+BluetoothGamepadRegistry
+  └── projects the single session onto a per-connection-id slot view
+```
+
+Key invariants:
+
+- **Tear-down on every restart.** Every transition out of a
+  registered state must call `unregisterAndRelease` before
+  re-acquiring the proxy. The original "background → return →
+  reconnect is dead" bug came from skipping this on restart.
+- **Released proxies are ignored.** Callbacks arriving from a proxy
+  that's already been released don't drive state changes; the
+  session FSM gates on the current proxy identity.
+- **Permissions can be revoked between sessions.** `BLUETOOTH_CONNECT`
+  can be denied between auto-reconnect runs on API 31+, surfacing
+  as `SecurityException`. The session routes that through its events
+  channel as a clean `Failed` state instead of throwing.
+- **Re-keying.** Discovery starts a session under a transient id
+  (`bt-pending-<n>`) because the host MAC is unknown until it
+  connects. On the first `BluetoothSessionState.Connected` the
+  registry swaps the transient id for `bt:<MAC>`, persists the host
+  through `ConnectionStore.rememberBt`, and drops the transient
+  entry. The UI sees a single stable row.
+- **Stale markers.** `BluetoothBondMonitor` reports `KEY_MISSING` or
+  unexpected `BOND_NONE` for remembered MACs; the registry surfaces
+  these as a `Stale` lift on `ConnectionHub`. `KEY_MISSING` is the
+  more specific signal — if both arrive for the same host, the
+  registry promotes `BOND_REMOVED` to `KEY_MISSING` so the user
+  copy reads *"Re-pair X"* instead of the weaker *"X was unpaired"*.
+
+## Rumble path
+
+Rumble flows the opposite direction to the input hot path:
+
+```
+satellite                                  dish-android
+  │                                              │
+  ├─ MSG_RUMBLE (encrypted UDP) ────────────────►├─ receiveAck (Dispatchers.IO)
+                                                 │   ├─ decrypt + parse
+                                                 │   └─ JNI → RumbleBridge.dispatchRumble
+                                                 │         └─ VibratorManager / Vibrator
+```
+
+`receiveAck` runs on `Dispatchers.IO`, which is JVM-attached, so the
+JNI side calls into Java directly with no `AttachCurrentThread`
+ceremony and no dispatcher thread. The dispatch is synchronous on
+the JNI caller.
+
+All actuation is routed to the phone's vibrators — there is no
+fallback path that drives a connected physical pad's actuators.
+Letting the phone body handle every rumble keeps actuation
+single-rooted and avoids a "which device should buzz?" decision
+when a player is paired with a physical pad. This is intentional,
+not a missing case.
+
+Pure rumble helpers (`rumbleMagnitudeTo255`, `rumbleSafeDurationMs`)
+are covered by `RumbleBridgeHelpersTest.kt`.
+
+## Host-testable C++ split
+
+`app/src/main/cpp/` is split so the parts of the JNI that the JVM
+can't reach are still unit-testable from a host build:
+
+- `gamepad_input.{cpp,h}` — pure gamepad-input processing. Owns
+  per-device button/axis state, the keycode → XUSB bit mapping, and
+  the send-on-change gate. No Android, JNI, or sodium headers — it
+  builds against `app/src/test/cpp/` with googletest.
+- `wire_encoders.h` — pure byte-layout encoders for `MSG_MOTION`,
+  `MSG_BATTERY`, `MSG_TOUCHPAD`, and `MSG_LIGHTBAR`. Same host-build
+  rule; the wire layout is type-checked against the satellite docs
+  in `docs/wire-format.md`.
+- `satellite_jni.cpp` — the Android-only glue. Owns sockets, libsodium,
+  the session map, the rumble + Bluetooth callbacks, and the JNI
+  registration. This file does **not** ship pure helpers — anything
+  testable belongs in one of the headers above.
+
+The split is the reason `gamepad_input.h` mirrors Android keycodes
+as integer constants instead of including `<android/keycodes.h>`:
+the constants must compile on host, and the values match Android's
+stable input ABI.
+
+## Activities and navigation
+
+Dish uses per-Activity navigation, wired through a single
+`androidx.navigation` graph at `res/navigation/nav_graph.xml`. All
+destinations are `<activity>` nodes; `ActivityNavigator` translates
+each `navigate(actionId)` call into `startActivity(Intent)` with the
+action's arguments applied as extras (argument names map 1:1).
+
+`DishNavigator` (`ui/common/`) is a thin typed wrapper so every
+navigation site is a compile-time check rather than a runtime
+"extra missing" branch:
+
+```kotlin
+nav.toGamepad(connectionId = cid, usePsLayout = true)
+nav.toTouchpad(connectionId = cid, touchpadMode = mode, slotId = slotId)
+```
+
+The input overlays (`GamepadOverlayActivity`, `TouchpadOverlayActivity`)
+intentionally bypass the activity-transition scaffolding and the
+edge-to-edge inset wiring — they prioritise zero-latency display and
+own their own immersive-mode setup through `BaseInputOverlayActivity`.

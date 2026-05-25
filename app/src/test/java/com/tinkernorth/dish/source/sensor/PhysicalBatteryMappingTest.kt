@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.sensor
 
@@ -7,22 +6,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/**
- * Unit tests for [PhysicalBatteryMapping] — the pure
- * `android.os.BatteryState` → wire `(level, status)` mapping behind
- * [PhysicalBatterySource] (roadmap Task 1.2, physical-controller half).
- *
- * The contract that matters: a wireless pad's own battery is reported as-is,
- * while a USB-wired / batteryless pad surfaces as `isPresent == false` and
- * MUST map to null so the caller falls back to the phone (host) battery.
- */
 class PhysicalBatteryMappingTest {
-    // ── controllerSample: present vs not-present ────────────────────────────
-
     @Test
     fun `pad with no battery present maps to null for phone fallback`() {
-        // A USB-wired pad: it has no battery of its own, so getBatteryState()
-        // reports isPresent=false. The caller must fall back to the phone.
         assertNull(
             PhysicalBatteryMapping.controllerSample(
                 isPresent = false,
@@ -34,8 +20,6 @@ class PhysicalBatteryMappingTest {
 
     @Test
     fun `not-present wins even when a capacity is somehow set`() {
-        // Defensive: isPresent=false is the authoritative signal — a stray
-        // capacity value must not resurrect a non-existent battery.
         assertNull(
             PhysicalBatteryMapping.controllerSample(
                 isPresent = false,
@@ -75,8 +59,7 @@ class PhysicalBatteryMappingTest {
 
     @Test
     fun `capacity above 1 is clamped to 100`() {
-        // Some HID descriptors report a slightly-over-1.0 capacity; clamp it
-        // rather than letting the validator reject a >100 level.
+        // Some HID descriptors report slightly-over-1.0 capacity — clamp rather than letting validator reject >100.
         assertEquals(
             100,
             PhysicalBatteryMapping
@@ -87,8 +70,6 @@ class PhysicalBatteryMappingTest {
 
     @Test
     fun `present pad with NaN capacity reports the unknown-level sentinel`() {
-        // A pad that exposes a charging status but no percentage (some 8BitDo
-        // pads): keep the status, send level=0xFF rather than discarding it.
         val sample =
             PhysicalBatteryMapping.controllerSample(
                 isPresent = true,
@@ -109,8 +90,6 @@ class PhysicalBatteryMappingTest {
             )
         assertEquals(BatteryValidator.LEVEL_UNKNOWN, sample?.level)
     }
-
-    // ── statusToWire ────────────────────────────────────────────────────────
 
     @Test
     fun `charging status maps to the wire charging status`() {
@@ -138,8 +117,7 @@ class PhysicalBatteryMappingTest {
 
     @Test
     fun `not-charging status reads as discharging`() {
-        // Plugged in but held (charge limiter) — closest to discharging from
-        // the player's point of view, matching the phone-battery choice.
+        // Plugged-but-held (charge limiter) — matches the phone-battery choice from the player's view.
         assertEquals(
             BatteryValidator.STATUS_DISCHARGING,
             PhysicalBatteryMapping.statusToWire(PhysicalBatteryMapping.ANDROID_STATUS_NOT_CHARGING),
@@ -162,8 +140,6 @@ class PhysicalBatteryMappingTest {
 
     @Test
     fun `every mapped sample is accepted by the validator`() {
-        // The mapping must never produce a (level, status) the validator would
-        // reject as malformed — that would silently drop a real battery report.
         val validator = BatteryValidator()
         val cases =
             listOf(
@@ -177,10 +153,7 @@ class PhysicalBatteryMappingTest {
             val sample = PhysicalBatteryMapping.controllerSample(present, cap, status)!!
             var emitted = false
             validator.publish(sample) { emitted = true }
-            org.junit.Assert.assertTrue(
-                "validator rejected mapped sample $sample",
-                emitted,
-            )
+            org.junit.Assert.assertTrue(emitted)
         }
     }
 }

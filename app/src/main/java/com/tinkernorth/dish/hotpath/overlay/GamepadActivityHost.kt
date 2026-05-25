@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.hotpath.overlay
 
@@ -23,63 +22,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 
-/**
- * Per-activity glue for every Dish activity that hosts (or could host) an
- * active streaming session. Owns the three things every activity needs to
- * agree on:
- *
- *  1. Hold the screen on while a slot is bound to a CONNECTED connection —
- *     `FLAG_KEEP_SCREEN_ON` is window-scoped, so each activity has to flip
- *     it on its own window from the shared
- *     [WakeStateController.shouldKeepScreenOn] flag.
- *  2. Present the dim-after-idle overlay through [LowPowerManager], with
- *     its "Bound · N controllers" line reactive to
- *     [WakeStateController.streamingSlotCount].
- *  3. Pass physical gamepad input through to the native pipeline instead
- *     of letting Android's fallback-action machinery turn `BUTTON_*`
- *     events into `KEYCODE_DPAD_CENTER` and click views.
- *
- * State (the [LowPowerManager], the [LowPowerTouchGate]) is per-activity;
- * the underlying controllers are process-scoped `@Singleton`s.
- *
- * ### Usage
- *
- * ```
- * private lateinit var gamepadHost: GamepadActivityHost
- *
- * override fun onCreate(savedInstanceState: Bundle?) {
- *     super.onCreate(savedInstanceState)
- *     binding = ActivityFooBinding.inflate(layoutInflater)
- *     setContentView(binding.root)
- *     gamepadHost = GamepadActivityHost(this, binding.root, wakeState, gamepadRegistry)
- *     gamepadHost.install()
- *     // ... activity-specific UI wiring ...
- * }
- *
- * override fun onStop() {
- *     super.onStop()
- *     gamepadHost.cancelDimOnStop()
- * }
- *
- * override fun dispatchKeyEvent(event: KeyEvent): Boolean =
- *     gamepadHost.dispatchKeyEvent(event) || super.dispatchKeyEvent(event)
- *
- * override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean =
- *     gamepadHost.dispatchGenericMotionEvent(event) || super.dispatchGenericMotionEvent(event)
- *
- * override fun dispatchTouchEvent(ev: MotionEvent): Boolean =
- *     gamepadHost.dispatchTouchEvent(ev) || super.dispatchTouchEvent(ev)
- *
- * override fun onWindowFocusChanged(hasFocus: Boolean) {
- *     super.onWindowFocusChanged(hasFocus)
- *     gamepadHost.onWindowFocusChanged(hasFocus)
- * }
- * ```
- *
- * [rootView] must be the inflated root of a layout that includes
- * `@layout/overlay_low_power`; the host binds it here to wire up the
- * dim-screen views.
- */
+// rootView must include @layout/overlay_low_power; the host binds it to wire up the dim-screen views.
 class GamepadActivityHost(
     private val activity: AppCompatActivity,
     private val rootView: View,
@@ -94,9 +37,6 @@ class GamepadActivityHost(
     private var snackbarAnchorJob: Job? = null
 
     init {
-        // Construct LowPowerManager eagerly so `dispatchTouchEvent` and
-        // `applyScreenOn` can read/poke its state immediately — the
-        // collectors in `install()` are what push values into it.
         val bindings = OverlayLowPowerBinding.bind(rootView)
         countdownBannerView = bindings.llCountdownBanner
         lowPowerManager =
@@ -113,24 +53,6 @@ class GamepadActivityHost(
             }
     }
 
-    /**
-     * Start the lifecycle-scoped collectors AND, when [notifications] is
-     * supplied, attach [DishNotifications] against the activity's root view:
-     *   - [WakeStateController.shouldKeepScreenOn] → toggle
-     *     `FLAG_KEEP_SCREEN_ON` and forward to [LowPowerManager.onLockStateChanged].
-     *   - [WakeStateController.streamingSlotCount] → call
-     *     [LowPowerManager.refreshStatus] so the dim line tracks
-     *     bind/unbind without waiting for the 15-second clock tick.
-     *   - [DishNotifications] renders the activity's Snackbars, anchored
-     *     above the low-power countdown pill while it's visible so the two
-     *     pieces of floating chrome stack cleanly. The previous split
-     *     (`DishNotificationQueue` + `DishSnackbarController` + a per-activity
-     *     `bindLifecycle` dance) folded into a single `notifications.attach()`
-     *     plus the anchor-view collector below.
-     *
-     * Collectors gate on `STARTED` so they only run while the host activity
-     * is visible.
-     */
     fun install(notifications: DishNotifications? = null) {
         activity.lifecycleScope.launch {
             activity.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -144,11 +66,7 @@ class GamepadActivityHost(
         }
         if (notifications != null) {
             val attachment = notifications.attach(activity, rootView)
-            // Re-anchor the Snackbar above the countdown pill while it's
-            // visible so a banner doesn't draw over the "Low power in Ns"
-            // text. The pill is GONE most of the time, so the Snackbar
-            // defaults to the bottom edge — anchoring kicks in only for
-            // the 5-second pre-dim window.
+            // Anchor Snackbar above countdown pill during the pre-dim window so banners don't draw over "Low power in Ns".
             snackbarAnchorJob =
                 lowPowerManager.state
                     .onEach { state ->
@@ -159,22 +77,11 @@ class GamepadActivityHost(
         }
     }
 
-    /** Tear the dim-screen state machine down on `onStop`. */
     fun cancelDimOnStop() {
         lowPowerManager.cancel()
     }
 
-    /**
-     * Returns true if the host wants to consume the event. Callers should
-     * fall through to `super.dispatchKeyEvent(event)` only when this returns
-     * false.
-     *
-     * Trust the device, not the event's source bits. Generic HID joystick
-     * adapters dispatch button events with `src=SOURCE_KEYBOARD` even when
-     * the device itself exposes `SOURCE_JOYSTICK`; letting those fall
-     * through lets Android's fallback-action pipeline turn `BUTTON_*` into
-     * `KEYCODE_DPAD_CENTER` and click whatever button is focused.
-     */
+    // Trust the device, not event.source: generic HID adapters report BUTTON_* as SOURCE_KEYBOARD; fallthrough → DPAD_CENTER clicks.
     fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val isKnownGamepad = event.deviceId in gamepadRegistry.devices.value
         if (!isGamepadSource(event.source) && !isKnownGamepad) return false
@@ -187,7 +94,6 @@ class GamepadActivityHost(
         return true
     }
 
-    /** Same shape as [dispatchKeyEvent] but for joystick motion. */
     fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
         val isJoy =
             (event.source and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK ||
@@ -212,23 +118,7 @@ class GamepadActivityHost(
             )
     }
 
-    /**
-     * Returns true if the touch should be swallowed (dim-screen overlay was
-     * the target). Caller falls through to `super.dispatchTouchEvent(ev)`
-     * otherwise so normal touch handling continues.
-     *
-     * Reads the overlay-active state *before* notifying the manager so a
-     * DOWN that dismisses the dim still wins the gate (and consumes the
-     * rest of the gesture, so the underlying button doesn't get a click).
-     *
-     * Resets the inactivity timer on any non-CANCEL touch action — not just
-     * DOWN — so a user dragging a finger on the gamepad (a held stick
-     * stroke, a long ABXY swipe) keeps the screen awake. The pre-fix code
-     * only fired on DOWN, so a 15 s continuous stroke would let the
-     * inactivity timer expire mid-gesture. `onUserInteraction` is cheap
-     * (two Handler post/remove ops in the IDLE case), so calling it on
-     * every MOVE at the panel's sample rate (~120 Hz) is negligible.
-     */
+    // Read overlayActive BEFORE notifying so a DOWN that dismisses the dim still wins the gate and consumes the rest of the gesture.
     fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         val overlayActive = lowPowerManager.state.value == LowPowerManager.State.ACTIVE
         val consume = lowPowerTouchGate.onDispatch(ev.action, overlayActive)
@@ -240,11 +130,7 @@ class GamepadActivityHost(
         return consume
     }
 
-    /**
-     * Release every per-device gamepad report when the window loses focus,
-     * so no button stays held server-side across notification shades,
-     * incoming calls, or back-button navigation.
-     */
+    // Release reports on focus loss so no button stays held across shades, calls, or back-button nav.
     fun onWindowFocusChanged(hasFocus: Boolean) {
         if (!hasFocus) SatelliteNative.releaseAllPhysicalReports()
     }

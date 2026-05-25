@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.core.net
 
@@ -15,53 +14,14 @@ import javax.net.ssl.SSLSession
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
-/**
- * HTTPS client for the satellite's client-facing API (port 9443, TLS).
- *
- * The satellite's re-architected client server speaks HTTPS on a single port
- * (9443) for both the connection API (`/api/connections`) and PIN pairing
- * (`/api/pair`). This client replaces the hand-rolled raw-TCP HTTP/1.1 code
- * that previously lived in `satellite_jni.cpp` (`httpRequest()` and the raw-TCP
- * `pair` function).
- *
- * ## Certificate handling — verification deliberately disabled
- *
- * The satellite presents a **self-signed** certificate. By approved project
- * decision the dish accepts it **without verification or pinning** — both TLS
- * certificate-chain validation and hostname validation are disabled, the
- * equivalent of `curl --insecure`. The satellite is only ever reached over the
- * LAN at an IP address the user explicitly discovered/paired with, so there is
- * no CA chain to validate against and no stable hostname to pin.
- *
- * This trades transport authentication for the convenience of a zero-config
- * self-signed setup; the UDP gamepad channel remains independently encrypted
- * and authenticated (ChaCha20-Poly1305 with the pair-derived shared key), so a
- * MITM on the HTTPS channel cannot forge gamepad input.
- *
- * Every method returns the server's raw JSON response body as a string, or a
- * JSON error object (`{"error":...}` / `{"ok":false,...}`) on a transport
- * failure — the exact same string-in / string-out contract the old native
- * functions had, so [DiscoveryRepository] and its callers are unchanged.
- *
- * All methods BLOCK — call from [kotlinx.coroutines.Dispatchers.IO].
- */
+// Satellite presents a self-signed cert on a LAN IP; approved decision to skip TLS validation
+// (curl --insecure equivalent). UDP gamepad channel has its own ChaCha20-Poly1305 auth.
+// All methods BLOCK — call from Dispatchers.IO.
 internal object SatelliteHttpClient {
     private const val TAG = "SatelliteHttpClient"
     private const val CONNECT_TIMEOUT_MS = 5_000
     private const val READ_TIMEOUT_MS = 5_000
 
-    /**
-     * SSL socket factory that trusts every certificate. Built once and reused
-     * — constructing an [SSLContext] per request is needless work and would
-     * defeat connection pooling.
-     *
-     * The `@Suppress("CustomX509TrustManager")` is intentional and matches the
-     * KDoc on this object: the satellite presents a self-signed cert over a
-     * user-discovered LAN IP, so there is no CA chain to validate or hostname
-     * to pin. The UDP gamepad channel layers its own ChaCha20-Poly1305
-     * authentication on top, so a MITM on this HTTPS channel cannot forge
-     * input. Removing this trust manager would break the documented design.
-     */
     @Suppress("CustomX509TrustManager")
     private val insecureSocketFactory by lazy {
         val trustAll =
@@ -88,15 +48,9 @@ internal object SatelliteHttpClient {
             }.socketFactory
     }
 
-    /** Hostname verifier that accepts any hostname (the cert is self-signed). */
     private val allowAllHostnames =
         HostnameVerifier { _: String?, _: SSLSession? -> true }
 
-    /**
-     * POST /api/connections — opens a new connection for this device.
-     * Returns the server's JSON: `{connectionId, token, maxControllers}` or
-     * `{error}` on the satellite side, or a transport-error JSON object.
-     */
     fun connect(
         ip: String,
         port: Int,
@@ -111,10 +65,6 @@ internal object SatelliteHttpClient {
             body = """{"deviceId":"${jsonEscape(deviceId)}"}""",
         )
 
-    /**
-     * DELETE /api/connections/<id> — closes the connection and removes all
-     * controllers. Returns the server's JSON `{ok,...}` or a transport error.
-     */
     fun disconnect(
         ip: String,
         port: Int,
@@ -130,21 +80,7 @@ internal object SatelliteHttpClient {
             body = """{"deviceId":"${jsonEscape(deviceId)}"}""",
         )
 
-    /**
-     * POST /api/devices/touchpad-mode — push the client's touchpad routing
-     * choice. Server validates against its supported modes (probed via
-     * `/api/server/capabilities`) and hot-applies to the live connection
-     * (no re-pair). The mode is also persisted server-side so a re-connect
-     * picks up the same routing without another round-trip.
-     *
-     * `mode` is one of `"off"`, `"ds4"`, `"mouse"`. The server responds
-     * `{"ok":true,"hotApplied":bool}` on success, or `{"error":...}` on
-     * unknown device / unsupported mode (409) / bad payload (400).
-     *
-     * The body field is `"id"` (matches the handler's route-param name); the
-     * device id used for auth is sent separately as the `X-Device-Id` header
-     * via [request] so it doesn't collide semantically with the route param.
-     */
+    // Body field is "id" (matches handler route-param); device id for auth goes in X-Device-Id header.
     fun setTouchpadMode(
         ip: String,
         port: Int,
@@ -162,19 +98,7 @@ internal object SatelliteHttpClient {
                     """"mode":"${jsonEscape(mode)}"}""",
         )
 
-    /**
-     * POST /api/pair — PIN pairing handshake.
-     *
-     * Pairing used to be a bespoke raw-TCP JSON line protocol on a separate
-     * port; it is now an ordinary HTTPS POST on the client server. The
-     * request/response JSON shapes are unchanged — only the transport differs.
-     * The satellite always answers HTTP 200 with
-     * `{"ok":bool,"error"?,"sharedKey"?,"message"?}`.
-     *
-     * No `X-Device-Id` header — pairing is the bootstrap that establishes the
-     * device's authorization, and the server's `/api/pair` route is the one
-     * client API endpoint that intentionally skips `clientAuthorized`.
-     */
+    // No X-Device-Id — /api/pair is the only client route that bypasses clientAuthorized.
     fun pair(
         ip: String,
         port: Int,
@@ -194,25 +118,7 @@ internal object SatelliteHttpClient {
                     """"pin":"${jsonEscape(pin)}"}""",
         )
 
-    /**
-     * Perform one HTTPS request against the satellite and return the response
-     * body. Never throws — a transport failure is reported as a JSON error
-     * object so callers keep their existing `runCatching { decode }` path.
-     *
-     * Non-2xx responses still have their body returned: the satellite's
-     * `/api/pair` always replies 200, and the connection API encodes its own
-     * failures as JSON `{error}` bodies, so the body is the useful payload
-     * regardless of status code.
-     *
-     * When [deviceId] is non-null it is sent as the `X-Device-Id` header,
-     * satisfying the satellite's `clientAuthorized` middleware for every
-     * route except `/api/pair` (which is intentionally unauthenticated —
-     * pairing is what creates the authorization in the first place). The
-     * header path is what the middleware prefers; the body-field fallback
-     * exists only as a legacy backstop and is fragile because the route's
-     * payload schema may use the `id` field for its own purposes (see
-     * `/api/devices/touchpad-mode`, which 401'd before this was wired up).
-     */
+    // Never throws — transport failure surfaces as a JSON {error} body so callers' decode path stays unchanged.
     @Suppress("NestedBlockDepth")
     private fun request(
         method: String,
@@ -228,8 +134,6 @@ internal object SatelliteHttpClient {
         return try {
             conn =
                 (url.openConnection() as HttpsURLConnection).apply {
-                    // Disable TLS cert-chain AND hostname validation — the
-                    // satellite uses a self-signed cert (approved decision).
                     sslSocketFactory = insecureSocketFactory
                     hostnameVerifier = allowAllHostnames
                     requestMethod = method
@@ -258,7 +162,6 @@ internal object SatelliteHttpClient {
         }
     }
 
-    /** Minimal JSON string escaping for the small set of values we send. */
     private fun jsonEscape(s: String): String =
         buildString(s.length) {
             for (c in s) {

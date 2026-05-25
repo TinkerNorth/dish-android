@@ -1,17 +1,10 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.notification
 
 import android.view.View
 import com.tinkernorth.dish.core.model.DishNotification
 
-/**
- * Test-only fake renderer that records every `show` call and the handles it
- * returned. Used by [DishNotificationsAttachmentTest] and
- * [DishNotificationsTransitionTest] to verify the data-flow side of
- * [DishNotifications] without involving real Android Snackbars.
- */
 class RecordingRenderer : DishNotifications.Renderer {
     data class Shown(
         val notification: DishNotification,
@@ -31,10 +24,8 @@ class RecordingRenderer : DishNotifications.Renderer {
         return handle
     }
 
-    /** Handles still tracked as live (not yet dismissed). */
     val liveHandles get() = handles.filterNot { it.dismissed }
 
-    /** Ids of all handles, in show order. */
     val shownIds get() = shown.map { it.notification.id }
 
     class RecordingHandle(

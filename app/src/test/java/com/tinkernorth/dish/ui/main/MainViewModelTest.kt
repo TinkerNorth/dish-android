@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.ui.main
 
@@ -36,11 +35,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Unit tests for [MainViewModel]. The hub, satellite manager, and physical
- * gamepad registry are stubbed so the VM is exercised in isolation; only the
- * slot derivation + bind/unbind forwarding is under test here.
- */
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModelTest {
     private val dispatcher: TestDispatcher = StandardTestDispatcher()
@@ -64,19 +58,11 @@ class MainViewModelTest {
         hub = mockk(relaxed = true)
         satellite = mockk(relaxed = true)
         gamepadRegistry = mockk(relaxed = true)
-        // BatteryStatusStore is a pure JVM holder (no Android deps) — use the
-        // real thing so battery samples really thread through to the slots.
         batteryStore = BatteryStatusStore()
-        // MotionEnabledStore is hydrated from MotionPreferenceRepository at
-        // construction. Stub the repo so the store's init reads emptyMap()
-        // (the relevant default for these slot-wiring tests).
         motionEnabledStore =
             MotionEnabledStore(
                 mockk(relaxed = true) { every { all() } returns emptyList() },
             )
-        // MotionCapabilityComposer is exercised separately; the VM only
-        // forwards its state into MainUiState. A relaxed mock with an
-        // empty initial-state flow is enough to satisfy the constructor.
         motionCapabilityComposer =
             mockk(relaxed = true) {
                 every { state } returns
@@ -84,12 +70,6 @@ class MainViewModelTest {
                         emptyMap<String, com.tinkernorth.dish.composer.MotionCapability>(),
                     )
             }
-        // TouchpadModeStore wraps a TouchpadModeRepository — stub the repo
-        // so the store's `init` block reads emptyList() (so `state.value`
-        // starts as emptyMap, the relevant default for slot-wiring tests).
-        // The dashboard's combine collector subscribes to `store.state`;
-        // its emissions drive the chip selection updates the VM forwards
-        // into MainUiState.touchpadModesBySatellite.
         touchpadModeStore =
             TouchpadModeStore(
                 mockk(relaxed = true) { every { all() } returns emptyList() },
@@ -98,9 +78,6 @@ class MainViewModelTest {
         every { hub.bindings } returns bindingsFlow
         every { gamepadRegistry.devices } returns devicesFlow
         every { satellite.events } returns satelliteEvents
-        // The VM resolves the virtual-slot label from string resources via the
-        // injected Context. A relaxed mock returns "" by default, which keeps
-        // the existing assertions (focused on slot wiring, not the label) green.
         val context = mockk<Context>(relaxed = true)
         vm =
             MainViewModel(
@@ -154,7 +131,7 @@ class MainViewModelTest {
             devicesFlow.value = mapOf(7 to pad)
             dispatcher.scheduler.runCurrent()
 
-            assertEquals(2, vm.uiState.value.slots.size) // virtual + one physical
+            assertEquals(2, vm.uiState.value.slots.size)
         }
 
     @Test
@@ -190,9 +167,6 @@ class MainViewModelTest {
 
     @Test
     fun `setMotionEnabled writes through to the motion store`() {
-        // The dashboard's toggle should be a thin pass-through; the durable
-        // write happens in MotionEnabledStore. Pin that the VM does not
-        // accidentally short-circuit (e.g. only updating local state).
         vm.setMotionEnabled(slotId = "9", enabled = false)
         assertEquals(false, motionEnabledStore.state.value["9"])
         assertEquals(false, motionEnabledStore.isEnabled("9"))
@@ -200,16 +174,11 @@ class MainViewModelTest {
 
     @Test
     fun `isMotionEnabled defaults to true for a slot that has not been toggled`() {
-        // Product default — flip in MotionEnabledStore.DEFAULT_ENABLED if
-        // policy changes. Pinned here so a regression in the VM accessor
-        // (e.g. reading the raw map and treating null as false) fails.
         assertTrue(vm.isMotionEnabled("never-touched"))
     }
 
     @Test
     fun `motionEnabled flow forwards the underlying store state`() {
-        // Bind point for the dashboard adapter: a write through the VM
-        // must be observable on its motionEnabled flow.
         vm.setMotionEnabled(slotId = "virtual", enabled = false)
         assertEquals(false, vm.motionEnabled.value["virtual"])
     }

@@ -1,5 +1,5 @@
 {
-  "_comment": "Template for app/google-services.json. To enable Firebase Crashlytics: (1) create a Firebase project for com.tinkernorth.dish at https://console.firebase.google.com/ ; (2) download the real google-services.json from the project settings; (3) save it as app/google-services.json (already in .gitignore, so it won't be committed); (4) for CI, base64-encode the file and add it as the GOOGLE_SERVICES_JSON_BASE64 GitHub Actions secret. See HANDOFF.md item 3 for the full procedure.",
+  "_comment": "Template for app/google-services.json. To enable Firebase Crashlytics: (1) create a Firebase project for com.tinkernorth.dish at https://console.firebase.google.com/ ; (2) download the real google-services.json from the project settings; (3) save it as app/google-services.json (already in .gitignore, so it won't be committed); (4) for CI, base64-encode the file and add it as the GOOGLE_SERVICES_JSON_BASE64 GitHub Actions secret.",
   "project_info": {
     "project_number": "REPLACE_WITH_FIREBASE_PROJECT_NUMBER",
     "project_id": "REPLACE_WITH_FIREBASE_PROJECT_ID",

@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.core.input
 
@@ -7,16 +6,7 @@ import com.tinkernorth.dish.ui.common.GamepadTouchView
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * Contract tests for [xusbToHid] and [hidToXusb] — the translators that sit
- * on the off-diagonals of the (producer × consumer) matrix.
- *
- * These tests pin every individual bit so a regression (e.g. the original
- * "physical X/Y falls in HID padding region" bug) fails loudly.
- */
 class GamepadButtonLayoutsTest {
-    // ── XUSB → HID: face / shoulder / system buttons ──────────────────────
-
     @Test fun `xusb A maps to HID BTN_A`() = assertHid(0x1000, GamepadTouchView.BTN_A, 0)
 
     @Test fun `xusb B maps to HID BTN_B`() = assertHid(0x2000, GamepadTouchView.BTN_B, 0)
@@ -39,8 +29,6 @@ class GamepadButtonLayoutsTest {
 
     @Test fun `xusb GUIDE maps to HID BTN_HOME`() = assertHid(0x0400, GamepadTouchView.BTN_HOME, 0)
 
-    // ── XUSB → HID: d-pad → hat-switch (all 9 positions) ──────────────────
-
     @Test fun `xusb dpad neutral maps to hat 0`() = assertHid(0x0000, 0, GamepadTouchView.HAT_NONE)
 
     @Test fun `xusb dpad up maps to hat N`() = assertHid(0x0001, 0, GamepadTouchView.HAT_N)
@@ -58,8 +46,6 @@ class GamepadButtonLayoutsTest {
     @Test fun `xusb dpad down+left maps to hat SW`() = assertHid(0x0002 or 0x0004, 0, GamepadTouchView.HAT_SW)
 
     @Test fun `xusb dpad up+left maps to hat NW`() = assertHid(0x0001 or 0x0004, 0, GamepadTouchView.HAT_NW)
-
-    // ── XUSB → HID: combined / hygiene ────────────────────────────────────
 
     @Test
     fun `xusb with A plus B plus X plus Y sets all four HID face bits`() {
@@ -80,11 +66,9 @@ class GamepadButtonLayoutsTest {
 
     @Test
     fun `xusb unknown bits are dropped`() {
-        // Bit 0x0800 is reserved / unused in XUSB — must not leak through.
+        // 0x0800 is reserved/unused in XUSB.
         assertEquals(0, hidButtonsOf(xusbToHid(0x0800)))
     }
-
-    // ── HID → XUSB: face / shoulder / system buttons ──────────────────────
 
     @Test fun `HID BTN_A maps to xusb A`() = assertXusb(GamepadTouchView.BTN_A, 0, 0x1000)
 
@@ -108,8 +92,6 @@ class GamepadButtonLayoutsTest {
 
     @Test fun `HID BTN_HOME maps to xusb GUIDE`() = assertXusb(GamepadTouchView.BTN_HOME, 0, 0x0400)
 
-    // ── HID → XUSB: hat-switch → d-pad (all 9 positions) ──────────────────
-
     @Test fun `HID hat 0 maps to xusb dpad neutral`() = assertXusb(0, GamepadTouchView.HAT_NONE, 0x0000)
 
     @Test fun `HID hat N maps to xusb dpad up`() = assertXusb(0, GamepadTouchView.HAT_N, 0x0001)
@@ -128,8 +110,6 @@ class GamepadButtonLayoutsTest {
 
     @Test fun `HID hat NW maps to xusb dpad up+left`() = assertXusb(0, GamepadTouchView.HAT_NW, 0x0001 or 0x0004)
 
-    // ── Round-trips ───────────────────────────────────────────────────────
-
     @Test
     fun `xusbToHid then hidToXusb is identity for every canonical bit`() {
         val xusbBits =
@@ -137,18 +117,18 @@ class GamepadButtonLayoutsTest {
                 0x0001,
                 0x0002,
                 0x0004,
-                0x0008, // d-pad
+                0x0008,
                 0x0010,
                 0x0020,
                 0x0040,
-                0x0080, // start / back / thumbs
+                0x0080,
                 0x0100,
                 0x0200,
-                0x0400, // shoulders / guide
+                0x0400,
                 0x1000,
                 0x2000,
                 0x4000,
-                0x8000, // A / B / X / Y
+                0x8000,
             )
         for (bit in xusbBits) {
             val packed = xusbToHid(bit)
@@ -159,8 +139,6 @@ class GamepadButtonLayoutsTest {
             )
         }
     }
-
-    // ── Helpers ───────────────────────────────────────────────────────────
 
     private fun assertHid(
         wButtons: Int,

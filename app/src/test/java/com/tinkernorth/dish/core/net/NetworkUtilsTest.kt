@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.core.net
 
@@ -9,13 +8,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/**
- * Unit tests for top-level helper functions:
- *   [jsonGet], [hexToBytes], [parseServers]
- */
 class NetworkUtilsTest {
-    // ── jsonGet ───────────────────────────────────────────────────────────
-
     @Test
     fun `jsonGet extracts string value`() {
         val json = """{"name":"MyServer","ip":"192.168.1.1"}"""
@@ -60,8 +53,6 @@ class NetworkUtilsTest {
         assertEquals("PIN required", jsonGet(json, "error"))
     }
 
-    // ── hexToBytes ────────────────────────────────────────────────────────
-
     @Test
     fun `hexToBytes converts even-length hex string`() {
         val bytes = hexToBytes("DEADBEEF")
@@ -84,12 +75,10 @@ class NetworkUtilsTest {
 
     @Test
     fun `hexToBytes produces correct length for 64-char key`() {
-        val hex = "0123456789abcdef".repeat(4) // 64 chars
+        val hex = "0123456789abcdef".repeat(4)
         val bytes = hexToBytes(hex)
         assertEquals(32, bytes.size)
     }
-
-    // ── parseServers ──────────────────────────────────────────────────────
 
     @Test
     fun `parseServers empty array`() {
@@ -124,8 +113,6 @@ class NetworkUtilsTest {
 
     @Test
     fun `parseServers uses default ports when missing`() {
-        // pairPort and httpPort default to the satellite's single HTTPS
-        // client-API port (9443); a beacon that omits them still resolves.
         val json = """[{"name":"X","ip":"3.3.3.3"}]"""
         val servers = parseServers(json)
         assertEquals(9876, servers[0].udpPort)

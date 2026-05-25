@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.composer
 
@@ -28,12 +27,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Unit tests for [ConnectionHub] binding semantics. Upstream flows from
- * [SatelliteConnectionManager] and [BluetoothGamepadRegistry] are driven with
- * [MutableStateFlow] stubs so the hub's `buildSummaries` logic can be exercised
- * without spinning real sockets or Bluetooth stacks.
- */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ConnectionHubTest {
     private lateinit var satellite: SatelliteConnectionManager
@@ -44,16 +37,9 @@ class ConnectionHubTest {
     private val satConnsFlow = MutableStateFlow<Map<String, SatelliteConnection>>(emptyMap())
     private val btStatesFlow = MutableStateFlow<Map<String, BluetoothGamepadRegistry.SlotState>>(emptyMap())
 
-    // ConnectionHub now subscribes to discoveredServers to split paired-idle
-    // satellites into Ready (in scan) vs Saved (offline). Tests default to an
-    // empty scan; push an entry into this flow to assert the Ready path.
     private val discoveredFlow =
         MutableStateFlow<List<com.tinkernorth.dish.core.model.DiscoveredServer>>(emptyList())
 
-    // Client-side Stale markers: per-satellite (set on auto-reconnect's
-    // pairing-rejected branch) and per-BT (set on KEY_MISSING / BOND_NONE
-    // by BluetoothBondMonitor). Default empty; push an id to assert the
-    // Stale-chip lift in buildSummaries.
     private val staleSatFlow = MutableStateFlow<Set<String>>(emptySet())
     private val staleBtFlow = MutableStateFlow<Map<String, com.tinkernorth.dish.source.bluetooth.BtStaleReason>>(emptyMap())
 
@@ -72,11 +58,6 @@ class ConnectionHubTest {
         scope = TestScope(StandardTestDispatcher())
     }
 
-    /**
-     * Mock Context that resolves the string resources [ConnectionsComposer]
-     * uses, applying format args inline. Keeps these assertions free of
-     * Robolectric while still exercising the formatter.
-     */
     private fun fakeStringContext(): Context {
         val ctx = mockk<Context>(relaxed = true)
         every { ctx.getString(com.tinkernorth.dish.R.string.bt_transient_acquiring) } returns
@@ -89,7 +70,6 @@ class ConnectionHubTest {
         every {
             ctx.getString(com.tinkernorth.dish.R.string.bt_row_detail, any<Any>(), any<Any>())
         } answers {
-            // Mockk surfaces vararg formatArgs as a single Array<*> at index 1.
             val args = invocation.args[1] as Array<*>
             "${args[0]} • ${args[1]}"
         }
@@ -102,17 +82,7 @@ class ConnectionHubTest {
         return ctx
     }
 
-    /**
-     * Build a hub *after* per-test mocks are set. The hub's combine emits its
-     * first summary snapshot when collection starts inside `init`, so any
-     * store-mocking must happen before this call.
-     */
     private fun buildHub(): ConnectionHub {
-        // ConnectionHub is now a coordinator over three split pieces — the
-        // bindings/types stores and a composer that derives the summaries list.
-        // Build real instances of all three so the test exercises the same
-        // wiring production runs through; only the satellite/bt/store boundary
-        // is mocked.
         val bindingStore =
             com.tinkernorth.dish.source.store
                 .SlotBindingStore()
@@ -121,10 +91,6 @@ class ConnectionHubTest {
                 .ControllerTypeStore()
         val composer =
             ConnectionsComposer(
-                // Resolve the few string resources the composer uses to build
-                // user-facing summary fields. Assertions below check substrings
-                // ("Acquiring", "PlayStation • …") so an empty default would
-                // mask real regressions.
                 context = fakeStringContext(),
                 satellite = satellite,
                 bt = bt,
@@ -208,13 +174,8 @@ class ConnectionHubTest {
         assertEquals(LinkState.Connected, summary.live)
     }
 
-    // ── BT progress surfacing (acquiring / registered / transient slot) ───
-
     @Test
     fun `acquiring on a remembered bt host shows CONNECTING`() {
-        // Without acquiring being treated as CONNECTING, the row would briefly
-        // flicker through IDLE between start() and onAppRegistered, which the
-        // user reads as "nothing happened".
         every { store.rememberedBt() } returns
             listOf(
                 RememberedBt(id = "bt:X", name = "Xbox", mac = "X", profileName = "Xbox"),
@@ -229,9 +190,6 @@ class ConnectionHubTest {
 
     @Test
     fun `transient bt-pending slot surfaces with profile label even before remembered`() {
-        // Until the host actually connects, RememberedBt has no entry for the
-        // session. The hub still emits a transient summary keyed by the
-        // pending id so the user sees something happen.
         btStatesFlow.value =
             mapOf(
                 "bt-pending-42" to
@@ -265,8 +223,6 @@ class ConnectionHubTest {
                 .first { it.id == "bt-pending-1" }
                 .detail
 
-        // Once Acquired → Registered, the pending entry's status should change
-        // to "Ready to pair" so the user knows to look at their host's BT menu.
         btStatesFlow.value =
             mapOf(
                 "bt-pending-1" to
@@ -291,9 +247,6 @@ class ConnectionHubTest {
 
     @Test
     fun `transient slot disappears once registry re-keys to bt-mac and host is remembered`() {
-        // Simulates the hand-off: registry's onConnected re-keys "bt-pending-X"
-        // to "bt:<MAC>", store.rememberBt() inserts the entry, the next
-        // emission collapses both into a single row.
         every { store.rememberedBt() } returns
             listOf(
                 RememberedBt(id = "bt:AA:BB", name = "PS5", mac = "AA:BB", profileName = "PlayStation"),
@@ -314,7 +267,6 @@ class ConnectionHubTest {
         assertEquals(1, btSummaries.size)
         assertEquals("bt:AA:BB", btSummaries[0].id)
         assertEquals(LinkState.Connected, btSummaries[0].live)
-        // Detail uses the persisted (friendly) profileName, not the enum name.
         assert(btSummaries[0].detail.startsWith("PlayStation")) {
             "expected friendly profile in detail, got: ${btSummaries[0].detail}"
         }
@@ -342,9 +294,6 @@ class ConnectionHubTest {
         val hub = buildHub()
 
         hub.bind(slotId = "slot-A", connectionId = "s:1")
-        // hub.connections forwards composer.state; mutating bindingStore fires
-        // the combine on its scheduled tick rather than synchronously, so the
-        // test must drive the scheduler before reading the derived value.
         scope.testScheduler.runCurrent()
 
         assertEquals(mapOf("slot-A" to "s:1"), hub.bindings.value)
@@ -374,7 +323,6 @@ class ConnectionHubTest {
             mapOf("slot-A" to "s:1", "slot-B" to "s:1"),
             hub.bindings.value,
         )
-        // Both slots show as bound on the satellite summary; nothing was detached.
         val summary = hub.connections.value.first { it.id == "s:1" }
         assertEquals(setOf("slot-A", "slot-B"), summary.boundSlotIds.toSet())
         verify(exactly = 0) { satConn.detachSlot(any()) }
@@ -391,7 +339,7 @@ class ConnectionHubTest {
         hub.bind("slot-A", "bt:X")
         hub.bind("slot-B", "bt:X")
 
-        // BT is single-host: the earlier slot is released so the new one owns it.
+        // BT is single-host: bind evicts the prior slot.
         assertEquals(mapOf("slot-B" to "bt:X"), hub.bindings.value)
     }
 
@@ -492,9 +440,6 @@ class ConnectionHubTest {
 
         hub.autoReconnectAll()
 
-        // connect() now takes a ConnectIntent. autoReconnectAll passes
-        // AUTO_RECONNECT (so error events stay silent); the test only cares
-        // that connect was/wasn't called for the right server.
         verify(exactly = 0) {
             satellite.connect(match { it.ip == "1.1.1.1" }, ConnectIntent.AUTO_RECONNECT)
         }
@@ -518,12 +463,6 @@ class ConnectionHubTest {
         verify(exactly = 0) { bt.tryAutoReconnect("bt:B") }
     }
 
-    /**
-     * Regression: previously the hub combined only on the outer
-     * `Map<String, SatelliteConnection>` identity, so a session flipping
-     * CONNECTING → CONNECTED inside the same map left the connections list
-     * stuck on "Connecting…" until the screen was reopened.
-     */
     @Test
     fun `connections re-emits when an inner SatelliteConnection state transitions`() {
         every { store.remembered() } returns
@@ -557,7 +496,6 @@ class ConnectionHubTest {
         satConnsFlow.value = mapOf("satellite:1.1.1.1:9876" to conn)
         val hub = buildHub()
 
-        // First snapshot: still CONNECTING.
         assertEquals(
             LinkState.Connecting,
             hub.connections.value
@@ -565,8 +503,6 @@ class ConnectionHubTest {
                 .live,
         )
 
-        // Inner state flips to CONNECTED — hub must re-emit even though the
-        // outer satellite.connections map is unchanged.
         state.value = SatelliteSessionState.Live
         scope.testScheduler.runCurrent()
 
@@ -635,8 +571,6 @@ class ConnectionHubTest {
         verify(exactly = 0) { bt.tryAutoReconnect(any()) }
     }
 
-    // ── LinkState.Stale lifting from upstream marker sets ─────────────────
-
     @Test
     fun `stale satellite id lifts an idle remembered satellite to LinkState Stale`() {
         every { store.remembered() } returns
@@ -653,7 +587,6 @@ class ConnectionHubTest {
         staleSatFlow.value = setOf("satellite:10.0.0.1:9876")
         val hub = buildHub()
 
-        // Stale wins over Saved/Ready — the row chip reads "Needs pairing".
         assertEquals(
             LinkState.Stale,
             hub.connections.value
@@ -664,10 +597,6 @@ class ConnectionHubTest {
 
     @Test
     fun `stale satellite marker does NOT override a live session`() {
-        // A satellite that's somehow both live AND in the Stale set (race
-        // between markStale and reconnect) should render Connected — the
-        // wire-level session takes precedence. The Stale set is for IDLE
-        // rows that need to surface "Needs pairing".
         val state = MutableStateFlow(SatelliteSessionState.Live)
         val conn =
             mockk<SatelliteConnection>(relaxed = true) {
@@ -715,8 +644,6 @@ class ConnectionHubTest {
 
     @Test
     fun `stale bt marker does not override a connected bt host`() {
-        // Connected wins over the stale marker — if the host reconnects
-        // before the registry's clearStale runs, the chip stays Online.
         every { store.rememberedBt() } returns
             listOf(RememberedBt(id = "bt:AA", name = "Xbox", mac = "AA", profileName = "Xbox"))
         every { bt.state(any()) } returns

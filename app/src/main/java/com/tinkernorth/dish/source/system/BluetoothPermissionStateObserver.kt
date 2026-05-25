@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.system
 
@@ -14,28 +13,12 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Whether the user has granted BLUETOOTH_CONNECT on API 31+. */
 enum class BluetoothPermissionState {
-    /** Not required on this API (pre-31). */
     NOT_REQUIRED,
-
-    /** Required and granted. */
     GRANTED,
-
-    /** Required and at least one permission denied / never asked. */
     DENIED,
 }
 
-/**
- * Re-checks the BT runtime permission state on every process foreground. Permissions
- * can be revoked while the app is backgrounded (App Info → Force stop → Permissions,
- * or the OS auto-revoke after long inactivity); without a re-check on resume the
- * activity would silently fail on the next auto-reconnect.
- *
- * **Pattern:** [AbstractStateSource]`<BluetoothPermissionState>` —
- * polls on `onStart` plus an imperative [refresh] called from the permission
- * launcher callback.
- */
 @Singleton
 class BluetoothPermissionStateObserver
     @Inject
@@ -47,11 +30,10 @@ class BluetoothPermissionStateObserver
         }
 
         override fun onStart(owner: LifecycleOwner) {
-            // Re-poll on every foreground — the OS doesn't broadcast revocation.
+            // OS doesn't broadcast revocation; re-poll on every foreground.
             setState(currentState())
         }
 
-        /** Force a re-poll (called after the Connections activity's permission launcher). */
         fun refresh() {
             setState(currentState())
         }

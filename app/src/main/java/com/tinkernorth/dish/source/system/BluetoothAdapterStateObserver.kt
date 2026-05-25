@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.system
 
@@ -17,31 +16,12 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Live Bluetooth adapter availability. Mirrors `BluetoothAdapter.getState()`. */
 enum class BluetoothAdapterState {
-    /** No Bluetooth hardware (rare, mostly emulators / tablets). */
     UNSUPPORTED,
-
-    /** Hardware present; adapter currently off. User can turn on from settings. */
     OFF,
-
-    /** Adapter on. */
     ON,
 }
 
-/**
- * Process-scoped observer for the Bluetooth adapter's on/off state. The activities
- * use this for two things:
- *
- *  - Render a persistent in-section banner on Connections when the adapter is off,
- *    with a "TURN ON" CTA. Without this the user had to discover their adapter was
- *    off by tapping Add and getting a one-shot toast.
- *  - Live-update on `BluetoothAdapter.ACTION_STATE_CHANGED` so the banner
- *    disappears the moment the user toggles BT on, no manual refresh needed.
- *
- * **Pattern:** [AbstractStateSource]`<BluetoothAdapterState>` — owns
- * a BroadcastReceiver, publishes state, no events.
- */
 @Singleton
 class BluetoothAdapterStateObserver
     @Inject
@@ -62,7 +42,6 @@ class BluetoothAdapterStateObserver
             }
 
         init {
-            // Seed before any subscriber attaches so `state.value` is correct on first read.
             setState(currentState())
         }
 

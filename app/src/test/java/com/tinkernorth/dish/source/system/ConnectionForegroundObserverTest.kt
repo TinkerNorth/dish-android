@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.system
 
@@ -11,17 +10,9 @@ import io.mockk.mockk
 import io.mockk.verify
 import org.junit.Test
 
-/**
- * The observer is the process-wide answer to the original bug: when the app
- * returns to the foreground, any stale BT/satellite session needs to be
- * rebuilt so input keeps flowing. We drive the observer directly against a
- * [LifecycleRegistry] via [LifecycleRegistry.createUnsafe] so the test is
- * not tied to a Looper.
- */
 class ConnectionForegroundObserverTest {
     private class TestOwner : LifecycleOwner {
-        // createUnsafe skips the main-thread check so the test runs on a
-        // plain JVM without android.os.Looper mocks.
+        // createUnsafe skips the main-thread check so the test runs without android.os.Looper mocks.
         val registry: LifecycleRegistry = LifecycleRegistry.createUnsafe(this)
         override val lifecycle: Lifecycle get() = registry
     }
@@ -46,10 +37,8 @@ class ConnectionForegroundObserverTest {
         owner.registry.addObserver(observer)
         owner.registry.currentState = Lifecycle.State.STARTED
 
-        owner.registry.currentState = Lifecycle.State.CREATED // emits ON_STOP
+        owner.registry.currentState = Lifecycle.State.CREATED
 
-        // Only the ON_START call was expected; a second call from ON_STOP
-        // would show up as exactly=2.
         verify(exactly = 1) { hub.autoReconnectAll() }
     }
 

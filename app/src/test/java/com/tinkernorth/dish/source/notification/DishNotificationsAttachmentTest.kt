@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.notification
 
@@ -23,29 +22,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Tests for `DishNotifications.attach()` — the lifecycle-bound render side.
- * Uses [RecordingRenderer] as the renderer fake so no real Snackbar / View
- * surface is needed; [TestLifecycleOwner] (from architecture/testing) drives
- * the owner state.
- *
- * What's exercised here:
- *
- *  - posts during the owner's STARTED state are rendered
- *  - posts before STARTED or after STOPPED are NOT rendered (replay=0 semantics)
- *  - `dismiss(id)` dismisses the live handle for that id
- *  - same-key replacement dismisses the prior handle before showing the new one
- *  - the per-attachment `anchorView` is passed to each `show` call
- *  - `onDestroy` clears every live handle
- *  - internal tracking maps (byId / byKey) stay consistent through the above
- */
 @OptIn(ExperimentalCoroutinesApi::class)
 class DishNotificationsAttachmentTest {
-    // repeatOnLifecycle internally schedules on Dispatchers.Main. Without
-    // setMain, every test that calls attachWithRenderer fails immediately
-    // with "Dispatchers.Main was accessed when the platform dispatcher was
-    // absent." Wire a StandardTestDispatcher so the lifecycle observer
-    // resumes on the test scheduler.
+    // repeatOnLifecycle needs Dispatchers.Main wired or attach calls fail immediately.
     private val mainDispatcher = StandardTestDispatcher()
 
     @Before
@@ -69,8 +48,6 @@ class DishNotificationsAttachmentTest {
             renderer = renderer,
             scope = scope.backgroundScope,
         )
-
-    // ── Lifecycle gating ──────────────────────────────────────────────────
 
     @Test
     fun `posts before STARTED are not rendered`() =
@@ -122,7 +99,6 @@ class DishNotificationsAttachmentTest {
             testScheduler.runCurrent()
 
             assertEquals(
-                "Only the post during STARTED should render",
                 listOf("while-started"),
                 renderer.shown.map { it.notification.title },
             )
@@ -140,7 +116,7 @@ class DishNotificationsAttachmentTest {
             testScheduler.runCurrent()
             owner.stop()
             testScheduler.runCurrent()
-            notifications.info(title = "between") // posted while STOPPED
+            notifications.info(title = "between")
             testScheduler.runCurrent()
 
             owner.start()
@@ -149,13 +125,10 @@ class DishNotificationsAttachmentTest {
             testScheduler.runCurrent()
 
             assertEquals(
-                "Only post after restart should render; 'between' is gone",
                 listOf("after-restart"),
                 renderer.shown.map { it.notification.title },
             )
         }
-
-    // ── Anchor view propagation ───────────────────────────────────────────
 
     @Test
     fun `default anchor is null`() =
@@ -192,8 +165,8 @@ class DishNotificationsAttachmentTest {
             notifications.info(title = "second")
             testScheduler.runCurrent()
 
-            assertNull("First post had no anchor", renderer.shown[0].anchor)
-            assertSame("Second post sees the anchor", anchor, renderer.shown[1].anchor)
+            assertNull(renderer.shown[0].anchor)
+            assertSame(anchor, renderer.shown[1].anchor)
         }
 
     @Test
@@ -219,8 +192,6 @@ class DishNotificationsAttachmentTest {
             assertNull(renderer.shown[1].anchor)
         }
 
-    // ── Dismiss-by-id ─────────────────────────────────────────────────────
-
     @Test
     fun `dismiss dismisses the handle for that id`() =
         runTest {
@@ -239,7 +210,7 @@ class DishNotificationsAttachmentTest {
             notifications.dismiss(id)
             testScheduler.runCurrent()
 
-            assertTrue("handle dismissed", handle.dismissed)
+            assertTrue(handle.dismissed)
             assertEquals(0, attachment.liveById())
         }
 
@@ -261,7 +232,6 @@ class DishNotificationsAttachmentTest {
             testScheduler.runCurrent()
 
             assertEquals(
-                "Unknown dismiss must not touch live handles",
                 liveCountBefore,
                 attachment.liveById(),
             )
@@ -279,23 +249,17 @@ class DishNotificationsAttachmentTest {
 
             val firstId = notifications.info(title = "v1", key = "k")
             testScheduler.runCurrent()
-            // Same-key replace dismisses the first handle as a side effect of
-            // the new post.
             notifications.info(title = "v2", key = "k")
             testScheduler.runCurrent()
             val firstHandle = renderer.handles.first { it.id == firstId }
-            assertTrue("First handle dismissed by replacement", firstHandle.dismissed)
+            assertTrue(firstHandle.dismissed)
 
-            // Now dismiss the first id explicitly — must not throw, and must
-            // not affect any other handle.
             notifications.dismiss(firstId)
             testScheduler.runCurrent()
 
             val secondHandle = renderer.handles.last()
-            assertFalse("Second handle still live", secondHandle.dismissed)
+            assertFalse(secondHandle.dismissed)
         }
-
-    // ── Same-key dedup ────────────────────────────────────────────────────
 
     @Test
     fun `same-key post dismisses the prior handle before showing the new one`() =
@@ -315,9 +279,8 @@ class DishNotificationsAttachmentTest {
             notifications.warn(title = "v2", key = "bt-off")
             testScheduler.runCurrent()
 
-            assertTrue("First handle dismissed by replacement", first.dismissed)
+            assertTrue(first.dismissed)
             assertEquals(
-                "Only the second handle is live",
                 1,
                 attachment.liveById(),
             )
@@ -340,7 +303,7 @@ class DishNotificationsAttachmentTest {
 
             assertEquals(2, attachment.liveById())
             assertEquals(2, attachment.liveByKey())
-            assertTrue("No handle dismissed", renderer.handles.none { it.dismissed })
+            assertTrue(renderer.handles.none { it.dismissed })
         }
 
     @Test
@@ -360,13 +323,10 @@ class DishNotificationsAttachmentTest {
 
             assertEquals(3, attachment.liveById())
             assertEquals(
-                "No keyed entries when all posts are null-key",
                 0,
                 attachment.liveByKey(),
             )
         }
-
-    // ── byId / byKey internal tracking consistency ────────────────────────
 
     @Test
     fun `dismiss removes the byKey entry too`() =
@@ -409,8 +369,6 @@ class DishNotificationsAttachmentTest {
             assertEquals(3, ids.distinct().size)
         }
 
-    // ── onDestroy clears live handles ─────────────────────────────────────
-
     @Test
     fun `onDestroy dismisses every live handle`() =
         runTest {
@@ -433,7 +391,6 @@ class DishNotificationsAttachmentTest {
             assertEquals(0, attachment.liveById())
             assertEquals(0, attachment.liveByKey())
             assertTrue(
-                "Every handle is dismissed",
                 renderer.handles.all { it.dismissed },
             )
         }
@@ -456,13 +413,10 @@ class DishNotificationsAttachmentTest {
             testScheduler.runCurrent()
 
             assertEquals(
-                "No new render after destroy",
                 priorShown,
                 renderer.shown.size,
             )
         }
-
-    // ── post ids vs render order ──────────────────────────────────────────
 
     @Test
     fun `posts render in the order they were posted`() =
@@ -504,18 +458,14 @@ class DishNotificationsAttachmentTest {
             val handleA = renderer.handles.first { it.id == a }
             val handleB = renderer.handles.first { it.id == b }
             val handleC = renderer.handles.first { it.id == c }
-            assertFalse("a still live", handleA.dismissed)
-            assertTrue("b dismissed", handleB.dismissed)
-            assertFalse("c still live", handleC.dismissed)
+            assertFalse(handleA.dismissed)
+            assertTrue(handleB.dismissed)
+            assertFalse(handleC.dismissed)
         }
 
     @Test
     fun `same-key replace assigns a new id (does not reuse the prior one)`() =
         runTest {
-            // Regression guard: the post path always allocates a new id; the
-            // dedup happens on the render side keyed by the user-supplied
-            // `key`. If a future change ever made replace re-use the id, the
-            // dismissals flow would become ambiguous.
             val notifications = DishNotifications()
             val owner = TestLifecycleOwner()
             val renderer = RecordingRenderer()

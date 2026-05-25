@@ -126,11 +126,10 @@ gitleaks detect --no-banner --redact --source .
 
 ### Gradle dependency verification (`gradle/verification-metadata.xml`)
 
-**Status:** the file is not yet committed. See `HANDOFF.md` item 6 for
-the open work. Until it lands, the section below describes the intended
-flow once a first generation pass is committed; following it on a clean
-checkout today will still produce a useful file you can use as a
-review aid.
+The file is not committed yet. The section below describes the
+intended flow once a first generation pass lands; until then,
+running these commands on a clean checkout still produces a useful
+file you can diff as a review aid.
 
 When you intentionally add or upgrade a dependency, regenerate the
 verification metadata so transitive jar tampering fails resolution:
@@ -192,8 +191,11 @@ server and must produce byte-identical traffic:
 - Packet layout: `token(4) | counter(4) | ciphertext+tag`, with the
   4-byte token as AAD.
 - XUSB report: 12 bytes, little-endian.
-- Ports: discovery UDP 9879, pairing TCP 9878, HTTP TCP 9877,
-  streaming UDP 9876.
+- Ports: discovery UDP 9879 (broadcast) + mDNS, pairing + REST over
+  HTTPS 9443, streaming UDP 9876.
+
+The full opcode catalog and message layouts live in
+[`docs/wire-format.md`](docs/wire-format.md).
 
 Any change here must be coordinated with `dish-linux`, `dish-mac`, and
 `satellite` in the same PR / release cycle.

@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.connection
 
@@ -22,10 +21,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Unit tests for [SatelliteConnection] state transitions, multi-slot binding
- * and gating of [SatelliteConnection.sendReport] on connection state.
- */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SatelliteConnectionTest {
     private val server =
@@ -55,7 +50,6 @@ class SatelliteConnectionTest {
 
     @After
     fun tearDown() {
-        // Cancel any background loops started by markConnected so runTest exits.
         conn.markDisconnected()
     }
 
@@ -115,8 +109,6 @@ class SatelliteConnectionTest {
             assertNull(conn.connectionId)
             verify { repo.stopHeartbeat(3) }
             verify { repo.closeSocket(3) }
-            // Slot is preserved across disconnect (so reconnect re-registers it)
-            // but its registered flag is cleared.
             assertEquals(false, conn.slots.value["slot-1"]?.registered)
         }
 
@@ -135,9 +127,6 @@ class SatelliteConnectionTest {
             every { repo.getLastControllerAck(any()) } returns 0
             conn.markConnecting()
             conn.markConnected(handle = 9, connectionId = "c") {}
-            // attachSlot triggers registerController which sets registered=true;
-            // sendReport gates on it so reports during the addController ACK
-            // window don't leak.
             conn.attachSlot(slotId = "slot-1", controllerType = 0)
 
             conn.sendReport(slotId = "slot-1", buttons = 0x42, lt = 10, rt = 20, lx = 30, ly = -40, rx = 50, ry = -60)
@@ -170,7 +159,6 @@ class SatelliteConnectionTest {
         every { repo.isConnectionAlive(any()) } returns true
         conn.markConnecting()
         conn.markConnected(handle = 9, connectionId = "c") {}
-        // No attachSlot → no registerController → registered stays false.
         conn.sendReport(slotId = "slot-1", buttons = 0x42, lt = 0, rt = 0, lx = 0, ly = 0, rx = 0, ry = 0)
 
         verify(exactly = 0) {
@@ -190,7 +178,6 @@ class SatelliteConnectionTest {
             conn.attachSlot(slotId = "slot-1", controllerType = 0)
             assertEquals(0, conn.slots.value["slot-1"]?.controllerIndex)
             assertEquals(false, conn.slots.value["slot-1"]?.registered)
-            // Server-side registration is deferred until markConnected runs.
             coVerify(exactly = 0) { repo.addController(any(), any(), any()) }
         }
 
@@ -217,9 +204,7 @@ class SatelliteConnectionTest {
             every { repo.resetControllerAck(any()) } just Runs
             every { repo.startHeartbeat(any()) } just Runs
             every { repo.isConnectionAlive(any()) } returns false
-            // Low byte 0x01 = ACK_ERR_BACKEND_UNAVAIL — a satellite with no
-            // virtual-gamepad backend (e.g. macOS). The dish must treat this as
-            // a failed registration, not — as it once did — silently as success.
+            // 0x01 = ACK_ERR_BACKEND_UNAVAIL.
             every { repo.getLastControllerAck(any()) } returns 1
 
             var failureReason: String? = null
@@ -231,15 +216,11 @@ class SatelliteConnectionTest {
             ) {}
             conn.attachSlot(slotId = "slot-1", controllerType = 0)
 
-            // An error ACK must not register the slot, so sendReport() stays
-            // gated — no input is streamed to a controller the satellite
-            // rejected.
             assertEquals(false, conn.slots.value["slot-1"]?.registered)
             conn.sendReport("slot-1", buttons = 1, lt = 0, rt = 0, lx = 0, ly = 0, rx = 0, ry = 0)
             verify(exactly = 0) {
                 repo.sendReport(any(), any(), any(), any(), any(), any(), any(), any(), any())
             }
-            // ...and the rejection reason reaches the caller for display.
             assertTrue(failureReason?.contains("backend", ignoreCase = true) == true)
         }
 
@@ -255,11 +236,6 @@ class SatelliteConnectionTest {
             conn.markConnected(handle = 8, connectionId = "c") {}
             conn.attachSlot(slotId = "slot-1", controllerType = 0)
 
-            // Post-Task-1.1 builds must set CAP_MOTION (0x0004) in the
-            // MSG_CONTROLLER_ADD capability word so the server knows to expect
-            // the MSG_MOTION IMU stream from this client. Default-arg
-            // motionCapsBitsFor returns CAP_MOTION_BIT_LEGACY, exercising the
-            // pre-composer behaviour.
             coVerify {
                 repo.addController(8, 0, match { (it and 0x0004) != 0 })
             }
@@ -268,12 +244,6 @@ class SatelliteConnectionTest {
     @Test
     fun `controller add CLEARS CAP_MOTION when motionCapsBitsFor returns 0`() =
         runTest {
-            // The headline PR3 fix: when the capability composer says "this
-            // slot has no gyro" OR "the user toggled motion off," the cap
-            // word on the wire must drop CAP_MOTION so the receiver's web
-            // UI is honest about which slots stream motion. A regression
-            // here is the existing bug (every controller silently advertises
-            // CAP_MOTION).
             every { repo.resetControllerAck(any()) } just Runs
             every { repo.startHeartbeat(any()) } just Runs
             every { repo.isConnectionAlive(any()) } returns false
@@ -291,12 +261,9 @@ class SatelliteConnectionTest {
             noMotion.markConnected(handle = 8, connectionId = "c") {}
             noMotion.attachSlot(slotId = "slot-1", controllerType = 0)
 
-            // Motion bit absent.
             coVerify {
                 repo.addController(8, 0, match { (it and 0x0004) == 0 })
             }
-            // Non-motion bits (analog triggers 0x0001 + rumble 0x0002) still set —
-            // the lambda only controls the motion bit, not the whole word.
             coVerify {
                 repo.addController(8, 0, match { (it and 0x0001) != 0 && (it and 0x0002) != 0 })
             }
@@ -307,10 +274,6 @@ class SatelliteConnectionTest {
     @Test
     fun `controller add SETS CAP_MOTION when motionCapsBitsFor returns the bit`() =
         runTest {
-            // The other side of the truth table: when the slot has motion
-            // (gyro present + user-enabled), the cap word must include
-            // CAP_MOTION. Pin the explicit-bit path (no default-arg
-            // accident).
             every { repo.resetControllerAck(any()) } just Runs
             every { repo.startHeartbeat(any()) } just Runs
             every { repo.isConnectionAlive(any()) } returns false
@@ -337,10 +300,6 @@ class SatelliteConnectionTest {
     @Test
     fun `motionCapsBitsFor is called with the SAME slotId being registered`() =
         runTest {
-            // Per-slot resolution is the whole point — two slots with
-            // different toggles must each see their own slotId. A regression
-            // that hardcodes a single slotId would silently apply slot-A's
-            // toggle to slot-B (or worse, return random results).
             every { repo.resetControllerAck(any()) } just Runs
             every { repo.startHeartbeat(any()) } just Runs
             every { repo.isConnectionAlive(any()) } returns false
@@ -383,15 +342,8 @@ class SatelliteConnectionTest {
             conn.markConnecting()
             conn.markConnected(handle = 5, connectionId = "c") {}
 
-            // Slot survives the IDLE → CONNECTED transition; registration is
-            // dispatched via scope.launch into the connection's scope, not the
-            // runTest scope, so we don't assert the addController call here —
-            // see "attachSlot when already connected" for the registration
-            // contract.
             assertTrue(conn.slots.value.containsKey("slot-1"))
         }
-
-    // ── Multi-slot ──────────────────────────────────────────────────────────
 
     @Test
     fun `attaching a second slot allocates a fresh controller index`() =
@@ -449,7 +401,6 @@ class SatelliteConnectionTest {
             assertNull(conn.slots.value["slot-A"])
 
             conn.attachSlot("slot-C", controllerType = 0)
-            // index 0 freed by the detach is reclaimed before allocating a new one.
             assertEquals(0, conn.slots.value["slot-C"]?.controllerIndex)
         }
 
@@ -464,7 +415,6 @@ class SatelliteConnectionTest {
             conn.markConnecting()
             conn.markConnected(handle = 6, connectionId = "c") {}
             conn.attachSlot("slot-A", controllerType = 0)
-            // Initial register pushed type=0; the change pushes type=1.
             conn.setControllerType("slot-A", controllerType = 1)
 
             verify { repo.sendControllerType(6, 0, 0) }
@@ -475,7 +425,6 @@ class SatelliteConnectionTest {
     @Test
     fun `setControllerType for an unregistered slot only updates local state`() =
         runTest {
-            // Not connected, so attachSlot stashes locally without registering.
             conn.attachSlot("slot-A", controllerType = 0)
             conn.setControllerType("slot-A", controllerType = 1)
 
@@ -504,10 +453,7 @@ class SatelliteConnectionTest {
             conn.attachSlot("slot-A", controllerType = 0)
             conn.attachSlot("slot-A", controllerType = 1)
 
-            // Only the first registration runs; setControllerType is the path
-            // for changing type on an attached slot.
             coVerify(exactly = 1) { repo.addController(1, 0, any()) }
-            // Type stays at the initial value because attachSlot is idempotent.
             assertEquals(0, conn.slots.value["slot-A"]?.controllerType)
         }
 
@@ -517,8 +463,6 @@ class SatelliteConnectionTest {
         conn.updateServer(newServer)
         assertEquals("Renamed", conn.server.value.name)
     }
-
-    // ── Transition guards ───────────────────────────────────────────────────
 
     @Test
     fun `markConnected from IDLE is rejected and leaves state IDLE`() {
@@ -539,8 +483,6 @@ class SatelliteConnectionTest {
 
         conn.markConnecting()
         conn.markConnected(handle = 1, connectionId = "first") {}
-        // A second attempt without going through disconnect must be rejected
-        // so we don't leak the first session's native handle.
         conn.markConnected(handle = 2, connectionId = "second") {}
 
         assertEquals(SatelliteSessionState.Live, conn.state.value)
@@ -573,13 +515,6 @@ class SatelliteConnectionTest {
         verify(exactly = 0) { repo.closeSocket(any()) }
     }
 
-    // ── Reactive cap-word refresh (MSG_CONTROLLER_CAPS_UPDATE / 0x000E) ──────
-    //
-    // Composer→wire reactivity: when the composer's `toCapBits(slotId)`
-    // changes after a slot has been registered, the connection pushes a
-    // mid-session caps update so the receiver's web-UI snapshot stays
-    // honest about what the dish is advertising right now.
-
     @Test
     fun `refreshCapsIfChanged sends a caps update when the lambda returns a new value`() =
         runTest {
@@ -588,10 +523,6 @@ class SatelliteConnectionTest {
             every { repo.isConnectionAlive(any()) } returns false
             every { repo.getLastControllerAck(any()) } returns 0
 
-            // Start the lambda returning the legacy "motion on" word. After
-            // the slot has registered we flip the lambda to "motion off" and
-            // refresh — the diff against lastAdvertisedCaps fires the wire
-            // update.
             var capsBit = 0x0004
             val reactive =
                 SatelliteConnection(
@@ -605,18 +536,13 @@ class SatelliteConnectionTest {
             reactive.markConnected(handle = 8, connectionId = "c") {}
             reactive.attachSlot(slotId = "slot-1", controllerType = 0)
 
-            // Sanity: the slot registered with CAP_MOTION.
             coVerify {
                 repo.addController(8, 0, match { (it and 0x0004) != 0 })
             }
 
-            // User toggles motion off — the composer would emit a new state
-            // and the manager would call refreshCapsIfChanged.
             capsBit = 0
             reactive.refreshCapsIfChanged()
 
-            // Wire update fires with the new (motion-off) caps word; non-motion
-            // bits (analog triggers + rumble) remain set.
             coVerify {
                 repo.sendControllerCapsUpdate(
                     8,
@@ -648,10 +574,6 @@ class SatelliteConnectionTest {
             steady.markConnected(handle = 8, connectionId = "c") {}
             steady.attachSlot(slotId = "slot-1", controllerType = 0)
 
-            // Call refresh multiple times with no upstream change. The
-            // diff against lastAdvertisedCaps short-circuits so no wire
-            // packets fire — important because composer emissions are
-            // frequent (hub.bindings churn re-runs the composer's combine).
             steady.refreshCapsIfChanged()
             steady.refreshCapsIfChanged()
             steady.refreshCapsIfChanged()
@@ -666,14 +588,9 @@ class SatelliteConnectionTest {
     @Test
     fun `refreshCapsIfChanged skips unregistered slots`() =
         runTest {
-            // The slot is attached but not registered (e.g. mid-handshake).
-            // Sending a caps update for an unregistered slot would tell the
-            // receiver about a controller it doesn't know — wasted packet
-            // at best, undefined behaviour at worst.
             every { repo.resetControllerAck(any()) } just Runs
             every { repo.startHeartbeat(any()) } just Runs
             every { repo.isConnectionAlive(any()) } returns false
-            // Never ACK — registration stays pending forever.
             every { repo.getLastControllerAck(any()) } returns -1
 
             var capsBit = 0x0004
@@ -689,13 +606,9 @@ class SatelliteConnectionTest {
             pending.markConnected(handle = 8, connectionId = "c") {}
             pending.attachSlot(slotId = "slot-pending", controllerType = 0)
 
-            // Flip caps while registration is still in flight (would-be-
-            // emitted via composer).
             capsBit = 0
             pending.refreshCapsIfChanged()
 
-            // No caps-update sent — the registration handshake will pick up
-            // the fresh value via motionCapsBitsFor on its own.
             coVerify(exactly = 0) {
                 repo.sendControllerCapsUpdate(any(), any(), any())
             }
@@ -706,9 +619,6 @@ class SatelliteConnectionTest {
     @Test
     fun `refreshCapsIfChanged is a no-op when the session is idle`() =
         runTest {
-            // No live handle → no wire send is even possible. Pin this so
-            // a composer emission landing during an Idle session doesn't
-            // attempt to push bytes through a closed socket.
             conn.refreshCapsIfChanged()
             coVerify(exactly = 0) {
                 repo.sendControllerCapsUpdate(any(), any(), any())
@@ -718,24 +628,12 @@ class SatelliteConnectionTest {
     @Test
     fun `registration closes the race when composer emits new caps mid-handshake`() =
         runTest {
-            // Sequence the test forces:
-            //   t=0  motionCapsBitsFor returns A (legacy on)
-            //   t=1  registerController reads A, calls addController(...,A)
-            //   t=2  composer emits B (motion off) BEFORE the ACK lands
-            //   t=3  ACK lands; registerController re-reads motionCapsBitsFor
-            //         and sees B; sends a caps-update with B; sets
-            //         lastAdvertisedCaps = B.
-            //
-            // Without this catch-up, the manager's later refreshCapsIfChanged
-            // would see lastAdvertisedCaps = A and newCaps from composer = B,
-            // fire the update… but only if composer emits AGAIN. If it
-            // doesn't, the slot stays with stale A on the wire forever.
             every { repo.resetControllerAck(any()) } just Runs
             every { repo.startHeartbeat(any()) } just Runs
             every { repo.isConnectionAlive(any()) } returns false
             every { repo.getLastControllerAck(any()) } returns 0
 
-            var capsBit = 0x0004 // value the lambda will return on the first call
+            var capsBit = 0x0004
             var callCount = 0
             val race =
                 SatelliteConnection(
@@ -745,8 +643,6 @@ class SatelliteConnectionTest {
                     controllerRepo = repo,
                     motionCapsBitsFor = {
                         callCount++
-                        // First call (at addController build time): A. Subsequent
-                        // calls (the post-ACK reconciliation read): B.
                         if (callCount == 1) capsBit else 0
                     },
                 )
@@ -754,9 +650,6 @@ class SatelliteConnectionTest {
             race.markConnected(handle = 8, connectionId = "c") {}
             race.attachSlot(slotId = "slot-race", controllerType = 0)
 
-            // The post-ACK reconciliation must have fired a caps-update
-            // carrying the *new* value (motion off), even though no
-            // external refresh was called.
             coVerify {
                 repo.sendControllerCapsUpdate(
                     8,

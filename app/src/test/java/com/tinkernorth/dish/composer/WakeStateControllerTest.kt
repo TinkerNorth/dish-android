@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.composer
 
@@ -22,19 +21,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Unit tests for [WakeStateController].
- *
- * The controller derives [WakeStateController.streamingSlotCount] +
- * [WakeStateController.shouldKeepScreenOn] from [ConnectionHub.bindings] ×
- * [ConnectionHub.connections] while ProcessLifecycle is STARTED, and owns the
- * partial wake lock. The tests drive the lifecycle through a stand-alone
- * [LifecycleRegistry] (createUnsafe so we don't need a Looper) and the hub
- * via [MutableStateFlow] stubs.
- *
- * PowerManager + WakeLock are mocked so we can assert acquire/release calls
- * without touching the real Android power service.
- */
 @OptIn(ExperimentalCoroutinesApi::class)
 class WakeStateControllerTest {
     private class TestOwner : LifecycleOwner {
@@ -53,21 +39,10 @@ class WakeStateControllerTest {
 
     @Before
     fun setUp() {
-        // Reset the shared upstream flows so a value leaked by an earlier test
-        // can't pollute the next one. With the Composer-based derivation, the
-        // forwarded `streamingSlotCount` is eager (it reflects whatever the
-        // upstream holds the moment the composer is built); the prior
-        // implementation hid leakage by only emitting after onStart.
         bindingsFlow.value = emptyMap()
         connectionsFlow.value = emptyList()
         wakeLock =
             mockk(relaxed = true) {
-                // The controller checks isHeld inside both `acquire()` (to
-                // short-circuit double acquisition) and `release()` (so we
-                // don't release a lock that isn't held). For the test we
-                // always return true: the controller already gates a fresh
-                // acquire on `wakeLock == null`, and we want release() to
-                // actually fire so we can verify the lifecycle.
                 every { isHeld } returns true
             }
         powerManager =
@@ -107,8 +82,6 @@ class WakeStateControllerTest {
         boundSlotIds = emptyList(),
     )
 
-    // ── Initial state ──────────────────────────────────────────────────────
-
     @Test
     fun `before ON_START both flows hold their initial defaults`() {
         val controller = WakeStateController(context, WakeStateComposer(hub, scope), scope)
@@ -126,8 +99,6 @@ class WakeStateControllerTest {
             verify(exactly = 0) { powerManager.newWakeLock(any(), any()) }
         }
 
-    // ── Streaming-state derivation ─────────────────────────────────────────
-
     @Test
     fun `bound slot on CONNECTED connection sets shouldKeepScreenOn`() =
         runTest(scope.testScheduler) {
@@ -142,9 +113,7 @@ class WakeStateControllerTest {
             verify(exactly = 1) {
                 powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, any())
             }
-            // The controller calls the timeout-bearing overload to satisfy
-            // lint's WakelockTimeout safety check; the no-arg `acquire()` is
-            // never used.
+            // Timeout overload required for lint's WakelockTimeout check.
             verify(exactly = 1) { wakeLock.acquire(any<Long>()) }
         }
 
@@ -167,8 +136,6 @@ class WakeStateControllerTest {
         runTest(scope.testScheduler) {
             val (controller, _) = buildAndStart()
 
-            // Stale binding to a connection that no longer appears in
-            // hub.connections (e.g. forgotten satellite): no streaming.
             bindingsFlow.value = mapOf("virtual" to "s:gone")
             scope.testScheduler.runCurrent()
 
@@ -199,7 +166,6 @@ class WakeStateControllerTest {
             scope.testScheduler.runCurrent()
             assertTrue(controller.shouldKeepScreenOn.value)
 
-            // Connection drops back to IDLE — the controller should release.
             connectionsFlow.value = listOf(summary("s:1", LinkState.Saved))
             scope.testScheduler.runCurrent()
 
@@ -217,9 +183,6 @@ class WakeStateControllerTest {
             bindingsFlow.value = mapOf("virtual" to "s:1")
             scope.testScheduler.runCurrent()
 
-            // Trigger another emission that doesn't change the keep-on
-            // boolean — count flips from 1 to 2 but shouldKeepScreenOn stays
-            // true. No second acquire.
             bindingsFlow.value = mapOf("virtual" to "s:1", "5" to "s:1")
             scope.testScheduler.runCurrent()
 
@@ -228,8 +191,6 @@ class WakeStateControllerTest {
             verify(exactly = 1) { powerManager.newWakeLock(any(), any()) }
             verify(exactly = 1) { wakeLock.acquire(any<Long>()) }
         }
-
-    // ── ON_STOP ────────────────────────────────────────────────────────────
 
     @Test
     fun `ON_STOP releases the wake lock and zeros both flows`() =
@@ -240,7 +201,7 @@ class WakeStateControllerTest {
             scope.testScheduler.runCurrent()
             assertTrue(controller.shouldKeepScreenOn.value)
 
-            owner.registry.currentState = Lifecycle.State.CREATED // ON_STOP
+            owner.registry.currentState = Lifecycle.State.CREATED
             scope.testScheduler.runCurrent()
 
             assertEquals(0, controller.streamingSlotCount.value)
@@ -263,10 +224,7 @@ class WakeStateControllerTest {
             owner.registry.currentState = Lifecycle.State.STARTED
             scope.testScheduler.runCurrent()
 
-            // Same hub state — collector picks up the still-CONNECTED summary
-            // and shouldKeepScreenOn flips back to true. Because release() in
-            // onStop nulls the cached `wakeLock` reference, the next acquire
-            // path goes through `powerManager.newWakeLock` a second time.
+            // onStop nulls the cached wakeLock so onStart goes through newWakeLock again.
             assertTrue(controller.shouldKeepScreenOn.value)
             assertEquals(1, controller.streamingSlotCount.value)
             verify(exactly = 2) { powerManager.newWakeLock(any(), any()) }
@@ -276,7 +234,6 @@ class WakeStateControllerTest {
     fun `ON_STOP without an active wake lock is a no-op on release`() =
         runTest(scope.testScheduler) {
             val (_, owner) = buildAndStart()
-            // No streaming ever happened — no lock acquired.
             owner.registry.currentState = Lifecycle.State.CREATED
             scope.testScheduler.runCurrent()
 

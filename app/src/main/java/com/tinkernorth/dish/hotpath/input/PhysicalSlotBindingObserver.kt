@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.hotpath.input
 
@@ -10,7 +9,6 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.jni.SatelliteNative
-import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -24,23 +22,7 @@ import kotlinx.coroutines.flow.onEach
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Process-scoped owner of the native pipeline's per-device → connection
- * bindings. Drives [SatelliteNative.bindPhysicalSlotSatellite] /
- * [SatelliteNative.bindPhysicalSlotBluetooth] / [SatelliteNative.unbindPhysicalSlot]
- * from the cross-product of:
- *   - [PhysicalGamepadRegistry.devices] — currently-attached gamepads
- *   - [ConnectionHub.bindings] — slot → connection routing
- *   - [ConnectionHub.connections] — live status of each routing target
- *   - each [SatelliteConnection.slots] — per-slot `registered` + `controllerIndex`
- *
- * Subscribing at the *process* lifecycle (not any activity's) means the
- * bindings survive the [com.tinkernorth.dish.ui.main.MainActivity] →
- * [com.tinkernorth.dish.ui.main.GamepadOverlayActivity] hand-off — without
- * this, the overlay would stop physical gamepads from passing through to the
- * server because the dashboard's onStop would tear every binding down right
- * as the overlay took focus.
- */
+// Process-scoped (not activity-scoped) so bindings survive MainActivity → GamepadOverlayActivity hand-off.
 @Singleton
 class PhysicalSlotBindingObserver
     @Inject
@@ -67,9 +49,6 @@ class PhysicalSlotBindingObserver
         override fun onStop(owner: LifecycleOwner) {
             job?.cancel()
             job = null
-            // Drop every native binding when the *app* fully backgrounds so no
-            // stale (deviceId → handle) mapping survives a session teardown.
-            // Re-derived on the next onStart from the freshest hub state.
             SatelliteNative.clearAllPhysicalSlots()
             lastBoundDeviceIds = emptySet()
         }
@@ -77,9 +56,7 @@ class PhysicalSlotBindingObserver
         @OptIn(ExperimentalCoroutinesApi::class)
         private fun stream(): Flow<BindingState> =
             satellite.connections.flatMapLatest { conns ->
-                // The outer Map only re-emits when a session is added/removed;
-                // we also need to re-push whenever an existing session's slot
-                // table flips `registered` so reports can actually flow.
+                // Outer Map only re-emits on session add/remove; slotsTrigger re-pushes when a session's slot flips `registered`.
                 val slotFlows = conns.values.map { it.slots }
                 val slotsTrigger: Flow<Unit> =
                     if (slotFlows.isEmpty()) flowOf(Unit) else combine(slotFlows) { Unit }
@@ -93,10 +70,7 @@ class PhysicalSlotBindingObserver
 
         private fun push(state: BindingState) {
             val present = state.devices.keys
-            // Release hub bindings for devices that just went away. Without
-            // this the satellite would keep the slot's controller index
-            // allocated and reports for re-added device ids could land on the
-            // wrong server-side controller.
+            // Without this, re-added device ids could land on the wrong server-side controller index.
             val disappeared = lastBoundDeviceIds - present
             for (id in disappeared) {
                 SatelliteNative.unbindPhysicalSlot(id)

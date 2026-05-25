@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.ui.main
 
@@ -9,21 +8,6 @@ import com.tinkernorth.dish.composer.LinkState
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * Integration tests for the picker filter against a realistic [MainUiState].
- *
- * The unit test in [ConnectionsVisibleInPickerTest] pins the pure rule;
- * this class drives it through the same shape the [ControllerAdapter] sees
- * at runtime — [ControllerSlot.boundConnectionId] derived from
- * [MainUiState.slots], a per-kind [ConnectionSummary] list from
- * [MainUiState.connections], and a virtual slot that's always present plus
- * physical slots that come and go.
- *
- * Each test models a step the user is likely to walk through, so a future
- * regression maps to a recognisable user-facing failure ("after unbind, the
- * offline row should disappear"). The "spec —" prefixed cases are direct
- * translations of the feature spec.
- */
 class PickerFromMainUiStateTest {
     private fun summary(
         id: String,
@@ -59,13 +43,10 @@ class PickerFromMainUiStateTest {
         boundConnectionId = boundTo,
     )
 
-    /** Convenience: filter the picker for the given slot using the state's connection list. */
     private fun pickerFor(
         state: MainUiState,
         slot: ControllerSlot,
     ): List<ConnectionSummary> = connectionsVisibleInPicker(state.connections, slot.boundConnectionId)
-
-    // ── Baseline ────────────────────────────────────────────────────────────
 
     @Test
     fun `default state has an empty picker for the virtual slot`() {
@@ -75,8 +56,6 @@ class PickerFromMainUiStateTest {
 
     @Test
     fun `freshly discovered satellites populate the picker even unbound`() {
-        // No bindings yet; everything online/ready/found should be claimable
-        // from the unbound virtual slot.
         val a = summary("s:1", LinkState.Connected)
         val b = summary("s:2", LinkState.Ready)
         val c = summary("s:3", LinkState.Found)
@@ -101,8 +80,6 @@ class PickerFromMainUiStateTest {
         assertEquals(emptyList<ConnectionSummary>(), pickerFor(state, state.virtualSlot))
     }
 
-    // ── Lifecycle steps the user actually walks ─────────────────────────────
-
     @Test
     fun `spec — after bind, picker still shows the bound connection`() {
         val online = summary("s:1", LinkState.Connected, boundSlots = listOf(VIRTUAL_SLOT_ID))
@@ -117,10 +94,6 @@ class PickerFromMainUiStateTest {
 
     @Test
     fun `spec — when the bound connection drops to Saved, picker keeps it as the holdover`() {
-        // The connection went offline while the user was bound. The summary
-        // reports LinkState.Saved but boundSlotIds still lists the slot — the
-        // hub keeps the binding until the user clears it or auto-reconnect
-        // restores the link.
         val offlineHeld = summary("s:1", LinkState.Saved, boundSlots = listOf(VIRTUAL_SLOT_ID))
         val state =
             MainUiState(
@@ -133,9 +106,6 @@ class PickerFromMainUiStateTest {
 
     @Test
     fun `spec — auto-recovery restores normal availability`() {
-        // After the Saved → Connected transition, the summary flips back to
-        // Connected; nothing about the bind has to change for the picker to
-        // render it as a normal online entry.
         val recovered = summary("s:1", LinkState.Connected, boundSlots = listOf(VIRTUAL_SLOT_ID))
         val state =
             MainUiState(
@@ -148,9 +118,6 @@ class PickerFromMainUiStateTest {
 
     @Test
     fun `spec — unbind while offline drops the row from the picker`() {
-        // The hub clears boundSlotIds on unbind, so the summary's bound list
-        // goes empty and the slot's boundConnectionId is null. The filter
-        // sees Saved + null and drops it.
         val nowUnboundOffline = summary("s:1", LinkState.Saved, boundSlots = emptyList())
         val state =
             MainUiState(
@@ -173,13 +140,8 @@ class PickerFromMainUiStateTest {
         assertEquals(listOf(stale), pickerFor(state, state.virtualSlot))
     }
 
-    // ── Multi-slot scenarios ────────────────────────────────────────────────
-
     @Test
     fun `two slots bound to two different live connections each see both`() {
-        // Two physical pads each bound to their own satellite. The picker is
-        // global — both pads see the full set of available connections; bind
-        // status only matters for the holdover rule.
         val a = summary("s:a", LinkState.Connected, boundSlots = listOf("p1"))
         val b = summary("s:b", LinkState.Connected, boundSlots = listOf("p2"))
         val state =
@@ -202,8 +164,6 @@ class PickerFromMainUiStateTest {
 
     @Test
     fun `slot A keeps offline holdover, slot B does not — bound-ness is per-slot`() {
-        // Slot A bound to Sat 1 (offline → held over for A only).
-        // Slot B unbound; Sat 1 should not appear in B's picker.
         val sat1Off = summary("s:1", LinkState.Saved, boundSlots = listOf("p1"))
         val sat2On = summary("s:2", LinkState.Connected)
         val state =
@@ -220,19 +180,13 @@ class PickerFromMainUiStateTest {
         val p1 = state.slots.first { it.id == "p1" }
         val p2 = state.slots.first { it.id == "p2" }
 
-        // p1 sees its offline holdover + the live alternative.
         assertEquals(listOf(sat1Off, sat2On), pickerFor(state, p1))
-        // p2 only sees the live one — Sat 1 is hidden there.
         assertEquals(listOf(sat2On), pickerFor(state, p2))
-        // Virtual is unbound, same as p2.
         assertEquals(listOf(sat2On), pickerFor(state, state.virtualSlot))
     }
 
     @Test
     fun `bound Bluetooth host that drops offline still shows in the picker`() {
-        // Bluetooth is single-host: HID Device profile only supports one
-        // active connection. When the host walks away the summary flips to
-        // Saved; the bound slot still wants the holdover.
         val btHostOffline =
             summary("bt:AA:BB", LinkState.Saved, kind = ConnectionKind.BLUETOOTH, boundSlots = listOf("p1"))
         val state =
@@ -243,7 +197,6 @@ class PickerFromMainUiStateTest {
 
         val p1 = state.slots.first { it.id == "p1" }
         assertEquals(listOf(btHostOffline), pickerFor(state, p1))
-        // Virtual is unbound — BT host is hidden there.
         assertEquals(emptyList<ConnectionSummary>(), pickerFor(state, state.virtualSlot))
     }
 
@@ -262,7 +215,6 @@ class PickerFromMainUiStateTest {
 
     @Test
     fun `recovery brings the bound row back to available styling for every slot`() {
-        // Pre-recovery: held-over offline only visible to the bound slot.
         val held = summary("s:1", LinkState.Saved, boundSlots = listOf("p1"))
         val pre =
             MainUiState(
@@ -273,7 +225,6 @@ class PickerFromMainUiStateTest {
         assertEquals(listOf(held), pickerFor(pre, p1))
         assertEquals(emptyList<ConnectionSummary>(), pickerFor(pre, pre.virtualSlot))
 
-        // Post-recovery: same id, now Connected. Visible to *every* slot.
         val recovered = summary("s:1", LinkState.Connected, boundSlots = listOf("p1"))
         val post =
             MainUiState(
@@ -284,8 +235,6 @@ class PickerFromMainUiStateTest {
         assertEquals(listOf(recovered), pickerFor(post, p1Post))
         assertEquals(listOf(recovered), pickerFor(post, post.virtualSlot))
     }
-
-    // ── Realistic dashboard ─────────────────────────────────────────────────
 
     @Test
     fun `crowded picker — one online, one connecting, one stale-held, one offline-unbound`() {
@@ -300,10 +249,6 @@ class PickerFromMainUiStateTest {
             )
 
         val virtualPicker = pickerFor(state, state.virtualSlot)
-        // s:4 is offline + unbound → hidden.
-        // s:3 is stale + bound to virtual → held over.
-        // s:1/s:2 are available → always shown.
-        // Order is the original input order.
         assertEquals(listOf(online, connecting, staleHeld), virtualPicker)
     }
 }

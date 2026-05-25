@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.core.model
 
@@ -7,12 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
 
-/**
- * Unit tests for model types: [ControllerEntry], [DiscoveredServer].
- */
 class ModelsTest {
-    // ── ControllerEntry defaults ──────────────────────────────────────────
-
     @Test
     fun `ControllerEntry has correct defaults`() {
         val entry = ControllerEntry(id = 1, name = "Test", controllerIndex = 0)
@@ -35,8 +29,6 @@ class ModelsTest {
         assertEquals(true, disconnected.isDisconnected)
         assertEquals(30, disconnected.disconnectTimeLeft)
     }
-
-    // ── DiscoveredServer ──────────────────────────────────────────────────
 
     @Test
     fun `DiscoveredServer data class equality`() {

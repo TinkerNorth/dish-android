@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.ui.common
 
@@ -16,19 +15,6 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 
-/**
- * Touch handling for [GamepadTouchView]. Owns the per-pointer-id tracking and
- * the [GamepadTouchView.GamepadState] mutation, but knows nothing about
- * drawing — it works against a [GamepadLayout] snapshot supplied by the
- * caller on each event.
- *
- * Pointer-id tracking is essential: a finger that lands on a button and then
- * drags off must still release on UP, otherwise the button bit stays held.
- * For sticks the displacement is also exposed via [leftStickDx]/[leftStickDy]
- * etc. so the View can render the thumb cap at the finger's position.
- *
- * Threading: assumes single-threaded use from the View's touch dispatch path.
- */
 internal class GamepadGestureRecognizer {
     var state: GamepadTouchView.GamepadState = GamepadTouchView.GamepadState()
         private set
@@ -60,31 +46,13 @@ internal class GamepadGestureRecognizer {
     private var lbPointerId = INVALID_POINTER
     private var rbPointerId = INVALID_POINTER
 
-    // ABXY is live-tracked, not additive: each pointer's current zone is
-    // recomputed on every MOVE so sliding from B into A drops B and picks up
-    // A (mirrors the d-pad's "hat follows the finger" contract). For multi-
-    // touch the state bits are the OR of every pointer's current zone.
+    // ABXY is live-tracked (not additive): each pointer's current zone is recomputed every
+    // MOVE so sliding from B into A drops B and picks up A.
     private val abxyPointerBits = mutableMapOf<Int, Int>()
     private val abxyMask =
         GamepadTouchView.BTN_A or GamepadTouchView.BTN_B or
             GamepadTouchView.BTN_X or GamepadTouchView.BTN_Y
 
-    /**
-     * Process a [MotionEvent] against the supplied [layout]. Mutates [state]
-     * and the per-stick displacement fields in place. The caller is
-     * responsible for invalidating the View.
-     *
-     * [onSampleApplied] fires after each *sample* has been applied so the
-     * caller can dispatch its listener per sample, not per event. For
-     * `ACTION_MOVE` this includes every historical sample carried by the
-     * `MotionEvent` plus the current one — Android coalesces multiple
-     * touch-panel reads at vsync, so a single `ACTION_MOVE` can carry several
-     * intermediate finger positions. Reading only `event.getX/getY` and
-     * notifying once would drop those intermediate positions, producing
-     * visible stutter on fast stick movements at the host (the in-between
-     * axis values never reach the wire). For non-MOVE actions the callback
-     * fires once. Pass `null` (the default) to suppress per-sample dispatch.
-     */
     fun onTouchEvent(
         event: MotionEvent,
         layout: GamepadLayout,
@@ -96,10 +64,7 @@ internal class GamepadGestureRecognizer {
                 onSampleApplied?.invoke()
             }
             MotionEvent.ACTION_MOVE -> {
-                // Drain historical samples first (oldest → newest) and notify
-                // per sample so each intermediate finger position becomes its
-                // own wire report. Per Android, only ACTION_MOVE carries a
-                // history; getHistoricalX/Y for any other action is undefined.
+                // Drain historical samples (oldest to newest) so vsync-coalesced intermediate finger positions each become a wire report.
                 val historySize = event.historySize
                 for (h in 0 until historySize) {
                     for (i in 0 until event.pointerCount) {
@@ -133,7 +98,6 @@ internal class GamepadGestureRecognizer {
         }
     }
 
-    /** Drop all touch state and zero the gamepad state. */
     fun reset() {
         state = GamepadTouchView.GamepadState()
         leftStickDx = 0f
@@ -168,7 +132,6 @@ internal class GamepadGestureRecognizer {
         val pickup = PICKUP_RADIUS_FACTOR
         val centerPickup = CENTER_BTN_PICKUP_FACTOR
 
-        // Sticks
         if (hypot(x - l.leftStickCx, y - l.leftStickCy) < l.stickRadius * pickup) {
             leftStickPointerId = pid
             return
@@ -177,7 +140,6 @@ internal class GamepadGestureRecognizer {
             rightStickPointerId = pid
             return
         }
-        // L3/R3 sticks (touch = button pressed + axis control)
         if (hypot(x - l.l3StickCx, y - l.l3StickCy) < l.l3StickRadius * pickup) {
             l3StickPointerId = pid
             state.buttons = state.buttons or GamepadTouchView.BTN_LS
@@ -188,8 +150,6 @@ internal class GamepadGestureRecognizer {
             state.buttons = state.buttons or GamepadTouchView.BTN_RS
             return
         }
-        // Triggers — binary press, tracked by pointer id so drag-off still
-        // releases cleanly on UP.
         if (l.ltRect.contains(x, y)) {
             ltPointerId = pid
             state.leftTrigger = TRIGGER_MAX
@@ -200,8 +160,6 @@ internal class GamepadGestureRecognizer {
             state.rightTrigger = TRIGGER_MAX
             return
         }
-        // Shoulders — pointer-id tracked so release works regardless of
-        // where the finger ends up on UP.
         if (l.lbRect.contains(x, y)) {
             lbPointerId = pid
             state.buttons = state.buttons or GamepadTouchView.BTN_LB
@@ -222,8 +180,6 @@ internal class GamepadGestureRecognizer {
             refreshAbxyButtons()
             return
         }
-        // Centre buttons — not pointer-tracked; cleared in handlePointerUp's
-        // fallthrough on any unmatched UP.
         if (hypot(x - l.selectCx, y - l.centerBtnCy) < l.smallBtnRadius * centerPickup) {
             state.buttons = state.buttons or GamepadTouchView.BTN_SELECT
             return
@@ -239,13 +195,6 @@ internal class GamepadGestureRecognizer {
         }
     }
 
-    /**
-     * Apply a single (x, y) sample for [pid] against the current per-pointer
-     * tracking. Called once per finger position — including historical
-     * samples drained out of an [MotionEvent] by [onTouchEvent]. Pure: takes
-     * coordinates by value so the caller can reuse it for both
-     * `event.getHistoricalX/Y(idx, h)` and `event.getX/Y(idx)`.
-     */
     @Suppress("CyclomaticComplexMethod", "LongMethod")
     private fun applyPointerMove(
         x: Float,
@@ -267,7 +216,6 @@ internal class GamepadGestureRecognizer {
             state.rightX = r.axisX
             state.rightY = r.axisY
         }
-        // L3 stick — same axes as L stick, plus L3 button held
         if (pid == l3StickPointerId) {
             val r = computeStickAxes((x - l.l3StickCx) / l.l3StickRadius, (y - l.l3StickCy) / l.l3StickRadius)
             l3StickDx = r.dx
@@ -275,7 +223,6 @@ internal class GamepadGestureRecognizer {
             state.leftX = r.axisX
             state.leftY = r.axisY
         }
-        // R3 stick — same axes as R stick, plus R3 button held
         if (pid == r3StickPointerId) {
             val r = computeStickAxes((x - l.r3StickCx) / l.l3StickRadius, (y - l.r3StickCy) / l.l3StickRadius)
             r3StickDx = r.dx
@@ -283,23 +230,11 @@ internal class GamepadGestureRecognizer {
             state.rightX = r.axisX
             state.rightY = r.axisY
         }
-        // Triggers are binary — no move-modulation. The DOWN/UP handlers
-        // set the value; MOVE is a no-op for trigger pointers.
-
-        // Live D-Pad tracking — once a pointer claims the d-pad, the angle
-        // from the d-pad center drives the hat for the rest of the gesture,
-        // even when the finger has dragged outside the d-pad's visible rect.
-        // Mirrors the analog sticks: drag past the well and direction stays
-        // registered (and re-resolves to whichever octant the finger now
-        // sits in). Cleared on UP/CANCEL.
+        // Once a pointer claims the d-pad, the angle from its centre drives the hat for the
+        // rest of the gesture, even when dragged outside the rect.
         if (pid == dpadPointerId) {
             updateDpad(x, y, l)
         }
-        // ABXY MOVE is live: the held bits track the finger's current zone,
-        // so sliding from one button into another replaces (rather than
-        // accumulates) — same contract as the d-pad's hat-switch follow.
-        // Zones extend infinitely past the visible cluster, so a drag in
-        // the same direction past the cluster boundary keeps the same bits.
         val currentBits = abxyPointerBits[pid]
         if (currentBits != null) {
             val newBits = computeAbxyZone(x, y, l)
@@ -361,9 +296,7 @@ internal class GamepadGestureRecognizer {
             state.rightTrigger = 0
             return
         }
-        // All button-region pointers clear by pointer ID, never by position —
-        // dragging the finger off the rect before release would otherwise
-        // leave the bit stuck.
+        // Button regions clear by pointer ID (never by position) so a drag-off before release doesn't leave the bit stuck.
         if (pid == dpadPointerId) {
             dpadPointerId = INVALID_POINTER
             state.hatSwitch = GamepadTouchView.HAT_NONE
@@ -371,8 +304,6 @@ internal class GamepadGestureRecognizer {
         }
         if (abxyPointerBits.containsKey(pid)) {
             abxyPointerBits.remove(pid)
-            // Other pointers may still be holding ABXY bits — re-OR what
-            // remains so the release only clears bits no one else is on.
             refreshAbxyButtons()
             return
         }
@@ -386,8 +317,7 @@ internal class GamepadGestureRecognizer {
             state.buttons = state.buttons and GamepadTouchView.BTN_RB.inv()
             return
         }
-        // Centre / stick-click buttons aren't tracked by id — drop all of
-        // them on any unmatched up.
+        // Centre / stick-click buttons aren't pointer-tracked — drop all on any unmatched up.
         state.buttons =
             state.buttons and
             (
@@ -412,10 +342,6 @@ internal class GamepadGestureRecognizer {
         val absDy = abs(dy)
         val major = max(absDx, absDy)
         val minor = min(absDx, absDy)
-        // Diagonal when the minor axis is within DPAD_DIAGONAL_THRESHOLD of
-        // the major. The two-axis HAT encoding can't represent left+right or
-        // up+down simultaneously, so picking a diagonal is a one-way choice
-        // — east-vs-west and north-vs-south fall out of the sign of dx/dy.
         val isDiagonal = (minor / major) >= DPAD_DIAGONAL_THRESHOLD
         val east = dx > 0
         val south = dy > 0
@@ -430,22 +356,6 @@ internal class GamepadGestureRecognizer {
             }
     }
 
-    /**
-     * Resolve a touch position to the set of ABXY bits its zone represents.
-     *
-     * The cluster is divided into nine zones around its centre:
-     *  - a centre disc (radius = [ABXY_CENTER_ZONE_FRACTION] of the centre →
-     *    button-centre distance) → all four buttons,
-     *  - four cardinal sectors → a single button (N=Y, S=A, E=B, W=X),
-     *  - four diagonal sectors → the two adjacent buttons (NE=Y+B, SE=A+B,
-     *    SW=A+X, NW=Y+X).
-     *
-     * Cardinal-vs-diagonal selection uses the same `min(|dx|,|dy|) /
-     * max(|dx|,|dy|) ≥ DPAD_DIAGONAL_THRESHOLD` test as the d-pad. Zones
-     * extend infinitely past the visible cluster — dragging far in one
-     * direction keeps the same bits held until the finger crosses into
-     * another zone.
-     */
     private fun computeAbxyZone(
         x: Float,
         y: Float,

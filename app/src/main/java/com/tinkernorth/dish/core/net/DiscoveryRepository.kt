@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.core.net
 
@@ -18,9 +17,6 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Repository handling server discovery and pairing via SatelliteNative.
- */
 @Singleton
 class DiscoveryRepository
     @Inject
@@ -30,14 +26,6 @@ class DiscoveryRepository
     ) {
         private val mutex = Mutex()
 
-        /**
-         * Discover satellites via two paths in parallel and merge by
-         * `ip:udpPort`: the legacy UDP broadcast beacon (native
-         * [SatelliteNative.discoverServers]) and mDNS / Bonjour
-         * ([MdnsDiscovery]). mDNS reaches subnets that drop broadcast; the
-         * beacon stays as the fallback for satellites that predate the mDNS
-         * responder.
-         */
         suspend fun discoverServers(
             port: Int,
             timeoutMs: Int,
@@ -61,11 +49,6 @@ class DiscoveryRepository
                 }
             }
 
-        /**
-         * PIN-pairing handshake — POST /api/pair on the satellite's HTTPS
-         * client server (port 9443). The request/response JSON is unchanged
-         * from the old raw-TCP pairing protocol; only the transport differs.
-         */
         suspend fun pair(
             ip: String,
             port: Int,
@@ -79,7 +62,6 @@ class DiscoveryRepository
                 }
             }
 
-        /** POST /api/connections over HTTPS. */
         suspend fun connect(
             ip: String,
             port: Int,
@@ -91,7 +73,6 @@ class DiscoveryRepository
                 }
             }
 
-        /** DELETE /api/connections/<id> over HTTPS. */
         suspend fun disconnect(
             ip: String,
             port: Int,
@@ -104,14 +85,6 @@ class DiscoveryRepository
                 }
             }
 
-        /**
-         * POST /api/devices/touchpad-mode over HTTPS. Server hot-applies to the
-         * live session and persists per-device so a re-connect reuses the same
-         * routing. The raw JSON reply is returned so the caller can decode
-         * `{"ok":true,"hotApplied":bool}` vs `{"error":"…"}` and surface a
-         * server-rejected mode (e.g. picking `ds4` against a macOS receiver
-         * that only advertises `off`) to the UI.
-         */
         suspend fun setTouchpadMode(
             ip: String,
             port: Int,
@@ -127,13 +100,6 @@ class DiscoveryRepository
         companion object {
             private const val TAG = "DiscoveryRepository"
 
-            /**
-             * Merge the two discovery paths by `ip:udpPort`, tagging each
-             * server's [DiscoveredServer.source]. A server heard on both paths
-             * becomes [DiscoverySource.BOTH]; otherwise it carries the path
-             * that surfaced it. Result is name-sorted. Pure + internal so it
-             * can be unit-tested without sockets.
-             */
             internal fun mergeDiscovered(
                 broadcast: List<DiscoveredServer>,
                 mdns: List<DiscoveredServer>,

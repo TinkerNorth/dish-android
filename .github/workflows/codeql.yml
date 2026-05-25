@@ -65,8 +65,7 @@ jobs:
       - name: Perform CodeQL analysis
         # SARIF upload requires GitHub Advanced Security on private repos.
         # `continue-on-error` keeps the analysis running and surfacing
-        # findings in the logs while GHAS enablement is still pending —
-        # see HANDOFF.md item 5.
+        # findings in the logs while GHAS enablement is still pending.
         continue-on-error: true
         uses: github/codeql-action/analyze@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4.35.2
         with:

@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.di
 
@@ -23,7 +22,6 @@ import kotlinx.serialization.json.Json
 import javax.inject.Qualifier
 import javax.inject.Singleton
 
-/** Marker for the long-lived UDP/HTTP/BT/JNI IO dispatcher (Dispatchers.IO in prod). */
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class IoDispatcher
@@ -31,23 +29,8 @@ annotation class IoDispatcher
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
-    /**
-     * Process scope used by every @Singleton flow collector. Two
-     * non-defaults make this load-bearing:
-     *
-     *  - [CoroutineExceptionHandler] — without it, an uncaught exception
-     *    inside any composer's combine block (e.g. an unchecked-cast
-     *    regression in an upstream payload shape) silently kills that
-     *    composer's collection for the rest of the process. A crash that
-     *    doesn't crash. With it, the failure lands in logcat / crash
-     *    reporting where it can be diagnosed.
-     *  - [SupervisorJob] — keeps a single failed child from cancelling
-     *    siblings; one broken composer must not take down the rest.
-     *
-     * The default dispatcher stays [Dispatchers.Default] because the
-     * majority of work on this scope is composer combine blocks (CPU). IO
-     * sites opt into the injected `@IoDispatcher` so tests can swap them.
-     */
+    // SupervisorJob + handler: one composer's combine throwing must not silently
+    // kill its collection or cancel siblings.
     @Provides
     @Singleton
     fun provideApplicationScope(): CoroutineScope {
@@ -62,12 +45,7 @@ object AppModule {
         return CoroutineScope(SupervisorJob() + Dispatchers.Default + handler)
     }
 
-    /**
-     * Injectable IO dispatcher. Production binds to [Dispatchers.IO]; tests
-     * override with `UnconfinedTestDispatcher` so the IO branches of
-     * `SatelliteConnectionManager.openSession` and friends become reachable
-     * from `runTest`-driven unit tests.
-     */
+    // Injected so tests can swap in UnconfinedTestDispatcher.
     @Provides
     @Singleton
     @IoDispatcher
@@ -82,13 +60,7 @@ object AppModule {
             encodeDefaults = true
         }
 
-    /**
-     * A fresh [HidProxyClient] per session start — each profile-proxy binding
-     * is single-use from Android's point of view, so the session allocates a
-     * new instance every time it enters [com.tinkernorth.dish.source.bluetooth.BluetoothSessionState.Acquiring].
-     * On API < 28 the factory returns a no-op stub; the FSM will surface a
-     * Failed state when it tries to acquire.
-     */
+    // Fresh client per session: Android's profile-proxy binding is single-use.
     @Provides
     @Singleton
     fun provideHidProxyFactory(

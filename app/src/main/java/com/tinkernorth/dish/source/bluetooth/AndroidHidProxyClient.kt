@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.bluetooth
 
@@ -17,15 +16,6 @@ import com.tinkernorth.dish.core.input.BluetoothGamepad
 import com.tinkernorth.dish.core.input.REPORT_ID
 import com.tinkernorth.dish.core.input.buildHidDescriptor
 
-/**
- * Android implementation of [HidProxyClient] backed by
- * [android.bluetooth.BluetoothHidDevice]. Each instance owns exactly one
- * profile-proxy binding; [unregisterAndRelease] tears it down idempotently
- * and clears every framework handle so the session can allocate a fresh
- * [AndroidHidProxyClient] for the next connect attempt.
- *
- * Requires API 28+. Callers must hold BLUETOOTH_CONNECT on API 31+.
- */
 @RequiresApi(Build.VERSION_CODES.P)
 @SuppressLint("MissingPermission")
 class AndroidHidProxyClient(
@@ -49,10 +39,6 @@ class AndroidHidProxyClient(
             events.onError("Bluetooth is not available or not enabled")
             return
         }
-        // BLUETOOTH_CONNECT may be revoked between sessions on API 31+. The
-        // foreground observer's auto-reconnect path bypasses ConnectionsActivity's
-        // permission flow, so a denial here surfaces as SecurityException unless
-        // we route it through the events channel as a clean Failed state.
         try {
             adapter.getProfileProxy(context, profileListener, BluetoothProfile.HID_DEVICE)
         } catch (e: SecurityException) {
@@ -121,8 +107,7 @@ class AndroidHidProxyClient(
     override fun sendReport(report: ByteArray): Boolean {
         val hid = hidDevice ?: return false
         val device = connectedDevice ?: return false
-        // Strip the report-id byte: BluetoothHidDevice.sendReport takes it
-        // separately from the payload (see buildHidReport wire layout).
+        // Strip report-id byte: BluetoothHidDevice.sendReport takes it separately from the payload.
         return hid.sendReport(device, REPORT_ID, report.sliceArray(1 until report.size))
     }
 
@@ -139,8 +124,6 @@ class AndroidHidProxyClient(
         currentProfile = null
         events = null
     }
-
-    // ── Framework callbacks ──────────────────────────────────────────────
 
     private val profileListener =
         object : BluetoothProfile.ServiceListener {

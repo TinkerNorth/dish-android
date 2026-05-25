@@ -15,8 +15,8 @@
 
     `elevation_raised` (2dp) and `elevation_modal` (12dp) were removed in
     the post-Phase-4 cleanup — no current callsite uses them. Re-introduce
-    when a surface needs to pin to the canonical scale (see DESIGN_SYSTEM.md
-    "When to add a new token").
+    when a surface needs to pin to the canonical scale (see
+    docs/design-system.md "When to add a new token").
 -->
 <resources>
     <dimen name="elevation_none">0dp</dimen>

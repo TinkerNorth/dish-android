@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.system
 
@@ -21,25 +20,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Process-scoped monitor for bond-state / key-missing events on hosts we've
- * remembered. When a previously-bonded host loses its side of the key
- * (peer factory-reset, OS reinstall, BT plist wiped) the system fires
- * [ACTION_KEY_MISSING] and disconnects with `HCI_ERR_AUTH_FAILURE` —
- * invisible to the HID profile callbacks, so without this monitor the app's
- * only visible symptom is "stuck on Registered, never reaches Connected."
- *
- * Sole responsibility: translate the broadcast into a [BluetoothGamepadRegistry]
- * stale marker. The user-facing banner is rendered by activity-side
- * observers of [BluetoothGamepadRegistry.staleBtIds] — that way each
- * activity binds, reads the current state, and surfaces its own Snackbar
- * rather than the data layer trying to push a one-shot notification through
- * a queue that has no idea which activity (if any) is foreground.
- *
- * This split (data layer marks state, UI layer renders) also fixes the
- * "banner re-shows on every activity switch" bug that came from
- * cross-activity replay of one-shot posts.
- */
 @Singleton
 class BluetoothBondMonitor
     @Inject

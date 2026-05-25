@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish
 
@@ -10,16 +9,6 @@ import com.tinkernorth.dish.ui.main.MainActivity
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * Smoke test: prove the process can start MainActivity and reach RESUMED
- * without crashing. This is intentionally minimal — it catches catastrophic
- * regressions (Hilt graph misconfiguration, missing AndroidManifest entries,
- * native-load failures on an unsupported emulator ABI) that unit tests with
- * mocked Android framework cannot.
- *
- * Run on a connected device or emulator:
- *   ./gradlew connectedDebugAndroidTest
- */
 @RunWith(AndroidJUnit4::class)
 class MainActivityLaunchTest {
     @Test

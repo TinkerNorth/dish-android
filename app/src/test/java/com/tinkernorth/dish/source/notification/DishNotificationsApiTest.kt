@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.notification
 
@@ -13,18 +12,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Pure-JVM tests for [DishNotifications]'s posting + dismissal API. No
- * lifecycle, no renderer, no Android — just the SharedFlow contract and the
- * value-mapping convenience builders.
- *
- * The attachment / rendering side is covered by [DishNotificationsAttachmentTest]
- * and [DishNotificationsTransitionTest].
- */
 @OptIn(ExperimentalCoroutinesApi::class)
 class DishNotificationsApiTest {
-    // ── id assignment ──────────────────────────────────────────────────────
-
     @Test
     fun `post returns monotonically increasing ids starting from 1`() {
         val notifications = DishNotifications()
@@ -43,8 +32,6 @@ class DishNotificationsApiTest {
         val b = notifications.post(title = "same")
         assertNotEquals(a, b)
     }
-
-    // ── posts SharedFlow contract ─────────────────────────────────────────
 
     @Test
     fun `posts emits the notification with all fields populated`() =
@@ -81,7 +68,7 @@ class DishNotificationsApiTest {
                     action =
                         DishNotification.Action(
                             label = "RETRY",
-                            handler = { /* no-op */ },
+                            handler = { },
                         ),
                 )
                 val emitted = awaitItem()
@@ -94,21 +81,15 @@ class DishNotificationsApiTest {
     fun `posts has replay=0 — late subscriber sees only future emissions`() =
         runTest {
             val notifications = DishNotifications()
-            // Emit while there's no subscriber. With replay=0 these will not
-            // be replayed to whoever attaches next.
             notifications.post(title = "early")
             notifications.posts.test {
-                // Attach now and post once more.
                 val id = notifications.post(title = "late")
                 val seen = awaitItem()
                 assertEquals(id, seen.id)
                 assertEquals("late", seen.title)
-                // Critically: we never see "early".
                 cancelAndIgnoreRemainingEvents()
             }
         }
-
-    // ── dismissals SharedFlow contract ────────────────────────────────────
 
     @Test
     fun `dismiss emits the id on the dismissals flow`() =
@@ -124,8 +105,6 @@ class DishNotificationsApiTest {
     @Test
     fun `dismiss of an unknown id does not throw and still emits`() =
         runTest {
-            // The class itself doesn't track "known" ids — dismissal is fire and
-            // forget; the attachment side decides whether the id is live.
             val notifications = DishNotifications()
             notifications.dismissals.test {
                 notifications.dismiss(id = 9999L)
@@ -145,8 +124,6 @@ class DishNotificationsApiTest {
                 cancelAndIgnoreRemainingEvents()
             }
         }
-
-    // ── convenience builders: severity ────────────────────────────────────
 
     @Test
     fun `info builder posts INFO severity`() =
@@ -192,8 +169,6 @@ class DishNotificationsApiTest {
             }
         }
 
-    // ── convenience builders: default durations ───────────────────────────
-
     @Test
     fun `info defaults to DURATION_SHORT`() =
         runTest {
@@ -219,9 +194,6 @@ class DishNotificationsApiTest {
     @Test
     fun `warn defaults to DURATION_LONG — regression for prior persistent-by-default bug`() =
         runTest {
-            // Earlier the default for WARN/ERROR was PERSISTENT, which caused
-            // transient failures to sit on screen forever. The fix made
-            // auto-dismiss the default and PERSISTENT explicit opt-in.
             val notifications = DishNotifications()
             notifications.posts.test {
                 notifications.warn(title = "x")
@@ -242,8 +214,6 @@ class DishNotificationsApiTest {
                 cancelAndIgnoreRemainingEvents()
             }
         }
-
-    // ── duration overrides ────────────────────────────────────────────────
 
     @Test
     fun `explicit durationMs overrides severity default`() =
@@ -266,8 +236,6 @@ class DishNotificationsApiTest {
                 cancelAndIgnoreRemainingEvents()
             }
         }
-
-    // ── key + body + glyph propagation ────────────────────────────────────
 
     @Test
     fun `post propagates body and glyph and key`() =
@@ -299,12 +267,8 @@ class DishNotificationsApiTest {
             }
         }
 
-    // ── post does not block under burst load ──────────────────────────────
-
     @Test
     fun `burst posts do not block — buffer absorbs them`() {
-        // No subscriber attached. With extraBufferCapacity=16 + DROP_OLDEST,
-        // every post() must return promptly (tryEmit is non-suspending).
         val notifications = DishNotifications()
         val ids = (1..100).map { notifications.post(title = "burst-$it") }
         assertEquals(100, ids.size)
