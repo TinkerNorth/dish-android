@@ -595,7 +595,6 @@ class ConnectionsActivity : AppCompatActivity() {
             val needed =
                 arrayOf(
                     Manifest.permission.BLUETOOTH_CONNECT,
-                    Manifest.permission.BLUETOOTH_ADVERTISE,
                 ).filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
             if (needed.isNotEmpty()) {
                 btPermissionLauncher.launch(needed.toTypedArray())
