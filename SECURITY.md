@@ -25,7 +25,7 @@ Use one of:
 1. **GitHub private vulnerability reporting** — open the repo, click
    *Security → Report a vulnerability*. This is preferred because it
    creates a tracked advisory and a private discussion thread.
-2. **Email** — `security@tinkernorth.invalid` (PGP key on request).
+2. **Email** — `security@tinkernorth.com` (PGP key on request).
    Include the repo, version (commit SHA or release tag), reproduction
    steps, and impact.
 
