@@ -1,0 +1,29 @@
+<!-- "contrast" — Lucide-style theme/appearance glyph. Outer circle outline
+     plus the right half filled, signalling the day/night split the
+     Appearance setting toggles. Tinted at the callsite via
+     `Widget.Dish.Icon.Card` (which applies `tint=colorPrimary`), so the
+     baked #4FE3FF here is irrelevant in practice — it's only the alpha
+     mask that gets carried through. Used as the row glyph on the Settings
+     → Appearance section's "Theme" row. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Outer circle: stroke only. -->
+    <path
+        android:strokeColor="#4FE3FF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M12,2 A10,10 0 1,1 12,22 A10,10 0 1,1 12,2 Z" />
+    <!-- Right half: filled to communicate the day/night split. The path
+         walks the vertical diameter from (12,2) down to (12,22), then the
+         arc back up around the right side. Stroke alpha is 0 so only the
+         filled half-disc contributes to the alpha mask. -->
+    <path
+        android:strokeWidth="0"
+        android:fillColor="#4FE3FF"
+        android:pathData="M12,2 L12,22 A10,10 0 0,0 12,2 Z" />
+</vector>

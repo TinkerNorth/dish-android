@@ -85,18 +85,27 @@ fun AppCompatActivity.attachGamepadHost(
  * padding on [root]. Required for `targetSdk` ≥ 35 (Android 15 enforces
  * edge-to-edge regardless of the deprecated `fitsSystemWindows` flag).
  *
- * Both bars use [SystemBarStyle.dark] with a transparent scrim. The
- * `dark` style forces light bar icons regardless of the device's day /
- * night mode — required because Theme.Dish renders the same dark navy
- * chrome in both modes. The default [SystemBarStyle.auto] would key off
- * `UI_MODE_NIGHT_NO` in light mode and pick light scrim + dark icons,
- * which would render invisibly against our dark window background.
+ * Both bars use [SystemBarStyle.auto] with a transparent scrim on both
+ * sides. `auto` keys off the resolved uiMode — when Dish renders the
+ * light theme (day mode, or user-opted "Light" in the Appearance setting)
+ * the bars pick DARK icons on a light scrim so they read against the
+ * cloud chrome; when Dish renders dark (night mode, or user-opted
+ * "Dark") the bars pick LIGHT icons on a dark scrim so they read against
+ * the navy chrome. This replaces the prior unconditional
+ * `SystemBarStyle.dark()` which forced light icons regardless of theme —
+ * correct when Dish was dark-only, but it would render invisible icons
+ * on the new light theme.
+ *
+ * AppCompatDelegate.setDefaultNightMode (driven by
+ * [com.tinkernorth.dish.source.store.ThemePreferenceStore]) flips the
+ * resolved uiMode the same way a system day/night change does, so the
+ * user's explicit "Light" / "Dark" choice flows through to the bar
+ * style without needing to re-call this function.
  *
  * The theme-level `android:windowLightStatusBar` /
- * `windowLightNavigationBar` attrs are NOT used for this — the runtime
- * SystemBarStyle takes precedence, works across the full minSdk range
- * (the windowLight* attrs require API 23 / 27 respectively), and keeps
- * the day / night theme files identical.
+ * `windowLightNavigationBar` attrs are NOT used — the runtime
+ * SystemBarStyle takes precedence and works across the full minSdk
+ * range (the windowLight* attrs require API 23 / 27 respectively).
  *
  * [root] receives `systemBars` insets as padding so content doesn't draw
  * under the status / navigation bars. Callers should pass the binding root
@@ -110,7 +119,7 @@ fun AppCompatActivity.attachGamepadHost(
  * is for the standard chrome screens (dashboard, connections, settings).
  */
 fun AppCompatActivity.applyDishSystemBars(root: View) {
-    val barStyle = SystemBarStyle.dark(Color.TRANSPARENT)
+    val barStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT)
     enableEdgeToEdge(statusBarStyle = barStyle, navigationBarStyle = barStyle)
     ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
         val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())

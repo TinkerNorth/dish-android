@@ -1,25 +1,55 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    SEMANTIC COLOR TOKENS — names by role, mapped to primitives in
-    `colors_primitives.xml`. This is the file every layout XML, drawable,
-    style, and Kotlin source should reference.
+    LIGHT-MODE SEMANTIC COLOR TOKENS — names by role, mapped to primitives
+    in `colors_primitives.xml`. This is the file every layout XML,
+    drawable, style, and Kotlin source consults at resource-resolution
+    time when the device is in DAY mode (or the user has opted into
+    the light theme via the in-app Appearance setting — AppCompatDelegate's
+    night-mode flag drives Android's resource resolution the same way a
+    system uiMode change does).
+
+    The DARK-mode counterpart lives in `values-night/colors.xml` and
+    overrides this file's bindings whenever the night qualifier wins.
+    Both files share the SAME semantic names so every consumer (layouts,
+    drawables, state-list colors, styles) reads the right tone for the
+    current mode without callsite knowledge of which mode is active.
 
     Two families:
       - Material slots (`colorPrimary`, `colorOnSurface`, `colorSurfaceVariant`,
         the M3 container hierarchy `colorSurfaceContainer*`, the inverse
         family `colorInverseSurface` / `colorInverseOnSurface` /
         `colorInversePrimary`, the tertiary role `colorTertiary*`, etc.) —
-        consumed by the Theme.Dish theme + every Material widget. The
-        post-Phase-4 audit pins the full M3 surface + container + tertiary +
-        inverse family so M3 defaults never compute off-brand tones from
-        the platform tonal palette.
+        consumed by the Theme.Dish theme + every Material widget. The full
+        M3 surface + container + tertiary + inverse family is pinned in
+        both day and night files so M3 defaults never compute off-brand
+        tones from the platform tonal palette.
       - Dish-specific roles (`colorMuted`, `colorCardStroke`,
-        `colorOverlayScrim`, `colorIconContainerFill`) — named for the visual
-        intent at the callsite. Note `colorIconContainerFill` was previously
-        named `colorSurfaceTint`; the rename was prompted by the M3 audit
-        because the old name implied the token backed Material's tonal
-        elevation overlay (it didn't, and Material 1.14's overlay is gated
-        by `elevationOverlayEnabled` — disabled in Theme.Dish).
+        `colorOverlayScrim`, `colorIconContainerFill`) — named for the
+        visual intent at the callsite.
+
+    Light-mode design rationale:
+      - Surfaces use the cool-tinted `cloud_*` ramp (faint blue-grey)
+        rather than a pure neutral, so the brand's deep-space accent
+        carries through both themes instead of feeling tacked-on in light.
+      - Body text uses `navy_900` (the same primitive that backs the
+        DARK theme's background) — the brand's darkest navy becomes the
+        text colour in light mode, completing the inversion.
+      - `colorPrimary` (signal_cyan_500) stays unchanged across both
+        modes — the brand cyan is bright enough to read on white surfaces
+        and saturated enough to read on the navy chrome. `colorPrimaryDark`
+        (signal_cyan_700, the mid-saturation teal) backs filled buttons
+        in both modes for the same reason.
+      - The alpha-derived cyan family (signal_cyan_100/200/300) is also
+        mode-neutral: composited over a light cloud surface, the same
+        18%-alpha cyan produces a pale-cyan outline; composited over
+        navy_800, it produces the same brand-cyan tint just on a darker
+        base. Stroke / outline / icon-container fill resolve correctly
+        in both directions without needing dedicated light primitives.
+      - Tonal containers (Primary / Error / Tertiary) DO need dedicated
+        light primitives because they must be OPAQUE — the M3 on/container
+        contrast guarantee assumes a fully-resolved container colour.
+        `signal_cyan_50` / `red_100` / `amber_100` back the light versions;
+        their *_900 counterparts back the dark versions.
 
     If you're tempted to put a literal `#…` in a layout, look here first.
     A new semantic name with a primitive ref behind it is almost always
@@ -27,155 +57,117 @@
 -->
 <resources>
     <!-- ===== Material surface + on-surface ===== -->
-    <color name="colorBackground">@color/navy_900</color>
-    <color name="colorSurface">@color/navy_800</color>
+    <color name="colorBackground">@color/cloud_200</color>
+    <color name="colorSurface">@color/cloud_50</color>
+    <!-- colorOnPrimary stays navy_900 in BOTH modes: the primary fill
+         (`colorPrimary` = signal_cyan_500) is bright cyan in both modes,
+         so dark text reads on it regardless of the underlying surface. -->
     <color name="colorOnPrimary">@color/navy_900</color>
-    <color name="colorOnSurface">@color/paper_50</color>
+    <color name="colorOnSurface">@color/navy_900</color>
 
     <!-- ===== M3 surface + outline variants =====
-         M3 widgets (dividers, switch tracks, alert dialog body bg,
-         MaterialDivider, LinearProgressIndicator track, …) reach for
-         these beyond the basic surface/onSurface/outline pair. Pinning
-         them keeps M3's defaults from computing pale neutrals that
-         don't match the navy palette.
-
-         `colorOutlineVariant` deliberately uses a neutral navy lift
-         (navy_650) instead of a cyan-alpha tint — that slot drives
-         MaterialDivider, the unselected MaterialSwitch track, dropdown
-         menu separators, and other structural dividers. Putting the
-         brand accent there bled the cyan into every quiet hierarchy
-         element; reserving cyan for the load-bearing `colorOutline`
-         (card strokes, focus rings) and using a desaturated navy here
-         gives the eye somewhere to rest. -->
-    <color name="colorSurfaceVariant">@color/navy_700</color>
-    <color name="colorOnSurfaceVariant">@color/slate_300</color>
-    <color name="colorOutlineVariant">@color/navy_650</color>
+         `colorOutlineVariant` uses a quiet cloud lift (cloud_400) rather
+         than a cyan-alpha tint — that slot drives MaterialDivider, the
+         unselected MaterialSwitch track, dropdown menu separators, and
+         other structural dividers. Cyan on `colorOutline` (card strokes,
+         focus rings) is load-bearing; cyan on every quiet structural
+         element would bleed the accent everywhere. -->
+    <color name="colorSurfaceVariant">@color/cloud_400</color>
+    <color name="colorOnSurfaceVariant">@color/slate_500</color>
+    <color name="colorOutlineVariant">@color/cloud_400</color>
 
     <!-- ===== M3 surface container hierarchy =====
-         M3's replacement for elevation overlays as the way to communicate
-         depth. Five tones (Lowest → Highest) plus the orthogonal Dim/Bright
-         pair. Pinned to the navy ramp so MaterialAlertDialog body
-         (containerHigh), BottomSheet (containerLow), NavigationBar
-         (container), MenuPopup (container), DatePicker / TimePicker
-         (containerHigh), and any future M3 elevated surface inherits a
-         navy tone instead of an M3-default grey-blue.
+         M3 light-mode spec ramps surface containers from the lightest
+         (Lowest = page surface) up through progressively darker tints
+         (Highest = most-elevated tier). The Dim/Bright pair is the
+         orthogonal axis: `colorSurfaceDim` is *darker* than surface in
+         light mode (it's the "recessed" companion); `colorSurfaceBright`
+         is the lightest tone (sits at white).
 
-         In M3 dark mode the spec keeps surface and surfaceDim at roughly
-         the same tone (light-theme is where the Dim distinction matters);
-         our `colorSurfaceDim` therefore aliases navy_800 here even though
-         the *semantic* `colorSurfaceDim` token below still maps to navy_700
-         for legacy consumers (GamepadTouchView's stick-recess paint, the
-         empty-state surfaces). The two coexist because the legacy token
-         was repurposed before the M3 attr family was pinned.
-
-         `colorSurfaceContainerHighest = navy_700` deliberately equals
-         `colorSurfaceVariant` — both M3 attrs read the same tone in dark
-         mode per spec (the variant slot is for *dividers/switch tracks*
-         at the same tone, not a separate ramp). -->
-    <color name="colorSurfaceContainerLowest">@color/navy_900</color>
-    <color name="colorSurfaceContainerLow">@color/navy_850</color>
-    <color name="colorSurfaceContainer">@color/navy_800</color>
-    <color name="colorSurfaceContainerHigh">@color/navy_750</color>
-    <color name="colorSurfaceContainerHighest">@color/navy_700</color>
-    <color name="colorM3SurfaceDim">@color/navy_800</color>
-    <color name="colorSurfaceBright">@color/navy_650</color>
+         The legacy `colorSurfaceDim` token immediately below this block
+         is the Dish-specific "slightly lifted from surface" role — it
+         aliases `cloud_400` (the same tone as `colorSurfaceVariant`) so
+         empty-state surfaces and the touchpad-stick recessed background
+         still read as a single recessed tier in light mode. -->
+    <color name="colorSurfaceContainerLowest">@color/cloud_50</color>
+    <color name="colorSurfaceContainerLow">@color/cloud_100</color>
+    <color name="colorSurfaceContainer">@color/cloud_200</color>
+    <color name="colorSurfaceContainerHigh">@color/cloud_300</color>
+    <color name="colorSurfaceContainerHighest">@color/cloud_400</color>
+    <color name="colorM3SurfaceDim">@color/cloud_300</color>
+    <color name="colorSurfaceBright">@color/cloud_50</color>
 
     <!-- ===== M3 inverse family =====
-         Used by Material Snackbar (the default surface — our DishNotifications
-         renderer skins this for severity, but plain `Snackbar.make()` from
-         any code path that hasn't been migrated would render with these),
-         the InverseTextButton style inside it, and any future M3 surface
-         that wants a high-contrast inverted treatment.
+         Inverse pairs DARK against the light theme so the "you have a
+         transient message" surface reads as a different elevation tier
+         than the light cards behind it. The same primitives that back
+         the *default* surface in dark mode (navy_900 / paper_50) back
+         the *inverse* surface here — the inversion is symmetric. -->
+    <color name="colorSurfaceInverse">@color/navy_900</color>
+    <color name="colorOnSurfaceInverse">@color/paper_50</color>
+    <color name="colorPrimaryInverse">@color/signal_cyan_500</color>
 
-         Inverse pairs intentionally LIGHT against the dark theme so the
-         "you have a transient message" surface reads as a different
-         elevation tier than the dark cards behind it.
-
-         Naming follows the Material 1.14 theme-attr convention
-         (`colorSurfaceInverse` / `colorOnSurfaceInverse` /
-         `colorPrimaryInverse`) — M3 docs use the reversed
-         `colorInverseSurface` form, but the library hasn't standardized
-         on the renamed attrs yet. Track the library; rename if 1.15+
-         flips. -->
-    <color name="colorSurfaceInverse">@color/paper_50</color>
-    <color name="colorOnSurfaceInverse">@color/navy_900</color>
-    <color name="colorPrimaryInverse">@color/signal_cyan_700</color>
-
-    <!-- M3 `colorScrim` (modal sheet / nav drawer scrim base) is NOT
-         pinned: Material 1.14 doesn't expose it as a theme attr. The
-         existing `colorOverlayScrim` token below (ink_900 @ 80% alpha)
-         continues to back the only scrim consumer we have today (the
-         low-power HUD). Re-evaluate if we adopt a BottomSheet that
-         needs a separate base + alpha and Material has shipped the
-         attr by then. -->
-
-
-    <!-- ===== Primary + variants ===== -->
+    <!-- ===== Primary + variants =====
+         Brand cyan reads on both themes. signal_cyan_500 (bright cyan)
+         is `colorPrimary`; signal_cyan_700 (mid-saturation teal) backs
+         filled buttons and the pressed/disabled state via
+         `colorPrimaryDark` / `colorPrimaryMid`. -->
     <color name="colorPrimary">@color/signal_cyan_500</color>
     <color name="colorPrimaryDark">@color/signal_cyan_700</color>
     <color name="colorPrimaryMid">@color/signal_cyan_700</color>
 
     <!-- ===== M3 tonal containers =====
-         The "container" companions to colorPrimary / colorError / colorTertiary.
-         Used by tonal button variants, FAB extended labels, error chip
-         surfaces, and any widget that wants a less-saturated tint of the
-         role colour.
-
-         Container values are OPAQUE tonals (the *_900 family in primitives)
-         rather than alpha-composited versions of the role colour. M3's
-         on/container contrast guarantee assumes the container is a
-         fully-resolved color — alpha containers break the guarantee under
-         any non-default surface (nested theme overlays, bottom sheets,
-         popovers). The audit's prior 12%-alpha containers worked only as
-         long as they sat on `colorSurface = navy_800`; the day someone
-         adopts FilledTonal button, an error chip, or a tonal FAB the alpha
-         compositing would have collapsed contrast silently. -->
-    <color name="colorPrimaryContainer">@color/signal_cyan_900</color>
-    <color name="colorOnPrimaryContainer">@color/paper_50</color>
-    <color name="colorErrorContainer">@color/red_900</color>
-    <color name="colorOnErrorContainer">@color/paper_50</color>
+         OPAQUE light tones (signal_cyan_50 / red_100 / amber_100) — the
+         M3 on/container contrast guarantee assumes a fully-resolved
+         container colour. The `*OnContainer` companions resolve to
+         `navy_900` for WCAG-AA-compliant dark text on the light fill. -->
+    <color name="colorPrimaryContainer">@color/signal_cyan_50</color>
+    <color name="colorOnPrimaryContainer">@color/navy_900</color>
+    <color name="colorErrorContainer">@color/red_100</color>
+    <color name="colorOnErrorContainer">@color/red_900</color>
 
     <!-- ===== M3 tertiary role =====
-         The "complementary accent" slot — for a deep-space cyan primary,
-         amber is the natural tertiary (cool/warm pairing). Mapped to the
-         existing amber severity palette so the warning indicator and the
-         M3 tertiary role share a single source of truth instead of running
-         as parallel families. -->
+         Amber pairs warm against the cool cyan primary; the M3 tertiary
+         role and the warning severity share a single source of truth. -->
     <color name="colorTertiary">@color/amber_500</color>
     <color name="colorOnTertiary">@color/navy_900</color>
-    <color name="colorTertiaryContainer">@color/amber_900</color>
-    <color name="colorOnTertiaryContainer">@color/paper_50</color>
+    <color name="colorTertiaryContainer">@color/amber_100</color>
+    <color name="colorOnTertiaryContainer">@color/amber_900</color>
 
     <!-- ===== Secondary chrome ===== -->
-    <color name="colorMuted">@color/slate_300</color>
-    <!-- Web uses rgba(79,227,255,0.18) for the outline; ARGB equivalent is
-         signal cyan at ~18% alpha (signal_cyan_300). -->
+    <color name="colorMuted">@color/slate_500</color>
+    <!-- signal_cyan_300 = signal cyan @ ~18% alpha. Composited over the
+         light cloud surfaces, this resolves to a pale-cyan outline that
+         carries the brand accent without overpowering the page. -->
     <color name="colorOutline">@color/signal_cyan_300</color>
-    <!-- Primary at ~12% alpha for card stroke. -->
+    <!-- signal_cyan_200 = signal cyan @ ~12% alpha. Composited over the
+         light cloud surfaces, this is the subtle cyan-tinted card stroke
+         that anchors every Widget.Dish.Card. -->
     <color name="colorCardStroke">@color/signal_cyan_200</color>
-    <!-- Primary at ~6% alpha — fill for the Settings-row icon container.
-         Renamed from `colorSurfaceTint` to free up that name for M3's
-         elevation-overlay attribute, which the theme now pins to
-         transparent so elevated surfaces don't accidentally pick up
-         this cyan as a tonal overlay. -->
+    <!-- signal_cyan_100 = signal cyan @ ~6% alpha. Faintest cyan tint —
+         the fill behind the Settings-row icon container. -->
     <color name="colorIconContainerFill">@color/signal_cyan_100</color>
-    <!-- Subtle surface variant for empty states + the touchpad-stick
-         recessed background. Not wired to M3's `colorSurfaceDim` attr —
-         that slot reads `colorM3SurfaceDim` above per M3 dark-mode spec
-         (surface and surfaceDim coincide in dark themes). This token
-         exists for the brand-specific "slightly lifted from surface"
-         role; rename pending a clearer name. -->
-    <color name="colorSurfaceDim">@color/navy_700</color>
+    <!-- Brand-specific "slightly lifted from surface" role used by empty
+         states + the touchpad-stick recessed background. Not wired to
+         M3's `colorSurfaceDim` attr — that slot reads `colorM3SurfaceDim`
+         above. cloud_400 keeps the recessed tier distinct from the
+         page surface (cloud_200) without going as dark as the variant
+         containers. -->
+    <color name="colorSurfaceDim">@color/cloud_400</color>
 
-    <!-- ===== Severity ===== -->
+    <!-- ===== Severity =====
+         Status tones are shared across both modes — green / red / amber
+         500 read on light and dark backgrounds. -->
     <color name="colorSuccess">@color/green_500</color>
     <color name="colorError">@color/red_500</color>
     <color name="colorWarning">@color/amber_500</color>
 
     <!-- ===== Scrim =====
-         Full-screen dim overlay (e.g. low-power mode) — black @ ~80% alpha.
-         Distinct from M3's `colorScrim` (which is opaque and consumer-tinted);
-         this one carries the dim already so the low-power HUD can apply it
-         as a single background. -->
+         Full-screen dim overlay (e.g. low-power mode) — black @ ~80% alpha
+         in BOTH modes. The scrim's job is to communicate "the screen
+         is intentionally dimmed", which reads identically on light and
+         dark page surfaces. Distinct from M3's `colorScrim` (which is
+         opaque and consumer-tinted); this token carries the dim already
+         so the low-power HUD can apply it as a single background. -->
     <color name="colorOverlayScrim">@color/ink_900_a80</color>
 </resources>

@@ -250,8 +250,14 @@
     <!-- Pantalla de Ajustes (icono del engranaje en la pantalla principal). -->
     <string name="menu_settings">Ajustes</string>
     <string name="settings_title">Ajustes</string>
+    <string name="settings_section_appearance">APARIENCIA</string>
     <string name="settings_section_diagnostics">DIAGNÓSTICO</string>
     <string name="settings_section_about">ACERCA DE</string>
+    <string name="settings_appearance_title">Tema</string>
+    <string name="settings_appearance_body">Elige cómo se ve Dish. «Sistema» sigue la configuración clara u oscura de tu dispositivo.</string>
+    <string name="settings_appearance_system">Sistema</string>
+    <string name="settings_appearance_light">Claro</string>
+    <string name="settings_appearance_dark">Oscuro</string>
     <string name="settings_crash_reporting_title">Compartir informes de fallos</string>
     <string name="settings_crash_reporting_body">Comparte registros de fallos anonimizados y rastreos de pila con TinkerNorth para ayudar a corregir errores. No se incluyen partidas ni entradas del mando.</string>
     <string name="settings_version_label">VERSIÓN</string>

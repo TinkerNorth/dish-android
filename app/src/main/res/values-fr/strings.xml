@@ -249,8 +249,14 @@
     <!-- Écran Paramètres (icône d\'engrenage sur l\'écran principal). -->
     <string name="menu_settings">Paramètres</string>
     <string name="settings_title">Paramètres</string>
+    <string name="settings_section_appearance">APPARENCE</string>
     <string name="settings_section_diagnostics">DIAGNOSTICS</string>
     <string name="settings_section_about">À PROPOS</string>
+    <string name="settings_appearance_title">Thème</string>
+    <string name="settings_appearance_body">Choisissez l\'apparence de Dish. « Système » suit le réglage clair ou sombre de votre appareil.</string>
+    <string name="settings_appearance_system">Système</string>
+    <string name="settings_appearance_light">Clair</string>
+    <string name="settings_appearance_dark">Sombre</string>
     <string name="settings_crash_reporting_title">Partager les rapports de plantage</string>
     <string name="settings_crash_reporting_body">Partagez avec TinkerNorth des journaux de plantage anonymisés et des traces de pile pour aider à corriger les bugs. Aucune partie ni entrée de manette n\'est incluse.</string>
     <string name="settings_version_label">VERSION</string>

@@ -1,7 +1,15 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Material 3 (Expressive + FocusRings) base. Material 1.14 ships a
-         four-axis grid of M3 parent themes; we sit at the corner that
-         enables:
+    <!-- Material 3 (Expressive + FocusRings) base. The theme is fully
+         DayNight-aware: this file is the SINGLE theme definition (the
+         redundant `values-night/themes.xml` is intentionally absent —
+         when day and night themes share the same attribute structure,
+         maintaining one file and letting the colour resources resolve
+         per night-qualifier eliminates the drift hazard of keeping two
+         theme files in sync). Light-mode colour primitives live in
+         `values/colors.xml`; dark-mode primitives in `values-night/colors.xml`.
+
+         Material 1.14 ships a four-axis grid of M3 parent themes; we
+         sit at the corner that enables:
 
            - **Material3Expressive** over plain Material3 — pulls in the
              expressive slider style (we don't render a slider today, so
@@ -196,20 +204,24 @@
         <item name="shapeAppearanceCornerExtraLarge">@style/ShapeAppearance.Dish.Corner.ExtraLarge</item>
 
         <!-- ── 7. Window chrome + default widget styles ──
-             windowBackground stays pinned to the navy background so the
-             pre-content frame doesn't flash a platform default. status /
-             navigation bar colours are NOT set here: applyDishSystemBars
-             (ActivityExtensions.kt) calls enableEdgeToEdge() with explicit
-             SystemBarStyle.dark() for both bars, which forces dark scrim
-             + light icons regardless of the device's day/night mode —
-             without that override, SystemBarStyle.auto() would pick light
-             scrim + dark icons in day mode, producing invisible dark icons
-             on our dark navy chrome (Theme.Dish renders identically in
-             day and night). The android:windowLightStatusBar /
-             windowLightNavigationBar theme attrs are not pinned because
-             the runtime SystemBarStyle.dark() takes precedence and works
-             across the full minSdk range (the windowLight* attrs require
-             API 23 / 27 respectively). -->
+             windowBackground stays pinned to `@color/colorBackground` so
+             the pre-content frame matches the active theme — the light
+             paper surface in day mode, the navy chrome in night mode
+             (the colour primitives are split across `values/colors.xml`
+             and `values-night/colors.xml`; the theme's reference here
+             resolves through whichever wins).
+
+             Status / navigation bar colours are NOT pinned here:
+             `applyDishSystemBars` (ActivityExtensions.kt) calls
+             `enableEdgeToEdge` with `SystemBarStyle.auto(transparent,
+             transparent)` for both bars, which keys off the resolved
+             uiMode (dark icons + light scrim in day mode, light icons +
+             dark scrim in night mode) so the bar icons stay visible
+             against whichever surface the theme is showing. The
+             `android:windowLightStatusBar` / `windowLightNavigationBar`
+             theme attrs are not pinned because the runtime SystemBarStyle
+             takes precedence and works across the full minSdk range
+             (the windowLight* attrs require API 23 / 27 respectively). -->
         <item name="android:windowBackground">@color/colorBackground</item>
         <!-- Default MaterialButton style for the entire app -->
         <item name="materialButtonStyle">@style/Widget.Dish.Button</item>
@@ -417,12 +429,44 @@
          so the rest of the screen renders with Dish chrome — not the
          stripped-down Theme.SplashScreen parent.
 
+         Day/night behaviour — KNOWN LIMITATION:
+           `windowSplashScreenBackground` resolves to `@color/colorBackground`,
+           which the values/ vs values-night/ colour split flips between
+           the light cloud and dark navy primitives. As a result the
+           splash backdrop tracks the OS uiMode (light scrim in day,
+           dark in night) — what the user expects when they have no
+           in-app override.
+
+           It does NOT track the user's in-app Appearance choice
+           (Settings → Appearance: Light / Dark). The system splash
+           window is rendered by Android BEFORE DishApplication.onCreate
+           runs — that's where ThemePreferenceStore.applyPersistedMode()
+           flips AppCompatDelegate's default night mode — so the splash
+           uses the OS night-mode state, not the persisted in-app
+           preference. The user's choice does take effect the moment
+           `installSplashScreen()` flips to `postSplashScreenTheme` (=
+           Theme.Dish) inside MainActivity.onCreate, so the brief splash
+           may render in the "wrong" mode for one frame before the rest
+           of the screen settles into the user's chosen theme. This
+           trade-off is documented in the user-facing Appearance copy
+           ("System matches your device's light or dark setting") so the
+           cold-start splash behaviour matches expectations.
+
+           Resolving this properly would require pre-launching
+           AppCompatDelegate's night mode in a Content Provider's
+           onCreate (which runs before Application.onCreate) — out of
+           scope for the initial light-theme rollout; track as future
+           work if cold-start splash polish becomes a priority.
+
          Icon: points at the existing adaptive launcher icon. The
          SplashScreen API extracts the foreground layer and masks it to
          a circle (240dp viewport, 160dp inner content area). The current
-         ic_launcher_foreground.png was designed for the launcher's
-         broader safe zone, so a future pass may want a dedicated
-         ic_splash drawable optimised for the splash mask — see the
+         ic_launcher_foreground.png is a cyan dish-on-gear designed for
+         a dark navy backdrop — on the light cloud splash it remains
+         visible but lower-contrast (light cyan over light cloud reads
+         as a pale-cyan silhouette rather than a punched-in glyph). A
+         dedicated ic_splash drawable optimised for both modes, plus
+         the splash mask, is the right long-term answer — see the
          comment in MainActivity.onCreate.
          ============================================================ -->
     <style name="Theme.App.Starting" parent="Theme.SplashScreen">

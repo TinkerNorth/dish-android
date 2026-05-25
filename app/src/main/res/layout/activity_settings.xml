@@ -53,6 +53,89 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
+                <!-- ═══ APPEARANCE ═════════════════════════════════════════
+                     Eyebrow uses the canonical `section_header.xml` include
+                     (label only); SettingsActivity.onCreate sets the text.
+                     First section on the screen — no gap_above on the
+                     include because the NestedScrollView's `paddingTop`
+                     (spacing_md) already supplies the breathing room. -->
+                <include
+                    android:id="@+id/sectionAppearance"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+                <!-- Theme card. Vertical orientation deviates from the other
+                     Settings cards (which are horizontal `Widget.Dish.Card.RowContainer`
+                     rows): the icon+title+body composite sits on top, then the
+                     three-way chip picker stacks underneath. The horizontal
+                     row container can't host this because the chip group is
+                     wider than any trailing affordance and would push the
+                     icon column off-screen on narrow devices. -->
+                <com.google.android.material.card.MaterialCardView
+                    style="@style/Widget.Dish.Card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="@dimen/card_padding">
+
+                        <!-- Same composite as the Crash + Privacy cards;
+                             SettingsActivity.onCreate sets icon (ic_contrast),
+                             title, and body. -->
+                        <include
+                            android:id="@+id/cardRowAppearance"
+                            layout="@layout/card_row_icon_label_value"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content" />
+
+                        <!-- Three-way chip picker for ThemeMode: System /
+                             Light / Dark. ChipGroup's `singleSelection` +
+                             `selectionRequired` enforce the invariant that
+                             exactly one chip is checked at any time, so
+                             SettingsActivity only has to map a chip id to a
+                             ThemeMode and persist the choice. The chip style
+                             (`Widget.Dish.Chip`) is the same one the slot
+                             card's inline pickers use, so the cyan-filled
+                             checked / pale-cyan-stroked unchecked treatment
+                             matches the rest of the app. -->
+                        <com.google.android.material.chip.ChipGroup
+                            android:id="@+id/chipGroupTheme"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/spacing_lg"
+                            app:chipSpacingHorizontal="@dimen/chip_margin_end"
+                            app:selectionRequired="true"
+                            app:singleSelection="true">
+
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chipThemeSystem"
+                                style="@style/Widget.Dish.Chip"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_appearance_system" />
+
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chipThemeLight"
+                                style="@style/Widget.Dish.Chip"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_appearance_light" />
+
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chipThemeDark"
+                                style="@style/Widget.Dish.Chip"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_appearance_dark" />
+                        </com.google.android.material.chip.ChipGroup>
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
                 <!-- ═══ DIAGNOSTICS ════════════════════════════════════════
                      Eyebrow uses the canonical `section_header.xml` include
                      with icon + button hidden by default (`Label.Accent`
@@ -63,6 +146,7 @@
                     layout="@layout/section_header"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
                     android:layout_marginBottom="@dimen/section_header_gap_below" />
 
                 <com.google.android.material.card.MaterialCardView

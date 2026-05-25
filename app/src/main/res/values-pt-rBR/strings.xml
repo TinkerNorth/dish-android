@@ -250,8 +250,14 @@
     <!-- Tela de Configurações (ícone de engrenagem na tela principal). -->
     <string name="menu_settings">Configurações</string>
     <string name="settings_title">Configurações</string>
+    <string name="settings_section_appearance">APARÊNCIA</string>
     <string name="settings_section_diagnostics">DIAGNÓSTICO</string>
     <string name="settings_section_about">SOBRE</string>
+    <string name="settings_appearance_title">Tema</string>
+    <string name="settings_appearance_body">Escolha como o Dish aparece. "Sistema" segue a configuração clara ou escura do seu dispositivo.</string>
+    <string name="settings_appearance_system">Sistema</string>
+    <string name="settings_appearance_light">Claro</string>
+    <string name="settings_appearance_dark">Escuro</string>
     <string name="settings_crash_reporting_title">Compartilhar relatórios de falhas</string>
     <string name="settings_crash_reporting_body">Compartilhe logs de falhas anonimizados e stack traces com a TinkerNorth para ajudar a corrigir bugs. Nenhum jogo ou entrada de controle é incluído.</string>
     <string name="settings_version_label">VERSÃO</string>

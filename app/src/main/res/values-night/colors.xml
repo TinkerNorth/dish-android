@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    DARK-MODE SEMANTIC COLOR TOKENS — overrides `values/colors.xml` (the
+    light-mode mapping) when the device is in night mode OR the user has
+    opted into the dark theme via the in-app Appearance setting (the
+    AppCompatDelegate night-mode flag flips Android's resource resolution
+    to this directory just like a system uiMode change).
+
+    Same semantic names as `values/colors.xml`; only the primitive bindings
+    differ. Anything not overridden here falls back to the light mapping —
+    which means if a token's value is genuinely day/night-neutral (e.g.
+    `colorOverlayScrim`, the severity 500-tones, the alpha-derived cyan
+    300/200/100 outline / stroke / icon-container fill family) it can stay
+    out of this file. We DO re-state those few cases (e.g. `colorPrimary`,
+    `colorPrimaryDark`) when the dark-mode value matches the light-mode
+    value, purely as a readability anchor — when the next contributor
+    looks for "what does this slot resolve to in dark mode?" the answer
+    should be in one place.
+-->
+<resources>
+    <!-- ===== Material surface + on-surface ===== -->
+    <color name="colorBackground">@color/navy_900</color>
+    <color name="colorSurface">@color/navy_800</color>
+    <color name="colorOnPrimary">@color/navy_900</color>
+    <color name="colorOnSurface">@color/paper_50</color>
+
+    <!-- ===== M3 surface + outline variants =====
+         `colorOutlineVariant` uses a desaturated navy lift (navy_650)
+         rather than a cyan-alpha tint — that slot drives MaterialDivider,
+         the unselected MaterialSwitch track, dropdown menu separators,
+         and other structural dividers. Cyan on the brand-accent slot
+         (`colorOutline`) is load-bearing; cyan on every quiet structural
+         element bleeds the accent into surfaces the eye wants quiet. -->
+    <color name="colorSurfaceVariant">@color/navy_700</color>
+    <color name="colorOnSurfaceVariant">@color/slate_300</color>
+    <color name="colorOutlineVariant">@color/navy_650</color>
+
+    <!-- ===== M3 surface container hierarchy =====
+         Five tones (Lowest → Highest) plus the orthogonal Dim/Bright pair.
+         M3 dark-mode spec keeps `surface` and `surfaceDim` at roughly the
+         same tone (the dim distinction is a light-mode affordance), so
+         `colorM3SurfaceDim` aliases navy_800 here. `colorSurfaceContainerHighest`
+         deliberately equals `colorSurfaceVariant` — both M3 attrs read
+         the same tone in dark mode per spec. -->
+    <color name="colorSurfaceContainerLowest">@color/navy_900</color>
+    <color name="colorSurfaceContainerLow">@color/navy_850</color>
+    <color name="colorSurfaceContainer">@color/navy_800</color>
+    <color name="colorSurfaceContainerHigh">@color/navy_750</color>
+    <color name="colorSurfaceContainerHighest">@color/navy_700</color>
+    <color name="colorM3SurfaceDim">@color/navy_800</color>
+    <color name="colorSurfaceBright">@color/navy_650</color>
+
+    <!-- ===== M3 inverse family =====
+         Inverse pairs LIGHT against the dark theme so the "you have a
+         transient message" surface reads as a different elevation tier
+         than the dark cards behind it. -->
+    <color name="colorSurfaceInverse">@color/paper_50</color>
+    <color name="colorOnSurfaceInverse">@color/navy_900</color>
+    <color name="colorPrimaryInverse">@color/signal_cyan_700</color>
+
+    <!-- ===== Primary + variants =====
+         Brand cyan reads on both themes; restated for one-place lookups. -->
+    <color name="colorPrimary">@color/signal_cyan_500</color>
+    <color name="colorPrimaryDark">@color/signal_cyan_700</color>
+    <color name="colorPrimaryMid">@color/signal_cyan_700</color>
+
+    <!-- ===== M3 tonal containers =====
+         OPAQUE deep tones (the *_900 family) rather than alpha-composited
+         tints — M3's on/container contrast guarantee assumes a
+         fully-resolved container colour. -->
+    <color name="colorPrimaryContainer">@color/signal_cyan_900</color>
+    <color name="colorOnPrimaryContainer">@color/paper_50</color>
+    <color name="colorErrorContainer">@color/red_900</color>
+    <color name="colorOnErrorContainer">@color/paper_50</color>
+
+    <!-- ===== M3 tertiary role =====
+         Amber pairs warm against the cool cyan primary; the M3 tertiary
+         role and the warning severity share a single source of truth. -->
+    <color name="colorTertiary">@color/amber_500</color>
+    <color name="colorOnTertiary">@color/navy_900</color>
+    <color name="colorTertiaryContainer">@color/amber_900</color>
+    <color name="colorOnTertiaryContainer">@color/paper_50</color>
+
+    <!-- ===== Secondary chrome ===== -->
+    <color name="colorMuted">@color/slate_300</color>
+    <!-- signal_cyan_300 = signal cyan @ ~18% alpha (rgba(79,227,255,0.18)). -->
+    <color name="colorOutline">@color/signal_cyan_300</color>
+    <!-- signal_cyan_200 = signal cyan @ ~12% alpha. -->
+    <color name="colorCardStroke">@color/signal_cyan_200</color>
+    <!-- signal_cyan_100 = signal cyan @ ~6% alpha. -->
+    <color name="colorIconContainerFill">@color/signal_cyan_100</color>
+    <!-- Subtle surface variant for empty states + the touchpad-stick
+         recessed background. Distinct from `colorM3SurfaceDim` (which
+         backs the M3 attr per spec); this is the brand-specific
+         "slightly lifted from surface" role. -->
+    <color name="colorSurfaceDim">@color/navy_700</color>
+</resources>

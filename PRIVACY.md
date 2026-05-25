@@ -107,7 +107,7 @@ Crashlytics retains crash data for 90 days, then deletes it. See Google's
 | Permission | Why | When asked |
 |---|---|---|
 | `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `CHANGE_WIFI_MULTICAST_STATE` | Sending the encrypted UDP stream and discovery beacons over your local network. | Install-time (normal permissions). |
-| `BLUETOOTH_CONNECT`, `BLUETOOTH_ADVERTISE` (API 31+) | Pairing with a Bluetooth host PC and presenting as a HID gamepad. | Runtime, when you tap *Add Bluetooth host*. |
+| `BLUETOOTH_CONNECT` (API 31+) | Pairing with a Bluetooth host PC and presenting as a HID gamepad. | Runtime, when you tap *Add Bluetooth host*. |
 | `BLUETOOTH`, `BLUETOOTH_ADMIN` (API ≤ 30 only) | Legacy Bluetooth equivalent for Android ≤ 11. | Install-time. |
 | `POST_NOTIFICATIONS` (API 33+) | Showing the ongoing-session notification while a controller is streaming, plus actionable error banners. | Runtime, on first launch on Android 13+. Declining still lets the app run; the notification just isn't visible. |
 | `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_CONNECTED_DEVICE` | Keeping the streaming session alive when you background the app. | Install-time. |

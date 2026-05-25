@@ -57,8 +57,58 @@
     <!-- ===== Slate — muted text + secondary chrome. ===== -->
     <color name="slate_300">#FF93A0C8</color>
 
-    <!-- ===== Paper — high-contrast on-surface text. ===== -->
+    <!-- ===== Paper — high-contrast on-surface text. =====
+         paper_50 backs `colorOnSurface` in DARK mode (the high-contrast
+         body text on a navy surface). In LIGHT mode it backs the *inverse*
+         on-surface (snackbar / inverted-elevation text on a dark inverse
+         surface) — the same pale blue-white role, just on the inverse
+         side of the palette. -->
     <color name="paper_50">#FFE6ECFF</color>
+
+    <!-- ===== Cloud — light-theme surface ramp. =====
+         New family added with the light-theme rollout. Anchors the
+         light-mode page background + the M3 surface container hierarchy
+         (Lowest → Highest + Dim/Bright) when `values-night/` is NOT
+         active. Lower numbers brighter (cloud_50 = pure white),
+         higher numbers darker (cloud_500 = the most-lifted container
+         tone, used as `colorSurfaceContainerHighest` and the new
+         `colorSurfaceVariant` companion).
+
+         The scale is intentionally cool-tinted (the hex hovers around
+         #F2F4F8 / #ECEFF5) rather than truly neutral grey — pairs the
+         navy chrome of dark mode with a faintly-cool light mode so the
+         brand voice carries across both. A pure-neutral light palette
+         would read disconnected from the deep-space cyan accent.
+
+         Dark mode does NOT consume this family; its surface ramp is
+         the navy_* primitives above. -->
+    <color name="cloud_50">#FFFFFFFF</color>
+    <color name="cloud_100">#FFF7F9FC</color>
+    <color name="cloud_200">#FFF2F4F8</color>
+    <color name="cloud_300">#FFECEFF5</color>
+    <color name="cloud_400">#FFE5E9F1</color>
+    <color name="cloud_500">#FFDADFEB</color>
+
+    <!-- ===== Slate — extended muted-text scale. =====
+         slate_300 (existing) is the muted text tone on dark surfaces.
+         slate_500 / slate_700 are added for light mode: slate_500 is
+         the secondary body text on cloud surfaces (medium tone with
+         enough contrast against the cloud_* ramp), slate_700 is the
+         outline-variant divider tone for the same surfaces. -->
+    <color name="slate_500">#FF6E7894</color>
+    <color name="slate_700">#FF394466</color>
+
+    <!-- ===== Light-mode tonal containers. =====
+         The M3 `colorPrimaryContainer` / `colorErrorContainer` /
+         `colorTertiaryContainer` slots need a light-tinted opaque
+         backing in light mode (the existing *_900 primitives below
+         are the dark-mode counterparts). Each pairs with a dark
+         on-container text colour (`colorOnPrimaryContainer` etc.
+         resolve to `navy_900` in `values/colors.xml`) for WCAG-AA
+         contrast on the light fill. -->
+    <color name="signal_cyan_50">#FFD8F5FB</color>
+    <color name="red_100">#FFFCE2DE</color>
+    <color name="amber_100">#FFFCEDD0</color>
 
     <!-- ===== Severity palette — used for status indicators. =====
          500s are the saturated severity colors used for foreground tints
