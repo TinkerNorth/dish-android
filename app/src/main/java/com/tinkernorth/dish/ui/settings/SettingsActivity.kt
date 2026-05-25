@@ -16,6 +16,8 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivitySettingsBinding
 import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.store.CrashReportingStore
+import com.tinkernorth.dish.source.store.ThemeMode
+import com.tinkernorth.dish.source.store.ThemePreferenceStore
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.setupDishToolbar
@@ -40,6 +42,8 @@ import javax.inject.Inject
 class SettingsActivity : AppCompatActivity() {
     @Inject lateinit var crashReportingStore: CrashReportingStore
 
+    @Inject lateinit var themePreferenceStore: ThemePreferenceStore
+
     @Inject lateinit var notifications: DishNotifications
 
     private lateinit var binding: ActivitySettingsBinding
@@ -56,8 +60,42 @@ class SettingsActivity : AppCompatActivity() {
         // populated here so the include's TextView (id `labelSection`) can
         // be shared across the dashboard, connections, and settings screens
         // without duplicating XML.
+        binding.sectionAppearance.labelSection.setText(R.string.settings_section_appearance)
         binding.sectionDiagnostics.labelSection.setText(R.string.settings_section_diagnostics)
         binding.sectionAbout.labelSection.setText(R.string.settings_section_about)
+
+        // Appearance card — icon container + title/body composite, then a
+        // three-way ChipGroup for System / Light / Dark below. The chip
+        // group's `singleSelection` + `selectionRequired` mean exactly one
+        // chip is checked at any moment, so we render the persisted state
+        // first (chooseChip below) before attaching the listener that
+        // forwards changes back to the store.
+        binding.cardRowAppearance.cardRowIcon.setImageResource(R.drawable.ic_contrast)
+        binding.cardRowAppearance.cardRowTitle.setText(R.string.settings_appearance_title)
+        binding.cardRowAppearance.cardRowSubtitle.setText(R.string.settings_appearance_body)
+        chooseChip(themePreferenceStore.state.value)
+        binding.chipGroupTheme.setOnCheckedStateChangeListener { _, checkedIds ->
+            // `selectionRequired=true` guarantees exactly one id, but guard
+            // anyway: an in-flight rebind (e.g. after a configuration
+            // change) can briefly observe an empty selection.
+            val mode =
+                when (checkedIds.firstOrNull()) {
+                    R.id.chipThemeLight -> ThemeMode.LIGHT
+                    R.id.chipThemeDark -> ThemeMode.DARK
+                    R.id.chipThemeSystem -> ThemeMode.SYSTEM
+                    else -> return@setOnCheckedStateChangeListener
+                }
+            if (mode != themePreferenceStore.state.value) {
+                // setMode persists the new value AND flips
+                // AppCompatDelegate.setDefaultNightMode, which triggers
+                // this Activity (AppCompat) to recreate with the new
+                // colour primitives. The dashboard underneath also
+                // recreates because its `configChanges` attr does not
+                // suppress uiMode changes (intentional — see
+                // AndroidManifest.xml's MainActivity entry).
+                themePreferenceStore.setMode(mode)
+            }
+        }
 
         // Crash-reporting card — composite `card_row_icon_label_value.xml`
         // owns the leading icon + title/subtitle column; the Switch sits
@@ -109,6 +147,28 @@ class SettingsActivity : AppCompatActivity() {
                 .removeSuffix("/")
 
         binding.tvVersion.text = formatVersion()
+    }
+
+    /**
+     * Render the appearance ChipGroup with [mode] selected. Called once at
+     * onCreate (to seed from the persisted preference) — there's no need
+     * to re-render on subsequent state emissions because the listener
+     * below only fires user-driven taps, and a tap that selects an
+     * already-checked chip is a no-op (the equality guard inside the
+     * listener handles the redundant case).
+     *
+     * Uses [com.google.android.material.chip.ChipGroup.check] (singular)
+     * to leverage the group's `singleSelection` semantics: it un-checks
+     * any prior selection and checks the target id atomically.
+     */
+    private fun chooseChip(mode: ThemeMode) {
+        val chipId =
+            when (mode) {
+                ThemeMode.LIGHT -> R.id.chipThemeLight
+                ThemeMode.DARK -> R.id.chipThemeDark
+                ThemeMode.SYSTEM -> R.id.chipThemeSystem
+            }
+        binding.chipGroupTheme.check(chipId)
     }
 
     /**

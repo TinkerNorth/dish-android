@@ -249,8 +249,14 @@
     <!-- Ekran Postavki (ikona zupčanika na glavnom ekranu). -->
     <string name="menu_settings">Postavke</string>
     <string name="settings_title">Postavke</string>
+    <string name="settings_section_appearance">IZGLED</string>
     <string name="settings_section_diagnostics">DIJAGNOSTIKA</string>
     <string name="settings_section_about">O APLIKACIJI</string>
+    <string name="settings_appearance_title">Tema</string>
+    <string name="settings_appearance_body">Odaberite kako Dish izgleda. „Sustav" prati svijetlu ili tamnu postavku uređaja.</string>
+    <string name="settings_appearance_system">Sustav</string>
+    <string name="settings_appearance_light">Svijetlo</string>
+    <string name="settings_appearance_dark">Tamno</string>
     <string name="settings_crash_reporting_title">Podijeli izvještaje o padovima</string>
     <string name="settings_crash_reporting_body">Podijelite anonimne dnevnike padova i stack trace s TinkerNorthom kako biste pomogli u ispravljanju grešaka. Igra ni unos kontrolera nisu uključeni.</string>
     <string name="settings_version_label">VERZIJA</string>

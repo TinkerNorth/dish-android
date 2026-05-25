@@ -19,6 +19,7 @@ import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.sensor.PhysicalBatterySource
 import com.tinkernorth.dish.source.sensor.PhysicalMotionSource
 import com.tinkernorth.dish.source.sensor.VirtualBatterySource
+import com.tinkernorth.dish.source.store.ThemePreferenceStore
 import com.tinkernorth.dish.source.system.BluetoothAdapterStateObserver
 import com.tinkernorth.dish.source.system.BluetoothBondMonitor
 import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
@@ -58,6 +59,8 @@ class DishApplication : Application() {
 
     @Inject lateinit var crashReportingController: CrashReportingController
 
+    @Inject lateinit var themePreferenceStore: ThemePreferenceStore
+
     /**
      * Process-scoped CoroutineScope, exposed for [com.tinkernorth.dish.composer.StreamingService]
      * whose framework-owned lifecycle can't see the Hilt singletons that
@@ -68,6 +71,14 @@ class DishApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         installStrictModeIfDebuggable()
+        // Apply the persisted Appearance preference (Settings → Appearance:
+        // System / Light / Dark) before any Activity inflates. The
+        // AppCompatDelegate default night mode is process-wide, so setting
+        // it here is enough — every Activity created from here on (and
+        // every later resource resolution that keys off uiMode) sees the
+        // user's choice. The first Activity has not been created yet when
+        // Application.onCreate runs, so there's no recreate cost.
+        themePreferenceStore.applyPersistedMode()
         // CrashReportingController must install BEFORE the native-load try
         // block: if the native library fails to load (the catch path below),
         // we still want the opt-in preference to be applied so Crashlytics

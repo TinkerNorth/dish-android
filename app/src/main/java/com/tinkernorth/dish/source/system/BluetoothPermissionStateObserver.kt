@@ -14,7 +14,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Whether the user has granted BLUETOOTH_CONNECT / BLUETOOTH_ADVERTISE on API 31+. */
+/** Whether the user has granted BLUETOOTH_CONNECT on API 31+. */
 enum class BluetoothPermissionState {
     /** Not required on this API (pre-31). */
     NOT_REQUIRED,
@@ -58,16 +58,9 @@ class BluetoothPermissionStateObserver
 
         private fun currentState(): BluetoothPermissionState {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return BluetoothPermissionState.NOT_REQUIRED
-            val needed =
-                arrayOf(
-                    Manifest.permission.BLUETOOTH_CONNECT,
-                    Manifest.permission.BLUETOOTH_ADVERTISE,
-                )
-            val allGranted =
-                needed.all {
-                    ContextCompat.checkSelfPermission(context, it) ==
-                        PackageManager.PERMISSION_GRANTED
-                }
-            return if (allGranted) BluetoothPermissionState.GRANTED else BluetoothPermissionState.DENIED
+            val granted =
+                ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
+                    PackageManager.PERMISSION_GRANTED
+            return if (granted) BluetoothPermissionState.GRANTED else BluetoothPermissionState.DENIED
         }
     }
