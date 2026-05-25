@@ -14,7 +14,8 @@
 -->
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurface">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -34,11 +35,16 @@
 
         <!-- Content area: gamepad surface fills, status pills float at
              top|end. Same FrameLayout shape as the touchpad overlay so
-             the two screens lay out identically. -->
+             the two screens lay out identically.
+
+             paddingBottom=?actionBarSize mirrors the toolbar at top so
+             the surface sits visually centred instead of crowding the
+             screen edge. -->
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1">
+            android:layout_weight="1"
+            android:paddingBottom="?attr/actionBarSize">
 
             <com.tinkernorth.dish.ui.common.GamepadTouchView
                 android:id="@+id/gamepadTouchView"

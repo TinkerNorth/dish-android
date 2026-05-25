@@ -43,11 +43,16 @@
              at top|end. FrameLayout because the pill and trackpads share
              the same region — pills can't live in the toolbar (toolbar is
              actionBarSize tall, pills with a vertical stack would push
-             that). -->
+             that).
+
+             paddingBottom=?actionBarSize mirrors the toolbar at top so
+             the surface sits visually centred instead of crowding the
+             screen edge. -->
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1">
+            android:layout_weight="1"
+            android:paddingBottom="?attr/actionBarSize">
 
             <!-- Trackpad row. Horizontal LinearLayout with weightSum=2
                  splits 50/50 between the two pads; margin_md on each

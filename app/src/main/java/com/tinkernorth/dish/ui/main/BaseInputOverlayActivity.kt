@@ -9,7 +9,12 @@ import android.view.Surface
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
+import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -30,6 +35,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import kotlin.math.max
 
 abstract class BaseInputOverlayActivity : AppCompatActivity() {
     @Inject lateinit var hub: ConnectionHub
@@ -57,10 +63,32 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
     protected open fun onConnectionEvent(event: ConnectionEvent) = Unit
 
     protected fun installBaseScaffolding() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            // Default cutout mode letterboxes content away in landscape, hiding the asymmetry
+            // we need to mirror; short-edges surfaces the cutout as a reported inset instead.
+            window.attributes =
+                window.attributes.apply {
+                    layoutInDisplayCutoutMode =
+                        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                }
+        }
+
         gamepadHost =
             GamepadActivityHost(this, rootView(), wakeState, gamepadRegistry)
                 .also { it.install(notifications) }
         hideSystemBars()
+
+        ViewCompat.setOnApplyWindowInsetsListener(rootView()) { v, wi ->
+            val ins =
+                wi.getInsets(
+                    WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
+                )
+            val mirror = max(ins.left, ins.right)
+            v.updatePadding(left = mirror, top = ins.top, right = mirror, bottom = ins.bottom)
+            wi
+        }
+
         connectionId = intent.getStringExtra(EXTRA_CONNECTION_ID).orEmpty()
 
         lifecycleScope.launch {
