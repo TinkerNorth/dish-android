@@ -31,45 +31,65 @@ token.
 
 ## Tokens
 
-### Colors → `values/colors_primitives.xml` + `values/colors.xml`
+### Colors
 
-**Primitives** (raw palette, never referenced from callsites):
+Day/night-aware. Two primitive layers + one semantic layer, with the
+night qualifier swapping the primitive bindings under the same semantic
+names.
 
-| Token | Hex | Notes |
-|---|---|---|
-| `signal_cyan_500` | `#FF4FE3FF` | brand accent (full saturation) |
-| `signal_cyan_700` | `#FF2C93AD` | filled-button bg, primary-dim |
-| `signal_cyan_100` | `#0F4FE3FF` | 6% alpha — subtle surface tint |
-| `signal_cyan_200` | `#1F4FE3FF` | 12% alpha — card strokes |
-| `signal_cyan_300` | `#2E4FE3FF` | 18% alpha — outlines |
-| `navy_900` | `#FF060818` | app background |
-| `navy_800` | `#FF0C1027` | elevated surface (cards, dialogs) |
-| `navy_700` | `#FF131A3A` | empty-state surface variant |
-| `slate_300` | `#FF93A0C8` | muted text + secondary chrome |
-| `paper_50` | `#FFE6ECFF` | high-contrast on-surface text |
-| `green_500` | `#FF22C55E` | success severity |
-| `red_500` | `#FFE74C3C` | error severity |
-| `amber_500` | `#FFF59E0B` | warning severity |
-| `ink_900_a80` | `#CC000000` | ~80% alpha scrim |
+| File | Role |
+|---|---|
+| `values/colors_primitives.xml` | shared raw palette (cyan, navy, slate, paper, severity) |
+| `values/colors.xml` | **light-mode** semantic → primitive mapping |
+| `values-night/colors.xml` | **dark-mode** override (only the slots that differ from light) |
 
-**Semantic** (what layouts and Kotlin reference):
+Tokens not overridden in `values-night/` fall back to `values/`, so
+mode-neutral roles (severity, scrim, alpha-derived outlines) live only in
+the light file. The cyan brand primary is restated in both for one-place
+lookup.
 
-| Token | Resolves to | Role |
-|---|---|---|
-| `colorBackground` | `navy_900` | app + window + status/nav bars |
-| `colorSurface` | `navy_800` | cards, dialogs |
-| `colorOnPrimary` | `navy_900` | text on cyan fills |
-| `colorOnSurface` | `paper_50` | primary text |
-| `colorPrimary` | `signal_cyan_500` | brand accent |
-| `colorPrimaryDark` | `signal_cyan_700` | filled-button bg |
-| `colorPrimaryMid` | `signal_cyan_700` | secondary accent |
-| `colorMuted` | `slate_300` | secondary text + chrome |
-| `colorOutline` | `signal_cyan_300` | component borders (18%) |
-| `colorCardStroke` | `signal_cyan_200` | card stroke (12%) |
-| `colorSurfaceTint` | `signal_cyan_100` | subtle fills (6%) |
-| `colorSurfaceDim` | `navy_700` | empty-state surfaces |
-| `colorSuccess` / `colorError` / `colorWarning` | severity primitives | status |
-| `colorOverlayScrim` | `ink_900_a80` | low-power dim |
+The user's choice in **Settings → Appearance** (System / Light / Dark) is
+persisted by [`ThemePreferenceStore`](../app/src/main/java/com/tinkernorth/dish/source/store/ThemePreferenceStore.kt)
+and applied via `AppCompatDelegate.setDefaultNightMode`, which flips
+Android's resource resolution between the two `colors.xml` files the same
+way a device-wide uiMode change does.
+
+**Semantic tokens** (what layouts and Kotlin reference):
+
+| Token | Light | Dark | Role |
+|---|---|---|---|
+| `colorBackground` | `paper_75` | `navy_900` | app + window background |
+| `colorSurface` | `paper_50` | `navy_800` | cards, dialogs |
+| `colorSurfaceDim` | `paper_100` | `navy_700` | empty-state surfaces |
+| `colorOnSurface` | `navy_900` | `paper_50` | primary text |
+| `colorOnPrimary` | `navy_900` | `navy_900` | text on cyan fills |
+| `colorPrimary` | `signal_cyan_500` | (same) | brand accent |
+| `colorPrimaryDark` | `signal_cyan_700` | (same) | filled-button bg |
+| `colorMuted` | `slate_500` | `slate_300` | secondary text + chrome |
+| `colorOutline` | `signal_cyan_300` | (same) | component borders (cyan @ ~18% alpha) |
+| `colorCardStroke` | `signal_cyan_200` | (same) | card stroke (cyan @ ~12% alpha) |
+| `colorIconContainerFill` | `signal_cyan_100` | (same) | subtle fills (cyan @ ~6%) |
+| `colorSuccess` / `colorError` / `colorWarning` | severity primitives | (same) | status |
+| `colorOverlayScrim` | `ink_900_a80` | (same) | low-power dim |
+
+The full primitive palette (including the M3 container family, surface
+hierarchy, tertiary, and inverse slots) lives in
+`colors_primitives.xml` — callsites should never reference primitives
+directly; route through a semantic name and add one if the slot you
+need doesn't exist.
+
+**M3 attr surface.** `Theme.Dish` pins the full M3 container hierarchy
+(`colorSurfaceContainer*`, `colorPrimaryContainer`, `colorTertiary`,
+`colorSurfaceInverse`, the shape ramp) so widgets that read these slots
+inherit brand-correct values instead of M3's auto-derived greys. The
+mappings are concentrated in `values/themes.xml`; the block comments
+there carry the M3-spec rationale for each pin.
+
+**Theme parent.** `Theme.Material3Expressive.DayNight.NoActionBar.FocusRings`.
+The `FocusRings` parent swaps the platform's near-invisible focus-state
+layer for an M3 ring drawable on every focusable widget — important here
+because the app's primary use case is a gamepad-driven controller picker,
+where keyboard / D-pad / gamepad navigation has to show what's focused.
 
 ### State-list colors → `values/colors_state.xml` + `color/*.xml`
 
@@ -221,16 +241,36 @@ surprise inheritance from Material/AppCompat text-appearance defaults.
 
 ### Theme
 
-Parented at **Material 3** (`Theme.Material3.DayNight.NoActionBar`). M2's
-`colorPrimaryVariant` / `colorSecondaryVariant` are intentionally not set —
-the M3 token system replaces them with `colorPrimaryContainer` /
-`colorSecondaryContainer`, which no callsite currently consumes. Re-introduce
-the container colours only when a real component needs them.
+Parented at **Material 3 Expressive + FocusRings**
+(`Theme.Material3Expressive.DayNight.NoActionBar.FocusRings`). The
+DayNight base resolves `values/colors.xml` vs `values-night/colors.xml`
+per qualifier (no separate `values-night/themes.xml` — one theme,
+two colour bindings). The Expressive parent enables future expressive
+component defaults; the FocusRings parent replaces M3's near-invisible
+focus state layer with a visible ring drawable, which is what makes
+keyboard / D-pad / gamepad focus legible on the controller picker.
+
+The full M3 container family (`colorSurfaceContainer*`,
+`colorPrimaryContainer`, `colorTertiary`, the surface inverse slots,
+the shape ramp) is pinned in `values/themes.xml` so any M3 widget that
+reads those slots inherits brand-correct values instead of M3's
+auto-derived greys. `elevationOverlayEnabled = false` blocks M3's
+tonal-elevation overlay from tinting elevated cards with the cyan
+primary as elevation rises.
 
 | Style | Where | Role |
 |---|---|---|
-| `Theme.Dish` | `values/themes.xml`, `values-night/themes.xml` | App + activity theme. Wires Material color slots to `colorPrimary` / `colorOnSurface` / etc., sets `windowBackground` + `statusBarColor` + `navigationBarColor` to `colorBackground`, and pins `materialButtonStyle = Widget.Dish.Button` as the global default. |
+| `Theme.Dish` | `values/themes.xml` | App + activity theme. Pins the M3 colour / surface-container / typography / shape ramps, the default `materialButtonStyle`, and `chipStyle`. DayNight-aware via the colour-resource split. |
 | `Theme.Dish.Dialog` | `values/themes.xml` | Pair-PIN dialog overlay (parented at `Theme.Material3.DayNight.Dialog`). Transparent `windowBackground` (so `bg_pill`'s rounded corners + cyan outline are the only visible shape), 60% backgroundDim, no title. |
+| `ThemeOverlay.Dish.MaterialAlertDialog` | `values/themes.xml` | Branded chrome for `MaterialAlertDialogBuilder` so the remaining stock dialogs (forget-BT confirmation, Bluetooth profile picker) match the app's brand language. |
+
+**Appearance picker.** Settings → Appearance lets the user override the
+device-wide day/night switch (System / Light / Dark). The choice is
+persisted to `user_preferences` SharedPreferences (cloud-backed) by
+[`ThemePreferenceStore`](../app/src/main/java/com/tinkernorth/dish/source/store/ThemePreferenceStore.kt),
+which also flips `AppCompatDelegate.setDefaultNightMode` — that triggers
+every live AppCompatActivity (including the GameActivity-derived
+`MainActivity`) to recreate with the new colour primitives.
 
 ### `Widget.Dish.*` styles
 
