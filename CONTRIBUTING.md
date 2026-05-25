@@ -3,6 +3,12 @@
 Thanks for your interest in improving the Android client! This document
 captures the conventions that aren't obvious from skimming the code.
 
+## Code of conduct
+
+This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md).
+By participating, you agree to uphold it. Report unacceptable behavior
+to `security@tinkernorth.com`.
+
 ## Getting set up
 
 ```bash

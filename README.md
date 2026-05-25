@@ -92,7 +92,8 @@ gradle/libs.versions.toml        Version catalog
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md). CI runs build + style
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) and the
+[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md). CI runs build + style
 (`android-ci.yml`) and security gates (`security.yml`, `codeql.yml`)
 on every PR — OWASP Dependency-Check (fails on CVSS ≥ 7.0),
 OSV-Scanner, gitleaks, action-pin lint, and CodeQL for `java-kotlin`
