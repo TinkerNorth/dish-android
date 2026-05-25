@@ -2,8 +2,6 @@
 
 package com.tinkernorth.dish.core.jni
 
-import com.tinkernorth.dish.source.sensor.MotionRateLimiter
-import com.tinkernorth.dish.source.sensor.PhoneMotionSource
 import javax.inject.Inject
 import javax.inject.Singleton
 

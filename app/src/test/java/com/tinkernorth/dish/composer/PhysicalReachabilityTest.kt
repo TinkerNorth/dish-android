@@ -6,8 +6,6 @@ import app.cash.turbine.test
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnection.SlotBinding
-import com.tinkernorth.dish.source.sensor.PhysicalBatterySource
-import com.tinkernorth.dish.source.sensor.PhysicalMotionSource
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow

@@ -2,11 +2,6 @@
 
 package com.tinkernorth.dish.core.jni
 
-import com.tinkernorth.dish.core.net.SatelliteHttpClient
-import com.tinkernorth.dish.hotpath.input.BluetoothGamepadBridge
-import com.tinkernorth.dish.source.sensor.BatteryValidator
-import com.tinkernorth.dish.source.sensor.MotionRateLimiter
-
 @Suppress("TooManyFunctions")
 object SatelliteNative {
     init {

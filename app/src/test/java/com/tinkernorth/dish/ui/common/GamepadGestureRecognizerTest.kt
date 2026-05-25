@@ -16,7 +16,9 @@ class GamepadGestureRecognizerTest {
     private val layout =
         GamepadLayout(
             dpadRect = fakeRect(100f, 200f, 200f, 300f),
-            // ABXY centred at (1000,1000), btnRadius=10 → A(1000,1015) B(1015,1000) X(985,1000) Y(1000,985); pickup radius 13; midpoint A↔B at (1007.5,1007.5) (dist 10.6 < 13).
+            // ABXY centred at (1000,1000), btnRadius=10 → A(1000,1015) B(1015,1000)
+            // X(985,1000) Y(1000,985); pickup radius 13; midpoint A↔B at (1007.5,1007.5)
+            // → distance 10.6, inside pickup radius.
             abxyRect = fakeRect(985f, 985f, 1015f, 1015f),
             lbRect = fakeRect(FAR, FAR, FAR + 1, FAR + 1),
             rbRect = fakeRect(FAR, FAR, FAR + 1, FAR + 1),

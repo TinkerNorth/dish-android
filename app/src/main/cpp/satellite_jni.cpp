@@ -322,10 +322,8 @@ static bool sendEncrypted(Session* s, uint16_t msgType, const uint8_t* payload,
 
     uint8_t ciphertext[sizeof(inner) + crypto_aead_chacha20poly1305_ietf_ABYTES];
     unsigned long long cipherLen = 0;
-    crypto_aead_chacha20poly1305_ietf_encrypt(ciphertext, &cipherLen, inner, innerLen, s->token,
-                                              4,
-                                              nullptr,
-                                              nonce, s->key);
+    crypto_aead_chacha20poly1305_ietf_encrypt(ciphertext, &cipherLen, inner, innerLen, s->token, 4,
+                                              nullptr, nonce, s->key);
 
     uint8_t packet[8 + sizeof(ciphertext)];
     memcpy(packet, s->token, 4);
@@ -333,7 +331,8 @@ static bool sendEncrypted(Session* s, uint16_t msgType, const uint8_t* payload,
     memcpy(packet + 8, ciphertext, (size_t)cipherLen);
 
     size_t totalLen = 8 + (size_t)cipherLen;
-    // MSG_DONTWAIT: a blocking sendto was observed to stall 1.5s during Wi-Fi power-save transitions.
+    // MSG_DONTWAIT: a blocking sendto was observed to stall 1.5s during Wi-Fi power-save
+    // transitions.
     ssize_t sent = sendto(s->udpSock, packet, totalLen, MSG_DONTWAIT, (struct sockaddr*)&s->dest,
                           sizeof(s->dest));
     // Soft-drop on buffer-full — UDP semantics absorb it and the next tick refreshes state.
@@ -722,7 +721,8 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiv
                                   strong, weakMag, durMs);
         if (env->ExceptionCheck()) env->ExceptionClear();
     } else if (msgType == MSG_LIGHTBAR && msgLen == 4 && decLen >= 8) {
-        // Android has no controller-LED API; decode and drop (dish-android does not advertise CAP_LIGHTBAR).
+        // Android has no controller-LED API; decode and drop (dish-android does not advertise
+        // CAP_LIGHTBAR).
         const dish_wire::LightbarPayload lb = dish_wire::decodeLightbarPayload(decrypted + 4);
         LOGI("Session %d lightbar (no LED API on Android, dropping): idx=%d rgb=%02X%02X%02X",
              handle, lb.ctrlIdx, lb.r, lb.g, lb.b);
@@ -881,7 +881,8 @@ Java_com_tinkernorth_dish_core_jni_SatelliteNative_releaseAllPhysicalReports(JNI
     }
 }
 
-// Class registration cannot live in JNI_OnLoad: FindClass there uses the system loader, not the app's.
+// Class registration cannot live in JNI_OnLoad: FindClass there uses the system loader, not the
+// app's.
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_hotpath_input_BluetoothGamepadBridge_nativeInstall(
     JNIEnv* env, jclass bridgeCls) {
     if (g_btBridgeClass == nullptr) { g_btBridgeClass = (jclass)env->NewGlobalRef(bridgeCls); }
@@ -910,7 +911,6 @@ Java_com_tinkernorth_dish_hotpath_input_RumbleBridge_nativeInstall(JNIEnv* env, 
         }
     }
 }
-
 }
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*) {

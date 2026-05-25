@@ -360,7 +360,8 @@ class GamepadTouchView
             drawDrawable(c, first, cx, cy, size)
             if (second == null) return
 
-            // Composite the second arrow with DARKEN (per-channel min) so both accent arms of a diagonal survive — otherwise the second icon's white overwrites the first's accent.
+            // Composite the second arrow with DARKEN (per-channel min) so both accent arms of
+            // a diagonal survive — otherwise the second icon's white overwrites the first's.
             val saveCount =
                 c.saveLayer(
                     l.dpadRect.left,
@@ -487,7 +488,8 @@ class GamepadTouchView
         @SuppressLint("ClickableViewAccessibility")
         override fun onTouchEvent(event: MotionEvent): Boolean {
             val l = layout ?: return false
-            // Opt out of vsync coalescing so each touch sensor sample is delivered as it arrives instead of being batched to display refresh.
+            // Opt out of vsync coalescing so each touch sensor sample is delivered as it
+            // arrives instead of being batched to display refresh.
             if (event.actionMasked == MotionEvent.ACTION_DOWN ||
                 event.actionMasked == MotionEvent.ACTION_POINTER_DOWN
             ) {

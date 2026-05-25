@@ -15,7 +15,6 @@ import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.composer.ConnectionHub
 import com.tinkernorth.dish.composer.PhysicalReachability
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
-import com.tinkernorth.dish.hotpath.input.PhysicalSlotBindingObserver
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample

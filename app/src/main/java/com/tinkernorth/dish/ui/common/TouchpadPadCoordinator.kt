@@ -2,7 +2,8 @@
 
 package com.tinkernorth.dish.ui.common
 
-// MSG_TOUCHPAD carries only finger 0, so two simultaneously emitting pads would race; this pins ownership to whichever pad's first finger landed first.
+// MSG_TOUCHPAD carries only finger 0, so two simultaneously emitting pads would race;
+// this pins ownership to whichever pad's first finger landed first.
 class TouchpadPadCoordinator<T : Any> {
     private var owner: T? = null
 
@@ -22,6 +23,7 @@ class TouchpadPadCoordinator<T : Any> {
         return true
     }
 
-    // The "no owner" fallthrough lets the active pad's final all-zero state reach the receiver as the clean lift signal after ownership clears.
+    // The "no owner" fallthrough lets the active pad's final all-zero state reach the
+    // receiver as the clean lift signal after ownership clears.
     fun mayWrite(pad: T): Boolean = owner == null || owner === pad
 }

@@ -2,7 +2,6 @@
 
 package com.tinkernorth.dish.composer
 
-import com.tinkernorth.dish.core.input.BluetoothGamepad
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.connection.ConnectIntent

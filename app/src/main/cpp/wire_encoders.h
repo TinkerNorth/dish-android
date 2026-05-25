@@ -39,7 +39,8 @@ inline void encodeBatteryPayload(uint8_t out[3], uint8_t ctrlIdx, uint8_t level,
     out[2] = status;
 }
 
-// MSG_TOUCHPAD 0x000C inner — 16B: ctrlIdx, flags(f0|f1|btn), f0Id, f0xy i16 LE, f1Id, f1xy i16 LE, eventTimeMs u32 LE.
+// MSG_TOUCHPAD 0x000C inner — 16B: ctrlIdx, flags(f0|f1|btn), f0Id, f0xy i16 LE, f1Id, f1xy i16 LE,
+// eventTimeMs u32 LE.
 inline void encodeTouchpadPayload(uint8_t out[16], uint8_t ctrlIdx, bool f0Active, bool f1Active,
                                   bool buttonPressed, uint8_t f0Id, int16_t f0x, int16_t f0y,
                                   uint8_t f1Id, int16_t f1x, int16_t f1y, uint32_t eventTimeMs) {
@@ -70,4 +71,4 @@ inline LightbarPayload decodeLightbarPayload(const uint8_t in[4]) {
     return LightbarPayload{in[0], in[1], in[2], in[3]};
 }
 
-}
+} // namespace dish_wire

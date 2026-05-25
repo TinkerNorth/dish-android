@@ -4,8 +4,6 @@ package com.tinkernorth.dish.source.store
 
 import com.tinkernorth.dish.architecture.abstracts.AbstractStateSource
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
-import com.tinkernorth.dish.source.sensor.PhysicalBatterySource
-import com.tinkernorth.dish.source.sensor.VirtualBatterySource
 import javax.inject.Inject
 import javax.inject.Singleton
 

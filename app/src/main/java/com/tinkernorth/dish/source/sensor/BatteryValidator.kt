@@ -2,8 +2,6 @@
 
 package com.tinkernorth.dish.source.sensor
 
-import com.tinkernorth.dish.core.jni.SatelliteNative
-
 class BatteryValidator {
     data class BatterySample(
         val level: Int,

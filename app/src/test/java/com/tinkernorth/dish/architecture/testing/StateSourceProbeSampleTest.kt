@@ -18,9 +18,6 @@ class StateSourceProbeSampleTest {
             setState(GateState.OPEN)
         }
 
-        override fun onStart(owner: LifecycleOwner) {
-        }
-
         override fun onStop(owner: LifecycleOwner) {
             setState(GateState.CLOSED)
         }

@@ -2,12 +2,8 @@
 
 package com.tinkernorth.dish.source.connection
 
-import com.tinkernorth.dish.composer.ConnectionHub
-import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.jni.ControllerRepository
 import com.tinkernorth.dish.core.model.DiscoveredServer
-import com.tinkernorth.dish.source.sensor.BatteryValidator
-import com.tinkernorth.dish.source.sensor.MotionRateLimiter
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatus
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
 import kotlinx.coroutines.CoroutineDispatcher

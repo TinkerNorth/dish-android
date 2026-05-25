@@ -9,7 +9,6 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.annotation.RequiresApi
-import com.tinkernorth.dish.core.jni.SatelliteNative
 
 // All rumble routed to phone vibrator by design; no fallback to physical pad actuators.
 object RumbleBridge {

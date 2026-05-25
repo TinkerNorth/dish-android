@@ -28,7 +28,8 @@ class TouchpadSurfaceView
             var finger1TrackingId: Int = 0,
             var finger1X: Short = 0,
             var finger1Y: Short = 0,
-            // Sensor sample timestamp; resends reuse the last value so the receiver can detect duplicates by equality and time-scale relative deltas.
+            // Sensor sample timestamp; resends reuse the last value so the receiver can
+            // detect duplicates by equality and time-scale relative deltas.
             var eventTimeMs: Long = 0L,
         ) {
             fun anyFingerDown(): Boolean = finger0Active || finger1Active
@@ -72,7 +73,8 @@ class TouchpadSurfaceView
 
         private val state = TouchpadState()
 
-        // Android pointer ids are stable across a single DOWN→UP but can be reused after lift, so we map to our own slot 0/1 and keep it until UP.
+        // Android pointer ids are stable across a single DOWN→UP but can be reused after
+        // lift, so we map to our own slot 0/1 and keep it until UP.
         private val slotForPointerId = HashMap<Int, Int>(4)
         private var nextTrackingId: Int = 0
 
@@ -128,7 +130,8 @@ class TouchpadSurfaceView
 
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
-                    // Opt out of vsync coalescing so the first MOVE's delta isn't a full input-frame larger than subsequent ones (cause of the first-touch jump).
+                    // Opt out of vsync coalescing so the first MOVE's delta isn't a full
+                    // input-frame larger than subsequent ones (cause of the first-touch jump).
                     requestUnbufferedDispatch(event)
                     val wasIdle = !state.anyFingerDown()
                     val index = event.actionIndex

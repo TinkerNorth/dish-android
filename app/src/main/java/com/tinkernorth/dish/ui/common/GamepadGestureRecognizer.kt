@@ -46,7 +46,8 @@ internal class GamepadGestureRecognizer {
     private var lbPointerId = INVALID_POINTER
     private var rbPointerId = INVALID_POINTER
 
-    // ABXY is live-tracked (not additive): each pointer's current zone is recomputed every MOVE so sliding from B into A drops B and picks up A.
+    // ABXY is live-tracked (not additive): each pointer's current zone is recomputed every
+    // MOVE so sliding from B into A drops B and picks up A.
     private val abxyPointerBits = mutableMapOf<Int, Int>()
     private val abxyMask =
         GamepadTouchView.BTN_A or GamepadTouchView.BTN_B or
@@ -229,7 +230,8 @@ internal class GamepadGestureRecognizer {
             state.rightX = r.axisX
             state.rightY = r.axisY
         }
-        // Once a pointer claims the d-pad, the angle from its centre drives the hat for the rest of the gesture, even when dragged outside the rect.
+        // Once a pointer claims the d-pad, the angle from its centre drives the hat for the
+        // rest of the gesture, even when dragged outside the rect.
         if (pid == dpadPointerId) {
             updateDpad(x, y, l)
         }

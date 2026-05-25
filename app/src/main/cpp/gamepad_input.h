@@ -91,4 +91,4 @@ void resetState(DeviceState& s);
 
 bool consumePublishIfChanged(DeviceState& s);
 
-}
+} // namespace gamepad

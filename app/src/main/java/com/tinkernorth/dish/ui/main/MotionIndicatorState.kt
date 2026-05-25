@@ -5,7 +5,6 @@ package com.tinkernorth.dish.ui.main
 import androidx.annotation.ColorRes
 import androidx.annotation.StringRes
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.source.sensor.PhoneMotionSource
 
 enum class MotionIndicatorState(
     @param:StringRes val labelRes: Int,

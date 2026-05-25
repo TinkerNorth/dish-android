@@ -14,7 +14,8 @@ class TouchpadPadCoordinatorTest {
 
     @Test
     fun `initial state has no owner and both pads may write`() {
-        // Final lift's onTouchActivityChanged(false) fires before its state-changed callback; both-write at idle lets that final emit reach the receiver.
+        // Final lift's onTouchActivityChanged(false) fires before its state-changed callback;
+        // both-write at idle lets that final emit reach the receiver.
         val c = TouchpadPadCoordinator<String>()
         assertNull(c.active())
         assertTrue(c.mayWrite(padA))

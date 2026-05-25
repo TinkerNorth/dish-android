@@ -4,8 +4,6 @@ package com.tinkernorth.dish.source.store
 
 import com.tinkernorth.dish.source.sensor.BatteryValidator
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
-import com.tinkernorth.dish.source.sensor.PhysicalBatterySource
-import com.tinkernorth.dish.source.sensor.VirtualBatterySource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test

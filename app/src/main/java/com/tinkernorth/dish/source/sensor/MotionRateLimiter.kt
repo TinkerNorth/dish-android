@@ -2,7 +2,6 @@
 
 package com.tinkernorth.dish.source.sensor
 
-import com.tinkernorth.dish.core.jni.SatelliteNative
 import com.tinkernorth.dish.source.sensor.MotionRateLimiter.MotionSample
 import java.util.concurrent.ConcurrentHashMap
 

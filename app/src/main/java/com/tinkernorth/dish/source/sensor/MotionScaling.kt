@@ -2,7 +2,6 @@
 
 package com.tinkernorth.dish.source.sensor
 
-import com.tinkernorth.dish.core.jni.SatelliteNative
 import kotlin.math.roundToInt
 
 object MotionScaling {

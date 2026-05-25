@@ -2,12 +2,10 @@
 
 package com.tinkernorth.dish.ui.main
 
-import com.tinkernorth.dish.composer.ConnectionHub
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.MotionCapability
 import com.tinkernorth.dish.source.sensor.BatteryValidator
-import com.tinkernorth.dish.source.store.BatteryStatusStore
 
 enum class SlotInputType { VIRTUAL, PHYSICAL }
 

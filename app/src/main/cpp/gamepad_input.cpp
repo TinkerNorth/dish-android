@@ -142,4 +142,4 @@ bool consumePublishIfChanged(DeviceState& s) {
     return true;
 }
 
-}
+} // namespace gamepad

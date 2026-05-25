@@ -7,7 +7,6 @@ import android.content.pm.ApplicationInfo
 import android.os.StrictMode
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.tinkernorth.dish.composer.CrashReportingController
-import com.tinkernorth.dish.composer.StreamingService
 import com.tinkernorth.dish.composer.StreamingServiceController
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.hotpath.input.BluetoothGamepadBridge

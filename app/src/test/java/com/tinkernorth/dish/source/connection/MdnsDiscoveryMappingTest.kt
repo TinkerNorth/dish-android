@@ -2,7 +2,6 @@
 
 package com.tinkernorth.dish.source.connection
 
-import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.DiscoverySource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
