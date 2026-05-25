@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.repository
 
@@ -10,17 +9,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Per-satellite pair-derived shared keys (32 bytes, hex-encoded). One row per satellite id;
- * the key is the satellite id, the value is the hex string the JNI side decodes.
- *
- * Stored as individual SharedPreferences entries under `"satellite_shared_key:<id>"` keys
- * — this lets a single forget-key call be a one-shot prefs edit without rewriting the
- * whole satellite list. Per-key writes are atomic at the SharedPreferences level so no
- * write-lock is needed.
- *
- * **Pattern:** [com.tinkernorth.dish.architecture.interfaces.Repository] — durable CRUD only.
- */
+// Per-key storage (vs. one JSON list) so forget is a single prefs edit; per-key writes are atomic.
 @Singleton
 class SatelliteSharedKeyRepository
     @Inject

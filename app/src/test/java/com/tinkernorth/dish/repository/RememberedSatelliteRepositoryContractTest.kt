@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.repository
 
@@ -13,17 +12,6 @@ import io.mockk.slot
 import kotlinx.serialization.json.Json
 import kotlin.random.Random
 
-/**
- * Inherits the standard CRUD contract from [RepositoryContract]. The contract
- * covers: get on empty, all on empty, get-after-put, replace-on-same-key, remove,
- * all-contains-every-put, clear, remove-absent-is-noop.
- *
- * **Per-implementation tests** (serialization edge cases, legacy migration, etc.)
- * still belong in a sibling test file — this contract test only pins the shape.
- *
- * The repository uses SharedPreferences; this test fixtures it with an in-memory
- * fake so no Android runtime is needed.
- */
 class RememberedSatelliteRepositoryContractTest : AbstractRepositoryContract<String, RememberedSatellite>() {
     override fun newRepository(): Repository<String, RememberedSatellite> =
         RememberedSatelliteRepository(
@@ -33,13 +21,7 @@ class RememberedSatelliteRepositoryContractTest : AbstractRepositoryContract<Str
 
     override fun newKey(): String = "satellite:1.1.1.${Random.nextInt(2, 250)}:${Random.nextInt(1, 65000)}"
 
-    /**
-     * Deterministic for a given key — the contract test calls `newValue(k)` more than
-     * once (e.g. `keys.map(::newValue)` to recompute expected values) and the equality
-     * check would fail if the same key produced different `RememberedSatellite`s.
-     * Derive ip/port from the key's hashCode so two calls with the same key always
-     * return equal records.
-     */
+    // Must be deterministic for a given key: contract recomputes expected via newValue(k).
     override fun newValue(key: String): RememberedSatellite {
         val seed = key.hashCode()
         return RememberedSatellite(
@@ -52,11 +34,6 @@ class RememberedSatelliteRepositoryContractTest : AbstractRepositoryContract<Str
         )
     }
 
-    /**
-     * Build a Context whose only purpose is to return a SharedPreferences that
-     * lives entirely in-memory. The MockK-backed prefs behave like the real
-     * thing for the get/put/remove/all paths the repository actually exercises.
-     */
     private fun fakeContextBackedByMap(): Context {
         val store = mutableMapOf<String, Any?>()
         val editor = mockk<SharedPreferences.Editor>(relaxed = true)
@@ -70,7 +47,7 @@ class RememberedSatelliteRepositoryContractTest : AbstractRepositoryContract<Str
             store.remove(keySlot.captured)
             editor
         }
-        every { editor.apply() } answers { /* no-op */ }
+        every { editor.apply() } answers { }
 
         val prefs = mockk<SharedPreferences>(relaxed = true)
         every { prefs.getString(any(), any()) } answers {

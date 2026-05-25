@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.ui.common
 
@@ -27,12 +26,6 @@ import com.tinkernorth.dish.ui.common.GamepadConstants.TOP_ROW_Y_FRACTION
 import com.tinkernorth.dish.ui.common.GamepadConstants.TRIGGER_WIDTH_DP
 import kotlin.math.min
 
-/**
- * Pure-data snapshot of every region/centre/radius needed to draw and
- * touch-test the on-screen gamepad. Computed once per [GamepadTouchView.onSizeChanged]
- * by [computeGamepadLayout] and consumed by both the View (for drawing) and
- * [GamepadGestureRecognizer] (for hit-testing).
- */
 internal data class GamepadLayout(
     val dpadRect: RectF,
     val abxyRect: RectF,
@@ -58,21 +51,6 @@ internal data class GamepadLayout(
     val centerBtnCy: Float,
 )
 
-/**
- * Compute the on-screen gamepad layout for the given view size and safe-area
- * insets. Layout is left/right symmetric except for the stick-vs-d-pad swap
- * between Xbox and PlayStation profiles.
- *
- * Layout (Xbox profile):
- *   shoulder band:          LB | gap | RB along the top of the safe area
- *   trigger columns:        LT (left strip) and RT (right strip), full content height
- *   left half  (top→bot):   left stick + L3 secondary  →  d-pad
- *   right half (top→bot):   ABXY                       →  right stick + R3 secondary
- *   centre cluster:         Select / Start / Home, just below the shoulder band
- *
- * PlayStation profile swaps the d-pad with the left stick (so d-pad sits up
- * top, left stick at the bottom-left), matching the DualShock layout.
- */
 @Suppress("LongMethod")
 internal fun computeGamepadLayout(
     width: Int,
@@ -112,8 +90,6 @@ internal fun computeGamepadLayout(
     val bottomRowCy = contentTop + contentH * BOTTOM_ROW_Y_FRACTION
 
     val pad = DPAD_INNER_PAD_DP * density
-    // Cluster size: capped both by the available half-width (left or right
-    // quarter pair, minus padding) and a fraction of content height.
     val clusterSize = min(qw * 2f - pad * 2, contentH * CLUSTER_HEIGHT_FRACTION)
 
     val dpadCx = contentLeft + qw * CLUSTER_X_FRACTION_OF_QUARTER
@@ -129,7 +105,6 @@ internal fun computeGamepadLayout(
     val l3StickCx = leftStickCx + stickRadius + l3StickRadius + l3Gap
     val l3StickCy = leftStickCy
 
-    // ABXY mirrors the d-pad on the right; right stick mirrors the left stick.
     val abxyCx = contentRight - qw * CLUSTER_X_FRACTION_OF_QUARTER
     val abxyRect =
         RectF(abxyCx - clusterSize / 2, topRowCy - clusterSize / 2, abxyCx + clusterSize / 2, topRowCy + clusterSize / 2)

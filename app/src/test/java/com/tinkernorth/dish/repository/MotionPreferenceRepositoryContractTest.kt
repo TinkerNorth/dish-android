@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.repository
 
@@ -13,18 +12,6 @@ import io.mockk.slot
 import kotlinx.serialization.json.Json
 import kotlin.random.Random
 
-/**
- * Inherits the standard CRUD contract from [AbstractRepositoryContract]:
- * get on empty, all on empty, get-after-put, replace-on-same-key, remove,
- * all-contains-every-put, clear, remove-absent-is-noop.
- *
- * Per-implementation behaviour (corrupt-JSON tolerance, multi-entry
- * persistence after a re-read) is in the sibling `MotionPreferenceRepositoryTest`.
- *
- * SharedPreferences is mocked into a `MutableMap` so this stays a pure
- * JVM test — same pattern as
- * [RememberedSatelliteRepositoryContractTest].
- */
 class MotionPreferenceRepositoryContractTest : AbstractRepositoryContract<String, MotionPreference>() {
     override fun newRepository(): Repository<String, MotionPreference> =
         MotionPreferenceRepository(
@@ -34,7 +21,7 @@ class MotionPreferenceRepositoryContractTest : AbstractRepositoryContract<String
 
     override fun newKey(): String = "slot-${Random.nextLong()}"
 
-    /** Same key ⇒ same value. The contract test compares sets of values. */
+    // Contract compares value sets; same key must yield equal value.
     override fun newValue(key: String): MotionPreference = MotionPreference(slotId = key, enabled = key.hashCode() and 1 == 0)
 
     private fun fakeContextBackedByMap(): Context {
@@ -50,7 +37,7 @@ class MotionPreferenceRepositoryContractTest : AbstractRepositoryContract<String
             store.remove(keySlot.captured)
             editor
         }
-        every { editor.apply() } answers { /* no-op */ }
+        every { editor.apply() } answers { }
 
         val prefs = mockk<SharedPreferences>(relaxed = true)
         every { prefs.getString(any(), any()) } answers {

@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.repository
 
@@ -12,13 +11,6 @@ import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Durable list of remembered Bluetooth HID hosts. Backed by SharedPreferences (one
- * JSON-encoded list under `KEY_BT`). See [RememberedSatelliteRepository] for the
- * thread-safety pattern.
- *
- * **Pattern:** [com.tinkernorth.dish.architecture.interfaces.KeyedRepository] — durable CRUD only.
- */
 @Singleton
 class RememberedBtRepository
     @Inject

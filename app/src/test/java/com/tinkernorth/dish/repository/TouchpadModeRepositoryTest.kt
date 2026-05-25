@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.repository
 
@@ -21,15 +20,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Behaviour tests for [TouchpadModeRepository] — pins the JSON shape,
- * the absence-means-default contract, and the resilience-on-corrupt-prefs
- * fallback that matters for an app upgrade landing on a stale prefs file.
- *
- * Mirror of the [MotionPreferenceRepositoryTest] surface, because the two
- * repositories share the same JSON-list-in-SharedPreferences storage
- * pattern.
- */
 class TouchpadModeRepositoryTest {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -46,18 +36,13 @@ class TouchpadModeRepositoryTest {
 
     @Test
     fun `all three valid modes round-trip through SharedPreferences`() {
-        // The repository must persist the string verbatim — `off` is the
-        // safe baseline default the server also uses, but the client may
-        // legitimately persist `mouse` or `ds4` for a satellite that
-        // supports those. Round-trip all three to pin the shape.
         val (ctx, _) = fakePrefs()
         val repo = TouchpadModeRepository(ctx, json)
         repo.put(TouchpadModePreference("sat-a", TouchpadModeValue.OFF))
         repo.put(TouchpadModePreference("sat-b", TouchpadModeValue.DS4))
         repo.put(TouchpadModePreference("sat-c", TouchpadModeValue.MOUSE))
 
-        // Re-read through a fresh repo on the same backing prefs to prove
-        // durability (no in-memory cache shortcut).
+        // Fresh repo on same backing prefs proves durability (no in-memory cache shortcut).
         val (ctx2, _) = fakePrefs(seedFrom = ctx)
         val repo2 = TouchpadModeRepository(ctx2, json)
         assertEquals(TouchpadModeValue.OFF, repo2.get("sat-a")?.mode)
@@ -67,11 +52,6 @@ class TouchpadModeRepositoryTest {
 
     @Test
     fun `get on a satellite that was never written returns null - not a default`() {
-        // The repository never invents `off` for an unknown satellite —
-        // that's the responsibility of the caller (TouchpadModeComposer or
-        // the UI's default-fold). Pinning this keeps "never picked" and
-        // "explicitly off" distinguishable, which matters for prompting
-        // first-time users to pick a mode.
         val (ctx, _) = fakePrefs()
         val repo = TouchpadModeRepository(ctx, json)
         assertNull(repo.get("never-written"))
@@ -79,10 +59,6 @@ class TouchpadModeRepositoryTest {
 
     @Test
     fun `corrupt JSON in prefs falls back to empty - does not crash app startup`() {
-        // An app crash mid-write, or a sideloaded build overwriting prefs,
-        // could leave invalid JSON. The repo must tolerate it (every saved
-        // mode reverts to default at the next call site) rather than
-        // crashing app startup.
         val (ctx, store) = fakePrefs()
         store["preferences"] = "{not valid json"
         val repo = TouchpadModeRepository(ctx, json)
@@ -119,8 +95,6 @@ class TouchpadModeRepositoryTest {
 
     @Test
     fun `put with same satellite id replaces in place - list never grows`() {
-        // Catches a regression where put would append rather than replace,
-        // producing duplicate entries and an unstable read order.
         val (ctx, _) = fakePrefs()
         val repo = TouchpadModeRepository(ctx, json)
         repo.put(TouchpadModePreference("sat-a", TouchpadModeValue.OFF))
@@ -132,9 +106,6 @@ class TouchpadModeRepositoryTest {
 
     @Test
     fun `TouchpadModeValue isValid accepts only the three wire strings`() {
-        // The string-as-wire choice means the picker validates at the
-        // boundary; this helper is that boundary. Catch a regression that
-        // accidentally accepts e.g. "Pad" (label-case) or empty.
         assertTrue(TouchpadModeValue.isValid("off"))
         assertTrue(TouchpadModeValue.isValid("ds4"))
         assertTrue(TouchpadModeValue.isValid("mouse"))
@@ -149,12 +120,9 @@ class TouchpadModeRepositoryTest {
 
     @Test
     fun `TouchpadModeValue ALL list is the three modes in canonical order`() {
-        // Some callers iterate ALL to populate the picker; pin the order
-        // so the picker UI is stable across builds.
+        // Picker UI iterates ALL; pin order so the displayed list is stable across builds.
         assertEquals(listOf("off", "ds4", "mouse"), TouchpadModeValue.ALL)
     }
-
-    // ── Test fixtures ────────────────────────────────────────────────────
 
     private fun fakePrefs(seedFrom: Context? = null): Pair<Context, MutableMap<String, Any?>> {
         val store: MutableMap<String, Any?> =
@@ -173,7 +141,7 @@ class TouchpadModeRepositoryTest {
             store.remove(keySlot.captured)
             editor
         }
-        every { editor.apply() } answers { /* no-op */ }
+        every { editor.apply() } answers { }
 
         val prefs = mockk<SharedPreferences>(relaxed = true)
         every { prefs.getString(any(), any()) } answers {

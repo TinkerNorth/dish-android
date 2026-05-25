@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.bluetooth
 
@@ -10,12 +9,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Report-dispatch contract: `sendReport` may only succeed when the session
- * is currently [BluetoothSessionState.Connected]. Every other state is a no-op that
- * the caller can rely on to avoid leaking payload bytes to the framework
- * during reconnects.
- */
 class BluetoothHidSessionReportTest {
     private lateinit var fake: FakeHidProxyClient
     private lateinit var session: BluetoothHidSession

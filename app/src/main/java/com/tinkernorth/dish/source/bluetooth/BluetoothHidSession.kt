@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.bluetooth
 
@@ -9,14 +8,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/**
- * Observable state of the single HID host session owned by [BluetoothHidSession].
- *
- * Android's HID Device profile caps us at one registered app per process, so
- * the whole connection lifecycle is modelled as a single linear state
- * machine rather than a per-slot object. The [BluetoothGamepadRegistry]
- * layer projects this onto per-slot UI state.
- */
 sealed interface BluetoothSessionState {
     data object Idle : BluetoothSessionState
 
@@ -41,28 +32,9 @@ sealed interface BluetoothSessionState {
     ) : BluetoothSessionState
 }
 
-/**
- * Process-scoped state machine for the app's Bluetooth HID gamepad session.
- *
- * Responsibilities:
- *   - Own the [HidProxyClient] binding and guarantee a clean release on
- *     every teardown path (restart, stop, framework release, error).
- *   - Translate raw framework events into [BluetoothSessionState] transitions.
- *   - Gate [sendReport] to only fire in [BluetoothSessionState.Connected].
- *
- * Not responsible for:
- *   - Mapping sessions to UI slot ids (see [BluetoothGamepadRegistry]).
- *   - Persisting remembered hosts (see [com.tinkernorth.dish.repository.ConnectionStore]).
- *   - Recovering across app foreground/background (see [BluetoothForegroundObserver]).
- *
- * Thread-safety: every public method and every proxy callback acquires the
- * same monitor. Framework callbacks from Binder threads are safe to interleave
- * with UI-thread calls; the monitor is held for microseconds.
- */
 class BluetoothHidSession(
     private val proxyFactory: () -> HidProxyClient,
 ) {
-    /** Synchronous observer for downstream state machines (e.g. [BluetoothGamepadRegistry]). */
     fun interface Listener {
         fun onStateChange(state: BluetoothSessionState)
     }
@@ -112,26 +84,19 @@ class BluetoothHidSession(
         return if (canSend) px?.sendReport(report) ?: false else false
     }
 
-    // ── Internals ─────────────────────────────────────────────────────────
-
     private fun teardownLocked() {
-        generation++ // invalidates any pending events from the previous proxy
+        generation++
         proxy?.unregisterAndRelease()
         proxy = null
     }
 
     private fun emitLocked(state: BluetoothSessionState) {
         _state.value = state
-        // Snapshot under lock (listeners is mutable) so late mutation is safe.
         val snapshot = listeners.toList()
         snapshot.forEach { it.onStateChange(state) }
     }
 
-    /**
-     * Events delivered by an older proxy (after restart / release) must not
-     * mutate the current session's state. Every callback re-checks the
-     * generation it was created with; stale calls are silently dropped.
-     */
+    // Events from older proxies (post-restart/release) are dropped by generation check.
     private fun eventsFor(gen: Int) =
         object : HidProxyClient.Events {
             override fun onAcquired() =
@@ -142,8 +107,6 @@ class BluetoothHidSession(
 
             override fun onReleased() =
                 ifCurrent(gen) {
-                    // Framework yanked the proxy: drop everything back to Idle. The
-                    // foreground observer is responsible for waking us up again.
                     teardownLocked()
                     emitLocked(BluetoothSessionState.Idle)
                 }

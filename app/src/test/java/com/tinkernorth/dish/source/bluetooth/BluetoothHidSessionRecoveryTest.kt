@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.bluetooth
 
@@ -12,24 +11,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Regression tests for the "background → return → reconnect is dead" bug.
- *
- * The root cause was that the old [BluetoothGamepad.stop] short-circuited
- * when the profile proxy had already been released by the OS, leaving the
- * HID app registration lingering in the framework. The next `start()` then
- * tried to re-bind on top of that stale registration and never saw the
- * `onAppStatusChanged(true)` callback.
- *
- * The contract pinned here:
- *   - Every teardown (`stop()`, `start()` on a non-Idle session,
- *     `onReleased` while non-Idle) MUST call `unregisterAndRelease` on
- *     the outgoing proxy.
- *   - A fresh proxy is acquired on every restart — the session must never
- *     reuse a proxy whose framework binding has been cleared.
- *   - Callbacks from a released proxy must be ignored and never mutate the
- *     current session's state.
- */
 class BluetoothHidSessionRecoveryTest {
     private lateinit var fakes: ArrayDeque<FakeHidProxyClient>
     private lateinit var session: BluetoothHidSession
@@ -37,7 +18,6 @@ class BluetoothHidSessionRecoveryTest {
     @Before
     fun setUp() {
         fakes = ArrayDeque()
-        // Pre-seed a deep stack; each start() pops a fresh fake.
         repeat(8) { fakes.add(FakeHidProxyClient()) }
         val supplier: () -> HidProxyClient = { fakes.removeFirst() }
         session = BluetoothHidSession(supplier)
@@ -55,12 +35,10 @@ class BluetoothHidSessionRecoveryTest {
         val second = fakes.first()
         session.start(GamepadProfile.PLAYSTATION, null)
 
-        // Old proxy was released.
         assertTrue(
             "outgoing proxy must be released on restart",
             first.calls.any { it is FakeHidProxyClient.Call.UnregisterAndRelease },
         )
-        // New proxy is a different instance and was acquired.
         assertNotSame(first, second)
         assertTrue(second.calls.any { it is FakeHidProxyClient.Call.Acquire })
     }
@@ -93,7 +71,6 @@ class BluetoothHidSessionRecoveryTest {
         session.start(GamepadProfile.XBOX, "AA")
         first.fireAcquired()
         first.fireAppRegistered()
-        // Framework yanks the proxy (backgrounding, BT toggle, OEM freeze).
         first.fireReleased()
 
         assertEquals(BluetoothSessionState.Idle, session.state.value)
@@ -108,7 +85,6 @@ class BluetoothHidSessionRecoveryTest {
         first.fireAppRegistered()
         first.fireReleased()
 
-        // This is exactly the "user taps Reconnect after returning from bg".
         val second = fakes.first()
         session.start(GamepadProfile.XBOX, "AA")
 
@@ -116,7 +92,6 @@ class BluetoothHidSessionRecoveryTest {
         val secondAcquire = second.calls.filterIsInstance<FakeHidProxyClient.Call.Acquire>()
         assertEquals(1, secondAcquire.size)
 
-        // Drive the new proxy through to Connected to prove the bug is gone.
         second.fireAcquired()
         second.fireAppRegistered()
         second.fireHostConnected("AA", "Xbox")
@@ -135,10 +110,8 @@ class BluetoothHidSessionRecoveryTest {
         second.fireAcquired()
         second.fireAppRegistered()
 
-        // A late callback from the first (already released) proxy arrives.
         first.fireHostConnected("GHOST:MAC", "zombie")
 
-        // Session is still in the Registered state for the new profile.
         val s = session.state.value as BluetoothSessionState.Registered
         assertEquals(GamepadProfile.PLAYSTATION, s.profile)
     }

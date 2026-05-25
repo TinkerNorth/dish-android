@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.sensor
 
@@ -10,12 +9,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Unit tests for [BatteryValidator] — the validation gate in front of
- * [SatelliteNative.sendBattery]. MSG_BATTERY is a fixed 30 s heartbeat, so
- * `publish` forwards every well-formed sample (no dedup) and rejects only
- * malformed ones.
- */
 class BatteryValidatorTest {
     private val emitted = mutableListOf<BatterySample>()
     private val emit = BatteryValidator.Emit { s -> emitted += s }
@@ -30,9 +23,7 @@ class BatteryValidatorTest {
 
     @Test
     fun `every sample is forwarded, including unchanged ones`() {
-        // MSG_BATTERY is a fixed 30 s heartbeat: an unchanged value must still
-        // reach the wire each tick so a dropped UDP packet self-heals — publish
-        // must NOT coalesce identical samples.
+        // 30 s heartbeat — coalescing identical samples would prevent self-heal after a dropped UDP packet.
         val v = BatteryValidator()
         val s = BatterySample(100, BatteryValidator.STATUS_WIRED)
         assertTrue(v.publish(s, emit))
@@ -62,8 +53,6 @@ class BatteryValidatorTest {
     @Test
     fun `0xFF level is accepted as the unknown sentinel`() {
         val v = BatteryValidator()
-        // Status-only Bluetooth pads (some 8BitDo) report level=0xFF + a
-        // known status. publish must NOT reject 0xFF as malformed.
         assertTrue(
             v.publish(
                 BatterySample(BatteryValidator.LEVEL_UNKNOWN, BatteryValidator.STATUS_CHARGING),
@@ -98,8 +87,7 @@ class BatteryValidatorTest {
 
     @Test
     fun `wire constants match the protocol spec`() {
-        // These literal values are the contract with satellite/src/core/types.h.
-        // Bumping them silently would break every paired receiver.
+        // Contract with satellite/src/core/types.h — drift breaks every paired receiver.
         assertEquals(0xFF, BatteryValidator.LEVEL_UNKNOWN)
         assertEquals(0, BatteryValidator.STATUS_UNKNOWN)
         assertEquals(1, BatteryValidator.STATUS_DISCHARGING)

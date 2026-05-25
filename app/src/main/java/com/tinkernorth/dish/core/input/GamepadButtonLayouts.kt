@@ -1,25 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.core.input
 
-/**
- * Pure translators between the two button-bit dialects used in the app:
- *
- *   - **XUSB** (`wButtons`): the XInput-compatible layout produced by the
- *     physical-controller path (`processNativeKeyEvent` /
- *     `processNativeMotionEvent` in `satellite_jni.cpp`) and consumed by the
- *     satellite path (see `XUSB_REPORT` in the same file).
- *   - **HID**: the 14-button + 4-bit hat-switch layout used by the on-screen
- *     gamepad ([com.tinkernorth.dish.ui.common.GamepadTouchView]) and the
- *     Bluetooth HID descriptor ([buildHidDescriptor] / [buildHidReport]).
- *
- * Each producer emits bits in its native dialect. The matching consumer is
- * identity; the off-diagonal consumers must translate. Keep these helpers
- * pure (no Android, no state) so they stay JVM-unit-testable.
- *
- * The block below is the XUSB `wButtons` bitfield as defined by XInput.
- */
 private const val XUSB_DPAD_UP = 0x0001
 private const val XUSB_DPAD_DOWN = 0x0002
 private const val XUSB_DPAD_LEFT = 0x0004
@@ -38,7 +20,6 @@ private const val XUSB_Y = 0x8000
 
 private const val XUSB_DPAD_MASK = 0x000F
 
-// ── HID button bits (matches GamepadTouchView.BTN_*) ─────────────────────
 private const val HID_A = 0x0001
 private const val HID_B = 0x0002
 private const val HID_X = 0x0004
@@ -51,7 +32,6 @@ private const val HID_LS = 0x0100
 private const val HID_RS = 0x0200
 private const val HID_HOME = 0x0400
 
-// ── HID hat-switch codes (matches GamepadTouchView.HAT_*) ────────────────
 private const val HAT_NEUTRAL = 0
 private const val HAT_N = 1
 private const val HAT_NE = 2
@@ -62,20 +42,8 @@ private const val HAT_SW = 6
 private const val HAT_W = 7
 private const val HAT_NW = 8
 
-/**
- * Translate an XUSB `wButtons` value (as produced by the native input thread)
- * into a packed `Int` carrying both the HID buttons bitfield and the 4-bit hat
- * code expected by [buildHidReport]. Layout:
- *   bits  0..15 — HID buttons (`hidButtonsOf(packed)`)
- *   bits 16..19 — HID hat code  (`hidHatOf(packed)`)
- *
- * Packed into a primitive Int instead of `Pair<Int, Int>` because this is the
- * Bluetooth-bound physical-gamepad hotpath. A `Pair` allocation per report at
- * ≤ 250 Hz is ~6 KB/s of pointless garbage.
- *
- * The low-nibble XUSB d-pad bits are folded into the hat; the remaining XUSB
- * button bits are remapped to their HID positions. Unknown bits are dropped.
- */
+// Packed Int (not Pair) to avoid per-report allocation on the ≤250 Hz hotpath.
+// Layout: bits 0..15 = HID buttons, bits 16..19 = HID hat code.
 fun xusbToHid(wButtons: Int): Int {
     val hat = dpadBitsToHat(wButtons and XUSB_DPAD_MASK)
     var hid = 0
@@ -93,17 +61,10 @@ fun xusbToHid(wButtons: Int): Int {
     return (hat shl 16) or (hid and 0xFFFF)
 }
 
-/** Extract the HID buttons bitfield from a [xusbToHid] packed result. */
 fun hidButtonsOf(packed: Int): Int = packed and 0xFFFF
 
-/** Extract the HID hat code from a [xusbToHid] packed result. */
 fun hidHatOf(packed: Int): Int = (packed shr 16) and 0xF
 
-/**
- * Inverse of [xusbToHid]: translate the HID `(buttons, hat)` pair emitted by
- * `GamepadTouchView` into an XUSB `wButtons` value the satellite path can hand
- * verbatim to `SatelliteNative.sendReport`.
- */
 fun hidToXusb(
     hidButtons: Int,
     hat: Int,

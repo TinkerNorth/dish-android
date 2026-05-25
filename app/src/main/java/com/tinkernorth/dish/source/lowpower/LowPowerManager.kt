@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.lowpower
 
@@ -17,21 +16,9 @@ import com.tinkernorth.dish.architecture.abstracts.AbstractStateSource
 import java.util.Calendar
 import java.util.Locale
 
-/**
- * Low-power mode state machine: tracks user inactivity while a screen-on lock is
- * held, shows a 5-second countdown banner, then dims the screen and presents a
- * minimal overlay. Touch interaction either exits or resets the state.
- *
- * **Pattern:** [AbstractStateSource]`<State>` — owns one external input
- * (touch + timer expirations), exposes a single `state: StateFlow<State>`, no
- * events. The lifecycle hook [onStop] is driven by the host (typically
- * `GamepadActivityHost`) since this is per-Activity rather than process-scoped;
- * the host calls [onStop] from its `cancelDimOnStop()` path.
- */
 class LowPowerManager(
     private val window: Window,
 ) : AbstractStateSource<LowPowerManager.State>(State.IDLE) {
-    /** Bind to the layout views once after inflation. */
     data class Views(
         val llCountdownBanner: LinearLayout,
         val tvCountdownSeconds: TextView,
@@ -42,7 +29,6 @@ class LowPowerManager(
 
     var views: Views? = null
 
-    /** Provide current controller count for the overlay status line. */
     var activeControllerCount: () -> Int = { 0 }
 
     enum class State { IDLE, COUNTDOWN, ACTIVE }
@@ -54,9 +40,6 @@ class LowPowerManager(
 
     private val inactivityRunnable = Runnable { startCountdown() }
 
-    // ── Public API ────────────────────────────────────────────────────────
-
-    /** Called when wake/screen lock state changes. */
     fun onLockStateChanged(active: Boolean) {
         if (active && state.value == State.IDLE) {
             resetInactivityTimer()
@@ -65,15 +48,9 @@ class LowPowerManager(
         }
     }
 
-    /** User touched the screen while locks are active. */
     fun onUserInteraction() {
         when (state.value) {
-            // Re-arm explicitly after exit(): `shouldKeepScreenOn` is a
-            // StateFlow that doesn't re-emit `true` for an already-true value,
-            // so onLockStateChanged won't fire a second time. Without this,
-            // dismissing the dim once leaves the inactivity timer un-posted
-            // until the next touch — a user who dismisses and walks away
-            // never sees the overlay return.
+            // Re-arm explicitly: shouldKeepScreenOn StateFlow won't re-emit true so onLockStateChanged is silent.
             State.ACTIVE -> {
                 exit()
                 resetInactivityTimer()
@@ -89,18 +66,14 @@ class LowPowerManager(
         }
     }
 
-    /** Tear down everything (connection dropped, activity destroyed). */
     fun cancel() {
         inactivityHandler.removeCallbacks(inactivityRunnable)
         exit()
     }
 
-    /** [AbstractStateSource] hook — alias for [cancel]. */
     override fun onStop(owner: LifecycleOwner) {
         cancel()
     }
-
-    // ── Internal ──────────────────────────────────────────────────────────
 
     private fun resetInactivityTimer() {
         inactivityHandler.removeCallbacks(inactivityRunnable)
@@ -156,12 +129,6 @@ class LowPowerManager(
         savedBrightness = -1f
     }
 
-    /**
-     * Re-evaluate the status line if the dim overlay is currently up. Called by
-     * the host activity whenever the wake-state controller's bound-slot count
-     * changes, so the line keeps up with bind/unbind mid-dim instead of
-     * waiting for the next 15-second clock tick.
-     */
     fun refreshStatus() {
         if (state.value == State.ACTIVE) updateStatus()
     }
@@ -172,9 +139,6 @@ class LowPowerManager(
         val ctx = v.tvLowPowerStatus.context
         v.tvLowPowerStatus.text =
             if (active > 0) {
-                // "Bound" mirrors the bind/unbind concept on the dashboard;
-                // we previously said "Streaming" which conflated the routing
-                // state with the on-the-wire transmission state.
                 ctx.resources.getQuantityString(R.plurals.low_power_status_bound, active, active)
             } else {
                 ctx.getString(R.string.low_power_status_idle)

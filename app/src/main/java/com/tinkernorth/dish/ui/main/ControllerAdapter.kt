@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.ui.main
 
@@ -45,57 +44,25 @@ interface SlotActionListener {
 
     fun onOpenGamepad()
 
-    /** User picked a new controller type (Xbox/PS) for a satellite-bound slot. */
     fun onChangeDeviceType(
         slotId: String,
         connectionId: String,
         type: Int,
     )
 
-    /**
-     * User flipped the per-slot motion toggle on the controller row.
-     * Persisted by [com.tinkernorth.dish.source.store.MotionEnabledStore]
-     * via the ViewModel; the dish stops emitting motion samples for the
-     * slot (listener gate) and clears the `CAP_MOTION` bit at the next
-     * `MSG_CONTROLLER_ADD` for it (cap-word reflection — see
-     * [com.tinkernorth.dish.composer.MotionCapability.toCapBits]).
-     */
     fun onMotionEnabledChanged(
         slotId: String,
         enabled: Boolean,
     )
 
-    /**
-     * User picked a touchpad routing mode on the virtual slot's satellite
-     * row. [mode] is a [com.tinkernorth.dish.repository.TouchpadModeValue]
-     * string (`"off"` / `"ds4"` / `"mouse"`). The ViewModel persists the
-     * pick locally and pushes it to the satellite — server rejections are
-     * surfaced as toasts so the user understands an unsupported pick.
-     */
     fun onChangeTouchpadMode(
         connectionId: String,
         mode: String,
     )
 
-    /**
-     * User tapped "Open Touchpad" on the slot card. Implementation launches
-     * [com.tinkernorth.dish.ui.main.TouchpadOverlayActivity] with the slot's
-     * bound connection id + current touchpad mode (so the surface paints the
-     * right Pad/Mouse visual, and the wire payload is sent under the slot's
-     * own controllerIndex). Only fires when the slot is bound to a Connected
-     * satellite and the mode is non-Off; the button is hidden otherwise.
-     */
     fun onOpenTouchpad(slotId: String)
 }
 
-/**
- * Whether a connection in this state belongs in the slot's bind picker as a
- * normal, claimable target. Saved (offline) and Stale (needs pairing) drop
- * off because the user can't usefully route input to them right now — the
- * picker stays focused on the targets they can actually pick. A slot that
- * is *already* bound keeps its current connection visible regardless, see
- * [connectionsVisibleInPicker].
- */
 internal fun LinkState.isAvailableForPicker(): Boolean =
     when (this) {
         LinkState.Connected, LinkState.Unstable,
@@ -105,12 +72,6 @@ internal fun LinkState.isAvailableForPicker(): Boolean =
         LinkState.Saved, LinkState.Stale -> false
     }
 
-/**
- * Pure helper: the subset of [all] the per-slot picker should display.
- * Includes every available connection plus the slot's currently-bound one
- * (even when unreachable) so the user keeps a handle on what they're routing
- * to until they unbind or the connection recovers.
- */
 internal fun connectionsVisibleInPicker(
     all: List<ConnectionSummary>,
     boundConnectionId: String?,
@@ -123,26 +84,7 @@ class ControllerAdapter(
         val slot: ControllerSlot,
         val connections: List<ConnectionSummary>,
         val expanded: Boolean,
-        /**
-         * The latest motion capability snapshot for this slot. Drives the
-         * per-slot motion toggle: the switch is checked iff
-         * [MotionCapability.userEnabled], and disabled iff
-         * `!hasGyro || !hostHasSinkForType` (with subtitle text explaining
-         * which limit is in effect). Defaults to [MotionCapability.Off] so
-         * a row built before the composer has emitted reads as
-         * "hardware-not-yet-confirmed" rather than crashing on a missing
-         * lookup.
-         */
         val motionCap: MotionCapability = MotionCapability.Off,
-        /**
-         * Resolved per-satellite touchpad routing mode (connectionId →
-         * [TouchpadModeValue]). Drives the touchpad-mode picker chips on
-         * the virtual slot's satellite row AND whether the "Open Touchpad"
-         * button is visible (hidden when the mode is Off). Empty until the
-         * ViewModel's composer has emitted — a row built before then reads
-         * every connection as Off, so the picker is shown with Off selected
-         * but the launch button stays hidden.
-         */
         val touchpadModes: Map<String, String> = emptyMap(),
     )
 
@@ -188,8 +130,6 @@ class ControllerAdapter(
             b.tvSlotStatus.text = slotStatusText(slot)
             bindBattery(slot.battery)
 
-            // dotStatus's oval shape comes from `background="@drawable/dot_circle"`
-            // in item_controller.xml — only the colour mutates at runtime.
             setDot(
                 b.dotStatus,
                 when {
@@ -200,10 +140,6 @@ class ControllerAdapter(
                 },
             )
 
-            // Connection-target glyph: mirrors the same icon family the
-            // ConnectionsActivity row uses, so a slot and its bound row read
-            // as the same thing. Hidden when the slot is unbound — the
-            // gamepad-type icon on the left already names the slot itself.
             val bound = slot.boundStatus
             if (bound == null) {
                 b.ivBoundKind.visibility = View.GONE
@@ -221,9 +157,6 @@ class ControllerAdapter(
 
             b.ivChevron.rotation = if (row.expanded) 180f else 0f
 
-            // Quick-launch button surfaces only on the collapsed virtual card
-            // when a connection is live, so the user can jump straight into
-            // the overlay without expanding.
             val canOpenGamepad =
                 isVirtual && slot.boundStatus?.live == LinkState.Connected
             b.ivOpenGamepadQuick.visibility =
@@ -233,7 +166,6 @@ class ControllerAdapter(
             b.llBody.visibility = if (row.expanded) View.VISIBLE else View.GONE
             if (!row.expanded) return
 
-            // Unbind button
             if (slot.boundConnectionId != null) {
                 b.btnUnbind.visibility = View.VISIBLE
                 b.btnUnbind.setOnClickListener { listener.onUnbind(slot.id) }
@@ -241,8 +173,6 @@ class ControllerAdapter(
                 b.btnUnbind.visibility = View.GONE
             }
 
-            // Connection list. Filtered to "available now" plus the
-            // bound-but-unreachable holdover; see [connectionsVisibleInPicker].
             b.llConnectionList.removeAllViews()
             val visible = connectionsVisibleInPicker(row.connections, slot.boundConnectionId)
             when {
@@ -265,23 +195,6 @@ class ControllerAdapter(
             bindOverlayLaunchButtons(row, isVirtual)
         }
 
-        /**
-         * Paint the two static overlay-launch buttons under Unbind: Open
-         * Gamepad and Open Touchpad. Pulled out of [bind] so the per-row
-         * action stack is one cohesive read — and to keep [bind]'s line
-         * count under the detekt LongMethod threshold.
-         *
-         * Open Gamepad is virtual-only — the on-screen touch gamepad is the
-         * only sender, so a physical slot would mislead the user.
-         *
-         * Open Touchpad is available for any slot bound to a Connected
-         * satellite when the satellite's resolved touchpad mode is non-Off.
-         * That covers the virtual slot AND physical pads without their own
-         * touchpad surface (Xbox, Switch Pro, generic HID) — the user gets
-         * an on-screen touchpad driven under the *slot's* controllerIndex,
-         * so the receiver routes through whichever virtual device was
-         * registered for it.
-         */
         private fun bindOverlayLaunchButtons(
             row: Row,
             isVirtual: Boolean,
@@ -325,18 +238,11 @@ class ControllerAdapter(
             val inflater = LayoutInflater.from(ctx)
             val rb = PickerConnectionRowBinding.inflate(inflater, parent, false)
             val bound = slot.boundConnectionId == c.id
-            // Bluetooth is single-host: another slot already bound to this BT
-            // connection blocks this slot from claiming it. Satellites accept
-            // multiple slots side-by-side so we never disable for sat.
+            // BT is single-host; satellites accept multiple slots.
             val ownedByOther =
                 c.kind == ConnectionKind.BLUETOOTH && c.boundSlotIds.any { it != slot.id }
-            // Only reachable when [connectionsVisibleInPicker] kept it via the
-            // bound-holdover rule — those rows render dimmed and don't accept
-            // a click (the explicit Unbind button below is the action surface).
             val unreachable = !c.live.isAvailableForPicker()
 
-            // Selected drives the picker_row_bg state-list so the border flips
-            // to colorPrimary when this slot is bound to this connection.
             rb.root.isSelected = bound
             rb.root.alpha =
                 when {
@@ -354,21 +260,9 @@ class ControllerAdapter(
 
             bindConnectionHeader(rb, c)
             bindConnectionDetail(rb, ctx, c, bound, ownedByOther)
-            // Per-slot Xbox/PS toggle for the satellite this slot is bound to.
-            // Bluetooth's controller type is fixed by the remembered host so
-            // we don't render a switcher there.
             if (bound && c.kind == ConnectionKind.SATELLITE) {
                 rb.llPickerControls.addView(buildTypeToggle(inflater, rb.llPickerControls, slot, c))
-                // Per-slot motion (gyro) on/off switch. Same gating as the
-                // type toggle — only meaningful for a satellite-bound slot
-                // because Bluetooth-HID has no motion channel and motion
-                // is a satellite-path feature.
                 rb.llPickerControls.addView(buildMotionToggle(inflater, rb.llPickerControls, slot, motionCap))
-                // Touchpad routing-mode picker — applies to both the on-screen
-                // virtual touchpad AND any physical slot bound here, since the
-                // satellite's per-device mode is shared across all of this
-                // dish's slots. The launch button itself lives in the card's
-                // static action stack (under Unbind), not here.
                 if (c.live == LinkState.Connected) {
                     rb.llPickerControls.addView(
                         buildTouchpadModePicker(inflater, rb.llPickerControls, c, touchpadMode),
@@ -378,28 +272,15 @@ class ControllerAdapter(
             parent.addView(rb.root)
         }
 
-        /**
-         * Header row inside a bind-picker entry: 22dp v6 brand glyph on the
-         * leading edge, bold title to its right. The glyph reads the kind+live
-         * state straight from [ConnectionSummary], so a row's silhouette
-         * tracks live SSE updates without a separate refresh path.
-         */
         private fun bindConnectionHeader(
             rb: PickerConnectionRowBinding,
             c: ConnectionSummary,
         ) {
-            // Glyph rides on tvPickerTitle as a leading compound drawable
-            // (collapsed from the prior ivPickerGlyph ImageView for perf in
-            // this RecyclerView item). Sized to @dimen/icon_picker_glyph
-            // rather than the vector's intrinsic 24dp.
             setStartCompoundDrawable(
                 rb.tvPickerTitle,
                 glyphForConnection(c.kind, c.live),
                 R.dimen.icon_picker_glyph,
             )
-            // Saved/Stale only reach this picker when the slot is currently
-            // bound to that connection — surface "offline"/"needs pairing"
-            // so the bound row reads as disconnected rather than silent.
             val ctx = rb.root.context
             val statusSuffix =
                 when (c.live) {
@@ -459,17 +340,6 @@ class ControllerAdapter(
             return rb.root
         }
 
-        /**
-         * Bind the per-slot motion (gyro) on/off row that lives under the
-         * Xbox/PS chips in the expanded controller card. The switch
-         * reflects [MotionCapability.userEnabled]; the subtitle text
-         * explains the gating in plain language whenever motion CAN'T flow
-         * (no gyro hardware, host has no sink for the chosen type, source
-         * paused for other reasons). The switch is **disabled** for hard
-         * limits the user can't fix by flipping it — no gyro and
-         * no-host-sink — so the user is steered toward the actionable
-         * remedy (different hardware, or change controller type) instead.
-         */
         private fun buildMotionToggle(
             inflater: LayoutInflater,
             parent: ViewGroup,
@@ -477,10 +347,6 @@ class ControllerAdapter(
             cap: MotionCapability,
         ): View {
             val rb = PickerMotionToggleBinding.inflate(inflater, parent, false)
-            // Subtitle: the most relevant "why" for the current state. Mirrors
-            // the precedence in MotionIndicatorState.of() — hardware first,
-            // then host-sink, then "on / off" status — so the text here is
-            // consistent with what the overlay pill says.
             val subtitleResId =
                 when {
                     !cap.hasGyro -> R.string.controller_motion_toggle_subtitle_no_gyro
@@ -491,15 +357,8 @@ class ControllerAdapter(
                 }
             rb.tvMotionSubtitle.setText(subtitleResId)
 
-            // The Switch itself. Disabled when there's nothing the user can
-            // do by flipping it — no hardware, or the host backend has no
-            // sink for the slot's controller type. The subtitle text above
-            // already explains the limit.
             val enabledForUser = cap.hasGyro && cap.hostHasSinkForType
-            // setOnCheckedChangeListener fires on programmatic setChecked
-            // too — null it before the assignment so the first paint (and
-            // every DiffUtil rebind through this same code) doesn't ping
-            // the store. RecyclerView reuses views.
+            // Null listener before programmatic setChecked so RecyclerView rebinds don't ping the store.
             rb.swMotion.setOnCheckedChangeListener(null)
             rb.swMotion.isChecked = cap.userEnabled && enabledForUser
             rb.swMotion.isEnabled = enabledForUser
@@ -509,14 +368,6 @@ class ControllerAdapter(
             return rb.root
         }
 
-        /**
-         * Touchpad routing-mode picker — three chips (Off / Pad / Mouse)
-         * rendered under the motion toggle on a satellite-bound slot's row.
-         * The selected chip mirrors the resolved mode in the row's
-         * [Row.touchpadModes] map; tapping a chip fires
-         * [SlotActionListener.onChangeTouchpadMode] which persists locally
-         * and pushes to the server.
-         */
         private fun buildTouchpadModePicker(
             inflater: LayoutInflater,
             parent: ViewGroup,
@@ -553,21 +404,9 @@ class ControllerAdapter(
             return rb.root
         }
 
-        /**
-         * Inflate one [chip_pickable.xml] chip, bind its label + checked
-         * state + click handler. MaterialChip (FilterChip variant) drives
-         * the selected/unselected fill, stroke, text colour, ripple, and
-         * state layer via Widget.Dish.Chip — the adapter only flips
-         * `isChecked` and wires the click handler.
-         *
-         * `isClickable = !checked` keeps the prior UX where the selected
-         * chip can't be tapped again (single-choice picker: re-selecting
-         * the current pick is a no-op). The OnClickListener path triggers
-         * the listener which causes a row rebind that re-renders both
-         * sibling chips with the new checked state — so the FilterChip's
-         * built-in toggle-on-tap behaviour ends up consistent with the
-         * single-choice semantics.
-         */
+        // Single-choice picker: clearing isClickable on the selected chip suppresses the
+        // FilterChip's built-in toggle-on-tap so re-selecting the current pick is a no-op;
+        // a real change rebinds the row and re-renders both chips with the new state.
         private fun buildChip(
             inflater: LayoutInflater,
             parent: ViewGroup,
@@ -587,22 +426,7 @@ class ControllerAdapter(
             return chip
         }
 
-        /**
-         * Set [resId] as the leading (start) compound drawable on [tv],
-         * sized to [sizeDimen] and with no tint (callers that need a tint
-         * should wrap the drawable themselves — none currently do because
-         * both the battery glyph and the connection-kind glyph are
-         * deliberately two-tone and self-coloured).
-         *
-         * Returns the resolved drawable so animated-vector callers can
-         * `start()` it without re-fetching from the TextView.
-         *
-         * Uses explicit bounds via [Drawable.setBounds] then
-         * `setCompoundDrawablesRelative` because the icon dimens
-         * (`icon_battery` = 20dp, `icon_picker_glyph` = 22dp) intentionally
-         * differ from the vectors' intrinsic 24dp; the wrap-with-bounds
-         * helper would render them at the wrong size.
-         */
+        // Explicit bounds because icon dimens (20/22dp) differ from vector intrinsic 24dp.
         private fun setStartCompoundDrawable(
             tv: TextView,
             @DrawableRes resId: Int,
@@ -622,34 +446,17 @@ class ControllerAdapter(
                 return
             }
             b.tvBattery.visibility = View.VISIBLE
-            // Battery glyph rides on the TextView as a leading compound
-            // drawable (collapsed from the prior ivBattery ImageView for
-            // perf in this RecyclerView item). The glyph is two-tone and
-            // intentionally not tinted; size comes from @dimen/icon_battery
-            // (not the drawable's intrinsic 24dp) so we set explicit bounds.
             val glyph = setStartCompoundDrawable(b.tvBattery, batteryIcon(battery), R.dimen.icon_battery)
-            // ic_battery_charging is an AnimatedVectorDrawable — kick off its
-            // fill-ramp / bolt-pulse loop. The other rungs are static, so for
-            // them this is a harmless no-op.
+            // ic_battery_charging is an AnimatedVectorDrawable; start() is a no-op on static rungs.
             (glyph as? Animatable)?.start()
             b.tvBattery.text =
                 battery.level?.let { ctx.getString(R.string.battery_percent, it) }
                     ?: ctx.getString(R.string.battery_unknown_level)
-            // Only the percentage text carries the low-battery red; the icon is
-            // left its own teal (a flat tint would collapse the white overlay).
             val colorRes = if (battery.isLow) R.color.colorError else R.color.colorMuted
             b.tvBattery.setTextColor(ctx.getColor(colorRes))
-            // contentDescription lives on the TextView now that the icon is a
-            // compound drawable; the announcement still tracks the live state.
             b.tvBattery.contentDescription = batteryDescription(ctx, battery)
         }
 
-        /**
-         * Pick the charge-ladder drawable for [battery]. Charging selects the
-         * animated bolt icon; otherwise the level picks a rung, mirroring the
-         * percent → file table the battery icon assets ship with. A null level
-         * (a status-only pad) falls back to the generic glyph.
-         */
         private fun batteryIcon(battery: BatteryUi): Int {
             if (battery.charging) return R.drawable.ic_battery_charging
             val level = battery.level ?: return R.drawable.ic_battery
@@ -663,12 +470,6 @@ class ControllerAdapter(
             }
         }
 
-        /**
-         * Build the dynamic battery `contentDescription` for screen readers:
-         * the level (a percentage, or "level unknown" for a status-only pad)
-         * plus a charging-state phrase. Kept off the static layout string so
-         * the announced value tracks the live battery.
-         */
         private fun batteryDescription(
             ctx: android.content.Context,
             battery: BatteryUi,
@@ -705,11 +506,6 @@ class ControllerAdapter(
         }
     }
 
-    /**
-     * Inflate the empty-state label into the picker's connection-list
-     * container. Width, top margin, text color, and text size all live in
-     * `@layout/picker_empty_label`; this helper only binds the message.
-     */
     private fun addEmptyLabel(
         parent: LinearLayout,
         @androidx.annotation.StringRes messageRes: Int,

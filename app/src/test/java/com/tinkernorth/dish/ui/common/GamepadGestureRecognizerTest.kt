@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.ui.common
 
@@ -11,41 +10,13 @@ import io.mockk.slot
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * Behavioural tests for [GamepadGestureRecognizer].
- *
- * Pins the key contract from the "d-pad releases when finger leaves the
- * well" bug: once a pointer claims the d-pad on DOWN, every subsequent MOVE
- * for that pointer drives the hat direction from the angle to the d-pad
- * centre — regardless of whether the finger is still inside [GamepadLayout.dpadRect].
- * That mirrors the analog-stick contract verified by [VirtualStickMathTest].
- *
- * The recognizer is `internal`, so this test lives in the same package.
- * Synthetic [MotionEvent]s are constructed with mockk so the test stays free
- * of Android Looper / native dependencies.
- */
 class GamepadGestureRecognizerTest {
     private val recognizer = GamepadGestureRecognizer()
 
-    /**
-     * Synthetic layout with the d-pad centred at (150, 250) and 100x100 px in
-     * size. Every other region is placed far off-screen so unrelated DOWNs
-     * don't accidentally claim a pointer.
-     *
-     * [android.graphics.RectF] is stubbed out by the AGP unit-test classpath
-     * (`Method ... not mocked.`), so we mock each instance to return the
-     * minimal slice the recognizer touches: [RectF.contains],
-     * [RectF.centerX], [RectF.centerY], [RectF.width].
-     */
     private val layout =
         GamepadLayout(
             dpadRect = fakeRect(100f, 200f, 200f, 300f),
-            // ABXY centred at (1000, 1000) with btnRadius = 10 → A at (1000,1015),
-            // B at (1015,1000), X at (985,1000), Y at (1000,985). Pickup radius
-            // is 1.3·10 = 13; spacing between adjacent button centres is
-            // 1.5·10·√2 ≈ 21.2, so the midpoint between A and B (1007.5, 1007.5)
-            // lands inside both pickup discs (10.6 < 13) and the multi-button
-            // tests below rely on those exact distances.
+            // ABXY centred at (1000,1000), btnRadius=10 → A(1000,1015) B(1015,1000) X(985,1000) Y(1000,985); pickup radius 13; midpoint A↔B at (1007.5,1007.5) (dist 10.6 < 13).
             abxyRect = fakeRect(985f, 985f, 1015f, 1015f),
             lbRect = fakeRect(FAR, FAR, FAR + 1, FAR + 1),
             rbRect = fakeRect(FAR, FAR, FAR + 1, FAR + 1),
@@ -75,6 +46,7 @@ class GamepadGestureRecognizerTest {
         right: Float,
         bottom: Float,
     ): RectF {
+        // RectF is stubbed out by AGP unit-test classpath; mock the slice the recognizer touches.
         val cx = (left + right) / 2f
         val cy = (top + bottom) / 2f
         val width = right - left
@@ -104,16 +76,9 @@ class GamepadGestureRecognizerTest {
             every { getPointerId(0) } returns pid
             every { getX(0) } returns x
             every { getY(0) } returns y
-            // No historical samples — exercised in moveEventWithHistory below.
             every { historySize } returns 0
         }
 
-    /**
-     * Build a synthetic `ACTION_MOVE` event for a single pointer that carries
-     * [history] intermediate (x, y) samples followed by the current
-     * ([currentX], [currentY]) position. Used to exercise the recognizer's
-     * historical-sample draining path.
-     */
     private fun moveEventWithHistory(
         history: List<Pair<Float, Float>>,
         currentX: Float,
@@ -134,8 +99,6 @@ class GamepadGestureRecognizerTest {
             }
         }
 
-    // ── DOWN: octant resolution ─────────────────────────────────────────────
-
     @Test
     fun `down east-of-centre inside rect sets HAT_E`() {
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 180f, y = 250f), layout)
@@ -150,7 +113,7 @@ class GamepadGestureRecognizerTest {
 
     @Test
     fun `down north-of-centre inside rect sets HAT_N`() {
-        // y < centerY means "up" on screen (Android y-down).
+        // y < centerY = up (Android y-down).
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 150f, y = 220f), layout)
         assertEquals(GamepadTouchView.HAT_N, recognizer.state.hatSwitch)
     }
@@ -169,17 +132,12 @@ class GamepadGestureRecognizerTest {
 
     @Test
     fun `down outside dpadRect leaves hat at HAT_NONE`() {
-        // (500, 500) is far from the d-pad — no pointer is claimed.
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 500f, y = 500f), layout)
         assertEquals(GamepadTouchView.HAT_NONE, recognizer.state.hatSwitch)
     }
 
-    // ── MOVE: drag past the rect keeps the hat registered ──────────────────
-
     @Test
     fun `drag far east past dpadRect keeps HAT_E registered`() {
-        // The regression this test pins: pre-fix, the move handler zeroed
-        // hatSwitch to HAT_NONE the moment the finger crossed dpadRect.
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 180f, y = 250f), layout)
         assertEquals(GamepadTouchView.HAT_E, recognizer.state.hatSwitch)
 
@@ -189,13 +147,9 @@ class GamepadGestureRecognizerTest {
 
     @Test
     fun `drag from east to south while outside rect resolves to HAT_S`() {
-        // Mirrors the analog-stick "drag past the well and direction
-        // re-resolves" contract — angle is from the d-pad centre, not the
-        // last known finger position.
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 180f, y = 250f), layout)
         assertEquals(GamepadTouchView.HAT_E, recognizer.state.hatSwitch)
 
-        // Finger now far below the d-pad centre (y >> centerY=250).
         recognizer.onTouchEvent(event(MotionEvent.ACTION_MOVE, x = 150f, y = 800f), layout)
         assertEquals(GamepadTouchView.HAT_S, recognizer.state.hatSwitch)
     }
@@ -205,8 +159,6 @@ class GamepadGestureRecognizerTest {
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 180f, y = 250f), layout)
         assertEquals(GamepadTouchView.HAT_E, recognizer.state.hatSwitch)
 
-        // Drag well outside to the south, then snap back inside on the
-        // north side — hat should follow.
         recognizer.onTouchEvent(event(MotionEvent.ACTION_MOVE, x = 150f, y = 800f), layout)
         assertEquals(GamepadTouchView.HAT_S, recognizer.state.hatSwitch)
 
@@ -216,18 +168,12 @@ class GamepadGestureRecognizerTest {
 
     @Test
     fun `move for a pointer that didn't claim the dpad does not touch the hat`() {
-        // Press east of centre, then send MOVE events for a *different*
-        // pointer id — d-pad state must stay locked to the original pointer.
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 180f, y = 250f, pid = POINTER_0), layout)
         assertEquals(GamepadTouchView.HAT_E, recognizer.state.hatSwitch)
 
-        // POINTER_1 never claimed the d-pad: a move event for it is ignored
-        // (the recognizer only updates the hat for pid == dpadPointerId).
         recognizer.onTouchEvent(event(MotionEvent.ACTION_MOVE, x = 150f, y = 800f, pid = POINTER_1), layout)
         assertEquals(GamepadTouchView.HAT_E, recognizer.state.hatSwitch)
     }
-
-    // ── UP / CANCEL: clear the hat ──────────────────────────────────────────
 
     @Test
     fun `up on the dpad pointer clears the hat to HAT_NONE`() {
@@ -240,8 +186,6 @@ class GamepadGestureRecognizerTest {
 
     @Test
     fun `up after drag outside rect still clears the hat`() {
-        // Drag past the rect (which keeps the hat held), then lift — must
-        // release cleanly, not stay latched.
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 180f, y = 250f), layout)
         recognizer.onTouchEvent(event(MotionEvent.ACTION_MOVE, x = 600f, y = 250f), layout)
         assertEquals(GamepadTouchView.HAT_E, recognizer.state.hatSwitch)
@@ -265,57 +209,39 @@ class GamepadGestureRecognizerTest {
         recognizer.reset()
         assertEquals(GamepadTouchView.HAT_NONE, recognizer.state.hatSwitch)
 
-        // After reset, a fresh DOWN must be able to claim the d-pad again
-        // (dpadPointerId was zeroed back to INVALID_POINTER).
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 120f, y = 250f), layout)
         assertEquals(GamepadTouchView.HAT_W, recognizer.state.hatSwitch)
     }
 
-    // ── D-pad diagonal sweet-spot (ratio threshold) ────────────────────────
-
     @Test
     fun `down east with small north offset above threshold sets HAT_NE`() {
-        // dx = 30, dy = -10 → minor/major = 0.33 ≥ DPAD_DIAGONAL_THRESHOLD (0.3).
-        // The old 22.5° geometric-octant logic would have snapped this to HAT_E
-        // because the angle is only ~18° from the east axis.
+        // dx=30, dy=-10 → ratio 0.33 ≥ DPAD_DIAGONAL_THRESHOLD (0.3).
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 180f, y = 240f), layout)
         assertEquals(GamepadTouchView.HAT_NE, recognizer.state.hatSwitch)
     }
 
     @Test
     fun `down east with tiny north offset below threshold stays cardinal HAT_E`() {
-        // dx = 30, dy = -2 → minor/major ≈ 0.067 < 0.3, so the finger sits well
-        // inside the cardinal-east band and we don't accidentally flip to NE.
+        // dx=30, dy=-2 → ratio ≈ 0.067 < 0.3.
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 180f, y = 248f), layout)
         assertEquals(GamepadTouchView.HAT_E, recognizer.state.hatSwitch)
     }
 
     @Test
     fun `down upper-left with dominant west still resolves to HAT_NW`() {
-        // dx = -30, dy = -12 → minor/major = 0.4 ≥ 0.3 → diagonal NW, even
-        // though the touch is much closer to "pure left" than to a 45° angle.
-        // This is the regression the user reported: pre-fix, "up + left"
-        // almost always collapsed to one or the other.
+        // dx=-30, dy=-12 → ratio 0.4 ≥ 0.3 → diagonal NW.
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 120f, y = 238f), layout)
         assertEquals(GamepadTouchView.HAT_NW, recognizer.state.hatSwitch)
     }
 
-    // ── ABXY: live-tracking zone resolver ──────────────────────────────────
-
     @Test
     fun `down on B button sets BTN_B`() {
-        // (1015, 1000) is 15 east of the cluster centre — well past the
-        // ABXY_CENTER_ZONE_FRACTION centre disc and inside the east sector,
-        // which resolves to a single B bit.
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 1015f, y = 1000f), layout)
         assertEquals(GamepadTouchView.BTN_B, recognizer.state.buttons and ABXY_MASK)
     }
 
     @Test
     fun `down at cluster centre triggers all four buttons`() {
-        // The new "centre = all four" sweet-spot the user explicitly asked
-        // for. With ABXY_CENTER_ZONE_FRACTION = 0.5 and btnRadius = 10 the
-        // centre disc has radius 7.5; (1000, 1000) is dead centre.
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 1000f, y = 1000f), layout)
         val all =
             GamepadTouchView.BTN_A or GamepadTouchView.BTN_B or
@@ -325,9 +251,6 @@ class GamepadGestureRecognizerTest {
 
     @Test
     fun `down between A and B in SE sector sets both bits`() {
-        // (1007.5, 1007.5) is 10.6 from centre — outside the 7.5-unit
-        // centre disc — and at a perfect 45° angle, putting it in the SE
-        // diagonal sector which maps to A + B.
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 1007.5f, y = 1007.5f), layout)
         val expected = GamepadTouchView.BTN_A or GamepadTouchView.BTN_B
         assertEquals(expected, recognizer.state.buttons and ABXY_MASK)
@@ -335,8 +258,6 @@ class GamepadGestureRecognizerTest {
 
     @Test
     fun `drag from B in same direction past cluster keeps BTN_B`() {
-        // Zones extend infinitely past the visible cluster, so a drag in the
-        // same east direction stays inside the east sector — bits unchanged.
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 1015f, y = 1000f), layout)
         recognizer.onTouchEvent(event(MotionEvent.ACTION_MOVE, x = 2000f, y = 1000f), layout)
         assertEquals(GamepadTouchView.BTN_B, recognizer.state.buttons and ABXY_MASK)
@@ -344,9 +265,6 @@ class GamepadGestureRecognizerTest {
 
     @Test
     fun `drag from B into A sector replaces BTN_B with BTN_A`() {
-        // The "turn off as I change direction" fix: live tracking means the
-        // held bits follow the finger across zones — sliding from B (east)
-        // to A (south) drops B and picks up A, instead of accumulating.
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 1015f, y = 1000f), layout)
         recognizer.onTouchEvent(event(MotionEvent.ACTION_MOVE, x = 1000f, y = 1015f), layout)
         assertEquals(GamepadTouchView.BTN_A, recognizer.state.buttons and ABXY_MASK)
@@ -397,9 +315,6 @@ class GamepadGestureRecognizerTest {
 
     @Test
     fun `two pointers holding the same button - releasing one keeps it latched`() {
-        // Both fingers on B. Lifting the first must leave B held by the second
-        // — the aggregation OR'd both pointers' east-zone bits, so removing
-        // one still leaves the other's contribution.
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 1015f, y = 1000f, pid = POINTER_0), layout)
         recognizer.onTouchEvent(
             event(MotionEvent.ACTION_POINTER_DOWN, x = 1015f, y = 1000f, pid = POINTER_1),
@@ -414,14 +329,8 @@ class GamepadGestureRecognizerTest {
         assertEquals(GamepadTouchView.BTN_B, recognizer.state.buttons and ABXY_MASK)
     }
 
-    // ── History draining: coalesced ACTION_MOVE samples ────────────────────
-
     @Test
     fun `move with historical samples applies each intermediate position`() {
-        // Claim the d-pad in the east octant, then deliver a single MOVE
-        // event that coalesces three panel samples: S (south), W (west),
-        // current = N (north). Without history draining the recognizer
-        // would jump E → N and the south/west sweeps would never appear.
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 180f, y = 250f), layout)
         assertEquals(GamepadTouchView.HAT_E, recognizer.state.hatSwitch)
 
@@ -436,18 +345,12 @@ class GamepadGestureRecognizerTest {
             seen.add(recognizer.state.hatSwitch)
         }
 
-        // Three callbacks: S (historical 0), W (historical 1), N (current).
         assertEquals(listOf(GamepadTouchView.HAT_S, GamepadTouchView.HAT_W, GamepadTouchView.HAT_N), seen)
-        // Final state reflects the current sample.
         assertEquals(GamepadTouchView.HAT_N, recognizer.state.hatSwitch)
     }
 
     @Test
     fun `move with no historical samples still fires callback once`() {
-        // Existing behaviour: an ACTION_MOVE with historySize=0 must still
-        // produce exactly one callback so the listener can dispatch the
-        // current sample. Pins that the per-sample notification path
-        // collapses cleanly when there's no history to drain.
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 180f, y = 250f), layout)
 
         var callbackCount = 0
@@ -461,9 +364,6 @@ class GamepadGestureRecognizerTest {
 
     @Test
     fun `down fires callback exactly once`() {
-        // DOWN/UP/CANCEL don't carry history per Android contract, so the
-        // recognizer must fire the callback exactly once for those — the
-        // touch view relies on this to dispatch a single state update.
         var callbackCount = 0
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 180f, y = 250f), layout) {
             callbackCount += 1

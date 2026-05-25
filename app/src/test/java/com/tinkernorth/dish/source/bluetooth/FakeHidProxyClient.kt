@@ -1,19 +1,11 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.bluetooth
 
 import com.tinkernorth.dish.core.input.BluetoothGamepad
 
-/**
- * In-memory test double for [HidProxyClient]. Records every call the session
- * makes to the proxy and exposes helpers to inject framework events back into
- * the session. Threading is irrelevant here — tests drive the session on one
- * thread and all synchronization lives in the session itself.
- */
 internal class FakeHidProxyClient(
     var adapterEnabled: Boolean = true,
-    /** MAC → name for hosts the OS already considers connected. */
     var osConnectedHosts: MutableMap<String, String?> = mutableMapOf(),
     var sendReportReturns: Boolean = true,
 ) : HidProxyClient {
@@ -72,8 +64,6 @@ internal class FakeHidProxyClient(
         calls += Call.UnregisterAndRelease
         events = null
     }
-
-    // ── Event injection ─────────────────────────────────────────────────
 
     fun fireAcquired() = events?.onAcquired() ?: Unit
 

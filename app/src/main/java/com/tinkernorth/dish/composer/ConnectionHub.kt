@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.composer
 
@@ -17,39 +16,13 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Kind of a connection target. Bluetooth is capped at a single active host by
- * Android's HID Device profile, but the hub still tracks multiple remembered hosts
- * and exposes them as separate [ConnectionSummary] entries so the user can switch
- * between them.
- */
 enum class ConnectionKind { SATELLITE, BLUETOOTH }
 
-/**
- * UI-facing link state for one connection.
- *
- * | LinkState   | Pairing axis    | Presence axis   | User-facing chip |
- * |-------------|-----------------|-----------------|------------------|
- * | [Found]     | unpaired        | seen            | "Found"          |
- * | [Stale]     | broken (lost)   | any             | "Needs pairing"  |
- * | [Saved]     | paired          | absent          | "Offline"        |
- * | [Ready]     | paired          | seen, no session| "Ready"          |
- * | [Connecting]| paired          | linking         | "Connecting…"    |
- * | [Connected] | paired          | live            | "Online"         |
- * | [Unstable]  | paired          | faltering       | "Unsteady"       |
- */
 enum class LinkState { Found, Stale, Saved, Ready, Connecting, Connected, Unstable }
 
-/** Server-visible controller type. The native protocol carries the raw int. */
 const val CONTROLLER_TYPE_XBOX = 0
 const val CONTROLLER_TYPE_PLAYSTATION = 1
 
-/**
- * Snapshot of a single remembered or live connection.
- *
- * [boundSlotIds] is a list because a satellite session can host multiple
- * controllers; for Bluetooth the hub enforces at most one entry.
- */
 data class ConnectionSummary(
     val id: String,
     val kind: ConnectionKind,
@@ -57,39 +30,10 @@ data class ConnectionSummary(
     val detail: String,
     val live: LinkState,
     val boundSlotIds: List<String>,
-    /** For BT only: name of the remembered [BluetoothGamepad.GamepadProfile]. */
     val btProfile: String? = null,
-    /**
-     * For SATELLITE only: per-slot controller type (Xbox / PlayStation /…). Empty
-     * for Bluetooth since BT type is fixed by the remembered host's HID profile.
-     */
     val satelliteControllerTypes: Map<String, Int> = emptyMap(),
 )
 
-/**
- * **Coordinator** — not a pattern instance itself. Orchestrates between three
- * underlying pattern instances:
- *
- *   - [SlotBindingStore] (source/store/) — `slotId -> connectionId`
- *   - [ControllerTypeStore] (source/store/) — `(connId, slotId) -> type` (satellites)
- *   - [ConnectionsComposer] (composer/) — derives the unified
- *     `List<ConnectionSummary>` consumers render
- *
- * The Hub exposes the same imperative API the old god-object did
- * (`bind` / `unbind` / `setSatelliteControllerType` / `autoReconnectAll`), but
- * every read goes through the stores' / composer's StateFlows. Eviction (the
- * Bluetooth one-slot-per-host rule, the satellite slot detach on rebind) lives
- * here because it spans multiple stores plus side-effects on
- * [com.tinkernorth.dish.source.connection.SatelliteConnection]; a pure store can't
- * do that.
- *
- * Reads consumers do today still work:
- *   - `hub.bindings` → forwards [SlotBindingStore.state]
- *   - `hub.satTypes` → forwards [ControllerTypeStore.state]
- *   - `hub.connections` → forwards [ConnectionsComposer.state]
- *
- * New code should prefer injecting the underlying store / composer directly.
- */
 @Singleton
 class ConnectionHub
     @Inject
@@ -102,48 +46,24 @@ class ConnectionHub
         private val composer: ConnectionsComposer,
         private val scope: CoroutineScope,
     ) {
-        // Forwarded flows so existing callers don't have to inject the underlying
-        // stores. The forwards are pass-through; the stores own the truth.
         val bindings: StateFlow<Map<String, String>> = bindingStore.state
         val satTypes: StateFlow<Map<Pair<String, String>, Int>> = typeStore.state
 
-        // Single source of truth: the composer's derived StateFlow. An earlier
-        // version mirrored this into a hub-local MutableStateFlow and imperative
-        // bind()/unbind() pushed a fresh snapshot into the mirror so the UI
-        // wouldn't wait for the combine to re-emit. That created two writers
-        // (composer onEach + imperative path) on one mutable, and a late
-        // composer emission could overwrite a just-pushed imperative snapshot.
-        // Now imperative paths just mutate the underlying stores; the combine
-        // re-fires automatically and downstream consumers see the new value.
         val connections: StateFlow<List<ConnectionSummary>> = composer.state
 
-        /** Look up a summary by id. */
         fun summary(id: String): ConnectionSummary? = connections.value.firstOrNull { it.id == id }
 
-        /**
-         * Bind [slotId] to [connectionId]. Eviction depends on the connection
-         * kind: Bluetooth releases any prior slot on the same host
-         * (single-host HID Device profile constraint), but satellites accept
-         * multiple slots side-by-side. If the slot was previously bound
-         * elsewhere, that prior binding is detached first regardless of kind.
-         */
         fun bind(
             slotId: String,
             connectionId: String,
         ) {
-            // Slot was previously bound to a different connection: release it
-            // there before claiming the new one. Without this the old satellite
-            // session would keep treating this slot as its owner and reports for
-            // it would still be addressed to the old controller index.
             val priorConnId = bindingStore.connectionFor(slotId)
             if (priorConnId != null && priorConnId != connectionId) {
                 satellite.get(priorConnId)?.detachSlot(slotId)
                 typeStore.clear(priorConnId, slotId)
             }
 
-            // Bluetooth-only: another slot already holds this connection?
-            // Release it and tell the native session so the server sees a clean
-            // CONTROLLER_REMOVE before the new slot's CONTROLLER_ADD.
+            // Android HID Device profile allows only one active host; release prior slot first.
             val isBt = store.rememberedBt().any { it.id == connectionId }
             if (isBt) {
                 val priorSlot =
@@ -156,13 +76,10 @@ class ConnectionHub
 
             bindingStore.bind(slotId, connectionId)
 
-            // Stash a default type for new satellite bindings so the UI's
-            // per-slot toggle has something to render before the user picks.
             if (!isBt) {
                 typeStore.setTypeIfAbsent(connectionId, slotId, CONTROLLER_TYPE_XBOX)
             }
 
-            // For satellite: attach the controller slot on the server side.
             val type = typeStore.typeFor(connectionId, slotId) ?: CONTROLLER_TYPE_XBOX
             satellite.get(connectionId)?.let { conn ->
                 scope.launch { conn.attachSlot(slotId, controllerType = type) }
@@ -176,13 +93,6 @@ class ConnectionHub
             typeStore.clear(connId, slotId)
         }
 
-        /**
-         * Change the controller type (Xbox/PS/…) for a satellite-bound slot.
-         * Pushes the change to the native session if it's live; otherwise
-         * stashes the new value so it's used at the next registration. No-op
-         * for Bluetooth bindings since BT type is fixed by the remembered
-         * host's HID profile.
-         */
         fun setSatelliteControllerType(
             connectionId: String,
             slotId: String,
@@ -200,24 +110,15 @@ class ConnectionHub
                 connections.value.firstOrNull { it.id == id }
             }
 
-        /**
-         * Kick off a reconnect for every remembered satellite that isn't live
-         * yet, plus the first remembered Bluetooth host. Safe to call on
-         * every `MainActivity.onCreate` — both underlying managers are
-         * idempotent when a session is already live.
-         */
         fun autoReconnectAll() {
             for (remembered in store.remembered()) {
                 val existing = satellite.get(remembered.id)
                 if (existing?.state?.value != SatelliteSessionState.Live) {
-                    // AUTO_RECONNECT keeps failure paths silent — the row chip
-                    // (Connecting → Saved/Stale) is the user-visible signal.
                     satellite.connect(remembered.toDiscovered(), ConnectIntent.AUTO_RECONNECT)
                 }
             }
             val btHosts = store.rememberedBt()
-            // Include `autoReconnecting` so an in-flight acquire (triggered by an
-            // earlier foreground kick) isn't torn down and restarted.
+            // `autoReconnecting` guards an in-flight acquire from being torn down and restarted.
             if (btHosts.none {
                     val s = bt.state(it.id)
                     s.connected || s.registered || s.autoReconnecting

@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.architecture.testing
 
@@ -10,48 +9,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Inheritable contract test for any
- * [com.tinkernorth.dish.architecture.interfaces.Repository] implementation. Subclass
- * it, override the three factories, and you get the standard CRUD property checks
- * for free:
- *
- *   - `get` after `put` returns the value
- *   - `get` after `remove` returns null
- *   - `all` returns every put value
- *   - `clear` empties the store
- *   - `put` with the same key replaces the prior value
- *   - reading an empty store returns null / empty list (never throws)
- *
- * Concrete tests still add their own behaviour tests (serialization, thread safety,
- * legacy migration, etc.) on top — this kit only ensures the CRUD contract holds.
- *
- * The `Abstract` prefix announces that this is a base test class meant to be
- * extended, mirroring the production-code naming convention.
- *
- * Example:
- *
- * ```
- * class RememberedSatelliteRepositoryContractTest :
- *     AbstractRepositoryContract<String, RememberedSatellite>() {
- *     override fun newRepository() =
- *         RememberedSatelliteRepository(InMemoryPrefs(), Json)
- *     override fun newKey() = "sat:${Random.nextLong()}"
- *     override fun newValue(key: String) =
- *         RememberedSatellite(id = key, name = "t", ip = "1.1.1.1",
- *             udpPort = 9, pairPort = 9, httpPort = 9)
- * }
- * ```
- */
 abstract class AbstractRepositoryContract<K, V> {
     private lateinit var repo: Repository<K, V>
 
     protected abstract fun newRepository(): Repository<K, V>
 
-    /** Produce a fresh, unique key for each call. */
     protected abstract fun newKey(): K
 
-    /** Produce a value whose identity matches [key]. */
     protected abstract fun newValue(key: K): V
 
     @Before
@@ -115,7 +79,7 @@ abstract class AbstractRepositoryContract<K, V> {
 
     @Test
     fun remove_absent_key_is_noop() {
-        repo.remove(newKey()) // must not throw
+        repo.remove(newKey())
         assertTrue(repo.all().isEmpty())
     }
 }

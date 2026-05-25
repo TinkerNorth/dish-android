@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.composer
 
@@ -18,26 +17,6 @@ import kotlinx.coroutines.flow.onEach
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Bridges [CrashReportingStore]'s reactive opt-in state to Firebase
- * Crashlytics's collection toggle.
- *
- * **Pattern:** [DefaultLifecycleObserver]; installed against
- * `ProcessLifecycleOwner` from [com.tinkernorth.dish.DishApplication]. Collects
- * the store's state for the lifetime of the process and pushes every change
- * to `FirebaseCrashlytics.setCrashlyticsCollectionEnabled` — including the
- * initial value at app start, so a user who opted out on a previous launch
- * gets that respected before any crash can be uploaded.
- *
- * **Firebase-absent builds.** When the build was assembled without
- * `app/google-services.json`, the `google-services` Gradle plugin did not
- * generate the Firebase resources and `FirebaseApp.initializeApp` was never
- * called by the auto-init ContentProvider. We detect that via
- * [FirebaseApp.getApps] and no-op — the store still records the preference
- * (so it'll be honoured on a future build that has Firebase configured),
- * but we skip the SDK call to avoid `IllegalStateException("Default
- * FirebaseApp is not initialized...")`.
- */
 @Singleton
 class CrashReportingController
     @Inject
@@ -57,10 +36,7 @@ class CrashReportingController
         }
 
         override fun onStop(owner: LifecycleOwner) {
-            // Intentionally do not cancel: the controller is process-scoped via
-            // ProcessLifecycleOwner. onStop fires when the LAST activity stops,
-            // but we still want the next launch's first opt-in / opt-out flip to
-            // propagate — the collector outliving onStop is the right shape.
+            // Process-scoped: do not cancel — must propagate opt-in flips across activity restarts.
         }
 
         private fun applyToCrashlytics(enabled: Boolean) {

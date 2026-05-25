@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.ui.common
 
@@ -9,16 +8,7 @@ import com.tinkernorth.dish.composer.LinkState
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * Unit tests for [glyphForConnection], [dotColorForState], and
- * [statusChipText]. The mapping previously lived in two places
- * (ConnectionsActivity + ControllerAdapter) and silently drifted whenever
- * a new state landed — pinning the table here so any future divergence
- * surfaces as a failing test.
- */
 class ConnectionGlyphsTest {
-    // ── Satellite glyph table ────────────────────────────────────────────
-
     @Test
     fun `satellite Connected uses ic_satellite_connected`() {
         assertEquals(
@@ -75,8 +65,6 @@ class ConnectionGlyphsTest {
         )
     }
 
-    // ── Bluetooth glyph table ────────────────────────────────────────────
-
     @Test
     fun `bluetooth Connected uses ic_bluetooth_connected`() {
         assertEquals(
@@ -87,8 +75,6 @@ class ConnectionGlyphsTest {
 
     @Test
     fun `bluetooth Connecting uses ic_bluetooth_searching (radar variant)`() {
-        // Distinct from satellite Connecting — the BT search radar pulses,
-        // satellite's base glyph stays static during connect.
         assertEquals(
             R.drawable.ic_bluetooth_searching,
             glyphForConnection(ConnectionKind.BLUETOOTH, LinkState.Connecting),
@@ -110,8 +96,6 @@ class ConnectionGlyphsTest {
             glyphForConnection(ConnectionKind.BLUETOOTH, LinkState.Stale),
         )
     }
-
-    // ── Dot color table ──────────────────────────────────────────────────
 
     @Test
     fun `Connected is green`() {
@@ -136,8 +120,6 @@ class ConnectionGlyphsTest {
         assertEquals(R.color.colorMuted, dotColorForState(LinkState.Found))
     }
 
-    // ── Chip text table ──────────────────────────────────────────────────
-
     @Test
     fun `chip text matches the shared LinkState vocabulary`() {
         assertEquals(R.string.chip_status_found, statusChipTextRes(LinkState.Found))
@@ -151,8 +133,6 @@ class ConnectionGlyphsTest {
 
     @Test
     fun `every LinkState has a chip text`() {
-        // Lock in exhaustiveness: a new LinkState that doesn't update
-        // statusChipTextRes would throw NoWhenBranchMatchedException.
         for (state in LinkState.entries) statusChipTextRes(state)
     }
 

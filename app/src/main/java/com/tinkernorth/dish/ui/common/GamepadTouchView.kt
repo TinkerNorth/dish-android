@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.ui.common
 
@@ -41,19 +40,6 @@ import kotlin.math.hypot
 import kotlin.math.min
 import kotlin.math.sin
 
-/**
- * Custom View rendering an on-screen gamepad with touch input.
- *
- * Layout (landscape):
- *   Left side:  D-Pad (top) + Left Stick (bottom)   (Xbox profile; PS swaps)
- *   Center:     Select / Start buttons
- *   Right side: ABXY buttons (top) + Right Stick (bottom)
- *   Shoulders:  LB/RB at top edges, LT/RT as vertical strips on far edges
- *
- * Layout, drawing tuning, and gesture handling live in
- * [GamepadConstants] / [computeGamepadLayout] / [GamepadGestureRecognizer].
- * This View only owns paints, drawables, and the draw + touch dispatch.
- */
 class GamepadTouchView
     @JvmOverloads
     constructor(
@@ -61,15 +47,11 @@ class GamepadTouchView
         attrs: AttributeSet? = null,
         defStyleAttr: Int = 0,
     ) : View(context, attrs, defStyleAttr) {
-        // ── Listener ─────────────────────────────────────────────────────────────
-
         interface Listener {
             fun onGamepadStateChanged(state: GamepadState)
         }
 
         var listener: Listener? = null
-
-        // ── Gamepad State ────────────────────────────────────────────────────────
 
         data class GamepadState(
             var buttons: Int = 0,
@@ -82,7 +64,6 @@ class GamepadTouchView
             var rightTrigger: Int = 0,
         )
 
-        // ── Button bit constants (public; referenced by tests + BT layout map) ──
         companion object {
             const val BTN_A = 1 shl 0
             const val BTN_B = 1 shl 1
@@ -107,8 +88,6 @@ class GamepadTouchView
             const val HAT_NW = 8
         }
 
-        // ── Controller profile ──────────────────────────────────────────────────
-
         var usePlayStation = false
             set(value) {
                 field = value
@@ -117,13 +96,6 @@ class GamepadTouchView
                 invalidate()
             }
 
-        // ── Paints ───────────────────────────────────────────────────────────────
-
-        // Chassis paints pull from the deep-space cyan palette in colors.xml so
-        // the on-screen gamepad reads as part of the app, not a separate skin.
-        // Face-button drawables (A/B/X/Y, cross/circle/square/triangle) keep
-        // their semantic controller colors — only the chassis around them
-        // re-skins.
         private val paintBg =
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = ContextCompat.getColor(context, R.color.colorSurface)
@@ -182,10 +154,7 @@ class GamepadTouchView
         private val dpadDarkenPaint =
             Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.DARKEN) }
 
-        // ── Safe-area insets (system bars + display cutouts) ─────────────────────
         private val safeInsets = Rect()
-
-        // ── Drawables ────────────────────────────────────────────────────────────
 
         private var icBtnA: Drawable? = null
         private var icBtnB: Drawable? = null
@@ -205,8 +174,6 @@ class GamepadTouchView
         private var icSelect: Drawable? = null
         private var icStart: Drawable? = null
         private var icHome: Drawable? = null
-
-        // ── Layout + gesture recognizer ─────────────────────────────────────────
 
         private var density = 1f
         private var layout: GamepadLayout? = null
@@ -294,8 +261,6 @@ class GamepadTouchView
             density = resources.displayMetrics.density
             layout = computeGamepadLayout(width, height, density, safeInsets, usePlayStation)
         }
-
-        // ── Drawing ──────────────────────────────────────────────────────────────
 
         private fun drawDrawable(
             c: Canvas,
@@ -395,17 +360,7 @@ class GamepadTouchView
             drawDrawable(c, first, cx, cy, size)
             if (second == null) return
 
-            // Each cardinal arrow icon is a complete filled cross with one
-            // arm in colorPrimary and the other three in white — so simply
-            // drawing a second icon on top would let its white overwrite the
-            // first icon's accent active arm and the diagonal would look like
-            // a single direction. Composite the second arrow with DARKEN
-            // (per-channel min): at any pixel inside the cross one icon has
-            // the accent (e.g. #FF4FE3FF) and the other has WHITE (#FFFFFFFF),
-            // so min(accent, white) = accent (every channel of the accent is
-            // <= 255) — both accent arms survive and the rest stays white.
-            // Outside the cross the source is transparent and DARKEN leaves
-            // the destination untouched.
+            // Composite the second arrow with DARKEN (per-channel min) so both accent arms of a diagonal survive — otherwise the second icon's white overwrites the first's accent.
             val saveCount =
                 c.saveLayer(
                     l.dpadRect.left,
@@ -457,8 +412,6 @@ class GamepadTouchView
             radius: Float,
             label: String,
         ) {
-            // Top-down view: outer base ring, a direction line from center to the
-            // displaced thumb cap, then the thumb cap with its label.
             c.drawCircle(cx, cy, radius, paintStickBg)
             paintStickRing.strokeWidth = STICK_RING_STROKE_DP * density
             c.drawCircle(cx, cy, radius, paintStickRing)
@@ -531,36 +484,15 @@ class GamepadTouchView
             drawPillButton(c, l.rtRect, icRT, s.rightTrigger > 0)
         }
 
-        // ── Touch handling ───────────────────────────────────────────────────────
-
         @SuppressLint("ClickableViewAccessibility")
         override fun onTouchEvent(event: MotionEvent): Boolean {
             val l = layout ?: return false
-            // On touchdown, opt the rest of this gesture out of the input
-            // dispatcher's default vsync coalescing. Without this, MOVE
-            // events for this gesture are batched to display refresh rate
-            // (~16 ms on 60 Hz) regardless of how fast the touch sensor
-            // underneath is actually sampling. Unbuffered dispatch
-            // delivers each touch sensor sample as it arrives (~4–8 ms
-            // on most modern phones), tightening the input → wire latency
-            // for stick/button responsiveness.
-            //
-            // The recognizer already drains ACTION_MOVE history (see
-            // below), so unbuffered dispatch is purely additive — fewer
-            // samples per batch, batches arrive sooner. Same trick the
-            // touchpad overlay uses, and what stylus drawing apps use
-            // for low-latency ink. Added in API 21.
+            // Opt out of vsync coalescing so each touch sensor sample is delivered as it arrives instead of being batched to display refresh.
             if (event.actionMasked == MotionEvent.ACTION_DOWN ||
                 event.actionMasked == MotionEvent.ACTION_POINTER_DOWN
             ) {
                 requestUnbufferedDispatch(event)
             }
-            // Notify the listener per *sample* — for ACTION_MOVE the
-            // recognizer drains every historical sample carried by the
-            // MotionEvent, so each intermediate finger position becomes its
-            // own report instead of being collapsed into the latest. The
-            // single invalidate() at the end is intentional: the view only
-            // ever needs to repaint the final state once per OS event.
             recognizer.onTouchEvent(event, l) {
                 listener?.onGamepadStateChanged(recognizer.state)
             }
@@ -569,17 +501,6 @@ class GamepadTouchView
         }
     }
 
-/**
- * Result of mapping a virtual-stick finger offset to visual + wire values.
- *
- * @property dx     unit-circle-clamped finger x for rendering, range -1f..1f
- * @property dy     unit-circle-clamped finger y for rendering, range -1f..1f
- *                  (y-down: positive = below stick center, matching Android
- *                  view coordinates).
- * @property axisX  signed 16-bit wire value: +32767 = full right, -32767 = full left.
- * @property axisY  signed 16-bit wire value: +32767 = full up,    -32767 = full down.
- *                  Note the sign flip vs [dy] — see [computeStickAxes].
- */
 internal data class StickAxes(
     val dx: Float,
     val dy: Float,
@@ -587,24 +508,6 @@ internal data class StickAxes(
     val axisY: Short,
 )
 
-/**
- * Maps a raw finger offset (in units of the virtual stick's radius, relative
- * to the stick center) to the clamped visual position and the int16 axis
- * values carried over the wire.
- *
- * Contract:
- *  - Magnitude is clamped to 1 while preserving direction (so a finger
- *    dragged outside the stick well still yields axes saturated at
- *    ±Short.MAX_VALUE in that direction).
- *  - Android view coordinates are y-down, but the Xbox/XInput wire format
- *    expects "stick up = positive Y". This function returns
- *    `axisY = -dy * Short.MAX_VALUE`, matching the `-32767` scaling used
- *    in the physical path (`processNativeMotionEvent` in `satellite_jni.cpp`).
- *  - A neutral input (0, 0) returns an all-zero result.
- *
- * This is the single source of truth for virtual-stick axis math; all four
- * on-screen sticks (L, R, L3, R3) funnel through it.
- */
 internal fun computeStickAxes(
     rawDx: Float,
     rawDy: Float,
@@ -618,6 +521,7 @@ internal fun computeStickAxes(
         dx = dx,
         dy = dy,
         axisX = (dx * max).toInt().toShort(),
+        // Sign flip: Android view coords are y-down but XInput wire expects stick-up = +Y.
         axisY = (-dy * max).toInt().toShort(),
     )
 }

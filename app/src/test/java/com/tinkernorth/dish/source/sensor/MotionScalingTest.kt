@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.sensor
 
@@ -7,17 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Unit tests for [MotionScaling] — the pure rad/s + m/s² → wire-int16
- * conversions and the landscape axis remap behind [PhoneMotionSource].
- *
- * The receiver derives its scale constants (`MOTION_GYRO_SCALE_DEG_S`,
- * `MOTION_ACCEL_SCALE_G`) from the same ±2000 deg/s and ±4 g full scale, so
- * a drift here desyncs both ends silently — these tests pin it.
- */
 class MotionScalingTest {
-    // ── gyroRadToWire ───────────────────────────────────────────────────────
-
     @Test
     fun `gyro zero maps to zero`() {
         assertEquals(0, MotionScaling.gyroRadToWire(0f).toInt())
@@ -25,7 +14,6 @@ class MotionScalingTest {
 
     @Test
     fun `gyro full scale maps to int16 max`() {
-        // 2000 deg/s in rad/s = 2000 / (180/pi).
         val fullScaleRad = Math.toRadians(2000.0).toFloat()
         val wire = MotionScaling.gyroRadToWire(fullScaleRad).toInt()
         assertTrue("expected ~32767, got $wire", wire in 32766..32767)
@@ -47,12 +35,10 @@ class MotionScalingTest {
 
     @Test
     fun `gyro quarter scale is roughly a quarter of int16 max`() {
-        val quarterRad = Math.toRadians(500.0).toFloat() // 500 of 2000 deg/s
+        val quarterRad = Math.toRadians(500.0).toFloat()
         val wire = MotionScaling.gyroRadToWire(quarterRad).toInt()
         assertTrue("expected ~8192, got $wire", wire in 8150..8240)
     }
-
-    // ── accelMssToWire ──────────────────────────────────────────────────────
 
     @Test
     fun `accel zero maps to zero`() {
@@ -61,7 +47,6 @@ class MotionScalingTest {
 
     @Test
     fun `accel one g is an eighth of full scale`() {
-        // 1 g of 4 g full scale → ~32767 / 4 ≈ 8192.
         val wire = MotionScaling.accelMssToWire(MotionScaling.GRAVITY_MSS.toFloat()).toInt()
         assertTrue("expected ~8192, got $wire", wire in 8150..8240)
     }
@@ -80,18 +65,12 @@ class MotionScalingTest {
         assertEquals(-32768, MotionScaling.accelMssToWire(-tenG).toInt())
     }
 
-    // ── remapLandscape ──────────────────────────────────────────────────────
-    //
-    // rotation arguments are raw Surface.ROTATION_* int values:
-    //   ROTATION_0 = 0, ROTATION_90 = 1, ROTATION_180 = 2, ROTATION_270 = 3.
-
     @Test
     fun `landscape remap rotates device axes into the screen frame`() {
-        // Device (x, y, z) → screen (y, -x, z) for ROTATION_90.
         val out = MotionScaling.remapLandscape(1f, 2f, 3f, ROTATION_90)
-        assertEquals(2f, out[0], 0f) // screenX = deviceY
-        assertEquals(-1f, out[1], 0f) // screenY = -deviceX
-        assertEquals(3f, out[2], 0f) // screenZ = deviceZ
+        assertEquals(2f, out[0], 0f)
+        assertEquals(-1f, out[1], 0f)
+        assertEquals(3f, out[2], 0f)
     }
 
     @Test
@@ -102,12 +81,10 @@ class MotionScalingTest {
 
     @Test
     fun `ROTATION_270 inverts both X and Y - the half-fleet bug`() {
-        // The regression case: landscape that resolved to ROTATION_270 must
-        // map device (x, y, z) → screen (-y, x, z), i.e. 180° from ROTATION_90.
         val out = MotionScaling.remapLandscape(1f, 2f, 3f, ROTATION_270)
-        assertEquals(-2f, out[0], 0f) // screenX = -deviceY
-        assertEquals(1f, out[1], 0f) // screenY = deviceX
-        assertEquals(3f, out[2], 0f) // screenZ = deviceZ
+        assertEquals(-2f, out[0], 0f)
+        assertEquals(1f, out[1], 0f)
+        assertEquals(3f, out[2], 0f)
     }
 
     @Test
@@ -116,23 +93,23 @@ class MotionScalingTest {
         val r270 = MotionScaling.remapLandscape(1.5f, -2.5f, 7f, ROTATION_270)
         assertEquals(-r90[0], r270[0], 0f)
         assertEquals(-r90[1], r270[1], 0f)
-        assertEquals(r90[2], r270[2], 0f) // Z is shared, never inverted.
+        assertEquals(r90[2], r270[2], 0f)
     }
 
     @Test
     fun `ROTATION_0 is the identity remap`() {
         val out = MotionScaling.remapLandscape(1f, 2f, 3f, ROTATION_0)
-        assertEquals(1f, out[0], 0f) // screenX = deviceX
-        assertEquals(2f, out[1], 0f) // screenY = deviceY
-        assertEquals(3f, out[2], 0f) // screenZ = deviceZ
+        assertEquals(1f, out[0], 0f)
+        assertEquals(2f, out[1], 0f)
+        assertEquals(3f, out[2], 0f)
     }
 
     @Test
     fun `ROTATION_180 inverts X and Y but not Z`() {
         val out = MotionScaling.remapLandscape(1f, 2f, 3f, ROTATION_180)
-        assertEquals(-1f, out[0], 0f) // screenX = -deviceX
-        assertEquals(-2f, out[1], 0f) // screenY = -deviceY
-        assertEquals(3f, out[2], 0f) // screenZ = deviceZ
+        assertEquals(-1f, out[0], 0f)
+        assertEquals(-2f, out[1], 0f)
+        assertEquals(3f, out[2], 0f)
     }
 
     @Test
@@ -144,13 +121,8 @@ class MotionScalingTest {
         assertEquals(r90[2], fallback[2], 0f)
     }
 
-    // ── Out-param variant + RemapResult (PR6) ──────────────────────────────
-
     @Test
     fun `out-param variant writes into the caller's scratch and returns Mapped`() {
-        // The hot-path version: caller allocates once, the scaler writes
-        // into the scratch every sample. 250 Hz × 2 sensors otherwise leaks
-        // up to 500 FloatArray allocations per second.
         val scratch = FloatArray(3)
         val result =
             MotionScaling.remapLandscape(
@@ -161,21 +133,16 @@ class MotionScalingTest {
                 out = scratch,
             )
         assertEquals(MotionScaling.RemapResult.Mapped, result)
-        assertEquals(2f, scratch[0], 0f) // deviceY
-        assertEquals(-1f, scratch[1], 0f) // -deviceX
-        assertEquals(3f, scratch[2], 0f) // deviceZ
+        assertEquals(2f, scratch[0], 0f)
+        assertEquals(-1f, scratch[1], 0f)
+        assertEquals(3f, scratch[2], 0f)
     }
 
     @Test
     fun `out-param variant returns Fallback with the unknown rotation value`() {
-        // The caller (PhoneMotionSource) reads RemapResult.Fallback to log
-        // the unknown rotation once. Pin that the value is surfaced —
-        // a regression that always returns Mapped would silently lose the
-        // "wrong axes on half the fleet" signal.
         val scratch = FloatArray(3)
         val result = MotionScaling.remapLandscape(0f, 0f, 0f, rotation = 99, out = scratch)
         assertEquals(MotionScaling.RemapResult.Fallback(99), result)
-        // And the scratch carries the ROTATION_90 fallback values.
         val r90 = MotionScaling.remapLandscape(0f, 0f, 0f, ROTATION_90)
         assertEquals(r90[0], scratch[0], 0f)
         assertEquals(r90[1], scratch[1], 0f)
@@ -184,24 +151,17 @@ class MotionScalingTest {
 
     @Test
     fun `out-param variant rejects a scratch smaller than 3 elements`() {
-        // Defensive: a 2-element scratch would corrupt the call site's
-        // neighbouring memory or silently produce wrong axes. The
-        // require() check should fail fast.
         val tooSmall = FloatArray(2)
         try {
             MotionScaling.remapLandscape(0f, 0f, 0f, ROTATION_90, tooSmall)
             org.junit.Assert.fail("expected IllegalArgumentException")
         } catch (e: IllegalArgumentException) {
-            // expected
             assertTrue(e.message?.contains("3") == true)
         }
     }
 
     @Test
     fun `out-param variant produces the same triple as the allocating shim`() {
-        // Equivalence pin: every rotation must produce identical output
-        // through both signatures so the array-returning shim stays a
-        // pure wrapper (no drift between the two paths).
         for (rot in intArrayOf(ROTATION_0, ROTATION_90, ROTATION_180, ROTATION_270, 99)) {
             val out = FloatArray(3)
             MotionScaling.remapLandscape(1.25f, -3.5f, 0.75f, rot, out)
@@ -213,8 +173,6 @@ class MotionScalingTest {
     }
 
     private companion object {
-        // Mirror of android.view.Surface.ROTATION_* — kept literal so this
-        // test stays a pure JVM test with no Android framework dependency.
         const val ROTATION_0 = 0
         const val ROTATION_90 = 1
         const val ROTATION_180 = 2

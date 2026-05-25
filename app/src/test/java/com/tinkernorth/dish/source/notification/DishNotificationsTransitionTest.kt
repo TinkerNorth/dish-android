@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.notification
 
@@ -18,19 +17,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Multi-attachment / Activity-transition tests for [DishNotifications].
- *
- * The merged class's most important invariant is that **two activities can
- * coexist in different lifecycle states without cross-contaminating each
- * other's live banners**. This is the case during every navigation transition
- * (A.onStop → B.onStart), and the prior split (`DishNotificationQueue` +
- * `DishSnackbarController`) made it correct by accident — each controller was
- * per-Activity. The merge has to preserve it explicitly.
- */
 @OptIn(ExperimentalCoroutinesApi::class)
 class DishNotificationsTransitionTest {
-    // See [DishNotificationsAttachmentTest] for why setMain is required.
     private val mainDispatcher = StandardTestDispatcher()
 
     @Before
@@ -55,16 +43,9 @@ class DishNotificationsTransitionTest {
             scope = scope.backgroundScope,
         )
 
-    // ── Concurrent attachments ────────────────────────────────────────────
-
     @Test
     fun `two STARTED attachments both render the same post`() =
         runTest {
-            // Pathological but legal: both A and B are STARTED at once
-            // (e.g. a popover Activity opens over the dashboard). The post
-            // goes to both renderers. This matches the prior behaviour of
-            // having two DishSnackbarController instances both subscribed to
-            // the same queue.
             val notifications = DishNotifications()
             val ownerA = TestLifecycleOwner()
             val rendererA = RecordingRenderer()
@@ -83,8 +64,6 @@ class DishNotificationsTransitionTest {
             assertEquals(1, rendererA.shown.size)
             assertEquals(1, rendererB.shown.size)
         }
-
-    // ── A → B handoff ────────────────────────────────────────────────────
 
     @Test
     fun `after A stops and B starts, posts route only to B`() =
@@ -112,18 +91,15 @@ class DishNotificationsTransitionTest {
             notifications.error(title = "on-b")
             testScheduler.runCurrent()
 
-            assertEquals("A saw only the first post", 1, rendererA.shown.size)
+            assertEquals(1, rendererA.shown.size)
             assertEquals("on-a", rendererA.shown[0].notification.title)
-            assertEquals("B saw only the second post", 1, rendererB.shown.size)
+            assertEquals(1, rendererB.shown.size)
             assertEquals("on-b", rendererB.shown[0].notification.title)
         }
 
     @Test
     fun `posts in the transition gap are dropped (replay=0)`() =
         runTest {
-            // Gap: A.onStop completes, post is emitted, then B attaches and
-            // starts. The replay=0 SharedFlow does not redeliver the gap-post
-            // to B. This is the same trade-off the prior queue had.
             val notifications = DishNotifications()
             val ownerA = TestLifecycleOwner()
             val rendererA = RecordingRenderer()
@@ -134,7 +110,6 @@ class DishNotificationsTransitionTest {
             ownerA.stop()
             testScheduler.runCurrent()
 
-            // Mid-gap: no Activity is STARTED.
             notifications.error(title = "gap")
             testScheduler.runCurrent()
 
@@ -145,16 +120,12 @@ class DishNotificationsTransitionTest {
             testScheduler.runCurrent()
 
             assertTrue(
-                "A saw nothing (it stopped before the post)",
                 rendererA.shown.isEmpty(),
             )
             assertTrue(
-                "B saw nothing (replay=0 means the gap-post is gone)",
                 rendererB.shown.isEmpty(),
             )
         }
-
-    // ── Cleanup isolation ────────────────────────────────────────────────
 
     @Test
     fun `destroying A does not dismiss handles owned by B`() =
@@ -173,7 +144,6 @@ class DishNotificationsTransitionTest {
             notifications.info(title = "shared")
             testScheduler.runCurrent()
 
-            // Both attachments hold a live handle for this id.
             assertEquals(1, attachmentA.liveById())
             assertEquals(1, attachmentB.liveById())
             val handleA = rendererA.handles.last()
@@ -182,8 +152,8 @@ class DishNotificationsTransitionTest {
             ownerA.destroy()
             testScheduler.runCurrent()
 
-            assertTrue("A's handle dismissed by onDestroy", handleA.dismissed)
-            assertFalse("B's handle untouched", handleB.dismissed)
+            assertTrue(handleA.dismissed)
+            assertFalse(handleB.dismissed)
             assertEquals(0, attachmentA.liveById())
             assertEquals(1, attachmentB.liveById())
         }
@@ -211,11 +181,8 @@ class DishNotificationsTransitionTest {
             notifications.warn(title = "v2", key = "shared-key")
             testScheduler.runCurrent()
 
-            // Both attachments independently saw v1 then v2 and replaced. The
-            // replacement happens *inside* each Attachment, not at the queue
-            // level, so the two attachments do not interfere.
-            assertTrue("A's v1 replaced", a1.dismissed)
-            assertTrue("B's v1 replaced", b1.dismissed)
+            assertTrue(a1.dismissed)
+            assertTrue(b1.dismissed)
             assertEquals(1, attachmentA.liveById())
             assertEquals(1, attachmentB.liveByKey())
         }
@@ -223,10 +190,6 @@ class DishNotificationsTransitionTest {
     @Test
     fun `dismiss(id) propagates to every attachment that has the live handle`() =
         runTest {
-            // Today the id is a process-wide monotonic counter; both
-            // attachments register the same id. A dismiss(id) call lands on
-            // both attachments. (If one attachment never had the id, that
-            // attachment is a no-op.)
             val notifications = DishNotifications()
             val ownerA = TestLifecycleOwner()
             val rendererA = RecordingRenderer()
@@ -256,10 +219,6 @@ class DishNotificationsTransitionTest {
     @Test
     fun `re-attaching to a fresh owner after destroy starts a clean slate`() =
         runTest {
-            // Activity recreation pattern: Activity A is destroyed, then a
-            // fresh Activity instance attaches. The new attachment has zero
-            // live handles even if the prior attachment's handles were never
-            // explicitly dismissed.
             val notifications = DishNotifications()
             val ownerA1 = TestLifecycleOwner()
             val rendererA1 = RecordingRenderer()
@@ -273,7 +232,6 @@ class DishNotificationsTransitionTest {
             ownerA1.destroy()
             testScheduler.runCurrent()
 
-            // Fresh attachment, fresh renderer, fresh handle tracking.
             val ownerA2 = TestLifecycleOwner()
             val rendererA2 = RecordingRenderer()
             val attachmentA2 = attach(notifications, ownerA2, rendererA2, this)

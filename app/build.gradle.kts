@@ -9,10 +9,7 @@ plugins {
     alias(libs.plugins.detekt)
 }
 
-// Crashlytics is gated on the presence of app/google-services.json so that
-// local development without a Firebase project still produces a runnable
-// build. CI populates the file from the GOOGLE_SERVICES_JSON_BASE64 secret
-// before invoking ./gradlew assembleRelease bundleRelease.
+// Firebase plugins only apply when google-services.json is present so local builds without Firebase still work.
 val googleServicesJson = file("google-services.json")
 val firebaseEnabled = googleServicesJson.exists()
 if (firebaseEnabled) {
@@ -20,14 +17,6 @@ if (firebaseEnabled) {
     apply(plugin = "com.google.firebase.crashlytics")
 }
 
-// versionCode / versionName resolution:
-//   1. DISH_VERSION_CODE + DISH_VERSION_NAME env vars (set by release.yml
-//      from the git tag).
-//   2. `git describe --tags --match v*` if a tag exists locally.
-//   3. Fallback to 1 / "1.0" for fresh clones with no tags.
-//
-// Keeps local debug builds usable while producing meaningful values for
-// tagged releases. See HANDOFF.md item 4 for the versioning scheme.
 data class ResolvedVersion(
     val code: Int,
     val name: String,
@@ -82,11 +71,6 @@ android {
         }
     }
 
-    // Reads from environment variables set by the release CI workflow. When
-    // any var is missing, the release build is unsigned (debuggable=false) so
-    // local `./gradlew assembleRelease` still works without provisioning a
-    // keystore — the resulting APK is just not installable on a device until
-    // it's signed manually.
     signingConfigs {
         val keystoreFile = System.getenv("DISH_KEYSTORE_FILE")?.takeIf { it.isNotBlank() }
         if (keystoreFile != null) {
@@ -107,8 +91,6 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            // Apply the release signing config only when it was registered above
-            // (i.e. DISH_KEYSTORE_FILE was set in the environment).
             signingConfig = signingConfigs.findByName("release")
         }
     }
@@ -125,10 +107,7 @@ android {
     buildFeatures {
         viewBinding = true
         prefab = true
-        // BuildConfig — needed by SettingsActivity to render the version row
-        // ("1.0 · build 1" style) without going through PackageManager.
-        // AGP 8 made this opt-in to shave a few generated classes off apps
-        // that don't reference BuildConfig at all.
+        // SettingsActivity reads BuildConfig.VERSION_* directly; AGP 8 makes this opt-in.
         buildConfig = true
     }
     packaging {
@@ -143,13 +122,6 @@ android {
         }
     }
 
-    // MissingTranslation is promoted from warning → error so CI's existing
-    // ./gradlew lint step fails when a new string in values/ isn't translated
-    // into every locale folder under locales_config (bs, de, es, fr, pt-rBR).
-    // ExtraTranslation stays at warning — useful for cleanup but it doesn't
-    // break the user-facing app if a stale translation lingers.
-    // Pre-commit hook (scripts/check-translations.py) runs the same check
-    // faster (no Gradle) when any values*/strings.xml is staged.
     lint {
         error += "MissingTranslation"
         abortOnError = true
@@ -172,21 +144,10 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
-    // Firebase SDKs are unconditional: the CrashReportingController references
-    // them directly. The classes are on the classpath even when
-    // google-services.json is absent — `FirebaseApp.getApps(context)` then
-    // returns empty and the controller no-ops. Only the `google-services` /
-    // `firebase-crashlytics` Gradle PLUGINS are conditional (above), because
-    // they need the JSON to generate resources and upload mapping files.
+    // Firebase SDKs always on classpath; controller no-ops when google-services.json is absent.
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.crashlytics)
-    // Firebase Analytics is deliberately NOT pulled in. Adding it would (a)
-    // auto-collect events like session_start / screen_view / first_open / app_remove,
-    // (b) cause the manifest merger to inject
-    // com.google.android.gms.permission.AD_ID into the production APK, and
-    // (c) require a Firebase Analytics section in PRIVACY.md plus a Data
-    // Safety form entry. The published policy promises a zero-analytics
-    // posture; keep this dep out unless that posture changes.
+    // Firebase Analytics is deliberately omitted: it would auto-inject AD_ID permission and break the zero-analytics privacy posture.
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.turbine)
@@ -209,11 +170,7 @@ detekt {
     allRules = false
 }
 
-// ── Host-build native unit tests ────────────────────────────────────────────
-// The pure gamepad-input layer (app/src/main/cpp/gamepad_input.{h,cpp}) is
-// tested via googletest from app/src/test/cpp. We drive cmake/make/ctest
-// directly rather than going through the AGP NDK build because the latter
-// only knows how to cross-compile for Android targets.
+// Host-built native unit tests bypass AGP NDK because AGP only cross-compiles for Android targets.
 val nativeTestBuildDir = layout.buildDirectory.dir("native-test")
 val nativeTestSrcDir = layout.projectDirectory.dir("src/test/cpp")
 
@@ -264,14 +221,7 @@ tasks.named("check") {
     dependsOn("nativeTest")
 }
 
-// ── JVM heap for unit-test workers ─────────────────────────────────────────
-// The default Gradle test worker runs at -Xmx512m, which is too tight for
-// the heavier MockK-based suites (SatelliteConnectionTest in particular
-// allocates enough reflection-cached metadata to OOM the worker partway
-// through the full suite, even though every test passes individually).
-// Bumping to 2g covers comfortably; matches the daemon heap from
-// gradle.properties so we don't accidentally starve the daemon when both
-// run in the same machine session.
+// 512m default OOMs SatelliteConnectionTest reflection cache; matches daemon heap.
 tasks.withType<Test>().configureEach {
     maxHeapSize = "2g"
 }

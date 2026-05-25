@@ -1,24 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
-/*
- * satellite_jni.cpp — Native bridge for the Dish Android client.
- *
- * Physical-gamepad input is handled inline in the GameActivity input filter
- * callbacks (UI thread), which is the lowest-latency path Android exposes:
- * Android InputDispatcher → GameActivity dispatch → filter callback → encrypted
- * UDP sendto, all on the same thread with no queue/looper hop. For Bluetooth-
- * bound slots the filter pushes the report onto an internal queue drained by
- * a dedicated worker thread (BluetoothHidDevice.sendReport is Binder IPC and
- * would jank the UI thread otherwise).
- *
- * Also handles the LAN broadcast discovery beacon and the heartbeat/ACK loops
- * for the encrypted UDP wire (ChaCha20-Poly1305).
- *
- * The satellite's client-facing API (connection management and PIN pairing) is
- * HTTPS/TLS now; that lives in Kotlin (SatelliteHttpClient) where TLS is a
- * one-liner, rather than pulling an SSL library into this NDK build.
- */
 #include <jni.h>
 #include <android/log.h>
 #include <android/input.h>
@@ -55,10 +36,8 @@
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
-/* ── Constants ─────────────────────────────────────────────────────────────── */
 static constexpr int HEARTBEAT_INTERVAL_MS = 2000;
 static constexpr int HEARTBEAT_MISS_MAX = 5;
-// Message types
 static constexpr uint16_t MSG_GAMEPAD_DATA = 0x0001;
 static constexpr uint16_t MSG_HEARTBEAT_PING = 0x0002;
 static constexpr uint16_t MSG_HEARTBEAT_ACK = 0x0003;
@@ -67,12 +46,6 @@ static constexpr uint16_t MSG_CONTROLLER_REMOVE = 0x0005;
 static constexpr uint16_t MSG_CONTROLLER_ACK = 0x0006;
 static constexpr uint16_t MSG_SERVER_STATUS = 0x0007;
 static constexpr uint16_t MSG_CONTROLLER_TYPE = 0x0008;
-// Mid-session capability update — same payload shape as the caps field
-// of MSG_CONTROLLER_ADD (ctrlIdx + caps BE16), but for an already-
-// registered controller. Lets the dish push e.g. a user-flipped motion
-// toggle without unplugging the controller on the receiver. See
-// `MSG_CONTROLLER_CAPS_UPDATE` in satellite/src/core/types.h for the
-// authoritative spec and the receiver's silent-drop fallback.
 static constexpr uint16_t MSG_CONTROLLER_CAPS_UPDATE = 0x000E;
 static constexpr uint16_t MSG_RUMBLE = 0x0009;
 static constexpr uint16_t MSG_MOTION = 0x000A;
@@ -93,41 +66,23 @@ struct XUSB_REPORT {
 #pragma pack(pop)
 static_assert(sizeof(XUSB_REPORT) == 12, "XUSB_REPORT must be 12 bytes");
 
-/* ── Per-session connection state ──────────────────────────────────────────── */
-// The JNI layer supports multiple concurrent UDP sessions, each keyed by a
-// positive integer handle returned from openSocket(). All subsequent calls take
-// the handle so independent WiFi servers can run side by side.
 struct Session {
     int udpSock = -1;
     struct sockaddr_in dest = {};
     uint8_t token[4] = {};
     uint8_t key[32] = {};
     std::atomic<uint32_t> counter{0};
-    // No userspace sendMtx: Linux UDP `sendto` is thread-safe per-socket
-    // (kernel serialises via the socket's own lock), and our protocol is
-    // tolerant of slight reordering across producers (each packet carries
-    // its own counter-as-nonce; the host's virtual gamepad applies state
-    // idempotently). Adding a userspace lock here would only propagate
-    // any one thread's kernel-side stall to every other producer.
+    // Linux UDP sendto is thread-safe per-socket; userspace lock would only serialise stalls.
 
     std::thread heartbeatThread;
     std::atomic<bool> heartbeatRunning{false};
     std::atomic<int> missedAcks{0};
     std::atomic<bool> connectionAlive{true};
 
-    // Controller ACK tracking: (requestType << 16) | (ctrlIdx << 8) | result.
-    // -1 means no ACK received yet.
+    // (requestType << 16) | (ctrlIdx << 8) | result; -1 = no ACK yet.
     std::atomic<int32_t> lastControllerAck{-1};
 
-    // Motion-status byte from the most recent MSG_CONTROLLER_ACK (only present
-    // on MSG_CONTROLLER_ADD acks from a post-extension satellite — msgLen 5
-    // instead of 4). Bit 0: receiver's backend supports IMU for this slot's
-    // chosen type; bit 1: backend successfully created the per-serial IMU
-    // sink. -1 means no extended ACK has been observed for this session —
-    // either no ACK at all, or the satellite is a pre-extension build that
-    // only sent the legacy 4-byte payload. The dish-side store collapses
-    // -1 onto "unknown" so an old satellite doesn't get treated as a
-    // permanent failure.
+    // -1 = unknown (no extended ACK observed or pre-extension satellite); do not collapse to false.
     std::atomic<int32_t> lastControllerAckMotionFlags{-1};
 
     std::atomic<int8_t> vigemAvailable{-1};
@@ -144,34 +99,18 @@ static std::shared_ptr<Session> getSession(int handle) {
     return it == g_sessions.end() ? nullptr : it->second;
 }
 
-/* ── Native gamepad input processor ────────────────────────────────────────
- *
- * Per-physical-device state and slot bindings live entirely in C++. Events
- * are processed inline in gamepadKeyFilter / gamepadMotionFilter (UI thread)
- * — see the filter callbacks further down. For satellite-bound slots the
- * resulting XUSB report is encrypted and sent inline. For Bluetooth-bound
- * slots the filter pushes the report onto a queue drained by btDispatchLoop
- * (BluetoothHidDevice.sendReport is Binder IPC; doing it inline would block
- * the UI thread).
- */
-
-// Forward-declare — defined further down with the rest of the wire helpers.
 static bool sendEncrypted(Session* s, uint16_t msgType, const uint8_t* payload,
                           uint16_t payloadLen);
 
-// Pure XUSB constants, DeviceState, and the keycode/axes/state helpers live
-// in gamepad_input.h so they can be exercised by the host-build googletest
-// target (app/src/test/cpp). The JNI glue below converts GameActivity events
-// into primitive args and delegates to that pure layer.
 using gamepad::DeviceState;
 
 enum SlotKind : uint8_t { SLOT_NONE = 0, SLOT_SATELLITE = 1, SLOT_BLUETOOTH = 2 };
 
 struct SlotBinding {
     SlotKind kind = SLOT_NONE;
-    int sessionHandle = -1;     // SATELLITE only
-    int controllerIndex = -1;   // SATELLITE only
-    std::string btConnectionId; // BLUETOOTH only (UTF-8). Empty otherwise.
+    int sessionHandle = -1;
+    int controllerIndex = -1;
+    std::string btConnectionId;
 };
 
 static std::mutex g_devicesMtx;
@@ -180,32 +119,14 @@ static std::unordered_map<int32_t, DeviceState> g_devices;
 static std::mutex g_slotsMtx;
 static std::unordered_map<int32_t, SlotBinding> g_slots;
 
-// JVM bridge for Bluetooth callback path. The bridge class + method id are
-// resolved once via BluetoothGamepadBridge.nativeInstall (see below).
 static JavaVM* g_jvm = nullptr;
-static jclass g_btBridgeClass = nullptr; // global ref, set once
+static jclass g_btBridgeClass = nullptr;
 static jmethodID g_btDispatchMethod = nullptr;
 
-// JVM bridge for the rumble return path. Resolved once via
-// RumbleBridge.nativeInstall. Unlike the BT bridge there is no dedicated
-// dispatcher thread — receiveAck() already runs on a JVM-attached thread
-// (Kotlin Dispatchers.IO), so we can call into Java directly from there.
-static jclass g_rumbleBridgeClass = nullptr; // global ref, set once
+static jclass g_rumbleBridgeClass = nullptr;
 static jmethodID g_rumbleDispatchMethod = nullptr;
 
-/* ── BT dispatch queue ───────────────────────────────────────────────────
- *
- * Filter callbacks run on the UI thread for lowest input-to-wire latency.
- * The satellite path (encrypted UDP send) is fast enough to do inline. The
- * Bluetooth HID path is not — BluetoothHidDevice.sendReport is Binder IPC
- * and can block for hundreds of µs to several ms, which would jank the UI.
- *
- * So BT reports are pushed onto this queue from the filter and drained by
- * a dedicated worker thread that owns the JNI dispatch into Kotlin.
- *
- * Queue depth is bounded; if the BT thread can't keep up we drop the oldest
- * report (latest-wins semantics — old reports are stale anyway).
- */
+// BT path runs off the UI thread because BluetoothHidDevice.sendReport is Binder IPC.
 struct BtReport {
     std::string connectionId;
     uint16_t wButtons;
@@ -265,24 +186,12 @@ static void startBtDispatchThread() {
     g_btDispatchThread = std::thread(btDispatchLoop);
 }
 
-// Read the primary pointer's current value for the given axis. We only deal
-// with physical gamepads here, which always present pointer 0.
 static inline float axisCur(const GameActivityMotionEvent* ev, int axis) {
     if (ev->pointerCount == 0) return 0.f;
     return ev->pointers[0].axisValues[axis];
 }
 
-// Look up the slot binding for a device and dispatch the report if state
-// changed since the last publish. Holds g_slotsMtx briefly. Lock order:
-// devices < slots < (sessions | btQueue).
-//
-// Satellite slots: encrypt + sendto inline. ChaCha20-Poly1305 of 16 bytes
-// plus a non-blocking sendto is ~30 µs total — fine on the UI thread.
-//
-// Bluetooth slots: enqueue a copy of the report; a dedicated worker thread
-// owns the Binder IPC. We don't hold any JVM ref across threads — the
-// connection-id string is copied into the queue entry and a fresh local
-// jstring is built on the dispatch side.
+// Lock order: devices < slots < (sessions | btQueue).
 static void publishIfChanged(int32_t deviceId, DeviceState& s) {
     if (!gamepad::consumePublishIfChanged(s)) return;
 
@@ -320,19 +229,7 @@ static void publishIfChanged(int32_t deviceId, DeviceState& s) {
     }
 }
 
-/* ── Filter callbacks (UI thread) ────────────────────────────────────────
- *
- * Process events inline rather than just predicating + queueing. This is
- * the lowest-latency path Android exposes for gamepad input — the native
- * input buffer + android_main looper-wake are skipped entirely, so the
- * encrypted UDP packet leaves the device on the same thread that received
- * the event.
- *
- * Both filters return true on every gamepad/joystick event — this consumes
- * the event so it doesn't bubble back into the View hierarchy and trigger
- * incidental focus navigation. android_main still drains-and-clears the
- * native input buffer to keep memory bounded; it just doesn't re-process.
- */
+// Returning true consumes the event so it can't trigger incidental View focus navigation.
 static bool gamepadKeyFilter(const GameActivityKeyEvent* ev) {
     int32_t source = ev->source;
     bool isGame = (source & AINPUT_SOURCE_GAMEPAD) == AINPUT_SOURCE_GAMEPAD ||
@@ -352,7 +249,7 @@ static bool gamepadKeyFilter(const GameActivityKeyEvent* ev) {
             publishIfChanged(deviceId, state);
         }
     }
-    return true; // consumed — do not propagate to View dispatch
+    return true;
 }
 
 static bool gamepadMotionFilter(const GameActivityMotionEvent* ev) {
@@ -370,15 +267,12 @@ static bool gamepadMotionFilter(const GameActivityMotionEvent* ev) {
     }
     if (action != AMOTION_EVENT_ACTION_MOVE) return true;
 
-    // "Latest sample wins" — historical samples are intermediate states the
-    // next apply would overwrite anyway. Faster *and* fewer wire packets.
+    // Latest sample wins — historicals are intermediate states the next apply overwrites anyway.
     float z = axisCur(ev, AMOTION_EVENT_AXIS_Z);
     float rz = axisCur(ev, AMOTION_EVENT_AXIS_RZ);
     float rx = axisCur(ev, AMOTION_EVENT_AXIS_RX);
     float ry = axisCur(ev, AMOTION_EVENT_AXIS_RY);
-    // Right-stick axis varies by controller: most use Z/RZ (Xbox-style), but
-    // some Bluetooth/HID gamepads use RX/RY. Take whichever pair has larger
-    // magnitude so we work for both without per-device config.
+    // Right-stick layout varies (Z/RZ vs RX/RY); pick the larger-magnitude pair.
     float rightX = std::fabs(z) >= std::fabs(rx) ? z : rx;
     float rightY = std::fabs(rz) >= std::fabs(ry) ? rz : ry;
     float lt =
@@ -398,7 +292,6 @@ static uint64_t nowMs() {
     return (uint64_t)ts.tv_sec * 1000u + (uint64_t)ts.tv_nsec / 1000000u;
 }
 
-/* ── Helpers: big-endian encoding ──────────────────────────────────────────── */
 static void putBE16(uint8_t* dst, uint16_t v) {
     dst[0] = (uint8_t)(v >> 8);
     dst[1] = (uint8_t)(v);
@@ -410,17 +303,12 @@ static void putBE32(uint8_t* dst, uint32_t v) {
     dst[3] = (uint8_t)(v);
 }
 
-// dish_wire::encodeMotionPayload / encodeBatteryPayload live in wire_encoders.h
-// so app/src/test/cpp/ can include them without dragging in JNI headers.
-
-/* ── Encrypt and send a message over the UDP channel ───────────────────────── */
 static bool sendEncrypted(Session* s, uint16_t msgType, const uint8_t* payload,
                           uint16_t payloadLen) {
     if (!s || s->udpSock < 0) return false;
 
-    // Inner message: type(2) + length(2) + payload
     uint16_t innerLen = 4 + payloadLen;
-    uint8_t inner[4 + 256]; // max payload ~256 bytes
+    uint8_t inner[4 + 256];
     if (innerLen > sizeof(inner)) return false;
     putBE16(inner, msgType);
     putBE16(inner + 2, payloadLen);
@@ -428,43 +316,31 @@ static bool sendEncrypted(Session* s, uint16_t msgType, const uint8_t* payload,
 
     uint32_t ctr = s->counter.fetch_add(1, std::memory_order_relaxed);
 
-    // Nonce: counter zero-padded to 12 bytes (big-endian, left-padded)
+    // Nonce: counter zero-padded to 12B big-endian, left-padded.
     uint8_t nonce[12] = {};
     putBE32(nonce + 8, ctr);
 
-    // Encrypt: ciphertext = encrypted(inner) + 16-byte auth tag
     uint8_t ciphertext[sizeof(inner) + crypto_aead_chacha20poly1305_ietf_ABYTES];
     unsigned long long cipherLen = 0;
     crypto_aead_chacha20poly1305_ietf_encrypt(ciphertext, &cipherLen, inner, innerLen, s->token,
-                                              4,       // AAD = token
-                                              nullptr, // nsec (unused)
+                                              4,
+                                              nullptr,
                                               nonce, s->key);
 
-    // Packet: token(4) + counter(4) + ciphertext
     uint8_t packet[8 + sizeof(ciphertext)];
     memcpy(packet, s->token, 4);
     putBE32(packet + 4, ctr);
     memcpy(packet + 8, ciphertext, (size_t)cipherLen);
 
     size_t totalLen = 8 + (size_t)cipherLen;
-    // MSG_DONTWAIT: make sendto non-blocking. Without this, when the Wi-Fi
-    // power-save state transitions or the radio TX buffer fills, sendto
-    // could block in the kernel for hundreds of ms (worst observed during
-    // diagnosis: 1.56 s, with that latency propagating to every other
-    // thread waiting to send). With MSG_DONTWAIT the call returns -1 /
-    // EAGAIN immediately instead; the next periodic-resend tick tries
-    // again with the latest state. UDP is already lossy by contract, so
-    // a buffer-full drop is no worse than any other packet loss.
+    // MSG_DONTWAIT: a blocking sendto was observed to stall 1.5s during Wi-Fi power-save transitions.
     ssize_t sent = sendto(s->udpSock, packet, totalLen, MSG_DONTWAIT, (struct sockaddr*)&s->dest,
                           sizeof(s->dest));
-    // EAGAIN / EWOULDBLOCK: kernel send buffer momentarily unavailable.
-    // Treat as a soft drop, not a hard error — UDP semantics absorb it and
-    // the next periodic tick will refresh the state.
+    // Soft-drop on buffer-full — UDP semantics absorb it and the next tick refreshes state.
     if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) { return true; }
     return sent == (ssize_t)totalLen;
 }
 
-/* ── Heartbeat thread (one per session) ────────────────────────────────────── */
 static void heartbeatLoop(std::shared_ptr<Session> s) {
     LOGI("Heartbeat thread started (sock=%d)", s->udpSock);
     while (s->heartbeatRunning.load(std::memory_order_relaxed)) {
@@ -478,28 +354,16 @@ static void heartbeatLoop(std::shared_ptr<Session> s) {
 
         for (int i = 0; i < HEARTBEAT_INTERVAL_MS / 100; i++) {
             if (!s->heartbeatRunning.load(std::memory_order_relaxed)) break;
-            usleep(100000); // 100ms
+            usleep(100000);
         }
     }
     LOGI("Heartbeat thread stopped");
 }
-/* ── android_main — GameActivity native entry point ──────────────────────
- *
- * Input is processed inline by gamepadKeyFilter / gamepadMotionFilter on
- * the UI thread (lowest possible latency — see Filter callbacks above).
- * This loop is therefore lifecycle-only: it drives source->process for
- * onStart/onStop/onDestroy and drains the native input buffer so it doesn't
- * grow unbounded. The events themselves were already processed in the
- * filter; we just clear them here.
- */
+
 void android_main(struct android_app* app) {
     LOGI("android_main started (filter-inline input mode)");
 
-    // GameActivity populates only AXIS_X and AXIS_Y in pointers[].axisValues
-    // by default; every other axis reads 0 until explicitly enabled. The
-    // filter below reads right stick (Z/RZ), triggers (LT/RT + BRAKE/GAS),
-    // and hat (HAT_X/HAT_Y) — opt them in here. If you ever read a new axis
-    // in gamepadMotionFilter, add a matching enableAxis call.
+    // GameActivity only fills AXIS_X/Y by default; opt-in to every axis the motion filter reads.
     GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_Z);
     GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_RZ);
     GameActivityPointerAxes_enableAxis(AMOTION_EVENT_AXIS_RX);
@@ -535,7 +399,6 @@ void android_main(struct android_app* app) {
 
 extern "C" {
 
-/* ── libsodium init ────────────────────────────────────────────────────────── */
 static std::once_flag g_sodiumInit;
 static void ensureSodiumInit() {
     std::call_once(g_sodiumInit, []() {
@@ -545,8 +408,6 @@ static void ensureSodiumInit() {
             LOGI("libsodium initialized");
     });
 }
-
-/* ── UDP Socket ────────────────────────────────────────────────────────────── */
 
 JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_openSocket(JNIEnv* env,
                                                                                      jobject,
@@ -567,7 +428,7 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_openSo
     if (setsockopt(sock, SOL_SOCKET, SO_BUSY_POLL, &busyPoll, sizeof(busyPoll)) < 0)
         LOGI("SO_BUSY_POLL not supported (non-fatal): %s", strerror(errno));
 
-    struct timeval rtv = {0, 500000}; // 500ms recv timeout
+    struct timeval rtv = {0, 500000};
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &rtv, sizeof(rtv));
 
     auto session = std::make_shared<Session>();
@@ -607,8 +468,6 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_closeS
     LOGI("UDP session %d closed", handle);
 }
 
-/* ── Connection params (called after HTTP POST /api/connections) ───────────── */
-
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setConnectionParams(
     JNIEnv* env, jobject, jint handle, jbyteArray tokenArr, jbyteArray keyArr) {
     ensureSodiumInit();
@@ -627,14 +486,11 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setCon
          s->token[2], s->token[3]);
 }
 
-/* ── Encrypted gamepad data ────────────────────────────────────────────────── */
-
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendReport(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jint wB, jint bLT, jint bRT, jint sLX,
     jint sLY, jint sRX, jint sRY) {
     auto s = getSession(handle);
     if (!s) return;
-    // Payload: controller_index(1B) + XUSB_REPORT(12B) = 13 bytes
     uint8_t payload[13];
     payload[0] = (uint8_t)(controllerIndex & 0xFF);
     XUSB_REPORT* r = (XUSB_REPORT*)(payload + 1);
@@ -647,8 +503,6 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendRe
     r->sThumbRY = (int16_t)sRY;
     sendEncrypted(s.get(), MSG_GAMEPAD_DATA, payload, 13);
 }
-
-/* ── Controller add/remove ─────────────────────────────────────────────────── */
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_controllerAdd(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jint capabilities) {
@@ -683,13 +537,6 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendCo
          controllerType);
 }
 
-// Push a new capability word for an already-registered controller. Wire
-// payload mirrors the caps field of MSG_CONTROLLER_ADD: ctrlIdx(1) +
-// caps(2 BE) = 3 bytes. The Kotlin caller (SatelliteConnectionManager)
-// only sends this when the dish-side composer's `toCapBits(slotId)`
-// differs from what was last advertised — the receiver no-ops on
-// duplicates, so the de-dup is technically redundant, but the wire
-// saving + log-line saving is worth the cheap check.
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendControllerCapsUpdate(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jint capabilities) {
     auto s = getSession(handle);
@@ -702,18 +549,6 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendCo
          capabilities);
 }
 
-/* ── Motion (gyro + accel) ────────────────────────────────────────────────── */
-//
-// Hot path. The Kotlin caller (MotionScaling.gyroRadToWire /
-// accelMssToWire) has already done all the unit conversion — rad/s →
-// int16 with 1 LSB = 2000/32767 deg/s, and m/s² → int16 with 1 LSB =
-// 4/32767 g. This function does NO scaling; it only packs the int16
-// values into the 17-byte MSG_MOTION (0x000A) wire payload via
-// dish_wire::encodeMotionPayload. Per-controller rate-limiting also
-// happens up-stack (MotionRateLimiter.kt); reaching this method means
-// the caller has already passed the 250 Hz gate.
-//
-// The satellite docs §0x000A is the canonical spec for the wire layout.
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendMotion(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jshort gyroX, jshort gyroY, jshort gyroZ,
     jshort accelX, jshort accelY, jshort accelZ, jint timestampDeltaUs) {
@@ -726,12 +561,6 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendMo
     sendEncrypted(s.get(), MSG_MOTION, payload, sizeof(payload));
 }
 
-/* ── Battery (level + status) ─────────────────────────────────────────────── */
-//
-// Low-rate (30 s cadence) — see BatteryValidator.kt for the per-sample
-// validation before the Kotlin → JNI call (it validates, it does not dedup).
-// `level` is 0..100 inclusive, or 0xFF for unknown. `status` is one of the
-// BATTERY_STATUS_* constants documented in satellite/docs/protocol.md §0x000B.
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendBattery(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jint level, jint status) {
     auto s = getSession(handle);
@@ -742,14 +571,6 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendBa
     sendEncrypted(s.get(), MSG_BATTERY, payload, sizeof(payload));
 }
 
-/* ── Touchpad (DS4 / DualSense trackpad — synthesized from a virtual on-screen
- *  touchpad surface in the Android UI). 250 Hz cadence pacing happens in
- *  Kotlin (same deadline-based loop as the gamepad overlay); this JNI export
- *  is one encode + one encrypted send.
- *
- *  Coordinates are pre-normalized int16 by the caller (-32768..32767).
- *  trackingId is per-finger and monotonic (Kotlin assigns; the wire just
- *  carries it). */
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendTouchpad(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jboolean f0Active, jboolean f1Active,
     jboolean buttonPressed, jint f0TrackingId, jshort f0x, jshort f0y, jint f1TrackingId,
@@ -757,11 +578,6 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendTo
     auto s = getSession(handle);
     if (!s) return;
     uint8_t payload[16];
-    // eventTimeMs is Android's MotionEvent.getEventTime() (uptime ms,
-    // monotonic). Truncate to u32 for the wire — 49 days of range, plenty
-    // for a session. The satellite computes dt between consecutive samples
-    // for the relative-mouse time-scaling that fixes the first-touch jump
-    // (see wire_encoders.h and the satellite's session_service.cpp).
     dish_wire::encodeTouchpadPayload(
         payload, (uint8_t)(controllerIndex & 0xFF), f0Active == JNI_TRUE, f1Active == JNI_TRUE,
         buttonPressed == JNI_TRUE, (uint8_t)(f0TrackingId & 0xFF), (int16_t)f0x, (int16_t)f0y,
@@ -769,8 +585,6 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendTo
         (uint32_t)(eventTimeMs & 0xFFFFFFFFLL));
     sendEncrypted(s.get(), MSG_TOUCHPAD, payload, sizeof(payload));
 }
-
-/* ── Heartbeat start/stop ──────────────────────────────────────────────────── */
 
 JNIEXPORT void JNICALL
 Java_com_tinkernorth_dish_core_jni_SatelliteNative_startHeartbeat(JNIEnv*, jobject, jint handle) {
@@ -810,21 +624,10 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_resetC
     auto s = getSession(handle);
     if (!s) return;
     s->lastControllerAck.store(-1, std::memory_order_release);
-    // Reset the motion-flags shadow too so a new registration doesn't read
-    // the previous slot's flags. Kept atomic-paired with lastControllerAck
-    // (same reset point) — divergence would mean a freshly-reset slot
-    // could spuriously read its predecessor's "kernel rejected" flag.
+    // Paired reset — divergence would let a fresh slot read its predecessor's flags.
     s->lastControllerAckMotionFlags.store(-1, std::memory_order_release);
 }
 
-// Latest MSG_CONTROLLER_ACK motion-flags byte for this session, or -1 if no
-// extended ACK has been observed. Bits as per ACK_MOTION_FLAG_* in the
-// satellite's core/types.h:
-//   bit 0 — receiver's backend supports IMU for the slot's chosen type
-//   bit 1 — backend successfully created the per-serial IMU sink
-// A pre-extension satellite leaves this at -1; the Kotlin side collapses
-// -1 onto "unknown" rather than treating either bit as false (which would
-// permanently disable motion against an old satellite).
 JNIEXPORT jint JNICALL
 Java_com_tinkernorth_dish_core_jni_SatelliteNative_getLastControllerMotionFlags(JNIEnv*, jobject,
                                                                                 jint handle) {
@@ -847,8 +650,6 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getAct
     return (jint)s->activeControllerCount.load(std::memory_order_acquire);
 }
 
-/* ── Receive ACK (called from a background thread) ────────────────────────── */
-
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiveAck(JNIEnv* env,
                                                                                      jobject,
                                                                                      jint handle) {
@@ -868,12 +669,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiv
     uint8_t nonce[12] = {};
     putBE32(nonce + 8, ctr);
 
-    // Sized to match buf[128] so the decrypt destination can never be
-    // overflowed: plaintext is (cipherLen - 16) bytes and cipherLen <= n - 8
-    // <= 120, so the largest possible plaintext (~104 B) still fits. A 64-byte
-    // buffer here was a latent stack overflow — not currently reachable (no
-    // server→client message is that large and the Poly1305 tag must verify
-    // first), but the bound must hold structurally, not by message-set luck.
+    // Must size with buf[128] not the message-set max — bound holds structurally, not by luck.
     uint8_t decrypted[sizeof(buf)];
     unsigned long long decLen = 0;
     size_t cipherLen = (size_t)n - 8;
@@ -895,13 +691,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiv
         uint8_t result = decrypted[7];
         int32_t packed = ((int32_t)reqType << 16) | ((int32_t)ctrlIdx << 8) | (int32_t)result;
         s->lastControllerAck.store(packed, std::memory_order_release);
-        // Optional motion-status byte (post-extension satellites). A
-        // pre-extension satellite sends only 4 bytes (msgLen == 4) and the
-        // extra byte is absent — leave the stored flags at whatever the
-        // prior ACK left, or -1 if never written, so a slot with no
-        // observation stays "unknown" rather than being misread as
-        // "backend broken." A post-extension satellite always sends the
-        // byte (zero or not), so msgLen >= 5 is the live-data branch.
+        // Pre-extension satellites send msgLen==4 and the byte is absent; leave -1 = unknown.
         if (msgLen >= 5 && decLen >= 9) {
             s->lastControllerAckMotionFlags.store((int32_t)decrypted[8], std::memory_order_release);
             LOGI("Session %d controller ACK: reqType=0x%04X idx=%d result=0x%02X motion=0x%02X",
@@ -922,8 +712,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiv
                  count);
         }
     } else if (msgType == MSG_RUMBLE && msgLen == 7 && decLen >= 11) {
-        // Wire layout (BE16 magnitudes/duration) — fixed 7-byte payload:
-        //   ctrlIdx(1) strong(2) weak(2) durMs(2)
+        // 7B fixed payload: ctrlIdx, strong BE16, weak BE16, durMs BE16.
         if (g_rumbleBridgeClass == nullptr || g_rumbleDispatchMethod == nullptr) return;
         const jint ctrlIdx = (jint)decrypted[4];
         const jint strong = ((jint)decrypted[5] << 8) | (jint)decrypted[6];
@@ -933,19 +722,12 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiv
                                   strong, weakMag, durMs);
         if (env->ExceptionCheck()) env->ExceptionClear();
     } else if (msgType == MSG_LIGHTBAR && msgLen == 4 && decLen >= 8) {
-        // Dedicated controller-RGB-LED message (satellite → sender). Android
-        // exposes no controller-LED API, so dish-android cannot actuate this
-        // and intentionally does not advertise CAP_LIGHTBAR — a capability-
-        // aware satellite won't send 0x000D here. We still decode and log any
-        // that arrive so the return path is observable, then drop the packet.
-        // Wire layout: ctrlIdx(1) R(1) G(1) B(1).
+        // Android has no controller-LED API; decode and drop (dish-android does not advertise CAP_LIGHTBAR).
         const dish_wire::LightbarPayload lb = dish_wire::decodeLightbarPayload(decrypted + 4);
         LOGI("Session %d lightbar (no LED API on Android, dropping): idx=%d rgb=%02X%02X%02X",
              handle, lb.ctrlIdx, lb.r, lb.g, lb.b);
     }
 }
-
-/* ── LAN Discovery ────────────────────────────────────────────────────────── */
 
 JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_discoverServers(
     JNIEnv* env, jobject, jint discPort, jint timeoutMs) {
@@ -1001,18 +783,6 @@ JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_dis
     return env->NewStringUTF(result.c_str());
 }
 
-/* ── Connection API + PIN pairing ──────────────────────────────────────────
- *
- * Both moved out of native code. The satellite's client-facing API is HTTPS
- * (TLS) now — POST/DELETE /api/connections for connection management and
- * POST /api/pair for PIN pairing (previously a bespoke raw-TCP line protocol).
- * Doing TLS here would mean adding an SSL library to the NDK CMake build and
- * driving a handshake by hand; in Kotlin it is a HttpsURLConnection with a
- * trust-all SSLContext. See SatelliteHttpClient.kt.
- */
-
-/* ── Physical-slot bindings (driven from MainActivity) ─────────────────── */
-
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_bindPhysicalSlotSatellite(
     JNIEnv*, jobject, jint deviceId, jint sessionHandle, jint controllerIndex) {
     std::lock_guard<std::mutex> lock(g_slotsMtx);
@@ -1058,38 +828,12 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setDev
     s.flatRZ = flatRZ;
 }
 
-/* ── Activity-level dispatch entry points ────────────────────────────────
- *
- * GameActivity routes generic motion events through its SurfaceView's
- * OnGenericMotionListener, which sits deep enough in Android's input
- * dispatch chain that for some controllers (notably the Nintendo Switch
- * Pro Controller via USB on Pixel devices) the input system synthesizes
- * DPAD key events from stick movement *before* the event ever reaches the
- * SurfaceView. The result is left-stick movement arriving as
- * DPAD_UP/DOWN/LEFT/RIGHT keycodes and the right stick going dead.
- *
- * Intercepting at the Activity dispatch level (the path the pre-refactor
- * Kotlin code used) and consuming the event there prevents that fallback
- * synthesis from running. These entry points reuse the same g_devices
- * state, applyKey/applyAxes pipeline, and publishIfChanged gate as the
- * GameActivity filter callbacks, so they share locking and the
- * send-on-change behaviour.
- *
- * Returns JNI_TRUE if the event was a gamepad input we recognised. The
- * caller should treat that as "consumed" and not fall through to super.
- */
+// Activity-level dispatch is needed because GameActivity's SurfaceView sits below the
+// input layer that synthesizes DPAD keys from stick motion on some controllers.
 JNIEXPORT jboolean JNICALL
 Java_com_tinkernorth_dish_core_jni_SatelliteNative_processGamepadKeyEvent(
     JNIEnv*, jobject, jint deviceId, jint /*source*/, jint action, jint keyCode) {
-    // The event's source bits are unreliable as a "is this a gamepad event"
-    // discriminator: generic HID joystick adapters dispatch button events
-    // with src=AINPUT_SOURCE_KEYBOARD even though the device itself exposes
-    // AINPUT_SOURCE_JOYSTICK. The mapped-keycode check below is the real
-    // gate — if the keycode resolves to an XUSB button (or one of the
-    // four trigger-via-key keycodes), this is a gamepad event regardless of
-    // which source flag Android tagged it with. Caller (Activity dispatch)
-    // is responsible for not handing us events from devices that aren't
-    // gamepads in the first place.
+    // Source bits are unreliable; gate on the mapped-keycode check instead.
     bool isMappedKey = (keyCode == AKEYCODE_BUTTON_L2 || keyCode == AKEYCODE_BUTTON_R2 ||
                         keyCode == AKEYCODE_BUTTON_7 || keyCode == AKEYCODE_BUTTON_8) ||
                        gamepad::keycodeToXusb(keyCode) != 0;
@@ -1118,9 +862,7 @@ Java_com_tinkernorth_dish_core_jni_SatelliteNative_processGamepadMotionEvent(
         return JNI_TRUE;
     }
     if (maskedAction != AMOTION_EVENT_ACTION_MOVE) return JNI_TRUE;
-    // Right-stick axis varies by controller: most use Z/RZ (Xbox-style), some
-    // use RX/RY. Pick whichever pair has larger magnitude so both layouts work
-    // without per-device config.
+    // Right-stick layout varies (Z/RZ vs RX/RY); pick the larger-magnitude pair.
     float rightX = std::fabs(z) >= std::fabs(rx) ? z : rx;
     float rightY = std::fabs(rz) >= std::fabs(ry) ? rz : ry;
     float lt = std::max(lTrigger, brake);
@@ -1130,8 +872,6 @@ Java_com_tinkernorth_dish_core_jni_SatelliteNative_processGamepadMotionEvent(
     return JNI_TRUE;
 }
 
-// Force-zero every device that's bound to a slot and emit a release-all
-// report. Used on focus loss so no button stays held server-side.
 JNIEXPORT void JNICALL
 Java_com_tinkernorth_dish_core_jni_SatelliteNative_releaseAllPhysicalReports(JNIEnv*, jobject) {
     std::lock_guard<std::mutex> lock(g_devicesMtx);
@@ -1141,11 +881,7 @@ Java_com_tinkernorth_dish_core_jni_SatelliteNative_releaseAllPhysicalReports(JNI
     }
 }
 
-/* ── Bluetooth bridge wiring ──────────────────────────────────────────── */
-// Called once from BluetoothGamepadBridge.install(). We register the bridge
-// class here, not in JNI_OnLoad, because FindClass() in JNI_OnLoad uses the
-// system classloader (which doesn't see app classes); from a regular JNI
-// call the app classloader is on the call stack so the lookup succeeds.
+// Class registration cannot live in JNI_OnLoad: FindClass there uses the system loader, not the app's.
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_hotpath_input_BluetoothGamepadBridge_nativeInstall(
     JNIEnv* env, jclass bridgeCls) {
     if (g_btBridgeClass == nullptr) { g_btBridgeClass = (jclass)env->NewGlobalRef(bridgeCls); }
@@ -1157,16 +893,9 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_hotpath_input_BluetoothGamepadB
             env->ExceptionClear();
         }
     }
-    // The BT worker thread takes Binder-IPC reports off the lock-free queue
-    // populated by gamepadKeyFilter / gamepadMotionFilter on the UI thread.
-    // Idempotent — safe if install() is ever called twice.
     startBtDispatchThread();
 }
 
-// Mirror of the BT bridge install path, but for the rumble return path. We
-// only need the class + method ids — receiveAck() is already invoked from a
-// JVM-attached thread (Kotlin Dispatchers.IO), so there's no separate
-// dispatcher thread to spawn here.
 JNIEXPORT void JNICALL
 Java_com_tinkernorth_dish_hotpath_input_RumbleBridge_nativeInstall(JNIEnv* env, jclass bridgeCls) {
     if (g_rumbleBridgeClass == nullptr) {
@@ -1182,9 +911,8 @@ Java_com_tinkernorth_dish_hotpath_input_RumbleBridge_nativeInstall(JNIEnv* env, 
     }
 }
 
-} // extern "C"
+}
 
-/* ── JNI_OnLoad: cache JavaVM only ────────────────────────────────────── */
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*) {
     g_jvm = vm;
     return JNI_VERSION_1_6;

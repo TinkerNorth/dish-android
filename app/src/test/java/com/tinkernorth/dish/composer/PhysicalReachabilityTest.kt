@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.composer
 
@@ -19,21 +18,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Test
 
-/**
- * Tests for [PhysicalReachability] — the shared "which physical pads can
- * currently accept a satellite report" logic behind [PhysicalBatterySource]
- * and [PhysicalMotionSource].
- *
- * The headline regression test is [reachableSlots re-emits when a slot flips
- * registered with no other change]. A physical pad's slot flips `registered`
- * on the `addController` ACK, 0–2 s **after** the connection reaches
- * CONNECTED — and on auto-reconnect the binding already exists, so at that
- * moment nothing in `devices` / `bindings` / `connections` changes. A
- * reachability flow that observes only those three inputs evaluates the pad
- * once (while still unregistered) and never re-evaluates it, so physical-pad
- * motion and battery silently never start. The flow must also fold in every
- * live connection's `slots` table.
- */
 class PhysicalReachabilityTest {
     private fun device(id: Int) = PhysicalGamepadRegistry.Device(id, "Pad-$id")
 
@@ -52,14 +36,11 @@ class PhysicalReachabilityTest {
 
     private fun slot(registered: Boolean) = SlotBinding(controllerIndex = 0, controllerType = 0, registered = registered)
 
-    /** A mock [SatelliteConnection] whose slot table is a flow the test drives. */
     private fun connection(slots: StateFlow<Map<String, SlotBinding>>): SatelliteConnection {
         val conn = mockk<SatelliteConnection>()
         every { conn.slots } returns slots
         return conn
     }
-
-    // ── connectionFor (pure) ─────────────────────────────────────────────
 
     @Test
     fun `connectionFor returns the connection for a bound, connected, registered slot`() {
@@ -115,8 +96,6 @@ class PhysicalReachabilityTest {
 
     @Test
     fun `connectionFor is null until the slot has registered`() {
-        // CONNECTED, but the addController ACK has not landed: sendBattery /
-        // sendMotion would drop the report, so the pad is not yet reachable.
         val conn = connection(MutableStateFlow(mapOf("9" to slot(registered = false))))
         assertNull(
             PhysicalReachability.connectionFor(
@@ -130,8 +109,6 @@ class PhysicalReachabilityTest {
 
     @Test
     fun `connectionFor is null when the connection object is gone`() {
-        // A summary says CONNECTED but the SatelliteConnection map has no entry
-        // (a teardown race) — must not NPE, must resolve to not-reachable.
         assertNull(
             PhysicalReachability.connectionFor(
                 slotId = "9",
@@ -148,14 +125,12 @@ class PhysicalReachabilityTest {
         val resolved =
             PhysicalReachability.resolve(
                 deviceIds = setOf(9, 11),
-                bindings = mapOf("9" to "c"), // device 11 is unbound
+                bindings = mapOf("9" to "c"),
                 summaries = listOf(summary("c")),
                 connections = mapOf("c" to reachableConn),
             )
         assertEquals(mapOf("9" to reachableConn), resolved)
     }
-
-    // ── reachableSlots (flow) — the registration-timing regression ───────
 
     @Test
     fun `reachableSlots re-emits when a slot flips registered with no other change`() =
@@ -170,14 +145,8 @@ class PhysicalReachabilityTest {
             PhysicalReachability
                 .reachableSlots(devices, bindings, summaries, connections)
                 .test {
-                    // Bound + CONNECTED, but the addController ACK has not
-                    // landed yet, so the pad is not reachable.
                     assertEquals(emptyMap<String, SatelliteConnection>(), awaitItem())
 
-                    // The ACK flips `registered`. NOTHING in devices / bindings
-                    // / connections changes — this is the auto-reconnect path.
-                    // A flow that doesn't observe the slot table never re-emits
-                    // here and the pad's motion/battery silently never start.
                     slots.value = mapOf("9" to slot(registered = true))
 
                     assertEquals(mapOf("9" to conn), awaitItem())
@@ -208,9 +177,7 @@ class PhysicalReachabilityTest {
     @Test
     fun `reachableSlots emits an empty map and does not hang when there are no connections`() =
         runTest {
-            // The empty-connection case must still produce an emission — a bare
-            // combine(slotFlows) over zero flows would never emit, stalling the
-            // whole observer. The flowOf(Unit) guard prevents that.
+            // Empty connections must still emit; bare combine over zero flows would stall.
             val devices = MutableStateFlow(mapOf(9 to device(9)))
             val bindings = MutableStateFlow<Map<String, String>>(emptyMap())
             val summaries = MutableStateFlow<List<ConnectionSummary>>(emptyList())
