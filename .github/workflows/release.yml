@@ -28,7 +28,6 @@ on:
 #                                 and the R8 mapping is auto-uploaded to
 #                                 Firebase. When unset, the build still
 #                                 succeeds but ships without crash reporting.
-#                                 See HANDOFF.md item 3.
 #   NVD_API_KEY                   speeds up OWASP Dependency-Check syncs.
 #
 # Pin map (verify with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`):
@@ -150,7 +149,7 @@ jobs:
           tag="${GITHUB_REF_NAME:-${{ inputs.tag }}}"
           name="${tag#v}"
           # vX.Y.Z → versionCode = X*10000 + Y*100 + Z. Re-derive locally with
-          # `git describe --tags` if changing this scheme; mirror in HANDOFF.md item 4.
+          # `git describe --tags` if changing this scheme.
           if [[ "$name" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
             major="${BASH_REMATCH[1]}"
             minor="${BASH_REMATCH[2]}"

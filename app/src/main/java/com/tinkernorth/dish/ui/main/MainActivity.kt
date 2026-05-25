@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.ui.main
 
@@ -51,31 +50,13 @@ class MainActivity :
 
     private lateinit var gamepadHost: GamepadActivityHost
 
-    // Typed navigation surface over res/navigation/nav_graph.xml. Replaces
-    // raw startActivity(Intent) calls with named, typed-args methods so a
-    // mistyped extra is a compile error rather than a silent runtime
-    // "extra missing" branch. See DishNavigator's KDoc for the rationale.
     private val nav by lazy { DishNavigator(this) }
 
-    // Flipped to false by either the first MainUiState emission rendered
-    // by updateUI() or the SPLASH_HOLD_MAX_MS safety timer below — whichever
-    // wins. While true, installSplashScreen()'s keep-on-screen condition
-    // holds the system splash, so the user sees the branded splash until
-    // first content is ready instead of a flash of empty MainActivity
-    // chrome. The 1500ms cap exists because a stalled ViewModel (e.g. the
-    // connection hub waiting on a slow DataStore read on cold boot) must
-    // not pin the splash forever.
+    // Held by installSplashScreen()'s keep-on-screen gate; cleared either by the first
+    // MainUiState render or the SPLASH_HOLD_MAX_MS fallback so a stalled ViewModel can't pin
+    // the splash forever.
     @Volatile
     private var splashHoldUntilFirstRender = true
-
-    // ═══════════════════════════════════════════════════════════════════════
-    //  LIFECYCLE
-    //
-    //  Wake-lock state, the dim-after-idle overlay, and physical-gamepad
-    //  pass-through are owned by GamepadActivityHost so the wiring matches
-    //  every other Dish activity. Anything specific to the dashboard
-    //  (viewmodel observation, controller adapter) lives here.
-    // ═══════════════════════════════════════════════════════════════════════
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Must run before super.onCreate so core-splashscreen can flip the
@@ -87,9 +68,7 @@ class MainActivity :
         val splash = installSplashScreen()
         splash.setKeepOnScreenCondition { splashHoldUntilFirstRender }
         super.onCreate(savedInstanceState)
-        // Native-library load failed in DishApplication.onCreate — route the
-        // user to the themed fallback screen instead of crashing the moment
-        // we touch any JNI surface (GameActivity itself loads native code).
+        // GameActivity loads native code on touch; route to fallback before JNI surface is hit.
         if (com.tinkernorth.dish.DishApplication.nativeLoadFailed) {
             // Release the splash hold immediately: this activity is finishing
             // and the NativeUnavailable screen needs to draw itself.
@@ -100,25 +79,13 @@ class MainActivity :
         }
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        // `attachGamepadHost` centralises the construct-and-install dance
-        // every Dish activity used to inline (see ActivityExtensions.kt).
-        // `install(notifications)` inside it wires the wake-state collectors
-        // AND the themed notification host in one call.
         gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications)
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()
         controllerAdapter = ControllerAdapter(this)
         setupUI()
         observeViewModel()
-        // Auto-reconnect is driven exclusively by ConnectionForegroundObserver
-        // (ProcessLifecycleOwner) so the cold-start and return-to-foreground
-        // paths share one entry point.
-
-        // Splash safety net: if the first MainUiState never arrives (slow
-        // DataStore on a cold boot, ViewModel stalled, etc.) release the
-        // splash anyway after SPLASH_HOLD_MAX_MS so the user is never
-        // staring at a held splash indefinitely. updateUI()'s release runs
-        // first in the happy path; this is the fallback.
+        // Fallback splash release — happy path is updateUI()'s first emission.
         binding.root.postDelayed({ splashHoldUntilFirstRender = false }, SPLASH_HOLD_MAX_MS)
     }
 
@@ -127,15 +94,7 @@ class MainActivity :
         gamepadHost.cancelDimOnStop()
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    //  UI
-    // ═══════════════════════════════════════════════════════════════════════
-
     private fun setupUI() {
-        // Section header label lives in `section_header.xml` and is set
-        // here so the include's TextView (id `labelSection`) carries the
-        // dashboard's "CONTROLLERS" string. Icon + trailing-button slots
-        // stay hidden by default for this eyebrow-only callsite.
         binding.sectionControllers.labelSection.setText(R.string.section_controllers)
         binding.rvControllers.adapter = controllerAdapter
         binding.btnManageConnections.setOnClickListener { nav.toConnections() }
@@ -163,10 +122,7 @@ class MainActivity :
             when {
                 liveCount == 0 && totalCount == 0 -> getString(R.string.status_tap_manage)
                 liveCount == 0 -> resources.getQuantityString(R.plurals.status_remembered, totalCount, totalCount)
-                // Quantity is selected on the *total* count (the "of N" number):
-                // "1 of 1 online" is singular, "2 of 5 online" plural — the
-                // positional args are still (liveCount, totalCount) in that
-                // order to match the %1$d / %2$d format slots.
+                // Quantity selects on totalCount; args order (liveCount, totalCount) matches %1$d/%2$d.
                 else -> resources.getQuantityString(R.plurals.status_connected_of, totalCount, liveCount, totalCount)
             }
         controllerAdapter.submitSlots(
@@ -179,18 +135,11 @@ class MainActivity :
 
     private fun handleEvent(event: MainEvent) {
         when (event) {
-            // Server-supplied error strings from user-initiated paths —
-            // the user just acted, so a warning that explains the result
-            // is the right severity.
             is MainEvent.ShowToast ->
                 notifications.warn(
                     title = event.message,
                     glyph = R.drawable.ic_satellite_off,
                 )
-            // Stale state on the row already says "Needs pairing"; the
-            // banner adds an OPEN action so the user can jump straight to
-            // the right satellite's PIN dialog. Same-key replacement so
-            // repeat pair-required events for the same id don't stack.
             is MainEvent.ShowPairingDialog ->
                 notifications.warn(
                     glyph = R.drawable.ic_satellite_off,
@@ -200,6 +149,7 @@ class MainActivity :
                         DishNotification.Action(
                             label = getString(R.string.action_open),
                         ) { openConnectionsForPairing(event.connectionId) },
+                    // Same-key replacement so repeat pair-required events for the same id don't stack.
                     key = "pair-required:${event.connectionId}",
                 )
         }
@@ -208,10 +158,6 @@ class MainActivity :
     private fun openConnectionsForPairing(connectionId: String) {
         nav.toConnectionsForPairing(connectionId)
     }
-
-    // ═══════════════════════════════════════════════════════════════════════
-    //  SLOT ACTIONS
-    // ═══════════════════════════════════════════════════════════════════════
 
     override fun onSlotTapped(slotId: String) = controllerAdapter.toggleExpanded(slotId)
 
@@ -250,9 +196,6 @@ class MainActivity :
         val v = viewModel.uiState.value.virtualSlot
         val cid =
             v.boundConnectionId ?: run {
-                // No connection bound. The on-screen gamepad has nowhere to
-                // route input to, so a transient INFO banner explaining the
-                // next step is the right severity — auto-dismisses.
                 notifications.info(
                     glyph = R.drawable.ic_gamepad,
                     title = getString(R.string.notif_bind_first_title),
@@ -261,19 +204,12 @@ class MainActivity :
                 return
             }
         val summary = v.boundStatus
-        // BT carries its profile in summary.btProfile; satellites carry a per-slot
-        // controller type the user can flip from the dashboard. Either signals
-        // "use PS layout" to the overlay.
         val usePs =
             summary?.btProfile == "PlayStation" ||
                 summary?.satelliteControllerTypes?.get(VIRTUAL_SLOT_ID) ==
                 com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
         nav.toGamepad(connectionId = cid, usePsLayout = usePs)
     }
-
-    // ═══════════════════════════════════════════════════════════════════════
-    //  INPUT DISPATCH — forwarded to GamepadActivityHost
-    // ═══════════════════════════════════════════════════════════════════════
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean = gamepadHost.dispatchKeyEvent(event) || super.dispatchKeyEvent(event)
 

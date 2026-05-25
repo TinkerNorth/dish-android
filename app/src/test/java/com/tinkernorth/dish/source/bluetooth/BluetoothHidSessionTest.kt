@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.bluetooth
 
@@ -9,16 +8,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * FSM contract tests for [BluetoothHidSession]. The session owns at most one
- * HID registration at a time (Android's HID Device API constraint) and must
- * be safely re-enterable across the app's foreground/background transitions.
- *
- * Each test drives the FSM through a concrete sequence of framework events
- * using a [FakeHidProxyClient], and asserts both the emitted [BluetoothSessionState]
- * and the exact sequence of proxy calls. Proxy call order matters — the
- * original bug was caused by skipping `unregisterAndRelease` on re-start.
- */
 class BluetoothHidSessionTest {
     private lateinit var fake: FakeHidProxyClient
     private lateinit var session: BluetoothHidSession
@@ -29,15 +18,11 @@ class BluetoothHidSessionTest {
         session = BluetoothHidSession { fake }
     }
 
-    // ── Initial state ─────────────────────────────────────────────────────
-
     @Test
     fun `initial state is Idle`() {
         assertEquals(BluetoothSessionState.Idle, session.state.value)
         assertTrue(fake.calls.isEmpty())
     }
-
-    // ── start() → Acquiring → Registered ──────────────────────────────────
 
     @Test
     fun `start from Idle moves to Acquiring and acquires a fresh proxy`() {
@@ -56,7 +41,6 @@ class BluetoothHidSessionTest {
 
         val registerCall = fake.calls.filterIsInstance<FakeHidProxyClient.Call.RegisterApp>().single()
         assertEquals(GamepadProfile.PLAYSTATION, registerCall.profile)
-        // Still Acquiring — registration is not yet confirmed.
         assertTrue(session.state.value is BluetoothSessionState.Acquiring)
     }
 
@@ -93,8 +77,6 @@ class BluetoothHidSessionTest {
         assertEquals("AA:BB", s.mac)
         assertEquals("Living Room TV", s.name)
     }
-
-    // ── Connect / disconnect from Registered ──────────────────────────────
 
     @Test
     fun `onHostConnected from Registered transitions to Connected with mac and name`() {

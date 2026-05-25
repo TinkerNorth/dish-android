@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 #include "gamepad_input.h"
 
@@ -54,10 +53,6 @@ uint16_t keycodeToXusb(int32_t kc) {
         return XUSB_DPAD_LEFT;
     case KC_DPAD_RIGHT:
         return XUSB_DPAD_RIGHT;
-    // Generic HID joystick fallback (DirectInput-style numbering). BUTTON_7
-    // and BUTTON_8 aren't here because they're triggers — they're handled
-    // alongside L2/R2 in [applyKey] so they engage the same trigger-via-key
-    // path that keeps the analog trigger axis pinned while held.
     case KC_BUTTON_1:
         return XUSB_A;
     case KC_BUTTON_2:
@@ -84,10 +79,6 @@ uint16_t keycodeToXusb(int32_t kc) {
 }
 
 bool applyKey(DeviceState& s, int32_t kc, bool down) {
-    // KC_BUTTON_7 and KC_BUTTON_8 follow the same trigger-via-key path so
-    // generic HID adapters whose L2/R2 surface as plain buttons still pin
-    // the analog trigger axis to 255 while held (matching what a real
-    // analog trigger pull at full depth would produce).
     if (kc == KC_BUTTON_L2 || kc == KC_BUTTON_7) {
         s.ltFromKey = down;
         s.bLT = down ? 255 : 0;

@@ -1,14 +1,9 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.connection
 
-import com.tinkernorth.dish.composer.ConnectionHub
-import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.jni.ControllerRepository
 import com.tinkernorth.dish.core.model.DiscoveredServer
-import com.tinkernorth.dish.source.sensor.BatteryValidator
-import com.tinkernorth.dish.source.sensor.MotionRateLimiter
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatus
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
 import kotlinx.coroutines.CoroutineDispatcher
@@ -27,55 +22,13 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-/**
- * A single live or potential session to one Satellite server (the host PC the
- * device routes input to over LAN).
- *
- * Multi-slot: a satellite session can host more than one controller. Each
- * attached slot is allocated a server-visible [SlotBinding.controllerIndex]
- * (0..N) so per-slot reports, type changes and removals can be addressed
- * independently. Bluetooth's single-host constraint is enforced one layer up
- * in [ConnectionHub.bind].
- *
- * The [id] is stable across app restarts (derived from server IP+port) so the
- * hub can persist a list of remembered connections and reclaim slot bindings
- * after a relaunch. [handle] is the native session handle returned by
- * [ControllerRepository.openSocket] and is only valid while [state] is
- * [SatelliteSessionState.Live]; once the session is torn down it is reset to -1
- * and a fresh handle is allocated on reconnect.
- */
 class SatelliteConnection(
     val id: String,
     server: DiscoveredServer,
     private val scope: CoroutineScope,
     private val controllerRepo: ControllerRepository,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    /**
-     * Resolves the per-slot `CAP_MOTION` (0x0004) bit for the wire
-     * capability word at `MSG_CONTROLLER_ADD` time. Defaulted to
-     * [CAP_MOTION_BIT_LEGACY] so pre-existing tests that don't care
-     * about the composer keep behaving like the pre-PR3 always-on path
-     * (where every controller advertised motion regardless of hardware
-     * or toggle).
-     *
-     * In production, [SatelliteConnectionManager] threads a closure that
-     * reads from [com.tinkernorth.dish.composer.MotionCapabilityComposer
-     * .capabilityFor] so the bit reflects the *user's* current toggle and
-     * the slot's *real* hardware. This makes the cap word honest —
-     * previously every controller advertised motion regardless of whether
-     * gyro samples would ever flow.
-     */
     private val motionCapsBitsFor: (slotId: String) -> Int = { CAP_MOTION_BIT_LEGACY },
-    /**
-     * Per-(connection, slot) store of the satellite's truth about whether
-     * motion bytes will actually reach the virtual gamepad's IMU surface.
-     * Written after a successful controller-add ACK using the motion-status
-     * byte the receiver appends to the ACK payload — see
-     * [com.tinkernorth.dish.core.jni.ControllerRepository
-     * .getLastControllerMotionFlags]. Defaulted to `null` so tests that
-     * don't care about the satellite-truth path can keep constructing a
-     * connection without wiring it.
-     */
     private val motionBackendStatusStore: SatelliteMotionBackendStatusStore? = null,
 ) {
     private val _server = MutableStateFlow(server)
@@ -84,12 +37,7 @@ class SatelliteConnection(
     private val _state = MutableStateFlow(SatelliteSessionState.Idle)
     val state: StateFlow<SatelliteSessionState> = _state.asStateFlow()
 
-    /**
-     * Immutable tuple of the live-session handle + connection id. Held in a
-     * single `@Volatile` reference so [sendReport] (report thread) always
-     * sees the pair atomically — readers can never observe a fresh handle
-     * with a stale connection id (or vice versa) mid-reconnect.
-     */
+    // Held atomically so sendReport never observes a torn (handle, connectionId) pair mid-reconnect.
     private data class LiveHandle(
         val handle: Int,
         val connectionId: String,
@@ -97,28 +45,10 @@ class SatelliteConnection(
 
     @Volatile private var live: LiveHandle? = null
 
-    /** Server-issued connection id for the live session, or null when idle. */
     val connectionId: String? get() = live?.connectionId
 
-    /** Native socket handle for the live session, or -1 when idle. */
     val handle: Int get() = live?.handle ?: -1
 
-    /**
-     * State of a single slot bound to this connection. [controllerIndex] is the
-     * server-visible 0..N index used in `addController`/`sendReport` etc.
-     * [registered] flips true once `addController` has been ACKed and the type
-     * has been pushed; reports for this slot are dropped until then so we don't
-     * silently feed packets the server will reject as "unknown controller".
-     *
-     * [lastAdvertisedCaps] tracks the most recent capability word the dish has
-     * told the satellite about for this slot — either via the original
-     * `MSG_CONTROLLER_ADD` or a subsequent `MSG_CONTROLLER_CAPS_UPDATE`
-     * (0x000E). [refreshCapsIfChanged] uses this to de-dup composer emissions
-     * that don't actually change the wire word, so a churning composer
-     * (e.g. an unrelated slot's hub.bindings change re-emitting the same map)
-     * doesn't burn a UDP packet per tick. `null` means "no registration has
-     * happened yet" — we don't bother tracking caps for an unregistered slot.
-     */
     data class SlotBinding(
         val controllerIndex: Int,
         val controllerType: Int,
@@ -132,12 +62,7 @@ class SatelliteConnection(
     private var ackJob: Job? = null
     private var aliveJob: Job? = null
 
-    /**
-     * Serializes [registerController] runs. The native ACK channel
-     * (`getLastControllerAck`) is per-handle, not per-controller-index, so two
-     * concurrent registrations would race on `resetControllerAck` and steal
-     * each other's ACKs.
-     */
+    // Native ACK channel is per-handle, not per-index — concurrent registers would steal each other's ACKs.
     private val registrationMutex = Mutex()
     private var onRegistrationFailed: ((reason: String) -> Unit)? = null
 
@@ -145,31 +70,11 @@ class SatelliteConnection(
         _server.value = server
     }
 
-    /**
-     * Advance to Linking from Idle or an already-in-flight Linking.
-     * Rejected from Live so a caller can't accidentally wipe a live
-     * session's state back to Linking without an intervening disconnect.
-     */
     internal fun markConnecting() {
         if (_state.value == SatelliteSessionState.Live) return
         _state.value = SatelliteSessionState.Linking
     }
 
-    /**
-     * Finalize a successful connect: stash the native handle + server-issued
-     * connectionId, start the ACK receive loop and heartbeat. Must be called
-     * after [ControllerRepository.openSocket] and [setConnectionParams] succeed.
-     *
-     * Strict guard: only valid from Linking. A second [markConnected] while
-     * already Live would leak the previous native handle, so we reject
-     * and let the caller run [markDisconnected] first if it really meant to
-     * rebind. Calls from Idle are likewise rejected — the pair/auth path must
-     * go through [markConnecting].
-     *
-     * Any slots attached before the session was online (common right after an
-     * app relaunch/auto-reconnect) get their `addController` handshake run now,
-     * sequentially, so subsequent [sendReport] packets are accepted.
-     */
     internal fun markConnected(
         handle: Int,
         connectionId: String,
@@ -177,9 +82,7 @@ class SatelliteConnection(
         onDead: () -> Unit,
     ) {
         if (_state.value != SatelliteSessionState.Linking) return
-        // Publish the (handle, connectionId) pair before flipping state so
-        // any concurrent sendReport that observes Live cannot see a
-        // null/-1 tuple.
+        // Publish tuple before state flip so concurrent sendReport never sees Live with null/-1.
         live = LiveHandle(handle, connectionId)
         _state.value = SatelliteSessionState.Live
         this.onRegistrationFailed = onRegistrationFailed
@@ -193,12 +96,6 @@ class SatelliteConnection(
         controllerRepo.startHeartbeat(handle)
         aliveJob =
             scope.launch {
-                // Synthesized Faltering: keep a short ring buffer of alive-poll
-                // results and only declare the session dead after FALTER_TO_DEAD
-                // consecutive misses. A single miss flips state to Faltering →
-                // chip "Unsteady"; a recovery before the threshold restores Live.
-                // This dampens single-tick Wi-Fi blips that the previous
-                // binary-alive code rendered as Online → Offline bounces.
                 var consecutiveMisses = 0
                 while (isActive) {
                     delay(ALIVE_POLL_MS)
@@ -233,14 +130,6 @@ class SatelliteConnection(
         }
     }
 
-    /**
-     * Tear the session down. Idempotent: a second call from Idle is a no-op
-     * so callers (alive-poll, manager.disconnect, forget, foreground kicks)
-     * can invoke it freely without needing to check state first.
-     *
-     * Slot attachments are preserved (only the `registered` flag is cleared)
-     * so the next [markConnected] re-registers them automatically.
-     */
     internal fun markDisconnected() {
         val snap = live
         if (_state.value == SatelliteSessionState.Idle && snap == null) return
@@ -248,32 +137,19 @@ class SatelliteConnection(
         aliveJob = null
         ackJob?.cancel()
         ackJob = null
-        // Null the tuple before native teardown so any concurrent sendReport
-        // sees a null snapshot and bails, rather than racing against a
-        // half-closed handle.
+        // Null tuple before native teardown so concurrent sendReport bails instead of racing a half-closed handle.
         live = null
         if (snap != null) {
             controllerRepo.stopHeartbeat(snap.handle)
             controllerRepo.closeSocket(snap.handle)
         }
         _slots.update { map -> map.mapValues { (_, v) -> v.copy(registered = false) } }
-        // Wipe the cached satellite-truth motion flags too — the slots will
-        // re-register on the next markConnected and write fresh statuses.
-        // Without this, a Connected → Idle → Connected sequence would have
-        // the pill briefly read the previous session's flags after the new
-        // session's first slot binds but before its ACK lands.
+        // Avoid pill reading previous session's flags during Connected→Idle→Connected re-register window.
         motionBackendStatusStore?.clearConnection(id)
         onRegistrationFailed = null
         _state.value = SatelliteSessionState.Idle
     }
 
-    /**
-     * Record [slotId] as bound to this connection at [controllerType]. If the
-     * slot is already attached this is a no-op (use [setControllerType] to
-     * change the type of an attached slot). When the native session is live
-     * the server is notified immediately; otherwise the registration is
-     * deferred to [markConnected].
-     */
     suspend fun attachSlot(
         slotId: String,
         controllerType: Int,
@@ -284,7 +160,6 @@ class SatelliteConnection(
                 val index = lowestFreeIndex(map.values.map { it.controllerIndex })
                 map + (slotId to SlotBinding(index, controllerType, registered = false))
             }
-        // No-op if this slot was already present.
         val info = updated[slotId] ?: return
         if (info.registered) return
         if (_state.value == SatelliteSessionState.Live && handle >= 0) {
@@ -292,12 +167,6 @@ class SatelliteConnection(
         }
     }
 
-    /**
-     * Update the controller type for an already-attached [slotId] (Xbox/PS
-     * etc.). If the slot is registered with the server, the change is pushed
-     * immediately; otherwise it sticks in [SlotBinding.controllerType] and is
-     * sent at registration time.
-     */
     suspend fun setControllerType(
         slotId: String,
         controllerType: Int,
@@ -328,13 +197,6 @@ class SatelliteConnection(
                 if (info.registered) return@withContext
                 if (handle < 0) return@withContext
                 controllerRepo.resetControllerAck(handle)
-                // Cap word: the non-motion bits are fixed (the dish always
-                // sends analog triggers and accepts rumble), motion comes
-                // from the composer so it reflects the slot's actual gyro
-                // hardware AND the user's toggle. A satellite re-connect
-                // does NOT re-handshake the cap word (toCapBits ignores the
-                // live link state), so a momentary network blip can't drop
-                // CAP_MOTION on the server side.
                 val caps = BASE_CAPABILITIES or motionCapsBitsFor(slotId)
                 controllerRepo.addController(handle, info.controllerIndex, caps)
                 var ack = -1
@@ -343,22 +205,9 @@ class SatelliteConnection(
                     if (ack != -1) return@repeat
                     delay(ACK_WAIT_INTERVAL_MS)
                 }
-                // ack == -1 → no ACK arrived at all. Otherwise the low byte is
-                // the MSG_CONTROLLER_ACK result code, and only ACK_OK means the
-                // controller is live server-side. An *error* ACK — e.g. a macOS
-                // satellite answering ACK_ERR_BACKEND_UNAVAIL because it has no
-                // virtual-gamepad backend — must NOT be mistaken for success,
-                // or sendReport() would stream input the server silently drops.
                 val result = if (ack == -1) null else ack and ACK_RESULT_MASK
                 if (result == ACK_OK) {
-                    // Read the optional motion-flags byte the satellite
-                    // appended to the ACK (post-extension receivers). A
-                    // pre-extension satellite returns -1 here — leave the
-                    // store entry absent so the composer falls back to its
-                    // own `hostHasSinkForType` heuristic rather than reading
-                    // the missing flags as "permanently broken." Paired with
-                    // the same `getLastControllerAck` snapshot, so we know
-                    // the flags correspond to the ACK we just observed.
+                    // Pre-extension satellite returns -1 — leave store absent so composer uses its heuristic.
                     val motionFlags = controllerRepo.getLastControllerMotionFlags(handle)
                     if (motionFlags >= 0) {
                         motionBackendStatusStore?.setStatus(
@@ -370,16 +219,7 @@ class SatelliteConnection(
                         motionBackendStatusStore?.clear(id, slotId)
                     }
                     controllerRepo.sendControllerType(handle, info.controllerIndex, info.controllerType)
-                    // Reconcile caps against the composer's *current* value
-                    // before flipping registered=true. If the composer
-                    // emitted a new value during our ACK window
-                    // (composer.state is a hot StateFlow), the manager's
-                    // post-registration subscriber would otherwise see
-                    // lastAdvertisedCaps == newCaps after our update below
-                    // and never send the catch-up MSG_CONTROLLER_CAPS_UPDATE.
-                    // Sending the diff here closes the registration-window
-                    // race in one place — the dish's lastAdvertisedCaps then
-                    // matches what's actually on the wire.
+                    // Close composer-emission-during-ACK race before flipping registered=true.
                     val currentCaps = BASE_CAPABILITIES or motionCapsBitsFor(slotId)
                     if (currentCaps != caps) {
                         controllerRepo.sendControllerCapsUpdate(
@@ -393,20 +233,11 @@ class SatelliteConnection(
                         map + (slotId to cur.copy(registered = true, lastAdvertisedCaps = currentCaps))
                     }
                 } else {
-                    // Leave the slot unregistered so sendReport() stays gated,
-                    // and surface why — the user gets a real reason instead of
-                    // a UI that looks connected but silently does nothing.
                     onRegistrationFailed?.invoke(registrationFailureReason(result))
                 }
             }
         }
 
-    /**
-     * A short, human-readable reason a controller registration was rejected,
-     * passed to the [onRegistrationFailed] callback for display. [result] is
-     * the MSG_CONTROLLER_ACK result byte, or null when the satellite never
-     * answered at all. Phrased as a clause — the caller prefixes the server.
-     */
     private fun registrationFailureReason(result: Int?): String =
         when (result) {
             null -> "it didn't respond"
@@ -417,28 +248,10 @@ class SatelliteConnection(
             else -> "it rejected the controller"
         }
 
-    /**
-     * Reconcile per-slot wire capability against the composer's latest
-     * value. For each registered slot whose [SlotBinding.lastAdvertisedCaps]
-     * differs from `BASE_CAPABILITIES OR motionCapsBitsFor(slotId)`, send
-     * a `MSG_CONTROLLER_CAPS_UPDATE` so the receiver's cap-word matches
-     * what the dish would advertise today.
-     *
-     * Called by [SatelliteConnectionManager]'s composer subscription on
-     * every emission. Idempotent: emitting the same composer state twice
-     * results in zero wire packets because `lastAdvertisedCaps` already
-     * equals the recomputed value. Unregistered slots are skipped — their
-     * next `registerController` will pick up the fresh caps via the
-     * `motionCapsBitsFor` lambda directly.
-     *
-     * Runs on [ioDispatcher] so the JNI `sendControllerCapsUpdate` doesn't
-     * stall the manager's collector dispatcher.
-     */
     internal suspend fun refreshCapsIfChanged() {
         val snap = live ?: return
         val updates = mutableListOf<Pair<String, Int>>()
-        // Compute the diff under a single _slots snapshot read so multiple
-        // mutations of slot info during the scan can't shear our decision.
+        // Single _slots snapshot so parallel mutations can't shear the diff.
         for ((slotId, slotInfo) in _slots.value) {
             if (!slotInfo.registered) continue
             val newCaps = BASE_CAPABILITIES or motionCapsBitsFor(slotId)
@@ -449,8 +262,7 @@ class SatelliteConnection(
         withContext(ioDispatcher) {
             for ((slotId, newCaps) in updates) {
                 val info = _slots.value[slotId] ?: continue
-                // Re-check registration: a parallel detach could have un-set
-                // it between our scan and our send. Cheap to re-read.
+                // Re-check: a parallel detach may have unset registered between scan and send.
                 if (!info.registered) continue
                 controllerRepo.sendControllerCapsUpdate(snap.handle, info.controllerIndex, newCaps)
                 _slots.update { map ->
@@ -469,9 +281,6 @@ class SatelliteConnection(
             map - slotId
         }
         val info = removed ?: return
-        // Drop any cached satellite-side motion truth — the next add for
-        // this slot will write a fresh status, and leaving stale data here
-        // would mislead the pill in the meantime.
         motionBackendStatusStore?.clear(id, slotId)
         if (handle >= 0 && info.registered) {
             controllerRepo.removeController(handle, info.controllerIndex)
@@ -490,20 +299,11 @@ class SatelliteConnection(
     ) {
         val snap = live ?: return
         val info = _slots.value[slotId] ?: return
-        // Gate on registered so reports during the registerController() ACK
-        // window (up to 2s after markConnected) aren't silently dropped
-        // server-side as "unknown controller". Slot-bind → connect ordering
-        // makes this window unavoidable on auto-reconnect.
+        // Gate: reports during registerController() ACK window would be dropped server-side as unknown.
         if (!info.registered) return
         controllerRepo.sendReport(snap.handle, info.controllerIndex, buttons, lt, rt, lx, ly, rx, ry)
     }
 
-    /**
-     * Forward an IMU sample for [slotId]. Axes are pre-scaled to the wire
-     * int16 form by the caller; rate-limiting is the caller's job too (see
-     * [com.tinkernorth.dish.source.sensor.MotionRateLimiter]). Same
-     * registered-gate + atomic [live] snapshot discipline as [sendReport].
-     */
     @Suppress("LongParameterList")
     fun sendMotion(
         slotId: String,
@@ -531,10 +331,6 @@ class SatelliteConnection(
         )
     }
 
-    /**
-     * Forward a battery snapshot for [slotId]. Deduping is the caller's job
-     * ([com.tinkernorth.dish.source.sensor.BatteryValidator]).
-     */
     fun sendBattery(
         slotId: String,
         level: Int,
@@ -546,19 +342,6 @@ class SatelliteConnection(
         controllerRepo.sendBattery(snap.handle, info.controllerIndex, level, status)
     }
 
-    /**
-     * Forward a touchpad sample for [slotId] (`MSG_TOUCHPAD`). Receiver
-     * routes by its per-device `touchpadMode` (Off drops, Pad feeds virtual
-     * DS4, Mouse synthesises desktop pointer); this method is mode-agnostic
-     * on the wire. Tracking ids are caller-assigned and monotonic per
-     * finger contact — see [com.tinkernorth.dish.ui.common.TouchpadSurfaceView].
-     *
-     * Same `registered`-gate + atomic [live] snapshot discipline as
-     * [sendReport] / [sendMotion] / [sendBattery]: reports captured during
-     * the brief window after auto-reconnect but before the slot's ACK
-     * lands are dropped client-side instead of going on the wire as an
-     * "unknown controller" packet the satellite would reject anyway.
-     */
     @Suppress("LongParameterList")
     fun sendTouchpad(
         slotId: String,
@@ -597,55 +380,18 @@ class SatelliteConnection(
         private const val ACK_WAIT_ATTEMPTS = 20
         private const val ACK_WAIT_INTERVAL_MS = 100L
 
-        /**
-         * Consecutive missed alive-polls before [SatelliteSessionState.Live] demotes to
-         * [SatelliteSessionState.Faltering] (chip "Unsteady"). Recovery within the next
-         * poll restores [SatelliteSessionState.Live] without the user ever seeing a
-         * disconnect. Tuned for Wi-Fi: a single ~1s blip stays "Online", but
-         * a real outage flips to "Unsteady" before the death threshold so the
-         * user sees the change coming.
-         */
         private const val FALTER_THRESHOLD = 2
-
-        /**
-         * Consecutive missed alive-polls before the session is treated as dead
-         * and [onDead] fires. Above this, the manager runs its silent
-         * RETRY_AFTER_DEATH path; the chip flips Faltering → Connecting → final.
-         */
         private const val FALTER_TO_DEAD = 5
 
-        // MSG_CONTROLLER_ADD capability word (2-byte big-endian): bit 0x0001
-        // analog triggers, 0x0002 rumble, 0x0004 motion (this client emits
-        // the MSG_MOTION IMU stream — see PhoneMotionSource, Task 1.1).
-        //
-        // CAP_LIGHTBAR (0x0008) is intentionally NOT set: Android exposes no
-        // controller-LED API, so dish-android cannot drive a controller's
-        // RGB lightbar. Leaving the bit clear tells a capability-aware
-        // satellite not to waste packets sending MSG_LIGHTBAR (0x000D) to
-        // this client. Any 0x000D that does arrive is decoded, logged, and
-        // dropped by the native receive loop (satellite_jni.cpp::receiveAck).
+        // CAP_LIGHTBAR (0x0008) intentionally unset: Android has no controller-LED API.
         private const val CAP_ANALOG_TRIGGERS = 0x0001
         private const val CAP_RUMBLE = 0x0002
 
-        /**
-         * The always-on slice of the capability word: analog triggers + rumble.
-         * Motion is per-slot via [motionCapsBitsFor]; lightbar is intentionally
-         * absent (no controller-LED API on Android).
-         */
         private const val BASE_CAPABILITIES = CAP_ANALOG_TRIGGERS or CAP_RUMBLE
 
-        /**
-         * Legacy "all motion" word for the default-arg motion lambda. Pre-PR3
-         * code path: every controller advertised CAP_MOTION regardless of
-         * gyro hardware or user toggle. Tests that don't inject a composer
-         * still see this value so their assertions don't have to know about
-         * the new wiring.
-         */
         internal const val CAP_MOTION_BIT_LEGACY = 0x0004
 
-        // MSG_CONTROLLER_ACK result codes — wire values mirror the satellite's
-        // core/types.h. getLastControllerAck() returns a packed word,
-        // (reqType shl 16) or (ctrlIdx shl 8) or result; the result is the low byte.
+        // getLastControllerAck returns packed word (reqType<<16)|(ctrlIdx<<8)|result; low byte is result.
         private const val ACK_RESULT_MASK = 0xFF
         private const val ACK_OK = 0x00
         private const val ACK_ERR_BACKEND_UNAVAIL = 0x01
@@ -664,22 +410,4 @@ class SatelliteConnection(
     }
 }
 
-/**
- * Internal wire-level session state for one Satellite connection. This is the
- * "Presence" axis (per the shared nomenclature): how far the live network link
- * has progressed for *this* connection.
- *
- * Distinct from the UI-facing [LinkState] (in [ConnectionHub]), which folds
- * pairing/discovery in on top of this.
- *
- * - [Idle] — no live session (paired or not).
- * - [Linking] — pair+auth handshake / [SatelliteConnection.markConnecting]
- *   is in flight; native socket not yet open. UI chip: "Connecting…".
- * - [Live] — native socket open, heartbeat ACKs flowing. UI chip: "Online".
- * - [Faltering] — Live, but the heartbeat-miss counter is non-zero and below
- *   the death threshold. UI chip: "Unsteady". **Not yet entered** —
- *   reaching it requires the native side to expose the consecutive-missed
- *   count separately from the binary `isConnectionAlive()` boolean. Today
- *   the alive-poll flips Live → Idle directly when misses hit the threshold.
- */
 enum class SatelliteSessionState { Idle, Linking, Live, Faltering }

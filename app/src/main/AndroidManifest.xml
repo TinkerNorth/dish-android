@@ -8,26 +8,14 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- Foreground service: required to keep the streaming session alive
-         across app backgrounding. CONNECTED_DEVICE is the type that fits a
-         controller-to-host session (alternative would be DATA_SYNC but that's
-         meant for background sync jobs, not user-facing streaming). -->
+    <!-- CONNECTED_DEVICE (not DATA_SYNC) fits a user-facing controller-to-host session. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
-    <!-- API 33+: required to post the ongoing-session notification. The user
-         can decline; the service still runs, the notification just isn't
-         visible. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- Rumble: routed to the phone's Vibrator / VibratorManager when a
-         satellite forwards game-side haptic events (MSG_RUMBLE 0x0009). -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- Bluetooth HID gamepad. BluetoothHidDevice (the HID Device profile)
-         requires BLUETOOTH_CONNECT only on API 31+; BLUETOOTH_ADVERTISE is
-         for BLE peripheral advertising via BluetoothLeAdvertiser, which this
-         app does not use. -->
     <uses-permission android:name="android.permission.BLUETOOTH"
         android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
@@ -36,11 +24,7 @@
 
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 
-    <!-- usesCleartextTraffic removed: the satellite client API is HTTPS now,
-         so no plaintext HTTP is sent. The encrypted UDP gamepad wire and the
-         LAN discovery beacon are raw sockets, which this flag never gated.
-         The explicit network_security_config below denies cleartext as a
-         belt-and-braces signal for Play's pre-launch security checks. -->
+    <!-- network_security_config denies cleartext as a belt-and-braces signal for Play's pre-launch checks. -->
     <application
         android:name=".DishApplication"
         android:allowBackup="true"
@@ -69,10 +53,7 @@
                 android:value="satellite" />
         </activity>
 
-        <!-- Fatal-fallback screen used when the satellite native library
-             fails to load (usually an ABI mismatch on a sideloaded build).
-             Routed to by an exported alias so it can be the LAUNCHER target
-             on devices where MainActivity would crash before drawing. -->
+        <!-- Fallback when the satellite native library fails to load (ABI mismatch on sideloaded builds). -->
         <activity
             android:name=".ui.main.NativeUnavailableActivity"
             android:exported="false"
@@ -109,8 +90,6 @@
             android:parentActivityName=".ui.main.MainActivity"
             tools:targetApi="p" />
 
-        <!-- Foreground service for keeping the streaming session alive.
-             Controlled by StreamingServiceController; not exported. -->
         <service
             android:name=".composer.StreamingService"
             android:exported="false"

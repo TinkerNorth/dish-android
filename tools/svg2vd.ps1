@@ -1,11 +1,9 @@
-# Convert Kenney SVG files to Android Vector Drawables
 param(
     [string]$SrcDir = "$env:TEMP\kenney-prompts\svg",
     [string]$DstDir = "c:\Users\emir\TinkerNorth\Dish\app\src\main\res\drawable"
 )
 
 $files = @{
-    # Xbox
     "xbox_button_color_a"     = "ic_gp_xbox_a"
     "xbox_button_color_b"     = "ic_gp_xbox_b"
     "xbox_button_color_x"     = "ic_gp_xbox_x"
@@ -24,7 +22,6 @@ $files = @{
     "xbox_button_view"        = "ic_gp_xbox_view"
     "xbox_button_menu"        = "ic_gp_xbox_menu"
     "xbox_guide"              = "ic_gp_xbox_guide"
-    # PlayStation
     "playstation_button_color_cross"    = "ic_gp_ps_cross"
     "playstation_button_color_circle"   = "ic_gp_ps_circle"
     "playstation_button_color_square"   = "ic_gp_ps_square"
@@ -49,7 +46,6 @@ foreach ($kv in $files.GetEnumerator()) {
     if (-not (Test-Path $svgPath)) { Write-Warning "Missing: $svgPath"; continue }
 
     $svg = Get-Content $svgPath -Raw
-    # Extract all path elements
     $paths = [regex]::Matches($svg, '<path\s+stroke="[^"]*"\s+fill="([^"]*)"\s+d="([^"]*)"')
     if ($paths.Count -eq 0) { Write-Warning "No paths in $svgPath"; continue }
 
@@ -57,7 +53,6 @@ foreach ($kv in $files.GetEnumerator()) {
     foreach ($m in $paths) {
         $fill = $m.Groups[1].Value
         $d = $m.Groups[2].Value -replace "`n"," " -replace "`r"," "
-        # Convert fill color
         if ($fill -eq "#FFFFFF") { $fill = "#FFFFFFFF" }
         elseif ($fill -match "^#[0-9A-Fa-f]{6}$") { $fill = "#FF" + $fill.Substring(1) }
         $vdPaths += "    <path`n        android:fillColor=`"$fill`"`n        android:pathData=`"$d`" />`n"

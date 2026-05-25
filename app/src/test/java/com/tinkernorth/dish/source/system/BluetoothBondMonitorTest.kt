@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.system
 
@@ -20,17 +19,6 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Behavioural tests for [BluetoothBondMonitor]'s broadcast handling. The
- * receiver is exercised via reflection — simpler than wiring a full
- * system-context test.
- *
- * The monitor's sole responsibility is to mark hosts stale on the registry.
- * Notification rendering is the activity layer's job (it observes
- * [BluetoothGamepadRegistry.staleBtIds]) — the monitor itself never
- * touches the notification queue, so the previous test that asserted "posts
- * a WARN notification" is gone with the BondMonitor → queue coupling.
- */
 class BluetoothBondMonitorTest {
     private lateinit var context: Context
     private lateinit var store: ConnectionStore
@@ -47,10 +35,7 @@ class BluetoothBondMonitorTest {
 
     @Before
     fun setUp() {
-        // android.util.Log is unmocked by default in JVM unit tests — every
-        // log call inside the receiver would throw "Method w in Log not
-        // mocked". Stub it to no-ops so the receiver path itself is what's
-        // under test, not the logging plumbing.
+        // android.util.Log is unmocked by default in JVM unit tests — stub to no-ops so logging plumbing isn't under test.
         mockkStatic(Log::class)
         every { Log.w(any(), any<String>()) } returns 0
         every { Log.d(any(), any<String>()) } returns 0
@@ -69,11 +54,6 @@ class BluetoothBondMonitorTest {
         unmockkAll()
     }
 
-    /**
-     * Build an `ACTION_KEY_MISSING`-shaped intent. The receiver only reads
-     * the action + the EXTRA_DEVICE; we mock both since [BluetoothDevice]
-     * itself isn't constructible in a JVM test.
-     */
     private fun keyMissingIntent(mac: String): Intent = intentForAction("android.bluetooth.device.action.KEY_MISSING", mac)
 
     private fun bondStateChangedIntent(
@@ -99,8 +79,6 @@ class BluetoothBondMonitorTest {
             mockk<Intent>(relaxed = true) {
                 every { this@mockk.action } returns action
             }
-        // Both API <33 and API 33+ paths route through extractDevice; cover
-        // the legacy path (extractDevice falls back to the deprecated extra).
         every {
             intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
         } returns device
@@ -116,8 +94,6 @@ class BluetoothBondMonitorTest {
         val receiver = field.get(monitor) as android.content.BroadcastReceiver
         receiver.onReceive(context, intent)
     }
-
-    // ── KEY_MISSING ──────────────────────────────────────────────────────
 
     @Test
     fun `KEY_MISSING on a remembered host marks Stale with KEY_MISSING reason`() {
@@ -150,8 +126,6 @@ class BluetoothBondMonitorTest {
 
         verify(exactly = 0) { registry.markStale(any(), any()) }
     }
-
-    // ── BOND_NONE ────────────────────────────────────────────────────────
 
     @Test
     fun `BOND_BONDED to BOND_NONE marks Stale with BOND_REMOVED reason`() {

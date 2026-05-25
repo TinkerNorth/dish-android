@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.composer
 
@@ -11,15 +10,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * Demonstrates the [com.tinkernorth.dish.architecture.abstracts.AbstractComposer] test pattern: the upstream
- * flows are fed as [MutableStateFlow]s; the [com.tinkernorth.dish.architecture.abstracts.AbstractComposerProbe]
- * records every derived value so assertions can target either the latest or the
- * full sequence.
- *
- * No `LifecycleOwner`, no scheduler advance, no JNI mock — composers are pure and
- * test like pure functions.
- */
 class WakeStateComposerTest {
     private fun connectionSummary(
         id: String,
@@ -72,7 +62,6 @@ class WakeStateComposerTest {
             val probe = composerFor(bindings, conns, backgroundScope).probe(this)
             testScheduler.runCurrent()
 
-            // sat-A is Connected → slot-1 counts; sat-B is Connecting → slot-2 does not.
             probe.assertLatest(WakeState(streamingSlotCount = 1, shouldKeepScreenOn = true))
         }
 
@@ -86,7 +75,6 @@ class WakeStateComposerTest {
 
             assertEquals(true, probe.latest.shouldKeepScreenOn)
 
-            // Disconnect.
             conns.value = listOf(connectionSummary("sat-A", LinkState.Saved))
             testScheduler.runCurrent()
 

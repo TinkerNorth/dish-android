@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.bluetooth
 
@@ -21,13 +20,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/**
- * Contract tests for [BluetoothGamepadRegistry] on top of a real
- * [BluetoothHidSession] driven by a [FakeHidProxyClient]. These exercise the
- * full chain session-event → registry state without the Android framework so
- * regressions in the re-keying logic (temp id → bt:<MAC>) or the slot lifecycle
- * get caught by unit tests.
- */
 class BluetoothGamepadRegistryTest {
     private lateinit var fake: FakeHidProxyClient
     private lateinit var session: BluetoothHidSession
@@ -56,8 +48,6 @@ class BluetoothGamepadRegistryTest {
         fake.fireHostConnected(mac, name)
     }
 
-    // ── Initial / lookup ──────────────────────────────────────────────────
-
     @Test
     fun `initial states map is empty`() {
         assertEquals(emptyMap<String, BluetoothGamepadRegistry.SlotState>(), registry.states.value)
@@ -70,8 +60,6 @@ class BluetoothGamepadRegistryTest {
         assertEquals("bt:AA:BB:CC", BluetoothGamepadRegistry.idFor("AA:BB:CC"))
     }
 
-    // ── start() → Acquiring/Registered ────────────────────────────────────
-
     @Test
     fun `start seeds the slot with profile name and clears live flags`() {
         registry.start("bt-pending-1", GamepadProfile.PLAYSTATION)
@@ -83,13 +71,8 @@ class BluetoothGamepadRegistryTest {
         assertFalse(s.autoReconnecting)
     }
 
-    // ── acquiring flag lifecycle ──────────────────────────────────────────
-
     @Test
     fun `start sets acquiring=true so the UI can show progress before Registered fires`() {
-        // Prior to this flag the slot showed IDLE during the Acquiring phase
-        // and the Connections row offered no feedback between profile-pick and
-        // the host actually connecting.
         registry.start("bt-pending-1", GamepadProfile.XBOX)
 
         assertTrue(registry.state("bt-pending-1").acquiring)
@@ -109,8 +92,6 @@ class BluetoothGamepadRegistryTest {
     fun `Connected clears acquiring on the re-keyed slot`() {
         registry.start("bt-pending-1", GamepadProfile.XBOX)
         fake.fireAcquired()
-        // Skip Registered to confirm acquiring is cleared even on a direct
-        // Connected (e.g. host already paired path).
         fake.fireHostConnected("AA:BB", "Xbox")
 
         assertFalse(registry.state("bt:AA:BB").acquiring)
@@ -137,17 +118,12 @@ class BluetoothGamepadRegistryTest {
         assertFalse(registry.state("bt-pending-1").acquiring)
     }
 
-    // ── errors flow ───────────────────────────────────────────────────────
-
     @Test
     fun `errors flow emits the message on Failed`() =
         runBlocking {
             registry.start("bt-pending-1", GamepadProfile.XBOX)
 
             val first = async { registry.errors.first() }
-            // Yield so the collector subscribes before we emit; SharedFlow with a
-            // 1-event extra buffer also covers the race, but the explicit yield
-            // keeps intent obvious.
             kotlinx.coroutines.yield()
             fake.fireError("adapter disabled")
 
@@ -185,8 +161,6 @@ class BluetoothGamepadRegistryTest {
         assertTrue(registry.state("bt-pending-1").registered)
         assertFalse(registry.state("bt-pending-1").connected)
     }
-
-    // ── Re-keying on Connected ────────────────────────────────────────────
 
     @Test
     fun `Connected re-keys slot from temp id to bt-mac id and removes temp entry`() {
@@ -249,8 +223,6 @@ class BluetoothGamepadRegistryTest {
         assertTrue(registry.state("bt:AA").connected)
     }
 
-    // ── Disconnect / teardown ─────────────────────────────────────────────
-
     @Test
     fun `host disconnect clears connected flag but keeps the slot registered`() {
         driveToConnected("bt-pending-1", "AA:BB", "Xbox")
@@ -304,8 +276,6 @@ class BluetoothGamepadRegistryTest {
         assertTrue(fake.calls.any { it is FakeHidProxyClient.Call.UnregisterAndRelease })
     }
 
-    // ── Error & unexpected release ────────────────────────────────────────
-
     @Test
     fun `framework release clears the active slot flags`() {
         driveToConnected("bt-pending-1", "AA:BB", "Xbox")
@@ -325,8 +295,6 @@ class BluetoothGamepadRegistryTest {
 
         assertFalse(registry.state("bt:AA").autoReconnecting)
     }
-
-    // ── sendReport gating ─────────────────────────────────────────────────
 
     @Test
     fun `sendReport is dropped when the slot is not connected`() {
@@ -370,8 +338,6 @@ class BluetoothGamepadRegistryTest {
         assertTrue(bytes != null && bytes.size == 14)
     }
 
-    // ── tryAutoReconnect ──────────────────────────────────────────────────
-
     @Test
     fun `tryAutoReconnect returns null when the connId is not remembered`() {
         every { store.rememberedBt() } returns emptyList()
@@ -395,10 +361,6 @@ class BluetoothGamepadRegistryTest {
 
     @Test
     fun `tryAutoReconnect accepts the legacy enum-name persisted by older builds`() {
-        // Builds before the fix stored "XBOX" / "PLAYSTATION" (enum names) in
-        // RememberedBt.profileName. Tests guard the migration so an existing
-        // remembered host on a user's device still auto-reconnects after the
-        // upgrade without forcing a re-pair.
         every { store.rememberedBt() } returns
             listOf(
                 RememberedBt(id = "bt:AA", name = "Xbox", mac = "AA", profileName = "XBOX"),
@@ -435,8 +397,6 @@ class BluetoothGamepadRegistryTest {
         assertNull(registry.tryAutoReconnect("bt:AA"))
     }
 
-    // ── Listener snapshot on state ────────────────────────────────────────
-
     @Test
     fun `states StateFlow reflects the latest registry snapshot`() {
         registry.start("bt-pending-1", GamepadProfile.XBOX)
@@ -454,8 +414,6 @@ class BluetoothGamepadRegistryTest {
         fake.fireHostConnected("AA", "X")
         verify(exactly = 0) { store.rememberBt(any()) }
     }
-
-    // ── staleBtIds: KEY_MISSING / BOND_NONE markers ───────────────────────
 
     @Test
     fun `markStale records the reason on the staleBtIds flow`() {
@@ -478,9 +436,6 @@ class BluetoothGamepadRegistryTest {
     fun `markStale is idempotent for the same reason`() {
         registry.markStale("bt:AA", BtStaleReason.KEY_MISSING)
         registry.markStale("bt:AA", BtStaleReason.KEY_MISSING)
-        // The semantic invariant: identical updates preserve the reason
-        // without flipping it to something else. StateFlow.update collapses
-        // duplicates internally, but the test pins the observable contract.
         assertEquals(BtStaleReason.KEY_MISSING, registry.staleBtIds.value["bt:AA"])
         assertEquals(1, registry.staleBtIds.value.size)
     }
@@ -490,9 +445,6 @@ class BluetoothGamepadRegistryTest {
         registry.markStale("bt:AA", BtStaleReason.KEY_MISSING)
         registry.markStale("bt:AA", BtStaleReason.BOND_REMOVED)
 
-        // The more-specific KEY_MISSING signal wins so the user copy reads
-        // "Re-pair X" (host lost its key) rather than the weaker "X was
-        // unpaired" — see BluetoothGamepadRegistry.markStale.
         assertEquals(BtStaleReason.KEY_MISSING, registry.staleBtIds.value["bt:AA"])
     }
 

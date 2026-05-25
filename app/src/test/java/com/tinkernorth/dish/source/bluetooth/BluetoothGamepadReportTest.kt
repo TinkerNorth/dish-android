@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.bluetooth
 
@@ -9,21 +8,7 @@ import com.tinkernorth.dish.core.input.buildHidReport
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * Contract tests for [buildHidReport] — the single source of truth for the
- * bytes that leave the phone over Bluetooth HID.
- *
- * These tests pin:
- *   - wire layout (offsets, endianness, field widths)
- *   - the Xbox/XInput axis-direction conventions that callers must honour
- *   - truncation behaviour for inputs wider than their on-wire slot
- *
- * If any of these tests break, the change almost certainly requires a
- * matching update on the host side as well.
- */
 class BluetoothGamepadReportTest {
-    // ── Layout ────────────────────────────────────────────────────────────
-
     @Test
     fun `report is 14 bytes total`() {
         val r = buildHidReport(0, 0, 0, 0, 0, 0, 0, 0)
@@ -86,13 +71,8 @@ class BluetoothGamepadReportTest {
         assertEquals(0xAA.toByte(), r[13])
     }
 
-    // ── Axis sign / two's-complement ──────────────────────────────────────
-
     @Test
     fun `stick-up on left stick is Y = plus 32767 per Xbox convention`() {
-        // Producers (physical + virtual paths) are both expected to emit
-        // +Short.MAX_VALUE when the stick is pushed up. The wire layout
-        // preserves that as 0xFF 0x7F (LE).
         val r = buildHidReport(0, 0, 0, Short.MAX_VALUE, 0, 0, 0, 0)
         assertEquals(0xFF.toByte(), r[6])
         assertEquals(0x7F.toByte(), r[7])
@@ -112,11 +92,8 @@ class BluetoothGamepadReportTest {
         assertEquals(0x80.toByte(), r[5])
     }
 
-    // ── Truncation ────────────────────────────────────────────────────────
-
     @Test
     fun `button bits above 16 are dropped (u16 wire width)`() {
-        // 0x1FFFF has bit 16 set; only the low 16 bits survive on the wire.
         val r = buildHidReport(0x1FFFF, 0, 0, 0, 0, 0, 0, 0)
         assertEquals(0xFF.toByte(), r[1])
         assertEquals(0xFF.toByte(), r[2])
@@ -129,8 +106,6 @@ class BluetoothGamepadReportTest {
         assertEquals(0x00.toByte(), r[13])
     }
 
-    // ── All-zero report ───────────────────────────────────────────────────
-
     @Test
     fun `neutral report is report id followed by zeros`() {
         val r = buildHidReport(0, 0, 0, 0, 0, 0, 0, 0)
@@ -138,11 +113,9 @@ class BluetoothGamepadReportTest {
         for (i in 1 until r.size) assertEquals("byte $i should be 0", 0.toByte(), r[i])
     }
 
-    // ── Documentation: hat encoding ───────────────────────────────────────
-
     @Test
     fun `hat encoding documents the 9 positions`() {
-        // 0=neutral, 1=N, 2=NE, 3=E, 4=SE, 5=S, 6=SW, 7=W, 8=NW.
+        // 0=neutral,1=N,2=NE,3=E,4=SE,5=S,6=SW,7=W,8=NW.
         for (code in 0..8) {
             val r = buildHidReport(0, code, 0, 0, 0, 0, 0, 0)
             assertEquals("hat=$code", code.toByte(), r[3])

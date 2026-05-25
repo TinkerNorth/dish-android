@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.ui.main
 
@@ -32,19 +31,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/**
- * Full-screen landscape activity hosting the on-screen touch gamepad.
- *
- * Bound to a single connection id passed via [EXTRA_CONNECTION_ID]; reports
- * are routed to that connection through either the [BluetoothGamepadRegistry]
- * or the matching [com.tinkernorth.dish.source.connection.SatelliteConnection] in
- * the [SatelliteConnectionManager]. Both owners outlive the host activity so
- * the same session is reused on re-entry.
- *
- * Wake-lock state, dim-after-idle, and physical-gamepad pass-through all
- * live in [GamepadActivityHost] — this activity only owns the on-screen
- * touch gamepad and the status pill at the top of the overlay.
- */
 @AndroidEntryPoint
 class GamepadOverlayActivity :
     BaseInputOverlayActivity(),
@@ -55,35 +41,13 @@ class GamepadOverlayActivity :
 
     private lateinit var binding: ActivityGamepadOverlayBinding
 
-    // hub, satellite, wakeState, gamepadRegistry, notifications, gamepadHost,
-    // and `connectionId` are inherited from BaseInputOverlayActivity.
-
     override fun rootView(): View = binding.root
 
     override val resendIntervalNs: Long = BaseInputOverlayActivity.RESEND_INTERVAL_NS_DEFAULT
 
-    /**
-     * Most recent gamepad state surfaced by [onGamepadStateChanged]. The touch
-     * view's recognizer mutates a single [GamepadTouchView.GamepadState] in
-     * place, so this holds the live reference — reading fields here always
-     * reflects the latest values. `null` until the user first touches the
-     * pad; the periodic-resend loop skips while it is still null.
-     *
-     * Written on the main thread (touch dispatch) and read from the resend
-     * coroutine which now runs on `Dispatchers.Default`, so the reference is
-     * `@Volatile` for cross-thread visibility. Per-field reads of the
-     * underlying [GamepadTouchView.GamepadState] may briefly see a torn
-     * snapshot if the recognizer is mid-update — acceptable for axis values
-     * (next tick corrects) and not a correctness hazard.
-     */
+    // @Volatile for main-thread write / Dispatchers.Default read.
     @Volatile private var lastReportedState: GamepadTouchView.GamepadState? = null
 
-    /**
-     * Phone IMU + battery sources for the on-screen touch controller. Created
-     * in [onCreate], streamed only while the activity is resumed (gyro
-     * listeners are a measurable battery cost). `motionSource` is a no-op on
-     * phones without a gyroscope.
-     */
     private lateinit var motionSource: PhoneMotionSource
     private lateinit var batterySource: PhoneBatterySource
 
@@ -91,71 +55,21 @@ class GamepadOverlayActivity :
         super.onCreate(savedInstanceState)
         binding = ActivityGamepadOverlayBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        // Base owns gamepad-host install, system-bar hide, connection-id parse,
-        // connection-summary collector, connection-events collector, and the
-        // 250 Hz resend loop. All gamepad-specific wiring runs after.
         installBaseScaffolding()
 
         binding.gamepadTouchView.listener = this
         binding.gamepadTouchView.usePlayStation = intent.getBooleanExtra(EXTRA_USE_PS_LAYOUT, false)
-        // Both status pills (`statusPillConnection`, `statusPillMotion`) use
-        // the shared `status_pill.xml` composite — the `statusPillDot` View
-        // inside each carries `background="@drawable/dot_circle"`, and the
-        // colour is mutated at runtime via
-        // (view.background as GradientDrawable).setColor(...).
-        //
-        // Shared toolbar: left-chevron back wired to finish(), page title
-        // on the right of the chevron. Same `setupDishToolbar` plumbing
-        // Connections + Settings use, so the chevron's tap behaviour,
-        // ripple, and content description all match the rest of the app
-        // for free.
         setupDishToolbar(binding.overlayToolbar)
         binding.overlayToolbar.setTitle(R.string.overlay_title_gamepad)
 
         val sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        // The IMU axis remap depends on whether `screenOrientation=landscape`
-        // resolved to ROTATION_90 or ROTATION_270 on this device. Pass a
-        // supplier so PhoneMotionSource re-reads the live rotation each start()
-        // rather than baking in a value at onCreate() time.
+        // Supplier re-reads live rotation on each start(); landscape may resolve to ROTATION_90 or ROTATION_270.
         motionSource = PhoneMotionSource(sensorManager, rotationSupplier = ::currentRotation)
-        // Wire-send only: pushes the virtual controller's MSG_BATTERY to the
-        // bound satellite while the overlay is the active input device. The
-        // dashboard indicator is fed separately, at process scope, by
-        // VirtualBatterySource — so no statusStore is passed here.
         batterySource = PhoneBatterySource(applicationContext)
-        // Paint the motion pill once up front from whatever the sources have
-        // already published. On a phone with no gyroscope the source's state
-        // is `Disabled` from construction, so this single paint surfaces the
-        // "no gyroscope" tile before any lifecycle work begins — important
-        // because the combine collector below only runs while STARTED.
+        // Surface "no gyroscope" tile before lifecycle collector starts (only runs while STARTED).
         repaintFrom(currentMotionPaint())
 
-        // Single combine collector — one StateFlow tuple drives the gate
-        // AND the pill paint AND the connection-status row, from one
-        // coherent snapshot per emission.
-        //
-        // Why fold the three previous collectors into one:
-        //   - `hub.connections` and `motionCapability.state` can both emit
-        //     for the same upstream event (a binding/connection change
-        //     re-runs the composer's combine). Two collectors mean two
-        //     repaints, the first reading one fresh / one stale field —
-        //     a visible flicker during reconnects.
-        //   - `motionSource.state` carries the Streaming ↔ Stalled flip
-        //     fired by the source's internal 500 ms stall tick; without a
-        //     collector it never reaches the UI.
-        //   - Combining the three lets the gate decision (start/stop the
-        //     IMU listener) and the pill paint read from the SAME snapshot,
-        //     so the pill can never display "STREAMING from a stopped
-        //     source" or similar half-state.
-        //
-        // The collector runs only while STARTED; repeatOnLifecycle cancels
-        // it on STOP. The finally clause stops the source on cancellation
-        // so a backgrounded overlay never leaks sensor listeners — even if
-        // the gate had just turned the source on.
-        //
-        // `distinctUntilChanged` is the simple deduper — two upstream
-        // emissions that collapse to the same paint shouldn't repaint the
-        // pill (Kotlin data-class equality handles the field-wise compare).
+        // Single combine so gate + pill paint + status row read from one snapshot per emission.
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 try {

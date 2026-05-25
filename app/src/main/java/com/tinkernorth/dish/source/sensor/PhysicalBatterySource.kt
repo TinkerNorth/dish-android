@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.source.sensor
 
@@ -16,7 +15,6 @@ import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.composer.ConnectionHub
 import com.tinkernorth.dish.composer.PhysicalReachability
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
-import com.tinkernorth.dish.hotpath.input.PhysicalSlotBindingObserver
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
@@ -32,48 +30,6 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Reports a *physical* gamepad's battery to the satellite it is routed to —
- * the physical-controller half of roadmap Task 1.2, mirroring what
- * [PhoneBatterySource] does for the on-screen touch controller.
- *
- * Per bound physical pad it picks the battery to report as follows:
- *
- *  - On API 31+ ([Build.VERSION_CODES.S]) query [InputDevice.getBatteryState].
- *    If the pad is wireless it exposes its own battery (`isPresent == true`) —
- *    that capacity + status, mapped by [PhysicalBatteryMapping], is the
- *    controller's battery and is reported as-is.
- *  - On API 24–30, where `getBatteryState()` does not exist, fall back to the
- *    [BluetoothBatteryReader] — a hidden-API reflection read of the bonded
- *    Bluetooth device's `getBatteryLevel()`. This is best-effort: it yields a
- *    level only for a wireless pad whose name matches a bonded device and only
- *    when the ROM exposes the hidden method.
- *  - Otherwise — `!isPresent`, a USB-wired pad (which reports `isPresent ==
- *    false` because it has no battery), or the API < 31 reflection finding
- *    nothing — fall back to the *phone* battery via [PhoneBatterySource.readBattery].
- *    The phone is the host the pad is plugged into, so its battery is the
- *    meaningful one.
- *
- * Wiring mirrors [PhysicalSlotBindingObserver]: this is a process-scoped
- * `@Singleton` observing the same cross-product of [PhysicalGamepadRegistry]
- * devices, [ConnectionHub] bindings + connection liveness, and each
- * [SatelliteConnection]'s slot table — so battery reporting survives the
- * MainActivity → GamepadOverlayActivity hand-off and starts the instant a pad
- * becomes reachable (send-on-connect). A 30 s poll loop iterates every
- * reachable physical pad, matching the overlay path's cadence; every tick is
- * forwarded — MSG_BATTERY is a fixed 30 s heartbeat.
- *
- * The protocol also wants a report **whenever the charging state transitions**
- * (§0x000B), not only on the 30 s boundary. An `ACTION_BATTERY_CHANGED`
- * [BroadcastReceiver], registered while started, triggers an immediate poll
- * when the host's charging state flips; [pollOnce] then re-reads every
- * reachable pad and forwards the change without waiting up to 30 s. The
- * receiver is unregistered in [onStop], so it is strictly lifecycle-scoped.
- *
- * Battery is a Bluetooth-HID non-feature: the BT HID Device profile carries
- * no `MSG_BATTERY` channel, so — exactly like [SatelliteConnection.sendMotion]
- * — only SATELLITE-bound pads are polled here.
- */
 @Singleton
 class PhysicalBatterySource
     @Inject
@@ -85,25 +41,19 @@ class PhysicalBatterySource
         private val statusStore: BatteryStatusStore,
         private val scope: CoroutineScope,
     ) : DefaultLifecycleObserver {
-        /** Phone-battery fallback for USB-wired / batteryless pads. */
         private val phoneBattery = PhoneBatterySource(context)
 
-        /** API < 31 hidden-API reader for a bonded BT pad's own battery. */
         private val bluetoothBattery = BluetoothBatteryReader(context)
 
-        /** Per-sample validation gate, same role as in [PhoneBatterySource]. */
         private val validator = BatteryValidator()
 
         private var bindingsJob: Job? = null
         private var pollJob: Job? = null
 
-        /** Charging-state change receiver; non-null only while started. */
         private var chargingReceiver: BroadcastReceiver? = null
 
-        /** Snapshot of `slotId -> connection` for pads currently reachable. */
         @Volatile private var reachable: Map<String, SatelliteConnection> = emptyMap()
 
-        /** Last host charging status seen, so the receiver fires only on a flip. */
         @Volatile private var lastChargingStatus: Int? = null
 
         override fun onStart(owner: LifecycleOwner) {
@@ -139,14 +89,6 @@ class PhysicalBatterySource
             reachable = emptyMap()
         }
 
-        /**
-         * Register the host `ACTION_BATTERY_CHANGED` receiver. A physical pad
-         * exposes no Android-observable charging event of its own, so the
-         * host's charging-state transition is the only signal available — and
-         * it is also exactly what a phone-fallback pad needs. On a flip we
-         * trigger an immediate [pollOnce], which re-reads every reachable pad
-         * and forwards any change rather than waiting for the 30 s tick.
-         */
         private fun registerChargingReceiver() {
             val receiver =
                 object : BroadcastReceiver() {
@@ -161,11 +103,6 @@ class PhysicalBatterySource
                         scope.launch { pollOnce() }
                     }
                 }
-            // ACTION_BATTERY_CHANGED is a protected system broadcast and is
-            // exempt from the API-34 receiver-flag enforcement, but route
-            // through ContextCompat with RECEIVER_NOT_EXPORTED anyway so the
-            // intent is unambiguous to the next reader and consistent with
-            // the BluetoothBondMonitor / BluetoothAdapterStateObserver pattern.
             ContextCompat.registerReceiver(
                 context,
                 receiver,
@@ -175,23 +112,13 @@ class PhysicalBatterySource
             chargingReceiver = receiver
         }
 
-        /**
-         * React to a change in the reachable-slot set: clear the cached state
-         * for pads that just dropped off, then poll the new set immediately so
-         * a freshly-connected pad reports on connect rather than waiting up to
-         * 30 s for the next loop tick.
-         */
         private fun onReachableChanged(next: Map<String, SatelliteConnection>) {
             (reachable.keys - next.keys).forEach(statusStore::clear)
             reachable = next
-            // pollOnce() is synchronous and returns immediately (no suspend),
-            // so this launch is a one-shot that completes before it could be
-            // observed as outstanding — not an untracked long-lived coroutine.
-            // It exists only to hop off the flow-collector / receiver thread.
+            // Hop off the flow-collector thread; pollOnce is synchronous.
             scope.launch { pollOnce() }
         }
 
-        /** Read + forward the battery for every currently-reachable pad. */
         private fun pollOnce() {
             for ((slotId, conn) in reachable) {
                 val deviceId = slotId.toIntOrNull() ?: continue
@@ -203,38 +130,15 @@ class PhysicalBatterySource
             }
         }
 
-        /**
-         * The battery to report for the pad with [deviceId]: its own battery
-         * if it is a wireless pad (read via `getBatteryState()` on API 31+, or
-         * the [BluetoothBatteryReader] reflection fallback below), otherwise
-         * the phone (host) battery. Never null — an Android host always has a
-         * battery, so the unknown-level sentinel is only ever sent for a
-         * wireless pad that exposes a status but no percentage.
-         */
         private fun sampleForDevice(deviceId: Int): BatterySample {
             controllerSample(deviceId)?.let { return it }
-            // USB-wired / batteryless pad, or no own-battery reading — the
-            // phone is the host the pad is plugged into.
             return phoneBattery.readBattery()
                 ?: BatterySample(BatteryValidator.LEVEL_UNKNOWN, BatteryValidator.STATUS_UNKNOWN)
         }
 
-        /**
-         * A wireless pad's own battery, or null when none is readable (device
-         * gone, USB-wired, or — on AOSP variants — the hidden API is absent).
-         *
-         *  - API 31+: [InputDevice.getBatteryState], the public path.
-         *  - API 24–30: [BluetoothBatteryReader], the hidden-API reflection
-         *    fallback (M-1) — without this, an API < 31 wireless pad's own
-         *    battery was never read and the phone battery was mis-reported as
-         *    the controller's. Level only (no charging status is reliably
-         *    reflectable across ROMs), so it pairs with [BatteryValidator.STATUS_UNKNOWN].
-         */
         private fun controllerSample(deviceId: Int): BatterySample? {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 val device = InputDevice.getDevice(deviceId) ?: return null
-                // getBatteryState() is non-null on API 31+; isPresent is the
-                // real "this pad has no battery" signal PhysicalBatteryMapping reads.
                 val state = device.batteryState
                 val sample =
                     PhysicalBatteryMapping.controllerSample(
@@ -245,18 +149,13 @@ class PhysicalBatterySource
                 if (sample != null) Log.d(TAG, "pad $deviceId own battery $sample")
                 return sample
             }
-            // API 24–30 — no getBatteryState(); try the BT reflection fallback.
+            // API 24–30: no getBatteryState(), use BT reflection fallback.
             val name = InputDevice.getDevice(deviceId)?.name ?: return null
             val level = bluetoothBattery.readLevel(name) ?: return null
             Log.d(TAG, "pad $deviceId BT battery level=$level (API<31 reflection)")
             return BatterySample(level, BatteryValidator.STATUS_UNKNOWN)
         }
 
-        /**
-         * The wire charging status of an `ACTION_BATTERY_CHANGED` intent — used
-         * only to detect host charging-state transitions. Mirrors the mapping
-         * in [PhoneBatterySource.sampleFromIntent].
-         */
         private fun chargingStatusOf(intent: Intent): Int =
             when (intent.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1)) {
                 android.os.BatteryManager.BATTERY_STATUS_CHARGING -> BatteryValidator.STATUS_CHARGING

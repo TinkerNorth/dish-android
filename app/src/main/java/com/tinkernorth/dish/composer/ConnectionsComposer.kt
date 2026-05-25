@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Copyright (C) 2026 Dish contributors.
 
 package com.tinkernorth.dish.composer
 
@@ -26,12 +25,6 @@ import kotlinx.coroutines.flow.flowOf
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Typed 7-arity combine that avoids the `Array<*>` cast jungle the bare
- * `combine(vararg)` overload forces. The single unchecked cast lives here so
- * call sites stay refactor-safe — changing an upstream flow's value type
- * reshapes the [transform] lambda at compile time.
- */
 @Suppress("UNCHECKED_CAST", "LongParameterList")
 private inline fun <T1, T2, T3, T4, T5, T6, T7, R> combine7(
     f1: Flow<T1>,
@@ -55,26 +48,6 @@ private inline fun <T1, T2, T3, T4, T5, T6, T7, R> combine7(
         )
     }
 
-/**
- * Derives the unified `List<ConnectionSummary>` that the UI renders. Pulled out of
- * the former `ConnectionHub` god object so the combine + `buildSummaries` logic
- * is testable in isolation.
- *
- * **Pattern:** [AbstractComposer]`<List<ConnectionSummary>>` — pure derivation
- * from seven upstream flows:
- *
- *   1. satellite sessions map (re-flattened so session-state transitions surface)
- *   2. Bluetooth slot states
- *   3. discovered servers (separates `Found` / `Ready` / `Saved`)
- *   4. slot bindings (drives `boundSlotIds`)
- *   5. controller-type swaps (drives the Xbox/PS chip on each satellite slot)
- *   6. stale satellite ids (auto-reconnect pair rejections)
- *   7. stale Bluetooth ids (KEY_MISSING / BOND_REMOVED)
- *
- * The Hub mutates the binding + type stores; this composer just reads them and
- * combines with the manager states. Hub side-effects (`detachSlot`,
- * `attachSlot`) are out of scope — composers never side-effect.
- */
 @Singleton
 class ConnectionsComposer
     @Inject
@@ -90,11 +63,7 @@ class ConnectionsComposer
         @OptIn(ExperimentalCoroutinesApi::class)
         private val flatSatConnections: Flow<Map<String, SatelliteConnection>> =
             satellite.connections.flatMapLatest { satMap ->
-                // The outer Map<String, SatelliteConnection> only re-emits when a
-                // session is added/removed — *not* when an existing session's
-                // state flips IDLE → CONNECTING → CONNECTED. Without flattening
-                // into each session's `state` flow, the connections-list UI would
-                // show stale "Connecting…" until the screen is reopened.
+                // Outer map only re-emits on add/remove; flatten so state transitions surface.
                 if (satMap.isEmpty()) {
                     flowOf(satMap)
                 } else {

@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Locales the app explicitly ships translations for. Picked up by Android
-     13+'s per-app language picker in Settings. The order here is the order
-     surfaced to the user; English is the source-of-truth default. -->
+<!-- Order is the user-facing order in Android 13+'s per-app language picker. -->
 <locale-config xmlns:android="http://schemas.android.com/apk/res/android">
     <locale android:name="en" />
     <locale android:name="bs" />

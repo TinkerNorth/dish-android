@@ -89,7 +89,7 @@ jobs:
 
       - name: Upload Dependency-Check SARIF to code scanning
         # Code scanning ingest requires GitHub Advanced Security on private
-        # repos; tolerate failure until GHAS is enabled (HANDOFF.md item 5).
+        # repos; tolerated as a soft failure until GHAS is enabled.
         if: ${{ always() && hashFiles('build/reports/dependency-check-report.sarif') != '' }}
         continue-on-error: true
         uses: github/codeql-action/upload-sarif@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4.35.2
