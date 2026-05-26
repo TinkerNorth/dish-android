@@ -201,10 +201,6 @@ class GamepadTouchView
             }
         }
 
-        // D-pad, center, shoulder, and trigger glyphs ship with hardcoded white fills (designed for
-        // the dark surface); tinting them to colorOnSurface inverts them on the light theme so
-        // they don't disappear into the near-white background. Face buttons are brand-coloured
-        // and intentionally skip the tint.
         @Suppress("CyclomaticComplexMethod")
         private fun loadDrawables() {
             val c = context
@@ -250,9 +246,6 @@ class GamepadTouchView
             }
         }
 
-        // mutate() is required because vector drawables share a ConstantState across
-        // ContextCompat.getDrawable() calls — without it, tinting one instance would leak into
-        // every other use of the same resource (e.g. the same analog glyph shown three times).
         private fun loadTinted(
             c: Context,
             id: Int,
