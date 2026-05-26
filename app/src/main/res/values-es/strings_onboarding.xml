@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="welcome_skip">Omitir</string>
+    <string name="welcome_back">Atrás</string>
+    <string name="welcome_next">Siguiente</string>
+    <string name="welcome_get_started">Empezar</string>
+
+    <string name="welcome_step1_eyebrow">BIENVENIDO</string>
+    <string name="welcome_step1_title">Tu teléfono, tu gamepad</string>
+    <string name="welcome_step1_body">Dish convierte tu teléfono en un mando inalámbrico para tu PC. Funciona como gamepad táctil por sí solo, o como puente inalámbrico para un mando que ya tengas.</string>
+
+    <string name="welcome_step2_eyebrow">CÓMO FUNCIONA</string>
+    <string name="welcome_step2_title">Un salto corto por Wi-Fi</string>
+    <string name="welcome_step2_body">Tu teléfono envía pulsaciones, sticks y movimiento a un pequeño ayudante gratuito llamado Satellite que se ejecuta en tu PC. Satellite aparece ante tus juegos como un mando normal — sin configuración extra por juego.</string>
+
+    <string name="welcome_step3_eyebrow">UNA COSA MÁS</string>
+    <string name="welcome_step3_title">Instala Satellite en tu PC</string>
+    <string name="welcome_step3_body">Satellite es gratuito y de código abierto. Descárgalo desde tinkernorth.com/satellite, ejecuta el instalador y Dish lo encontrará automáticamente. Puedes terminar esta introducción ahora e instalar Satellite más tarde.</string>
+    <string name="welcome_step3_satellite_link_label">Abrir página de descarga</string>
+
+    <string name="welcome_step4_eyebrow">LISTO</string>
+    <string name="welcome_step4_title">Cuando tú quieras</string>
+    <string name="welcome_step4_body">Toca Empezar para comenzar. Abre la Guía de configuración cuando quieras desde Ajustes si necesitas instrucciones — o lánzate directamente y empareja con un Satellite en tu red.</string>
+    <string name="welcome_step4_launch_wizard">Abrir guía de configuración</string>
+
+    <string name="welcome_step1_hero_desc">Logo de la aplicación Dish</string>
+    <string name="welcome_step2_hero_desc">Teléfono emitiendo una señal inalámbrica</string>
+    <string name="welcome_step3_hero_desc">Monitor de escritorio mostrando Satellite en ejecución</string>
+    <string name="welcome_step4_hero_desc">Configuración completada</string>
+
+    <string name="welcome_step_indicator_desc">Paso %1$d de %2$d</string>
+
+    <string name="wizard_title">Guía de configuración</string>
+    <string name="wizard_step_progress">Paso %1$d de %2$d</string>
+    <string name="wizard_action_back">Atrás</string>
+    <string name="wizard_action_next">Siguiente</string>
+    <string name="wizard_action_finish">Finalizar</string>
+    <string name="wizard_recommended_label">Recomendado</string>
+
+    <string name="wizard_step1_eyebrow">PASO 1 · CONEXIÓN</string>
+    <string name="wizard_step1_title">¿Cómo llegarás a tu PC?</string>
+    <string name="wizard_step1_body">Dos formas de enviar tu entrada a un PC. Wi-Fi tiene la menor latencia y desbloquea el movimiento y el touchpad. Bluetooth trata este teléfono como un mando inalámbrico normal — funciona sin Satellite, pero con un pequeño coste de latencia.</string>
+
+    <string name="wizard_option_lan_title">Wi-Fi a Satellite</string>
+    <string name="wizard_option_lan_body">Teléfono y PC en el mismo Wi-Fi. Latencia mínima, conjunto completo de funciones (movimiento, touchpad, vibración).</string>
+    <string name="wizard_option_lan_pill_recommended">Recomendado</string>
+
+    <string name="wizard_option_bt_title">Mando Bluetooth</string>
+    <string name="wizard_option_bt_body">Empareja tu teléfono con tu PC o consola como un mando Bluetooth normal. Funciona sin Satellite. El movimiento y el touchpad no están disponibles por esta ruta.</string>
+
+    <string name="wizard_step2_eyebrow">PASO 2 · MANDO</string>
+    <string name="wizard_step2_title">¿Con qué vas a jugar?</string>
+    <string name="wizard_step2_body">Puedes jugar con el pad en pantalla, o conectar un mando real para tener sticks y gatillos de verdad. Un mando USB en tu teléfono tiene la menor latencia de entrada — sin Bluetooth en la cadena.</string>
+
+    <string name="wizard_option_virtual_title">Gamepad en pantalla</string>
+    <string name="wizard_option_virtual_body">Toca los botones en la pantalla del teléfono. Ideal para juegos casuales y para probar — el giroscopio de tu teléfono está disponible para ayuda de apuntado.</string>
+
+    <string name="wizard_option_usb_title">Mando USB en el teléfono</string>
+    <string name="wizard_option_usb_body">Conecta un mando Xbox / PlayStation / genérico con cable al puerto USB-C de tu teléfono. El teléfono reenvía cada pulsación a tu PC.</string>
+    <string name="wizard_option_usb_pill_recommended">Mínima latencia</string>
+
+    <string name="wizard_option_phys_bt_title">Mando Bluetooth emparejado al teléfono</string>
+    <string name="wizard_option_phys_bt_body">Usa un mando que ya hayas emparejado con tu teléfono (Xbox Wireless, DualSense, etc.). Un salto Bluetooth en lugar de dos, en comparación con emparejar el mando directamente con tu PC.</string>
+
+    <string name="wizard_step3_eyebrow">PASO 3 · ADELANTE</string>
+    <string name="wizard_step3_title">Esto es lo que haremos</string>
+
+    <string name="wizard_summary_connection_label">Conexión</string>
+    <string name="wizard_summary_controller_label">Mando</string>
+
+    <string name="wizard_next_lan_virtual">Toca Finalizar para abrir Conexiones. Busca tu Satellite, empareja con el PIN de 4 dígitos, y luego abre el gamepad en pantalla.</string>
+    <string name="wizard_next_lan_usb">Toca Finalizar para abrir Conexiones. Empareja tu Satellite con el PIN de 4 dígitos, y luego conecta tu mando USB al teléfono — aparecerá como un nuevo slot listo para vincular.</string>
+    <string name="wizard_next_lan_phys_bt">Toca Finalizar para abrir Conexiones. Empareja tu Satellite con el PIN de 4 dígitos. Tu mando Bluetooth ya emparejado aparecerá como un slot que podrás vincular al Satellite.</string>
+    <string name="wizard_next_bt_virtual">Toca Finalizar para abrir Conexiones. Añade un host Bluetooth, acepta el emparejamiento en tu PC, y luego abre el gamepad en pantalla.</string>
+    <string name="wizard_next_bt_usb">Aviso — el modo host Bluetooth envía el estado del mando del teléfono, no un pad USB separado. Usa el gamepad en pantalla por esta ruta, o cambia a la conexión Wi-Fi en el paso anterior.</string>
+    <string name="wizard_next_bt_phys_bt">Aviso — el modo host Bluetooth envía el estado del mando del teléfono, no el de tu gamepad Bluetooth ya emparejado. Usa el gamepad en pantalla por esta ruta, o cambia a la conexión Wi-Fi en el paso anterior.</string>
+
+    <string name="wizard_finish_review">Volver</string>
+
+    <string name="help_title">Ayuda y preguntas frecuentes</string>
+
+    <string name="help_section_concepts">CONCEPTOS</string>
+    <string name="help_section_performance">MEJOR RENDIMIENTO</string>
+    <string name="help_section_troubleshooting">SOLUCIÓN DE PROBLEMAS</string>
+    <string name="help_section_about">ACERCA DE DISH</string>
+
+    <string name="help_run_setup_title">Guíame paso a paso</string>
+    <string name="help_run_setup_body">Abre la guía de configuración. Selecciona tu conexión y mando, y te lleva a la pantalla adecuada.</string>
+
+    <string name="help_q_what_is_dish">¿Qué es Dish?</string>
+    <string name="help_a_what_is_dish">Dish convierte tu teléfono en un gamepad inalámbrico. Puede enviar entrada a un PC por Wi-Fi (con el ayudante gratuito Satellite) o emparejarse con un PC / consola como un mando Bluetooth normal.</string>
+
+    <string name="help_q_what_is_satellite">¿Qué es Satellite?</string>
+    <string name="help_a_what_is_satellite">Satellite es un programa pequeño, gratuito y de código abierto que se ejecuta en tu PC. Recibe entrada de Dish por Wi-Fi y se presenta a tus juegos como un mando normal. Sin Satellite, los juegos no pueden ver tu teléfono — instálalo desde tinkernorth.com/satellite.</string>
+
+    <string name="help_q_lan_vs_bluetooth">Wi-Fi o Bluetooth — ¿cuál elegir?</string>
+    <string name="help_a_lan_vs_bluetooth">Wi-Fi con Satellite es la mejor opción para casi todos. Menor latencia, soporta movimiento (giro para apuntar) y desbloquea el touchpad. El modo host Bluetooth es la opción adecuada cuando no quieres instalar nada en el PC, o cuando usas una consola / decodificador que no ejecuta Satellite.</string>
+
+    <string name="help_q_controller_modes">¿Puedo usar un mando real con Dish?</string>
+    <string name="help_a_controller_modes">Sí. Conecta un mando USB al puerto USB-C de tu teléfono, o empareja un mando Bluetooth (Xbox Wireless, DualSense, 8BitDo, etc.) directamente con tu teléfono. El mando aparecerá como un nuevo slot que podrás vincular a tu Satellite.</string>
+
+    <string name="help_q_motion_touchpad">¿Qué son el movimiento y el touchpad?</string>
+    <string name="help_a_motion_touchpad">El movimiento es el giroscopio de tu teléfono usado como ayuda de apuntado — aparece a los juegos como el giroscopio dentro de un mando de PlayStation. El touchpad convierte la pantalla del teléfono en un trackpad clicable que puedes usar para menús o como ratón. Ambos necesitan una conexión Wi-Fi (Satellite) — el modo host Bluetooth no puede transportarlos.</string>
+
+    <string name="help_q_best_setup">¿Cuál es la mejor configuración para baja latencia?</string>
+    <string name="help_a_best_setup">Mando USB en el teléfono, teléfono en Wi-Fi 5 GHz, PC en el mismo router (preferiblemente Ethernet con cable). USB-al-teléfono no añade latencia; Wi-Fi añade un salto corto. Evita Wi-Fi 2,4 GHz y datos móviles — Dish necesita el teléfono y el PC en la misma red local.</string>
+
+    <string name="help_q_why_lan_lower">¿Por qué Wi-Fi tiene menor latencia que Bluetooth?</string>
+    <string name="help_a_why_lan_lower">Wi-Fi envía la entrada como pequeños paquetes UDP al ritmo al que tu teléfono los polea — normalmente más rápido de lo que Bluetooth puede. Bluetooth HID tiene un intervalo de polling fijo y una tubería más larga, por lo que se sitúa entre tú y el juego con un retraso pequeño pero real.</string>
+
+    <string name="help_q_wired_better">¿Es mejor con cable que inalámbrico?</string>
+    <string name="help_a_wired_better">Para el tramo mando-a-teléfono: sí, USB supera a Bluetooth-emparejado-al-teléfono. Para el tramo teléfono-a-PC: Wi-Fi es la única opción — no puedes conectar el USB de tu teléfono a tu PC para reenviar entrada. Conecta tu PC al router por Ethernet si puedes; el lado del teléfono se queda en Wi-Fi.</string>
+
+    <string name="help_q_no_satellites">Dish no encuentra ningún Satellite — ¿y ahora qué?</string>
+    <string name="help_a_no_satellites">Verifica que Satellite esté ejecutándose en el PC (su icono en la bandeja debería estar visible). Confirma que el teléfono y el PC están en la misma red Wi-Fi — las redes de invitados y 2,4 GHz vs 5 GHz en el mismo router cuentan como diferentes. Toca Buscar en Conexiones para reintentar.</string>
+
+    <string name="help_q_pin_rejected">Mi PIN se rechaza siempre.</string>
+    <string name="help_a_pin_rejected">El PIN lo muestra Satellite en tu PC y cambia si lo reinicias. Revisa los dígitos en el PC justo antes de teclear — y asegúrate de estar escribiendo en el Satellite correcto si hay más de uno en la lista.</string>
+
+    <string name="help_q_disconnects">Mi mando se desconecta a mitad de partida.</string>
+    <string name="help_a_disconnects">La mayoría de desconexiones vienen de que tu teléfono entra en suspensión o el Wi-Fi cambia de banda. Conéctalo a la corriente mientras juegas, y fija el Wi-Fi de tu teléfono a 5 GHz si el router lo permite. Dish mantiene una notificación en primer plano mientras transmite — déjala en su sitio, así es como Android mantiene viva la conexión.</string>
+
+    <string name="help_q_no_motion">El movimiento (giro para apuntar) no funciona.</string>
+    <string name="help_a_no_motion">El movimiento necesita tres cosas: una conexión Wi-Fi (Satellite) (el host Bluetooth no puede transportar movimiento), un teléfono con giroscopio (la mayoría desde 2018) y un mando estilo PlayStation en el lado del host. Cambia el tipo de mando del slot a PlayStation para activar el canal de movimiento.</string>
+
+    <string name="help_q_battery_drain">La batería se agota rápido mientras transmito.</string>
+    <string name="help_a_battery_drain">Transmitir usa la radio de tu teléfono constantemente — es el coste de ser un mando en vivo. Conéctalo a la corriente mientras juegas. Dish también tiene un modo de bajo consumo (la pantalla atenuada durante el juego) que baja la pantalla a su brillo mínimo mientras sigue transmitiendo — deja la aplicación abierta y no bloquees la pantalla.</string>
+
+    <string name="help_q_open_source">¿Es Dish de código abierto?</string>
+    <string name="help_a_open_source">Sí. Dish (Android, Linux, Mac) y Satellite están publicados bajo LGPL-3.0, código fuente en GitHub en github.com/TinkerNorth. Se aceptan pull requests.</string>
+
+    <string name="help_q_privacy">¿Qué recopila Dish?</string>
+    <string name="help_a_privacy">Casi nada. Dish no envía contenido de juego ni entrada del mando a ningún sitio — ese tráfico se queda en tu red local entre teléfono y PC. Los informes anónimos de fallos son opcionales (Ajustes → Diagnóstico). Consulta la política de privacidad para la lista completa.</string>
+
+    <string name="help_view_privacy_policy">Política de privacidad</string>
+    <string name="help_view_github">Ver código fuente en GitHub</string>
+
+    <string name="dashboard_hint_title">¿Necesitas ayuda?</string>
+    <string name="dashboard_hint_body">Abre la guía de configuración para elegir tu conexión y mando — te llevamos a la pantalla adecuada.</string>
+    <string name="dashboard_hint_action_open">Abrir guía</string>
+    <string name="dashboard_hint_action_dismiss">Ahora no</string>
+
+    <string name="settings_section_setup">CONFIGURACIÓN Y AYUDA</string>
+    <string name="settings_setup_wizard_title">Guía de configuración</string>
+    <string name="settings_setup_wizard_body">Recorre las opciones de conexión y mando. Repítela cuando quieras.</string>
+    <string name="settings_help_title">Ayuda y preguntas frecuentes</string>
+    <string name="settings_help_body">Conceptos, consejos de rendimiento y solución de problemas.</string>
+</resources>

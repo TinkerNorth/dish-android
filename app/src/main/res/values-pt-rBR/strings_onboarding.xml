@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="welcome_skip">Pular</string>
+    <string name="welcome_back">Voltar</string>
+    <string name="welcome_next">Próximo</string>
+    <string name="welcome_get_started">Começar</string>
+
+    <string name="welcome_step1_eyebrow">BEM-VINDO</string>
+    <string name="welcome_step1_title">Seu celular, seu gamepad</string>
+    <string name="welcome_step1_body">O Dish transforma seu celular em um controle sem fio para seu PC. Funciona como gamepad por toque sozinho, ou como ponte sem fio para um controle que você já possui.</string>
+
+    <string name="welcome_step2_eyebrow">COMO FUNCIONA</string>
+    <string name="welcome_step2_title">Um pulo curto via Wi-Fi</string>
+    <string name="welcome_step2_body">Seu celular envia toques, sticks e movimento para um pequeno auxiliar gratuito chamado Satellite que roda no seu PC. O Satellite aparece para os jogos como um controle comum — sem configuração extra por jogo.</string>
+
+    <string name="welcome_step3_eyebrow">MAIS UMA COISA</string>
+    <string name="welcome_step3_title">Instale o Satellite no seu PC</string>
+    <string name="welcome_step3_body">O Satellite é gratuito e de código aberto. Baixe em tinkernorth.com/satellite, execute o instalador, e o Dish vai encontrá-lo automaticamente. Você pode terminar essa introdução agora e instalar o Satellite depois.</string>
+    <string name="welcome_step3_satellite_link_label">Abrir página de download</string>
+
+    <string name="welcome_step4_eyebrow">PRONTO</string>
+    <string name="welcome_step4_title">Quando você quiser</string>
+    <string name="welcome_step4_body">Toque Começar para iniciar. Abra o Guia de configuração a qualquer momento em Configurações se quiser um passo a passo — ou pule direto e pareie com um Satellite na sua rede.</string>
+    <string name="welcome_step4_launch_wizard">Abrir guia de configuração</string>
+
+    <string name="welcome_step1_hero_desc">Logo do app Dish</string>
+    <string name="welcome_step2_hero_desc">Celular emitindo um sinal sem fio</string>
+    <string name="welcome_step3_hero_desc">Monitor de desktop mostrando o Satellite em execução</string>
+    <string name="welcome_step4_hero_desc">Configuração concluída</string>
+
+    <string name="welcome_step_indicator_desc">Passo %1$d de %2$d</string>
+
+    <string name="wizard_title">Guia de configuração</string>
+    <string name="wizard_step_progress">Passo %1$d de %2$d</string>
+    <string name="wizard_action_back">Voltar</string>
+    <string name="wizard_action_next">Próximo</string>
+    <string name="wizard_action_finish">Concluir</string>
+    <string name="wizard_recommended_label">Recomendado</string>
+
+    <string name="wizard_step1_eyebrow">PASSO 1 · CONEXÃO</string>
+    <string name="wizard_step1_title">Como você vai chegar ao seu PC?</string>
+    <string name="wizard_step1_body">Duas formas de enviar a entrada a um PC. Wi-Fi tem a menor latência e libera movimento e touchpad. Bluetooth trata este celular como um controle sem fio comum — funciona sem o Satellite, mas com um pequeno custo de latência.</string>
+
+    <string name="wizard_option_lan_title">Wi-Fi para o Satellite</string>
+    <string name="wizard_option_lan_body">Celular e PC na mesma rede Wi-Fi. Latência mínima, conjunto completo de recursos (movimento, touchpad, vibração).</string>
+    <string name="wizard_option_lan_pill_recommended">Recomendado</string>
+
+    <string name="wizard_option_bt_title">Gamepad Bluetooth</string>
+    <string name="wizard_option_bt_body">Pareie seu celular ao seu PC ou console como um controle Bluetooth comum. Funciona sem o Satellite. Movimento e touchpad não estão disponíveis nesta rota.</string>
+
+    <string name="wizard_step2_eyebrow">PASSO 2 · CONTROLE</string>
+    <string name="wizard_step2_title">Com o que você vai jogar?</string>
+    <string name="wizard_step2_body">Você pode jogar com o pad na tela, ou plugar um controle de verdade para ter sticks e gatilhos reais. Um controle USB no celular tem a menor latência de entrada — sem Bluetooth no caminho.</string>
+
+    <string name="wizard_option_virtual_title">Gamepad na tela</string>
+    <string name="wizard_option_virtual_body">Toque os botões na tela do celular. Ótimo para jogos casuais e para experimentar — o giroscópio do seu celular fica disponível como auxílio de mira.</string>
+
+    <string name="wizard_option_usb_title">Controle USB no celular</string>
+    <string name="wizard_option_usb_body">Plugue um controle Xbox / PlayStation / genérico com fio na porta USB-C do seu celular. O celular repassa cada toque ao seu PC.</string>
+    <string name="wizard_option_usb_pill_recommended">Menor latência</string>
+
+    <string name="wizard_option_phys_bt_title">Controle Bluetooth pareado ao celular</string>
+    <string name="wizard_option_phys_bt_body">Use um controle que você já pareou ao celular (Xbox Wireless, DualSense, etc.). Um pulo Bluetooth em vez de dois, comparado a parear o controle direto no PC.</string>
+
+    <string name="wizard_step3_eyebrow">PASSO 3 · BORA</string>
+    <string name="wizard_step3_title">Aqui está o que vamos fazer</string>
+
+    <string name="wizard_summary_connection_label">Conexão</string>
+    <string name="wizard_summary_controller_label">Controle</string>
+
+    <string name="wizard_next_lan_virtual">Toque Concluir para abrir Conexões. Busque o seu Satellite, pareie com o PIN de 4 dígitos, e abra o gamepad na tela.</string>
+    <string name="wizard_next_lan_usb">Toque Concluir para abrir Conexões. Pareie o seu Satellite com o PIN de 4 dígitos, depois plugue o controle USB no celular — ele vai aparecer como um novo slot pronto para vincular.</string>
+    <string name="wizard_next_lan_phys_bt">Toque Concluir para abrir Conexões. Pareie o seu Satellite com o PIN de 4 dígitos. Seu controle Bluetooth já pareado vai aparecer como um slot que você pode vincular ao Satellite.</string>
+    <string name="wizard_next_bt_virtual">Toque Concluir para abrir Conexões. Adicione um host Bluetooth, aceite o pareamento no seu PC, e abra o gamepad na tela.</string>
+    <string name="wizard_next_bt_usb">Aviso — o modo host Bluetooth envia o estado do controle do celular, não um pad USB separado. Use o gamepad na tela por essa rota, ou troque para a conexão Wi-Fi no passo anterior.</string>
+    <string name="wizard_next_bt_phys_bt">Aviso — o modo host Bluetooth envia o estado do controle do celular, não o do seu gamepad Bluetooth já pareado. Use o gamepad na tela por essa rota, ou troque para a conexão Wi-Fi no passo anterior.</string>
+
+    <string name="wizard_finish_review">Voltar</string>
+
+    <string name="help_title">Ajuda e FAQ</string>
+
+    <string name="help_section_concepts">CONCEITOS</string>
+    <string name="help_section_performance">MELHOR DESEMPENHO</string>
+    <string name="help_section_troubleshooting">SOLUÇÃO DE PROBLEMAS</string>
+    <string name="help_section_about">SOBRE O DISH</string>
+
+    <string name="help_run_setup_title">Me guie pela configuração</string>
+    <string name="help_run_setup_body">Abre o guia de configuração. Escolhe sua conexão e controle, e te leva à tela certa.</string>
+
+    <string name="help_q_what_is_dish">O que é o Dish?</string>
+    <string name="help_a_what_is_dish">O Dish transforma seu celular em um gamepad sem fio. Pode enviar entrada para um PC por Wi-Fi (com o auxiliar gratuito Satellite) ou parear com um PC / console como um controle Bluetooth comum.</string>
+
+    <string name="help_q_what_is_satellite">O que é o Satellite?</string>
+    <string name="help_a_what_is_satellite">O Satellite é um programa pequeno, gratuito e de código aberto que roda no seu PC. Ele recebe entrada do Dish por Wi-Fi e se apresenta aos jogos como um controle comum. Sem o Satellite, os jogos não enxergam seu celular — instale em tinkernorth.com/satellite.</string>
+
+    <string name="help_q_lan_vs_bluetooth">Wi-Fi ou Bluetooth — qual escolher?</string>
+    <string name="help_a_lan_vs_bluetooth">Wi-Fi com Satellite é a melhor escolha para quase todo mundo. Latência menor, suporta movimento (mira por giroscópio) e libera o touchpad. O modo host Bluetooth é a escolha certa quando você não quer instalar nada no PC, ou quando está usando um console / set-top box que não roda o Satellite.</string>
+
+    <string name="help_q_controller_modes">Posso usar um controle de verdade com o Dish?</string>
+    <string name="help_a_controller_modes">Sim. Plugue um controle USB na porta USB-C do seu celular, ou pareie um controle Bluetooth (Xbox Wireless, DualSense, 8BitDo, etc.) direto no celular. O controle aparece como um novo slot que você pode vincular ao seu Satellite.</string>
+
+    <string name="help_q_motion_touchpad">O que é movimento e o que é o touchpad?</string>
+    <string name="help_a_motion_touchpad">Movimento é o giroscópio do seu celular usado como auxílio de mira — aparece para os jogos como o giroscópio dentro de um controle de PlayStation. O touchpad transforma a tela do celular em um trackpad clicável que você pode usar para menus ou como mouse. Os dois precisam de conexão Wi-Fi (Satellite) — o modo host Bluetooth não consegue carregar nenhum dos dois.</string>
+
+    <string name="help_q_best_setup">Qual é a melhor configuração para latência baixa?</string>
+    <string name="help_a_best_setup">Controle USB no celular, celular no Wi-Fi de 5 GHz, PC no mesmo roteador (de preferência por Ethernet com fio). USB-para-celular não adiciona latência; Wi-Fi adiciona um pulo curto. Evite Wi-Fi de 2,4 GHz e dados móveis — o Dish precisa do celular e do PC na mesma rede local.</string>
+
+    <string name="help_q_why_lan_lower">Por que o Wi-Fi tem latência menor que o Bluetooth?</string>
+    <string name="help_a_why_lan_lower">O Wi-Fi envia a entrada como pequenos pacotes UDP no ritmo em que seu celular faz polling — geralmente mais rápido que o Bluetooth consegue. Bluetooth HID tem intervalo de polling fixo e um pipeline mais longo, então fica entre você e o jogo com um atraso pequeno mas real.</string>
+
+    <string name="help_q_wired_better">Com fio é melhor que sem fio?</string>
+    <string name="help_a_wired_better">Para o trecho controle-para-celular: sim, USB ganha de Bluetooth-pareado-no-celular. Para o trecho celular-para-PC: Wi-Fi é a única opção — você não pode plugar o USB do celular no PC para encaminhar entrada. Conecte o PC ao roteador por Ethernet se possível; o lado do celular fica no Wi-Fi.</string>
+
+    <string name="help_q_no_satellites">O Dish não acha nenhum Satellite — e agora?</string>
+    <string name="help_a_no_satellites">Confira se o Satellite está rodando no PC (o ícone na bandeja deveria estar visível). Confirme que o celular e o PC estão na mesma rede Wi-Fi — redes de convidados e 2,4 GHz vs 5 GHz no mesmo roteador contam como diferentes. Toque Buscar em Conexões para tentar de novo.</string>
+
+    <string name="help_q_pin_rejected">Meu PIN continua sendo rejeitado.</string>
+    <string name="help_a_pin_rejected">O PIN é mostrado pelo Satellite no seu PC e muda se você reiniciar. Confira os dígitos no PC logo antes de digitar — e tenha certeza de estar digitando no Satellite certo se tiver mais de um na lista.</string>
+
+    <string name="help_q_disconnects">Meu controle desconecta no meio do jogo.</string>
+    <string name="help_a_disconnects">A maioria das desconexões vem do celular dormindo ou do Wi-Fi trocando de banda. Plugue o celular pra carregar enquanto joga, e fixe o Wi-Fi do seu celular em 5 GHz se o roteador deixar. O Dish mantém uma notificação em primeiro plano durante o streaming — deixe ela aí, é assim que o Android mantém a conexão viva.</string>
+
+    <string name="help_q_no_motion">O movimento (mira por giro) não funciona.</string>
+    <string name="help_a_no_motion">O movimento precisa de três coisas: conexão Wi-Fi (Satellite) (o host Bluetooth não carrega movimento), um celular com giroscópio (a maioria desde 2018) e um controle estilo PlayStation no lado do host. Troque o tipo de controle do slot para PlayStation para ativar o canal de movimento.</string>
+
+    <string name="help_q_battery_drain">A bateria descarrega rápido durante o streaming.</string>
+    <string name="help_a_battery_drain">O streaming usa o rádio do seu celular o tempo todo — esse é o custo de ser um controle ao vivo. Plugue pra carregar enquanto joga. O Dish também tem um modo de baixo consumo (a tela escurecida durante o jogo) que reduz o brilho da tela ao mínimo enquanto continua transmitindo — deixe o app aberto e não bloqueie a tela.</string>
+
+    <string name="help_q_open_source">O Dish é de código aberto?</string>
+    <string name="help_a_open_source">Sim. Dish (Android, Linux, Mac) e Satellite são todos publicados sob LGPL-3.0, código-fonte no GitHub em github.com/TinkerNorth. Pull requests são bem-vindas.</string>
+
+    <string name="help_q_privacy">O que o Dish coleta?</string>
+    <string name="help_a_privacy">Quase nada. O Dish não envia conteúdo de jogo nem entrada do controle pra lugar nenhum — esse tráfego fica na sua rede local entre celular e PC. Relatórios anônimos de falhas são opcionais (Configurações → Diagnóstico). Veja a política de privacidade para a lista completa.</string>
+
+    <string name="help_view_privacy_policy">Política de privacidade</string>
+    <string name="help_view_github">Ver código-fonte no GitHub</string>
+
+    <string name="dashboard_hint_title">Precisa de uma mão?</string>
+    <string name="dashboard_hint_body">Abra o guia de configuração para escolher sua conexão e controle — a gente te leva à tela certa.</string>
+    <string name="dashboard_hint_action_open">Abrir guia</string>
+    <string name="dashboard_hint_action_dismiss">Agora não</string>
+
+    <string name="settings_section_setup">CONFIGURAÇÃO E AJUDA</string>
+    <string name="settings_setup_wizard_title">Guia de configuração</string>
+    <string name="settings_setup_wizard_body">Veja as opções de conexão e controle. Pode rodar quantas vezes quiser.</string>
+    <string name="settings_help_title">Ajuda e FAQ</string>
+    <string name="settings_help_body">Conceitos, dicas de desempenho e solução de problemas.</string>
+</resources>

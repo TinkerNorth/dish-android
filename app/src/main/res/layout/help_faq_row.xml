@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/faqRowRoot"
+    style="@style/Widget.Dish.Card"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="@dimen/card_margin_bottom"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="@dimen/card_padding">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/faqQuestion"
+                style="@style/TextAppearance.Dish.Title"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                tools:text="What is Satellite?" />
+
+            <ImageView
+                android:id="@+id/faqChevron"
+                android:layout_width="@dimen/icon_chevron_lg"
+                android:layout_height="@dimen/icon_chevron_lg"
+                android:layout_marginStart="@dimen/spacing_xl"
+                android:src="@drawable/ic_chevron_down"
+                android:importantForAccessibility="no"
+                app:tint="@color/colorMuted" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/faqAnswer"
+            style="@style/TextAppearance.Dish.Body"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_md"
+            android:visibility="gone"
+            tools:visibility="visible"
+            tools:text="Satellite is a small, free, open-source program that runs on your PC..." />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>
