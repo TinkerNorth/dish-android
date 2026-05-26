@@ -166,6 +166,19 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Enable KVM (for Baseline Profile managed-device emulator)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Generate Baseline Profile
+        env:
+          DISH_VERSION_CODE: ${{ steps.ver.outputs.code }}
+          DISH_VERSION_NAME: ${{ steps.ver.outputs.name }}
+        run: ./gradlew :app:generateBaselineProfile
+
       - name: Build release APK + AAB
         env:
           DISH_KEYSTORE_FILE: ${{ steps.keystore.outputs.path }}

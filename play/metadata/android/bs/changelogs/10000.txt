@@ -1,0 +1,7 @@
+Prvo izdanje.
+
+• Pretvorite telefon u bežični gamepad za PC.
+• Dva režima: Wi-Fi sa Satellite-om, ili Bluetooth gamepad za bilo koji host.
+• Koristite gamepad na ekranu, ili priključite / uparite vlastiti kontroler.
+• Motion (žiroskop), touchpad i in-game rumble na Wi-Fi putu.
+• Open source pod LGPL-3.0.

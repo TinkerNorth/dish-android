@@ -1,0 +1,7 @@
+Versão inicial.
+
+• Transforme seu celular em um gamepad sem fio para PC.
+• Dois modos: Wi-Fi com Satellite, ou gamepad Bluetooth para qualquer host.
+• Use o pad na tela, ou conecte / pareie seu próprio controle.
+• Motion (giroscópio), touchpad e rumble no jogo no caminho Wi-Fi.
+• Código aberto sob LGPL-3.0.
