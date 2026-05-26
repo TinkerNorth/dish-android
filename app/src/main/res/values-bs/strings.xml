@@ -267,5 +267,8 @@
     <string name="settings_appearance_dark">Tamno</string>
     <string name="settings_crash_reporting_title">Podijeli izvještaje o padovima</string>
     <string name="settings_crash_reporting_body">Podijelite anonimne dnevnike padova i stack trace s TinkerNorthom kako biste pomogli u ispravljanju grešaka. Igra ni unos kontrolera nisu uključeni.</string>
+    <string name="settings_open_source_licenses_title">Licence otvorenog koda</string>
+    <string name="settings_open_source_licenses_body">Napomene za biblioteke na kojima je Dish izgrađen.</string>
+    <string name="licenses_open_external">Otvori licencu za %1$s</string>
     <string name="settings_version_label">VERZIJA</string>
 </resources>

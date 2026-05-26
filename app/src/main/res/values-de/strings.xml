@@ -264,5 +264,8 @@
     <string name="settings_appearance_dark">Dunkel</string>
     <string name="settings_crash_reporting_title">Absturzberichte teilen</string>
     <string name="settings_crash_reporting_body">Teile anonymisierte Absturzprotokolle und Stack-Traces mit TinkerNorth, um Bugs zu beheben. Spielgeschehen und Controller-Eingaben sind nicht enthalten.</string>
+    <string name="settings_open_source_licenses_title">Open-Source-Lizenzen</string>
+    <string name="settings_open_source_licenses_body">Hinweise zu den Bibliotheken, auf denen Dish aufbaut.</string>
+    <string name="licenses_open_external">Lizenz für %1$s öffnen</string>
     <string name="settings_version_label">VERSION</string>
 </resources>

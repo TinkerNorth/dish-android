@@ -268,5 +268,8 @@
     <string name="settings_appearance_dark">Oscuro</string>
     <string name="settings_crash_reporting_title">Compartir informes de fallos</string>
     <string name="settings_crash_reporting_body">Comparte registros de fallos anonimizados y rastreos de pila con TinkerNorth para ayudar a corregir errores. No se incluyen partidas ni entradas del mando.</string>
+    <string name="settings_open_source_licenses_title">Licencias de código abierto</string>
+    <string name="settings_open_source_licenses_body">Avisos de las bibliotecas sobre las que se construye Dish.</string>
+    <string name="licenses_open_external">Abrir licencia de %1$s</string>
     <string name="settings_version_label">VERSIÓN</string>
 </resources>
