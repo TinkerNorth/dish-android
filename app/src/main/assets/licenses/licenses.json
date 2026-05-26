@@ -914,9 +914,9 @@
     {
       "group": "androidx.profileinstaller",
       "artifact": "profileinstaller",
-      "version": "1.4.0",
+      "version": "1.4.1",
       "name": "Profile Installer",
-      "url": "https://developer.android.com/jetpack/androidx/releases/profileinstaller#1.4.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/profileinstaller#1.4.1",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
