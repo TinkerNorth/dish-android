@@ -4,7 +4,37 @@
      labels sandwiching the clock and a faint "TAP TO WAKE" affordance.
      View IDs and root types are preserved so LowPowerManager.Views still binds.
 -->
-<merge xmlns:android="http://schemas.android.com/apk/res/android">
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <LinearLayout
+        android:id="@+id/llStreamingHint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="@dimen/spacing_6xl"
+        android:background="@drawable/bg_pill"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="@dimen/spacing_5xl"
+        android:paddingVertical="@dimen/spacing_lg"
+        android:alpha="0.85"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="@dimen/icon_card_glyph"
+            android:layout_height="@dimen/icon_card_glyph"
+            android:src="@drawable/ic_overlay_link"
+            app:tint="@color/colorPrimary"
+            android:importantForAccessibility="no"
+            android:layout_marginEnd="@dimen/spacing_md" />
+
+        <TextView
+            style="@style/TextAppearance.Dish.Label.Accent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/low_power_streaming_hint" />
+    </LinearLayout>
 
     <!-- ── Countdown banner (shown ~5s before the dim kicks in) ─────────── -->
     <LinearLayout
@@ -99,6 +129,16 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_2xl"
                 android:text="@string/low_power_status_idle" />
+
+            <TextView
+                android:id="@+id/tvLowPowerDimBody"
+                style="@style/TextAppearance.Dish.Body"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_lg"
+                android:maxWidth="280dp"
+                android:gravity="center_horizontal"
+                android:text="@string/low_power_dim_body" />
         </LinearLayout>
 
         <!-- Faint affordance — screen is dimmed to ~1% brightness so this

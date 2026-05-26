@@ -247,6 +247,8 @@
         <item quantity="many">Liées · %1$d manettes</item>
         <item quantity="other">Liées · %1$d manettes</item>
     </plurals>
+    <string name="low_power_streaming_hint">DIFFUSION · GARDEZ L\'APPLI OUVERTE</string>
+    <string name="low_power_dim_body">La diffusion continue à l\'écran tamisé — ne fermez pas Dish.</string>
 
     <!-- Lien Politique de confidentialité (dans Paramètres) et message d\'erreur partagé. -->
     <string name="menu_privacy_policy">Politique de confidentialité</string>

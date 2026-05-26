@@ -244,6 +244,8 @@
         <item quantity="one">Verknüpft · %1$d Controller</item>
         <item quantity="other">Verknüpft · %1$d Controller</item>
     </plurals>
+    <string name="low_power_streaming_hint">STREAMING · APP OFFEN LASSEN</string>
+    <string name="low_power_dim_body">Streaming läuft im gedimmten Modus weiter — Dish nicht schließen.</string>
 
     <!-- Datenschutzerklärung-Link (in den Einstellungen) und gemeinsame Fehlermeldung. -->
     <string name="menu_privacy_policy">Datenschutzerklärung</string>

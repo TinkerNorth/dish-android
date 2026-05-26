@@ -248,6 +248,8 @@
         <item quantity="many">Enlazados · %1$d mandos</item>
         <item quantity="other">Enlazados · %1$d mandos</item>
     </plurals>
+    <string name="low_power_streaming_hint">TRANSMITIENDO · MANTÉN LA APP ABIERTA</string>
+    <string name="low_power_dim_body">La transmisión sigue con la pantalla atenuada — no cierres Dish.</string>
 
     <!-- Enlace a la Política de privacidad (en Ajustes) y mensaje de error compartido. -->
     <string name="menu_privacy_policy">Política de privacidad</string>
