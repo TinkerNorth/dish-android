@@ -3,13 +3,18 @@
 package com.tinkernorth.dish.ui.main
 
 import android.content.Context
-import android.graphics.drawable.GradientDrawable
+import android.content.res.ColorStateList
 import android.hardware.SensorManager
 import android.os.Bundle
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
+import androidx.annotation.StringRes
+import androidx.core.view.MenuItemCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
@@ -23,7 +28,9 @@ import com.tinkernorth.dish.source.sensor.MotionStreamState
 import com.tinkernorth.dish.source.sensor.PhoneBatterySource
 import com.tinkernorth.dish.source.sensor.PhoneMotionSource
 import com.tinkernorth.dish.ui.common.GamepadTouchView
+import com.tinkernorth.dish.ui.common.paintConnectionMenuItem
 import com.tinkernorth.dish.ui.common.setupDishToolbar
+import com.tinkernorth.dish.ui.common.showConnectionDialog
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -51,6 +58,10 @@ class GamepadOverlayActivity :
     private lateinit var motionSource: PhoneMotionSource
     private lateinit var batterySource: PhoneBatterySource
 
+    private var optionsMenu: Menu? = null
+    private var currentPaint: OverlayMotionPaint? = null
+    private var currentMotionState: MotionIndicatorState? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityGamepadOverlayBinding.inflate(layoutInflater)
@@ -66,10 +77,10 @@ class GamepadOverlayActivity :
         // Supplier re-reads live rotation on each start(); landscape may resolve to ROTATION_90 or ROTATION_270.
         motionSource = PhoneMotionSource(sensorManager, rotationSupplier = ::currentRotation)
         batterySource = PhoneBatterySource(applicationContext)
-        // Surface "no gyroscope" tile before lifecycle collector starts (only runs while STARTED).
+        // Surface initial indicator state before the lifecycle collector starts (only runs while STARTED).
         repaintFrom(currentMotionPaint())
 
-        // Single combine so gate + pill paint + status row read from one snapshot per emission.
+        // Single combine so gate + indicator paint read from one snapshot per emission.
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 try {
@@ -122,7 +133,7 @@ class GamepadOverlayActivity :
         batterySource.start(lifecycleScope) { level, status ->
             satellite.get(connectionId)?.sendBattery(VIRTUAL_SLOT_ID, level, status)
         }
-        // motion source start/stop and pill paints are driven by the single
+        // motion source start/stop and indicator paint are driven by the single
         // combine collector in onCreate — repeatOnLifecycle re-subscribes on
         // STARTED so the StateFlow tuple re-emits its current values and the
         // collector handles the gate + repaint. No explicit work needed here.
@@ -131,7 +142,7 @@ class GamepadOverlayActivity :
     override fun onPause() {
         super.onPause()
         batterySource.stop()
-        // Pill repaint is driven by the source-state change inside the
+        // Indicator repaint is driven by the source-state change inside the
         // combine collector; no explicit refresh here.
     }
 
@@ -140,8 +151,8 @@ class GamepadOverlayActivity :
     // all live in BaseInputOverlayActivity now.
 
     /**
-     * One coherent snapshot of the three inputs that drive both the motion
-     * pill and the gyro-listener gate. Composed from [hub.connections] +
+     * One coherent snapshot of the three inputs that drive both toolbar
+     * indicators and the gyro-listener gate. Composed from [hub.connections] +
      * [motionCapability.state] + [motionSource.state] in one combine, so
      * every paint reads from the same emission rather than racing three
      * collectors against three independent reads (which could paint a
@@ -159,8 +170,8 @@ class GamepadOverlayActivity :
      * sources have already published. Used for the initial paint in
      * [onCreate] before the lifecycle collector starts — the StateFlow
      * tuple won't emit until something subscribes, but the "no gyroscope"
-     * tile must show up immediately so users on phones without an IMU
-     * don't see a blank pill before resume.
+     * indicator state must be ready before onCreateOptionsMenu fires so the
+     * toolbar icon paints right the first time on phones with no IMU.
      */
     private fun currentMotionPaint(): OverlayMotionPaint =
         OverlayMotionPaint(
@@ -173,8 +184,8 @@ class GamepadOverlayActivity :
      * Listener-gate side-effect — start/stop the IMU listener so the
      * sensor never runs when the slot is ineligible for motion (gyro
      * absent, BT-HID, user toggled off, satellite not connected). Lives
-     * inside the combine collector so the gate decision and the pill paint
-     * share one snapshot.
+     * inside the combine collector so the gate decision and the indicator
+     * paint share one snapshot.
      */
     private fun applyMotionGate(capability: MotionCapability) {
         val effective = capability.effective
@@ -196,101 +207,100 @@ class GamepadOverlayActivity :
         }
     }
 
-    /**
-     * Atomic repaint: connection-status row + motion pill from the same
-     * [OverlayMotionPaint] snapshot. Both UI elements are touched here so
-     * they always reflect one logical moment — no possibility of the
-     * status row reading one combine output while the pill reads the next.
-     */
-    private fun repaintFrom(paint: OverlayMotionPaint) {
-        repaintConnectionRow(paint.summary)
-        repaintMotionPill(paint)
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.menu_gamepad_overlay, menu)
+        optionsMenu = menu
+        currentPaint?.let(::paintMenu)
+        return true
     }
 
-    private fun repaintConnectionRow(summary: ConnectionSummary?) {
-        val connected = summary?.live == LinkState.Connected
-        binding.statusPillConnection.statusPillLabel.text =
-            when {
-                // `connected` true implies summary is non-null (`summary?.live ==
-                // LinkState.Connected` can't match a null summary), so the
-                // compiler smart-casts the receiver — no safe-call needed.
-                connected -> summary.label
-                summary?.live == LinkState.Connecting -> getString(R.string.chip_status_connecting)
-                summary == null -> getString(R.string.overlay_status_unknown)
-                else -> getString(R.string.overlay_status_not_connected)
+    override fun onOptionsItemSelected(item: MenuItem): Boolean =
+        when (item.itemId) {
+            R.id.action_connection_info -> {
+                showConnectionDialog(currentPaint?.summary)
+                true
             }
-        (binding.statusPillConnection.statusPillDot.background as? GradientDrawable)?.setColor(
-            getColor(if (connected) R.color.colorSuccess else R.color.colorMuted),
-        )
+            R.id.action_motion_info -> {
+                showMotionDialog()
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
+
+    private fun repaintFrom(paint: OverlayMotionPaint) {
+        currentPaint = paint
+        paintMenu(paint)
     }
 
-    /**
-     * Repaint the phone-motion pill from a single coherent [paint] tuple.
-     *
-     * The dish surfaces a state for every reason motion might or might not
-     * be flowing — hardware absent, user toggled off, link kind can't
-     * carry it, host-type has no sink, satellite reported its backend
-     * broken, source paused, streaming live, or stalled. The two states
-     * that imply motion is *not* leaving the phone (and the BACKEND_BROKEN
-     * case, where it leaves but doesn't land) carry a one-line
-     * explanation so a limitation is never mistaken for an off switch.
-     * See [MotionIndicatorState].
-     *
-     * Reading from [paint] — not from `motionSource.is*` or
-     * `motionCapability.capabilityFor(…)` directly — is the load-bearing
-     * change for the single-snapshot-per-paint contract: every field below
-     * comes from the same combine emission, so the pill cannot render the
-     * "user disabled but still streaming" half-states the old three-
-     * collector arrangement was prone to during reconnects.
-     */
-    private fun repaintMotionPill(paint: OverlayMotionPaint) {
+    private fun paintMenu(paint: OverlayMotionPaint) {
+        val menu = optionsMenu ?: return
+        paintConnectionMenuItem(menu.findItem(R.id.action_connection_info), paint.summary)
+        paintMotionMenuItem(menu.findItem(R.id.action_motion_info), paint)
+    }
+
+    private fun paintMotionMenuItem(
+        item: MenuItem?,
+        paint: OverlayMotionPaint,
+    ) {
+        val state = motionStateOf(paint)
+        currentMotionState = state
+        item ?: return
+        val active = state == MotionIndicatorState.STREAMING
+        item.setIcon(if (active) R.drawable.ic_overlay_motion else R.drawable.ic_overlay_motion_off)
+        MenuItemCompat.setIconTintList(item, ColorStateList.valueOf(getColor(state.dotColorRes)))
+    }
+
+    private fun motionStateOf(paint: OverlayMotionPaint): MotionIndicatorState {
         val summary = paint.summary
-        // A null summary (connection not resolved yet) is treated as
-        // motion-capable but not-yet-connected: the pill reads "paused"
-        // until the kind + liveness resolve, then self-corrects on the
-        // next paint.
+        // A null summary (connection not resolved yet) is treated as motion-capable but
+        // not-yet-connected: PAUSED is rendered until the kind + liveness resolve, then the next
+        // paint self-corrects.
         val carriesMotion = summary?.kind != ConnectionKind.BLUETOOTH
         val connected = summary?.live == LinkState.Connected
         val cap = paint.capability
         val sourceState = paint.sourceState
-        // Derived from sourceState — eliminates the previous three
-        // separate `motionSource.is*` reads, each of which could be at a
-        // different point in time than the others.
         val isAvailable = sourceState != MotionStreamState.Disabled
         val isStreaming =
             sourceState == MotionStreamState.Streaming ||
                 sourceState == MotionStreamState.Stalled
         val isStalled = sourceState == MotionStreamState.Stalled
-        val state =
-            MotionIndicatorState.of(
-                isAvailable = isAvailable,
-                isStreaming = isStreaming,
-                connectionCarriesMotion = carriesMotion,
-                connectionConnected = connected,
-                userEnabled = cap.userEnabled,
-                hostHasSinkForType = cap.hostHasSinkForType,
-                satelliteBackendOk = cap.satelliteBackendStatus?.backendOk,
-                isStalled = isStalled,
-            )
-        binding.statusPillMotion.statusPillLabel.setText(state.labelRes)
-        (binding.statusPillMotion.statusPillDot.background as? GradientDrawable)?.setColor(getColor(state.dotColorRes))
-        binding.tvMotionDetail.visibility = if (state.hasDetail) View.VISIBLE else View.GONE
-        when (state) {
-            MotionIndicatorState.UNAVAILABLE ->
-                binding.tvMotionDetail.setText(R.string.motion_unavailable_detail)
-            MotionIndicatorState.NOT_FORWARDED ->
-                binding.tvMotionDetail.setText(R.string.motion_not_forwarded_detail)
-            MotionIndicatorState.STALLED ->
-                binding.tvMotionDetail.setText(R.string.motion_stalled_detail)
-            MotionIndicatorState.USER_DISABLED ->
-                binding.tvMotionDetail.setText(R.string.motion_user_disabled_detail)
-            MotionIndicatorState.NO_HOST_SINK ->
-                binding.tvMotionDetail.setText(R.string.motion_no_host_sink_detail)
-            MotionIndicatorState.BACKEND_BROKEN ->
-                binding.tvMotionDetail.setText(R.string.motion_backend_broken_detail)
-            else -> Unit
-        }
+        return MotionIndicatorState.of(
+            isAvailable = isAvailable,
+            isStreaming = isStreaming,
+            connectionCarriesMotion = carriesMotion,
+            connectionConnected = connected,
+            userEnabled = cap.userEnabled,
+            hostHasSinkForType = cap.hostHasSinkForType,
+            satelliteBackendOk = cap.satelliteBackendStatus?.backendOk,
+            isStalled = isStalled,
+        )
     }
+
+    private fun showMotionDialog() {
+        val state = currentMotionState ?: currentPaint?.let(::motionStateOf) ?: return
+        val message =
+            buildString {
+                append(getString(state.labelRes))
+                detailResFor(state)?.let { append("\n\n").append(getString(it)) }
+            }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.overlay_dialog_motion_title)
+            .setMessage(message)
+            .setPositiveButton(R.string.action_close, null)
+            .show()
+    }
+
+    @StringRes
+    private fun detailResFor(state: MotionIndicatorState): Int? =
+        when (state) {
+            MotionIndicatorState.UNAVAILABLE -> R.string.motion_unavailable_detail
+            MotionIndicatorState.NOT_FORWARDED -> R.string.motion_not_forwarded_detail
+            MotionIndicatorState.STALLED -> R.string.motion_stalled_detail
+            MotionIndicatorState.USER_DISABLED -> R.string.motion_user_disabled_detail
+            MotionIndicatorState.NO_HOST_SINK -> R.string.motion_no_host_sink_detail
+            MotionIndicatorState.BACKEND_BROKEN -> R.string.motion_backend_broken_detail
+            else -> null
+        }
 
     override fun onGamepadStateChanged(state: GamepadTouchView.GamepadState) {
         // Stored before the connection-status gate so input captured while

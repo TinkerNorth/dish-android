@@ -39,6 +39,7 @@
     <string name="action_repair_short">Re-pair</string>
     <string name="action_forget_short">Forget</string>
     <string name="action_cancel">Cancel</string>
+    <string name="action_close">Close</string>
     <string name="bt_row_pair_from_host">Pair from host</string>
     <string name="bt_row_acquiring">Acquiring…</string>
     <string name="bt_row_waiting">Waiting…</string>
@@ -127,10 +128,15 @@
     <string name="chip_status_online">Online</string>
     <string name="chip_status_unstable">Unsteady</string>
 
-    <!-- Gamepad overlay (activity_gamepad_overlay.xml + GamepadOverlayActivity). -->
-    <string name="overlay_status_streaming">Streaming</string>
+    <!-- Overlay screens (gamepad + touchpad): toolbar action icons + their info-dialog content. -->
     <string name="overlay_status_unknown">Unknown connection</string>
     <string name="overlay_status_not_connected">Not connected</string>
+    <string name="overlay_action_connection">Connection status</string>
+    <string name="overlay_action_motion">Motion status</string>
+    <string name="overlay_dialog_connection_title">Connection</string>
+    <string name="overlay_dialog_motion_title">Motion</string>
+    <string name="overlay_connection_kind_satellite">Satellite</string>
+    <string name="overlay_connection_kind_bluetooth">Bluetooth</string>
 
     <!-- Shared overlay header titles. Sit next to the back chevron so the
          user always sees which input surface they're on. -->

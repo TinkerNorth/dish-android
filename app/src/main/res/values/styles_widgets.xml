@@ -89,16 +89,10 @@
 
     <!-- ============================================================
          STATUS DOT — bare View with the dot_circle drawable, sized to
-         the icon_dot / icon_dot_lg semantic dimens. The drawable's fill
-         is set programmatically (live/connecting/idle/error) by the
-         hosting Activity/Adapter; the style owns geometry + background.
+         the icon_dot_lg semantic dimen. The drawable's fill is set
+         programmatically (live/connecting/idle/error) by the hosting
+         Activity/Adapter; the style owns geometry + background.
          ============================================================ -->
-    <style name="Widget.Dish.StatusDot.Small" parent="">
-        <item name="android:layout_width">@dimen/icon_dot</item>
-        <item name="android:layout_height">@dimen/icon_dot</item>
-        <item name="android:background">@drawable/dot_circle</item>
-    </style>
-
     <style name="Widget.Dish.StatusDot.Large" parent="">
         <item name="android:layout_width">@dimen/icon_dot_lg</item>
         <item name="android:layout_height">@dimen/icon_dot_lg</item>

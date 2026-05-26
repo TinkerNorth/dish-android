@@ -43,8 +43,9 @@
         <activity
             android:name=".ui.main.MainActivity"
             android:exported="true"
+            android:resizeableActivity="true"
             android:theme="@style/Theme.App.Starting"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|navigation">
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|navigation">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -57,36 +58,41 @@
         <activity
             android:name=".ui.main.NativeUnavailableActivity"
             android:exported="false"
+            android:resizeableActivity="true"
             android:theme="@style/Theme.Dish" />
         <activity
             android:name=".ui.main.GamepadOverlayActivity"
             android:exported="false"
+            android:resizeableActivity="true"
             android:theme="@style/Theme.Dish"
             android:screenOrientation="landscape"
-            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
             tools:ignore="DiscouragedApi" />
 
         <activity
             android:name=".ui.main.TouchpadOverlayActivity"
             android:exported="false"
+            android:resizeableActivity="true"
             android:theme="@style/Theme.Dish"
             android:screenOrientation="landscape"
-            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
             tools:ignore="DiscouragedApi" />
 
         <activity
             android:name=".ui.connections.ConnectionsActivity"
             android:exported="false"
+            android:resizeableActivity="true"
             android:theme="@style/Theme.Dish"
-            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
             android:parentActivityName=".ui.main.MainActivity"
             tools:targetApi="p" />
 
         <activity
             android:name=".ui.settings.SettingsActivity"
             android:exported="false"
+            android:resizeableActivity="true"
             android:theme="@style/Theme.Dish"
-            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
             android:parentActivityName=".ui.main.MainActivity"
             tools:targetApi="p" />
 

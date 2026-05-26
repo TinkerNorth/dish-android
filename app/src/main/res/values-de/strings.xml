@@ -34,6 +34,7 @@
     <string name="action_repair_short">Neu koppeln</string>
     <string name="action_forget_short">Entfernen</string>
     <string name="action_cancel">Abbrechen</string>
+    <string name="action_close">Schließen</string>
     <string name="bt_row_pair_from_host">Vom Host koppeln</string>
     <string name="bt_row_acquiring">Wird abgerufen…</string>
     <string name="bt_row_waiting">Warten…</string>
@@ -107,9 +108,14 @@
     <string name="chip_status_unstable">Instabil</string>
 
     <!-- Controller-Overlay (activity_gamepad_overlay.xml + GamepadOverlayActivity). -->
-    <string name="overlay_status_streaming">Streamt</string>
     <string name="overlay_status_unknown">Unbekannte Verbindung</string>
     <string name="overlay_status_not_connected">Nicht verbunden</string>
+    <string name="overlay_action_connection">Verbindungsstatus</string>
+    <string name="overlay_action_motion">Bewegungsstatus</string>
+    <string name="overlay_dialog_connection_title">Verbindung</string>
+    <string name="overlay_dialog_motion_title">Bewegung</string>
+    <string name="overlay_connection_kind_satellite">Satellit</string>
+    <string name="overlay_connection_kind_bluetooth">Bluetooth</string>
     <string name="overlay_title_gamepad">Gamepad</string>
     <string name="overlay_title_touchpad">Touchpad</string>
     <string name="touchpad_pad_click_label">Klicken + Bewegen</string>
