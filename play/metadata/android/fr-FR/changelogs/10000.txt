@@ -1,0 +1,7 @@
+Version initiale.
+
+• Transformez votre téléphone en manette sans fil pour PC.
+• Deux modes : Wi-Fi avec Satellite, ou manette Bluetooth pour n'importe quel hôte.
+• Utilisez la manette à l'écran, ou branchez / appairez votre propre manette.
+• Mouvement (gyroscope), pavé tactile et vibration en jeu sur le chemin Wi-Fi.
+• Open source sous LGPL-3.0.

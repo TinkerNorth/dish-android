@@ -1,0 +1,7 @@
+Initial release.
+
+• Turn your phone into a wireless gamepad for PC.
+• Two modes: Wi-Fi with Satellite, or Bluetooth gamepad to any host.
+• Use the on-screen pad, or plug in / pair your own controller.
+• Motion (gyro), touchpad, and in-game rumble on the Wi-Fi path.
+• Open source under LGPL-3.0.

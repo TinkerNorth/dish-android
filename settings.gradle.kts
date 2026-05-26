@@ -24,3 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Dish"
 include(":app")
+include(":baselineprofile")

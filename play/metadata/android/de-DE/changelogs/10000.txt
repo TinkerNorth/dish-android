@@ -1,0 +1,7 @@
+Erstveröffentlichung.
+
+• Mache dein Handy zum drahtlosen Gamepad für PC.
+• Zwei Modi: Wi-Fi mit Satellite, oder Bluetooth-Gamepad an jeden Host.
+• Verwende das Bildschirm-Pad oder schließe deinen eigenen Controller an / koppel ihn.
+• Motion (Gyroskop), Touchpad und In-Game-Rumble auf dem Wi-Fi-Pfad.
+• Open Source unter LGPL-3.0.

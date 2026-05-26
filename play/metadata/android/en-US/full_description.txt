@@ -1,0 +1,27 @@
+Dish turns any controller or Android phone into a low latency wireless gamepad. Whether you want a low-latency Wi-Fi link with motion-aim and a touchpad, or the simplicity of pairing as a regular Bluetooth controller, Dish has you covered. No per-game configuration, no monthly fees, no ads.
+
+TWO WAYS TO CONNECT
+
+• Wi-Fi (with Satellite, free): the fastest path. Lowest input latency, motion (gyro) aim assist, and a clickable touchpad for menus and mouse control.
+
+• Bluetooth: pair your phone to a PC, console, or set-top box as a regular Bluetooth gamepad. Works with anything that accepts a Bluetooth controller.
+
+USE YOUR OWN CONTROLLER
+
+Plug a USB gamepad into your phone's USB port for zero added latency, or pair a Bluetooth controller (Xbox, DualSense, 8BitDo, and more) directly to your phone. Dish forwards every press, axis, and trigger to your host.
+
+DESIGNED FOR GAMING
+
+• Optimized hot path for lowest latency
+• Encrypted Wi-Fi stream
+• Multiple satellites side-by-side: pair more than one PC and route between them per slot
+• Motion and touchpad presented to games as a standard PlayStation-style pad
+• In-game rumble from the host vibrates your phone
+
+GET SATELLITE
+
+The free Satellite helper is available for Windows, macOS, and Linux at https://dish.tinkernorth.com/downloads/satellite. Bluetooth-host mode works without Satellite, but the Wi-Fi path is the best experience.
+
+FOR TINKERERS
+
+Source code, security policy, and wire-format docs are public on GitHub at github.com/TinkerNorth/dish-android. Phone client, Satellite server, and platform variants.

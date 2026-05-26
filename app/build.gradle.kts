@@ -7,6 +7,7 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.ktlint)
     alias(libs.plugins.detekt)
+    alias(libs.plugins.androidx.baselineprofile)
 }
 
 // Firebase plugins only apply when google-services.json is present so local builds without Firebase still work.
@@ -132,6 +133,7 @@ android {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.core.splashscreen)
+    implementation(libs.androidx.profileinstaller)
     implementation(libs.androidx.viewpager2)
     implementation(libs.androidx.window)
     implementation(libs.androidx.appcompat)
@@ -159,6 +161,7 @@ dependencies {
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.rules)
+    "baselineProfile"(project(":baselineprofile"))
 }
 
 ktlint {
