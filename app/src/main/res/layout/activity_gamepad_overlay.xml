@@ -41,6 +41,7 @@
              the surface sits visually centred instead of crowding the
              screen edge. -->
         <FrameLayout
+            android:id="@+id/overlayContentFrame"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"

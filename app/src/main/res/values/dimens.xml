@@ -130,6 +130,16 @@
     <dimen name="dialog_inline_max_width">@dimen/size_280</dimen>  <!-- gamepad overlay error banner -->
 
     <!-- ============================================================
+         ADAPTIVE / LARGE SCREEN
+
+         Caps the Settings card column on tablets so cards don't stretch
+         full-bleed across a wide screen. Width matches the sw600dp
+         minimum so the inner column never overflows the screen on any
+         qualifying device.
+         ============================================================ -->
+    <dimen name="settings_content_max_width">@dimen/size_600</dimen>
+
+    <!-- ============================================================
          NOTIFICATION SNACKBAR (DishNotifications)
          ============================================================ -->
     <dimen name="notification_rail_width">@dimen/size_4</dimen>
