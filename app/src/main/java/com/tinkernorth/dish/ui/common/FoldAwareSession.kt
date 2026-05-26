@@ -74,9 +74,6 @@ data class HingeInsets(
     }
 }
 
-// Tabletop pushes content below the horizontal hinge so the user can rest the device on a table
-// and reach controls on the bottom half. Book mode is a no-op here because the gamepad/touchpad
-// surfaces already keep their interactive area away from the centre column.
 fun Posture.hingeInsetsFor(view: View): HingeInsets {
     if (this !is Posture.Tabletop) return HingeInsets.NONE
     val loc = IntArray(2)

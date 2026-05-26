@@ -1,7 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Tablet variant: same vertical card stack as the phone layout, but capped to a readable width
-     so cards don't stretch full-bleed on a wide tablet. Width matches the sw600dp minimum so no
-     overflow can occur on any qualifying device. IDs mirror the phone layout exactly. -->
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"

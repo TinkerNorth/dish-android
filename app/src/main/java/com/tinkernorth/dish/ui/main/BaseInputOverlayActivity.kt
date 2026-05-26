@@ -172,9 +172,6 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
             windowManager.defaultDisplay?.rotation ?: Surface.ROTATION_0
         }
 
-    // Content frame may not exist on every overlay layout (the base class can host arbitrary
-    // subclasses); skipping silently is the right default rather than forcing every overlay to
-    // declare a hinge target.
     private fun installFoldAwareness() {
         val content = rootView().findViewById<View>(R.id.overlayContentFrame) ?: return
         val origTop = content.paddingTop
@@ -193,8 +190,6 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
         posture: Posture,
         origTop: Int,
     ) {
-        // Hinge bounds are in window coordinates and only become meaningful once the view is laid
-        // out, so defer to the next layout pass when the call lands before first measure.
         if (!content.isLaidOut) {
             content.post { applyPostureToContent(content, posture, origTop) }
             return
