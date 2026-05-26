@@ -247,6 +247,8 @@
         <item quantity="few">Vezano · %1$d kontrolera</item>
         <item quantity="other">Vezano · %1$d kontrolera</item>
     </plurals>
+    <string name="low_power_streaming_hint">STRIMING · NE ZATVARAJTE APLIKACIJU</string>
+    <string name="low_power_dim_body">Striming se nastavlja dok je ekran zatamnjen — ne zatvarajte Dish.</string>
 
     <!-- Link na politiku privatnosti (u Postavkama) i zajednička poruka greške. -->
     <string name="menu_privacy_policy">Politika privatnosti</string>

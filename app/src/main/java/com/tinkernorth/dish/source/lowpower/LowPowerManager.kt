@@ -25,6 +25,7 @@ class LowPowerManager(
         val flLowPowerOverlay: FrameLayout,
         val tvLowPowerTime: TextView,
         val tvLowPowerStatus: TextView,
+        val llStreamingHint: LinearLayout,
     )
 
     var views: Views? = null
@@ -32,6 +33,8 @@ class LowPowerManager(
     var activeControllerCount: () -> Int = { 0 }
 
     enum class State { IDLE, COUNTDOWN, ACTIVE }
+
+    private var isStreaming = false
 
     private var savedBrightness = -1f
     private val inactivityHandler = Handler(Looper.getMainLooper())
@@ -41,11 +44,13 @@ class LowPowerManager(
     private val inactivityRunnable = Runnable { startCountdown() }
 
     fun onLockStateChanged(active: Boolean) {
+        isStreaming = active
         if (active && state.value == State.IDLE) {
             resetInactivityTimer()
         } else if (!active) {
             cancel()
         }
+        applyStreamingHintVisibility()
     }
 
     fun onUserInteraction() {
@@ -61,6 +66,7 @@ class LowPowerManager(
                 views?.llCountdownBanner?.visibility = View.GONE
                 setState(State.IDLE)
                 resetInactivityTimer()
+                applyStreamingHintVisibility()
             }
             State.IDLE -> resetInactivityTimer()
         }
@@ -86,6 +92,7 @@ class LowPowerManager(
         setState(State.COUNTDOWN)
         val v = views ?: return
         v.llCountdownBanner.visibility = View.VISIBLE
+        applyStreamingHintVisibility()
         v.tvCountdownSeconds.text = String.format(Locale.getDefault(), "%d", COUNTDOWN_SECONDS)
         countdownTimer?.cancel()
         countdownTimer =
@@ -105,6 +112,7 @@ class LowPowerManager(
         setState(State.ACTIVE)
         val v = views ?: return
         v.llCountdownBanner.visibility = View.GONE
+        applyStreamingHintVisibility()
         val lp = window.attributes
         savedBrightness = lp.screenBrightness
         lp.screenBrightness = MIN_BRIGHTNESS
@@ -127,6 +135,13 @@ class LowPowerManager(
         lp.screenBrightness = if (savedBrightness >= 0) savedBrightness else -1f
         window.attributes = lp
         savedBrightness = -1f
+        applyStreamingHintVisibility()
+    }
+
+    private fun applyStreamingHintVisibility() {
+        val v = views ?: return
+        v.llStreamingHint.visibility =
+            if (isStreaming && state.value == State.IDLE) View.VISIBLE else View.GONE
     }
 
     fun refreshStatus() {
