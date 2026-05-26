@@ -39,7 +39,6 @@
     <dimen name="size_36">36dp</dimen>
     <dimen name="size_40">40dp</dimen>
     <dimen name="size_56">56dp</dimen>
-    <dimen name="size_280">280dp</dimen>
     <dimen name="size_600">600dp</dimen>
 
     <!-- ===== sp scale ===== -->

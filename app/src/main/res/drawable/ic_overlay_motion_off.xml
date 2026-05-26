@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <group android:name="dimmed">
+        <path
+            android:strokeColor="#FFFFFFFF"
+            android:strokeAlpha="0.45"
+            android:strokeWidth="1.6"
+            android:fillColor="#00000000"
+            android:pathData="M12,3 a9,9 0 1 1 0,18 a9,9 0 1 1 0,-18 z" />
+        <path
+            android:strokeColor="#FFFFFFFF"
+            android:strokeAlpha="0.45"
+            android:strokeWidth="1.4"
+            android:fillColor="#00000000"
+            android:pathData="M3,12 a9,3.2 0 1 1 18,0 a9,3.2 0 1 1 -18,0 z" />
+        <path
+            android:strokeColor="#FFFFFFFF"
+            android:strokeAlpha="0.45"
+            android:strokeWidth="1.4"
+            android:fillColor="#00000000"
+            android:pathData="M12,3 a3.2,9 0 1 1 0,18 a3.2,9 0 1 1 0,-18 z" />
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:fillAlpha="0.45"
+            android:pathData="M12,10.4 a1.6,1.6 0 1 1 0,3.2 a1.6,1.6 0 1 1 0,-3.2 z" />
+    </group>
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M4,20 L20,4" />
+</vector>

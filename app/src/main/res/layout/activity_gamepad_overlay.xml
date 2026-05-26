@@ -33,13 +33,9 @@
             style="@style/Widget.Dish.Toolbar"
             android:layout_width="match_parent" />
 
-        <!-- Content area: gamepad surface fills, status pills float at
-             top|end. Same FrameLayout shape as the touchpad overlay so
-             the two screens lay out identically.
-
-             paddingBottom=?actionBarSize mirrors the toolbar at top so
-             the surface sits visually centred instead of crowding the
-             screen edge. -->
+        <!-- Content area: gamepad surface fills. paddingBottom=?actionBarSize
+             mirrors the toolbar at top so the surface sits visually
+             centred instead of crowding the screen edge. -->
         <FrameLayout
             android:id="@+id/overlayContentFrame"
             android:layout_width="match_parent"
@@ -54,51 +50,6 @@
                 android:paddingHorizontal="@dimen/spacing_2xl"
                 android:paddingTop="@dimen/spacing_lg"
                 android:paddingBottom="@dimen/spacing_2xl" />
-
-            <!-- Status pills + motion detail stack, floating top|end.
-                 Two pills (connection + motion) plus the motion-detail
-                 caption only show their stack when motion is unavailable;
-                 vertical orientation lets all three sit cleanly aligned. -->
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="top|end"
-                android:layout_marginTop="@dimen/spacing_md"
-                android:layout_marginEnd="@dimen/spacing_xl"
-                android:orientation="vertical"
-                android:gravity="end">
-
-                <include
-                    android:id="@+id/statusPillConnection"
-                    layout="@layout/status_pill"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
-
-                <!-- Phone-motion (gyro/accel) indicator. Always visible
-                     so the three states — streaming / paused / no-
-                     gyroscope — are never ambiguous; the detail line
-                     below appears only for no-gyroscope. The pill's
-                     text is set live by refreshMotionStatus() so a
-                     screen reader reads the current state instead of a
-                     stale contentDescription. -->
-                <include
-                    android:id="@+id/statusPillMotion"
-                    layout="@layout/status_pill"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/spacing_sm" />
-
-                <TextView
-                    android:id="@+id/tvMotionDetail"
-                    style="@style/TextAppearance.Dish.Caption"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/spacing_xs"
-                    android:maxWidth="@dimen/dialog_inline_max_width"
-                    android:gravity="end"
-                    android:text="@string/motion_unavailable_detail"
-                    android:visibility="gone" />
-            </LinearLayout>
         </FrameLayout>
     </LinearLayout>
 
