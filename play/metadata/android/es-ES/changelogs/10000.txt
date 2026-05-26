@@ -1,0 +1,7 @@
+Versión inicial.
+
+• Convierte tu teléfono en un gamepad inalámbrico para PC.
+• Dos modos: Wi-Fi con Satellite, o gamepad Bluetooth para cualquier host.
+• Usa el pad en pantalla, o conecta / empareja tu propio mando.
+• Motion (giroscopio), touchpad y rumble en juego en la vía Wi-Fi.
+• Código abierto bajo LGPL-3.0.

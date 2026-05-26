@@ -1,0 +1,37 @@
+O Dish transforma seu celular Android em um gamepad sem fio para seu PC. Seja para uma conexão Wi-Fi de baixa latência com motion-aim e touchpad, ou a simplicidade de parear como um controle Bluetooth comum — o Dish tem você coberto. Sem configuração por jogo, sem assinaturas mensais, sem anúncios.
+
+
+DUAS MANEIRAS DE CONECTAR
+
+• Wi-Fi (com Satellite, gratuito): o caminho mais rápido. Menor latência de entrada, motion (giroscópio) como assistência de mira e um touchpad clicável para menus e controle do mouse.
+
+• Bluetooth: pareie seu celular com um PC, console ou set-top box como um gamepad Bluetooth comum. Sem software de PC necessário — funciona com qualquer coisa que aceite um controle Bluetooth.
+
+
+USE SEU PRÓPRIO CONTROLE
+
+Conecte um gamepad USB na porta USB-C do seu celular para zero latência adicionada, ou pareie um controle Bluetooth (Xbox, DualSense, 8BitDo e mais) diretamente com seu celular. O Dish encaminha cada pressionamento, eixo e gatilho para seu PC.
+
+
+PROJETADO PARA JOGAR
+
+• Pipeline de entrada nativo (C++/JNI), para que suas entradas não fiquem esperando atrás do trabalho de UI
+• Stream Wi-Fi criptografado com ChaCha20-Poly1305 sobre UDP — rápido e autenticado
+• Múltiplos satélites lado a lado: pareie mais de um PC e direcione entre eles por slot
+• Motion e touchpad apresentados aos jogos como um pad padrão estilo PlayStation
+• Rumble no jogo do host faz seu celular vibrar
+
+
+PRIVACIDADE QUE VOCÊ PODE AUDITAR
+
+O Dish é código aberto sob a licença LGPL-3.0. Sem anúncios. Sem análise. Não enviamos dados para servidores da TinkerNorth — porque não temos nenhum. O único destino de rede é o Satellite na sua própria LAN. O diagnóstico de falhas (Firebase Crashlytics) está ligado por padrão e você pode desligá-lo a qualquer momento em Configurações.
+
+
+OBTENHA O SATELLITE
+
+O auxiliar gratuito Satellite está disponível para Windows, macOS e Linux em tinkernorth.com/satellite. O modo Bluetooth-host funciona sem o Satellite, mas a melhor experiência é pelo caminho Wi-Fi.
+
+
+PARA QUEM GOSTA DE EXPLORAR
+
+O código fonte, política de segurança e documentação do formato de fio são públicos no GitHub em github.com/TinkerNorth/dish-android. Todo o produto — cliente para celular, servidor Satellite e variantes de plataforma — é construído em código aberto.

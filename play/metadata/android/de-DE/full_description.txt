@@ -1,0 +1,37 @@
+Dish verwandelt dein Android-Handy in ein drahtloses Gamepad für deinen PC. Egal ob du eine Wi-Fi-Verbindung mit niedriger Latenz, Motion-Aim und Touchpad möchtest oder die Einfachheit eines normalen Bluetooth-Controllers — Dish hat dich abgedeckt. Keine Pro-Spiel-Konfiguration, keine monatlichen Gebühren, keine Werbung.
+
+
+ZWEI VERBINDUNGSWEGE
+
+• Wi-Fi (mit Satellite, kostenlos): der schnellste Weg. Niedrigste Eingabelatenz, Motion (Gyroskop) als Zielassistenz und ein klickbares Touchpad für Menüs und Maussteuerung.
+
+• Bluetooth: Koppel dein Handy mit PC, Konsole oder Set-Top-Box als normales Bluetooth-Gamepad. Keine PC-Software nötig — funktioniert mit allem, das einen Bluetooth-Controller akzeptiert.
+
+
+DEINEN EIGENEN CONTROLLER VERWENDEN
+
+Stecke ein USB-Gamepad in den USB-C-Anschluss deines Handys für null zusätzliche Latenz, oder koppel einen Bluetooth-Controller (Xbox, DualSense, 8BitDo und mehr) direkt mit dem Handy. Dish leitet jeden Druck, jede Achse und jeden Trigger an deinen PC weiter.
+
+
+FÜRS GAMING ENTWORFEN
+
+• Native Eingabe-Pipeline (C++/JNI), damit deine Eingaben nicht hinter UI-Arbeit warten müssen
+• ChaCha20-Poly1305-verschlüsselter Wi-Fi-Stream über UDP — schnell und authentifiziert
+• Mehrere Satelliten gleichzeitig: koppel mehrere PCs und route zwischen ihnen pro Slot
+• Motion und Touchpad werden Spielen als Standard-PlayStation-Pad präsentiert
+• In-Game-Rumble vom Host bringt dein Handy zum Vibrieren
+
+
+PRIVATSPHÄRE, DIE DU PRÜFEN KANNST
+
+Dish ist Open Source unter der LGPL-3.0-Lizenz. Keine Werbung. Keine Analyse. Wir senden keine Daten an TinkerNorth-Server — weil wir keine haben. Das einzige Netzwerkziel ist der Satellite in deinem eigenen LAN. Crash-Diagnose (Firebase Crashlytics) ist standardmäßig aktiviert und kann jederzeit in den Einstellungen abgeschaltet werden.
+
+
+SATELLITE HOLEN
+
+Der kostenlose Satellite-Helfer ist für Windows, macOS und Linux unter tinkernorth.com/satellite verfügbar. Der Bluetooth-Host-Modus funktioniert ohne Satellite, aber das beste Erlebnis bietet der Wi-Fi-Pfad.
+
+
+FÜR BASTLER
+
+Quellcode, Sicherheitsrichtlinie und Wire-Format-Dokumentation sind öffentlich auf GitHub unter github.com/TinkerNorth/dish-android. Das gesamte Produkt — Handy-Client, Satellite-Server und Plattformvarianten — wird offen entwickelt.

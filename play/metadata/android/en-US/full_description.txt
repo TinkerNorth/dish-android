@@ -1,0 +1,37 @@
+Dish turns your Android phone into a wireless gamepad for your PC. Whether you want a low-latency Wi-Fi link with motion-aim and a touchpad, or the simplicity of pairing as a regular Bluetooth controller, Dish has you covered — no per-game configuration, no monthly fees, no ads.
+
+
+TWO WAYS TO CONNECT
+
+• Wi-Fi (with Satellite, free): the fastest path. Lowest input latency, motion (gyro) aim assist, and a clickable touchpad for menus and mouse control.
+
+• Bluetooth: pair your phone to a PC, console, or set-top box as a regular Bluetooth gamepad. No PC software required — works with anything that accepts a Bluetooth controller.
+
+
+USE YOUR OWN CONTROLLER
+
+Plug a USB gamepad into your phone's USB-C port for zero added latency, or pair a Bluetooth controller (Xbox, DualSense, 8BitDo, and more) directly to your phone. Dish forwards every press, axis, and trigger to your PC.
+
+
+DESIGNED FOR GAMING
+
+• Native input pipeline (C++/JNI), so your inputs aren't queued behind UI work
+• ChaCha20-Poly1305 encrypted Wi-Fi stream over UDP — fast and authenticated
+• Multiple satellites side-by-side: pair more than one PC and route between them per slot
+• Motion and touchpad presented to games as a standard PlayStation-style pad
+• In-game rumble from the host vibrates your phone
+
+
+PRIVACY YOU CAN AUDIT
+
+Dish is open source under the LGPL-3.0 license. No ads. No analytics. We don't ship any data to TinkerNorth servers — because we don't have any. The only network destination is the Satellite on your own LAN. Crash diagnostics (Firebase Crashlytics) are on by default and can be switched off any time in Settings.
+
+
+GET SATELLITE
+
+The free Satellite helper is available for Windows, macOS, and Linux at tinkernorth.com/satellite. Bluetooth-host mode works without Satellite, but the Wi-Fi path is the best experience.
+
+
+FOR TINKERERS
+
+Source code, security policy, and wire-format docs are public on GitHub at github.com/TinkerNorth/dish-android. The whole product — phone client, Satellite server, and platform variants — is built in the open.
