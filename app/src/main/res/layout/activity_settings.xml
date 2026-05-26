@@ -53,17 +53,81 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
+                <include
+                    android:id="@+id/sectionSetup"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardSetupWizard"
+                    style="@style/Widget.Dish.Card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground">
+
+                    <LinearLayout
+                        style="@style/Widget.Dish.Card.RowContainer"
+                        android:gravity="center_vertical">
+
+                        <include
+                            android:id="@+id/cardRowSetupWizard"
+                            layout="@layout/card_row_icon_label_value"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1" />
+
+                        <ImageView
+                            android:layout_width="@dimen/icon_card_glyph"
+                            android:layout_height="@dimen/icon_card_glyph"
+                            android:layout_marginStart="@dimen/spacing_xl"
+                            android:src="@drawable/ic_chevron_right"
+                            android:importantForAccessibility="no" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardHelp"
+                    style="@style/Widget.Dish.Card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/card_margin_bottom"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground">
+
+                    <LinearLayout
+                        style="@style/Widget.Dish.Card.RowContainer"
+                        android:gravity="center_vertical">
+
+                        <include
+                            android:id="@+id/cardRowHelp"
+                            layout="@layout/card_row_icon_label_value"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1" />
+
+                        <ImageView
+                            android:layout_width="@dimen/icon_card_glyph"
+                            android:layout_height="@dimen/icon_card_glyph"
+                            android:layout_marginStart="@dimen/spacing_xl"
+                            android:src="@drawable/ic_chevron_right"
+                            android:importantForAccessibility="no" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
                 <!-- ═══ APPEARANCE ═════════════════════════════════════════
                      Eyebrow uses the canonical `section_header.xml` include
-                     (label only); SettingsActivity.onCreate sets the text.
-                     First section on the screen — no gap_above on the
-                     include because the NestedScrollView's `paddingTop`
-                     (spacing_md) already supplies the breathing room. -->
+                     (label only); SettingsActivity.onCreate sets the text. -->
                 <include
                     android:id="@+id/sectionAppearance"
                     layout="@layout/section_header"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
                     android:layout_marginBottom="@dimen/section_header_gap_below" />
 
                 <!-- Theme card. Vertical orientation deviates from the other

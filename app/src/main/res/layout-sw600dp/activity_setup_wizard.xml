@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            style="@style/Widget.Dish.Toolbar"
+            android:layout_width="match_parent"
+            app:title="@string/wizard_title" />
+
+        <androidx.core.widget.NestedScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:paddingTop="@dimen/spacing_md"
+            android:paddingBottom="@dimen/spacing_5xl">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center_horizontal">
+
+                <LinearLayout
+                    android:layout_width="@dimen/welcome_content_max_width"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvWizardProgress"
+                        style="@style/TextAppearance.Dish.Caption"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textAllCaps="true"
+                        tools:text="STEP 1 OF 3" />
+
+                    <TextView
+                        android:id="@+id/tvWizardEyebrow"
+                        style="@style/TextAppearance.Dish.Label.Accent"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_md"
+                        tools:text="STEP 1 · CONNECTION" />
+
+                    <TextView
+                        android:id="@+id/tvWizardTitle"
+                        style="@style/TextAppearance.Dish.Title.Large"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_md"
+                        tools:text="How will you reach your PC?" />
+
+                    <TextView
+                        android:id="@+id/tvWizardBody"
+                        style="@style/TextAppearance.Dish.Body"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_xl"
+                        tools:text="Two ways to send your input to a PC." />
+
+                    <LinearLayout
+                        android:id="@+id/step1Body"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_md"
+                        android:orientation="vertical">
+
+                        <include
+                            android:id="@+id/optionLan"
+                            layout="@layout/wizard_option_card" />
+
+                        <include
+                            android:id="@+id/optionBt"
+                            layout="@layout/wizard_option_card" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/step2Body"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_md"
+                        android:orientation="vertical"
+                        android:visibility="gone"
+                        tools:visibility="gone">
+
+                        <include
+                            android:id="@+id/optionVirtual"
+                            layout="@layout/wizard_option_card" />
+
+                        <include
+                            android:id="@+id/optionUsb"
+                            layout="@layout/wizard_option_card" />
+
+                        <include
+                            android:id="@+id/optionPhysBt"
+                            layout="@layout/wizard_option_card" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/step3Body"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_md"
+                        android:orientation="vertical"
+                        android:visibility="gone"
+                        tools:visibility="gone">
+
+                        <com.google.android.material.card.MaterialCardView
+                            style="@style/Widget.Dish.Card"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:padding="@dimen/card_padding">
+
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:orientation="horizontal"
+                                    android:gravity="center_vertical">
+
+                                    <TextView
+                                        style="@style/TextAppearance.Dish.Label"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="@string/wizard_summary_connection_label"
+                                        android:textAllCaps="true" />
+
+                                    <TextView
+                                        android:id="@+id/tvSummaryConnection"
+                                        style="@style/TextAppearance.Dish.Body.Mono"
+                                        android:layout_width="0dp"
+                                        android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:layout_marginStart="@dimen/spacing_xl"
+                                        android:gravity="end"
+                                        tools:text="Wi-Fi to Satellite" />
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:orientation="horizontal"
+                                    android:layout_marginTop="@dimen/spacing_md"
+                                    android:gravity="center_vertical">
+
+                                    <TextView
+                                        style="@style/TextAppearance.Dish.Label"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="@string/wizard_summary_controller_label"
+                                        android:textAllCaps="true" />
+
+                                    <TextView
+                                        android:id="@+id/tvSummaryController"
+                                        style="@style/TextAppearance.Dish.Body.Mono"
+                                        android:layout_width="0dp"
+                                        android:layout_height="wrap_content"
+                                        android:layout_weight="1"
+                                        android:layout_marginStart="@dimen/spacing_xl"
+                                        android:gravity="end"
+                                        tools:text="USB controller into phone" />
+                                </LinearLayout>
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <TextView
+                            android:id="@+id/tvWizardNextSteps"
+                            style="@style/TextAppearance.Dish.Body"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/spacing_5xl"
+                            tools:text="Tap Finish to open Connections." />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_horizontal"
+            android:paddingVertical="@dimen/spacing_xl">
+
+            <LinearLayout
+                android:layout_width="@dimen/welcome_content_max_width"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnWizardBack"
+                    style="@style/Widget.Dish.Button.Outlined"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/wizard_action_back" />
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnWizardNext"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/wizard_action_next" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>
