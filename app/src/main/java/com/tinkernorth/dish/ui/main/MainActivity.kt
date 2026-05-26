@@ -95,6 +95,7 @@ class MainActivity :
     }
 
     private fun setupUI() {
+        binding.sectionConnections.labelSection.setText(R.string.section_connections)
         binding.sectionControllers.labelSection.setText(R.string.section_controllers)
         binding.rvControllers.adapter = controllerAdapter
         binding.btnManageConnections.setOnClickListener { nav.toConnections() }
