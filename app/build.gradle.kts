@@ -228,16 +228,9 @@ tasks.withType<Test>().configureEach {
     maxHeapSize = "2g"
 }
 
-// ─── Open-source license manifest ─────────────────────────────────────────────
-// AGP 9 dropped applicationVariants, which broke the official
-// play-services-oss-licenses plugin and AboutLibraries. We resolve POMs from
-// releaseRuntimeClasspath directly and emit a manifest the in-app screen reads.
 val licensesOutputFile =
     layout.projectDirectory.file("src/main/assets/licenses/licenses.json")
 
-// Hand-curated fallbacks for artifacts that publish empty <licenses> blocks.
-// Guava's listenablefuture-1.0 is a stub published by Google; the code itself
-// is Apache 2.0 (it's pulled in by Firebase transitively, never used directly).
 val knownLicenseOverrides: Map<String, List<Map<String, String?>>> =
     mapOf(
         "com.google.guava:listenablefuture" to
