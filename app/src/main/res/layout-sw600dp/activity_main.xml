@@ -1,7 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Tablet variant: header spans full width, body splits into a controllers list (left, dominant)
-     and a sticky connections panel (right). IDs mirror the phone layout so the activity binding
-     resolves unchanged. -->
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"

@@ -39,9 +39,6 @@
             style="@style/Widget.Dish.Toolbar"
             android:layout_width="match_parent" />
 
-        <!-- Content area: trackpads fill the surface. paddingBottom=
-             ?actionBarSize mirrors the toolbar at top so the surface
-             sits visually centred instead of crowding the screen edge. -->
         <FrameLayout
             android:id="@+id/overlayContentFrame"
             android:layout_width="match_parent"
