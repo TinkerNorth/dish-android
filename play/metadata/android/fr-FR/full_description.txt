@@ -1,37 +1,32 @@
-Dish transforme votre téléphone Android en manette sans fil pour votre PC. Que vous souhaitiez une connexion Wi-Fi à faible latence avec motion-aim et pavé tactile, ou la simplicité d'un appairage en manette Bluetooth classique — Dish vous couvre. Pas de configuration par jeu, pas d'abonnement mensuel, pas de publicité.
+Dish transforme n'importe quelle manette ou téléphone Android en manette sans fil à faible latence. Que vous souhaitiez une connexion Wi-Fi à faible latence avec motion-aim et pavé tactile, ou la simplicité d'un appairage en manette Bluetooth classique, Dish vous couvre. Pas de configuration par jeu, pas d'abonnement mensuel, pas de publicité.
 
 
 DEUX MOYENS DE CONNEXION
 
 • Wi-Fi (avec Satellite, gratuit) : le chemin le plus rapide. Latence d'entrée la plus basse, mouvement (gyroscope) comme assistance à la visée et un pavé tactile cliquable pour les menus et le contrôle de la souris.
 
-• Bluetooth : appairez votre téléphone avec un PC, une console ou un boîtier TV comme manette Bluetooth classique. Aucun logiciel PC requis — fonctionne avec tout ce qui accepte une manette Bluetooth.
+• Bluetooth : appairez votre téléphone avec un PC, une console ou un boîtier TV comme manette Bluetooth classique. Fonctionne avec tout ce qui accepte une manette Bluetooth.
 
 
 UTILISEZ VOTRE PROPRE MANETTE
 
-Branchez une manette USB sur le port USB-C de votre téléphone pour zéro latence ajoutée, ou appairez une manette Bluetooth (Xbox, DualSense, 8BitDo et plus) directement à votre téléphone. Dish transmet chaque appui, axe et gâchette à votre PC.
+Branchez une manette USB sur le port USB de votre téléphone pour zéro latence ajoutée, ou appairez une manette Bluetooth (Xbox, DualSense, 8BitDo et plus) directement à votre téléphone. Dish transmet chaque appui, axe et gâchette à votre hôte.
 
 
 CONÇU POUR LE JEU
 
-• Pipeline d'entrée natif (C++/JNI), pour que vos entrées n'attendent pas derrière le travail d'UI
-• Flux Wi-Fi chiffré ChaCha20-Poly1305 sur UDP — rapide et authentifié
+• Chemin rapide optimisé pour une latence minimale
+• Flux Wi-Fi chiffré
 • Plusieurs satellites côte à côte : appairez plus d'un PC et routez entre eux par slot
 • Mouvement et pavé tactile présentés aux jeux comme un pad standard de style PlayStation
 • Vibration en jeu depuis l'hôte fait vibrer votre téléphone
 
 
-UNE CONFIDENTIALITÉ QUE VOUS POUVEZ AUDITER
-
-Dish est open source sous licence LGPL-3.0. Pas de publicité. Pas d'analyse. Nous n'envoyons aucune donnée à des serveurs TinkerNorth — parce que nous n'en avons pas. La seule destination réseau est le Satellite sur votre propre LAN. Le diagnostic des plantages (Firebase Crashlytics) est activé par défaut et peut être désactivé à tout moment dans les Paramètres.
-
-
 OBTENIR SATELLITE
 
-L'assistant gratuit Satellite est disponible pour Windows, macOS et Linux sur tinkernorth.com/satellite. Le mode Bluetooth-hôte fonctionne sans Satellite, mais la meilleure expérience passe par le chemin Wi-Fi.
+L'assistant gratuit Satellite est disponible pour Windows, macOS et Linux sur https://dish.tinkernorth.com/downloads/satellite. Le mode Bluetooth-hôte fonctionne sans Satellite, mais le chemin Wi-Fi offre la meilleure expérience.
 
 
 POUR LES BIDOUILLEURS
 
-Le code source, la politique de sécurité et la documentation du format filaire sont publics sur GitHub à github.com/TinkerNorth/dish-android. Tout le produit — client téléphone, serveur Satellite et variantes de plateforme — est construit en open source.
+Le code source, la politique de sécurité et la documentation du format filaire sont publics sur GitHub à github.com/TinkerNorth/dish-android. Client téléphone, serveur Satellite et variantes de plateforme.

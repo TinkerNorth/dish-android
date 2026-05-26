@@ -1,37 +1,32 @@
-Dish convierte tu teléfono Android en un gamepad inalámbrico para tu PC. Ya quieras una conexión Wi-Fi de baja latencia con motion-aim y touchpad, o la simplicidad de emparejar como un mando Bluetooth normal — Dish te cubre. Sin configuración por juego, sin suscripciones mensuales, sin anuncios.
+Dish convierte cualquier mando o teléfono Android en un gamepad inalámbrico de baja latencia. Ya quieras una conexión Wi-Fi de baja latencia con motion-aim y touchpad, o la simplicidad de emparejar como un mando Bluetooth normal, Dish te cubre. Sin configuración por juego, sin suscripciones mensuales, sin anuncios.
 
 
 DOS FORMAS DE CONECTAR
 
 • Wi-Fi (con Satellite, gratis): el camino más rápido. Latencia de entrada más baja, motion (giroscopio) como asistencia de puntería y un touchpad clicable para menús y control del ratón.
 
-• Bluetooth: empareja tu teléfono con un PC, consola o set-top box como un gamepad Bluetooth normal. No requiere software de PC — funciona con cualquier cosa que acepte un mando Bluetooth.
+• Bluetooth: empareja tu teléfono con un PC, consola o set-top box como un gamepad Bluetooth normal. Funciona con cualquier cosa que acepte un mando Bluetooth.
 
 
 USA TU PROPIO MANDO
 
-Conecta un gamepad USB en el puerto USB-C de tu teléfono para cero latencia añadida, o empareja un mando Bluetooth (Xbox, DualSense, 8BitDo y más) directamente con tu teléfono. Dish reenvía cada pulsación, eje y gatillo a tu PC.
+Conecta un gamepad USB en el puerto USB de tu teléfono para cero latencia añadida, o empareja un mando Bluetooth (Xbox, DualSense, 8BitDo y más) directamente con tu teléfono. Dish reenvía cada pulsación, eje y gatillo a tu host.
 
 
 DISEÑADO PARA JUGAR
 
-• Pipeline de entrada nativo (C++/JNI), para que tus entradas no queden detrás del trabajo de UI
-• Stream Wi-Fi cifrado con ChaCha20-Poly1305 sobre UDP — rápido y autenticado
+• Ruta optimizada para latencia mínima
+• Stream Wi-Fi cifrado
 • Múltiples satélites a la vez: empareja más de un PC y enruta entre ellos por slot
 • Motion y touchpad presentados a los juegos como un pad estándar estilo PlayStation
 • Rumble en juego desde el host hace vibrar tu teléfono
 
 
-PRIVACIDAD QUE PUEDES AUDITAR
-
-Dish es open source bajo la licencia LGPL-3.0. Sin anuncios. Sin análisis. No enviamos datos a servidores de TinkerNorth — porque no tenemos ninguno. El único destino de red es el Satellite en tu propia LAN. El diagnóstico de fallos (Firebase Crashlytics) está activado por defecto y puedes desactivarlo en cualquier momento desde Ajustes.
-
-
 OBTÉN SATELLITE
 
-El ayudante gratuito Satellite está disponible para Windows, macOS y Linux en tinkernorth.com/satellite. El modo Bluetooth-host funciona sin Satellite, pero la mejor experiencia es por la vía Wi-Fi.
+El ayudante gratuito Satellite está disponible para Windows, macOS y Linux en https://dish.tinkernorth.com/downloads/satellite. El modo Bluetooth-host funciona sin Satellite, pero la mejor experiencia es por la vía Wi-Fi.
 
 
 PARA EXPERIMENTADORES
 
-El código fuente, política de seguridad y documentación del formato de cable son públicos en GitHub en github.com/TinkerNorth/dish-android. Todo el producto — cliente de teléfono, servidor Satellite y variantes de plataforma — se construye en código abierto.
+El código fuente, política de seguridad y documentación del formato de cable son públicos en GitHub en github.com/TinkerNorth/dish-android. Cliente de teléfono, servidor Satellite y variantes de plataforma.

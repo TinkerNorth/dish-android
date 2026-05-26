@@ -13,7 +13,7 @@ play/
   CONTENT_RATING.md                  ← notes for the IARC content-rating questionnaire
   metadata/
     android/
-      en-US/                         ← English (US) — canonical listing locale
+      en-US/                         ← English (US), canonical listing locale
         title.txt
         short_description.txt
         full_description.txt
@@ -45,7 +45,7 @@ These have to be designed and exported separately. None of them exist yet:
 |---|---|
 | Store icon | 512×512 PNG, 32-bit, no alpha, ≤1 MB |
 | Feature graphic | 1024×500 PNG or JPG |
-| Phone screenshots | 2–8, 16:9 or 9:16, 320–3840 px short side |
+| Phone screenshots | 2 to 8, 16:9 or 9:16, 320 to 3840 px short side |
 | 7-inch tablet screenshots | 16:9 or 9:16, recommended for tablet surfacing |
 | 10-inch tablet screenshots | 16:9 or 9:16, recommended for foldable/ChromeOS surfacing |
 | Promo video | YouTube URL, ≤30s landscape, optional but expected at Editor's Choice tier |

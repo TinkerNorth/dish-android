@@ -1,37 +1,32 @@
-Dish pretvara vaš Android telefon u bežični gamepad za vaš PC. Bilo da želite Wi-Fi vezu niske latencije sa motion-aim-om i touchpadom, ili jednostavnost uparivanja kao običan Bluetooth kontroler — Dish to može. Bez podešavanja po igri, bez mjesečnih pretplata, bez reklama.
+Dish pretvara bilo koji kontroler ili Android telefon u bežični gamepad niske latencije. Bilo da želite Wi-Fi vezu niske latencije sa motion-aim-om i touchpadom, ili jednostavnost uparivanja kao običnog Bluetooth kontrolera, Dish to može. Bez podešavanja po igri, bez mjesečnih pretplata, bez reklama.
 
 
 DVA NAČINA POVEZIVANJA
 
 • Wi-Fi (sa Satellite-om, besplatno): najbrži put. Najniža latencija unosa, motion (žiroskop) za pomoć pri ciljanju i klikabilan touchpad za menije i kontrolu miša.
 
-• Bluetooth: uparite telefon sa PC-jem, konzolom ili set-top boxom kao običan Bluetooth gamepad. Nije potreban PC softver — radi sa svime što prihvata Bluetooth kontroler.
+• Bluetooth: uparite telefon sa PC-jem, konzolom ili set-top boxom kao običan Bluetooth gamepad. Radi sa svime što prihvata Bluetooth kontroler.
 
 
 KORISTITE VLASTITI KONTROLER
 
-Priključite USB gamepad u USB-C port telefona za nultu dodatnu latenciju, ili uparite Bluetooth kontroler (Xbox, DualSense, 8BitDo i druge) direktno sa telefonom. Dish prosljeđuje svaki pritisak, osu i okidač na vaš PC.
+Priključite USB gamepad u USB port telefona za nultu dodatnu latenciju, ili uparite Bluetooth kontroler (Xbox, DualSense, 8BitDo i druge) direktno sa telefonom. Dish prosljeđuje svaki pritisak, osu i okidač na vaš host.
 
 
 NAPRAVLJEN ZA IGRANJE
 
-• Nativni input pipeline (C++/JNI), tako da unosi ne čekaju iza UI posla
-• ChaCha20-Poly1305 enkriptovan Wi-Fi stream preko UDP-a — brz i autentificiran
+• Optimizovan brzi put za najnižu latenciju
+• Enkriptovan Wi-Fi stream
 • Više satelita istovremeno: uparite više PC-ja i preusmjerite između njih po slotu
 • Motion i touchpad predstavljeni igrama kao standardan PlayStation pad
 • In-game rumble sa hosta vibrira vaš telefon
 
 
-PRIVATNOST KOJU MOŽETE PROVJERITI
-
-Dish je open source pod LGPL-3.0 licencom. Bez reklama. Bez analitike. Ne šaljemo nikakve podatke na TinkerNorth servere — jer ih ne posjedujemo. Jedino mrežno odredište je Satellite na vašoj vlastitoj LAN-i. Dijagnostika padova (Firebase Crashlytics) je uključena prema zadanim postavkama i možete je isključiti u svakom trenutku iz Postavki.
-
-
 PREUZMITE SATELLITE
 
-Besplatni Satellite pomoćnik dostupan je za Windows, macOS i Linux na tinkernorth.com/satellite. Bluetooth-host režim radi bez Satellite-a, ali Wi-Fi put pruža najbolje iskustvo.
+Besplatni Satellite pomoćnik dostupan je za Windows, macOS i Linux na https://dish.tinkernorth.com/downloads/satellite. Bluetooth-host režim radi bez Satellite-a, ali Wi-Fi put pruža najbolje iskustvo.
 
 
 ZA ENTUZIJASTE
 
-Izvorni kod, sigurnosna politika i dokumentacija žičanog formata javni su na GitHub-u na github.com/TinkerNorth/dish-android. Cijeli proizvod — telefonski klijent, Satellite server i platformske varijante — gradi se u otvorenom kodu.
+Izvorni kod, sigurnosna politika i dokumentacija žičanog formata javni su na GitHub-u na github.com/TinkerNorth/dish-android. Telefonski klijent, Satellite server i platformske varijante.

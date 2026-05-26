@@ -4,7 +4,7 @@ Quick reference for filling out Play's IARC questionnaire. Dish is a utility-cla
 
 | Question category | Answer | Notes |
 |---|---|---|
-| Violence | NONE | Dish is a controller — what gets played through it is the host PC's content, not Dish's. |
+| Violence | NONE | Dish is a controller. What gets played through it is the host PC's content, not Dish's. |
 | Sexuality / nudity | NONE | |
 | Language / profanity | NONE | |
 | Controlled substances | NONE | |
