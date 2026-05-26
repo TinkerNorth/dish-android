@@ -2,8 +2,9 @@
 
 package com.tinkernorth.dish.ui.main
 
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionKind
@@ -12,7 +13,9 @@ import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.databinding.ActivityTouchpadOverlayBinding
 import com.tinkernorth.dish.ui.common.TouchpadPadCoordinator
 import com.tinkernorth.dish.ui.common.TouchpadSurfaceView
+import com.tinkernorth.dish.ui.common.paintConnectionMenuItem
 import com.tinkernorth.dish.ui.common.setupDishToolbar
+import com.tinkernorth.dish.ui.common.showConnectionDialog
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -25,6 +28,9 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
     private var slotId: String = VIRTUAL_SLOT_ID
 
     private val padCoordinator = TouchpadPadCoordinator<TouchpadSurfaceView>()
+
+    private var optionsMenu: Menu? = null
+    private var currentSummary: ConnectionSummary? = null
 
     override fun rootView(): View = binding.root
 
@@ -99,18 +105,25 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
         sendSatelliteTouchpadReport(state)
     }
 
-    override fun onConnectionSummaryChanged(summary: ConnectionSummary?) {
-        val connected = summary?.live == LinkState.Connected
-        binding.statusPillTouchpad.statusPillLabel.text =
-            when {
-                connected -> summary.label
-                summary?.live == LinkState.Connecting -> getString(R.string.chip_status_connecting)
-                summary == null -> getString(R.string.overlay_status_unknown)
-                else -> getString(R.string.overlay_status_not_connected)
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.menu_touchpad_overlay, menu)
+        optionsMenu = menu
+        paintConnectionMenuItem(menu.findItem(R.id.action_connection_info), currentSummary)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean =
+        when (item.itemId) {
+            R.id.action_connection_info -> {
+                showConnectionDialog(currentSummary)
+                true
             }
-        (binding.statusPillTouchpad.statusPillDot.background as? GradientDrawable)?.setColor(
-            getColor(if (connected) R.color.colorSuccess else R.color.colorMuted),
-        )
+            else -> super.onOptionsItemSelected(item)
+        }
+
+    override fun onConnectionSummaryChanged(summary: ConnectionSummary?) {
+        currentSummary = summary
+        paintConnectionMenuItem(optionsMenu?.findItem(R.id.action_connection_info), summary)
     }
 
     // Resolves connection by id each call so reconnects after alive-poll death pick up new session handle.

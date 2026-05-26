@@ -55,7 +55,6 @@
     <!-- ============================================================
          ICON SIZES (in-layout — vector drawable canvases stay literal)
          ============================================================ -->
-    <dimen name="icon_dot">@dimen/size_6</dimen>           <!-- overlay status indicator -->
     <dimen name="icon_dot_lg">@dimen/size_8</dimen>        <!-- slot-card status indicator -->
     <dimen name="icon_battery">@dimen/size_20</dimen>      <!-- battery glyph in slot card -->
     <dimen name="icon_picker_glyph">@dimen/size_22</dimen> <!-- glyph in expanded picker row -->
@@ -125,9 +124,14 @@
     <dimen name="chip_min_height">@dimen/size_24</dimen>
 
     <!-- ============================================================
-         DIALOG / OVERLAY
+         ADAPTIVE / LARGE SCREEN
+
+         Caps the Settings card column on tablets so cards don't stretch
+         full-bleed across a wide screen. Width matches the sw600dp
+         minimum so the inner column never overflows the screen on any
+         qualifying device.
          ============================================================ -->
-    <dimen name="dialog_inline_max_width">@dimen/size_280</dimen>  <!-- gamepad overlay error banner -->
+    <dimen name="settings_content_max_width">@dimen/size_600</dimen>
 
     <!-- ============================================================
          NOTIFICATION SNACKBAR (DishNotifications)

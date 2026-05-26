@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/action_motion_info"
+        android:icon="@drawable/ic_overlay_motion"
+        android:title="@string/overlay_action_motion"
+        app:showAsAction="always" />
+    <item
+        android:id="@+id/action_connection_info"
+        android:icon="@drawable/ic_overlay_link"
+        android:title="@string/overlay_action_connection"
+        app:showAsAction="always" />
+</menu>

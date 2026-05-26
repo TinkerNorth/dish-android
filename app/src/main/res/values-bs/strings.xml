@@ -35,6 +35,7 @@
     <string name="action_repair_short">Ponovo upari</string>
     <string name="action_forget_short">Zaboravi</string>
     <string name="action_cancel">Otkaži</string>
+    <string name="action_close">Zatvori</string>
     <string name="bt_row_pair_from_host">Upari sa hosta</string>
     <string name="bt_row_acquiring">Preuzimanje…</string>
     <string name="bt_row_waiting">Čekanje…</string>
@@ -108,9 +109,14 @@
     <string name="chip_status_unstable">Nestabilan</string>
 
     <!-- Sloj kontrolera (activity_gamepad_overlay.xml + GamepadOverlayActivity). -->
-    <string name="overlay_status_streaming">Striming u toku</string>
     <string name="overlay_status_unknown">Nepoznata veza</string>
     <string name="overlay_status_not_connected">Nije povezan</string>
+    <string name="overlay_action_connection">Status veze</string>
+    <string name="overlay_action_motion">Status pokreta</string>
+    <string name="overlay_dialog_connection_title">Veza</string>
+    <string name="overlay_dialog_motion_title">Pokret</string>
+    <string name="overlay_connection_kind_satellite">Satelit</string>
+    <string name="overlay_connection_kind_bluetooth">Bluetooth</string>
     <string name="overlay_title_gamepad">Gamepad</string>
     <string name="overlay_title_touchpad">Dodirna ploča</string>
     <string name="touchpad_pad_click_label">Klik + Pomak</string>

@@ -9,6 +9,8 @@ import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import androidx.core.content.ContextCompat
+import com.tinkernorth.dish.R
 import kotlin.math.roundToInt
 
 class TouchpadSurfaceView
@@ -80,7 +82,7 @@ class TouchpadSurfaceView
 
         private val bgPaint =
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.argb(40, 0xFF, 0xFF, 0xFF)
+                color = ContextCompat.getColor(context, R.color.colorSurfaceDim)
                 style = Paint.Style.FILL
             }
         private val outlinePaint =
@@ -96,13 +98,13 @@ class TouchpadSurfaceView
             }
         private val labelPaint =
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.argb(220, 0xFF, 0xFF, 0xFF)
+                color = ContextCompat.getColor(context, R.color.colorOnSurface)
                 textSize = 56f
                 textAlign = Paint.Align.CENTER
             }
         private val hintPaint =
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.argb(140, 0xFF, 0xFF, 0xFF)
+                color = ContextCompat.getColor(context, R.color.colorOnSurfaceVariant)
                 textSize = 28f
                 textAlign = Paint.Align.CENTER
             }

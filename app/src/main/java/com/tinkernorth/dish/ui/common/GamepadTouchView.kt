@@ -201,49 +201,63 @@ class GamepadTouchView
             }
         }
 
+        // D-pad, center, shoulder, and trigger glyphs ship with hardcoded white fills (designed for
+        // the dark surface); tinting them to colorOnSurface inverts them on the light theme so
+        // they don't disappear into the near-white background. Face buttons are brand-coloured
+        // and intentionally skip the tint.
         @Suppress("CyclomaticComplexMethod")
         private fun loadDrawables() {
             val c = context
+            val tint = ContextCompat.getColor(c, R.color.colorOnSurface)
             if (usePlayStation) {
                 icBtnA = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_cross)
                 icBtnB = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_circle)
                 icBtnX = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_square)
                 icBtnY = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_triangle)
-                icDpad = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_dpad)
+                icDpad = loadTinted(c, R.drawable.ic_gp_ps_dpad, tint)
                 icDpadUp = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_dpad_up)
                 icDpadDown = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_dpad_down)
                 icDpadLeft = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_dpad_left)
                 icDpadRight = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_dpad_right)
-                icLB = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_l1)
-                icRB = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_r1)
-                icLT = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_l2)
-                icRT = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_r2)
+                icLB = loadTinted(c, R.drawable.ic_gp_ps_l1, tint)
+                icRB = loadTinted(c, R.drawable.ic_gp_ps_r1, tint)
+                icLT = loadTinted(c, R.drawable.ic_gp_ps_l2, tint)
+                icRT = loadTinted(c, R.drawable.ic_gp_ps_r2, tint)
                 icStickL = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_stick_l)
                 icStickR = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_stick_r)
-                icSelect = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_analog)
-                icStart = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_analog)
-                icHome = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_analog)
+                icSelect = loadTinted(c, R.drawable.ic_gp_ps_share, tint)
+                icStart = loadTinted(c, R.drawable.ic_gp_ps_options, tint)
+                icHome = loadTinted(c, R.drawable.ic_gp_ps_logo, tint)
             } else {
                 icBtnA = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_a)
                 icBtnB = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_b)
                 icBtnX = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_x)
                 icBtnY = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_y)
-                icDpad = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_dpad)
+                icDpad = loadTinted(c, R.drawable.ic_gp_xbox_dpad, tint)
                 icDpadUp = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_dpad_up)
                 icDpadDown = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_dpad_down)
                 icDpadLeft = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_dpad_left)
                 icDpadRight = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_dpad_right)
-                icLB = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_lb)
-                icRB = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_rb)
-                icLT = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_lt)
-                icRT = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_rt)
+                icLB = loadTinted(c, R.drawable.ic_gp_xbox_lb, tint)
+                icRB = loadTinted(c, R.drawable.ic_gp_xbox_rb, tint)
+                icLT = loadTinted(c, R.drawable.ic_gp_xbox_lt, tint)
+                icRT = loadTinted(c, R.drawable.ic_gp_xbox_rt, tint)
                 icStickL = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_stick_l)
                 icStickR = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_stick_r)
-                icSelect = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_view)
-                icStart = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_menu)
-                icHome = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_guide)
+                icSelect = loadTinted(c, R.drawable.ic_gp_xbox_view, tint)
+                icStart = loadTinted(c, R.drawable.ic_gp_xbox_menu, tint)
+                icHome = loadTinted(c, R.drawable.ic_gp_xbox_guide, tint)
             }
         }
+
+        // mutate() is required because vector drawables share a ConstantState across
+        // ContextCompat.getDrawable() calls — without it, tinting one instance would leak into
+        // every other use of the same resource (e.g. the same analog glyph shown three times).
+        private fun loadTinted(
+            c: Context,
+            id: Int,
+            tint: Int,
+        ): Drawable? = ContextCompat.getDrawable(c, id)?.mutate()?.apply { setTint(tint) }
 
         override fun onSizeChanged(
             w: Int,

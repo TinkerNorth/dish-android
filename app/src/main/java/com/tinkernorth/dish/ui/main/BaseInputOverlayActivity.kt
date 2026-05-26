@@ -28,6 +28,9 @@ import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.notification.DishNotifications
+import com.tinkernorth.dish.ui.common.FoldAwareSession
+import com.tinkernorth.dish.ui.common.Posture
+import com.tinkernorth.dish.ui.common.hingeInsetsFor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -90,6 +93,8 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
         }
 
         connectionId = intent.getStringExtra(EXTRA_CONNECTION_ID).orEmpty()
+
+        installFoldAwareness()
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -166,6 +171,37 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
             @Suppress("DEPRECATION")
             windowManager.defaultDisplay?.rotation ?: Surface.ROTATION_0
         }
+
+    // Content frame may not exist on every overlay layout (the base class can host arbitrary
+    // subclasses); skipping silently is the right default rather than forcing every overlay to
+    // declare a hinge target.
+    private fun installFoldAwareness() {
+        val content = rootView().findViewById<View>(R.id.overlayContentFrame) ?: return
+        val origTop = content.paddingTop
+        val session = FoldAwareSession(this, this)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                session.posture.collect { posture ->
+                    applyPostureToContent(content, posture, origTop)
+                }
+            }
+        }
+    }
+
+    private fun applyPostureToContent(
+        content: View,
+        posture: Posture,
+        origTop: Int,
+    ) {
+        // Hinge bounds are in window coordinates and only become meaningful once the view is laid
+        // out, so defer to the next layout pass when the call lands before first measure.
+        if (!content.isLaidOut) {
+            content.post { applyPostureToContent(content, posture, origTop) }
+            return
+        }
+        val insets = posture.hingeInsetsFor(content)
+        content.updatePadding(top = origTop + insets.top)
+    }
 
     private fun hideSystemBars() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
