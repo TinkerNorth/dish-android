@@ -267,5 +267,8 @@
     <string name="settings_appearance_dark">Sombre</string>
     <string name="settings_crash_reporting_title">Partager les rapports de plantage</string>
     <string name="settings_crash_reporting_body">Partagez avec TinkerNorth des journaux de plantage anonymisés et des traces de pile pour aider à corriger les bugs. Aucune partie ni entrée de manette n\'est incluse.</string>
+    <string name="settings_open_source_licenses_title">Licences open source</string>
+    <string name="settings_open_source_licenses_body">Mentions pour les bibliothèques sur lesquelles Dish s\'appuie.</string>
+    <string name="licenses_open_external">Ouvrir la licence de %1$s</string>
     <string name="settings_version_label">VERSION</string>
 </resources>
