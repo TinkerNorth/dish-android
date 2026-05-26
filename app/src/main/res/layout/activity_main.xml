@@ -48,13 +48,20 @@
                     android:scaleType="fitCenter" />
             </LinearLayout>
 
+            <include
+                android:id="@+id/sectionConnections"
+                layout="@layout/section_header"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/section_header_gap_above"
+                android:layout_marginBottom="@dimen/section_header_gap_below" />
+
             <!-- Connections summary card -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/cardConnections"
                 style="@style/Widget.Dish.Card"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_xl">
+                android:layout_height="wrap_content">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -63,26 +70,21 @@
                     android:gravity="center_vertical"
                     android:padding="@dimen/card_padding">
 
-                    <LinearLayout
+                    <ImageView
+                        android:layout_width="@dimen/icon_controller"
+                        android:layout_height="@dimen/icon_controller"
+                        android:src="@drawable/ic_overlay_link"
+                        android:importantForAccessibility="no"
+                        app:tint="@color/colorPrimary" />
+
+                    <TextView
+                        android:id="@+id/tvConnectionsSummary"
+                        style="@style/TextAppearance.Dish.BodyLarge.Bold"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            style="@style/TextAppearance.Dish.Label.Accent"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/section_connections" />
-
-                        <TextView
-                            android:id="@+id/tvConnectionsSummary"
-                            style="@style/TextAppearance.Dish.BodyLarge.Bold"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/dashboard_connections_empty"
-                            android:layout_marginTop="@dimen/size_2" />
-                    </LinearLayout>
+                        android:layout_marginStart="@dimen/spacing_2xl"
+                        android:text="@string/dashboard_connections_empty" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnManageConnections"

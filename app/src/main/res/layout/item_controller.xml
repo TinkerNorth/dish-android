@@ -48,6 +48,20 @@
                     android:layout_height="wrap_content" />
             </LinearLayout>
 
+            <ImageView
+                android:id="@+id/ivOpenGamepadQuick"
+                android:layout_width="@dimen/icon_action"
+                android:layout_height="@dimen/icon_action"
+                android:layout_marginEnd="@dimen/spacing_sm"
+                android:padding="@dimen/size_2"
+                android:src="@drawable/ic_open_gamepad"
+                android:contentDescription="@string/desc_open_gamepad"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true"
+                android:visibility="gone"
+                app:tint="@color/colorPrimary" />
+
             <!-- ── Battery indicator (Task 1.2): icon + percentage ──
                  Collapsed to a single TextView with a leading compound
                  drawable (perf: avoids an ImageView+LinearLayout in a
@@ -84,19 +98,6 @@
                 android:id="@+id/dotStatus"
                 style="@style/Widget.Dish.StatusDot.Large"
                 android:layout_marginEnd="@dimen/spacing_xl" />
-
-            <ImageView
-                android:id="@+id/ivOpenGamepadQuick"
-                android:layout_width="@dimen/icon_action"
-                android:layout_height="@dimen/icon_action"
-                android:padding="@dimen/size_2"
-                android:src="@drawable/ic_open_gamepad"
-                android:contentDescription="@string/desc_open_gamepad"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:clickable="true"
-                android:focusable="true"
-                android:visibility="gone"
-                app:tint="@color/colorPrimary" />
 
             <ImageView
                 android:id="@+id/ivChevron"

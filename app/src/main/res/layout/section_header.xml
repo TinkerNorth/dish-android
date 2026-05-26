@@ -2,8 +2,9 @@
 <!--
     SECTION HEADER — icon + label + optional trailing button.
 
-    Single canonical layout for every section header in the app. Five
+    Single canonical layout for every section header in the app. Six
     callsites:
+      - Dashboard CONNECTIONS eyebrow      (label only)
       - Dashboard CONTROLLERS eyebrow      (label only)
       - Connections SATELLITES with scan   (icon + label + button)
       - Connections BLUETOOTH with add     (icon + label + button)

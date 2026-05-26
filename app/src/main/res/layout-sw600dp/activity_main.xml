@@ -67,42 +67,64 @@
                     app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
             </LinearLayout>
 
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/cardConnections"
-                style="@style/Widget.Dish.Card"
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1">
+                android:layout_weight="1"
+                android:orientation="vertical">
 
-                <LinearLayout
+                <include
+                    android:id="@+id/sectionConnections"
+                    layout="@layout/section_header"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="@dimen/card_padding">
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
 
-                    <TextView
-                        style="@style/TextAppearance.Dish.Label.Accent"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/section_connections" />
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardConnections"
+                    style="@style/Widget.Dish.Card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
 
-                    <TextView
-                        android:id="@+id/tvConnectionsSummary"
-                        style="@style/TextAppearance.Dish.BodyLarge.Bold"
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="@string/dashboard_connections_empty"
-                        android:layout_marginTop="@dimen/size_2" />
+                        android:orientation="vertical"
+                        android:padding="@dimen/card_padding">
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnManageConnections"
-                        style="@style/Widget.Dish.Button.Outlined"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/spacing_xl"
-                        android:text="@string/action_manage" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <ImageView
+                                android:layout_width="@dimen/icon_controller"
+                                android:layout_height="@dimen/icon_controller"
+                                android:src="@drawable/ic_overlay_link"
+                                android:importantForAccessibility="no"
+                                app:tint="@color/colorPrimary" />
+
+                            <TextView
+                                android:id="@+id/tvConnectionsSummary"
+                                style="@style/TextAppearance.Dish.BodyLarge.Bold"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginStart="@dimen/spacing_2xl"
+                                android:text="@string/dashboard_connections_empty" />
+                        </LinearLayout>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnManageConnections"
+                            style="@style/Widget.Dish.Button.Outlined"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/spacing_xl"
+                            android:text="@string/action_manage" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 
