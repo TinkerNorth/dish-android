@@ -48,6 +48,7 @@ class GamepadActivityHost(
                         flLowPowerOverlay = bindings.flLowPowerOverlay,
                         tvLowPowerTime = bindings.tvLowPowerTime,
                         tvLowPowerStatus = bindings.tvLowPowerStatus,
+                        llStreamingHint = bindings.llStreamingHint,
                     )
                 activeControllerCount = { wakeState.streamingSlotCount.value }
             }

@@ -297,6 +297,8 @@
         <item quantity="one">Bound · %1$d controller</item>
         <item quantity="other">Bound · %1$d controllers</item>
     </plurals>
+    <string name="low_power_streaming_hint">STREAMING · KEEP APP OPEN</string>
+    <string name="low_power_dim_body">Streaming continues while dimmed — don\'t close Dish.</string>
 
     <!-- Numeric placeholders rendered before the runtime value lands. Kept as
          resources (translatable=false) so layout previews and lint pass, but

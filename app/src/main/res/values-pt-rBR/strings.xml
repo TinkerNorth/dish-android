@@ -248,6 +248,8 @@
         <item quantity="many">Vinculados · %1$d controles</item>
         <item quantity="other">Vinculados · %1$d controles</item>
     </plurals>
+    <string name="low_power_streaming_hint">TRANSMITINDO · MANTENHA O APP ABERTO</string>
+    <string name="low_power_dim_body">A transmissão continua com a tela esmaecida — não feche o Dish.</string>
 
     <!-- Link da Política de Privacidade (em Configurações) e mensagem de erro compartilhada. -->
     <string name="menu_privacy_policy">Política de privacidade</string>

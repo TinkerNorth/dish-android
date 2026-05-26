@@ -26,6 +26,7 @@ import org.junit.Test
 class LowPowerManagerTest {
     private lateinit var window: Window
     private lateinit var statusView: TextView
+    private lateinit var streamingHint: LinearLayout
     private lateinit var lpm: LowPowerManager
 
     @Before
@@ -55,6 +56,7 @@ class LowPowerManagerTest {
         val countdownSeconds = mockk<TextView>(relaxed = true)
         val overlay = mockk<FrameLayout>(relaxed = true)
         val timeView = mockk<TextView>(relaxed = true)
+        streamingHint = mockk(relaxed = true)
 
         lpm = LowPowerManager(window)
         lpm.views =
@@ -64,6 +66,7 @@ class LowPowerManagerTest {
                 flLowPowerOverlay = overlay,
                 tvLowPowerTime = timeView,
                 tvLowPowerStatus = statusView,
+                llStreamingHint = streamingHint,
             )
     }
 
@@ -230,5 +233,55 @@ class LowPowerManagerTest {
 
         assertEquals(LowPowerManager.State.IDLE, lpm.state.value)
         verify { inactivityHandler.postDelayed(any(), 15_000L) }
+    }
+
+    @Test
+    fun `streaming hint shows when wake state goes active while idle`() {
+        val inactivityHandler = mockk<Handler>(relaxed = true)
+        setPrivateField("inactivityHandler", inactivityHandler)
+
+        lpm.onLockStateChanged(active = true)
+
+        verify { streamingHint.visibility = View.VISIBLE }
+    }
+
+    @Test
+    fun `streaming hint hides when wake state clears`() {
+        val inactivityHandler = mockk<Handler>(relaxed = true)
+        setPrivateField("inactivityHandler", inactivityHandler)
+        lpm.onLockStateChanged(active = true)
+
+        lpm.onLockStateChanged(active = false)
+
+        val captured = mutableListOf<Int>()
+        verify(atLeast = 1) { streamingHint.visibility = capture(captured) }
+        assertEquals(View.GONE, captured.last())
+    }
+
+    @Test
+    fun `streaming hint stays hidden while countdown banner is showing`() {
+        val inactivityHandler = mockk<Handler>(relaxed = true)
+        setPrivateField("inactivityHandler", inactivityHandler)
+        setStateDirect(LowPowerManager.State.COUNTDOWN)
+
+        lpm.onLockStateChanged(active = true)
+
+        verify { streamingHint.visibility = View.GONE }
+    }
+
+    @Test
+    fun `streaming hint reappears after user wakes from dim while still streaming`() {
+        val inactivityHandler = mockk<Handler>(relaxed = true)
+        val clockHandler = mockk<Handler>(relaxed = true)
+        setPrivateField("inactivityHandler", inactivityHandler)
+        setPrivateField("clockHandler", clockHandler)
+        lpm.onLockStateChanged(active = true)
+        setStateDirect(LowPowerManager.State.ACTIVE)
+
+        lpm.onUserInteraction()
+
+        val captured = mutableListOf<Int>()
+        verify(atLeast = 1) { streamingHint.visibility = capture(captured) }
+        assertEquals(View.VISIBLE, captured.last())
     }
 }
