@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/cardWizardOptionRoot"
+    style="@style/Widget.Dish.Card"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="@dimen/card_margin_bottom"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground">
+
+    <LinearLayout
+        style="@style/Widget.Dish.Card.RowContainer"
+        android:gravity="top">
+
+        <FrameLayout
+            android:layout_width="@dimen/icon_card_container"
+            android:layout_height="@dimen/icon_card_container"
+            android:background="@drawable/bg_icon_container">
+
+            <ImageView
+                android:id="@+id/optionIcon"
+                style="@style/Widget.Dish.Icon.Card"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                tools:src="@drawable/ic_wifi" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="@dimen/spacing_2xl"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/optionTitle"
+                    style="@style/TextAppearance.Dish.Title"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    tools:text="Wi-Fi to Satellite" />
+
+                <TextView
+                    android:id="@+id/optionRecommendedPill"
+                    style="@style/TextAppearance.Dish.Caption"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/spacing_md"
+                    android:background="@drawable/bg_recommended_pill"
+                    android:paddingHorizontal="@dimen/spacing_md"
+                    android:paddingVertical="@dimen/recommended_pill_vertical_padding"
+                    android:textColor="@color/colorOnPrimary"
+                    android:textAllCaps="true"
+                    android:visibility="gone"
+                    tools:text="RECOMMENDED"
+                    tools:visibility="visible" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/optionBody"
+                style="@style/TextAppearance.Dish.Body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xs"
+                tools:text="Phone and PC on the same Wi-Fi. Lowest latency, full feature set." />
+        </LinearLayout>
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="welcome_skip">Überspringen</string>
+    <string name="welcome_back">Zurück</string>
+    <string name="welcome_next">Weiter</string>
+    <string name="welcome_get_started">Loslegen</string>
+
+    <string name="welcome_step1_eyebrow">WILLKOMMEN</string>
+    <string name="welcome_step1_title">Dein Handy, dein Gamepad</string>
+    <string name="welcome_step1_body">Dish macht dein Handy zum kabellosen Controller für deinen PC. Es funktioniert eigenständig als Touch-Gamepad oder als kabellose Brücke für einen Controller, den du bereits besitzt.</string>
+
+    <string name="welcome_step2_eyebrow">SO FUNKTIONIERT\'S</string>
+    <string name="welcome_step2_title">Ein kurzer Sprung über WLAN</string>
+    <string name="welcome_step2_body">Dein Handy sendet Tastendrücke, Sticks und Bewegung an einen kleinen kostenlosen Helfer namens Satellite, der auf deinem PC läuft. Satellite erscheint deinen Spielen als regulärer Gamepad — keine zusätzliche Konfiguration pro Spiel.</string>
+
+    <string name="welcome_step3_eyebrow">NOCH EINE SACHE</string>
+    <string name="welcome_step3_title">Satellite auf dem PC installieren</string>
+    <string name="welcome_step3_body">Satellite ist kostenlos und Open Source. Hol es dir von tinkernorth.com/satellite, führe das Installationsprogramm aus, und Dish findet es automatisch. Du kannst diese Einführung jetzt beenden und Satellite später installieren.</string>
+    <string name="welcome_step3_satellite_link_label">Download-Seite öffnen</string>
+
+    <string name="welcome_step4_eyebrow">FERTIG</string>
+    <string name="welcome_step4_title">Bereit, wenn du es bist</string>
+    <string name="welcome_step4_body">Tippe Loslegen, um zu starten. Öffne den Einrichtungsassistenten jederzeit über Einstellungen, wenn du eine Anleitung möchtest — oder leg direkt los und koppele mit einem Satellite in deinem Netzwerk.</string>
+    <string name="welcome_step4_launch_wizard">Einrichtungsassistent öffnen</string>
+
+    <string name="welcome_step1_hero_desc">Dish-App-Logo</string>
+    <string name="welcome_step2_hero_desc">Handy, das ein Funksignal sendet</string>
+    <string name="welcome_step3_hero_desc">Desktop-Monitor mit laufendem Satellite</string>
+    <string name="welcome_step4_hero_desc">Einrichtung abgeschlossen</string>
+
+    <string name="welcome_step_indicator_desc">Schritt %1$d von %2$d</string>
+
+    <string name="wizard_title">Einrichtungsassistent</string>
+    <string name="wizard_step_progress">Schritt %1$d von %2$d</string>
+    <string name="wizard_action_back">Zurück</string>
+    <string name="wizard_action_next">Weiter</string>
+    <string name="wizard_action_finish">Fertigstellen</string>
+    <string name="wizard_recommended_label">Empfohlen</string>
+
+    <string name="wizard_step1_eyebrow">SCHRITT 1 · VERBINDUNG</string>
+    <string name="wizard_step1_title">Wie erreichst du deinen PC?</string>
+    <string name="wizard_step1_body">Zwei Wege, deine Eingaben an einen PC zu senden. WLAN hat die geringste Latenz und schaltet Bewegung und Touchpad frei. Bluetooth behandelt dieses Handy als regulären kabellosen Gamepad — funktioniert ohne Satellite, aber mit etwas mehr Latenz.</string>
+
+    <string name="wizard_option_lan_title">WLAN zu Satellite</string>
+    <string name="wizard_option_lan_body">Handy und PC im selben WLAN. Geringste Latenz, voller Funktionsumfang (Bewegung, Touchpad, Vibration).</string>
+    <string name="wizard_option_lan_pill_recommended">Empfohlen</string>
+
+    <string name="wizard_option_bt_title">Bluetooth-Gamepad</string>
+    <string name="wizard_option_bt_body">Koppele dein Handy mit deinem PC oder deiner Konsole als regulären Bluetooth-Controller. Funktioniert ohne Satellite. Bewegung und Touchpad sind auf diesem Weg nicht verfügbar.</string>
+
+    <string name="wizard_step2_eyebrow">SCHRITT 2 · CONTROLLER</string>
+    <string name="wizard_step2_title">Womit spielst du?</string>
+    <string name="wizard_step2_body">Du kannst mit dem Bildschirm-Pad spielen oder einen echten Controller anschließen für richtige Sticks und Trigger. Ein USB-Controller im Handy hat die geringste Eingabelatenz — kein Bluetooth im Pfad.</string>
+
+    <string name="wizard_option_virtual_title">Bildschirm-Gamepad</string>
+    <string name="wizard_option_virtual_body">Tippe die Tasten auf dem Handy-Bildschirm. Ideal für gemütliche Spiele und zum Ausprobieren — das Gyroskop deines Handys ist für Zielhilfe verfügbar.</string>
+
+    <string name="wizard_option_usb_title">USB-Controller am Handy</string>
+    <string name="wizard_option_usb_body">Schließe einen kabelgebundenen Xbox-/PlayStation-/generischen Gamepad an den USB-C-Anschluss deines Handys an. Das Handy leitet jeden Tastendruck an deinen PC weiter.</string>
+    <string name="wizard_option_usb_pill_recommended">Geringste Latenz</string>
+
+    <string name="wizard_option_phys_bt_title">Bluetooth-Controller am Handy gekoppelt</string>
+    <string name="wizard_option_phys_bt_body">Nutze einen Controller, den du bereits mit deinem Handy gekoppelt hast (Xbox Wireless, DualSense usw.). Ein Bluetooth-Sprung statt zwei, verglichen mit dem direkten Koppeln des Controllers an deinen PC.</string>
+
+    <string name="wizard_step3_eyebrow">SCHRITT 3 · LOS GEHT\'S</string>
+    <string name="wizard_step3_title">Das machen wir</string>
+
+    <string name="wizard_summary_connection_label">Verbindung</string>
+    <string name="wizard_summary_controller_label">Controller</string>
+
+    <string name="wizard_next_lan_virtual">Tippe Fertigstellen, um Verbindungen zu öffnen. Such nach deinem Satellite, koppele es mit der 4-stelligen PIN, dann öffne das Bildschirm-Gamepad.</string>
+    <string name="wizard_next_lan_usb">Tippe Fertigstellen, um Verbindungen zu öffnen. Koppele dein Satellite mit der 4-stelligen PIN, dann schließe deinen USB-Controller an das Handy an — er erscheint als neuer Slot, bereit zum Binden.</string>
+    <string name="wizard_next_lan_phys_bt">Tippe Fertigstellen, um Verbindungen zu öffnen. Koppele dein Satellite mit der 4-stelligen PIN. Dein bereits gekoppelter Bluetooth-Controller erscheint als Slot, den du an das Satellite binden kannst.</string>
+    <string name="wizard_next_bt_virtual">Tippe Fertigstellen, um Verbindungen zu öffnen. Füge einen Bluetooth-Host hinzu, akzeptiere die Kopplung auf deinem PC, dann öffne das Bildschirm-Gamepad.</string>
+    <string name="wizard_next_bt_usb">Hinweis — der Bluetooth-Host-Modus sendet den Controller-Zustand des Handys, nicht einen separaten USB-Pad. Nutze das Bildschirm-Gamepad auf diesem Weg, oder wechsle im vorigen Schritt zur WLAN-Verbindung.</string>
+    <string name="wizard_next_bt_phys_bt">Hinweis — der Bluetooth-Host-Modus sendet den Controller-Zustand des Handys, nicht den deines bereits gekoppelten Bluetooth-Gamepads. Nutze das Bildschirm-Gamepad auf diesem Weg, oder wechsle im vorigen Schritt zur WLAN-Verbindung.</string>
+
+    <string name="wizard_finish_review">Zurück</string>
+
+    <string name="help_title">Hilfe &amp; FAQ</string>
+
+    <string name="help_section_concepts">KONZEPTE</string>
+    <string name="help_section_performance">BESTE LEISTUNG</string>
+    <string name="help_section_troubleshooting">FEHLERBEHEBUNG</string>
+    <string name="help_section_about">ÜBER DISH</string>
+
+    <string name="help_run_setup_title">Setup-Anleitung öffnen</string>
+    <string name="help_run_setup_body">Öffne den Einrichtungsassistenten. Wählt deine Verbindung und deinen Controller, dann führt dich zur richtigen Stelle.</string>
+
+    <string name="help_q_what_is_dish">Was ist Dish?</string>
+    <string name="help_a_what_is_dish">Dish macht dein Handy zum kabellosen Gamepad. Es kann Eingaben über WLAN an einen PC senden (mit dem kostenlosen Satellite-Helfer) oder sich an einen PC / eine Konsole als regulärer Bluetooth-Gamepad koppeln.</string>
+
+    <string name="help_q_what_is_satellite">Was ist Satellite?</string>
+    <string name="help_a_what_is_satellite">Satellite ist ein kleines, kostenloses, quelloffenes Programm, das auf deinem PC läuft. Es empfängt Eingaben von Dish über WLAN und erscheint deinen Spielen als regulärer Controller. Ohne Satellite können Spiele dein Handy nicht sehen — installiere es von tinkernorth.com/satellite.</string>
+
+    <string name="help_q_lan_vs_bluetooth">WLAN oder Bluetooth — was soll ich wählen?</string>
+    <string name="help_a_lan_vs_bluetooth">WLAN mit Satellite ist für fast jeden der bessere Weg. Niedrigere Latenz, unterstützt Bewegung (Gyro-Zielen) und schaltet das Touchpad frei. Der Bluetooth-Host-Modus ist die richtige Wahl, wenn du nichts auf dem PC installieren willst oder eine Konsole / Set-Top-Box nutzt, die Satellite nicht ausführt.</string>
+
+    <string name="help_q_controller_modes">Kann ich einen echten Controller mit Dish nutzen?</string>
+    <string name="help_a_controller_modes">Ja. Schließe einen USB-Controller an den USB-C-Anschluss deines Handys an oder koppele einen Bluetooth-Controller (Xbox Wireless, DualSense, 8BitDo usw.) direkt mit deinem Handy. Der Controller erscheint als neuer Slot, den du an dein Satellite binden kannst.</string>
+
+    <string name="help_q_motion_touchpad">Was ist Bewegung und was ist das Touchpad?</string>
+    <string name="help_a_motion_touchpad">Bewegung ist das Gyroskop deines Handys, das als Zielhilfe verwendet wird — es erscheint Spielen als das Gyroskop eines PlayStation-Pads. Das Touchpad verwandelt den Handy-Bildschirm in ein klickbares Trackpad für Menüs oder als Maus. Beide benötigen eine WLAN-Verbindung (Satellite) — der Bluetooth-Host-Modus kann sie nicht übertragen.</string>
+
+    <string name="help_q_best_setup">Was ist die beste Einrichtung für geringe Latenz?</string>
+    <string name="help_a_best_setup">USB-Controller im Handy, Handy im 5-GHz-WLAN, PC am selben Router (am besten per Ethernet). USB-zum-Handy hat keine zusätzliche Latenz; WLAN fügt einen kurzen Sprung hinzu. Vermeide 2,4-GHz-WLAN und mobile Daten — Dish benötigt Handy und PC im selben lokalen Netzwerk.</string>
+
+    <string name="help_q_why_lan_lower">Warum hat WLAN eine geringere Latenz als Bluetooth?</string>
+    <string name="help_a_why_lan_lower">WLAN sendet Eingaben als kleine UDP-Pakete im Takt deines Handys — meist schneller, als Bluetooth es kann. Bluetooth HID hat ein festes Polling-Intervall und eine längere Pipeline und sitzt damit mit einer kleinen, aber realen Verzögerung zwischen dir und dem Spiel.</string>
+
+    <string name="help_q_wired_better">Ist kabelgebunden besser als kabellos?</string>
+    <string name="help_a_wired_better">Für die Strecke vom Controller zum Handy: ja, USB schlägt Bluetooth-am-Handy-gekoppelt. Für die Strecke vom Handy zum PC: WLAN ist die einzige Option — du kannst den USB deines Handys nicht an deinen PC für die Eingabeweiterleitung anschließen. Schließe deinen PC nach Möglichkeit per Ethernet an den Router an; das Handy bleibt im WLAN.</string>
+
+    <string name="help_q_no_satellites">Dish findet keine Satellites — was nun?</string>
+    <string name="help_a_no_satellites">Prüfe, ob Satellite auf dem PC läuft (das Tray-Symbol sollte sichtbar sein). Bestätige, dass Handy und PC im selben WLAN sind — Gastnetzwerke und 2,4 GHz vs. 5 GHz im selben Router zählen als unterschiedlich. Tippe Scan in Verbindungen, um erneut zu suchen.</string>
+
+    <string name="help_q_pin_rejected">Meine PIN wird immer wieder abgelehnt.</string>
+    <string name="help_a_pin_rejected">Die PIN wird von Satellite auf deinem PC angezeigt und ändert sich beim Neustart. Prüfe die Ziffern auf dem PC direkt vor der Eingabe — und stelle sicher, dass du in das richtige Satellite tippst, wenn mehrere in der Liste sind.</string>
+
+    <string name="help_q_disconnects">Mein Controller trennt sich mitten im Spiel.</string>
+    <string name="help_a_disconnects">Die meisten Trennungen kommen davon, dass dein Handy schlafen geht oder das WLAN die Bänder wechselt. Schließ das Handy zum Laden an, während du spielst, und fixiere das WLAN deines Handys auf 5 GHz, falls der Router es zulässt. Dish behält eine Vordergrundbenachrichtigung während des Streamings — lass sie an Ort und Stelle, so hält Android die Verbindung lebendig.</string>
+
+    <string name="help_q_no_motion">Bewegung (Gyro-Zielen) funktioniert nicht.</string>
+    <string name="help_a_no_motion">Bewegung braucht drei Dinge: eine WLAN-Verbindung (Satellite) (Bluetooth-Host kann Bewegung nicht übertragen), ein Handy mit Gyroskop (die meisten Handys seit 2018) und einen PlayStation-Stil-Controller auf der Host-Seite. Wechsle den Controller-Typ am Slot auf PlayStation, um den Bewegungskanal zu aktivieren.</string>
+
+    <string name="help_q_battery_drain">Der Akku entlädt sich schnell beim Streaming.</string>
+    <string name="help_a_battery_drain">Streaming nutzt das Funkmodul deines Handys ständig — das ist der Preis, ein Live-Controller zu sein. Schließ es zum Laden an, während du spielst. Dish hat auch einen Energiesparmodus (der dunkle Bildschirm während des Spiels), der die Anzeige auf ihre minimale Helligkeit reduziert, während weiter gestreamt wird — lass die App offen und sperre den Bildschirm nicht.</string>
+
+    <string name="help_q_open_source">Ist Dish Open Source?</string>
+    <string name="help_a_open_source">Ja. Dish (Android, Linux, Mac) und Satellite sind alle unter LGPL-3.0 veröffentlicht, Quellcode auf GitHub unter github.com/TinkerNorth. Pull Requests willkommen.</string>
+
+    <string name="help_q_privacy">Was sammelt Dish?</string>
+    <string name="help_a_privacy">Fast nichts. Dish sendet keine Spielinhalte oder Controller-Eingaben irgendwohin — dieser Verkehr bleibt in deinem lokalen Netzwerk zwischen Handy und PC. Anonyme Absturzberichte sind opt-in (Einstellungen → Diagnose). Die vollständige Liste findest du in der Datenschutzrichtlinie.</string>
+
+    <string name="help_view_privacy_policy">Datenschutzrichtlinie</string>
+    <string name="help_view_github">Quellcode auf GitHub ansehen</string>
+
+    <string name="dashboard_hint_title">Brauchst du Hilfe?</string>
+    <string name="dashboard_hint_body">Öffne den Einrichtungsassistenten, um deine Verbindung und deinen Controller zu wählen — wir bringen dich zur richtigen Stelle.</string>
+    <string name="dashboard_hint_action_open">Assistent öffnen</string>
+    <string name="dashboard_hint_action_dismiss">Nicht jetzt</string>
+
+    <string name="settings_section_setup">EINRICHTUNG &amp; HILFE</string>
+    <string name="settings_setup_wizard_title">Einrichtungsassistent</string>
+    <string name="settings_setup_wizard_body">Verbindung und Controller-Optionen durchgehen. Jederzeit erneut ausführbar.</string>
+    <string name="settings_help_title">Hilfe &amp; FAQ</string>
+    <string name="settings_help_body">Konzepte, Leistungstipps und Fehlerbehebung.</string>
+</resources>

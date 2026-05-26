@@ -60,6 +60,21 @@
         android:name="com.tinkernorth.dish.ui.settings.SettingsActivity"
         android:label="@string/settings_title" />
 
+    <activity
+        android:id="@+id/welcomeActivity"
+        android:name="com.tinkernorth.dish.ui.onboarding.WelcomeActivity"
+        android:label="@string/welcome_step1_title" />
+
+    <activity
+        android:id="@+id/setupWizardActivity"
+        android:name="com.tinkernorth.dish.ui.onboarding.SetupWizardActivity"
+        android:label="@string/wizard_title" />
+
+    <activity
+        android:id="@+id/helpActivity"
+        android:name="com.tinkernorth.dish.ui.onboarding.HelpActivity"
+        android:label="@string/help_title" />
+
     <!-- ═══ INPUT OVERLAYS ════════════════════════════════════════════ -->
     <activity
         android:id="@+id/touchpadOverlayActivity"

@@ -34,6 +34,18 @@ class DishNavigator(
         controller.navigate(R.id.settingsActivity)
     }
 
+    fun toWelcome() {
+        controller.navigate(R.id.welcomeActivity)
+    }
+
+    fun toSetupWizard() {
+        controller.navigate(R.id.setupWizardActivity)
+    }
+
+    fun toHelp() {
+        controller.navigate(R.id.helpActivity)
+    }
+
     fun toTouchpad(
         connectionId: String,
         touchpadMode: String,

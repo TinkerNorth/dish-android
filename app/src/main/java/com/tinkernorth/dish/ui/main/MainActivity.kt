@@ -7,6 +7,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import androidx.activity.viewModels
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -22,6 +23,8 @@ import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.notification.DishNotifications
+import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
+import com.tinkernorth.dish.source.store.OnboardingState
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
@@ -47,6 +50,8 @@ class MainActivity :
     @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
 
     @Inject lateinit var notifications: DishNotifications
+
+    @Inject lateinit var onboarding: OnboardingPreferenceStore
 
     private lateinit var gamepadHost: GamepadActivityHost
 
@@ -77,6 +82,12 @@ class MainActivity :
             finish()
             return
         }
+        if (!onboarding.state.value.welcomeCompleted) {
+            splashHoldUntilFirstRender = false
+            nav.toWelcome()
+            finish()
+            return
+        }
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications)
@@ -100,6 +111,12 @@ class MainActivity :
         binding.rvControllers.adapter = controllerAdapter
         binding.btnManageConnections.setOnClickListener { nav.toConnections() }
         binding.btnSettings.setOnClickListener { nav.toSettings() }
+        binding.cardDashboardHintInclude.btnDashboardHintOpen.setOnClickListener {
+            nav.toSetupWizard()
+        }
+        binding.cardDashboardHintInclude.btnDashboardHintDismiss.setOnClickListener {
+            onboarding.dismissDashboardHint()
+        }
     }
 
     private fun observeViewModel() {
@@ -109,6 +126,22 @@ class MainActivity :
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) { viewModel.events.collect { handleEvent(it) } }
         }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                onboarding.state.collect { refreshDashboardHint(it, viewModel.uiState.value) }
+            }
+        }
+    }
+
+    private fun refreshDashboardHint(
+        onboardingState: OnboardingState,
+        ui: MainUiState,
+    ) {
+        val shouldShow =
+            onboardingState.welcomeCompleted &&
+                !onboardingState.dashboardHintDismissed &&
+                ui.connections.isEmpty()
+        binding.cardDashboardHintInclude.cardDashboardHint.isVisible = shouldShow
     }
 
     private fun updateUI(s: MainUiState) {
@@ -132,6 +165,7 @@ class MainActivity :
             s.motionCapabilities,
             s.touchpadModesBySatellite,
         )
+        refreshDashboardHint(onboarding.state.value, s)
     }
 
     private fun handleEvent(event: MainEvent) {

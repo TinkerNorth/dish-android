@@ -17,6 +17,7 @@ import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.store.CrashReportingStore
 import com.tinkernorth.dish.source.store.ThemeMode
 import com.tinkernorth.dish.source.store.ThemePreferenceStore
+import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.setupDishToolbar
@@ -33,6 +34,7 @@ class SettingsActivity : AppCompatActivity() {
     @Inject lateinit var notifications: DishNotifications
 
     private lateinit var binding: ActivitySettingsBinding
+    private val nav by lazy { DishNavigator(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,9 +44,20 @@ class SettingsActivity : AppCompatActivity() {
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()
 
+        binding.sectionSetup.labelSection.setText(R.string.settings_section_setup)
         binding.sectionAppearance.labelSection.setText(R.string.settings_section_appearance)
         binding.sectionDiagnostics.labelSection.setText(R.string.settings_section_diagnostics)
         binding.sectionAbout.labelSection.setText(R.string.settings_section_about)
+
+        binding.cardRowSetupWizard.cardRowIcon.setImageResource(R.drawable.ic_route)
+        binding.cardRowSetupWizard.cardRowTitle.setText(R.string.settings_setup_wizard_title)
+        binding.cardRowSetupWizard.cardRowSubtitle.setText(R.string.settings_setup_wizard_body)
+        binding.cardSetupWizard.setOnClickListener { nav.toSetupWizard() }
+
+        binding.cardRowHelp.cardRowIcon.setImageResource(R.drawable.ic_help)
+        binding.cardRowHelp.cardRowTitle.setText(R.string.settings_help_title)
+        binding.cardRowHelp.cardRowSubtitle.setText(R.string.settings_help_body)
+        binding.cardHelp.setOnClickListener { nav.toHelp() }
 
         binding.cardRowAppearance.cardRowIcon.setImageResource(R.drawable.ic_contrast)
         binding.cardRowAppearance.cardRowTitle.setText(R.string.settings_appearance_title)

@@ -49,6 +49,13 @@
             </LinearLayout>
 
             <include
+                android:id="@+id/cardDashboardHintInclude"
+                layout="@layout/dashboard_hint_card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/card_margin_bottom" />
+
+            <include
                 android:id="@+id/sectionConnections"
                 layout="@layout/section_header"
                 android:layout_width="match_parent"

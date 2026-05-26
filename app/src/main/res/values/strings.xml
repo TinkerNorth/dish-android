@@ -336,4 +336,5 @@
          the canonical TinkerNorth domain. The page covers all jurisdictions
          (GDPR, UK GDPR, CCPA/CPRA, LGPD) in sections inside the document. -->
     <string name="url_privacy_policy" translatable="false">https://dish.tinkernorth.com/privacy/dish-android/</string>
+
 </resources>

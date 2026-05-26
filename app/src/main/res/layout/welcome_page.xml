@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:paddingHorizontal="@dimen/spacing_5xl">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <ImageView
+            android:id="@+id/ivWelcomePageHero"
+            android:layout_width="@dimen/welcome_hero_size"
+            android:layout_height="@dimen/welcome_hero_size"
+            android:layout_gravity="center"
+            android:adjustViewBounds="true"
+            android:scaleType="fitCenter"
+            tools:src="@drawable/ic_dish_connected" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:id="@+id/welcomePageTextColumn"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tvWelcomePageEyebrow"
+            style="@style/TextAppearance.Dish.Label.Accent"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_horizontal"
+            tools:text="WELCOME" />
+
+        <TextView
+            android:id="@+id/tvWelcomePageTitle"
+            style="@style/TextAppearance.Dish.Title.Large"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_md"
+            android:gravity="center_horizontal"
+            tools:text="Your phone, your gamepad" />
+
+        <TextView
+            android:id="@+id/tvWelcomePageBody"
+            style="@style/TextAppearance.Dish.Body"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_xl"
+            android:gravity="center_horizontal"
+            tools:text="Dish turns your phone into a wireless controller for your PC." />
+    </LinearLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnWelcomePageExtra"
+        style="@style/Widget.Dish.Button.Outlined"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_5xl"
+        android:visibility="gone"
+        tools:text="Open setup guide"
+        tools:visibility="visible" />
+</LinearLayout>
