@@ -227,3 +227,218 @@ tasks.named("check") {
 tasks.withType<Test>().configureEach {
     maxHeapSize = "2g"
 }
+
+// ─── Open-source license manifest ─────────────────────────────────────────────
+// AGP 9 dropped applicationVariants, which broke the official
+// play-services-oss-licenses plugin and AboutLibraries. We resolve POMs from
+// releaseRuntimeClasspath directly and emit a manifest the in-app screen reads.
+val licensesOutputFile =
+    layout.projectDirectory.file("src/main/assets/licenses/licenses.json")
+
+// Hand-curated fallbacks for artifacts that publish empty <licenses> blocks.
+// Guava's listenablefuture-1.0 is a stub published by Google; the code itself
+// is Apache 2.0 (it's pulled in by Firebase transitively, never used directly).
+val knownLicenseOverrides: Map<String, List<Map<String, String?>>> =
+    mapOf(
+        "com.google.guava:listenablefuture" to
+            listOf(
+                mapOf(
+                    "name" to "Apache License 2.0",
+                    "url" to "http://www.apache.org/licenses/LICENSE-2.0.txt",
+                ),
+            ),
+    )
+
+tasks.register("generateLicenseManifest") {
+    group = "build"
+    description =
+        "Generate src/main/assets/licenses/licenses.json from the release runtime classpath POMs."
+
+    outputs.file(licensesOutputFile)
+
+    doLast {
+        val moduleIds =
+            configurations
+                .getByName("releaseRuntimeClasspath")
+                .incoming
+                .resolutionResult
+                .allComponents
+                .mapNotNull { it.id as? org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+                .distinctBy { "${it.group}:${it.module}:${it.version}" }
+                .sortedBy { "${it.group}:${it.module}:${it.version}" }
+
+        val pomDeps =
+            moduleIds.map { id ->
+                dependencies.create("${id.group}:${id.module}:${id.version}@pom")
+            }
+        val pomConfig =
+            configurations.detachedConfiguration(*pomDeps.toTypedArray()).apply {
+                isTransitive = false
+            }
+
+        val entries =
+            pomConfig
+                .resolve()
+                .mapNotNull { parsePomFile(it) }
+                .map { entry ->
+                    val licenses = entry["licenses"] as? List<*>
+                    if (licenses.isNullOrEmpty()) {
+                        val key = "${entry["group"]}:${entry["artifact"]}"
+                        knownLicenseOverrides[key]?.let { entry + ("licenses" to it) } ?: entry
+                    } else {
+                        entry
+                    }
+                }.sortedBy { "${it["group"]}:${it["artifact"]}" }
+
+        val payload =
+            mapOf(
+                "generatedBy" to "generateLicenseManifest",
+                "libraries" to entries,
+            )
+
+        val outFile = licensesOutputFile.asFile
+        outFile.parentFile.mkdirs()
+        outFile.writeText(renderJson(payload))
+    }
+}
+
+tasks.named("preBuild") { dependsOn("generateLicenseManifest") }
+
+fun parsePomFile(pomFile: java.io.File): Map<String, Any?>? {
+    return try {
+        val factory =
+            javax.xml.parsers.DocumentBuilderFactory.newInstance().apply {
+                isNamespaceAware = false
+                setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+            }
+        val doc = factory.newDocumentBuilder().parse(pomFile)
+        val root: org.w3c.dom.Element = doc.documentElement
+
+        fun directChild(
+            parent: org.w3c.dom.Element,
+            tag: String,
+        ): org.w3c.dom.Element? {
+            val children = parent.childNodes
+            for (i in 0 until children.length) {
+                val node = children.item(i)
+                if (node is org.w3c.dom.Element && node.tagName == tag) return node
+            }
+            return null
+        }
+
+        val parent = directChild(root, "parent")
+        val group =
+            directChild(root, "groupId")?.textContent
+                ?: parent?.let { directChild(it, "groupId") }?.textContent
+        val artifact = directChild(root, "artifactId")?.textContent
+        val version =
+            directChild(root, "version")?.textContent
+                ?: parent?.let { directChild(it, "version") }?.textContent
+        val displayName =
+            directChild(root, "name")?.textContent?.takeIf { it.isNotBlank() }
+                ?: "$group:$artifact"
+        val url = directChild(root, "url")?.textContent
+
+        val licensesEl = directChild(root, "licenses")
+        val licenses: List<Map<String, String?>> =
+            if (licensesEl != null) {
+                val list = mutableListOf<Map<String, String?>>()
+                val kids = licensesEl.childNodes
+                for (i in 0 until kids.length) {
+                    val node = kids.item(i)
+                    if (node is org.w3c.dom.Element && node.tagName == "license") {
+                        list.add(
+                            mapOf(
+                                "name" to directChild(node, "name")?.textContent,
+                                "url" to directChild(node, "url")?.textContent,
+                            ),
+                        )
+                    }
+                }
+                list
+            } else {
+                emptyList()
+            }
+
+        mapOf(
+            "group" to group,
+            "artifact" to artifact,
+            "version" to version,
+            "name" to displayName,
+            "url" to url,
+            "licenses" to licenses,
+        )
+    } catch (e: Exception) {
+        logger.warn("generateLicenseManifest: failed to parse ${pomFile.name}: ${e.message}")
+        null
+    }
+}
+
+fun renderJson(value: Any?): String = StringBuilder().also { renderJsonTo(it, value, 0) }.append('\n').toString()
+
+fun renderJsonTo(
+    sb: StringBuilder,
+    value: Any?,
+    indent: Int,
+) {
+    when (value) {
+        null -> sb.append("null")
+        is Boolean -> sb.append(value.toString())
+        is Number -> sb.append(value.toString())
+        is String -> appendJsonString(sb, value)
+        is Map<*, *> -> {
+            if (value.isEmpty()) {
+                sb.append("{}")
+                return
+            }
+            sb.append("{\n")
+            val entries = value.entries.toList()
+            for ((i, e) in entries.withIndex()) {
+                repeat(indent + 1) { sb.append("  ") }
+                appendJsonString(sb, e.key.toString())
+                sb.append(": ")
+                renderJsonTo(sb, e.value, indent + 1)
+                if (i < entries.size - 1) sb.append(',')
+                sb.append('\n')
+            }
+            repeat(indent) { sb.append("  ") }
+            sb.append('}')
+        }
+        is Iterable<*> -> {
+            val list = value.toList()
+            if (list.isEmpty()) {
+                sb.append("[]")
+                return
+            }
+            sb.append("[\n")
+            for ((i, item) in list.withIndex()) {
+                repeat(indent + 1) { sb.append("  ") }
+                renderJsonTo(sb, item, indent + 1)
+                if (i < list.size - 1) sb.append(',')
+                sb.append('\n')
+            }
+            repeat(indent) { sb.append("  ") }
+            sb.append(']')
+        }
+        else -> appendJsonString(sb, value.toString())
+    }
+}
+
+fun appendJsonString(
+    sb: StringBuilder,
+    s: String,
+) {
+    sb.append('"')
+    for (c in s) {
+        when {
+            c == '"' -> sb.append("\\\"")
+            c == '\\' -> sb.append("\\\\")
+            c == '\n' -> sb.append("\\n")
+            c == '\r' -> sb.append("\\r")
+            c == '\t' -> sb.append("\\t")
+            c < ' ' -> sb.append("\\u%04x".format(c.code))
+            else -> sb.append(c)
+        }
+    }
+    sb.append('"')
+}

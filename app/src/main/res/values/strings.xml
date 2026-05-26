@@ -327,6 +327,9 @@
     <string name="settings_appearance_dark">Dark</string>
     <string name="settings_crash_reporting_title">Share crash reports</string>
     <string name="settings_crash_reporting_body">Share anonymized crash logs and stack traces with TinkerNorth to help fix bugs. No gameplay or controller input is included.</string>
+    <string name="settings_open_source_licenses_title">Open source licenses</string>
+    <string name="settings_open_source_licenses_body">Acknowledgements for the libraries Dish is built on.</string>
+    <string name="licenses_open_external">Open license for %1$s</string>
     <string name="settings_version_label">VERSION</string>
     <!-- Brand wordmark in the footer. Not translated — stylistic constant
          across all locales, matching the rest of TinkerNorth's brand usage. -->

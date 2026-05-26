@@ -90,6 +90,13 @@ class SettingsActivity : AppCompatActivity() {
             ellipsize = TextUtils.TruncateAt.END
         }
 
+        binding.cardRowOpenSourceLicenses.cardRowIcon.setImageResource(R.drawable.ic_license)
+        binding.cardRowOpenSourceLicenses.cardRowTitle.setText(R.string.settings_open_source_licenses_title)
+        binding.cardRowOpenSourceLicenses.cardRowSubtitle.setText(R.string.settings_open_source_licenses_body)
+        binding.cardOpenSourceLicenses.setOnClickListener {
+            startActivity(Intent(this, LicensesActivity::class.java))
+        }
+
         // Observe-then-bind: opposite order would re-write the persisted preference on the first frame.
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
