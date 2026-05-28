@@ -69,3 +69,7 @@ Note on Play Console locale codes: `pt-BR` matches Android's `pt-rBR`. German us
 ## Privacy policy
 
 Hosted at `https://dish.tinkernorth.com/privacy/dish-android/`. The `PRIVACY.md` file at the repo root is the in-repo mirror. Paste the hosted URL into the Play Console "Privacy policy" field on the App content page.
+
+## Screenshot pipeline
+
+See [SCREENSHOT-STRATEGY.md](SCREENSHOT-STRATEGY.md) for how the screenshots in this directory were produced, including fixture data and emulator setup so they can be recreated.
