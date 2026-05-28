@@ -1,17 +1,14 @@
 O Dish transforma qualquer controle ou celular Android em um gamepad sem fio de baixa latência. Seja para uma conexão Wi-Fi de baixa latência com motion-aim e touchpad, ou a simplicidade de parear como um controle Bluetooth comum, o Dish tem você coberto. Sem configuração por jogo, sem assinaturas mensais, sem anúncios.
 
-
 DUAS MANEIRAS DE CONECTAR
 
 • Wi-Fi (com Satellite, gratuito): o caminho mais rápido. Menor latência de entrada, motion (giroscópio) como assistência de mira e um touchpad clicável para menus e controle do mouse.
 
 • Bluetooth: pareie seu celular com um PC, console ou set-top box como um gamepad Bluetooth comum. Funciona com qualquer coisa que aceite um controle Bluetooth.
 
-
 USE SEU PRÓPRIO CONTROLE
 
 Conecte um gamepad USB na porta USB do seu celular para zero latência adicionada, ou pareie um controle Bluetooth (Xbox, DualSense, 8BitDo e mais) diretamente com seu celular. O Dish encaminha cada pressionamento, eixo e gatilho para seu host.
-
 
 PROJETADO PARA JOGAR
 
@@ -21,11 +18,9 @@ PROJETADO PARA JOGAR
 • Motion e touchpad apresentados aos jogos como um pad padrão estilo PlayStation
 • Rumble no jogo do host faz seu celular vibrar
 
-
 OBTENHA O SATELLITE
 
 O auxiliar gratuito Satellite está disponível para Windows, macOS e Linux em https://dish.tinkernorth.com/downloads/satellite. O modo Bluetooth-host funciona sem o Satellite, mas o caminho Wi-Fi oferece a melhor experiência.
-
 
 PARA QUEM GOSTA DE EXPLORAR
 
