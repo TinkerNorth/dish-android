@@ -156,6 +156,44 @@ object SatelliteNative {
         keyCode: Int,
     ): Boolean
 
+    // USB host fast-lane attach. Kotlin claims the interface via UsbDeviceConnection and hands
+    // the file descriptor down. Native dups the fd, owns a poll thread for the device, decodes
+    // HID reports straight to the encrypted-UDP send path. Returns the synthetic deviceId
+    // (negative int) on success, or 0 on failure.
+    external fun attachUsbDevice(
+        fd: Int,
+        vendorId: Int,
+        productId: Int,
+        interfaceNumber: Int,
+        endpointIn: Int,
+        endpointInMaxPacket: Int,
+        endpointOut: Int,
+    ): Int
+
+    external fun detachUsbDevice(syntheticDeviceId: Int)
+
+    // Cold-path: does our parser table know this VID/PID? Lets Kotlin decide whether to even
+    // request USB permission for an unknown device.
+    external fun isKnownFastLaneModel(
+        vendorId: Int,
+        productId: Int,
+    ): Boolean
+
+    external fun modelHasImu(
+        vendorId: Int,
+        productId: Int,
+    ): Boolean
+
+    external fun lookupKnownModelName(
+        vendorId: Int,
+        productId: Int,
+    ): String
+
+    // Returns the cumulative count of successfully completed input URBs for the USB-host device.
+    // Kotlin's PollRateSampler reads this on a fixed cadence and computes the measured Hz from
+    // the delta over time. Returns 0 for unknown deviceIds.
+    external fun getDeviceUrbCount(deviceId: Int): Long
+
     // Flat parameter list (not packed) so each axis stays primitive Float — no per-event allocation.
     @Suppress("LongParameterList")
     external fun processGamepadMotionEvent(

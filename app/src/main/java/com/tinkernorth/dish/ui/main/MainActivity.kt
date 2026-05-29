@@ -25,11 +25,15 @@ import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.source.store.OnboardingState
+import com.tinkernorth.dish.source.usb.PathMode
+import com.tinkernorth.dish.source.usb.PathReason
+import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachGamepadHost
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -48,6 +52,8 @@ class MainActivity :
     @Inject lateinit var wakeState: WakeStateController
 
     @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
+
+    @Inject lateinit var usbGamepadManager: UsbGamepadManager
 
     @Inject lateinit var notifications: DishNotifications
 
@@ -105,10 +111,21 @@ class MainActivity :
         gamepadHost.cancelDimOnStop()
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Restore already-permitted controllers and prompt any recognised ones connected while the
+        // app was closed (the prompt needs the dashboard up to render).
+        if (!com.tinkernorth.dish.DishApplication.nativeLoadFailed) {
+            usbGamepadManager.reconcileForeground()
+        }
+    }
+
     private fun setupUI() {
         binding.sectionConnections.labelSection.setText(R.string.section_connections)
         binding.sectionControllers.labelSection.setText(R.string.section_controllers)
         binding.rvControllers.adapter = controllerAdapter
+        (binding.rvControllers.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
+            ?.supportsChangeAnimations = false
         binding.btnManageConnections.setOnClickListener { nav.toConnections() }
         binding.btnSettings.setOnClickListener { nav.toSettings() }
         binding.cardDashboardHintInclude.btnDashboardHintOpen.setOnClickListener {
@@ -121,7 +138,12 @@ class MainActivity :
 
     private fun observeViewModel() {
         lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) { viewModel.uiState.collect { updateUI(it) } }
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                // Combine path info into the same render so a USB plug-in / permission grant
+                // updates the per-controller badge in lockstep with the slot list.
+                combine(viewModel.uiState, gamepadRegistry.devices) { ui, devs -> ui to devs }
+                    .collect { (ui, devs) -> updateUI(ui, devs) }
+            }
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) { viewModel.events.collect { handleEvent(it) } }
@@ -144,7 +166,10 @@ class MainActivity :
         binding.cardDashboardHintInclude.cardDashboardHint.isVisible = shouldShow
     }
 
-    private fun updateUI(s: MainUiState) {
+    private fun updateUI(
+        s: MainUiState,
+        devices: Map<Int, com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry.Device> = gamepadRegistry.devices.value,
+    ) {
         // First emission has been rendered: release the splash hold so the
         // system splash exits and MainActivity becomes interactive. Idempotent
         // (the postDelayed safety net may also flip this) so subsequent
@@ -164,9 +189,23 @@ class MainActivity :
             s.connections,
             s.motionCapabilities,
             s.touchpadModesBySatellite,
+            computePathBadges(s.slots, devices),
         )
         refreshDashboardHint(onboarding.state.value, s)
     }
+
+    private fun computePathBadges(
+        slots: List<ControllerSlot>,
+        devices: Map<Int, com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry.Device>,
+    ): Map<String, PathBadge> =
+        slots.associate { slot ->
+            val isOnScreen = slot.inputType == SlotInputType.VIRTUAL
+            val device = devices[slot.physicalDeviceId]
+            val mode = device?.pathMode ?: PathMode.Routed
+            val reason = device?.pathReason ?: PathReason.None
+            val rate = device?.pollRateHz ?: 0
+            slot.id to PathBadgeMapper.map(this, mode, reason, isOnScreen, rate)
+        }
 
     private fun handleEvent(event: MainEvent) {
         when (event) {
@@ -195,6 +234,14 @@ class MainActivity :
     }
 
     override fun onSlotTapped(slotId: String) = controllerAdapter.toggleExpanded(slotId)
+
+    override fun onTryDirectMode(slotId: String) {
+        val device =
+            viewModel.uiState.value.slots
+                .firstOrNull { it.id == slotId }
+                ?.let { gamepadRegistry.devices.value[it.physicalDeviceId] } ?: return
+        usbGamepadManager.tryDirectMode(device.vendorId, device.productId)
+    }
 
     override fun onBind(
         slotId: String,

@@ -68,17 +68,23 @@ class MainViewModel
                         inputType = SlotInputType.VIRTUAL,
                         name = context.getString(R.string.default_virtual_controller_name),
                     )
+                val directVidPids =
+                    devices.values
+                        .filter { it.isUsbSynthetic && it.vendorId != 0 && it.productId != 0 }
+                        .mapTo(mutableSetOf()) { it.vendorId to it.productId }
                 val physical =
-                    devices.values.map { dev ->
-                        ControllerSlot(
-                            id = dev.id.toString(),
-                            inputType = SlotInputType.PHYSICAL,
-                            name = dev.name,
-                            physicalDeviceId = dev.id,
-                            isDisconnecting = dev.isDisconnecting,
-                            disconnectTimeLeft = dev.disconnectingTimeLeftSec ?: 0,
-                        )
-                    }
+                    devices.values
+                        .filter { dev -> dev.isUsbSynthetic || (dev.vendorId to dev.productId) !in directVidPids }
+                        .map { dev ->
+                            ControllerSlot(
+                                id = dev.id.toString(),
+                                inputType = SlotInputType.PHYSICAL,
+                                name = dev.name,
+                                physicalDeviceId = dev.id,
+                                isDisconnecting = dev.isDisconnecting,
+                                disconnectTimeLeft = dev.disconnectingTimeLeftSec ?: 0,
+                            )
+                        }
                 val slots =
                     (listOf(virtual) + physical).map { slot ->
                         val cid = bindings[slot.id]

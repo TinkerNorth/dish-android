@@ -268,4 +268,21 @@
     <string name="settings_open_source_licenses_body">Hinweise zu den Bibliotheken, auf denen Dish aufbaut.</string>
     <string name="licenses_open_external">Lizenz für %1$s öffnen</string>
     <string name="settings_version_label">VERSION</string>
+
+    <string name="path_label_direct">Direktmodus</string>
+    <string name="path_label_direct_with_rate">Direktmodus · %1$d Hz</string>
+    <string name="path_label_standard">Standardmodus</string>
+    <string name="path_direct_explainer">Geringste Verzögerung. Direkter Zugriff auf den Controller.</string>
+    <string name="path_reason_default">Funktioniert mit jedem Controller, den Android erkennt.</string>
+    <string name="path_reason_bluetooth">Bluetooth-Controller verwenden immer den Standardmodus.</string>
+    <string name="path_reason_onscreen">Bildschirm-Controller verwenden den Standardmodus.</string>    <string name="path_reason_unknown_model">Dieser Controller ist noch nicht in der Schnellzugriffsliste.</string>
+    <string name="path_reason_busy">Eine andere App verwendet diesen Controller.</string>
+    <string name="path_reason_init_failed">Direktmodus konnte nicht eingerichtet werden. Standardmodus wird verwendet.</string>
+    <string name="path_reason_detached">Controller wurde getrennt.</string>
+    <string name="path_reason_not_yet">Direktmodus für diesen Controller kommt bald.</string>
+    <string name="path_action_try_direct">Direktmodus versuchen</string>
+    <string name="direct_prompt_title">Direktmodus für %1$s versuchen?</string>
+    <string name="direct_prompt_action">Versuchen</string>
+    <string name="direct_enabled">%1$s nutzt jetzt den Direktmodus.</string>
+    <string name="direct_failed">%1$s konnte nicht in den Direktmodus wechseln.</string>
 </resources>

@@ -23,6 +23,8 @@ import com.tinkernorth.dish.source.system.BluetoothBondMonitor
 import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
 import com.tinkernorth.dish.source.system.ConnectionForegroundObserver
 import com.tinkernorth.dish.source.system.NetworkStateObserver
+import com.tinkernorth.dish.source.usb.PollRateSampler
+import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import javax.inject.Inject
@@ -58,6 +60,10 @@ class DishApplication : Application() {
     @Inject lateinit var crashReportingController: CrashReportingController
 
     @Inject lateinit var themePreferenceStore: ThemePreferenceStore
+
+    @Inject lateinit var usbGamepadManager: UsbGamepadManager
+
+    @Inject lateinit var pollRateSampler: PollRateSampler
 
     // Exposed so StreamingService (framework-owned lifecycle) can reuse the Hilt singleton scope.
     @Inject lateinit var processScope: CoroutineScope
@@ -112,6 +118,13 @@ class DishApplication : Application() {
         lifecycle.addObserver(connectionForegroundObserver)
         // Process-scoped so bindings survive the MainActivity → GamepadOverlayActivity handoff.
         physicalGamepadRegistry.install()
+        // Also process-scoped: USB host claims survive activity recreation, and the broadcast
+        // receiver listening for plug/unplug needs to be alive even while the app is backgrounded
+        // so we can detach cleanly when the user unplugs without opening the app first.
+        usbGamepadManager.install()
+        // Process-scope sampler so the dashboard's Hz badge keeps updating across activity
+        // recreations; sample cost is one atomic read per direct-mode device every 500 ms.
+        pollRateSampler.install()
         lifecycle.addObserver(physicalSlotBindingObserver)
         lifecycle.addObserver(physicalBatterySource)
         lifecycle.addObserver(virtualBatterySource)

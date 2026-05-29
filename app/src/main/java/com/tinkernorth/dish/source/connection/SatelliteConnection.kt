@@ -196,16 +196,32 @@ class SatelliteConnection(
                 val info = _slots.value[slotId] ?: return@withContext
                 if (info.registered) return@withContext
                 if (handle < 0) return@withContext
-                controllerRepo.resetControllerAck(handle)
                 val caps = BASE_CAPABILITIES or motionCapsBitsFor(slotId)
-                controllerRepo.addController(handle, info.controllerIndex, caps)
-                var ack = -1
-                repeat(ACK_WAIT_ATTEMPTS) {
-                    ack = controllerRepo.getLastControllerAck(handle)
-                    if (ack != -1) return@repeat
-                    delay(ACK_WAIT_INTERVAL_MS)
+                // Retry the ADD a few times: a dropped UDP packet on the first attempt would
+                // otherwise leave the slot stuck unregistered until the user manually rebinds.
+                //
+                // ALREADY_EXISTS is treated as success either way. The two cases we see it in
+                // are (a) our own ADD's ACK was dropped on a previous attempt in this loop and
+                // we're hearing about the still-live controller, or (b) a previous session's
+                // REMOVE was dropped and the server is still holding a controller at our index.
+                // Both cases mean the slot is live server-side and the send path will work.
+                var result: Int? = null
+                for (attempt in 1..ADD_MAX_ATTEMPTS) {
+                    if (handle < 0) return@withContext
+                    controllerRepo.resetControllerAck(handle)
+                    controllerRepo.addController(handle, info.controllerIndex, caps)
+                    var ack = -1
+                    repeat(ACK_WAIT_ATTEMPTS) {
+                        ack = controllerRepo.getLastControllerAck(handle)
+                        if (ack != -1) return@repeat
+                        delay(ACK_WAIT_INTERVAL_MS)
+                    }
+                    if (ack != -1) {
+                        val raw = ack and ACK_RESULT_MASK
+                        result = if (raw == ACK_ERR_ALREADY_EXISTS) ACK_OK else raw
+                        break
+                    }
                 }
-                val result = if (ack == -1) null else ack and ACK_RESULT_MASK
                 if (result == ACK_OK) {
                     // Pre-extension satellite returns -1 — leave store absent so composer uses its heuristic.
                     val motionFlags = controllerRepo.getLastControllerMotionFlags(handle)
@@ -283,7 +299,19 @@ class SatelliteConnection(
         val info = removed ?: return
         motionBackendStatusStore?.clear(id, slotId)
         if (handle >= 0 && info.registered) {
-            controllerRepo.removeController(handle, info.controllerIndex)
+            val originalHandle = handle
+            // The remove path has no ack/retry-from-server. A single UDP drop here would leave a
+            // ghost controller on the satellite indefinitely. Fire the remove a few times spaced
+            // apart so at least one almost certainly survives even on a lossy link; the server
+            // treats "remove a controller that doesn't exist" as a no-op.
+            scope.launch(ioDispatcher) {
+                repeat(REMOVE_RETRIES) { attempt ->
+                    val snap = live ?: return@launch
+                    if (snap.handle != originalHandle) return@launch
+                    controllerRepo.removeController(snap.handle, info.controllerIndex)
+                    if (attempt < REMOVE_RETRIES - 1) delay(REMOVE_RETRY_INTERVAL_MS)
+                }
+            }
         }
     }
 
@@ -379,6 +407,9 @@ class SatelliteConnection(
         private const val ALIVE_POLL_MS = 1000L
         private const val ACK_WAIT_ATTEMPTS = 20
         private const val ACK_WAIT_INTERVAL_MS = 100L
+        private const val ADD_MAX_ATTEMPTS = 3
+        private const val REMOVE_RETRIES = 3
+        private const val REMOVE_RETRY_INTERVAL_MS = 200L
 
         private const val FALTER_THRESHOLD = 2
         private const val FALTER_TO_DEAD = 5

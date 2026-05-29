@@ -340,4 +340,29 @@
          (GDPR, UK GDPR, CCPA/CPRA, LGPD) in sections inside the document. -->
     <string name="url_privacy_policy" translatable="false">https://dish.tinkernorth.com/privacy/dish-android/</string>
 
+    <!-- Input-path badges on the dashboard controller list. The "Direct mode" badge means the
+         controller is running through Dish\'s fast path: the app talks straight to the controller
+         over USB and forwards reports to the PC with the absolute minimum delay. "Standard mode"
+         means the controller goes through Android\'s built-in input layer, which works for every
+         controller but adds a small amount of delay. The reason strings explain why a particular
+         controller landed on Standard mode so the user can act on it (grant a permission, switch
+         to USB, etc.). All copy is intentionally non-technical: no mention of JNI, USB host,
+         interrupt endpoints, evdev, kernel, etc. -->
+    <string name="path_label_direct">Direct mode</string>
+    <string name="path_label_direct_with_rate">Direct mode · %1$d Hz</string>
+    <string name="path_label_standard">Standard mode</string>
+    <string name="path_direct_explainer">Lowest delay. Talking straight to the controller.</string>
+    <string name="path_reason_default">Works with every controller Android recognises.</string>
+    <string name="path_reason_bluetooth">Bluetooth controllers always use Standard mode.</string>
+    <string name="path_reason_onscreen">On-screen controllers use Standard mode.</string>    <string name="path_reason_unknown_model">This controller isn\'t in the fast-path list yet.</string>
+    <string name="path_reason_busy">Another app is using this controller.</string>
+    <string name="path_reason_init_failed">Couldn\'t set up Direct mode. Using Standard mode instead.</string>
+    <string name="path_reason_detached">Controller was unplugged.</string>
+    <string name="path_reason_not_yet">Direct mode for this controller is coming soon.</string>
+    <string name="path_action_try_direct">Try Direct mode</string>
+    <string name="direct_prompt_title">Try Direct mode for %1$s?</string>
+    <string name="direct_prompt_action">Try</string>
+    <string name="direct_enabled">%1$s is on Direct mode.</string>
+    <string name="direct_failed">Couldn\'t switch %1$s to Direct mode.</string>
+
 </resources>
