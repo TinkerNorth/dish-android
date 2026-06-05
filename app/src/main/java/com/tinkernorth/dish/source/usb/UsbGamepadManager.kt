@@ -17,6 +17,7 @@ import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.composer.ConnectionHub
 import com.tinkernorth.dish.core.jni.SatelliteNative
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
@@ -26,6 +27,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 
 // Hilt singleton that manages the USB-host fast lane. Direct mode is opt-in per connection: when a
@@ -40,6 +42,7 @@ class UsbGamepadManager
     constructor(
         @ApplicationContext private val context: Context,
         private val registry: PhysicalGamepadRegistry,
+        private val connectionHubProvider: Provider<ConnectionHub>,
         private val notifications: DishNotifications,
         private val scope: CoroutineScope,
     ) {
@@ -191,6 +194,14 @@ class UsbGamepadManager
             if (claimedDevices.containsKey(key)) return null
             val (intf, epIn, epOut) =
                 findInterruptInPair(device) ?: return PathReason.SupportedNoFastPathYet
+            val routedSlotId =
+                registry.devices.value.values
+                    .firstOrNull {
+                        !it.isUsbSynthetic &&
+                            it.vendorId == device.vendorId &&
+                            it.productId == device.productId
+                    }?.id
+                    ?.toString()
             val conn = usbManager.openDevice(device) ?: return PathReason.Busy
             if (!conn.claimInterface(intf, true)) {
                 conn.close()
@@ -224,6 +235,9 @@ class UsbGamepadManager
                 vendorId = device.vendorId,
                 productId = device.productId,
             )
+            if (routedSlotId != null) {
+                connectionHubProvider.get().migrateSlotBinding(routedSlotId, synthetic.toString())
+            }
             Log.i(TAG, "claimed ${device.vendorId.toHex4()}:${device.productId.toHex4()} ($displayName) → dev=$synthetic")
             return null
         }

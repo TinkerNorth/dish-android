@@ -643,6 +643,44 @@ class ConnectionHubTest {
     }
 
     @Test
+    fun `migrateSlotBinding carries binding and type to the new slot id and re-keys the satellite slot`() {
+        val satConn = mockk<SatelliteConnection>(relaxed = true)
+        every { satellite.get("s:1") } returns satConn
+        every { store.remembered() } returns
+            listOf(
+                RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
+            )
+        val hub = buildHub()
+
+        hub.bind("slot-fw", "s:1")
+        hub.setSatelliteControllerType("s:1", "slot-fw", CONTROLLER_TYPE_PLAYSTATION)
+        scope.testScheduler.runCurrent()
+
+        hub.migrateSlotBinding("slot-fw", "slot-usb")
+        scope.testScheduler.runCurrent()
+
+        assertEquals(mapOf("slot-usb" to "s:1"), hub.bindings.value)
+        val summary = hub.connections.value.first { it.id == "s:1" }
+        assertEquals(CONTROLLER_TYPE_PLAYSTATION, summary.satelliteControllerTypes["slot-usb"])
+        assertNull(summary.satelliteControllerTypes["slot-fw"])
+        verify { satConn.renameSlot("slot-fw", "slot-usb") }
+        verify(exactly = 0) { satConn.detachSlot(any()) }
+    }
+
+    @Test
+    fun `migrateSlotBinding does nothing when the source slot is unbound`() {
+        val satConn = mockk<SatelliteConnection>(relaxed = true)
+        every { satellite.get(any()) } returns satConn
+        val hub = buildHub()
+
+        hub.migrateSlotBinding("ghost", "slot-usb")
+        scope.testScheduler.runCurrent()
+
+        assertEquals(emptyMap<String, String>(), hub.bindings.value)
+        verify(exactly = 0) { satConn.renameSlot(any(), any()) }
+    }
+
+    @Test
     fun `stale bt marker does not override a connected bt host`() {
         every { store.rememberedBt() } returns
             listOf(RememberedBt(id = "bt:AA", name = "Xbox", mac = "AA", profileName = "Xbox"))

@@ -92,6 +92,22 @@ class ConnectionHub
             typeStore.clear(connId, slotId)
         }
 
+        fun migrateSlotBinding(
+            fromSlotId: String,
+            toSlotId: String,
+        ) {
+            if (fromSlotId == toSlotId) return
+            val connId = bindingStore.connectionFor(fromSlotId) ?: return
+            val type = typeStore.typeFor(connId, fromSlotId)
+            bindingStore.unbind(fromSlotId)
+            bindingStore.bind(toSlotId, connId)
+            if (type != null) {
+                typeStore.clear(connId, fromSlotId)
+                typeStore.setType(connId, toSlotId, type)
+            }
+            satellite.get(connId)?.renameSlot(fromSlotId, toSlotId)
+        }
+
         fun setSatelliteControllerType(
             connectionId: String,
             slotId: String,

@@ -315,6 +315,24 @@ class SatelliteConnection(
         }
     }
 
+    fun renameSlot(
+        fromSlotId: String,
+        toSlotId: String,
+    ) {
+        if (fromSlotId == toSlotId) return
+        _slots.update { map ->
+            val cur = map[fromSlotId] ?: return@update map
+            if (map.containsKey(toSlotId)) return@update map
+            (map - fromSlotId) + (toSlotId to cur)
+        }
+        motionBackendStatusStore?.let { store ->
+            store.statusFor(id, fromSlotId)?.let { status ->
+                store.setStatus(id, toSlotId, status)
+                store.clear(id, fromSlotId)
+            }
+        }
+    }
+
     fun sendReport(
         slotId: String,
         buttons: Int,
