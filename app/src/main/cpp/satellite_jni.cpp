@@ -232,6 +232,17 @@ static void publishIfChanged(int32_t deviceId, DeviceState& s) {
     }
 }
 
+// USB-direct reports skip gamepad::applyAxes, so the per-device flat (deadzone) is never applied; a
+// resting stick would otherwise stream jitter and drift. Radial hard cutoff, ~8% of int16 range.
+static constexpr int32_t kUsbStickDeadzone = 2600;
+static inline void applyUsbStickDeadzone(int16_t& x, int16_t& y) {
+    const int64_t mag2 = static_cast<int64_t>(x) * x + static_cast<int64_t>(y) * y;
+    if (mag2 < static_cast<int64_t>(kUsbStickDeadzone) * kUsbStickDeadzone) {
+        x = 0;
+        y = 0;
+    }
+}
+
 namespace dispatch {
 
 void prewarmDevice(int32_t deviceId) {
@@ -249,6 +260,8 @@ void applyUsbReport(int32_t deviceId, const gamepad::DeviceState& nu) {
     s.sLY = nu.sLY;
     s.sRX = nu.sRX;
     s.sRY = nu.sRY;
+    applyUsbStickDeadzone(s.sLX, s.sLY);
+    applyUsbStickDeadzone(s.sRX, s.sRY);
     publishIfChanged(deviceId, s);
 }
 
@@ -965,13 +978,6 @@ Java_com_tinkernorth_dish_hotpath_input_RumbleBridge_nativeInstall(JNIEnv* env, 
     }
 }
 
-// USB host fast-lane exports. The Kotlin side has already claimed the interface and given us a
-// usbdevfs fd from UsbDeviceConnection.getFileDescriptor(). From here the controller runs
-// entirely in C: URB submit/reap on a dedicated thread, decode, publishIfChanged into the
-// existing encrypted-UDP send path. No per-event JNI.
-//
-// Returns the synthetic deviceId (negative int) on success, or 0 on failure. Caller passes -1
-// as interfaceNumber to skip CLAIMINTERFACE if Kotlin already holds the interface lock.
 JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_attachUsbDevice(
     JNIEnv*, jobject, jint fd, jint vid, jint pid, jint interfaceNumber, jint epIn,
     jint epInMaxPacket, jint epOut) {
@@ -993,10 +999,6 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_detach
     usbhost::detachDevice((int32_t)syntheticDeviceId);
 }
 
-// Cold-path lookup of a known controller model name by VID/PID — lets Kotlin show the friendly
-// product label ("Sony DualSense", "Xbox Series X|S Controller") even before the user grants USB
-// permission. Returns the empty string if the VID/PID isn't in our table; Kotlin falls back to
-// whatever the framework reports (UsbDevice.productName / InputDevice.name).
 JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_lookupKnownModelName(
     JNIEnv* env, jobject, jint vid, jint pid) {
     const usbparsers::KnownDevice* k =
@@ -1020,9 +1022,6 @@ JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_mo
     return usbparsers::parserHasImu(k->parser) ? JNI_TRUE : JNI_FALSE;
 }
 
-// Monotonic URB completion counter for the device. Kotlin samples this on a fixed interval and
-// derives an instantaneous Hz from the delta. The atomic read is wait-free; no JNI work on the
-// hot path itself.
 JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDeviceUrbCount(
     JNIEnv*, jobject, jint deviceId) {
     return (jlong)usbhost::getUrbCount((int32_t)deviceId);

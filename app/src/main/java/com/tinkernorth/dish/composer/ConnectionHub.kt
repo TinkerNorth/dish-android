@@ -105,7 +105,25 @@ class ConnectionHub
                 typeStore.clear(connId, fromSlotId)
                 typeStore.setType(connId, toSlotId, type)
             }
-            satellite.get(connId)?.renameSlot(fromSlotId, toSlotId)
+            val conn = satellite.get(connId) ?: return
+            if (!conn.renameSlot(fromSlotId, toSlotId)) {
+                scope.launch { conn.attachSlot(toSlotId, controllerType = type ?: CONTROLLER_TYPE_XBOX) }
+            }
+        }
+
+        fun bindClaimedSynthetic(
+            twinSlotId: String?,
+            syntheticSlotId: String,
+        ) {
+            if (twinSlotId != null && bindingStore.connectionFor(twinSlotId) != null) {
+                migrateSlotBinding(twinSlotId, syntheticSlotId)
+                return
+            }
+            val target =
+                connections.value.singleOrNull {
+                    it.kind == ConnectionKind.SATELLITE && it.live == LinkState.Connected
+                }
+            if (target != null) bind(syntheticSlotId, target.id)
         }
 
         fun setSatelliteControllerType(

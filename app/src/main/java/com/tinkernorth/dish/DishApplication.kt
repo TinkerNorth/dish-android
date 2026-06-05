@@ -118,12 +118,7 @@ class DishApplication : Application() {
         lifecycle.addObserver(connectionForegroundObserver)
         // Process-scoped so bindings survive the MainActivity → GamepadOverlayActivity handoff.
         physicalGamepadRegistry.install()
-        // Also process-scoped: USB host claims survive activity recreation, and the broadcast
-        // receiver listening for plug/unplug needs to be alive even while the app is backgrounded
-        // so we can detach cleanly when the user unplugs without opening the app first.
         usbGamepadManager.install()
-        // Process-scope sampler so the dashboard's Hz badge keeps updating across activity
-        // recreations; sample cost is one atomic read per direct-mode device every 500 ms.
         pollRateSampler.install()
         lifecycle.addObserver(physicalSlotBindingObserver)
         lifecycle.addObserver(physicalBatterySource)

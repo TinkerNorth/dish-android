@@ -43,13 +43,8 @@ struct DeviceCtx {
     std::string parserName;
     usbparsers::StickAutoRange stickRange;
 
-    // Monotonic-clock timestamp (ns) of the last MSG_MOTION shipped for this device, used for the
-    // inter-sample delta and rate limiting. 0 until the first motion sample.
     int64_t lastMotionNs = 0;
 
-    // Successful URB completions since attach. Read by Kotlin's PollRateSampler at a fixed
-    // interval to derive the measured Hz; the delta-over-time approach gives a true sampled
-    // rate that includes whatever stalls or coalescing the kernel and the device introduce.
     std::atomic<uint64_t> urbCount{0};
 
     std::atomic<bool> stop{false};
@@ -127,8 +122,6 @@ void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
         struct pollfd pfd = {};
         pfd.fd = ctx->fd;
         pfd.events = POLLOUT;
-        // The 100 ms timeout bounds stop-flag latency. URBs wake poll the instant the kernel
-        // marks the device fd writable, so this timeout never gates per-event latency.
         int pr = poll(&pfd, 1, 100);
         if (ctx->stop.load(std::memory_order_relaxed)) break;
         if (pr < 0) {
@@ -138,9 +131,6 @@ void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
         }
         if (pr == 0) continue;
 
-        // Drain every completed URB before going back to poll. The kernel may have completed
-        // multiple in the time we were asleep; reaping all of them in one wake keeps the
-        // pipeline saturated and avoids extra poll syscalls per report.
         while (running) {
             usbdevfs_urb* reaped = nullptr;
             int r = ioctl(ctx->fd, USBDEVFS_REAPURBNDELAY, &reaped);
@@ -237,12 +227,6 @@ constexpr int kProbeMaxReads = 16;
 constexpr unsigned kProbeReadTimeoutMs = 80;
 constexpr int kProbeMaxTimeouts = 4;
 
-// Returns true if the device emits a report our parser recognises within a short window.
-// attachDevice uses this to avoid stealing a controller from the framework path when we can't
-// actually decode it: on failure the interface is released so the controller stays on Android's
-// standard input instead of being claimed into a dead Direct-mode card. Uses synchronous bulk
-// reads (usbfs routes these to interrupt endpoints, like the init writes) to avoid managing async
-// URB lifetimes here.
 bool probeDecodable(int fd, uint8_t epIn, uint16_t epInMaxPacket, usbparsers::Parser parser) {
     std::vector<uint8_t> buf(epInMaxPacket == 0 ? 64 : epInMaxPacket);
     gamepad::DeviceState scratch{};

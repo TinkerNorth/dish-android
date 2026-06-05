@@ -32,30 +32,13 @@ using gamepad::XUSB_THUMB_R;
 using gamepad::XUSB_X;
 using gamepad::XUSB_Y;
 
-// VID/PID table. Order is informational; lookupKnown does a linear scan since the table is small
-// and only consulted on plug-in (cold path).
-//
-// Categories:
-//   XINPUT_360       Microsoft Xbox 360 wire protocol. Most "PC gamepads" emulate this when set
-//                    to XInput mode (Logitech F310/F710/F510, 8BitDo, PowerA, Hori, Mad Catz,
-//                    PDP, Razer, Afterglow, Thrustmaster, etc.).
-//   XBOX_ONE_GIP     Microsoft GIP protocol used by Xbox One / Series / Elite / Adaptive
-//                    controllers when wired.
-//   DUALSHOCK4       Sony PS4 controllers (CUH-ZCT1/2, Nacon, Razer, Hori PS4 sticks).
-//   DUALSENSE        Sony PS5 controllers.
-//   SWITCH_PRO_USB   Nintendo Switch Pro Controller. Sends the USB handshake + set-report-mode
-//                    sequence on attach, then decodes the 0x30 standard full report.
-//   STADIA           Google Stadia controller (HID gamepad with extras).
-//   GENERIC_HID_GAMEPAD  Best-effort fallback for unrecognised HID gamepads.
 static const KnownDevice kKnown[] = {
-    // ── Microsoft Xbox 360 ────────────────────────────────────────────────
     {0x045E, 0x028E, "Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
     {0x045E, 0x028F, "Xbox 360 Wireless Receiver (wired)", Parser::XINPUT_360, InitKind::NONE},
     {0x045E, 0x02A1, "Xbox 360 Wireless Controller (PC)", Parser::XINPUT_360, InitKind::NONE},
     {0x045E, 0x0291, "Xbox 360 Wireless Receiver (rev 1)", Parser::XINPUT_360, InitKind::NONE},
     {0x045E, 0x0719, "Xbox 360 Wireless Receiver (rev 2)", Parser::XINPUT_360, InitKind::NONE},
 
-    // ── Microsoft Xbox One / Series / Elite (GIP) ────────────────────────
     {0x045E, 0x02D1, "Xbox One Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
     {0x045E, 0x02DD, "Xbox One Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
     {0x045E, 0x02E3, "Xbox One Elite Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
@@ -68,7 +51,6 @@ static const KnownDevice kKnown[] = {
     {0x045E, 0x0B13, "Xbox Series X|S Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
     {0x045E, 0x0B22, "Xbox Adaptive Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
 
-    // ── Logitech F-Series (XInput mode) ──────────────────────────────────
     {0x046D, 0xC218, "Logitech F310 (XInput)", Parser::XINPUT_360, InitKind::NONE},
     {0x046D, 0xC219, "Logitech F710 (XInput)", Parser::XINPUT_360, InitKind::NONE},
     {0x046D, 0xC21D, "Logitech F310 (XInput)", Parser::XINPUT_360, InitKind::NONE},
@@ -76,7 +58,6 @@ static const KnownDevice kKnown[] = {
     {0x046D, 0xC21F, "Logitech F710 (XInput)", Parser::XINPUT_360, InitKind::NONE},
     {0x046D, 0xCAA3, "Logitech G29 Driving Force (XInput)", Parser::XINPUT_360, InitKind::NONE},
 
-    // ── 8BitDo (XInput mode) ─────────────────────────────────────────────
     {0x2DC8, 0x9000, "8BitDo Pro 2", Parser::XINPUT_360, InitKind::NONE},
     {0x2DC8, 0x9001, "8BitDo SN30 Pro", Parser::XINPUT_360, InitKind::NONE},
     {0x2DC8, 0x9003, "8BitDo SN30 Pro+", Parser::XINPUT_360, InitKind::NONE},
@@ -84,7 +65,6 @@ static const KnownDevice kKnown[] = {
     {0x2DC8, 0x6101, "8BitDo Ultimate (XInput)", Parser::XINPUT_360, InitKind::NONE},
     {0x2DC8, 0x6001, "8BitDo M30", Parser::XINPUT_360, InitKind::NONE},
 
-    // ── PowerA / PDP / Hori / Mad Catz (Xbox 360 protocol) ───────────────
     {0x0738, 0x4716, "Mad Catz Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
     {0x0738, 0x4726, "Mad Catz Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
     {0x0738, 0x4728, "Mad Catz Street Fighter IV FightPad", Parser::XINPUT_360, InitKind::NONE},
@@ -120,7 +100,6 @@ static const KnownDevice kKnown[] = {
     {0x24C6, 0x551A, "PowerA FUSION Pro Controller", Parser::XINPUT_360, InitKind::NONE},
     {0x24C6, 0x561A, "PowerA FUSION Controller", Parser::XINPUT_360, InitKind::NONE},
 
-    // ── PowerA / Hori / PDP Xbox One ────────────────────────────────────
     {0x0E6F, 0x0139, "Afterglow Prismatic Wired Xbox One", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
     {0x0E6F, 0x013B, "PDP Xbox One Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
     {0x0E6F, 0x0146, "Rock Candy Xbox One", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
@@ -140,7 +119,6 @@ static const KnownDevice kKnown[] = {
     {0x24C6, 0x791A, "PowerA Fusion FightPad", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
     {0x1532, 0x0A03, "Razer Wildcat", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
 
-    // ── Sony DualShock 4 / PS4 family ───────────────────────────────────
     {0x054C, 0x05C4, "Sony DualShock 4 (CUH-ZCT1)", Parser::DUALSHOCK4, InitKind::NONE},
     {0x054C, 0x09CC, "Sony DualShock 4 v2 (CUH-ZCT2)", Parser::DUALSHOCK4, InitKind::NONE},
     {0x054C, 0x0BA0, "Sony DualShock 4 USB Wireless Adapter", Parser::DUALSHOCK4, InitKind::NONE},
@@ -158,16 +136,13 @@ static const KnownDevice kKnown[] = {
     {0x1532, 0x1200, "Razer Raiju Ultimate", Parser::DUALSHOCK4, InitKind::NONE},
     {0x7545, 0x0104, "Armor3 Armor Titan", Parser::DUALSHOCK4, InitKind::NONE},
 
-    // ── Sony DualSense / PS5 family ─────────────────────────────────────
     {0x054C, 0x0CE6, "Sony DualSense", Parser::DUALSENSE, InitKind::NONE},
     {0x054C, 0x0DF2, "Sony DualSense Edge", Parser::DUALSENSE, InitKind::NONE},
 
-    // ── Nintendo Switch Pro ─────────────────────────────────────────────
     {0x057E, 0x2009, "Nintendo Switch Pro Controller", Parser::SWITCH_PRO_USB, InitKind::SWITCH_PRO_HANDSHAKE},
     {0x057E, 0x200E, "Nintendo Joy-Con Charging Grip", Parser::SWITCH_PRO_USB, InitKind::SWITCH_PRO_HANDSHAKE},
     {0x057E, 0x2017, "Nintendo SNES Online Controller", Parser::SWITCH_PRO_USB, InitKind::SWITCH_PRO_HANDSHAKE},
 
-    // ── Google Stadia ───────────────────────────────────────────────────
     {0x18D1, 0x9400, "Google Stadia Controller", Parser::STADIA, InitKind::NONE},
 };
 
@@ -201,13 +176,11 @@ const char* parserName(Parser p) {
 }
 
 bool parserHasImu(Parser p) {
-    // Extend as IMU parsing lands for each family (DualShock 4, DualSense next).
     return p == Parser::SWITCH_PRO_USB;
 }
 
 namespace {
 
-// Bulk-write helper used for init handshakes. Returns true if all bytes were accepted.
 bool bulkWrite(int fd, uint8_t epOut, const uint8_t* data, size_t len, unsigned timeoutMs) {
     if (epOut == 0) return false;
     struct usbdevfs_bulktransfer xfer = {};
@@ -236,17 +209,25 @@ int16_t scaleU8Centered(uint8_t v, bool invert) {
 // asymmetric: scaling both sides by one shared reach leaves the smaller side short of the rail.
 // Each side stretches its own learned reach to the full extent, so every direction can hit the
 // edge. Center stays at the nominal 2048.
+// Inner deadzone in the raw 12-bit domain. The Switch Pro's stick center wanders per unit (a resting
+// stick can sit a few hundred counts off 2048) and we read no factory calibration, so without this
+// the auto-range amplifies that offset into large resting drift. Counts within the deadzone read as
+// center; the throw beyond it is auto-ranged to full scale.
+static constexpr int32_t kSwitchStickRawDeadzone = 320;
+
 int16_t scaleSwitchStickAuto(uint16_t raw12, AxisAutoRange& axis) {
     int32_t centered = (int32_t)raw12 - 2048;
+    int32_t mag = centered >= 0 ? centered : -centered;
+    if (mag <= kSwitchStickRawDeadzone) return 0;
+    int32_t adj = mag - kSwitchStickRawDeadzone;
     if (centered >= 0) {
-        if (centered > axis.posReach) axis.posReach = centered;
-        int32_t scaled = (centered * 32767) / axis.posReach;
+        if (adj > axis.posReach) axis.posReach = adj;
+        int32_t scaled = (adj * 32767) / axis.posReach;
         if (scaled > 32767) scaled = 32767;
         return (int16_t)scaled;
     }
-    int32_t mag = -centered;
-    if (mag > axis.negReach) axis.negReach = mag;
-    int32_t scaled = (mag * 32768) / axis.negReach;
+    if (adj > axis.negReach) axis.negReach = adj;
+    int32_t scaled = (adj * 32768) / axis.negReach;
     if (scaled > 32768) scaled = 32768;
     return (int16_t)(-scaled);
 }

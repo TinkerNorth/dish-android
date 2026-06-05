@@ -18,7 +18,7 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionHub
-import com.tinkernorth.dish.core.jni.SatelliteNative
+import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.notification.DishNotifications
@@ -26,16 +26,11 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
 
-// Hilt singleton that manages the USB-host fast lane. Direct mode is opt-in per connection: when a
-// recognised controller is attached we post a themed prompt asking whether to move it to the
-// C-level fast lane. Accepting (prompt action or the per-card button) requests USB permission,
-// claims the interface, and hands the fd to SatelliteNative.attachUsbDevice; the per-device hot
-// path then runs entirely in C. This class is only touched on plug-in, prompt/button action,
-// permission-grant, and unplug.
 @Singleton
 class UsbGamepadManager
     @Inject
@@ -45,11 +40,12 @@ class UsbGamepadManager
         private val connectionHubProvider: Provider<ConnectionHub>,
         private val notifications: DishNotifications,
         private val scope: CoroutineScope,
+        private val native: PhysicalInputNative,
     ) {
         private val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
 
-        private val claimedDevices = HashMap<String, ClaimedDevice>()
-        private val promptedDevices = HashSet<String>()
+        private val claimedDevices = ConcurrentHashMap<String, ClaimedDevice>()
+        private val promptedDevices = ConcurrentHashMap.newKeySet<String>()
 
         @Volatile private var installed = false
 
@@ -79,9 +75,6 @@ class UsbGamepadManager
         }
 
         private fun scanExistingDevices() {
-            // App start: the dashboard isn't up yet, so a prompt would be dropped. Silently restore
-            // devices we already hold permission for; reconcileForeground() prompts the rest once
-            // the UI is showing.
             for (device in usbManager.deviceList.values) {
                 claimIfPermitted(device)
             }
@@ -93,18 +86,12 @@ class UsbGamepadManager
             if (usbManager.hasPermission(device)) claimAndReport(device, notify = false)
         }
 
-        // Called when the dashboard comes to the foreground: silently restores already-permitted
-        // candidates and prompts the rest (once per connection), covering controllers plugged in
-        // while the app was closed.
         fun reconcileForeground() {
             for (device in usbManager.deviceList.values) {
                 handleAttached(device)
             }
         }
 
-        // Entry point for the prompt's "Try" action and the per-card "Try Direct mode" button.
-        // Claims the device (permission already held) or pops the system permission dialog; the
-        // outcome surfaces as a themed toast.
         fun tryDirectMode(
             vendorId: Int,
             productId: Int,
@@ -140,8 +127,6 @@ class UsbGamepadManager
                             val device = deviceFromIntent(intent) ?: return
                             val granted =
                                 intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
-                            // Denial leaves the controller eligible (the card keeps its "Try Direct
-                            // mode" button); only a real claim failure locks it.
                             if (granted) claimAndReport(device, notify = true)
                         }
                     }
@@ -163,7 +148,7 @@ class UsbGamepadManager
             promptedDevices.remove(key)
             registry.clearDirectFailed(device.vendorId, device.productId)
             val claimed = claimedDevices.remove(key) ?: return
-            SatelliteNative.detachUsbDevice(claimed.syntheticDeviceId)
+            native.detachUsbDevice(claimed.syntheticDeviceId)
             runCatching {
                 claimed.connection.releaseInterface(claimed.intf)
                 claimed.connection.close()
@@ -186,9 +171,6 @@ class UsbGamepadManager
             }
         }
 
-        // Returns null on success (the device is now on the fast lane), or the PathReason explaining
-        // why it couldn't be claimed. Surfaces nothing to the user; the caller decides whether to
-        // toast (user-initiated) or stay silent (background restore).
         private fun attemptClaim(device: UsbDevice): PathReason? {
             val key = keyFor(device)
             if (claimedDevices.containsKey(key)) return null
@@ -202,13 +184,9 @@ class UsbGamepadManager
                             it.productId == device.productId
                     }?.id
                     ?.toString()
-            val conn = usbManager.openDevice(device) ?: return PathReason.Busy
-            if (!conn.claimInterface(intf, true)) {
-                conn.close()
-                return PathReason.Busy
-            }
+            val conn = openAndClaim(device, intf) ?: return PathReason.Busy
             val synthetic =
-                SatelliteNative.attachUsbDevice(
+                native.attachUsbDevice(
                     fd = conn.fileDescriptor,
                     vendorId = device.vendorId,
                     productId = device.productId,
@@ -226,19 +204,27 @@ class UsbGamepadManager
             }
             claimedDevices[key] = ClaimedDevice(device, conn, intf, synthetic)
             val displayName = friendlyName(device)
-            val pollRateHz = computePollRateHz(epIn.interval, epIn.maxPacketSize)
+            val pollRateHz = computeUsbPollRateHz(epIn.interval, epIn.maxPacketSize)
             registry.addUsbSynthetic(
                 deviceId = synthetic,
                 name = displayName,
-                hasGyro = SatelliteNative.modelHasImu(device.vendorId, device.productId),
+                hasGyro = native.modelHasImu(device.vendorId, device.productId),
                 pollRateHz = pollRateHz,
                 vendorId = device.vendorId,
                 productId = device.productId,
             )
-            if (routedSlotId != null) {
-                connectionHubProvider.get().migrateSlotBinding(routedSlotId, synthetic.toString())
-            }
+            connectionHubProvider.get().bindClaimedSynthetic(routedSlotId, synthetic.toString())
             Log.i(TAG, "claimed ${device.vendorId.toHex4()}:${device.productId.toHex4()} ($displayName) → dev=$synthetic")
+            return null
+        }
+
+        private fun openAndClaim(
+            device: UsbDevice,
+            intf: UsbInterface,
+        ): UsbDeviceConnection? {
+            val conn = usbManager.openDevice(device) ?: return null
+            if (conn.claimInterface(intf, true)) return conn
+            conn.close()
             return null
         }
 
@@ -273,10 +259,6 @@ class UsbGamepadManager
             }
         }
 
-        // The PendingIntent must be MUTABLE on API 31+: UsbManager fills EXTRA_DEVICE and
-        // EXTRA_PERMISSION_GRANTED into the result when it fires, which it can't do on an immutable
-        // one (the grant then never reaches our receiver). Safe here: the intent is package-scoped
-        // and the receiver is not exported.
         private fun requestPermission(device: UsbDevice) {
             val intent = Intent(ACTION_USB_PERMISSION).setPackage(context.packageName)
             val flags =
@@ -291,18 +273,14 @@ class UsbGamepadManager
             }
         }
 
-        // A controller is a Direct-mode candidate if it's gamepad-shaped and its VID/PID is in our
-        // parser table. Both are readable without USB permission, so we decide before prompting.
         private fun isCandidate(device: UsbDevice): Boolean =
             isGamepadShaped(device) &&
-                SatelliteNative.isKnownFastLaneModel(device.vendorId, device.productId)
+                native.isKnownFastLaneModel(device.vendorId, device.productId)
 
-        // Stable per-connection key: deviceName is the USB bus path, identical at attach and detach,
-        // unique per attached device, and readable without USB permission.
         private fun keyFor(device: UsbDevice): String = device.deviceName
 
         private fun friendlyName(device: UsbDevice): String {
-            val known = SatelliteNative.lookupKnownModelName(device.vendorId, device.productId)
+            val known = native.lookupKnownModelName(device.vendorId, device.productId)
             if (known.isNotEmpty()) return known
             val product = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) device.productName else null
             return product?.takeIf { it.isNotBlank() } ?: device.deviceName
@@ -345,31 +323,6 @@ class UsbGamepadManager
             return null
         }
 
-        // Derives the controller's advertised poll rate from the endpoint descriptor. USB-HID
-        // interrupt endpoints encode this differently per device speed: low/full-speed devices
-        // report bInterval in 1ms frames (rate = 1000 / bInterval), high-speed devices encode it
-        // as a power-of-2 microframe exponent (rate = 8000 / 2^(bInterval-1)).
-        //
-        // Android's UsbEndpoint.getInterval returns the raw bInterval byte and does not expose
-        // the negotiated USB speed. We infer high-speed from the IN endpoint's max packet size:
-        // anything over 64 bytes can only come from a high-speed (or faster) endpoint.
-        private fun computePollRateHz(
-            epInterval: Int,
-            epMaxPacketSize: Int,
-        ): Int {
-            if (epInterval <= 0) return 0
-            val isHighSpeed = epMaxPacketSize > MAX_FS_INTERRUPT_PACKET
-            val periodMicros =
-                if (isHighSpeed) {
-                    val exp = (epInterval - 1).coerceIn(0, 15)
-                    (1L shl exp) * 125L
-                } else {
-                    epInterval.toLong() * 1000L
-                }
-            if (periodMicros <= 0L) return 0
-            return (1_000_000L / periodMicros).toInt()
-        }
-
         private fun deviceFromIntent(intent: Intent): UsbDevice? =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
@@ -383,6 +336,5 @@ class UsbGamepadManager
         private companion object {
             const val TAG = "UsbGamepadManager"
             const val ACTION_USB_PERMISSION = "com.tinkernorth.dish.USB_PERMISSION"
-            const val MAX_FS_INTERRUPT_PACKET = 64
         }
     }

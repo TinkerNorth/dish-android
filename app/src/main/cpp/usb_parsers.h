@@ -56,21 +56,13 @@ const KnownDevice* lookupKnown(uint16_t vid, uint16_t pid);
 
 const char* parserName(Parser p);
 
-// True if this parser decodes an on-controller IMU into DeviceState's motion fields. Lets Kotlin
-// mark the synthetic device hasGyro so the motion toggle becomes available in Direct mode.
 bool parserHasImu(Parser p);
 
 bool runInit(int fd, uint8_t epOut, Parser p, InitKind init);
 
-// Returns true if the report was consumed and state was updated. `sticks` carries the per-device
-// auto-range state for parsers that need it (Switch Pro); pass the device's persistent instance.
 bool decodeReport(Parser p, const uint8_t* buf, size_t len, gamepad::DeviceState& s,
                   StickAutoRange* sticks);
 
-// Best-effort fallback for devices we don't have a per-model parser for. Tries the simple HID
-// gamepad layout (4 sticks as 1-byte axes, two trigger bytes, button bitmask). Returns false if
-// the report doesn't look gamepad-shaped, so the caller can fall back to ROUTED instead of
-// publishing garbage.
 bool decodeGenericHidGamepad(const uint8_t* buf, size_t len, gamepad::DeviceState& s);
 
 } // namespace usbparsers

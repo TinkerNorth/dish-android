@@ -16,6 +16,8 @@ import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.TouchpadModeStore
+import com.tinkernorth.dish.source.usb.PathMode
+import com.tinkernorth.dish.source.usb.PathReason
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -248,5 +250,146 @@ class MainViewModelTest {
                     .first { it.id == VIRTUAL_SLOT_ID }
             assertNull(virtual.boundConnectionId)
             assertNull(virtual.boundStatus)
+        }
+
+    private fun synthetic(
+        id: Int,
+        vid: Int,
+        pid: Int,
+        pollRateHz: Int = 0,
+    ) = PhysicalGamepadRegistry.Device(
+        id = id,
+        name = "Pad",
+        isUsbSynthetic = true,
+        pathMode = PathMode.Direct,
+        pollRateHz = pollRateHz,
+        vendorId = vid,
+        productId = pid,
+    )
+
+    private fun routed(
+        id: Int,
+        vid: Int,
+        pid: Int,
+        reason: PathReason = PathReason.None,
+        disconnecting: Boolean = false,
+    ) = PhysicalGamepadRegistry.Device(
+        id = id,
+        name = "Pad",
+        disconnectingTimeLeftSec = if (disconnecting) 3 else null,
+        isUsbSynthetic = false,
+        pathMode = PathMode.Routed,
+        pathReason = reason,
+        vendorId = vid,
+        productId = pid,
+    )
+
+    @Test
+    fun `synthetic device appears as a Direct-mode physical slot`() =
+        runTest(dispatcher) {
+            devicesFlow.value = mapOf(-1000 to synthetic(-1000, 1, 2, pollRateHz = 1000))
+            dispatcher.scheduler.runCurrent()
+
+            val slot =
+                vm.uiState.value.slots
+                    .first { it.inputType == SlotInputType.PHYSICAL }
+            assertEquals("-1000", slot.id)
+            assertEquals(
+                true,
+                vm.uiState.value.pathBadges["-1000"]
+                    ?.isDirect,
+            )
+        }
+
+    @Test
+    fun `a routed twin of a claimed synthetic is hidden from the slot list`() =
+        runTest(dispatcher) {
+            devicesFlow.value =
+                mapOf(
+                    -1000 to synthetic(-1000, 1, 2),
+                    50 to routed(50, 1, 2),
+                )
+            dispatcher.scheduler.runCurrent()
+
+            val physical =
+                vm.uiState.value.slots
+                    .filter { it.inputType == SlotInputType.PHYSICAL }
+            assertEquals(1, physical.size)
+            assertEquals("-1000", physical.first().id)
+        }
+
+    @Test
+    fun `a second identical routed controller stays visible alongside one synthetic`() =
+        runTest(dispatcher) {
+            devicesFlow.value =
+                mapOf(
+                    -1000 to synthetic(-1000, 1, 2),
+                    50 to routed(50, 1, 2),
+                    51 to routed(51, 1, 2),
+                )
+            dispatcher.scheduler.runCurrent()
+
+            val ids =
+                vm.uiState.value.slots
+                    .filter { it.inputType == SlotInputType.PHYSICAL }
+                    .map { it.id }
+            assertEquals(2, ids.size)
+            assertTrue(ids.contains("-1000"))
+        }
+
+    @Test
+    fun `the disconnecting twin is hidden first, keeping the live duplicate listed`() =
+        runTest(dispatcher) {
+            devicesFlow.value =
+                mapOf(
+                    -1000 to synthetic(-1000, 1, 2),
+                    50 to routed(50, 1, 2, disconnecting = false),
+                    51 to routed(51, 1, 2, disconnecting = true),
+                )
+            dispatcher.scheduler.runCurrent()
+
+            val ids =
+                vm.uiState.value.slots
+                    .filter { it.inputType == SlotInputType.PHYSICAL }
+                    .map { it.id }
+            assertTrue("live duplicate kept", ids.contains("50"))
+            assertTrue("disconnecting twin hidden", !ids.contains("51"))
+        }
+
+    @Test
+    fun `eligible routed controller produces an actionable standard badge`() =
+        runTest(dispatcher) {
+            devicesFlow.value = mapOf(60 to routed(60, 0x045E, 0x028E, reason = PathReason.Eligible))
+            dispatcher.scheduler.runCurrent()
+
+            val badge = vm.uiState.value.pathBadges["60"]
+            assertEquals(false, badge?.isDirect)
+            assertEquals(true, badge?.actionable)
+        }
+
+    @Test
+    fun `the virtual slot always carries a non-direct, non-actionable badge`() =
+        runTest(dispatcher) {
+            dispatcher.scheduler.runCurrent()
+            val badge = vm.uiState.value.pathBadges[VIRTUAL_SLOT_ID]
+            assertEquals(false, badge?.isDirect)
+            assertEquals(false, badge?.actionable)
+        }
+
+    @Test
+    fun `every rendered slot has a path badge`() =
+        runTest(dispatcher) {
+            devicesFlow.value =
+                mapOf(
+                    -1000 to synthetic(-1000, 1, 2),
+                    60 to routed(60, 0x045E, 0x028E, reason = PathReason.Eligible),
+                )
+            dispatcher.scheduler.runCurrent()
+
+            val slotIds =
+                vm.uiState.value.slots
+                    .map { it.id }
+                    .toSet()
+            assertEquals(slotIds, vm.uiState.value.pathBadges.keys)
         }
 }

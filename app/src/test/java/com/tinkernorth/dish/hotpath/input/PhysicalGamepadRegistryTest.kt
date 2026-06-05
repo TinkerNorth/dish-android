@@ -2,8 +2,20 @@
 
 package com.tinkernorth.dish.hotpath.input
 
+import android.content.Context
+import android.hardware.input.InputManager
+import android.hardware.usb.UsbManager
 import android.view.InputDevice
+import com.tinkernorth.dish.source.usb.PathMode
+import com.tinkernorth.dish.source.usb.PathReason
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -127,5 +139,102 @@ class PhysicalGamepadRegistryTest {
                 keyboardType = InputDevice.KEYBOARD_TYPE_NON_ALPHABETIC,
             ),
         )
+    }
+
+    private fun buildRegistry(): PhysicalGamepadRegistry {
+        val ctx = mockk<Context>()
+        every { ctx.getSystemService(Context.INPUT_SERVICE) } returns mockk<InputManager>(relaxed = true)
+        every { ctx.getSystemService(Context.USB_SERVICE) } returns mockk<UsbManager>(relaxed = true)
+        return PhysicalGamepadRegistry(ctx, CoroutineScope(SupervisorJob()), mockk(relaxed = true))
+    }
+
+    @Test
+    fun `addUsbSynthetic publishes a Direct-mode device with the supplied fields`() {
+        val registry = buildRegistry()
+        registry.addUsbSynthetic(
+            deviceId = -1000,
+            name = "DualSense",
+            hasGyro = true,
+            pollRateHz = 250,
+            vendorId = 0x054C,
+            productId = 0x0CE6,
+        )
+        val d = registry.devices.value.getValue(-1000)
+        assertEquals("DualSense", d.name)
+        assertTrue(d.isUsbSynthetic)
+        assertEquals(PathMode.Direct, d.pathMode)
+        assertEquals(PathReason.None, d.pathReason)
+        assertTrue(d.hasGyro)
+        assertEquals(250, d.pollRateHz)
+        assertEquals(0x054C, d.vendorId)
+        assertEquals(0x0CE6, d.productId)
+    }
+
+    @Test
+    fun `removeUsbSynthetic drops the entry`() {
+        val registry = buildRegistry()
+        registry.addUsbSynthetic(-1000, "Pad", false, 0, 1, 2)
+        registry.removeUsbSynthetic(-1000)
+        assertNull(registry.devices.value[-1000])
+    }
+
+    @Test
+    fun `updateMeasuredPollRate sets the rate on a present device`() {
+        val registry = buildRegistry()
+        registry.addUsbSynthetic(-1000, "Pad", false, 0, 1, 2)
+        registry.updateMeasuredPollRate(-1000, 500)
+        assertEquals(500, registry.devices.value[-1000]?.pollRateHz)
+    }
+
+    @Test
+    fun `updateMeasuredPollRate never creates a device that is not present`() {
+        val registry = buildRegistry()
+        registry.updateMeasuredPollRate(-1000, 500)
+        assertNull(registry.devices.value[-1000])
+    }
+
+    @Test
+    fun `updateMeasuredPollRate after removal does not resurrect the device`() {
+        val registry = buildRegistry()
+        registry.addUsbSynthetic(-1000, "Pad", false, 0, 1, 2)
+        registry.removeUsbSynthetic(-1000)
+        registry.updateMeasuredPollRate(-1000, 500)
+        assertNull(registry.devices.value[-1000])
+    }
+
+    @Test
+    fun `updateMeasuredPollRate with the same rate is a no-op that does not re-emit`() {
+        val registry = buildRegistry()
+        registry.addUsbSynthetic(-1000, "Pad", false, 250, 1, 2)
+        val before = registry.devices.value
+        registry.updateMeasuredPollRate(-1000, 250)
+        assertSame(before, registry.devices.value)
+    }
+
+    @Test
+    fun `updating one synthetic preserves the others`() {
+        val registry = buildRegistry()
+        registry.addUsbSynthetic(-1000, "A", false, 0, 1, 2)
+        registry.addUsbSynthetic(-1001, "B", false, 0, 3, 4)
+        registry.updateMeasuredPollRate(-1000, 500)
+        assertEquals(2, registry.devices.value.size)
+        assertEquals(500, registry.devices.value[-1000]?.pollRateHz)
+        assertEquals(0, registry.devices.value[-1001]?.pollRateHz)
+    }
+
+    @Test
+    fun `markDirectFailed does not touch a synthetic device of the same model`() {
+        val registry = buildRegistry()
+        registry.addUsbSynthetic(-1000, "Pad", false, 0, vendorId = 1, productId = 2)
+        registry.markDirectFailed(1, 2, PathReason.Busy)
+        assertEquals(PathReason.None, registry.devices.value[-1000]?.pathReason)
+    }
+
+    @Test
+    fun `isSyntheticId treats negative ids as synthetic and non-negative as framework`() {
+        assertTrue(PhysicalGamepadRegistry.isSyntheticId(-1000))
+        assertTrue(PhysicalGamepadRegistry.isSyntheticId(-1))
+        assertFalse(PhysicalGamepadRegistry.isSyntheticId(0))
+        assertFalse(PhysicalGamepadRegistry.isSyntheticId(42))
     }
 }

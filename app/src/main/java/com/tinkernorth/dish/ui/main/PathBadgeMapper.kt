@@ -8,9 +8,6 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.source.usb.PathMode
 import com.tinkernorth.dish.source.usb.PathReason
 
-// Translates a PathMode + PathReason into a user-facing label + optional "why?" subtitle. Names
-// are intentionally non-technical so the dashboard reads "Direct mode" rather than "USB host fast
-// lane via libusb evdev" or "JNI-routed framework input".
 data class PathBadge(
     val label: String,
     val subtitle: String?,

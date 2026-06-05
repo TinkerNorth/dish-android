@@ -8,10 +8,11 @@ import android.hardware.usb.UsbManager
 import android.util.Log
 import android.view.InputDevice
 import android.view.MotionEvent
-import com.tinkernorth.dish.core.jni.SatelliteNative
+import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.sensor.PhysicalMotionProbe
 import com.tinkernorth.dish.source.usb.PathMode
 import com.tinkernorth.dish.source.usb.PathReason
+import com.tinkernorth.dish.source.usb.classifyDirectPathReason
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -19,8 +20,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -30,6 +34,7 @@ class PhysicalGamepadRegistry
     constructor(
         @ApplicationContext context: Context,
         private val scope: CoroutineScope,
+        private val native: PhysicalInputNative,
     ) : InputManager.InputDeviceListener {
         data class Device(
             val id: Int,
@@ -57,7 +62,7 @@ class PhysicalGamepadRegistry
 
         @Volatile private var installed = false
 
-        private val disconnectJobs = HashMap<Int, Job>()
+        private val disconnectJobs = ConcurrentHashMap<Int, Job>()
 
         fun install() {
             if (installed) return
@@ -82,13 +87,9 @@ class PhysicalGamepadRegistry
             if (!isGamepad(dev)) return
             pushDeadzones(dev)
             cancelDisconnect(deviceId)
-            _devices.value = _devices.value + (deviceId to makeRoutedDevice(deviceId, dev))
+            _devices.update { it + (deviceId to makeRoutedDevice(deviceId, dev)) }
         }
 
-        // Classifies a framework-routed controller. A known fast-lane model on the USB bus is an
-        // Eligible Direct-mode candidate (the card offers a "Try Direct mode" action) unless a prior
-        // attempt failed, in which case it shows that locked reason. Off the USB bus (Bluetooth)
-        // Direct mode can't apply; unknown models stay UnknownModel.
         private fun makeRoutedDevice(
             deviceId: Int,
             dev: InputDevice,
@@ -96,12 +97,13 @@ class PhysicalGamepadRegistry
             val vid = runCatching { dev.vendorId }.getOrDefault(0)
             val pid = runCatching { dev.productId }.getOrDefault(0)
             val reason =
-                when {
-                    vid == 0 || pid == 0 -> PathReason.UnknownModel
-                    !SatelliteNative.isKnownFastLaneModel(vid, pid) -> PathReason.UnknownModel
-                    !isUsbDevicePresent(vid, pid) -> PathReason.Bluetooth
-                    else -> directFailed[vpKey(vid, pid)] ?: PathReason.Eligible
-                }
+                classifyDirectPathReason(
+                    vendorId = vid,
+                    productId = pid,
+                    isKnownFastLaneModel = native.isKnownFastLaneModel(vid, pid),
+                    isUsbPresent = isUsbDevicePresent(vid, pid),
+                    priorFailure = directFailed[vpKey(vid, pid)],
+                )
             return Device(
                 id = deviceId,
                 name = dev.name,
@@ -121,29 +123,28 @@ class PhysicalGamepadRegistry
                 it.vendorId == vendorId && it.productId == productId
             }
 
-        private val directFailed = HashMap<Int, PathReason>()
+        private val directFailed = ConcurrentHashMap<Int, PathReason>()
 
         private fun vpKey(
             vendorId: Int,
             productId: Int,
         ): Int = (vendorId shl 16) or (productId and 0xFFFF)
 
-        // Called by UsbGamepadManager when a Direct-mode claim fails. Locks the matching framework
-        // card to the failure reason (no retry affordance) until the controller is re-plugged.
         fun markDirectFailed(
             vendorId: Int,
             productId: Int,
             reason: PathReason,
         ) {
             directFailed[vpKey(vendorId, productId)] = reason
-            _devices.value =
-                _devices.value.mapValues { (_, d) ->
+            _devices.update { map ->
+                map.mapValues { (_, d) ->
                     if (!d.isUsbSynthetic && d.vendorId == vendorId && d.productId == productId) {
                         d.copy(pathReason = reason)
                     } else {
                         d
                     }
                 }
+            }
         }
 
         fun clearDirectFailed(
@@ -181,8 +182,7 @@ class PhysicalGamepadRegistry
                             "${current?.hasGyro} -> $nextHasGyro",
                     )
                 }
-                _devices.value =
-                    _devices.value + (deviceId to makeRoutedDevice(deviceId, dev))
+                _devices.update { it + (deviceId to makeRoutedDevice(deviceId, dev)) }
             }
         }
 
@@ -192,28 +192,28 @@ class PhysicalGamepadRegistry
                 scope.launch {
                     var remaining = DISCONNECT_GRACE_SEC
                     while (isActive && remaining > 0) {
-                        val current = _devices.value[device.id] ?: return@launch
-                        _devices.value =
-                            _devices.value + (device.id to current.copy(disconnectingTimeLeftSec = remaining))
+                        val snapshot =
+                            _devices.updateAndGet { map ->
+                                val cur = map[device.id] ?: return@updateAndGet map
+                                map + (device.id to cur.copy(disconnectingTimeLeftSec = remaining))
+                            }
+                        if (device.id !in snapshot) return@launch
                         delay(1000L)
                         remaining -= 1
                     }
-                    _devices.value = _devices.value - device.id
+                    _devices.update { it - device.id }
                     disconnectJobs.remove(device.id)
                 }
         }
 
         private fun cancelDisconnect(deviceId: Int) {
             disconnectJobs.remove(deviceId)?.cancel()
-            val cur = _devices.value[deviceId] ?: return
-            if (cur.isDisconnecting) {
-                _devices.value = _devices.value + (deviceId to cur.copy(disconnectingTimeLeftSec = null))
+            _devices.update { map ->
+                val cur = map[deviceId] ?: return@update map
+                if (cur.isDisconnecting) map + (deviceId to cur.copy(disconnectingTimeLeftSec = null)) else map
             }
         }
 
-        // Called by UsbGamepadManager after a successful claim. The synthetic deviceId is the
-        // negative integer returned by SatelliteNative.attachUsbDevice; the slot binding observer
-        // treats it like any other physical device.
         fun addUsbSynthetic(
             deviceId: Int,
             name: String,
@@ -222,44 +222,43 @@ class PhysicalGamepadRegistry
             vendorId: Int,
             productId: Int,
         ) {
-            _devices.value =
-                _devices.value +
-                (
-                    deviceId to
-                        Device(
-                            id = deviceId,
-                            name = name,
-                            hasGyro = hasGyro,
-                            pathMode = PathMode.Direct,
-                            pathReason = PathReason.None,
-                            isUsbSynthetic = true,
-                            pollRateHz = pollRateHz,
-                            vendorId = vendorId,
-                            productId = productId,
-                        )
-                )
+            _devices.update { map ->
+                map +
+                    (
+                        deviceId to
+                            Device(
+                                id = deviceId,
+                                name = name,
+                                hasGyro = hasGyro,
+                                pathMode = PathMode.Direct,
+                                pathReason = PathReason.None,
+                                isUsbSynthetic = true,
+                                pollRateHz = pollRateHz,
+                                vendorId = vendorId,
+                                productId = productId,
+                            )
+                    )
+            }
         }
 
         fun removeUsbSynthetic(deviceId: Int) {
-            _devices.value = _devices.value - deviceId
+            _devices.update { it - deviceId }
         }
 
-        // Called by PollRateSampler with the measured Hz computed from native URB-count deltas.
-        // Replaces the advertised rate set at attach with the actual live rate so the UI shows
-        // what the controller is doing right now rather than what its descriptor claims.
         fun updateMeasuredPollRate(
             deviceId: Int,
             rateHz: Int,
         ) {
-            val cur = _devices.value[deviceId] ?: return
-            if (cur.pollRateHz == rateHz) return
-            _devices.value = _devices.value + (deviceId to cur.copy(pollRateHz = rateHz))
+            _devices.update { map ->
+                val cur = map[deviceId] ?: return@update map
+                if (cur.pollRateHz == rateHz) map else map + (deviceId to cur.copy(pollRateHz = rateHz))
+            }
         }
 
         // Pushed at device-add time so the native input thread never crosses back into Java per event.
         private fun pushDeadzones(dev: InputDevice) {
             val src = InputDevice.SOURCE_JOYSTICK
-            SatelliteNative.setDeviceDeadzones(
+            native.setDeviceDeadzones(
                 dev.id,
                 dev.getMotionRange(MotionEvent.AXIS_X, src)?.flat ?: 0f,
                 dev.getMotionRange(MotionEvent.AXIS_Y, src)?.flat ?: 0f,
@@ -319,11 +318,13 @@ class PhysicalGamepadRegistry
         // Generic HID joysticks expose buttons as KEYCODE_BUTTON_1..16; gating on hasKeys would hide them.
         private fun isGamepad(d: InputDevice): Boolean = isGamepadDeviceFromCapabilities(d.sources, d.keyboardType)
 
-        private companion object {
-            const val TAG = "PhysicalGamepadRegistry"
+        companion object {
+            private const val TAG = "PhysicalGamepadRegistry"
 
             // Covers a USB cable jiggle / re-enumeration without holding state long enough that a real removal feels stuck.
-            const val DISCONNECT_GRACE_SEC = 5
+            private const val DISCONNECT_GRACE_SEC = 5
+
+            fun isSyntheticId(deviceId: Int): Boolean = deviceId < 0
         }
     }
 

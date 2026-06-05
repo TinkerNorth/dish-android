@@ -72,8 +72,6 @@ struct DeviceState {
 
     float flatX = 0.f, flatY = 0.f, flatZ = 0.f, flatRZ = 0.f;
 
-    // Motion in wire units, filled by parsers that decode an on-controller IMU. Not part of
-    // consumePublishIfChanged (gamepad data); the USB poll loop ships these separately as MSG_MOTION.
     bool motionValid = false;
     int16_t gyroX = 0, gyroY = 0, gyroZ = 0;
     int16_t accelX = 0, accelY = 0, accelZ = 0;

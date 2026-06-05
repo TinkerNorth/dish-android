@@ -354,7 +354,8 @@
     <string name="path_direct_explainer">Lowest delay. Talking straight to the controller.</string>
     <string name="path_reason_default">Works with every controller Android recognises.</string>
     <string name="path_reason_bluetooth">Bluetooth controllers always use Standard mode.</string>
-    <string name="path_reason_onscreen">On-screen controllers use Standard mode.</string>    <string name="path_reason_unknown_model">This controller isn\'t in the fast-path list yet.</string>
+    <string name="path_reason_onscreen">On-screen controllers use Standard mode.</string>
+    <string name="path_reason_unknown_model">This controller isn\'t in the fast-path list yet.</string>
     <string name="path_reason_busy">Another app is using this controller.</string>
     <string name="path_reason_init_failed">Couldn\'t set up Direct mode. Using Standard mode instead.</string>
     <string name="path_reason_detached">Controller was unplugged.</string>

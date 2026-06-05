@@ -197,14 +197,6 @@ class SatelliteConnection(
                 if (info.registered) return@withContext
                 if (handle < 0) return@withContext
                 val caps = BASE_CAPABILITIES or motionCapsBitsFor(slotId)
-                // Retry the ADD a few times: a dropped UDP packet on the first attempt would
-                // otherwise leave the slot stuck unregistered until the user manually rebinds.
-                //
-                // ALREADY_EXISTS is treated as success either way. The two cases we see it in
-                // are (a) our own ADD's ACK was dropped on a previous attempt in this loop and
-                // we're hearing about the still-live controller, or (b) a previous session's
-                // REMOVE was dropped and the server is still holding a controller at our index.
-                // Both cases mean the slot is live server-side and the send path will work.
                 var result: Int? = null
                 for (attempt in 1..ADD_MAX_ATTEMPTS) {
                     if (handle < 0) return@withContext
@@ -300,10 +292,6 @@ class SatelliteConnection(
         motionBackendStatusStore?.clear(id, slotId)
         if (handle >= 0 && info.registered) {
             val originalHandle = handle
-            // The remove path has no ack/retry-from-server. A single UDP drop here would leave a
-            // ghost controller on the satellite indefinitely. Fire the remove a few times spaced
-            // apart so at least one almost certainly survives even on a lossy link; the server
-            // treats "remove a controller that doesn't exist" as a no-op.
             scope.launch(ioDispatcher) {
                 repeat(REMOVE_RETRIES) { attempt ->
                     val snap = live ?: return@launch
@@ -318,19 +306,24 @@ class SatelliteConnection(
     fun renameSlot(
         fromSlotId: String,
         toSlotId: String,
-    ) {
-        if (fromSlotId == toSlotId) return
+    ): Boolean {
+        if (fromSlotId == toSlotId) return _slots.value.containsKey(toSlotId)
+        var renamed = false
         _slots.update { map ->
             val cur = map[fromSlotId] ?: return@update map
             if (map.containsKey(toSlotId)) return@update map
+            renamed = true
             (map - fromSlotId) + (toSlotId to cur)
         }
-        motionBackendStatusStore?.let { store ->
-            store.statusFor(id, fromSlotId)?.let { status ->
-                store.setStatus(id, toSlotId, status)
-                store.clear(id, fromSlotId)
+        if (renamed) {
+            motionBackendStatusStore?.let { store ->
+                store.statusFor(id, fromSlotId)?.let { status ->
+                    store.setStatus(id, toSlotId, status)
+                    store.clear(id, fromSlotId)
+                }
             }
         }
+        return _slots.value.containsKey(toSlotId)
     }
 
     fun sendReport(

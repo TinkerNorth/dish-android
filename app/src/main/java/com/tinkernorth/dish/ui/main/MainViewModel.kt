@@ -8,6 +8,8 @@ import androidx.lifecycle.viewModelScope
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionHub
 import com.tinkernorth.dish.composer.ConnectionKind
+import com.tinkernorth.dish.composer.ConnectionSummary
+import com.tinkernorth.dish.composer.MotionCapability
 import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.composer.TouchpadModeComposer
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
@@ -17,6 +19,8 @@ import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.TouchpadModeStore
+import com.tinkernorth.dish.source.usb.PathMode
+import com.tinkernorth.dish.source.usb.PathReason
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -68,13 +72,10 @@ class MainViewModel
                         inputType = SlotInputType.VIRTUAL,
                         name = context.getString(R.string.default_virtual_controller_name),
                     )
-                val directVidPids =
-                    devices.values
-                        .filter { it.isUsbSynthetic && it.vendorId != 0 && it.productId != 0 }
-                        .mapTo(mutableSetOf()) { it.vendorId to it.productId }
+                val hiddenRoutedIds = routedTwinIdsHiddenBySynthetics(devices.values)
                 val physical =
                     devices.values
-                        .filter { dev -> dev.isUsbSynthetic || (dev.vendorId to dev.productId) !in directVidPids }
+                        .filter { dev -> dev.isUsbSynthetic || dev.id !in hiddenRoutedIds }
                         .map { dev ->
                             ControllerSlot(
                                 id = dev.id.toString(),
@@ -97,14 +98,15 @@ class MainViewModel
                                 },
                         )
                     }
-                Triple(slots, conns, motionCaps)
-            }.onEach { (slots, conns, motionCaps) ->
-                // `.update` (not `.value =`) so the parallel touchpad-mode collector's field isn't wiped on re-fire.
+                val pathBadges = slots.associate { it.id to pathBadgeFor(it, devices) }
+                SlotsRender(slots, conns, motionCaps, pathBadges)
+            }.onEach { render ->
                 _uiState.update { prev ->
                     prev.copy(
-                        slots = slots,
-                        connections = conns,
-                        motionCapabilities = motionCaps,
+                        slots = render.slots,
+                        connections = render.connections,
+                        motionCapabilities = render.motionCapabilities,
+                        pathBadges = render.pathBadges,
                     )
                 }
             }.launchIn(viewModelScope)
@@ -214,6 +216,27 @@ class MainViewModel
             if (closeQuote < 0) return null
             return json.substring(openQuote + 1, closeQuote)
         }
+
+        private fun pathBadgeFor(
+            slot: ControllerSlot,
+            devices: Map<Int, PhysicalGamepadRegistry.Device>,
+        ): PathBadge {
+            val device = devices[slot.physicalDeviceId]
+            return PathBadgeMapper.map(
+                ctx = context,
+                mode = device?.pathMode ?: PathMode.Routed,
+                reason = device?.pathReason ?: PathReason.None,
+                isOnScreen = slot.inputType == SlotInputType.VIRTUAL,
+                pollRateHz = device?.pollRateHz ?: 0,
+            )
+        }
+
+        private data class SlotsRender(
+            val slots: List<ControllerSlot>,
+            val connections: List<ConnectionSummary>,
+            val motionCapabilities: Map<String, MotionCapability>,
+            val pathBadges: Map<String, PathBadge>,
+        )
 
         private companion object {
             val ASSUMED_SUPPORTED_TOUCHPAD_MODES: Set<String> = TouchpadModeValue.ALL.toSet()
