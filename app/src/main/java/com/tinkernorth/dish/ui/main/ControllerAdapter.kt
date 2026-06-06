@@ -67,11 +67,11 @@ interface SlotActionListener {
 
 internal fun LinkState.isAvailableForPicker(): Boolean =
     when (this) {
-        LinkState.Connected, LinkState.Unstable,
+        LinkState.Connected, LinkState.Unstable -> true
         LinkState.Connecting,
         LinkState.Ready, LinkState.Found,
-        -> true
-        LinkState.Saved, LinkState.Stale -> false
+        LinkState.Saved, LinkState.Stale,
+        -> false
     }
 
 internal fun connectionsVisibleInPicker(

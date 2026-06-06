@@ -93,6 +93,15 @@
                         android:layout_marginStart="@dimen/spacing_2xl"
                         android:text="@string/dashboard_connections_empty" />
 
+                    <ImageView
+                        android:id="@+id/ivConnectionsLoading"
+                        android:layout_width="@dimen/icon_battery"
+                        android:layout_height="@dimen/icon_battery"
+                        android:layout_marginStart="@dimen/spacing_md"
+                        android:layout_marginEnd="@dimen/spacing_md"
+                        android:importantForAccessibility="no"
+                        android:visibility="gone" />
+
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnManageConnections"
                         style="@style/Widget.Dish.Button.Outlined"

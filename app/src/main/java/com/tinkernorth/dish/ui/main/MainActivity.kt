@@ -27,6 +27,7 @@ import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.source.store.OnboardingState
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.ui.common.DishSpinnerDrawable
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachGamepadHost
@@ -59,6 +60,10 @@ class MainActivity :
     private lateinit var gamepadHost: GamepadActivityHost
 
     private val nav by lazy { DishNavigator(this) }
+
+    private val connectionsSpinner by lazy {
+        DishSpinnerDrawable(this, resources.getDimensionPixelSize(R.dimen.icon_battery))
+    }
 
     // Held by installSplashScreen()'s keep-on-screen gate; cleared either by the first
     // MainUiState render or the SPLASH_HOLD_MAX_MS fallback so a stalled ViewModel can't pin
@@ -118,6 +123,7 @@ class MainActivity :
     private fun setupUI() {
         binding.sectionConnections.labelSection.setText(R.string.section_connections)
         binding.sectionControllers.labelSection.setText(R.string.section_controllers)
+        binding.ivConnectionsLoading.setImageDrawable(connectionsSpinner)
         binding.rvControllers.adapter = controllerAdapter
         (binding.rvControllers.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
             ?.supportsChangeAnimations = false
@@ -166,6 +172,9 @@ class MainActivity :
         splashHoldUntilFirstRender = false
         val liveCount = s.connections.count { it.live == LinkState.Connected }
         val totalCount = s.connections.size
+        val checking = s.anyConnecting
+        binding.ivConnectionsLoading.isVisible = checking
+        if (checking) connectionsSpinner.start() else connectionsSpinner.stop()
         binding.tvConnectionsSummary.text =
             when {
                 liveCount == 0 && totalCount == 0 -> getString(R.string.status_tap_manage)

@@ -264,4 +264,11 @@ class MainUiStateTest {
         assert(state.anyConnected)
         assertEquals(0, state.streamingSlotCount)
     }
+
+    @Test
+    fun `anyConnecting is true only while a connection is connecting`() {
+        assertTrue(MainUiState(connections = listOf(summary("s:1", LinkState.Connecting))).anyConnecting)
+        assertFalse(MainUiState(connections = listOf(summary("s:1", LinkState.Connected))).anyConnecting)
+        assertFalse(MainUiState().anyConnecting)
+    }
 }
