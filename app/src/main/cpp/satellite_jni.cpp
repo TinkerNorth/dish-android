@@ -884,6 +884,11 @@ Java_com_tinkernorth_dish_core_jni_SatelliteNative_clearAllPhysicalSlots(JNIEnv*
     g_slots.clear();
 }
 
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_forgetPhysicalDevice(
+    JNIEnv*, jobject, jint deviceId) {
+    dispatch::forgetDevice((int32_t)deviceId);
+}
+
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setDeviceDeadzones(
     JNIEnv*, jobject, jint deviceId, jfloat flatX, jfloat flatY, jfloat flatZ, jfloat flatRZ) {
     std::lock_guard<std::mutex> lock(g_devicesMtx);
@@ -986,17 +991,21 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_attach
         LOGE("attachUsbDevice: dup(%d) failed: %s", fd, strerror(errno));
         return 0;
     }
-    usbhost::AttachResult r = usbhost::attachDevice(dupFd, (uint16_t)(vid & 0xFFFF),
-                                                    (uint16_t)(pid & 0xFFFF), interfaceNumber,
-                                                    (uint8_t)(epIn & 0xFF),
-                                                    (uint16_t)(epInMaxPacket & 0xFFFF),
-                                                    (uint8_t)(epOut & 0xFF));
+    usbhost::AttachResult r = usbhost::attachDevice(
+        dupFd, (uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF), interfaceNumber,
+        (uint8_t)(epIn & 0xFF), (uint16_t)(epInMaxPacket & 0xFFFF), (uint8_t)(epOut & 0xFF));
     return r.ok ? (jint)r.syntheticDeviceId : 0;
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_detachUsbDevice(
     JNIEnv*, jobject, jint syntheticDeviceId) {
     usbhost::detachDevice((int32_t)syntheticDeviceId);
+}
+
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendUsbRumble(
+    JNIEnv*, jobject, jint syntheticDeviceId, jint strong, jint weak) {
+    usbhost::sendRumble((int32_t)syntheticDeviceId, (uint16_t)(strong & 0xFFFF),
+                        (uint16_t)(weak & 0xFFFF));
 }
 
 JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_lookupKnownModelName(

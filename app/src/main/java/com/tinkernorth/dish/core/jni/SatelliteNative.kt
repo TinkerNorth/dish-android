@@ -138,6 +138,8 @@ object SatelliteNative {
 
     external fun clearAllPhysicalSlots()
 
+    external fun forgetPhysicalDevice(deviceId: Int)
+
     // Without this, axes near rest stream tiny non-zero values upstream.
     external fun setDeviceDeadzones(
         deviceId: Int,
@@ -167,6 +169,13 @@ object SatelliteNative {
     ): Int
 
     external fun detachUsbDevice(syntheticDeviceId: Int)
+
+    // strong/weak are wire-scale 0..65535; native maps to each device's rumble output report.
+    external fun sendUsbRumble(
+        syntheticDeviceId: Int,
+        strong: Int,
+        weak: Int,
+    )
 
     external fun isKnownFastLaneModel(
         vendorId: Int,

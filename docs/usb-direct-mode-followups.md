@@ -23,6 +23,12 @@ Routed.
 fuller GIP handshake for the models that stay silent. Re-evaluate the probe timeout/attempt counts so
 slow starters are not dropped.
 
+**Status:** Guide-button decode is **done**. `decodeXboxOneGip` now handles the virtual-key report
+(0x07) and merges the sticky guide bit (`XUSB_GUIDE` = 0x0400) into the main 0x20 reports via
+`ParserState`; covered by `usb_parsers_test.cpp`. End-to-end depends on the satellite forwarding
+wButtons bit 0x0400 to ViGEm. Still open: the fuller GIP announce/identify handshake for silent
+Series/Elite models, and the probe timeout/attempt tuning (both need that hardware to verify).
+
 **Acceptance:** Guide button registers; a Series X|S and an Elite Series 2 both reach Direct mode
 reliably from cold plug-in.
 
@@ -93,6 +99,11 @@ more frequent now.
 **Task:** When a framework device is removed (or superseded by a synthetic twin), call
 `dispatch::forgetDevice(fwId)` so the entry is reclaimed.
 
+**Status:** **Done.** `SatelliteNative.forgetPhysicalDevice` exposes `dispatch::forgetDevice`, and
+`PhysicalSlotBindingObserver` calls it for every departed framework device id (non-negative; claimed
+synthetics are still freed by `detachUsbDevice`). The 5s registry disconnect-grace means the entry is
+reclaimed a few seconds after a claim/unplug rather than instantly.
+
 **Acceptance:** `g_devices` size returns to baseline after a plug -> claim -> unplug cycle.
 
 ---
@@ -123,13 +134,26 @@ stress never drops the synthetic device or its host registration.
 
 ---
 
-## 7. Cosmetic: two strings on one line
+## 7. USB-direct rumble output (implemented, needs hardware verification)
 
-**Context:** `path_reason_onscreen` and `path_reason_unknown_model` share a single physical line.
-Valid XML, just messy.
+**Status:** Implemented from the Linux kernel drivers, not yet verified on hardware. Builders exist
+for Xbox 360, Xbox One GIP, DualShock 4, DualSense, and Switch Pro. The write path, report layouts,
+counter handling, and sources are in `docs/rumble.md`.
 
-**Where:** `app/src/main/res/values/strings.xml`.
+**Remaining work:**
+- Verify each builder on real hardware (motor mapping, magnitude feel, and that no controller NAKs
+  the report). The Xbox One GIP `/512` divisor caps at half scale, matching xpad; revisit if weak.
+- Xbox 360 *wireless receivers* (PIDs 0x0291/0x0719/0x02A1) need the wrapped wireless rumble frame,
+  not the wired `00 08 00 ...` format currently sent.
+- Stadia uses a SET_REPORT control transfer (not interrupt OUT), so it has no builder yet; the
+  generic-HID parser has none either. Both stay silent rather than guess.
+- Trigger-motor haptics on GIP pads need the wire-format change in `docs/rumble.md` FR-2.
 
-**Task:** Put each `<string>` on its own line.
+**Where:** `app/src/main/cpp/usb_parsers.cpp` (`runRumble`, `switchEncodeMotor`, `runInit`),
+`app/src/main/cpp/usb_host.cpp` (`sendRumble`, `DeviceCtx`), `app/src/main/cpp/satellite_jni.cpp`
+(`sendUsbRumble` JNI), `SatelliteNative.kt` / `PhysicalInputNative.kt`,
+`app/src/main/java/.../hotpath/input/RumbleRouter.kt`.
 
-**Acceptance:** One string per line.
+**Acceptance:** A claimed USB-direct pad of each verified family rumbles on `MSG_RUMBLE` and stops on
+the 0,0 packet (or the safety auto-stop), with no effect on input latency. Unverified families either
+work or stay silent; none receives a malformed report.

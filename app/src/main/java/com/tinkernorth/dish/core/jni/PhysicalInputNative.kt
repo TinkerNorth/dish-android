@@ -58,5 +58,13 @@ class PhysicalInputNative
             SatelliteNative.detachUsbDevice(syntheticDeviceId)
         }
 
+        fun sendUsbRumble(
+            syntheticDeviceId: Int,
+            strong: Int,
+            weak: Int,
+        ) {
+            SatelliteNative.sendUsbRumble(syntheticDeviceId, strong, weak)
+        }
+
         fun getDeviceUrbCount(deviceId: Int): Long = SatelliteNative.getDeviceUrbCount(deviceId)
     }

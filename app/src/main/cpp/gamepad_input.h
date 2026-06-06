@@ -16,6 +16,7 @@ constexpr uint16_t XUSB_THUMB_L = 0x0040;
 constexpr uint16_t XUSB_THUMB_R = 0x0080;
 constexpr uint16_t XUSB_LB = 0x0100;
 constexpr uint16_t XUSB_RB = 0x0200;
+constexpr uint16_t XUSB_GUIDE = 0x0400;
 constexpr uint16_t XUSB_A = 0x1000;
 constexpr uint16_t XUSB_B = 0x2000;
 constexpr uint16_t XUSB_X = 0x4000;

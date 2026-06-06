@@ -41,11 +41,16 @@ struct DeviceCtx {
     usbparsers::Parser parser = usbparsers::Parser::NONE;
     std::string modelName;
     std::string parserName;
-    usbparsers::StickAutoRange stickRange;
+    usbparsers::ParserState stickRange;
 
     int64_t lastMotionNs = 0;
 
     std::atomic<uint64_t> urbCount{0};
+
+    // Guards rumble writes to epOut against the detach that closes fd; outSeq is the output report
+    // counter for protocols that carry one (Xbox One serial, Switch Pro packet number).
+    std::mutex outMtx;
+    uint8_t outSeq = 0;
 
     std::atomic<bool> stop{false};
     std::thread poller;
@@ -55,9 +60,7 @@ std::mutex g_mtx;
 std::unordered_map<int32_t, std::shared_ptr<DeviceCtx>> g_devices;
 std::atomic<int32_t> g_nextSyntheticId{-1000};
 
-int32_t allocSyntheticId() {
-    return g_nextSyntheticId.fetch_sub(1, std::memory_order_relaxed);
-}
+int32_t allocSyntheticId() { return g_nextSyntheticId.fetch_sub(1, std::memory_order_relaxed); }
 
 // Number of URBs kept in flight per device. Two is enough to eliminate the gap between
 // REAP and the next SUBMIT for any HID gamepad we target (highest declared bInterval is 1 ms);
@@ -172,10 +175,9 @@ void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
                         int64_t nowNs = (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
                         if (ctx->lastMotionNs == 0 ||
                             nowNs - ctx->lastMotionNs >= kMotionMinIntervalNs) {
-                            uint32_t deltaUs =
-                                ctx->lastMotionNs == 0
-                                    ? 0
-                                    : (uint32_t)((nowNs - ctx->lastMotionNs) / 1000);
+                            uint32_t deltaUs = ctx->lastMotionNs == 0
+                                                   ? 0
+                                                   : (uint32_t)((nowNs - ctx->lastMotionNs) / 1000);
                             ctx->lastMotionNs = nowNs;
                             dispatch::applyUsbMotion(ctx->syntheticDeviceId, scratch.gyroX,
                                                      scratch.gyroY, scratch.gyroZ, scratch.accelX,
@@ -211,15 +213,18 @@ void shutdownLocked(const std::shared_ptr<DeviceCtx>& ctx) {
     ctx->stop.store(true, std::memory_order_relaxed);
     if (ctx->poller.joinable()) {
         // Joining outside the map lock would race with attach; the poll thread only ever
-        // ever touches ctx + dispatch, never g_mtx, so holding it here is safe.
+        // touches ctx + dispatch, never g_mtx, so holding it here is safe.
         ctx->poller.join();
     }
+    // outMtx so an in-flight sendRumble finishes before the fd it is writing to is closed.
+    std::lock_guard<std::mutex> lock(ctx->outMtx);
     if (ctx->interfaceNumber >= 0) {
         unsigned int iface = (unsigned int)ctx->interfaceNumber;
         ioctl(ctx->fd, USBDEVFS_RELEASEINTERFACE, &iface);
     }
     if (ctx->fd >= 0) {
         ::close(ctx->fd);
+        ctx->fd = -1;
     }
 }
 
@@ -230,7 +235,7 @@ constexpr int kProbeMaxTimeouts = 4;
 bool probeDecodable(int fd, uint8_t epIn, uint16_t epInMaxPacket, usbparsers::Parser parser) {
     std::vector<uint8_t> buf(epInMaxPacket == 0 ? 64 : epInMaxPacket);
     gamepad::DeviceState scratch{};
-    usbparsers::StickAutoRange probeSticks;
+    usbparsers::ParserState probeSticks;
     int consecutiveTimeouts = 0;
     for (int i = 0; i < kProbeMaxReads; i++) {
         struct usbdevfs_bulktransfer xfer = {};
@@ -328,9 +333,8 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
 
     ctx->poller = std::thread(pollLoop, ctx);
 
-    LOGI("attach ok: %04X:%04X (%s) dev=%d parser=%s ep=0x%02X max=%u", vid, pid,
-         modelName.c_str(), ctx->syntheticDeviceId, ctx->parserName.c_str(), ctx->epIn,
-         (unsigned)ctx->epInMaxPacket);
+    LOGI("attach ok: %04X:%04X (%s) dev=%d parser=%s ep=0x%02X max=%u", vid, pid, modelName.c_str(),
+         ctx->syntheticDeviceId, ctx->parserName.c_str(), ctx->epIn, (unsigned)ctx->epInMaxPacket);
 
     out.syntheticDeviceId = ctx->syntheticDeviceId;
     out.ok = true;
@@ -358,6 +362,21 @@ uint64_t getUrbCount(int32_t deviceId) {
     auto it = g_devices.find(deviceId);
     if (it == g_devices.end()) return 0;
     return it->second->urbCount.load(std::memory_order_relaxed);
+}
+
+void sendRumble(int32_t syntheticDeviceId, uint16_t strong, uint16_t weak) {
+    std::shared_ptr<DeviceCtx> ctx;
+    {
+        std::lock_guard<std::mutex> lock(g_mtx);
+        auto it = g_devices.find(syntheticDeviceId);
+        if (it == g_devices.end()) return;
+        ctx = it->second;
+    }
+    if (!ctx) return;
+    std::lock_guard<std::mutex> lock(ctx->outMtx);
+    if (ctx->fd < 0) return;
+    uint8_t seq = ctx->outSeq++;
+    usbparsers::runRumble(ctx->fd, ctx->epOut, ctx->parser, strong, weak, seq);
 }
 
 } // namespace usbhost

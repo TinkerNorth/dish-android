@@ -45,11 +45,14 @@ struct AxisAutoRange {
     int32_t negReach = 1000;
 };
 
-struct StickAutoRange {
+struct ParserState {
     AxisAutoRange lx;
     AxisAutoRange ly;
     AxisAutoRange rx;
     AxisAutoRange ry;
+    // Xbox One guide button (GIP report 0x07) is sticky state merged into the main 0x20 reports.
+    bool xboxGuideHeld = false;
+    gamepad::DeviceState xboxLastMain;
 };
 
 const KnownDevice* lookupKnown(uint16_t vid, uint16_t pid);
@@ -60,8 +63,15 @@ bool parserHasImu(Parser p);
 
 bool runInit(int fd, uint8_t epOut, Parser p, InitKind init);
 
+bool runRumble(int fd, uint8_t epOut, Parser p, uint16_t strong, uint16_t weak, uint8_t seq);
+
+// Pure: writes the device's rumble report into out, returns its length (0 if unsupported or out is
+// too small). Host-tested in usb_parsers_test.cpp; runRumble is the Android write wrapper.
+size_t buildRumbleReport(Parser p, uint16_t strong, uint16_t weak, uint8_t seq, uint8_t* out,
+                         size_t outCap);
+
 bool decodeReport(Parser p, const uint8_t* buf, size_t len, gamepad::DeviceState& s,
-                  StickAutoRange* sticks);
+                  ParserState* sticks);
 
 bool decodeGenericHidGamepad(const uint8_t* buf, size_t len, gamepad::DeviceState& s);
 

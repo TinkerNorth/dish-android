@@ -2,17 +2,22 @@
 
 #include "usb_parsers.h"
 
+#include <string.h>
+#include <algorithm>
+
+// The decoders and report builders here are pure and host-tested (usb_parsers_test.cpp). Only the
+// USB transfer helpers need the kernel ioctls, so they are fenced to the Android build.
+#ifdef __ANDROID__
 #include <android/log.h>
 #include <linux/usbdevice_fs.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
 #include <errno.h>
-#include <string.h>
-#include <algorithm>
 
 #define TAG "SatelliteUsbParse"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
+#endif
 
 namespace usbparsers {
 
@@ -24,6 +29,7 @@ using gamepad::XUSB_DPAD_DOWN;
 using gamepad::XUSB_DPAD_LEFT;
 using gamepad::XUSB_DPAD_RIGHT;
 using gamepad::XUSB_DPAD_UP;
+using gamepad::XUSB_GUIDE;
 using gamepad::XUSB_LB;
 using gamepad::XUSB_RB;
 using gamepad::XUSB_START;
@@ -44,11 +50,15 @@ static const KnownDevice kKnown[] = {
     {0x045E, 0x02E3, "Xbox One Elite Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
     {0x045E, 0x02EA, "Xbox One S Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
     {0x045E, 0x02FD, "Xbox One S Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x045E, 0x0B00, "Xbox Elite Series 2 Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x045E, 0x0B05, "Xbox Elite Series 2 Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
+    {0x045E, 0x0B00, "Xbox Elite Series 2 Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x045E, 0x0B05, "Xbox Elite Series 2 Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
     {0x045E, 0x0B0A, "Xbox Adaptive Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x045E, 0x0B12, "Xbox Series X|S Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x045E, 0x0B13, "Xbox Series X|S Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
+    {0x045E, 0x0B12, "Xbox Series X|S Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x045E, 0x0B13, "Xbox Series X|S Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
     {0x045E, 0x0B22, "Xbox Adaptive Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
 
     {0x046D, 0xC218, "Logitech F310 (XInput)", Parser::XINPUT_360, InitKind::NONE},
@@ -69,12 +79,14 @@ static const KnownDevice kKnown[] = {
     {0x0738, 0x4726, "Mad Catz Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
     {0x0738, 0x4728, "Mad Catz Street Fighter IV FightPad", Parser::XINPUT_360, InitKind::NONE},
     {0x0738, 0x4736, "Mad Catz MicroCon Gamepad", Parser::XINPUT_360, InitKind::NONE},
-    {0x0738, 0x4738, "Mad Catz Wired Xbox 360 Controller (SFIV)", Parser::XINPUT_360, InitKind::NONE},
+    {0x0738, 0x4738, "Mad Catz Wired Xbox 360 Controller (SFIV)", Parser::XINPUT_360,
+     InitKind::NONE},
     {0x0738, 0x4740, "Mad Catz Beat Pad", Parser::XINPUT_360, InitKind::NONE},
     {0x0738, 0xCB02, "Saitek Cyborg Rumble Pad PC/Xbox 360", Parser::XINPUT_360, InitKind::NONE},
     {0x0E6F, 0x0105, "HSM3 Xbox360 dancepad", Parser::XINPUT_360, InitKind::NONE},
     {0x0E6F, 0x0113, "Afterglow AX.1 Gamepad for Xbox 360", Parser::XINPUT_360, InitKind::NONE},
-    {0x0E6F, 0x011F, "Rock Candy Wired Controller for Xbox 360", Parser::XINPUT_360, InitKind::NONE},
+    {0x0E6F, 0x011F, "Rock Candy Wired Controller for Xbox 360", Parser::XINPUT_360,
+     InitKind::NONE},
     {0x0E6F, 0x0301, "Logic3 Controller", Parser::XINPUT_360, InitKind::NONE},
     {0x0E6F, 0x0401, "Logic3 Controller", Parser::XINPUT_360, InitKind::NONE},
     {0x0E6F, 0x0413, "Afterglow AX.1 Gen 2 for Xbox 360", Parser::XINPUT_360, InitKind::NONE},
@@ -100,7 +112,8 @@ static const KnownDevice kKnown[] = {
     {0x24C6, 0x551A, "PowerA FUSION Pro Controller", Parser::XINPUT_360, InitKind::NONE},
     {0x24C6, 0x561A, "PowerA FUSION Controller", Parser::XINPUT_360, InitKind::NONE},
 
-    {0x0E6F, 0x0139, "Afterglow Prismatic Wired Xbox One", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
+    {0x0E6F, 0x0139, "Afterglow Prismatic Wired Xbox One", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
     {0x0E6F, 0x013B, "PDP Xbox One Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
     {0x0E6F, 0x0146, "Rock Candy Xbox One", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
     {0x0E6F, 0x0161, "PDP Xbox One Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
@@ -108,14 +121,20 @@ static const KnownDevice kKnown[] = {
     {0x0E6F, 0x0163, "PDP Xbox One Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
     {0x0E6F, 0x0164, "PDP Battlefield One", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
     {0x0E6F, 0x0165, "PDP Titanfall 2", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x0F0D, 0x0063, "Hori Real Arcade Pro Hayabusa (Xbox One)", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
+    {0x0F0D, 0x0063, "Hori Real Arcade Pro Hayabusa (Xbox One)", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
     {0x0F0D, 0x0067, "Hori HORIPAD ONE", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x0F0D, 0x0078, "Hori Real Arcade Pro V Kai (Xbox One)", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x24C6, 0x541A, "PowerA Xbox One Mini Wired", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x24C6, 0x542A, "Xbox 360 Pro EX Controller (XOne)", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
+    {0x0F0D, 0x0078, "Hori Real Arcade Pro V Kai (Xbox One)", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x24C6, 0x541A, "PowerA Xbox One Mini Wired", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x24C6, 0x542A, "Xbox 360 Pro EX Controller (XOne)", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
     {0x24C6, 0x543A, "PowerA Xbox One Wired", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x24C6, 0x551A, "PowerA FUSION Pro Wired Xbox One", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x24C6, 0x561A, "PowerA FUSION Wired Xbox One", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
+    {0x24C6, 0x551A, "PowerA FUSION Pro Wired Xbox One", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x24C6, 0x561A, "PowerA FUSION Wired Xbox One", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
     {0x24C6, 0x791A, "PowerA Fusion FightPad", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
     {0x1532, 0x0A03, "Razer Wildcat", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
 
@@ -139,9 +158,12 @@ static const KnownDevice kKnown[] = {
     {0x054C, 0x0CE6, "Sony DualSense", Parser::DUALSENSE, InitKind::NONE},
     {0x054C, 0x0DF2, "Sony DualSense Edge", Parser::DUALSENSE, InitKind::NONE},
 
-    {0x057E, 0x2009, "Nintendo Switch Pro Controller", Parser::SWITCH_PRO_USB, InitKind::SWITCH_PRO_HANDSHAKE},
-    {0x057E, 0x200E, "Nintendo Joy-Con Charging Grip", Parser::SWITCH_PRO_USB, InitKind::SWITCH_PRO_HANDSHAKE},
-    {0x057E, 0x2017, "Nintendo SNES Online Controller", Parser::SWITCH_PRO_USB, InitKind::SWITCH_PRO_HANDSHAKE},
+    {0x057E, 0x2009, "Nintendo Switch Pro Controller", Parser::SWITCH_PRO_USB,
+     InitKind::SWITCH_PRO_HANDSHAKE},
+    {0x057E, 0x200E, "Nintendo Joy-Con Charging Grip", Parser::SWITCH_PRO_USB,
+     InitKind::SWITCH_PRO_HANDSHAKE},
+    {0x057E, 0x2017, "Nintendo SNES Online Controller", Parser::SWITCH_PRO_USB,
+     InitKind::SWITCH_PRO_HANDSHAKE},
 
     {0x18D1, 0x9400, "Google Stadia Controller", Parser::STADIA, InitKind::NONE},
 };
@@ -175,12 +197,11 @@ const char* parserName(Parser p) {
     return "Unknown";
 }
 
-bool parserHasImu(Parser p) {
-    return p == Parser::SWITCH_PRO_USB;
-}
+bool parserHasImu(Parser p) { return p == Parser::SWITCH_PRO_USB; }
 
 namespace {
 
+#ifdef __ANDROID__
 bool bulkWrite(int fd, uint8_t epOut, const uint8_t* data, size_t len, unsigned timeoutMs) {
     if (epOut == 0) return false;
     struct usbdevfs_bulktransfer xfer = {};
@@ -195,6 +216,7 @@ bool bulkWrite(int fd, uint8_t epOut, const uint8_t* data, size_t len, unsigned 
     }
     return (size_t)n == len;
 }
+#endif
 
 int16_t scaleU8Centered(uint8_t v, bool invert) {
     int32_t s = invert ? (128 - (int32_t)v) : ((int32_t)v - 128);
@@ -209,10 +231,10 @@ int16_t scaleU8Centered(uint8_t v, bool invert) {
 // asymmetric: scaling both sides by one shared reach leaves the smaller side short of the rail.
 // Each side stretches its own learned reach to the full extent, so every direction can hit the
 // edge. Center stays at the nominal 2048.
-// Inner deadzone in the raw 12-bit domain. The Switch Pro's stick center wanders per unit (a resting
-// stick can sit a few hundred counts off 2048) and we read no factory calibration, so without this
-// the auto-range amplifies that offset into large resting drift. Counts within the deadzone read as
-// center; the throw beyond it is auto-ranged to full scale.
+// Inner deadzone in the raw 12-bit domain. The Switch Pro's stick center wanders per unit (a
+// resting stick can sit a few hundred counts off 2048) and we read no factory calibration, so
+// without this the auto-range amplifies that offset into large resting drift. Counts within the
+// deadzone read as center; the throw beyond it is auto-ranged to full scale.
 static constexpr int32_t kSwitchStickRawDeadzone = 320;
 
 int16_t scaleSwitchStickAuto(uint16_t raw12, AxisAutoRange& axis) {
@@ -254,7 +276,8 @@ int16_t switchAccelToWire(int16_t raw) {
 }
 
 uint16_t setDpadFromHat(uint16_t buttons, uint8_t hat) {
-    buttons = (uint16_t)(buttons & ~(XUSB_DPAD_UP | XUSB_DPAD_DOWN | XUSB_DPAD_LEFT | XUSB_DPAD_RIGHT));
+    buttons =
+        (uint16_t)(buttons & ~(XUSB_DPAD_UP | XUSB_DPAD_DOWN | XUSB_DPAD_LEFT | XUSB_DPAD_RIGHT));
     switch (hat & 0x0F) {
     case 0:
         buttons |= XUSB_DPAD_UP;
@@ -320,8 +343,20 @@ bool decodeXInput360(const uint8_t* buf, size_t len, DeviceState& s) {
 }
 
 // Xbox One GIP input report 0x20. Triggers are 10-bit little-endian (0..1023); scaled to XUSB's
-// 0..255 below. Sticks are little-endian int16, same convention as XInput.
-bool decodeXboxOneGip(const uint8_t* buf, size_t len, DeviceState& s) {
+// 0..255 below. Sticks are little-endian int16, same convention as XInput. The Guide button arrives
+// in a separate virtual-key report (0x07, state in byte 4); it is sticky and merged into the main
+// report via ParserState so a guide press survives the interleaved 0x20 frames.
+bool decodeXboxOneGip(const uint8_t* buf, size_t len, DeviceState& s, ParserState& st) {
+    if (len >= 5 && buf[0] == 0x07) {
+        st.xboxGuideHeld = (buf[4] & 0x03) != 0;
+        s = st.xboxLastMain;
+        if (st.xboxGuideHeld) {
+            s.wButtons |= XUSB_GUIDE;
+        } else {
+            s.wButtons = (uint16_t)(s.wButtons & ~XUSB_GUIDE);
+        }
+        return true;
+    }
     if (len < 18) return false;
     if (buf[0] != 0x20) return false;
 
@@ -353,6 +388,9 @@ bool decodeXboxOneGip(const uint8_t* buf, size_t len, DeviceState& s) {
     s.sLY = (int16_t)((uint16_t)buf[12] | ((uint16_t)buf[13] << 8));
     s.sRX = (int16_t)((uint16_t)buf[14] | ((uint16_t)buf[15] << 8));
     s.sRY = (int16_t)((uint16_t)buf[16] | ((uint16_t)buf[17] << 8));
+
+    st.xboxLastMain = s;
+    if (st.xboxGuideHeld) s.wButtons |= XUSB_GUIDE;
     return true;
 }
 
@@ -369,14 +407,14 @@ bool decodeDualShock4(const uint8_t* buf, size_t len, DeviceState& s) {
     s.sRY = scaleU8Centered(buf[4], true);
 
     uint16_t b = 0;
-    if (buf[5] & 0x10) b |= XUSB_X;      // Square
-    if (buf[5] & 0x20) b |= XUSB_A;      // Cross
-    if (buf[5] & 0x40) b |= XUSB_B;      // Circle
-    if (buf[5] & 0x80) b |= XUSB_Y;      // Triangle
-    if (buf[6] & 0x01) b |= XUSB_LB;     // L1
-    if (buf[6] & 0x02) b |= XUSB_RB;     // R1
-    if (buf[6] & 0x10) b |= XUSB_BACK;   // Share
-    if (buf[6] & 0x20) b |= XUSB_START;  // Options
+    if (buf[5] & 0x10) b |= XUSB_X;
+    if (buf[5] & 0x20) b |= XUSB_A;
+    if (buf[5] & 0x40) b |= XUSB_B;
+    if (buf[5] & 0x80) b |= XUSB_Y;
+    if (buf[6] & 0x01) b |= XUSB_LB;
+    if (buf[6] & 0x02) b |= XUSB_RB;
+    if (buf[6] & 0x10) b |= XUSB_BACK;
+    if (buf[6] & 0x20) b |= XUSB_START;
     if (buf[6] & 0x40) b |= XUSB_THUMB_L;
     if (buf[6] & 0x80) b |= XUSB_THUMB_R;
     b = setDpadFromHat(b, buf[5] & 0x0F);
@@ -402,14 +440,14 @@ bool decodeDualSense(const uint8_t* buf, size_t len, DeviceState& s) {
     s.bRT = buf[6];
 
     uint16_t b = 0;
-    if (buf[8] & 0x10) b |= XUSB_X;      // Square
-    if (buf[8] & 0x20) b |= XUSB_A;      // Cross
-    if (buf[8] & 0x40) b |= XUSB_B;      // Circle
-    if (buf[8] & 0x80) b |= XUSB_Y;      // Triangle
+    if (buf[8] & 0x10) b |= XUSB_X;
+    if (buf[8] & 0x20) b |= XUSB_A;
+    if (buf[8] & 0x40) b |= XUSB_B;
+    if (buf[8] & 0x80) b |= XUSB_Y;
     if (buf[9] & 0x01) b |= XUSB_LB;
     if (buf[9] & 0x02) b |= XUSB_RB;
-    if (buf[9] & 0x10) b |= XUSB_BACK;   // Create
-    if (buf[9] & 0x20) b |= XUSB_START;  // Options
+    if (buf[9] & 0x10) b |= XUSB_BACK;
+    if (buf[9] & 0x20) b |= XUSB_START;
     if (buf[9] & 0x40) b |= XUSB_THUMB_L;
     if (buf[9] & 0x80) b |= XUSB_THUMB_R;
     b = setDpadFromHat(b, buf[8] & 0x0F);
@@ -422,7 +460,7 @@ bool decodeDualSense(const uint8_t* buf, size_t len, DeviceState& s) {
 // position rather than label, the same convention used for DualShock 4: Switch A (right face) →
 // XUSB_B (right face), Switch B (bottom) → XUSB_A (bottom), Switch X (top) → XUSB_Y, Switch Y
 // (left) → XUSB_X. This is what PC games and ViGEm expect.
-bool decodeSwitchProUsb(const uint8_t* buf, size_t len, DeviceState& s, StickAutoRange& sticks) {
+bool decodeSwitchProUsb(const uint8_t* buf, size_t len, DeviceState& s, ParserState& sticks) {
     if (len < 12) return false;
     if (buf[0] != 0x30) return false;
 
@@ -431,13 +469,13 @@ bool decodeSwitchProUsb(const uint8_t* buf, size_t len, DeviceState& s, StickAut
     const uint8_t bl = buf[5];
 
     uint16_t b = 0;
-    if (br & 0x01) b |= XUSB_X;     // Y label (left position) → XUSB X
-    if (br & 0x02) b |= XUSB_Y;     // X label (top position) → XUSB Y
-    if (br & 0x04) b |= XUSB_A;     // B label (bottom position) → XUSB A
-    if (br & 0x08) b |= XUSB_B;     // A label (right position) → XUSB B
+    if (br & 0x01) b |= XUSB_X;
+    if (br & 0x02) b |= XUSB_Y;
+    if (br & 0x04) b |= XUSB_A;
+    if (br & 0x08) b |= XUSB_B;
     if (br & 0x40) b |= XUSB_RB;
-    if (bs & 0x01) b |= XUSB_BACK;  // Minus
-    if (bs & 0x02) b |= XUSB_START; // Plus
+    if (bs & 0x01) b |= XUSB_BACK;
+    if (bs & 0x02) b |= XUSB_START;
     if (bs & 0x04) b |= XUSB_THUMB_R;
     if (bs & 0x08) b |= XUSB_THUMB_L;
     if (bl & 0x01) b |= XUSB_DPAD_DOWN;
@@ -476,7 +514,6 @@ bool decodeSwitchProUsb(const uint8_t* buf, size_t len, DeviceState& s, StickAut
     return true;
 }
 
-// Stadia controller HID report 0x03 (basic gamepad layout).
 bool decodeStadia(const uint8_t* buf, size_t len, DeviceState& s) {
     if (len < 11) return false;
     if (buf[0] != 0x03) return false;
@@ -502,14 +539,43 @@ bool decodeStadia(const uint8_t* buf, size_t len, DeviceState& s) {
     return true;
 }
 
+// Switch Pro HD-rumble amplitude codes from the Linux hid-nintendo table; frequency held at the
+// neutral default so a coarse strong/weak motor still encodes a faithful buzz. See docs/rumble.md.
+struct SwitchAmpCode {
+    uint8_t high;
+    uint16_t low;
+    uint16_t amp;
+};
+
+const SwitchAmpCode kSwitchAmpCodes[] = {
+    {0x00, 0x0040, 0},   {0x02, 0x8040, 10},  {0x08, 0x0042, 17},  {0x10, 0x0044, 33},
+    {0x40, 0x0050, 230}, {0x70, 0x005c, 387}, {0xa0, 0x0068, 650}, {0xc8, 0x0072, 1003},
+};
+
+void switchEncodeMotor(uint8_t* out, uint16_t magnitude) {
+    uint32_t amp = (uint32_t)magnitude * 1003u / 65535u;
+    const SwitchAmpCode* code = &kSwitchAmpCodes[0];
+    for (const auto& e : kSwitchAmpCodes) {
+        if (e.amp <= amp) {
+            code = &e;
+        } else {
+            break;
+        }
+    }
+    out[0] = 0x00;
+    out[1] = (uint8_t)(0x01 + code->high);
+    out[2] = (uint8_t)(0x40 + ((code->low >> 8) & 0xFF));
+    out[3] = (uint8_t)(code->low & 0xFF);
+}
+
 } // namespace
 
-bool decodeReport(Parser p, const uint8_t* buf, size_t len, DeviceState& s, StickAutoRange* sticks) {
+bool decodeReport(Parser p, const uint8_t* buf, size_t len, DeviceState& s, ParserState* sticks) {
     switch (p) {
     case Parser::XINPUT_360:
         return decodeXInput360(buf, len, s);
     case Parser::XBOX_ONE_GIP:
-        return decodeXboxOneGip(buf, len, s);
+        return sticks != nullptr && decodeXboxOneGip(buf, len, s, *sticks);
     case Parser::DUALSHOCK4:
         return decodeDualShock4(buf, len, s);
     case Parser::DUALSENSE:
@@ -556,6 +622,72 @@ bool decodeGenericHidGamepad(const uint8_t* buf, size_t len, DeviceState& s) {
     return true;
 }
 
+// Per-device rumble output reports. Motor convention: strong = large/low-frequency (left), weak =
+// small/high-frequency (right), both wire-scale 0..65535. Report layouts and sources (Linux xpad,
+// hid-playstation, hid-nintendo) are documented in docs/rumble.md.
+size_t buildRumbleReport(Parser p, uint16_t strong, uint16_t weak, uint8_t seq, uint8_t* out,
+                         size_t outCap) {
+    switch (p) {
+    case Parser::XINPUT_360:
+        if (outCap < 8) return 0;
+        out[0] = 0x00;
+        out[1] = 0x08;
+        out[2] = 0x00;
+        out[3] = (uint8_t)(strong >> 8);
+        out[4] = (uint8_t)(weak >> 8);
+        out[5] = 0x00;
+        out[6] = 0x00;
+        out[7] = 0x00;
+        return 8;
+    case Parser::XBOX_ONE_GIP:
+        if (outCap < 13) return 0;
+        out[0] = 0x09;
+        out[1] = 0x00;
+        out[2] = seq;
+        out[3] = 0x09;
+        out[4] = 0x00;
+        out[5] = 0x0F;
+        out[6] = 0x00;
+        out[7] = 0x00;
+        out[8] = (uint8_t)(strong / 512);
+        out[9] = (uint8_t)(weak / 512);
+        out[10] = 0xFF;
+        out[11] = 0x00;
+        out[12] = 0xFF;
+        return 13;
+    case Parser::DUALSHOCK4:
+        if (outCap < 32) return 0;
+        memset(out, 0, 32);
+        out[0] = 0x05;
+        out[1] = 0x01;
+        out[4] = (uint8_t)(weak >> 8);
+        out[5] = (uint8_t)(strong >> 8);
+        return 32;
+    case Parser::DUALSENSE:
+        if (outCap < 63) return 0;
+        memset(out, 0, 63);
+        out[0] = 0x02;
+        out[1] = 0x01;
+        out[3] = (uint8_t)(weak >> 8);
+        out[4] = (uint8_t)(strong >> 8);
+        return 63;
+    case Parser::SWITCH_PRO_USB:
+        if (outCap < 10) return 0;
+        memset(out, 0, 10);
+        out[0] = 0x10;
+        out[1] = (uint8_t)(seq & 0x0F);
+        switchEncodeMotor(&out[2], strong);
+        switchEncodeMotor(&out[6], weak);
+        return 10;
+    case Parser::STADIA:
+    case Parser::GENERIC_HID_GAMEPAD:
+    case Parser::NONE:
+        return 0;
+    }
+    return 0;
+}
+
+#ifdef __ANDROID__
 bool runInit(int fd, uint8_t epOut, Parser p, InitKind init) {
     switch (init) {
     case InitKind::NONE:
@@ -596,14 +728,21 @@ bool runInit(int fd, uint8_t epOut, Parser p, InitKind init) {
         // is one rumble + subcommand HID output report: report id 0x01, packet counter, 8-byte
         // neutral rumble pattern, subcommand id 0x03, argument 0x30.
         uint8_t setReportMode[] = {
-            0x01,
-            0x00,
-            0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40,
-            0x03, 0x30,
+            0x01, 0x00, 0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40, 0x03, 0x30,
         };
         if (!bulkWrite(fd, epOut, setReportMode, sizeof(setReportMode), 200)) {
             LOGE("Switch Pro: set-report-mode write failed");
             return false;
+        }
+        usleep(40000);
+
+        // Enable vibration (subcommand 0x48, arg 0x01) so later rumble-only (0x10) reports take
+        // effect.
+        uint8_t enableVibration[] = {
+            0x01, 0x01, 0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40, 0x48, 0x01,
+        };
+        if (!bulkWrite(fd, epOut, enableVibration, sizeof(enableVibration), 200)) {
+            LOGI("Switch Pro: enable-vibration write failed (non-fatal)");
         }
         LOGI("Switch Pro USB init sequence sent");
         return true;
@@ -611,5 +750,14 @@ bool runInit(int fd, uint8_t epOut, Parser p, InitKind init) {
     }
     return false;
 }
+
+bool runRumble(int fd, uint8_t epOut, Parser p, uint16_t strong, uint16_t weak, uint8_t seq) {
+    if (epOut == 0) return false;
+    uint8_t buf[64];
+    size_t n = buildRumbleReport(p, strong, weak, seq, buf, sizeof(buf));
+    if (n == 0) return false;
+    return bulkWrite(fd, epOut, buf, n, 100);
+}
+#endif
 
 } // namespace usbparsers

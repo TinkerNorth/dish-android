@@ -74,6 +74,9 @@ class PhysicalSlotBindingObserver
             val disappeared = lastBoundDeviceIds - present
             for (id in disappeared) {
                 SatelliteNative.unbindPhysicalSlot(id)
+                // Reclaim the native input-state entry for a departed framework device; a claimed
+                // USB synthetic (negative id) is freed by detachUsbDevice instead.
+                if (id >= 0) SatelliteNative.forgetPhysicalDevice(id)
                 hub.unbind(id.toString())
             }
             for (id in present) {

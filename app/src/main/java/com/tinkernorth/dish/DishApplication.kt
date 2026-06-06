@@ -13,6 +13,7 @@ import com.tinkernorth.dish.hotpath.input.BluetoothGamepadBridge
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.PhysicalSlotBindingObserver
 import com.tinkernorth.dish.hotpath.input.RumbleBridge
+import com.tinkernorth.dish.hotpath.input.RumbleRouter
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.sensor.PhysicalBatterySource
 import com.tinkernorth.dish.source.sensor.PhysicalMotionSource
@@ -64,6 +65,8 @@ class DishApplication : Application() {
     @Inject lateinit var usbGamepadManager: UsbGamepadManager
 
     @Inject lateinit var pollRateSampler: PollRateSampler
+
+    @Inject lateinit var rumbleRouter: RumbleRouter
 
     // Exposed so StreamingService (framework-owned lifecycle) can reuse the Hilt singleton scope.
     @Inject lateinit var processScope: CoroutineScope
@@ -131,7 +134,7 @@ class DishApplication : Application() {
         lifecycle.addObserver(bluetoothPermissionStateObserver)
         lifecycle.addObserver(networkStateObserver)
         lifecycle.addObserver(streamingServiceController)
-        RumbleBridge.install(this)
+        RumbleBridge.install(rumbleRouter)
     }
 
     companion object {
