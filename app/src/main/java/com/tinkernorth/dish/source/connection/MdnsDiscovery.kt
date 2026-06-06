@@ -8,6 +8,7 @@ import android.net.nsd.NsdServiceInfo
 import android.util.Log
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.DiscoverySource
+import com.tinkernorth.dish.core.model.stableKey
 import com.tinkernorth.dish.di.IoDispatcher
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
@@ -49,7 +50,9 @@ class MdnsDiscovery
                         for (info in found) {
                             val server = resolveOne(nsd, info)
                             if (server != null) {
-                                results["${server.ip}:${server.udpPort}"] = server
+                                // Key on the stable id so a satellite that also
+                                // answers the broadcast beacon merges to one row.
+                                results[server.stableKey] = server
                             }
                         }
                     }
@@ -148,6 +151,7 @@ internal fun mdnsServiceToServer(
         udpPort = mdnsTxtInt(txt, "udp") ?: srvPort.takeIf { it > 0 } ?: MDNS_DEFAULT_UDP,
         pairPort = mdnsTxtInt(txt, "pair") ?: MDNS_DEFAULT_PAIR,
         httpPort = mdnsTxtInt(txt, "http") ?: MDNS_DEFAULT_HTTP,
+        machineId = mdnsTxtString(txt, "mid").orEmpty(),
         source = DiscoverySource.MDNS,
     )
 }
@@ -156,3 +160,8 @@ internal fun mdnsTxtInt(
     txt: Map<String, ByteArray?>,
     key: String,
 ): Int? = txt[key]?.let { String(it).trim().toIntOrNull() }
+
+internal fun mdnsTxtString(
+    txt: Map<String, ByteArray?>,
+    key: String,
+): String? = txt[key]?.let { String(it).trim() }?.takeIf { it.isNotEmpty() }

@@ -221,6 +221,9 @@
     <string name="pair_dialog_submit">Emparejar</string>
     <string name="pair_dialog_pairing">Emparejando…</string>
     <string name="pair_dialog_error_empty">Introduce el PIN que aparece en tu satélite.</string>
+    <string name="pair_dialog_or_show_pin">O muestra el PIN de este dispositivo y acéptalo en el satélite:</string>
+    <string name="pair_dialog_request_approval">Aceptar en el satélite</string>
+    <string name="pair_dialog_awaiting">Esperando al satélite…</string>
 
     <!-- Notificación del servicio en primer plano. -->
     <string name="streaming_channel_name">Sesión de transmisión</string>

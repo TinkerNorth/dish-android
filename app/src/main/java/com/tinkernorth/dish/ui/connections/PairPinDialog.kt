@@ -6,6 +6,7 @@ import android.app.Dialog
 import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
+import android.view.View
 import android.view.Window
 import android.widget.FrameLayout
 import com.tinkernorth.dish.R
@@ -17,6 +18,12 @@ import com.tinkernorth.dish.ui.common.setLoading
 // (the M3 live-region announces it for TalkBack).
 class PairPinDialog(
     context: Context,
+    // The PIN this dish shows for Path-B (operator-accepts) pairing. "" hides
+    // that whole section, leaving a plain enter-the-satellite's-PIN dialog —
+    // which is why it and onRequestApproval default, keeping onSubmit the
+    // trailing lambda for existing call sites.
+    private val clientPin: String = "",
+    private val onRequestApproval: () -> Unit = {},
     private val onSubmit: (pin: String) -> Unit,
 ) : Dialog(context, R.style.Theme_Dish_Dialog) {
     private lateinit var binding: DialogPairPinBinding
@@ -69,6 +76,13 @@ class PairPinDialog(
             showError(null)
             onSubmit(pin)
         }
+
+        // Path B — show this dish's PIN for the operator to accept on the
+        // satellite. Hidden entirely when no client PIN was supplied.
+        binding.tvClientPin.text = clientPin
+        binding.clientPinSection.visibility =
+            if (clientPin.isNotEmpty()) View.VISIBLE else View.GONE
+        binding.btnPairApprove.setOnClickListener { onRequestApproval() }
     }
 
     fun setBusy(busy: Boolean) {
@@ -81,6 +95,20 @@ class PairPinDialog(
         binding.etPin.isEnabled = !busy
         setCanceledOnTouchOutside(!busy)
         setCancelable(!busy)
+    }
+
+    // Path-B in-flight: the request is submitted and we're polling for the
+    // operator's decision. Drives the approve button's spinner; keeps cancel
+    // live so the user can back out of the wait.
+    fun setAwaitingApproval(awaiting: Boolean) {
+        binding.btnPairApprove.setLoading(
+            loading = awaiting,
+            loadingText = context.getString(R.string.pair_dialog_awaiting),
+            restingText = context.getString(R.string.pair_dialog_request_approval),
+        )
+        binding.etPin.isEnabled = !awaiting
+        binding.btnPairSubmit.isEnabled = !awaiting
+        setCanceledOnTouchOutside(!awaiting)
     }
 
     fun showError(message: CharSequence?) {

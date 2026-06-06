@@ -220,6 +220,9 @@
     <string name="pair_dialog_submit">Appairer</string>
     <string name="pair_dialog_pairing">Appairage…</string>
     <string name="pair_dialog_error_empty">Saisissez le PIN affiché sur votre satellite.</string>
+    <string name="pair_dialog_or_show_pin">Ou affichez le PIN de cet appareil et acceptez-le sur le satellite :</string>
+    <string name="pair_dialog_request_approval">Accepter sur le satellite</string>
+    <string name="pair_dialog_awaiting">En attente du satellite…</string>
 
     <!-- Notification du service au premier plan. -->
     <string name="streaming_channel_name">Session de diffusion</string>

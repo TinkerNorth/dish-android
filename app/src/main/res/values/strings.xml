@@ -269,6 +269,11 @@
     <string name="pair_dialog_submit">Pair</string>
     <string name="pair_dialog_pairing">Pairing…</string>
     <string name="pair_dialog_error_empty">Enter the PIN shown on your satellite.</string>
+    <!-- Reverse-direction (Path B) pairing: this dish shows its own PIN and the
+         operator accepts it on the satellite instead of the user typing one. -->
+    <string name="pair_dialog_or_show_pin">Or show this device\'s PIN and accept it on the satellite:</string>
+    <string name="pair_dialog_request_approval">Accept on satellite</string>
+    <string name="pair_dialog_awaiting">Waiting for satellite…</string>
 
     <!-- Foreground service notification. -->
     <string name="streaming_channel_name">Streaming session</string>

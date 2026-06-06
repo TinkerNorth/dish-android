@@ -42,6 +42,7 @@ import com.tinkernorth.dish.repository.RememberedBt
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.bluetooth.BtStaleReason
 import com.tinkernorth.dish.source.connection.ConnectionEvent
+import com.tinkernorth.dish.source.connection.PairingApproval
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.notification.DishNotifications
@@ -540,8 +541,19 @@ class ConnectionsActivity : AppCompatActivity() {
     private fun showPairingDialog(server: com.tinkernorth.dish.core.model.DiscoveredServer) {
         pinDialog?.dismiss()
         pairingServer = server
+        // This dish's own PIN for the reverse direction — the operator can
+        // accept it on the satellite instead of the user typing the server PIN.
+        val clientPin = PairingApproval.generatePin()
         val dialog =
-            PairPinDialog(this) { pin ->
+            PairPinDialog(
+                this,
+                clientPin = clientPin,
+                onRequestApproval = {
+                    pinDialog?.setAwaitingApproval(true)
+                    pinDialog?.showError(null)
+                    satellite.requestApproval(server, clientPin)
+                },
+            ) { pin ->
                 pinDialog?.setBusy(true)
                 pinDialog?.showError(null)
                 satellite.pairWithPin(server, pin)
@@ -569,6 +581,7 @@ class ConnectionsActivity : AppCompatActivity() {
         val pairing = pairingServer
         if (dialog != null && pairing != null) {
             dialog.setBusy(false)
+            dialog.setAwaitingApproval(false)
             dialog.showError(message)
             return
         }

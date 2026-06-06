@@ -219,6 +219,9 @@
     <string name="pair_dialog_submit">Koppeln</string>
     <string name="pair_dialog_pairing">Koppelt…</string>
     <string name="pair_dialog_error_empty">Gib den PIN ein, der auf deinem Satelliten angezeigt wird.</string>
+    <string name="pair_dialog_or_show_pin">Oder zeige den PIN dieses Geräts und akzeptiere ihn am Satelliten:</string>
+    <string name="pair_dialog_request_approval">Am Satelliten akzeptieren</string>
+    <string name="pair_dialog_awaiting">Warte auf Satellit…</string>
 
     <!-- Vordergrund-Service-Benachrichtigung. -->
     <string name="streaming_channel_name">Streaming-Sitzung</string>

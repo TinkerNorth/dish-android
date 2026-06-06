@@ -99,12 +99,16 @@ internal object SatelliteHttpClient {
         )
 
     // No X-Device-Id — /api/pair is the only client route that bypasses clientAuthorized.
+    // `pin` drives Path A (the dish entered the satellite's PIN); `clientPin` drives
+    // Path B (the dish shows its own PIN for the operator to accept). Both ride in the
+    // body; the satellite uses a valid `pin` first and only falls back to `clientPin`.
     fun pair(
         ip: String,
         port: Int,
         deviceId: String,
         deviceName: String,
         pin: String,
+        clientPin: String = "",
     ): String =
         request(
             method = "POST",
@@ -115,7 +119,23 @@ internal object SatelliteHttpClient {
             body =
                 """{"deviceId":"${jsonEscape(deviceId)}",""" +
                     """"deviceName":"${jsonEscape(deviceName)}",""" +
-                    """"pin":"${jsonEscape(pin)}"}""",
+                    """"pin":"${jsonEscape(pin)}",""" +
+                    """"clientPin":"${jsonEscape(clientPin)}"}""",
+        )
+
+    // Poll for the operator's accept/deny decision on a Path-B request.
+    fun pairStatus(
+        ip: String,
+        port: Int,
+        deviceId: String,
+    ): String =
+        request(
+            method = "GET",
+            ip = ip,
+            port = port,
+            path = "/api/pair/status?deviceId=" + java.net.URLEncoder.encode(deviceId, "UTF-8"),
+            deviceId = null,
+            body = null,
         )
 
     // Never throws — transport failure surfaces as a JSON {error} body so callers' decode path stays unchanged.

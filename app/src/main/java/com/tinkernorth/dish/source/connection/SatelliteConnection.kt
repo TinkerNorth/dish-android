@@ -4,6 +4,7 @@ package com.tinkernorth.dish.source.connection
 
 import com.tinkernorth.dish.core.jni.ControllerRepository
 import com.tinkernorth.dish.core.model.DiscoveredServer
+import com.tinkernorth.dish.core.model.stableKey
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatus
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
 import kotlinx.coroutines.CoroutineDispatcher
@@ -441,7 +442,9 @@ class SatelliteConnection(
         private const val ACK_ERR_ALREADY_EXISTS = 0x03
         private const val ACK_ERR_PLUGIN_FAIL = 0x05
 
-        fun idFor(server: DiscoveredServer): String = "satellite:${server.ip}:${server.udpPort}"
+        // Keyed on the stable id (machineId when present, else ip:udpPort) so a
+        // receiver that changes IP keeps the same connection identity.
+        fun idFor(server: DiscoveredServer): String = "satellite:${server.stableKey}"
 
         private fun lowestFreeIndex(taken: List<Int>): Int {
             val set = taken.toHashSet()

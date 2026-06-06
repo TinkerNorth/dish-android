@@ -218,6 +218,9 @@
     <string name="pair_dialog_submit">Upari</string>
     <string name="pair_dialog_pairing">Uparivanje…</string>
     <string name="pair_dialog_error_empty">Unesite PIN prikazan na satelitu.</string>
+    <string name="pair_dialog_or_show_pin">Ili prikažite PIN ovog uređaja i prihvatite ga na satelitu:</string>
+    <string name="pair_dialog_request_approval">Prihvati na satelitu</string>
+    <string name="pair_dialog_awaiting">Čekanje satelita…</string>
 
     <!-- Obavještenje servisa u prvom planu. -->
     <string name="streaming_channel_name">Sesija strimanja</string>
