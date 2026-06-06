@@ -106,8 +106,9 @@ class PairPinDialog(
             loadingText = context.getString(R.string.pair_dialog_awaiting),
             restingText = context.getString(R.string.pair_dialog_request_approval),
         )
-        binding.etPin.isEnabled = !awaiting
-        binding.btnPairSubmit.isEnabled = !awaiting
+        // Deliberately leave the satellite-PIN field + Pair button enabled while
+        // the request is in flight: it's sent automatically on open, but typing
+        // the satellite's PIN stays a live fallback if the native prompt didn't show.
         setCanceledOnTouchOutside(!awaiting)
     }
 

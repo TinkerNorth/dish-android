@@ -574,6 +574,11 @@ class ConnectionsActivity : AppCompatActivity() {
             }
         pinDialog = dialog
         dialog.show()
+        // Send the satellite request immediately so the operator is notified the
+        // moment the user taps Connect — no extra "Accept on satellite" tap. The
+        // satellite-PIN field stays available as a fallback.
+        dialog.setAwaitingApproval(true)
+        satellite.requestApproval(server, clientPin)
     }
 
     private fun onConnectionError(message: String) {

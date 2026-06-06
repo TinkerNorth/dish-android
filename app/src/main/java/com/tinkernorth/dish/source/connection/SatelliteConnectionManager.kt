@@ -337,8 +337,13 @@ class SatelliteConnectionManager
                     return@launch
                 }
                 // Otherwise wait for the operator: poll until accept / deny / timeout.
+                // The satellite-PIN path (pairWithPin) shares this connection, so
+                // once it reaches Live we bail without touching it — otherwise this
+                // poll's terminal paths (esp. the timeout) would tear down a live
+                // session the user just established by typing the PIN.
                 var waited = 0L
                 while (waited < APPROVAL_TIMEOUT_MS) {
+                    if (conn.state.value == SatelliteSessionState.Live) return@launch
                     kotlinx.coroutines.delay(APPROVAL_POLL_INTERVAL_MS)
                     waited += APPROVAL_POLL_INTERVAL_MS
                     val statusRaw =
@@ -351,6 +356,8 @@ class SatelliteConnectionManager
                         } else {
                             PairingApproval.classifyStatus(statusRaw)
                         }
+                    // Re-check: Live may have flipped during the poll round-trip.
+                    if (conn.state.value == SatelliteSessionState.Live) return@launch
                     if (st is PairingApproval.Status.Approved) {
                         clearStale(id)
                         store.setSatelliteSharedKey(id, st.sharedKeyHex)
@@ -363,8 +370,10 @@ class SatelliteConnectionManager
                         return@launch
                     }
                 }
-                conn.markDisconnected()
-                _events.emit(ConnectionEvent.Error(APPROVAL_TIMEOUT_MSG))
+                if (conn.state.value != SatelliteSessionState.Live) {
+                    conn.markDisconnected()
+                    _events.emit(ConnectionEvent.Error(APPROVAL_TIMEOUT_MSG))
+                }
             }
         }
 
