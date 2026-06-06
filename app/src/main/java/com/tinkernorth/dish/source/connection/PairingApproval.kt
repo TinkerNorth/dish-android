@@ -16,8 +16,7 @@ internal object PairingApproval {
      * read identically when the operator compares them. [random] is injectable
      * so a test can assert the shape deterministically.
      */
-    fun generatePin(random: Random = Random.Default): String =
-        buildString { repeat(PIN_DIGITS) { append(random.nextInt(10)) } }
+    fun generatePin(random: Random = Random.Default): String = buildString { repeat(PIN_DIGITS) { append(random.nextInt(10)) } }
 
     sealed interface Status {
         data class Approved(

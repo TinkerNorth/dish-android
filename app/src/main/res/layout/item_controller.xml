@@ -55,15 +55,6 @@
                     android:layout_marginTop="@dimen/spacing_xs"
                     android:textStyle="bold"
                     android:visibility="gone" />
-
-                <TextView
-                    android:id="@+id/tvPathReason"
-                    style="@style/TextAppearance.Dish.BodySmall"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:paddingVertical="@dimen/spacing_xs"
-                    android:textColor="@color/colorMuted"
-                    android:visibility="gone" />
             </LinearLayout>
 
             <ImageView
@@ -136,6 +127,83 @@
             android:paddingHorizontal="@dimen/card_padding_horizontal"
             android:paddingBottom="@dimen/card_padding_bottom"
             android:visibility="gone">
+
+            <!-- Input path: Standard (framework) vs Direct (claimed USB) for this device, with the
+                 trade-off and a way back. Bound only for physical slots; hidden for the on-screen pad. -->
+            <TextView
+                android:id="@+id/labelInputPath"
+                style="@style/TextAppearance.Dish.Label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/path_input_section_label"
+                android:paddingBottom="@dimen/picker_section_padding_bottom" />
+
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/toggleInputPath"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:singleSelection="true"
+                app:selectionRequired="true">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnPathStandard"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/path_choice_standard" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnPathDirect"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/path_choice_direct" />
+            </com.google.android.material.button.MaterialButtonToggleGroup>
+
+            <TextView
+                android:id="@+id/tvPathCaps"
+                style="@style/TextAppearance.Dish.BodySmall"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm"
+                android:textColor="@color/colorMuted" />
+
+            <TextView
+                android:id="@+id/tvPathRisk"
+                style="@style/TextAppearance.Dish.BodySmall"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xs" />
+
+            <LinearLayout
+                android:id="@+id/llPathRestoring"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xs"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <ProgressBar
+                    android:layout_width="@dimen/icon_battery"
+                    android:layout_height="@dimen/icon_battery"
+                    android:indeterminate="true" />
+
+                <TextView
+                    android:id="@+id/tvPathRestoring"
+                    style="@style/TextAppearance.Dish.BodySmall"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/spacing_sm"
+                    android:text="@string/path_restoring"
+                    android:textColor="@color/colorMuted" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/picker_section_margin_top" />
 
             <TextView
                 style="@style/TextAppearance.Dish.Label"

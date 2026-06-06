@@ -48,6 +48,25 @@ private inline fun <T1, T2, T3, T4, T5, T6, T7, R> combine7(
         )
     }
 
+// Maps the satellite session FSM to the UI LinkState. Pulled out of the composer so it is unit-testable
+// without standing up the whole graph, and so the dashboard and connections screen agree by construction.
+internal fun satelliteLinkState(
+    state: SatelliteSessionState?,
+    isStale: Boolean,
+    isDiscovered: Boolean,
+): LinkState =
+    when (state) {
+        SatelliteSessionState.Live -> LinkState.Connected
+        SatelliteSessionState.Linking -> LinkState.Connecting
+        SatelliteSessionState.Faltering -> LinkState.Unstable
+        SatelliteSessionState.Idle, null ->
+            when {
+                isStale -> LinkState.Stale
+                isDiscovered -> LinkState.Ready
+                else -> LinkState.Saved
+            }
+    }
+
 @Singleton
 class ConnectionsComposer
     @Inject
@@ -149,18 +168,7 @@ class ConnectionsComposer
             isStale: Boolean,
         ): ConnectionSummary? {
             val server = conn?.server?.value ?: remembered?.toDiscovered() ?: return null
-            val live =
-                when (conn?.state?.value) {
-                    SatelliteSessionState.Live -> LinkState.Connected
-                    SatelliteSessionState.Linking -> LinkState.Connecting
-                    SatelliteSessionState.Faltering -> LinkState.Unstable
-                    SatelliteSessionState.Idle, null ->
-                        when {
-                            isStale -> LinkState.Stale
-                            id in discoveredIds -> LinkState.Ready
-                            else -> LinkState.Saved
-                        }
-                }
+            val live = satelliteLinkState(conn?.state?.value, isStale = isStale, isDiscovered = id in discoveredIds)
             val bound = bindings.entries.filter { it.value == id }.map { it.key }
             return ConnectionSummary(
                 id = id,

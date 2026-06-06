@@ -30,6 +30,8 @@ import com.tinkernorth.dish.databinding.PickerChipRowBinding
 import com.tinkernorth.dish.databinding.PickerConnectionRowBinding
 import com.tinkernorth.dish.databinding.PickerMotionToggleBinding
 import com.tinkernorth.dish.repository.TouchpadModeValue
+import com.tinkernorth.dish.source.usb.DirectClaimFailure
+import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.ui.common.glyphForConnection
 
 interface SlotActionListener {
@@ -42,7 +44,10 @@ interface SlotActionListener {
 
     fun onUnbind(slotId: String)
 
-    fun onTryDirectMode(slotId: String)
+    fun onSelectInputPath(
+        slotId: String,
+        choice: PathChoice,
+    )
 
     fun onOpenGamepad()
 
@@ -79,6 +84,11 @@ internal fun connectionsVisibleInPicker(
     boundConnectionId: String?,
 ): List<ConnectionSummary> = all.filter { it.live.isAvailableForPicker() || it.id == boundConnectionId }
 
+// A link that is up and streaming (Connected) or up but degraded (Unstable). Both count as "online" for
+// the slot status, the status dot, and the summary count so a faltering link reads the same everywhere
+// instead of looking offline on the dashboard while the connections screen calls it unstable.
+internal fun LinkState.isLiveLink(): Boolean = this == LinkState.Connected || this == LinkState.Unstable
+
 class ControllerAdapter(
     private val listener: SlotActionListener,
 ) : ListAdapter<ControllerAdapter.Row, ControllerAdapter.VH>(Diff) {
@@ -88,7 +98,7 @@ class ControllerAdapter(
         val expanded: Boolean,
         val motionCap: MotionCapability = MotionCapability.Off,
         val touchpadModes: Map<String, String> = emptyMap(),
-        val pathBadge: PathBadge? = null,
+        val pathCard: PathCard? = null,
     )
 
     private val expandedIds = mutableSetOf(VIRTUAL_SLOT_ID)
@@ -98,7 +108,7 @@ class ControllerAdapter(
         connections: List<ConnectionSummary>,
         motionCapabilities: Map<String, MotionCapability> = emptyMap(),
         touchpadModes: Map<String, String> = emptyMap(),
-        pathBadges: Map<String, PathBadge> = emptyMap(),
+        pathCards: Map<String, PathCard> = emptyMap(),
     ) {
         submitList(
             slots.map { slot ->
@@ -108,7 +118,7 @@ class ControllerAdapter(
                     expanded = expandedIds.contains(slot.id),
                     motionCap = motionCapabilities[slot.id] ?: MotionCapability.Off,
                     touchpadModes = touchpadModes,
-                    pathBadge = pathBadges[slot.id],
+                    pathCard = pathCards[slot.id],
                 )
             },
         )
@@ -134,14 +144,15 @@ class ControllerAdapter(
             b.tvControllerName.text = slot.name
             b.tvSlotStatus.text = slotStatusText(slot)
             bindBattery(slot.battery)
-            bindPathBadge(row.pathBadge, slot.id)
+            bindPathHeader(row.pathCard)
 
             setDot(
                 b.dotStatus,
                 when {
                     slot.isDisconnecting -> R.color.colorWarning
                     slot.boundStatus?.live == LinkState.Connected -> R.color.colorSuccess
-                    slot.boundStatus?.live == LinkState.Connecting -> R.color.colorPrimary
+                    slot.boundStatus?.live == LinkState.Connecting ||
+                        slot.boundStatus?.live == LinkState.Unstable -> R.color.colorPrimary
                     else -> R.color.colorMuted
                 },
             )
@@ -171,6 +182,8 @@ class ControllerAdapter(
 
             b.llBody.visibility = if (row.expanded) View.VISIBLE else View.GONE
             if (!row.expanded) return
+
+            bindInputPath(row.pathCard, slot.id)
 
             if (slot.boundConnectionId != null) {
                 b.btnUnbind.visibility = View.VISIBLE
@@ -492,53 +505,154 @@ class ControllerAdapter(
             return ctx.getString(R.string.battery_desc, levelText, ctx.getString(stateRes))
         }
 
-        private fun bindPathBadge(
-            badge: PathBadge?,
-            slotId: String,
-        ) {
-            if (badge == null) {
+        // Collapsed header: at-a-glance current mode. The toggle and detail live in the expanded body.
+        private fun bindPathHeader(card: PathCard?) {
+            if (card == null) {
                 b.tvPathBadge.visibility = View.GONE
-                b.tvPathReason.visibility = View.GONE
-                b.tvPathReason.setOnClickListener(null)
                 return
             }
             val ctx = b.root.context
             b.tvPathBadge.visibility = View.VISIBLE
-            b.tvPathBadge.text = badge.label
-            val colorRes = if (badge.isDirect) R.color.colorSuccess else R.color.colorMuted
+            b.tvPathBadge.text =
+                when (card.currentMode) {
+                    InputPathMode.Direct ->
+                        if (card.directPollHz > 0) {
+                            ctx.getString(R.string.path_label_direct_with_rate, card.directPollHz)
+                        } else {
+                            ctx.getString(R.string.path_label_direct)
+                        }
+                    InputPathMode.Standard -> ctx.getString(R.string.path_label_standard)
+                }
+            val colorRes =
+                if (card.currentMode == InputPathMode.Direct) R.color.colorSuccess else R.color.colorMuted
             b.tvPathBadge.setTextColor(ctx.getColor(colorRes))
-            val subtitle = badge.subtitle
-            if (subtitle.isNullOrBlank()) {
-                b.tvPathReason.visibility = View.GONE
-                b.tvPathReason.setOnClickListener(null)
+        }
+
+        private fun bindInputPath(
+            card: PathCard?,
+            slotId: String,
+        ) {
+            val show = card != null
+            b.labelInputPath.visibility = if (show) View.VISIBLE else View.GONE
+            b.toggleInputPath.visibility = if (show) View.VISIBLE else View.GONE
+            b.tvPathCaps.visibility = if (show) View.VISIBLE else View.GONE
+            b.tvPathRisk.visibility = if (show) View.VISIBLE else View.GONE
+            if (card == null) {
+                b.llPathRestoring.visibility = View.GONE
                 return
             }
-            b.tvPathReason.visibility = View.VISIBLE
-            b.tvPathReason.text = subtitle
-            if (badge.actionable) {
-                val attr = android.util.TypedValue()
-                ctx.theme.resolveAttribute(android.R.attr.selectableItemBackground, attr, true)
-                b.tvPathReason.setBackgroundResource(attr.resourceId)
-                b.tvPathReason.setTextColor(ctx.getColor(R.color.colorPrimary))
-                b.tvPathReason.isClickable = true
-                b.tvPathReason.isFocusable = true
-                b.tvPathReason.setOnClickListener { listener.onTryDirectMode(slotId) }
-            } else {
-                b.tvPathReason.setTextColor(ctx.getColor(R.color.colorMuted))
-                b.tvPathReason.setOnClickListener(null)
-                b.tvPathReason.isClickable = false
-                b.tvPathReason.isFocusable = false
-                b.tvPathReason.background = null
+            val ctx = b.root.context
+
+            // Clear before the programmatic check so a RecyclerView rebind can't fire onSelectInputPath.
+            // Both buttons are enabled across the check() so a disabled target can still take selection,
+            // then the real enabled state is applied.
+            b.toggleInputPath.clearOnButtonCheckedListeners()
+            b.btnPathStandard.isEnabled = true
+            b.btnPathDirect.isEnabled = true
+            b.toggleInputPath.check(
+                if (card.selected == PathChoice.Direct) R.id.btnPathDirect else R.id.btnPathStandard,
+            )
+            val locked = card.restoring || card.needsReplug
+            b.btnPathStandard.isEnabled = !locked
+            b.btnPathDirect.isEnabled = card.directAvailable && !locked
+            b.toggleInputPath.addOnButtonCheckedListener { _, checkedId, isChecked ->
+                if (!isChecked) return@addOnButtonCheckedListener
+                when (checkedId) {
+                    R.id.btnPathDirect -> onDirectChosen(card, slotId)
+                    R.id.btnPathStandard -> listener.onSelectInputPath(slotId, PathChoice.Standard)
+                }
+            }
+
+            b.tvPathCaps.text = capsText(ctx, card)
+            bindPathRisk(ctx, card)
+            b.llPathRestoring.visibility = if (card.restoring) View.VISIBLE else View.GONE
+        }
+
+        private fun onDirectChosen(
+            card: PathCard,
+            slotId: String,
+        ) {
+            if (card.risk != PathRisk.GuessedLayout) {
+                listener.onSelectInputPath(slotId, PathChoice.Direct)
+                return
+            }
+            // An unrecognized pad's layout is guessed, so confirm before claiming; cancel snaps back.
+            androidx.appcompat.app.AlertDialog
+                .Builder(b.root.context)
+                .setTitle(R.string.path_confirm_title)
+                .setMessage(R.string.path_confirm_body)
+                .setPositiveButton(R.string.path_confirm_positive) { _, _ ->
+                    listener.onSelectInputPath(slotId, PathChoice.Direct)
+                }.setNegativeButton(R.string.path_confirm_negative) { _, _ ->
+                    b.toggleInputPath.check(R.id.btnPathStandard)
+                }.setOnCancelListener { b.toggleInputPath.check(R.id.btnPathStandard) }
+                .show()
+        }
+
+        private fun capsText(
+            ctx: android.content.Context,
+            card: PathCard,
+        ): String {
+            val standard =
+                ctx.getString(
+                    R.string.path_caps_standard,
+                    capMark(card.standard.rumble),
+                    capMark(card.standard.motion),
+                )
+            val direct =
+                ctx.getString(
+                    R.string.path_caps_direct,
+                    capMark(card.direct.rumble),
+                    capMark(card.direct.motion),
+                )
+            return "$standard\n$direct"
+        }
+
+        private fun capMark(present: Boolean): String = if (present) "✓" else "✗"
+
+        private fun bindPathRisk(
+            ctx: android.content.Context,
+            card: PathCard,
+        ) {
+            // Priority: an OS-dropped device, then a stuck return-to-Standard, then a recorded claim
+            // failure each override the steady-state risk line and read as warnings.
+            when {
+                card.needsReplug -> setRisk(ctx, R.string.path_needs_replug, warn = true)
+                card.restoreStuck -> setRisk(ctx, R.string.path_restore_stuck, warn = true)
+                card.failure != null -> setRisk(ctx, failureTextRes(card.failure), warn = true)
+                card.risk == PathRisk.GuessedLayout -> setRisk(ctx, R.string.path_risk_guessed, warn = true)
+                card.risk == PathRisk.BluetoothUnavailable -> setRisk(ctx, R.string.path_risk_bluetooth, warn = false)
+                else -> setRisk(ctx, R.string.path_risk_verified, warn = false)
             }
         }
 
+        private fun setRisk(
+            ctx: android.content.Context,
+            @androidx.annotation.StringRes textRes: Int,
+            warn: Boolean,
+        ) {
+            b.tvPathRisk.setText(textRes)
+            b.tvPathRisk.setTextColor(ctx.getColor(if (warn) R.color.colorWarning else R.color.colorMuted))
+        }
+
+        private fun failureTextRes(failure: DirectClaimFailure): Int =
+            when (failure) {
+                DirectClaimFailure.Busy -> R.string.path_reason_busy
+                DirectClaimFailure.InitFailed -> R.string.path_reason_init_failed
+                DirectClaimFailure.PermissionDenied -> R.string.path_reason_permission_denied
+                DirectClaimFailure.Dropped -> R.string.path_needs_replug
+            }
+
         private fun slotStatusText(s: ControllerSlot): String {
             val ctx = b.root.context
+            val bound = s.boundStatus
             return when {
                 s.isDisconnecting -> ctx.getString(R.string.slot_status_disconnecting, s.disconnectTimeLeft)
-                s.boundStatus?.live == LinkState.Connected ->
-                    ctx.getString(R.string.slot_status_routing_to, s.boundStatus.label)
-                s.boundStatus?.live == LinkState.Connecting -> ctx.getString(R.string.chip_status_connecting)
+                // A degraded (Unstable) link is still routing to the host, so it reads like Connected here;
+                // the primary status dot is what distinguishes it from a rock-solid link.
+                bound != null && bound.live.isLiveLink() ->
+                    ctx.getString(R.string.slot_status_routing_to, bound.label)
+                bound?.live == LinkState.Connecting -> ctx.getString(R.string.chip_status_connecting)
                 s.boundConnectionId != null -> ctx.getString(R.string.slot_status_bound)
                 else -> ctx.getString(R.string.slot_status_tap_to_bind)
             }

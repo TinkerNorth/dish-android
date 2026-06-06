@@ -14,6 +14,7 @@ using gamepad::XUSB_GUIDE;
 using usbparsers::buildRumbleReport;
 using usbparsers::decodeReport;
 using usbparsers::Parser;
+using usbparsers::parserHasRumble;
 using usbparsers::ParserState;
 
 namespace {
@@ -178,6 +179,21 @@ TEST(Rumble, UnsupportedParsersReturnZero) {
 TEST(Rumble, TooSmallBufferReturnsZero) {
     uint8_t out[10];
     EXPECT_EQ(0u, buildRumbleReport(Parser::DUALSENSE, 0xFFFF, 0xFFFF, 0, out, sizeof(out)));
+}
+
+// parserHasRumble must agree with which families buildRumbleReport actually emits.
+TEST(RumbleCapability, FamiliesWithBuildersReportTrue) {
+    EXPECT_TRUE(parserHasRumble(Parser::XINPUT_360));
+    EXPECT_TRUE(parserHasRumble(Parser::XBOX_ONE_GIP));
+    EXPECT_TRUE(parserHasRumble(Parser::DUALSHOCK4));
+    EXPECT_TRUE(parserHasRumble(Parser::DUALSENSE));
+    EXPECT_TRUE(parserHasRumble(Parser::SWITCH_PRO_USB));
+}
+
+TEST(RumbleCapability, FamiliesWithoutBuildersReportFalse) {
+    EXPECT_FALSE(parserHasRumble(Parser::STADIA));
+    EXPECT_FALSE(parserHasRumble(Parser::GENERIC_HID_GAMEPAD));
+    EXPECT_FALSE(parserHasRumble(Parser::NONE));
 }
 
 // Guards the refactor that moved I/O out: a non-Xbox decoder still works through decodeReport.

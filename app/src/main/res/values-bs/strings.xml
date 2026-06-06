@@ -278,17 +278,27 @@
     <string name="path_label_direct">Brzi način</string>
     <string name="path_label_direct_with_rate">Brzi način · %1$d Hz</string>
     <string name="path_label_standard">Standardni način</string>
-    <string name="path_direct_explainer">Najmanje kašnjenje. Direktno do kontrolera.</string>
-    <string name="path_reason_default">Radi sa svakim kontrolerom koji Android prepoznaje.</string>
-    <string name="path_reason_bluetooth">Bluetooth kontroleri uvijek koriste Standardni način.</string>
-    <string name="path_reason_onscreen">Kontroleri na ekranu koriste Standardni način.</string>    <string name="path_reason_unknown_model">Ovaj kontroler još nije na brzoj listi.</string>
     <string name="path_reason_busy">Druga aplikacija koristi ovaj kontroler.</string>
     <string name="path_reason_init_failed">Nije moguće postaviti Brzi način. Koristi se Standardni način.</string>
-    <string name="path_reason_detached">Kontroler je isključen.</string>
-    <string name="path_reason_not_yet">Brzi način za ovaj kontroler dolazi uskoro.</string>
-    <string name="path_action_try_direct">Pokušaj Brzi način</string>
+    <string name="path_reason_permission_denied">USB dozvola odbijena. Odobrite je za Brzi način.</string>
     <string name="direct_prompt_title">Pokušati Brzi način za %1$s?</string>
     <string name="direct_prompt_action">Pokušaj</string>
-    <string name="direct_enabled">%1$s sada koristi Brzi način.</string>
     <string name="direct_failed">Nije moguće prebaciti %1$s na Brzi način.</string>
+    <string name="path_input_section_label">Način unosa</string>
+    <string name="path_choice_standard">Standardni</string>
+    <string name="path_choice_direct">Brzi</string>
+    <string name="path_caps_standard">Standardni: vibracija %1$s · pokret %2$s</string>
+    <string name="path_caps_direct">Brzi: vibracija %1$s · pokret %2$s</string>
+    <string name="path_risk_verified">Provjereno za Brzi način.</string>
+    <string name="path_risk_guessed">Nije prepoznato. Brzi način pogađa raspored ovog kontrolera, pa neki unosi mogu biti pogrešni. Možete se vratiti u svakom trenutku.</string>
+    <string name="path_risk_bluetooth">Brzi način zahtijeva USB vezu.</string>
+    <string name="path_restoring">Vraćanje Standardnog načina</string>
+    <string name="path_confirm_title">Isprobati Brzi način?</string>
+    <string name="path_confirm_body">Ne prepoznajemo ovaj kontroler. Brzi način pogađa raspored dugmadi i palica, pa neki unosi mogu biti pogrešni. Možete se vratiti na Standardni u svakom trenutku.</string>
+    <string name="path_confirm_positive">Isprobaj</string>
+    <string name="path_confirm_negative">Otkaži</string>
+    <string name="direct_restore_failed">Vraćanje Standardnog načina za %1$s nije uspjelo. Isključite i ponovo priključite.</string>
+    <string name="direct_revert_to_direct">Nije moguće prebaciti %1$s na Standardni. I dalje je na Brzom načinu.</string>
+    <string name="path_restore_stuck">Standardni način ne reagira. Prebacite na Brzi ili ponovo priključite.</string>
+    <string name="path_needs_replug">Prekinuto. Isključite i ponovo priključite da koristite ovaj kontroler.</string>
 </resources>

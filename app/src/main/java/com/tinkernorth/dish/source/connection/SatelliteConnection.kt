@@ -295,9 +295,11 @@ class SatelliteConnection(
             val originalHandle = handle
             scope.launch(ioDispatcher) {
                 repeat(REMOVE_RETRIES) { attempt ->
-                    val snap = live ?: return@launch
-                    if (snap.handle != originalHandle) return@launch
-                    controllerRepo.removeController(snap.handle, info.controllerIndex)
+                    val indices = _slots.value.values.map { it.controllerIndex }
+                    if (!controllerIndexStillRemovable(live?.handle, originalHandle, indices, info.controllerIndex)) {
+                        return@launch
+                    }
+                    controllerRepo.removeController(originalHandle, info.controllerIndex)
                     if (attempt < REMOVE_RETRIES - 1) delay(REMOVE_RETRY_INTERVAL_MS)
                 }
             }
@@ -454,5 +456,15 @@ class SatelliteConnection(
         }
     }
 }
+
+// A queued controller-remove must abort if the session was torn down or reconnected under it, or if
+// the index has since been reused by a new slot. Removing a reused index would kill the freshly
+// registered controller, which is the exact race a multi-send retry widens.
+internal fun controllerIndexStillRemovable(
+    liveHandle: Int?,
+    originalHandle: Int,
+    currentIndices: Collection<Int>,
+    index: Int,
+): Boolean = liveHandle == originalHandle && index !in currentIndices
 
 enum class SatelliteSessionState { Idle, Linking, Live, Faltering }

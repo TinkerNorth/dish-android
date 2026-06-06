@@ -66,6 +66,12 @@ generic parser to cut dead code.
 **Acceptance:** Either an unknown gamepad can be attempted via a deliberate user action, or the dead
 path is gone. No silent generic claims.
 
+**Status:** **Done** via option (a). The per-controller input-path toggle (`PathCard` /
+`ControllerAdapter`) lets the user pick Direct for an unrecognised gamepad-shaped device behind a
+"layout is guessed, may read wrong" confirm dialog, and switch back at any time. Auto-claim still
+requires a known model (`resolvePath` defaults unknown models to Standard), so the generic parser is
+reached only through that deliberate, reversible, disclosed action. No silent generic claims.
+
 ---
 
 ## 4. Output mutex held across encrypt + sendto
@@ -131,6 +137,14 @@ stale entry. Only then move `attemptClaim` / `detachUsbDevice` to IO.
 
 **Acceptance:** Plug a recognised controller at app start with no UI hitch; repeated plug/unplug
 stress never drops the synthetic device or its host registration.
+
+**Status:** Partially addressed. `UsbGamepadManager.reconcile` is now idempotent (it no-ops when a
+device is already in its resolved state and skips a vid/pid with a recorded `directFailed`), so the
+repeated full-claim stall on every `onResume`/`reconcileForeground` is gone. The `PhysicalGamepadRegistry`
+writes are already `_devices.update {}` and `directFailed`/`claimedDevices` are concurrent. Still open:
+the one-time claim and `detachUsbDevice` join still run on the broadcast/main thread, so moving them to
+`Dispatchers.IO` (with the in-flight guard so an unplug-during-claim can't leave a stale synthetic)
+remains the actual fix for the plug-in hitch.
 
 ---
 

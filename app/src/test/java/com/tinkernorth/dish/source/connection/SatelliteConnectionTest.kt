@@ -404,7 +404,8 @@ class SatelliteConnectionTest {
             conn.attachSlot("slot-B", controllerType = 0)
 
             conn.detachSlot("slot-A")
-            verify { repo.removeController(2, 0) }
+            // The remove is dispatched async on ioDispatcher now; wait for it rather than racing it.
+            verify(timeout = 2000) { repo.removeController(2, 0) }
             assertNull(conn.slots.value["slot-A"])
 
             conn.attachSlot("slot-C", controllerType = 0)
@@ -708,4 +709,48 @@ class SatelliteConnectionTest {
             conn.attachSlot(slotId = "b", controllerType = 0)
             assertTrue(conn.renameSlot("ghost", "b"))
         }
+
+    @Test
+    fun `controllerIndexStillRemovable is false once the index has been reused`() {
+        assertFalse(
+            controllerIndexStillRemovable(
+                liveHandle = 4,
+                originalHandle = 4,
+                currentIndices = listOf(0, 1),
+                index = 0,
+            ),
+        )
+    }
+
+    @Test
+    fun `controllerIndexStillRemovable is false when the session changed under the queued remove`() {
+        assertFalse(
+            controllerIndexStillRemovable(
+                liveHandle = 5,
+                originalHandle = 4,
+                currentIndices = emptyList(),
+                index = 0,
+            ),
+        )
+        assertFalse(
+            controllerIndexStillRemovable(
+                liveHandle = null,
+                originalHandle = 4,
+                currentIndices = emptyList(),
+                index = 0,
+            ),
+        )
+    }
+
+    @Test
+    fun `controllerIndexStillRemovable is true when the handle matches and the index is free`() {
+        assertTrue(
+            controllerIndexStillRemovable(
+                liveHandle = 4,
+                originalHandle = 4,
+                currentIndices = listOf(1, 2),
+                index = 0,
+            ),
+        )
+    }
 }

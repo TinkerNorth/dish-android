@@ -8,6 +8,7 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.MotionCapabilityComposer
+import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
@@ -16,8 +17,9 @@ import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.TouchpadModeStore
-import com.tinkernorth.dish.source.usb.PathMode
-import com.tinkernorth.dish.source.usb.PathReason
+import com.tinkernorth.dish.source.store.UsbPathPreferenceStore
+import com.tinkernorth.dish.source.usb.PathChoice
+import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -47,6 +49,9 @@ class MainViewModelTest {
     private lateinit var motionEnabledStore: MotionEnabledStore
     private lateinit var motionCapabilityComposer: MotionCapabilityComposer
     private lateinit var touchpadModeStore: TouchpadModeStore
+    private lateinit var native: PhysicalInputNative
+    private lateinit var pathPrefs: UsbPathPreferenceStore
+    private lateinit var usbGamepadManager: UsbGamepadManager
     private lateinit var vm: MainViewModel
 
     private val connectionsFlow = MutableStateFlow<List<ConnectionSummary>>(emptyList())
@@ -76,10 +81,16 @@ class MainViewModelTest {
             TouchpadModeStore(
                 mockk(relaxed = true) { every { all() } returns emptyList() },
             )
+        native = mockk(relaxed = true)
+        pathPrefs = mockk(relaxed = true)
+        usbGamepadManager = mockk(relaxed = true)
         every { hub.connections } returns connectionsFlow
         every { hub.bindings } returns bindingsFlow
         every { gamepadRegistry.devices } returns devicesFlow
+        every { gamepadRegistry.isUsbDevicePresent(any(), any()) } returns true
+        every { gamepadRegistry.frameworkCapsFor(any(), any()) } returns null
         every { satellite.events } returns satelliteEvents
+        every { pathPrefs.state } returns MutableStateFlow(emptyMap())
         val context = mockk<Context>(relaxed = true)
         vm =
             MainViewModel(
@@ -91,6 +102,9 @@ class MainViewModelTest {
                 motionEnabledStore,
                 motionCapabilityComposer,
                 touchpadModeStore,
+                native,
+                pathPrefs,
+                usbGamepadManager,
             )
     }
 
@@ -261,7 +275,6 @@ class MainViewModelTest {
         id = id,
         name = "Pad",
         isUsbSynthetic = true,
-        pathMode = PathMode.Direct,
         pollRateHz = pollRateHz,
         vendorId = vid,
         productId = pid,
@@ -271,15 +284,12 @@ class MainViewModelTest {
         id: Int,
         vid: Int,
         pid: Int,
-        reason: PathReason = PathReason.None,
         disconnecting: Boolean = false,
     ) = PhysicalGamepadRegistry.Device(
         id = id,
         name = "Pad",
         disconnectingTimeLeftSec = if (disconnecting) 3 else null,
         isUsbSynthetic = false,
-        pathMode = PathMode.Routed,
-        pathReason = reason,
         vendorId = vid,
         productId = pid,
     )
@@ -295,9 +305,9 @@ class MainViewModelTest {
                     .first { it.inputType == SlotInputType.PHYSICAL }
             assertEquals("-1000", slot.id)
             assertEquals(
-                true,
-                vm.uiState.value.pathBadges["-1000"]
-                    ?.isDirect,
+                InputPathMode.Direct,
+                vm.uiState.value.pathCards["-1000"]
+                    ?.currentMode,
             )
         }
 
@@ -357,39 +367,55 @@ class MainViewModelTest {
         }
 
     @Test
-    fun `eligible routed controller produces an actionable standard badge`() =
+    fun `recognised routed controller reads as Standard until it actually claims`() =
         runTest(dispatcher) {
-            devicesFlow.value = mapOf(60 to routed(60, 0x045E, 0x028E, reason = PathReason.Eligible))
+            every { native.isKnownFastLaneModel(0x045E, 0x028E) } returns true
+            devicesFlow.value = mapOf(60 to routed(60, 0x045E, 0x028E))
             dispatcher.scheduler.runCurrent()
 
-            val badge = vm.uiState.value.pathBadges["60"]
-            assertEquals(false, badge?.isDirect)
-            assertEquals(true, badge?.actionable)
+            val card = vm.uiState.value.pathCards["60"]
+            // Recognised (Direct offered, no risk), but the switch shows the live Standard mode until a
+            // synthetic is actually claimed; it must never pre-select Direct.
+            assertEquals(InputPathMode.Standard, card?.currentMode)
+            assertEquals(PathChoice.Standard, card?.selected)
+            assertEquals(PathRisk.None, card?.risk)
         }
 
     @Test
-    fun `the virtual slot always carries a non-direct, non-actionable badge`() =
+    fun `the virtual slot has no path card`() =
         runTest(dispatcher) {
             dispatcher.scheduler.runCurrent()
-            val badge = vm.uiState.value.pathBadges[VIRTUAL_SLOT_ID]
-            assertEquals(false, badge?.isDirect)
-            assertEquals(false, badge?.actionable)
+            assertNull(vm.uiState.value.pathCards[VIRTUAL_SLOT_ID])
         }
 
     @Test
-    fun `every rendered slot has a path badge`() =
+    fun `every physical slot has a path card and the virtual slot does not`() =
         runTest(dispatcher) {
             devicesFlow.value =
                 mapOf(
                     -1000 to synthetic(-1000, 1, 2),
-                    60 to routed(60, 0x045E, 0x028E, reason = PathReason.Eligible),
+                    60 to routed(60, 0x045E, 0x028E),
                 )
             dispatcher.scheduler.runCurrent()
 
-            val slotIds =
+            val physicalIds =
                 vm.uiState.value.slots
+                    .filter { it.inputType == SlotInputType.PHYSICAL }
                     .map { it.id }
                     .toSet()
-            assertEquals(slotIds, vm.uiState.value.pathBadges.keys)
+            assertEquals(physicalIds, vm.uiState.value.pathCards.keys)
+        }
+
+    @Test
+    fun `a device held mid-switch surfaces a restoring path card`() =
+        runTest(dispatcher) {
+            devicesFlow.value = mapOf(-1000 to synthetic(-1000, 1, 2).copy(transitioning = true))
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(
+                true,
+                vm.uiState.value.pathCards["-1000"]
+                    ?.restoring,
+            )
         }
 }

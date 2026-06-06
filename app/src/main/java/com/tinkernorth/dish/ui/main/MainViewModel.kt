@@ -12,6 +12,7 @@ import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.MotionCapability
 import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.composer.TouchpadModeComposer
+import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.connection.ConnectionEvent
@@ -19,8 +20,9 @@ import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.TouchpadModeStore
-import com.tinkernorth.dish.source.usb.PathMode
-import com.tinkernorth.dish.source.usb.PathReason
+import com.tinkernorth.dish.source.store.UsbPathPreferenceStore
+import com.tinkernorth.dish.source.usb.PathChoice
+import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -37,6 +39,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
+@Suppress("LongParameterList")
 class MainViewModel
     @Inject
     constructor(
@@ -48,6 +51,9 @@ class MainViewModel
         private val motionEnabledStore: MotionEnabledStore,
         private val motionCapability: MotionCapabilityComposer,
         private val touchpadModeStore: TouchpadModeStore,
+        private val native: PhysicalInputNative,
+        private val pathPrefs: UsbPathPreferenceStore,
+        private val usbGamepadManager: UsbGamepadManager,
     ) : ViewModel() {
         // Absence means "user has not toggled"; use isMotionEnabled() for default rather than reading directly.
         val motionEnabled: StateFlow<Map<String, Boolean>> = motionEnabledStore.state
@@ -59,54 +65,68 @@ class MainViewModel
         val events: SharedFlow<MainEvent> = _events.asSharedFlow()
 
         init {
-            combine(
-                hub.connections,
-                hub.bindings,
-                gamepadRegistry.devices,
-                batteryStatusStore.samples,
-                motionCapability.state,
-            ) { conns, bindings, devices, batteries, motionCaps ->
-                val virtual =
-                    ControllerSlot(
-                        id = VIRTUAL_SLOT_ID,
-                        inputType = SlotInputType.VIRTUAL,
-                        name = context.getString(R.string.default_virtual_controller_name),
-                    )
-                val hiddenRoutedIds = routedTwinIdsHiddenBySynthetics(devices.values)
-                val physical =
-                    devices.values
-                        .filter { dev -> dev.isUsbSynthetic || dev.id !in hiddenRoutedIds }
-                        .map { dev ->
-                            ControllerSlot(
-                                id = dev.id.toString(),
-                                inputType = SlotInputType.PHYSICAL,
-                                name = dev.name,
-                                physicalDeviceId = dev.id,
-                                isDisconnecting = dev.isDisconnecting,
-                                disconnectTimeLeft = dev.disconnectingTimeLeftSec ?: 0,
+            val slotsBase =
+                combine(
+                    hub.connections,
+                    hub.bindings,
+                    gamepadRegistry.devices,
+                    batteryStatusStore.samples,
+                    motionCapability.state,
+                ) { conns, bindings, devices, batteries, motionCaps ->
+                    val virtual =
+                        ControllerSlot(
+                            id = VIRTUAL_SLOT_ID,
+                            inputType = SlotInputType.VIRTUAL,
+                            name = context.getString(R.string.default_virtual_controller_name),
+                        )
+                    val hiddenRoutedIds = routedTwinIdsHiddenBySynthetics(devices.values)
+                    val physical =
+                        devices.values
+                            .filter { dev -> dev.isUsbSynthetic || dev.id !in hiddenRoutedIds }
+                            .map { dev ->
+                                ControllerSlot(
+                                    id = dev.id.toString(),
+                                    inputType = SlotInputType.PHYSICAL,
+                                    name = dev.name,
+                                    physicalDeviceId = dev.id,
+                                    isDisconnecting = dev.isDisconnecting,
+                                    disconnectTimeLeft = dev.disconnectingTimeLeftSec ?: 0,
+                                )
+                            }
+                    val slots =
+                        (listOf(virtual) + physical).map { slot ->
+                            val cid = bindings[slot.id]
+                            slot.copy(
+                                boundConnectionId = cid,
+                                boundStatus = cid?.let { id -> conns.firstOrNull { it.id == id } },
+                                battery =
+                                    batteries[slot.id]?.let { s ->
+                                        BatteryUi.fromWire(s.level, s.status)
+                                    },
                             )
                         }
-                val slots =
-                    (listOf(virtual) + physical).map { slot ->
-                        val cid = bindings[slot.id]
-                        slot.copy(
-                            boundConnectionId = cid,
-                            boundStatus = cid?.let { id -> conns.firstOrNull { it.id == id } },
-                            battery =
-                                batteries[slot.id]?.let { s ->
-                                    BatteryUi.fromWire(s.level, s.status)
-                                },
-                        )
-                    }
-                val pathBadges = slots.associate { it.id to pathBadgeFor(it, devices) }
-                SlotsRender(slots, conns, motionCaps, pathBadges)
+                    SlotsBase(slots, conns, motionCaps, devices)
+                }
+
+            // Second stage keyed off path prefs so a choice re-evaluates promptly; the cards themselves are
+            // derived from the live device state, so the badge and toggle always show the actual mode.
+            combine(
+                slotsBase,
+                pathPrefs.state,
+            ) { base, _ ->
+                val pathCards =
+                    base.slots
+                        .mapNotNull { slot ->
+                            pathCardFor(slot, base.devices)?.let { slot.id to it }
+                        }.toMap()
+                SlotsRender(base.slots, base.connections, base.motionCapabilities, pathCards)
             }.onEach { render ->
                 _uiState.update { prev ->
                     prev.copy(
                         slots = render.slots,
                         connections = render.connections,
                         motionCapabilities = render.motionCapabilities,
-                        pathBadges = render.pathBadges,
+                        pathCards = render.pathCards,
                     )
                 }
             }.launchIn(viewModelScope)
@@ -217,25 +237,65 @@ class MainViewModel
             return json.substring(openQuote + 1, closeQuote)
         }
 
-        private fun pathBadgeFor(
+        private fun pathCardFor(
             slot: ControllerSlot,
             devices: Map<Int, PhysicalGamepadRegistry.Device>,
-        ): PathBadge {
-            val device = devices[slot.physicalDeviceId]
-            return PathBadgeMapper.map(
-                ctx = context,
-                mode = device?.pathMode ?: PathMode.Routed,
-                reason = device?.pathReason ?: PathReason.None,
-                isOnScreen = slot.inputType == SlotInputType.VIRTUAL,
-                pollRateHz = device?.pollRateHz ?: 0,
+        ): PathCard? {
+            if (slot.inputType != SlotInputType.PHYSICAL) return null
+            val device = devices[slot.physicalDeviceId] ?: return null
+            val vid = device.vendorId
+            val pid = device.productId
+            // While claimed the framework InputDevice is gone, so Standard caps come from the last time
+            // it was seen routed; if it was never seen routed they're unknown (shown as absent).
+            val standard =
+                if (device.isUsbSynthetic) {
+                    gamepadRegistry
+                        .frameworkCapsFor(vid, pid)
+                        ?.let { PathCapabilities(rumble = it.hasRumble, motion = it.hasGyro) }
+                        ?: PathCapabilities(rumble = false, motion = false)
+                } else {
+                    PathCapabilities(rumble = device.hasRumble, motion = device.hasGyro)
+                }
+            return PathCardMapper.map(
+                isClaimedDirect = device.isUsbSynthetic,
+                usbPresent = gamepadRegistry.isUsbDevicePresent(vid, pid),
+                recognized = native.isKnownFastLaneModel(vid, pid),
+                restoring = device.transitioning,
+                standard = standard,
+                direct =
+                    PathCapabilities(
+                        rumble = native.modelHasRumble(vid, pid),
+                        motion = native.modelHasImu(vid, pid),
+                    ),
+                // Only a live synthetic (not mid-release, not stuck) is actually streaming Direct.
+                directPollHz = if (device.isUsbSynthetic && !device.transitioning && !device.restoreStuck) device.pollRateHz else 0,
+                needsReplug = device.needsReplug,
+                restoreStuck = device.restoreStuck,
+                directFailure = device.directFailure,
             )
         }
+
+        fun setInputPath(
+            slotId: String,
+            choice: PathChoice,
+        ) {
+            val deviceId = slotId.toIntOrNull() ?: return
+            val device = gamepadRegistry.devices.value[deviceId] ?: return
+            usbGamepadManager.setPathChoice(device.vendorId, device.productId, choice)
+        }
+
+        private data class SlotsBase(
+            val slots: List<ControllerSlot>,
+            val connections: List<ConnectionSummary>,
+            val motionCapabilities: Map<String, MotionCapability>,
+            val devices: Map<Int, PhysicalGamepadRegistry.Device>,
+        )
 
         private data class SlotsRender(
             val slots: List<ControllerSlot>,
             val connections: List<ConnectionSummary>,
             val motionCapabilities: Map<String, MotionCapability>,
-            val pathBadges: Map<String, PathBadge>,
+            val pathCards: Map<String, PathCard>,
         )
 
         private companion object {
