@@ -272,4 +272,21 @@
     <string name="settings_open_source_licenses_body">Créditos das bibliotecas em que o Dish é construído.</string>
     <string name="licenses_open_external">Abrir licença de %1$s</string>
     <string name="settings_version_label">VERSÃO</string>
+
+    <string name="path_label_direct">Modo direto</string>
+    <string name="path_label_direct_with_rate">Modo direto · %1$d Hz</string>
+    <string name="path_label_standard">Modo padrão</string>
+    <string name="path_direct_explainer">Menor atraso. Comunicação direta com o controle.</string>
+    <string name="path_reason_default">Funciona com qualquer controle reconhecido pelo Android.</string>
+    <string name="path_reason_bluetooth">Controles Bluetooth sempre usam o Modo padrão.</string>
+    <string name="path_reason_onscreen">Controles na tela usam o Modo padrão.</string>    <string name="path_reason_unknown_model">Este controle ainda não está na lista rápida.</string>
+    <string name="path_reason_busy">Outro app está usando este controle.</string>
+    <string name="path_reason_init_failed">Não foi possível ativar o Modo direto. Usando Modo padrão.</string>
+    <string name="path_reason_detached">O controle foi desconectado.</string>
+    <string name="path_reason_not_yet">O Modo direto para este controle chegará em breve.</string>
+    <string name="path_action_try_direct">Tentar Modo direto</string>
+    <string name="direct_prompt_title">Tentar Modo direto para %1$s?</string>
+    <string name="direct_prompt_action">Tentar</string>
+    <string name="direct_enabled">%1$s está no Modo direto.</string>
+    <string name="direct_failed">Não foi possível mudar %1$s para o Modo direto.</string>
 </resources>

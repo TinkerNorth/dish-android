@@ -16,6 +16,7 @@ constexpr uint16_t XUSB_THUMB_L = 0x0040;
 constexpr uint16_t XUSB_THUMB_R = 0x0080;
 constexpr uint16_t XUSB_LB = 0x0100;
 constexpr uint16_t XUSB_RB = 0x0200;
+constexpr uint16_t XUSB_GUIDE = 0x0400;
 constexpr uint16_t XUSB_A = 0x1000;
 constexpr uint16_t XUSB_B = 0x2000;
 constexpr uint16_t XUSB_X = 0x4000;
@@ -71,6 +72,10 @@ struct DeviceState {
     int16_t lastSLX = 0, lastSLY = 0, lastSRX = 0, lastSRY = 0;
 
     float flatX = 0.f, flatY = 0.f, flatZ = 0.f, flatRZ = 0.f;
+
+    bool motionValid = false;
+    int16_t gyroX = 0, gyroY = 0, gyroZ = 0;
+    int16_t accelX = 0, accelY = 0, accelZ = 0;
 };
 
 int16_t scaleAxis(float v, float max);

@@ -29,7 +29,10 @@
 #include <vector>
 #include <sodium.h>
 
+#include "dispatch.h"
 #include "gamepad_input.h"
+#include "usb_host.h"
+#include "usb_parsers.h"
 #include "wire_encoders.h"
 
 #define TAG "SatelliteJNI"
@@ -228,6 +231,69 @@ static void publishIfChanged(int32_t deviceId, DeviceState& s) {
         });
     }
 }
+
+// USB-direct reports skip gamepad::applyAxes, so the per-device flat (deadzone) is never applied; a
+// resting stick would otherwise stream jitter and drift. Radial hard cutoff, ~8% of int16 range.
+static constexpr int32_t kUsbStickDeadzone = 2600;
+static inline void applyUsbStickDeadzone(int16_t& x, int16_t& y) {
+    const int64_t mag2 = static_cast<int64_t>(x) * x + static_cast<int64_t>(y) * y;
+    if (mag2 < static_cast<int64_t>(kUsbStickDeadzone) * kUsbStickDeadzone) {
+        x = 0;
+        y = 0;
+    }
+}
+
+namespace dispatch {
+
+void prewarmDevice(int32_t deviceId) {
+    std::lock_guard<std::mutex> lock(g_devicesMtx);
+    g_devices[deviceId];
+}
+
+void applyUsbReport(int32_t deviceId, const gamepad::DeviceState& nu) {
+    std::lock_guard<std::mutex> lock(g_devicesMtx);
+    auto& s = g_devices[deviceId];
+    s.wButtons = nu.wButtons;
+    s.bLT = nu.bLT;
+    s.bRT = nu.bRT;
+    s.sLX = nu.sLX;
+    s.sLY = nu.sLY;
+    s.sRX = nu.sRX;
+    s.sRY = nu.sRY;
+    applyUsbStickDeadzone(s.sLX, s.sLY);
+    applyUsbStickDeadzone(s.sRX, s.sRY);
+    publishIfChanged(deviceId, s);
+}
+
+void resetAndPublish(int32_t deviceId) {
+    std::lock_guard<std::mutex> lock(g_devicesMtx);
+    auto it = g_devices.find(deviceId);
+    if (it == g_devices.end()) return;
+    gamepad::resetState(it->second);
+    publishIfChanged(deviceId, it->second);
+}
+
+void forgetDevice(int32_t deviceId) {
+    std::lock_guard<std::mutex> lock(g_devicesMtx);
+    g_devices.erase(deviceId);
+}
+
+void applyUsbMotion(int32_t deviceId, int16_t gyroX, int16_t gyroY, int16_t gyroZ, int16_t accelX,
+                    int16_t accelY, int16_t accelZ, uint32_t timestampDeltaUs) {
+    std::lock_guard<std::mutex> lock(g_slotsMtx);
+    auto it = g_slots.find(deviceId);
+    if (it == g_slots.end()) return;
+    const SlotBinding& binding = it->second;
+    if (binding.kind != SLOT_SATELLITE) return;
+    auto session = getSession(binding.sessionHandle);
+    if (!session) return;
+    uint8_t payload[17];
+    dish_wire::encodeMotionPayload(payload, (uint8_t)(binding.controllerIndex & 0xFF), gyroX, gyroY,
+                                   gyroZ, accelX, accelY, accelZ, timestampDeltaUs);
+    sendEncrypted(session.get(), MSG_MOTION, payload, sizeof(payload));
+}
+
+} // namespace dispatch
 
 // Returning true consumes the event so it can't trigger incidental View focus navigation.
 static bool gamepadKeyFilter(const GameActivityKeyEvent* ev) {
@@ -818,6 +884,11 @@ Java_com_tinkernorth_dish_core_jni_SatelliteNative_clearAllPhysicalSlots(JNIEnv*
     g_slots.clear();
 }
 
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_forgetPhysicalDevice(
+    JNIEnv*, jobject, jint deviceId) {
+    dispatch::forgetDevice((int32_t)deviceId);
+}
+
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setDeviceDeadzones(
     JNIEnv*, jobject, jint deviceId, jfloat flatX, jfloat flatY, jfloat flatZ, jfloat flatRZ) {
     std::lock_guard<std::mutex> lock(g_devicesMtx);
@@ -910,6 +981,59 @@ Java_com_tinkernorth_dish_hotpath_input_RumbleBridge_nativeInstall(JNIEnv* env, 
             env->ExceptionClear();
         }
     }
+}
+
+JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_attachUsbDevice(
+    JNIEnv*, jobject, jint fd, jint vid, jint pid, jint interfaceNumber, jint epIn,
+    jint epInMaxPacket, jint epOut) {
+    int dupFd = dup(fd);
+    if (dupFd < 0) {
+        LOGE("attachUsbDevice: dup(%d) failed: %s", fd, strerror(errno));
+        return 0;
+    }
+    usbhost::AttachResult r = usbhost::attachDevice(
+        dupFd, (uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF), interfaceNumber,
+        (uint8_t)(epIn & 0xFF), (uint16_t)(epInMaxPacket & 0xFFFF), (uint8_t)(epOut & 0xFF));
+    return r.ok ? (jint)r.syntheticDeviceId : 0;
+}
+
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_detachUsbDevice(
+    JNIEnv*, jobject, jint syntheticDeviceId) {
+    usbhost::detachDevice((int32_t)syntheticDeviceId);
+}
+
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendUsbRumble(
+    JNIEnv*, jobject, jint syntheticDeviceId, jint strong, jint weak) {
+    usbhost::sendRumble((int32_t)syntheticDeviceId, (uint16_t)(strong & 0xFFFF),
+                        (uint16_t)(weak & 0xFFFF));
+}
+
+JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_lookupKnownModelName(
+    JNIEnv* env, jobject, jint vid, jint pid) {
+    const usbparsers::KnownDevice* k =
+        usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
+    return env->NewStringUTF(k ? k->name : "");
+}
+
+JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_isKnownFastLaneModel(
+    JNIEnv*, jobject, jint vid, jint pid) {
+    const usbparsers::KnownDevice* k =
+        usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
+    if (!k) return JNI_FALSE;
+    return k->parser != usbparsers::Parser::NONE ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_modelHasImu(
+    JNIEnv*, jobject, jint vid, jint pid) {
+    const usbparsers::KnownDevice* k =
+        usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
+    if (!k) return JNI_FALSE;
+    return usbparsers::parserHasImu(k->parser) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDeviceUrbCount(
+    JNIEnv*, jobject, jint deviceId) {
+    return (jlong)usbhost::getUrbCount((int32_t)deviceId);
 }
 }
 

@@ -37,18 +37,18 @@ class ConnectionsVisibleInPickerTest {
     }
 
     @Test
-    fun `Connecting counts as available`() {
-        assertTrue(LinkState.Connecting.isAvailableForPicker())
+    fun `Connecting does not count as available — no live session yet`() {
+        assertFalse(LinkState.Connecting.isAvailableForPicker())
     }
 
     @Test
-    fun `Ready counts as available — paired and seen, just no session yet`() {
-        assertTrue(LinkState.Ready.isAvailableForPicker())
+    fun `Ready does not count as available — paired and seen, but not connected`() {
+        assertFalse(LinkState.Ready.isAvailableForPicker())
     }
 
     @Test
-    fun `Found counts as available — visible target, just unpaired`() {
-        assertTrue(LinkState.Found.isAvailableForPicker())
+    fun `Found does not count as available — visible target, but not connected`() {
+        assertFalse(LinkState.Found.isAvailableForPicker())
     }
 
     @Test
@@ -124,7 +124,7 @@ class ConnectionsVisibleInPickerTest {
     }
 
     @Test
-    fun `picker drops only the unreachable unbound entries`() {
+    fun `picker keeps only the live unbound entries`() {
         val online = summary("s:online", LinkState.Connected)
         val ready = summary("s:ready", LinkState.Ready)
         val offline = summary("s:offline", LinkState.Saved)
@@ -136,7 +136,7 @@ class ConnectionsVisibleInPickerTest {
                 boundConnectionId = null,
             )
 
-        assertEquals(listOf(online, ready), visible)
+        assertEquals(listOf(online), visible)
     }
 
     @Test
@@ -169,17 +169,17 @@ class ConnectionsVisibleInPickerTest {
     fun `picker preserves order even with mixed available and held-over rows`() {
         val a = summary("s:a", LinkState.Connected)
         val bSaved = summary("s:b", LinkState.Saved)
-        val c = summary("s:c", LinkState.Connecting)
+        val cConnecting = summary("s:c", LinkState.Connecting)
         val dSavedUnbound = summary("s:d", LinkState.Saved)
-        val e = summary("s:e", LinkState.Ready)
+        val e = summary("s:e", LinkState.Connected)
 
         val visible =
             connectionsVisibleInPicker(
-                listOf(a, bSaved, c, dSavedUnbound, e),
+                listOf(a, bSaved, cConnecting, dSavedUnbound, e),
                 boundConnectionId = "s:b",
             )
 
-        assertEquals(listOf(a, bSaved, c, e), visible)
+        assertEquals(listOf(a, bSaved, e), visible)
     }
 
     @Test

@@ -226,9 +226,8 @@ tasks.named("check") {
     dependsOn("nativeTest")
 }
 
-// 512m default OOMs SatelliteConnectionTest reflection cache; matches daemon heap.
 tasks.withType<Test>().configureEach {
-    maxHeapSize = "2g"
+    maxHeapSize = "512m"
 }
 
 val licensesOutputFile =

@@ -55,10 +55,12 @@ data class MainUiState(
     val connections: List<ConnectionSummary> = emptyList(),
     val motionCapabilities: Map<String, MotionCapability> = emptyMap(),
     val touchpadModesBySatellite: Map<String, String> = emptyMap(),
+    val pathBadges: Map<String, PathBadge> = emptyMap(),
 ) {
     val virtualSlot get() = slots.first { it.id == VIRTUAL_SLOT_ID }
     val physicalSlots get() = slots.filter { it.inputType == SlotInputType.PHYSICAL }
     val anyConnected get() = connections.any { it.live == com.tinkernorth.dish.composer.LinkState.Connected }
+    val anyConnecting get() = connections.any { it.live == com.tinkernorth.dish.composer.LinkState.Connecting }
 
     // Distinct from connections.count { CONNECTED }: excludes physical slots with no device attached.
     val streamingSlotCount: Int get() =

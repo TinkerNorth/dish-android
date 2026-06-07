@@ -55,17 +55,17 @@ class PickerFromMainUiStateTest {
     }
 
     @Test
-    fun `freshly discovered satellites populate the picker even unbound`() {
-        val a = summary("s:1", LinkState.Connected)
-        val b = summary("s:2", LinkState.Ready)
-        val c = summary("s:3", LinkState.Found)
+    fun `only live connections populate the picker — discovered-but-not-connected are hidden`() {
+        val live = summary("s:1", LinkState.Connected)
+        val ready = summary("s:2", LinkState.Ready)
+        val found = summary("s:3", LinkState.Found)
         val state =
             MainUiState(
                 slots = listOf(virtualSlot()),
-                connections = listOf(a, b, c),
+                connections = listOf(live, ready, found),
             )
 
-        assertEquals(listOf(a, b, c), pickerFor(state, state.virtualSlot))
+        assertEquals(listOf(live), pickerFor(state, state.virtualSlot))
     }
 
     @Test
@@ -249,6 +249,6 @@ class PickerFromMainUiStateTest {
             )
 
         val virtualPicker = pickerFor(state, state.virtualSlot)
-        assertEquals(listOf(online, connecting, staleHeld), virtualPicker)
+        assertEquals(listOf(online, staleHeld), virtualPicker)
     }
 }
