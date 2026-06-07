@@ -2,6 +2,7 @@
 
 package com.tinkernorth.dish.ui.main
 
+import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.usb.DirectClaimFailure
 import com.tinkernorth.dish.source.usb.PathChoice
 
@@ -11,7 +12,6 @@ enum class InputPathMode { Standard, Direct }
 enum class PathRisk {
     None,
     GuessedLayout,
-    BluetoothUnavailable,
 }
 
 data class PathCapabilities(
@@ -24,6 +24,7 @@ data class PathCapabilities(
 data class PathCard(
     val currentMode: InputPathMode,
     val selected: PathChoice,
+    val transport: Transport,
     val directAvailable: Boolean,
     val recognized: Boolean,
     val restoring: Boolean,
@@ -43,7 +44,7 @@ object PathCardMapper {
     @Suppress("LongParameterList")
     fun map(
         isClaimedDirect: Boolean,
-        usbPresent: Boolean,
+        transport: Transport,
         recognized: Boolean,
         restoring: Boolean,
         standard: PathCapabilities,
@@ -59,14 +60,15 @@ object PathCardMapper {
         val onDirect = isClaimedDirect && !restoring && !restoreStuck
         val risk =
             when {
-                !usbPresent -> PathRisk.BluetoothUnavailable
+                transport == Transport.Bluetooth -> PathRisk.None
                 !recognized -> PathRisk.GuessedLayout
                 else -> PathRisk.None
             }
         return PathCard(
             currentMode = if (onDirect) InputPathMode.Direct else InputPathMode.Standard,
             selected = if (onDirect) PathChoice.Direct else PathChoice.Standard,
-            directAvailable = usbPresent,
+            transport = transport,
+            directAvailable = transport == Transport.Usb,
             recognized = recognized,
             restoring = restoring,
             standard = standard,

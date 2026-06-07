@@ -278,6 +278,7 @@
     <string name="path_label_direct">Brzi način</string>
     <string name="path_label_direct_with_rate">Brzi način · %1$d Hz</string>
     <string name="path_label_standard">Standardni način</string>
+    <string name="path_label_bluetooth">Bluetooth</string>
     <string name="path_reason_busy">Druga aplikacija koristi ovaj kontroler.</string>
     <string name="path_reason_init_failed">Nije moguće postaviti Brzi način. Koristi se Standardni način.</string>
     <string name="path_reason_permission_denied">USB dozvola odbijena. Odobrite je za Brzi način.</string>

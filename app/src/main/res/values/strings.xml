@@ -356,6 +356,7 @@
     <string name="path_label_direct">Direct mode</string>
     <string name="path_label_direct_with_rate">Direct mode · %1$d Hz</string>
     <string name="path_label_standard">Standard mode</string>
+    <string name="path_label_bluetooth">Bluetooth</string>
     <string name="path_reason_busy">Another app is using this controller.</string>
     <string name="path_reason_init_failed">Couldn\'t set up Direct mode. Using Standard mode instead.</string>
     <string name="path_reason_permission_denied">USB permission denied. Grant it to use Direct mode.</string>

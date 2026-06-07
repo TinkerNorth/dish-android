@@ -258,7 +258,7 @@ class MainViewModel
                 }
             return PathCardMapper.map(
                 isClaimedDirect = device.isUsbSynthetic,
-                usbPresent = gamepadRegistry.isUsbDevicePresent(vid, pid),
+                transport = device.transport,
                 recognized = native.isKnownFastLaneModel(vid, pid),
                 restoring = device.transitioning,
                 standard = standard,

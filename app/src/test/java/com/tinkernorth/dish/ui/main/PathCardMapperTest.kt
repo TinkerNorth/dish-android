@@ -2,6 +2,7 @@
 
 package com.tinkernorth.dish.ui.main
 
+import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.usb.DirectClaimFailure
 import com.tinkernorth.dish.source.usb.PathChoice
 import org.junit.Assert.assertEquals
@@ -16,7 +17,7 @@ class PathCardMapperTest {
     @Suppress("LongParameterList")
     private fun map(
         isClaimedDirect: Boolean = false,
-        usbPresent: Boolean = true,
+        transport: Transport = Transport.Usb,
         recognized: Boolean = true,
         restoring: Boolean = false,
         needsReplug: Boolean = false,
@@ -24,7 +25,7 @@ class PathCardMapperTest {
         directFailure: DirectClaimFailure? = null,
     ) = PathCardMapper.map(
         isClaimedDirect = isClaimedDirect,
-        usbPresent = usbPresent,
+        transport = transport,
         recognized = recognized,
         restoring = restoring,
         standard = caps,
@@ -79,21 +80,22 @@ class PathCardMapperTest {
     }
 
     @Test
-    fun `no usb connection forces Standard and disables Direct`() {
-        val card = map(usbPresent = false)
+    fun `a bluetooth controller offers no direct path`() {
+        val card = map(transport = Transport.Bluetooth)
+        assertEquals(Transport.Bluetooth, card.transport)
         assertEquals(PathChoice.Standard, card.selected)
         assertFalse(card.directAvailable)
-        assertEquals(PathRisk.BluetoothUnavailable, card.risk)
+        assertEquals(PathRisk.None, card.risk)
     }
 
     @Test
     fun `an unknown usb model carries the guessed-layout risk`() {
-        assertEquals(PathRisk.GuessedLayout, map(usbPresent = true, recognized = false).risk)
+        assertEquals(PathRisk.GuessedLayout, map(transport = Transport.Usb, recognized = false).risk)
     }
 
     @Test
     fun `a verified usb model has no risk`() {
-        assertEquals(PathRisk.None, map(usbPresent = true, recognized = true).risk)
+        assertEquals(PathRisk.None, map(transport = Transport.Usb, recognized = true).risk)
     }
 
     @Test

@@ -275,6 +275,7 @@
     <string name="path_label_direct">Direktmodus</string>
     <string name="path_label_direct_with_rate">Direktmodus · %1$d Hz</string>
     <string name="path_label_standard">Standardmodus</string>
+    <string name="path_label_bluetooth">Bluetooth</string>
     <string name="path_reason_busy">Eine andere App verwendet diesen Controller.</string>
     <string name="path_reason_init_failed">Direktmodus konnte nicht eingerichtet werden. Standardmodus wird verwendet.</string>
     <string name="path_reason_permission_denied">USB-Berechtigung verweigert. Erteile sie für den Direktmodus.</string>

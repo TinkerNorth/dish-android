@@ -278,6 +278,7 @@
     <string name="path_label_direct">Mode direct</string>
     <string name="path_label_direct_with_rate">Mode direct · %1$d Hz</string>
     <string name="path_label_standard">Mode standard</string>
+    <string name="path_label_bluetooth">Bluetooth</string>
     <string name="path_reason_busy">Une autre app utilise cette manette.</string>
     <string name="path_reason_init_failed">Impossible d\'activer le Mode direct. Mode standard utilisé.</string>
     <string name="path_reason_permission_denied">Autorisation USB refusée. Accordez-la pour le Mode direct.</string>

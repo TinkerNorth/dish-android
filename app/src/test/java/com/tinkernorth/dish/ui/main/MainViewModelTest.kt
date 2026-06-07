@@ -10,6 +10,7 @@ import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
+import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.sensor.BatteryValidator
@@ -87,7 +88,6 @@ class MainViewModelTest {
         every { hub.connections } returns connectionsFlow
         every { hub.bindings } returns bindingsFlow
         every { gamepadRegistry.devices } returns devicesFlow
-        every { gamepadRegistry.isUsbDevicePresent(any(), any()) } returns true
         every { gamepadRegistry.frameworkCapsFor(any(), any()) } returns null
         every { satellite.events } returns satelliteEvents
         every { pathPrefs.state } returns MutableStateFlow(emptyMap())
@@ -285,6 +285,7 @@ class MainViewModelTest {
         vid: Int,
         pid: Int,
         disconnecting: Boolean = false,
+        transport: Transport = Transport.Usb,
     ) = PhysicalGamepadRegistry.Device(
         id = id,
         name = "Pad",
@@ -292,6 +293,7 @@ class MainViewModelTest {
         isUsbSynthetic = false,
         vendorId = vid,
         productId = pid,
+        transport = transport,
     )
 
     @Test
@@ -379,6 +381,17 @@ class MainViewModelTest {
             assertEquals(InputPathMode.Standard, card?.currentMode)
             assertEquals(PathChoice.Standard, card?.selected)
             assertEquals(PathRisk.None, card?.risk)
+        }
+
+    @Test
+    fun `a bluetooth controller's card reports bluetooth and offers no direct path`() =
+        runTest(dispatcher) {
+            devicesFlow.value = mapOf(70 to routed(70, 1, 2, transport = Transport.Bluetooth))
+            dispatcher.scheduler.runCurrent()
+
+            val card = vm.uiState.value.pathCards["70"]
+            assertEquals(Transport.Bluetooth, card?.transport)
+            assertEquals(false, card?.directAvailable)
         }
 
     @Test

@@ -10,6 +10,7 @@ import android.util.Log
 import android.view.InputDevice
 import android.view.MotionEvent
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
+import com.tinkernorth.dish.source.bluetooth.BluetoothConnections
 import com.tinkernorth.dish.source.sensor.PhysicalMotionProbe
 import com.tinkernorth.dish.source.usb.DirectClaimFailure
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -34,6 +35,7 @@ class PhysicalGamepadRegistry
         @ApplicationContext context: Context,
         private val scope: CoroutineScope,
         private val native: PhysicalInputNative,
+        private val btConnections: BluetoothConnections,
     ) : InputManager.InputDeviceListener {
         data class Device(
             val id: Int,
@@ -56,6 +58,7 @@ class PhysicalGamepadRegistry
             val pollRateHz: Int = 0,
             val vendorId: Int = 0,
             val productId: Int = 0,
+            val transport: Transport = Transport.Usb,
         ) {
             val isDisconnecting: Boolean get() = disconnectingTimeLeftSec != null
         }
@@ -85,6 +88,7 @@ class PhysicalGamepadRegistry
             installed = true
             inputManager.registerInputDeviceListener(this, null)
             syncAll()
+            btConnections.start { refreshTransports() }
         }
 
         private fun syncAll() {
@@ -139,6 +143,7 @@ class PhysicalGamepadRegistry
                 directFailure = directFailed[vpKey(vid, pid)],
                 vendorId = vid,
                 productId = pid,
+                transport = resolveTransport(dev.name, vid, pid),
             )
         }
 
@@ -150,13 +155,25 @@ class PhysicalGamepadRegistry
                 dev.vibrator?.hasVibrator() == true
             }
 
-        fun isUsbDevicePresent(
+        private fun resolveTransport(
+            name: String,
             vendorId: Int,
             productId: Int,
-        ): Boolean =
-            usbManager.deviceList.values.any {
-                it.vendorId == vendorId && it.productId == productId
+        ): Transport =
+            when {
+                btConnections.isConnected(name) -> Transport.Bluetooth
+                usbManager.deviceList.values.any { it.vendorId == vendorId && it.productId == productId } ->
+                    Transport.Usb
+                else -> Transport.Bluetooth
             }
+
+        private fun refreshTransports() {
+            _devices.update { map ->
+                map.mapValues { (_, d) ->
+                    if (d.isUsbSynthetic) d else d.copy(transport = resolveTransport(d.name, d.vendorId, d.productId))
+                }
+            }
+        }
 
         private val directFailed = ConcurrentHashMap<Int, DirectClaimFailure>()
 

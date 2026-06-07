@@ -29,6 +29,7 @@ import com.tinkernorth.dish.databinding.ItemControllerBinding
 import com.tinkernorth.dish.databinding.PickerChipRowBinding
 import com.tinkernorth.dish.databinding.PickerConnectionRowBinding
 import com.tinkernorth.dish.databinding.PickerMotionToggleBinding
+import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.usb.DirectClaimFailure
 import com.tinkernorth.dish.source.usb.PathChoice
@@ -513,6 +514,11 @@ class ControllerAdapter(
             }
             val ctx = b.root.context
             b.tvPathBadge.visibility = View.VISIBLE
+            if (card.transport == Transport.Bluetooth) {
+                b.tvPathBadge.text = ctx.getString(R.string.path_label_bluetooth)
+                b.tvPathBadge.setTextColor(ctx.getColor(R.color.colorMuted))
+                return
+            }
             b.tvPathBadge.text =
                 when (card.currentMode) {
                     InputPathMode.Direct ->
@@ -542,6 +548,16 @@ class ControllerAdapter(
                 return
             }
             val ctx = b.root.context
+
+            if (card.transport == Transport.Bluetooth) {
+                b.labelInputPath.visibility = View.GONE
+                b.toggleInputPath.visibility = View.GONE
+                b.tvPathCaps.visibility = View.GONE
+                b.tvPathRisk.visibility = View.GONE
+                b.llPathRestoring.visibility = View.GONE
+                b.toggleInputPath.clearOnButtonCheckedListeners()
+                return
+            }
 
             // Clear before the programmatic check so a RecyclerView rebind can't fire onSelectInputPath.
             // Both buttons are enabled across the check() so a disabled target can still take selection,
@@ -621,7 +637,6 @@ class ControllerAdapter(
                 card.restoreStuck -> setRisk(ctx, R.string.path_restore_stuck, warn = true)
                 card.failure != null -> setRisk(ctx, failureTextRes(card.failure), warn = true)
                 card.risk == PathRisk.GuessedLayout -> setRisk(ctx, R.string.path_risk_guessed, warn = true)
-                card.risk == PathRisk.BluetoothUnavailable -> setRisk(ctx, R.string.path_risk_bluetooth, warn = false)
                 else -> setRisk(ctx, R.string.path_risk_verified, warn = false)
             }
         }

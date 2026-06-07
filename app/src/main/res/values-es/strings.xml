@@ -279,6 +279,7 @@
     <string name="path_label_direct">Modo directo</string>
     <string name="path_label_direct_with_rate">Modo directo · %1$d Hz</string>
     <string name="path_label_standard">Modo estándar</string>
+    <string name="path_label_bluetooth">Bluetooth</string>
     <string name="path_reason_busy">Otra app está usando este mando.</string>
     <string name="path_reason_init_failed">No se pudo activar el Modo directo. Se usa Modo estándar.</string>
     <string name="path_reason_permission_denied">Permiso USB denegado. Concédelo para usar el Modo directo.</string>

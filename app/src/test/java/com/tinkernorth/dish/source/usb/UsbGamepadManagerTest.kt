@@ -172,7 +172,7 @@ class UsbGamepadManagerTest {
         val ctx = mockk<Context>(relaxed = true)
         every { ctx.getSystemService(Context.INPUT_SERVICE) } returns mockk<InputManager>(relaxed = true)
         every { ctx.getSystemService(Context.USB_SERVICE) } returns mockk<UsbManager>(relaxed = true)
-        return PhysicalGamepadRegistry(ctx, CoroutineScope(SupervisorJob()), native)
+        return PhysicalGamepadRegistry(ctx, CoroutineScope(SupervisorJob()), native, mockk(relaxed = true))
     }
 
     private fun buildManagerWith(reg: PhysicalGamepadRegistry): UsbGamepadManager {
