@@ -15,7 +15,6 @@ import com.google.androidgamesdk.GameActivity
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.ConnectionHub
-import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.databinding.ActivityMainBinding
@@ -25,6 +24,7 @@ import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.source.store.OnboardingState
+import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.DishSpinnerDrawable
@@ -170,7 +170,8 @@ class MainActivity :
         // (the postDelayed safety net may also flip this) so subsequent
         // emissions are no-ops.
         splashHoldUntilFirstRender = false
-        val liveCount = s.connections.count { it.live == LinkState.Connected }
+        // Unstable links are still streaming, so they count as online here just like on the connections screen.
+        val liveCount = s.connections.count { it.live.isLiveLink() }
         val totalCount = s.connections.size
         val checking = s.anyConnecting
         binding.ivConnectionsLoading.isVisible = checking
@@ -187,7 +188,7 @@ class MainActivity :
             s.connections,
             s.motionCapabilities,
             s.touchpadModesBySatellite,
-            s.pathBadges,
+            s.pathCards,
         )
         refreshDashboardHint(onboarding.state.value, s)
     }
@@ -220,12 +221,11 @@ class MainActivity :
 
     override fun onSlotTapped(slotId: String) = controllerAdapter.toggleExpanded(slotId)
 
-    override fun onTryDirectMode(slotId: String) {
-        val device =
-            viewModel.uiState.value.slots
-                .firstOrNull { it.id == slotId }
-                ?.let { gamepadRegistry.devices.value[it.physicalDeviceId] } ?: return
-        usbGamepadManager.tryDirectMode(device.vendorId, device.productId)
+    override fun onSelectInputPath(
+        slotId: String,
+        choice: PathChoice,
+    ) {
+        viewModel.setInputPath(slotId, choice)
     }
 
     override fun onBind(

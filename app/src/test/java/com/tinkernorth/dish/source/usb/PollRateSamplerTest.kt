@@ -28,7 +28,7 @@ class PollRateSamplerTest {
         every { ctx.getSystemService(Context.INPUT_SERVICE) } returns mockk<InputManager>(relaxed = true)
         every { ctx.getSystemService(Context.USB_SERVICE) } returns mockk<UsbManager>(relaxed = true)
         native = mockk(relaxed = true)
-        registry = PhysicalGamepadRegistry(ctx, CoroutineScope(SupervisorJob()), native)
+        registry = PhysicalGamepadRegistry(ctx, CoroutineScope(SupervisorJob()), native, mockk(relaxed = true))
         sampler = PollRateSampler(registry, CoroutineScope(SupervisorJob()), native)
     }
 

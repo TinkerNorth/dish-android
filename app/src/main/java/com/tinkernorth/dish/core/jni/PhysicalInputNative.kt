@@ -19,6 +19,11 @@ class PhysicalInputNative
             productId: Int,
         ): Boolean = SatelliteNative.modelHasImu(vendorId, productId)
 
+        fun modelHasRumble(
+            vendorId: Int,
+            productId: Int,
+        ): Boolean = SatelliteNative.modelHasRumble(vendorId, productId)
+
         fun lookupKnownModelName(
             vendorId: Int,
             productId: Int,

@@ -187,6 +187,11 @@ object SatelliteNative {
         productId: Int,
     ): Boolean
 
+    external fun modelHasRumble(
+        vendorId: Int,
+        productId: Int,
+    ): Boolean
+
     external fun lookupKnownModelName(
         vendorId: Int,
         productId: Int,

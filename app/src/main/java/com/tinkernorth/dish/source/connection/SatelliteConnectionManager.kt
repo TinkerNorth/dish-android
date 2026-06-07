@@ -277,6 +277,106 @@ class SatelliteConnectionManager
             }
         }
 
+        /**
+         * Path B: the dish shows [clientPin] and asks the operator to accept it
+         * on the satellite. Submits the request, then polls /api/pair/status
+         * until the operator accepts (→ open the session), declines, or the
+         * request times out. The shared key arrives via the poll, never typed on
+         * this device.
+         */
+        fun requestApproval(
+            server: DiscoveredServer,
+            clientPin: String,
+        ) {
+            val id = SatelliteConnection.idFor(server)
+            val conn =
+                _connections
+                    .updateAndGet { map ->
+                        if (map.containsKey(id)) return@updateAndGet map
+                        map + (
+                            id to
+                                SatelliteConnection(
+                                    id,
+                                    server,
+                                    scope,
+                                    controllerRepo,
+                                    ioDispatcher,
+                                    motionCapsBitsFor = { slotId ->
+                                        motionCapabilityProvider.get().capabilityFor(slotId).toCapBits()
+                                    },
+                                    motionBackendStatusStore = motionBackendStatusStore,
+                                )
+                        )
+                    }[id] ?: return
+            conn.updateServer(server)
+            conn.markConnecting()
+            scope.launch {
+                val raw =
+                    runCatching {
+                        discoveryRepo.pair(
+                            server.ip,
+                            server.pairPort,
+                            deviceId,
+                            deviceName,
+                            pin = "",
+                            clientPin = clientPin,
+                        )
+                    }.getOrNull()
+                if (raw.isNullOrBlank()) {
+                    conn.markDisconnected()
+                    _events.emit(ConnectionEvent.Error(SERVER_UNREACHABLE_MSG))
+                    return@launch
+                }
+                // An already-paired short-circuit hands a key straight back, skipping the operator step.
+                val immediate =
+                    runCatching { json.decodeFromString(PairResponse.serializer(), raw) }.getOrNull()
+                if (immediate?.ok == true && immediate.sharedKey != null) {
+                    clearStale(id)
+                    store.setSatelliteSharedKey(id, immediate.sharedKey)
+                    openSession(conn, server, ConnectIntent.USER_INITIATED)
+                    return@launch
+                }
+                // Otherwise wait for the operator: poll until accept / deny / timeout.
+                // The satellite-PIN path (pairWithPin) shares this connection, so
+                // once it reaches Live we bail without touching it. Otherwise this
+                // poll's terminal paths (esp. the timeout) would tear down a live
+                // session the user just established by typing the PIN.
+                var waited = 0L
+                while (waited < APPROVAL_TIMEOUT_MS) {
+                    if (conn.state.value == SatelliteSessionState.Live) return@launch
+                    kotlinx.coroutines.delay(APPROVAL_POLL_INTERVAL_MS)
+                    waited += APPROVAL_POLL_INTERVAL_MS
+                    val statusRaw =
+                        runCatching { discoveryRepo.pairStatus(server.ip, server.httpPort, deviceId) }
+                            .getOrNull()
+                    // A transient null reply is treated as still-pending, not a refusal.
+                    val st =
+                        if (statusRaw.isNullOrBlank()) {
+                            PairingApproval.Status.Pending
+                        } else {
+                            PairingApproval.classifyStatus(statusRaw)
+                        }
+                    // Re-check: Live may have flipped during the poll round-trip.
+                    if (conn.state.value == SatelliteSessionState.Live) return@launch
+                    if (st is PairingApproval.Status.Approved) {
+                        clearStale(id)
+                        store.setSatelliteSharedKey(id, st.sharedKeyHex)
+                        openSession(conn, server, ConnectIntent.USER_INITIATED)
+                        return@launch
+                    }
+                    if (st is PairingApproval.Status.Declined) {
+                        conn.markDisconnected()
+                        _events.emit(ConnectionEvent.Error(APPROVAL_DECLINED_MSG))
+                        return@launch
+                    }
+                }
+                if (conn.state.value != SatelliteSessionState.Live) {
+                    conn.markDisconnected()
+                    _events.emit(ConnectionEvent.Error(APPROVAL_TIMEOUT_MSG))
+                }
+            }
+        }
+
         private suspend fun openSession(
             conn: SatelliteConnection,
             server: DiscoveredServer,
@@ -481,6 +581,18 @@ class SatelliteConnectionManager
         private fun sharedKeyFor(server: DiscoveredServer): String? {
             val id = SatelliteConnection.idFor(server)
             store.satelliteSharedKey(id)?.let { return it }
+            // Upgrade migration: a satellite that just began advertising a
+            // machineId flips its id from satellite:<ip>:<udpPort> to
+            // satellite:mid:<id>. Claim the key stored under the old ip:port id
+            // so a known device isn't bounced through pairing on the first
+            // post-upgrade connect.
+            if (server.machineId.isNotBlank()) {
+                val legacyId = "satellite:${server.ip}:${server.udpPort}"
+                store.satelliteSharedKey(legacyId)?.let {
+                    store.setSatelliteSharedKey(id, it)
+                    return it
+                }
+            }
             val legacyPrefs = context.getSharedPreferences(LEGACY_PREFS, Context.MODE_PRIVATE)
             val legacy = legacyPrefs.getString(LEGACY_KEY_SHARED, null) ?: return null
             store.setSatelliteSharedKey(id, legacy)
@@ -507,5 +619,16 @@ class SatelliteConnectionManager
 
             internal const val SERVER_UNREACHABLE_MSG =
                 "Server unreachable — check it's powered on and on the same Wi-Fi."
+
+            private const val APPROVAL_POLL_INTERVAL_MS = 2000L
+
+            // Matches the satellite's 2-minute pairing-request TTL. Stop waiting
+            // once the request can no longer be accepted on the other side.
+            private const val APPROVAL_TIMEOUT_MS = 120_000L
+
+            internal const val APPROVAL_DECLINED_MSG =
+                "The satellite declined the pairing request."
+            internal const val APPROVAL_TIMEOUT_MSG =
+                "No response from the satellite. The pairing request timed out."
         }
     }

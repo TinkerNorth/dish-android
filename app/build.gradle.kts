@@ -128,6 +128,12 @@ android {
         abortOnError = true
         checkReleaseBuilds = true
     }
+
+    testOptions {
+        unitTests {
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 dependencies {

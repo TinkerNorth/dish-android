@@ -1031,6 +1031,14 @@ JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_mo
     return usbparsers::parserHasImu(k->parser) ? JNI_TRUE : JNI_FALSE;
 }
 
+JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_modelHasRumble(
+    JNIEnv*, jobject, jint vid, jint pid) {
+    const usbparsers::KnownDevice* k =
+        usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
+    if (!k) return JNI_FALSE;
+    return usbparsers::parserHasRumble(k->parser) ? JNI_TRUE : JNI_FALSE;
+}
+
 JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDeviceUrbCount(
     JNIEnv*, jobject, jint deviceId) {
     return (jlong)usbhost::getUrbCount((int32_t)deviceId);

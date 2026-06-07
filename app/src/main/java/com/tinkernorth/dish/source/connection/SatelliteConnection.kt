@@ -4,6 +4,7 @@ package com.tinkernorth.dish.source.connection
 
 import com.tinkernorth.dish.core.jni.ControllerRepository
 import com.tinkernorth.dish.core.model.DiscoveredServer
+import com.tinkernorth.dish.core.model.stableKey
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatus
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
 import kotlinx.coroutines.CoroutineDispatcher
@@ -294,9 +295,11 @@ class SatelliteConnection(
             val originalHandle = handle
             scope.launch(ioDispatcher) {
                 repeat(REMOVE_RETRIES) { attempt ->
-                    val snap = live ?: return@launch
-                    if (snap.handle != originalHandle) return@launch
-                    controllerRepo.removeController(snap.handle, info.controllerIndex)
+                    val indices = _slots.value.values.map { it.controllerIndex }
+                    if (!controllerIndexStillRemovable(live?.handle, originalHandle, indices, info.controllerIndex)) {
+                        return@launch
+                    }
+                    controllerRepo.removeController(originalHandle, info.controllerIndex)
                     if (attempt < REMOVE_RETRIES - 1) delay(REMOVE_RETRY_INTERVAL_MS)
                 }
             }
@@ -441,7 +444,9 @@ class SatelliteConnection(
         private const val ACK_ERR_ALREADY_EXISTS = 0x03
         private const val ACK_ERR_PLUGIN_FAIL = 0x05
 
-        fun idFor(server: DiscoveredServer): String = "satellite:${server.ip}:${server.udpPort}"
+        // Keyed on the stable id (machineId when present, else ip:udpPort) so a
+        // receiver that changes IP keeps the same connection identity.
+        fun idFor(server: DiscoveredServer): String = "satellite:${server.stableKey}"
 
         private fun lowestFreeIndex(taken: List<Int>): Int {
             val set = taken.toHashSet()
@@ -451,5 +456,15 @@ class SatelliteConnection(
         }
     }
 }
+
+// A queued controller-remove must abort if the session was torn down or reconnected under it, or if
+// the index has since been reused by a new slot. Removing a reused index would kill the freshly
+// registered controller, which is the exact race a multi-send retry widens.
+internal fun controllerIndexStillRemovable(
+    liveHandle: Int?,
+    originalHandle: Int,
+    currentIndices: Collection<Int>,
+    index: Int,
+): Boolean = liveHandle == originalHandle && index !in currentIndices
 
 enum class SatelliteSessionState { Idle, Linking, Live, Faltering }

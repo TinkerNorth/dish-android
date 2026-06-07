@@ -199,6 +199,22 @@ const char* parserName(Parser p) {
 
 bool parserHasImu(Parser p) { return p == Parser::SWITCH_PRO_USB; }
 
+bool parserHasRumble(Parser p) {
+    switch (p) {
+    case Parser::XINPUT_360:
+    case Parser::XBOX_ONE_GIP:
+    case Parser::DUALSHOCK4:
+    case Parser::DUALSENSE:
+    case Parser::SWITCH_PRO_USB:
+        return true;
+    case Parser::STADIA:
+    case Parser::GENERIC_HID_GAMEPAD:
+    case Parser::NONE:
+        return false;
+    }
+    return false;
+}
+
 namespace {
 
 #ifdef __ANDROID__

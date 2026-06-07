@@ -61,6 +61,8 @@ const char* parserName(Parser p);
 
 bool parserHasImu(Parser p);
 
+bool parserHasRumble(Parser p);
+
 bool runInit(int fd, uint8_t epOut, Parser p, InitKind init);
 
 bool runRumble(int fd, uint8_t epOut, Parser p, uint16_t strong, uint16_t weak, uint8_t seq);

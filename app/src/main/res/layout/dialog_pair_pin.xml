@@ -87,4 +87,38 @@
             android:layout_marginStart="@dimen/spacing_lg"
             android:text="@string/pair_dialog_submit" />
     </LinearLayout>
+
+    <!-- Path B: this dish shows its own PIN; the operator accepts it on the
+         satellite. Toggled GONE by PairPinDialog when no client PIN is set. -->
+    <LinearLayout
+        android:id="@+id/clientPinSection"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_5xl"
+        android:orientation="vertical">
+
+        <TextView
+            style="@style/TextAppearance.Dish.BodySmall"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/pair_dialog_or_show_pin" />
+
+        <TextView
+            android:id="@+id/tvClientPin"
+            style="@style/TextAppearance.Dish.Title.Large"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_sm"
+            android:gravity="center"
+            android:letterSpacing="0.3"
+            tools:text="4821" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnPairApprove"
+            style="@style/Widget.Dish.Button.Outlined"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_lg"
+            android:text="@string/pair_dialog_request_approval" />
+    </LinearLayout>
 </LinearLayout>
