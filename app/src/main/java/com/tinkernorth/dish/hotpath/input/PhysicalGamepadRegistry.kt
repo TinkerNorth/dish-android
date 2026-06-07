@@ -5,14 +5,14 @@ package com.tinkernorth.dish.hotpath.input
 import android.content.Context
 import android.hardware.input.InputManager
 import android.hardware.usb.UsbManager
+import android.os.Build
 import android.util.Log
 import android.view.InputDevice
 import android.view.MotionEvent
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
+import com.tinkernorth.dish.source.bluetooth.BluetoothConnections
 import com.tinkernorth.dish.source.sensor.PhysicalMotionProbe
-import com.tinkernorth.dish.source.usb.PathMode
-import com.tinkernorth.dish.source.usb.PathReason
-import com.tinkernorth.dish.source.usb.classifyDirectPathReason
+import com.tinkernorth.dish.source.usb.DirectClaimFailure
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -35,21 +35,40 @@ class PhysicalGamepadRegistry
         @ApplicationContext context: Context,
         private val scope: CoroutineScope,
         private val native: PhysicalInputNative,
+        private val btConnections: BluetoothConnections,
     ) : InputManager.InputDeviceListener {
         data class Device(
             val id: Int,
             val name: String,
             val disconnectingTimeLeftSec: Int? = null,
             val hasGyro: Boolean = false,
-            val pathMode: PathMode = PathMode.Routed,
-            val pathReason: PathReason = PathReason.None,
+            val hasRumble: Boolean = false,
             val isUsbSynthetic: Boolean = false,
+            // A loader placeholder held visible while the manager switches this controller's path. Its
+            // backing device (framework or synthetic) is being torn down/brought up; not actionable.
+            val transitioning: Boolean = false,
+            // A placeholder kept visible after the OS dropped the device on a failed claim and never
+            // gave it back; the user must physically replug. Not actionable.
+            val needsReplug: Boolean = false,
+            // A held synthetic whose return-to-Standard never re-enumerated; the toggle stays live so the
+            // user picks Direct / retry / replug instead of the app silently reverting.
+            val restoreStuck: Boolean = false,
+            // Why the last Direct claim for this model failed, surfaced on the card under the toggle.
+            val directFailure: DirectClaimFailure? = null,
             val pollRateHz: Int = 0,
             val vendorId: Int = 0,
             val productId: Int = 0,
+            val transport: Transport = Transport.Usb,
         ) {
             val isDisconnecting: Boolean get() = disconnectingTimeLeftSec != null
         }
+
+        // Last-seen Standard-mode capabilities for a model, kept so the path UI can still show what
+        // Standard offers after the framework InputDevice has gone (claimed into Direct).
+        data class FrameworkCaps(
+            val hasGyro: Boolean,
+            val hasRumble: Boolean,
+        )
 
         private val inputManager =
             context.getSystemService(Context.INPUT_SERVICE) as InputManager
@@ -69,6 +88,7 @@ class PhysicalGamepadRegistry
             installed = true
             inputManager.registerInputDeviceListener(this, null)
             syncAll()
+            btConnections.start { refreshTransports() }
         }
 
         private fun syncAll() {
@@ -87,7 +107,20 @@ class PhysicalGamepadRegistry
             if (!isGamepad(dev)) return
             pushDeadzones(dev)
             cancelDisconnect(deviceId)
-            _devices.update { it + (deviceId to makeRoutedDevice(deviceId, dev)) }
+            val device = makeRoutedDevice(deviceId, dev)
+            _devices.update { map ->
+                // A live device is back: drop any stale loader placeholder for the same model so the
+                // slot swaps cleanly to the re-enumerated device instead of briefly showing two cards.
+                val withoutStalePlaceholder =
+                    map.filterNot { (id, d) ->
+                        id != deviceId &&
+                            (d.transitioning || d.needsReplug) &&
+                            !d.isUsbSynthetic &&
+                            d.vendorId == device.vendorId &&
+                            d.productId == device.productId
+                    }
+                withoutStalePlaceholder + (deviceId to device)
+            }
         }
 
         private fun makeRoutedDevice(
@@ -96,50 +129,78 @@ class PhysicalGamepadRegistry
         ): Device {
             val vid = runCatching { dev.vendorId }.getOrDefault(0)
             val pid = runCatching { dev.productId }.getOrDefault(0)
-            val reason =
-                classifyDirectPathReason(
-                    vendorId = vid,
-                    productId = pid,
-                    isKnownFastLaneModel = native.isKnownFastLaneModel(vid, pid),
-                    isUsbPresent = isUsbDevicePresent(vid, pid),
-                    priorFailure = directFailed[vpKey(vid, pid)],
-                )
+            val hasGyro = PhysicalMotionProbe.hasGyro(deviceId)
+            val hasRumble = probeRumble(dev)
+            if (vid != 0 && pid != 0) {
+                lastFrameworkCaps[vpKey(vid, pid)] = FrameworkCaps(hasGyro, hasRumble)
+            }
             return Device(
                 id = deviceId,
                 name = dev.name,
-                hasGyro = PhysicalMotionProbe.hasGyro(deviceId),
-                pathMode = PathMode.Routed,
-                pathReason = reason,
+                hasGyro = hasGyro,
+                hasRumble = hasRumble,
+                // A model that just failed a Direct claim re-enumerates with the cause already attached.
+                directFailure = directFailed[vpKey(vid, pid)],
                 vendorId = vid,
                 productId = pid,
+                transport = resolveTransport(dev.name, vid, pid),
             )
         }
 
-        private fun isUsbDevicePresent(
-            vendorId: Int,
-            productId: Int,
-        ): Boolean =
-            usbManager.deviceList.values.any {
-                it.vendorId == vendorId && it.productId == productId
+        private fun probeRumble(dev: InputDevice): Boolean =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                dev.vibratorManager.vibratorIds.isNotEmpty()
+            } else {
+                @Suppress("DEPRECATION")
+                dev.vibrator?.hasVibrator() == true
             }
 
-        private val directFailed = ConcurrentHashMap<Int, PathReason>()
+        private fun resolveTransport(
+            name: String,
+            vendorId: Int,
+            productId: Int,
+        ): Transport =
+            when {
+                btConnections.isConnected(name) -> Transport.Bluetooth
+                usbManager.deviceList.values.any { it.vendorId == vendorId && it.productId == productId } ->
+                    Transport.Usb
+                else -> Transport.Bluetooth
+            }
+
+        private fun refreshTransports() {
+            _devices.update { map ->
+                map.mapValues { (_, d) ->
+                    if (d.isUsbSynthetic) d else d.copy(transport = resolveTransport(d.name, d.vendorId, d.productId))
+                }
+            }
+        }
+
+        private val directFailed = ConcurrentHashMap<Int, DirectClaimFailure>()
+
+        private val lastFrameworkCaps = ConcurrentHashMap<Int, FrameworkCaps>()
+
+        fun frameworkCapsFor(
+            vendorId: Int,
+            productId: Int,
+        ): FrameworkCaps? = lastFrameworkCaps[vpKey(vendorId, productId)]
 
         private fun vpKey(
             vendorId: Int,
             productId: Int,
         ): Int = (vendorId shl 16) or (productId and 0xFFFF)
 
+        // Record why a Direct claim failed: shown on the model's card and consulted so the model is not
+        // auto-retried into Direct on the next plug-in (an explicit user pick still claims).
         fun markDirectFailed(
             vendorId: Int,
             productId: Int,
-            reason: PathReason,
+            reason: DirectClaimFailure,
         ) {
             directFailed[vpKey(vendorId, productId)] = reason
             _devices.update { map ->
                 map.mapValues { (_, d) ->
                     if (!d.isUsbSynthetic && d.vendorId == vendorId && d.productId == productId) {
-                        d.copy(pathReason = reason)
+                        d.copy(directFailure = reason)
                     } else {
                         d
                     }
@@ -152,17 +213,135 @@ class PhysicalGamepadRegistry
             productId: Int,
         ) {
             directFailed.remove(vpKey(vendorId, productId))
+            _devices.update { map ->
+                map.mapValues { (_, d) ->
+                    if (d.directFailure != null && d.vendorId == vendorId && d.productId == productId) {
+                        d.copy(directFailure = null)
+                    } else {
+                        d
+                    }
+                }
+            }
+        }
+
+        fun directFailureFor(
+            vendorId: Int,
+            productId: Int,
+        ): DirectClaimFailure? = directFailed[vpKey(vendorId, productId)]
+
+        // The manager marks a model "transitioning" around a path switch so the disconnect reaper does
+        // not silently remove the framework device when claiming force-detaches the kernel HID driver.
+        // Instead the slot is held as a loader placeholder until the manager ends the transition.
+        private val transitioningModels = ConcurrentHashMap.newKeySet<Int>()
+
+        fun beginModelTransition(
+            vendorId: Int,
+            productId: Int,
+        ) {
+            transitioningModels.add(vpKey(vendorId, productId))
+        }
+
+        fun endModelTransition(
+            vendorId: Int,
+            productId: Int,
+        ) {
+            transitioningModels.remove(vpKey(vendorId, productId))
+            // Drop the stale placeholder (loader or needs-replug); a live re-enumerated entry of the
+            // same model is neither flag and is left in place.
+            _devices.update { map ->
+                map.filterNot { (_, d) ->
+                    (d.transitioning || d.needsReplug) &&
+                        !d.isUsbSynthetic &&
+                        d.vendorId == vendorId &&
+                        d.productId == productId
+                }
+            }
+        }
+
+        // Settle a held loader placeholder into a visible "needs replug" card (the OS never returned
+        // the device). Kept until the device re-enumerates (onInputDeviceAdded) or is unplugged.
+        fun markNeedsReplug(
+            vendorId: Int,
+            productId: Int,
+        ) {
+            transitioningModels.remove(vpKey(vendorId, productId))
+            _devices.update { map ->
+                map.mapValues { (_, d) ->
+                    if (d.transitioning && !d.isUsbSynthetic && d.vendorId == vendorId && d.productId == productId) {
+                        d.copy(transitioning = false, needsReplug = true)
+                    } else {
+                        d
+                    }
+                }
+            }
+        }
+
+        // A held synthetic whose return-to-Standard never came back: keep it visible as an actionable
+        // "Standard isn't responding" card (toggle stays live) instead of silently re-claiming Direct.
+        fun markRestoreStuck(
+            vendorId: Int,
+            productId: Int,
+        ) {
+            _devices.update { map ->
+                map.mapValues { (_, d) ->
+                    if (d.isUsbSynthetic && d.vendorId == vendorId && d.productId == productId) {
+                        d.copy(transitioning = false, restoreStuck = true)
+                    } else {
+                        d
+                    }
+                }
+            }
+        }
+
+        // Back to the held-loader look while a retry waits for the framework device to re-enumerate.
+        fun clearRestoreStuck(
+            vendorId: Int,
+            productId: Int,
+        ) {
+            _devices.update { map ->
+                map.mapValues { (_, d) ->
+                    if (d.isUsbSynthetic && d.vendorId == vendorId && d.productId == productId) {
+                        d.copy(restoreStuck = false, transitioning = true)
+                    } else {
+                        d
+                    }
+                }
+            }
+        }
+
+        fun setUsbSyntheticTransitioning(
+            deviceId: Int,
+            value: Boolean,
+        ) {
+            _devices.update { map ->
+                val cur = map[deviceId] ?: return@update map
+                if (cur.transitioning == value) map else map + (deviceId to cur.copy(transitioning = value))
+            }
+        }
+
+        private fun isModelTransitioning(d: Device): Boolean =
+            d.vendorId != 0 && d.productId != 0 && vpKey(d.vendorId, d.productId) in transitioningModels
+
+        // Hold a removed framework device as a visible loader placeholder instead of reaping it.
+        private fun holdAsTransitioning(deviceId: Int) {
+            disconnectJobs.remove(deviceId)?.cancel()
+            _devices.update { map ->
+                val cur = map[deviceId] ?: return@update map
+                map + (deviceId to cur.copy(transitioning = true, disconnectingTimeLeftSec = null))
+            }
         }
 
         override fun onInputDeviceRemoved(deviceId: Int) {
             val current = _devices.value[deviceId] ?: return
-            scheduleDisconnect(current)
+            if (isModelTransitioning(current)) holdAsTransitioning(deviceId) else scheduleDisconnect(current)
         }
 
         override fun onInputDeviceChanged(deviceId: Int) {
             val dev = InputDevice.getDevice(deviceId)
             if (dev == null || !isGamepad(dev)) {
-                _devices.value[deviceId]?.let { scheduleDisconnect(it) }
+                _devices.value[deviceId]?.let { cur ->
+                    if (isModelTransitioning(cur)) holdAsTransitioning(deviceId) else scheduleDisconnect(cur)
+                }
                 return
             }
             cancelDisconnect(deviceId)
@@ -230,8 +409,6 @@ class PhysicalGamepadRegistry
                                 id = deviceId,
                                 name = name,
                                 hasGyro = hasGyro,
-                                pathMode = PathMode.Direct,
-                                pathReason = PathReason.None,
                                 isUsbSynthetic = true,
                                 pollRateHz = pollRateHz,
                                 vendorId = vendorId,
@@ -242,6 +419,14 @@ class PhysicalGamepadRegistry
         }
 
         fun removeUsbSynthetic(deviceId: Int) {
+            _devices.update { it - deviceId }
+        }
+
+        // Drop a framework device a Direct claim just superseded (its interface was stolen) instead of
+        // leaving it in the 5s disconnect grace, where it would collide with the framework that
+        // re-enumerates on a switch back to Standard and briefly show two cards for one controller.
+        fun forgetSupersededFramework(deviceId: Int) {
+            disconnectJobs.remove(deviceId)?.cancel()
             _devices.update { it - deviceId }
         }
 

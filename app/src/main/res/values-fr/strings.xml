@@ -220,6 +220,9 @@
     <string name="pair_dialog_submit">Appairer</string>
     <string name="pair_dialog_pairing">Appairage…</string>
     <string name="pair_dialog_error_empty">Saisissez le PIN affiché sur votre satellite.</string>
+    <string name="pair_dialog_or_show_pin">Ou affichez le PIN de cet appareil et acceptez-le sur le satellite :</string>
+    <string name="pair_dialog_request_approval">Accepter sur le satellite</string>
+    <string name="pair_dialog_awaiting">En attente du satellite…</string>
 
     <!-- Notification du service au premier plan. -->
     <string name="streaming_channel_name">Session de diffusion</string>
@@ -275,17 +278,28 @@
     <string name="path_label_direct">Mode direct</string>
     <string name="path_label_direct_with_rate">Mode direct · %1$d Hz</string>
     <string name="path_label_standard">Mode standard</string>
-    <string name="path_direct_explainer">Latence minimale. Communication directe avec la manette.</string>
-    <string name="path_reason_default">Compatible avec toute manette reconnue par Android.</string>
-    <string name="path_reason_bluetooth">Les manettes Bluetooth utilisent toujours le Mode standard.</string>
-    <string name="path_reason_onscreen">Les manettes à l\'écran utilisent le Mode standard.</string>    <string name="path_reason_unknown_model">Cette manette n\'est pas encore sur la liste rapide.</string>
+    <string name="path_label_bluetooth">Bluetooth</string>
     <string name="path_reason_busy">Une autre app utilise cette manette.</string>
     <string name="path_reason_init_failed">Impossible d\'activer le Mode direct. Mode standard utilisé.</string>
-    <string name="path_reason_detached">La manette a été déconnectée.</string>
-    <string name="path_reason_not_yet">Le Mode direct pour cette manette arrive bientôt.</string>
-    <string name="path_action_try_direct">Essayer le Mode direct</string>
+    <string name="path_reason_permission_denied">Autorisation USB refusée. Accordez-la pour le Mode direct.</string>
     <string name="direct_prompt_title">Essayer le Mode direct pour %1$s ?</string>
     <string name="direct_prompt_action">Essayer</string>
-    <string name="direct_enabled">%1$s est en Mode direct.</string>
     <string name="direct_failed">Impossible de passer %1$s en Mode direct.</string>
+    <string name="path_input_section_label">Voie d\'entrée</string>
+    <string name="path_choice_standard">Standard</string>
+    <string name="path_choice_direct">Direct</string>
+    <string name="path_caps_standard">Standard : vibration %1$s · mouvement %2$s</string>
+    <string name="path_caps_direct">Direct : vibration %1$s · mouvement %2$s</string>
+    <string name="path_risk_verified">Vérifié pour le Mode direct.</string>
+    <string name="path_risk_guessed">Non reconnue. Le Mode direct devine la disposition de cette manette, donc certaines entrées peuvent être mal lues. Vous pouvez revenir à tout moment.</string>
+    <string name="path_risk_bluetooth">Le Mode direct nécessite une connexion USB.</string>
+    <string name="path_restoring">Restauration du Mode standard</string>
+    <string name="path_confirm_title">Essayer le Mode direct ?</string>
+    <string name="path_confirm_body">Nous ne reconnaissons pas cette manette. Le Mode direct devine la disposition des boutons et des sticks, donc certaines entrées peuvent être mal lues. Vous pouvez revenir au Mode standard à tout moment.</string>
+    <string name="path_confirm_positive">Essayer</string>
+    <string name="path_confirm_negative">Annuler</string>
+    <string name="direct_restore_failed">Impossible de restaurer le Mode standard pour %1$s. Débranchez-le puis rebranchez-le.</string>
+    <string name="direct_revert_to_direct">Impossible de passer %1$s en Standard. Toujours en Mode direct.</string>
+    <string name="path_restore_stuck">Le Mode standard ne répond pas. Passez en Direct ou rebranchez la manette.</string>
+    <string name="path_needs_replug">Déconnectée. Débranchez puis rebranchez pour utiliser cette manette.</string>
 </resources>

@@ -219,6 +219,9 @@
     <string name="pair_dialog_submit">Koppeln</string>
     <string name="pair_dialog_pairing">Koppelt…</string>
     <string name="pair_dialog_error_empty">Gib den PIN ein, der auf deinem Satelliten angezeigt wird.</string>
+    <string name="pair_dialog_or_show_pin">Oder zeige den PIN dieses Geräts und akzeptiere ihn am Satelliten:</string>
+    <string name="pair_dialog_request_approval">Am Satelliten akzeptieren</string>
+    <string name="pair_dialog_awaiting">Warte auf Satellit…</string>
 
     <!-- Vordergrund-Service-Benachrichtigung. -->
     <string name="streaming_channel_name">Streaming-Sitzung</string>
@@ -272,17 +275,28 @@
     <string name="path_label_direct">Direktmodus</string>
     <string name="path_label_direct_with_rate">Direktmodus · %1$d Hz</string>
     <string name="path_label_standard">Standardmodus</string>
-    <string name="path_direct_explainer">Geringste Verzögerung. Direkter Zugriff auf den Controller.</string>
-    <string name="path_reason_default">Funktioniert mit jedem Controller, den Android erkennt.</string>
-    <string name="path_reason_bluetooth">Bluetooth-Controller verwenden immer den Standardmodus.</string>
-    <string name="path_reason_onscreen">Bildschirm-Controller verwenden den Standardmodus.</string>    <string name="path_reason_unknown_model">Dieser Controller ist noch nicht in der Schnellzugriffsliste.</string>
+    <string name="path_label_bluetooth">Bluetooth</string>
     <string name="path_reason_busy">Eine andere App verwendet diesen Controller.</string>
     <string name="path_reason_init_failed">Direktmodus konnte nicht eingerichtet werden. Standardmodus wird verwendet.</string>
-    <string name="path_reason_detached">Controller wurde getrennt.</string>
-    <string name="path_reason_not_yet">Direktmodus für diesen Controller kommt bald.</string>
-    <string name="path_action_try_direct">Direktmodus versuchen</string>
+    <string name="path_reason_permission_denied">USB-Berechtigung verweigert. Erteile sie für den Direktmodus.</string>
     <string name="direct_prompt_title">Direktmodus für %1$s versuchen?</string>
     <string name="direct_prompt_action">Versuchen</string>
-    <string name="direct_enabled">%1$s nutzt jetzt den Direktmodus.</string>
     <string name="direct_failed">%1$s konnte nicht in den Direktmodus wechseln.</string>
+    <string name="path_input_section_label">Eingabepfad</string>
+    <string name="path_choice_standard">Standard</string>
+    <string name="path_choice_direct">Direkt</string>
+    <string name="path_caps_standard">Standard: Vibration %1$s · Bewegung %2$s</string>
+    <string name="path_caps_direct">Direkt: Vibration %1$s · Bewegung %2$s</string>
+    <string name="path_risk_verified">Für den Direktmodus verifiziert.</string>
+    <string name="path_risk_guessed">Nicht erkannt. Der Direktmodus errät die Belegung dieses Controllers, daher können einige Eingaben falsch sein. Du kannst jederzeit zurückwechseln.</string>
+    <string name="path_risk_bluetooth">Der Direktmodus benötigt eine USB-Verbindung.</string>
+    <string name="path_restoring">Standardmodus wird wiederhergestellt</string>
+    <string name="path_confirm_title">Direktmodus testen?</string>
+    <string name="path_confirm_body">Wir erkennen diesen Controller nicht. Der Direktmodus errät die Tasten- und Stick-Belegung, daher können einige Eingaben falsch sein. Du kannst jederzeit zum Standardmodus zurückwechseln.</string>
+    <string name="path_confirm_positive">Testen</string>
+    <string name="path_confirm_negative">Abbrechen</string>
+    <string name="direct_restore_failed">Standardmodus für %1$s konnte nicht wiederhergestellt werden. Trenne den Controller und schließe ihn erneut an.</string>
+    <string name="direct_revert_to_direct">%1$s konnte nicht auf Standard wechseln. Weiterhin im Direktmodus.</string>
+    <string name="path_restore_stuck">Standardmodus reagiert nicht. Wechsle zu Direkt oder schließe den Controller neu an.</string>
+    <string name="path_needs_replug">Getrennt. Trenne den Controller und schließe ihn erneut an, um ihn zu verwenden.</string>
 </resources>

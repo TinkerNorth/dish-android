@@ -22,15 +22,29 @@ import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.notification.DishNotifications
+import com.tinkernorth.dish.source.store.UsbPathPreferenceStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
 
+// Drives the per-controller UsbPathMachine (the pure, exhaustively-tested FSM in UsbPathMachine.kt).
+// World signals (USB attach/detach, framework presence, permission, claim results, timeouts) become
+// UsbEvents; `reduce` decides the next state and the effects; this class executes those effects
+// against the real subsystems (native claim/detach, the registry, the connection hub). All FSM
+// mutation runs on the main thread so events apply in order and never race InputManager callbacks.
 @Singleton
 class UsbGamepadManager
     @Inject
@@ -41,71 +55,81 @@ class UsbGamepadManager
         private val notifications: DishNotifications,
         private val scope: CoroutineScope,
         private val native: PhysicalInputNative,
+        private val pathPrefs: UsbPathPreferenceStore,
     ) {
         private val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
 
-        private val claimedDevices = ConcurrentHashMap<String, ClaimedDevice>()
-        private val promptedDevices = ConcurrentHashMap.newKeySet<String>()
+        // Single source of truth for USB controller path state, keyed by vpKey (vid<<16|pid).
+        private val _controllers = MutableStateFlow<Map<Int, UsbController>>(emptyMap())
+        val controllers: StateFlow<Map<Int, UsbController>> = _controllers.asStateFlow()
+
+        // Main-thread-confined bookkeeping the effects need.
+        private val usbDevices = HashMap<Int, UsbDevice>()
+        private val claimedConns = HashMap<Int, ClaimedConn>()
+        private val lastFrameworkId = HashMap<Int, Int?>()
+        private val timeouts = HashMap<Int, Job>()
+        private val prompted = HashSet<Int>()
 
         @Volatile private var installed = false
 
-        private data class ClaimedDevice(
-            val device: UsbDevice,
+        private data class ClaimedConn(
             val connection: UsbDeviceConnection,
             val intf: UsbInterface,
-            val syntheticDeviceId: Int,
+            val syntheticId: Int,
         )
+
+        private sealed interface ClaimOutcome {
+            data class Ok(
+                val syntheticId: Int,
+            ) : ClaimOutcome
+
+            data class Fail(
+                val reason: DirectClaimFailure,
+                val frameworkStolen: Boolean,
+            ) : ClaimOutcome
+        }
 
         fun install() {
             if (installed) return
             installed = true
-            val filter =
+            ContextCompat.registerReceiver(
+                context,
+                receiver,
                 IntentFilter().apply {
                     addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
                     addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
                     addAction(ACTION_USB_PERMISSION)
-                }
-            ContextCompat.registerReceiver(
-                context,
-                receiver,
-                filter,
+                },
                 ContextCompat.RECEIVER_NOT_EXPORTED,
             )
-            scanExistingDevices()
+            registry.devices
+                .onEach { devices -> withContext(Dispatchers.Main) { syncFromRegistry(devices) } }
+                .launchIn(scope)
+            scanExistingUsb()
         }
 
-        private fun scanExistingDevices() {
-            for (device in usbManager.deviceList.values) {
-                claimIfPermitted(device)
-            }
-        }
+        // Re-scan on foreground; idempotent (onUsbPresent only creates absent entries).
+        fun reconcileForeground() = scanExistingUsb()
 
-        private fun claimIfPermitted(device: UsbDevice) {
-            if (!isCandidate(device)) return
-            if (claimedDevices.containsKey(keyFor(device))) return
-            if (usbManager.hasPermission(device)) claimAndReport(device, notify = false)
-        }
-
-        fun reconcileForeground() {
-            for (device in usbManager.deviceList.values) {
-                handleAttached(device)
-            }
+        private fun scanExistingUsb() {
+            for (device in usbManager.deviceList.values) onUsbPresent(device)
         }
 
         fun tryDirectMode(
             vendorId: Int,
             productId: Int,
+        ) = setPathChoice(vendorId, productId, PathChoice.Direct)
+
+        fun setPathChoice(
+            vendorId: Int,
+            productId: Int,
+            choice: PathChoice,
         ) {
+            pathPrefs.setChoice(vendorId, productId, choice)
             val device =
-                usbManager.deviceList.values.firstOrNull {
-                    it.vendorId == vendorId && it.productId == productId
-                } ?: return
-            if (claimedDevices.containsKey(keyFor(device))) return
-            if (usbManager.hasPermission(device)) {
-                claimAndReport(device, notify = true)
-            } else {
-                requestPermission(device)
-            }
+                usbManager.deviceList.values.firstOrNull { it.vendorId == vendorId && it.productId == productId }
+            if (device != null) onUsbPresent(device)
+            applyEvent(vpk(vendorId, productId), UsbEvent.Choose(choice, userInitiated = true))
         }
 
         private val receiver =
@@ -114,77 +138,200 @@ class UsbGamepadManager
                     ctx: Context,
                     intent: Intent,
                 ) {
+                    val device = deviceFromIntent(intent) ?: return
                     when (intent.action) {
-                        UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
-                            val device = deviceFromIntent(intent) ?: return
-                            handleAttached(device)
-                        }
-                        UsbManager.ACTION_USB_DEVICE_DETACHED -> {
-                            val device = deviceFromIntent(intent) ?: return
-                            handleDetached(device)
-                        }
-                        ACTION_USB_PERMISSION -> {
-                            val device = deviceFromIntent(intent) ?: return
-                            val granted =
-                                intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
-                            if (granted) claimAndReport(device, notify = true)
-                        }
+                        UsbManager.ACTION_USB_DEVICE_ATTACHED -> onUsbPresent(device)
+                        UsbManager.ACTION_USB_DEVICE_DETACHED -> onUsbGone(device)
+                        ACTION_USB_PERMISSION ->
+                            if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+                                onUsbPresent(device)
+                                applyEvent(vpk(device.vendorId, device.productId), UsbEvent.PermissionGranted)
+                            }
                     }
                 }
             }
 
-        private fun handleAttached(device: UsbDevice) {
-            if (!isCandidate(device)) return
-            if (claimedDevices.containsKey(keyFor(device))) return
-            if (usbManager.hasPermission(device)) {
-                claimAndReport(device, notify = false)
-            } else {
-                promptTryDirect(device)
+        // ── Signal sources → events ──────────────────────────────────────────
+
+        private fun onUsbPresent(device: UsbDevice) {
+            if (!isGamepadShaped(device)) return
+            val vid = device.vendorId
+            val pid = device.productId
+            val key = vpk(vid, pid)
+            usbDevices[key] = device
+            val existing = _controllers.value[key]
+            if (existing == null) {
+                val fwId = liveFrameworkFor(registry.devices.value, vid, pid)
+                _controllers.update {
+                    it +
+                        (
+                            key to
+                                UsbController(
+                                    vendorId = vid,
+                                    productId = pid,
+                                    name = friendlyName(device),
+                                    phase = UsbPhase.Routed,
+                                    usbPresent = true,
+                                    frameworkId = fwId,
+                                    hasPermission = usbManager.hasPermission(device),
+                                    desired = resolvePath(vid, pid),
+                                ).withCapturedBinding(fwId)
+                        )
+                }
+                lastFrameworkId[key] = fwId
+                // Drive toward the resolved path automatically (not user-initiated).
+                applyEvent(key, UsbEvent.Choose(resolvePath(vid, pid), userInitiated = false))
+            } else if (usbManager.hasPermission(device) && !existing.hasPermission) {
+                applyEvent(key, UsbEvent.PermissionGranted)
             }
         }
 
-        private fun handleDetached(device: UsbDevice) {
-            val key = keyFor(device)
-            promptedDevices.remove(key)
+        private fun onUsbGone(device: UsbDevice) {
+            val key = vpk(device.vendorId, device.productId)
+            applyEvent(key, UsbEvent.UsbUnplugged)
+            usbDevices.remove(key)
+            timeouts.remove(key)?.cancel()
+            lastFrameworkId.remove(key)
+            prompted.remove(key)
+            claimedConns.remove(key)?.let { runCatching { it.connection.close() } }
+            // A fresh plug-in of this model should re-evaluate Direct rather than inherit a stale failure.
             registry.clearDirectFailed(device.vendorId, device.productId)
-            val claimed = claimedDevices.remove(key) ?: return
-            native.detachUsbDevice(claimed.syntheticDeviceId)
-            runCatching {
-                claimed.connection.releaseInterface(claimed.intf)
-                claimed.connection.close()
-            }
-            registry.removeUsbSynthetic(claimed.syntheticDeviceId)
         }
 
-        private fun claimAndReport(
-            device: UsbDevice,
-            notify: Boolean,
+        private fun syncFromRegistry(devices: Map<Int, PhysicalGamepadRegistry.Device>) {
+            // Framework presence deltas for tracked controllers.
+            for ((key, c) in _controllers.value) {
+                val fwId = liveFrameworkFor(devices, c.vendorId, c.productId)
+                if (fwId != lastFrameworkId[key]) {
+                    lastFrameworkId[key] = fwId
+                    applyEvent(key, if (fwId != null) UsbEvent.FrameworkUp(fwId) else UsbEvent.FrameworkDown)
+                }
+            }
+            // A framework gamepad for a USB-present model we aren't tracking yet (framework enumerated
+            // before the USB broadcast landed): start tracking it.
+            for (dev in devices.values) {
+                if (dev.isUsbSynthetic || dev.vendorId == 0 || dev.productId == 0) continue
+                if (vpk(dev.vendorId, dev.productId) in _controllers.value) continue
+                usbManager.deviceList.values
+                    .firstOrNull { it.vendorId == dev.vendorId && it.productId == dev.productId }
+                    ?.let { onUsbPresent(it) }
+            }
+        }
+
+        // ── The reducer driver (main thread) ─────────────────────────────────
+
+        private fun applyEvent(
+            key: Int,
+            event: UsbEvent,
         ) {
-            val failure = attemptClaim(device)
-            if (failure == null) {
-                registry.clearDirectFailed(device.vendorId, device.productId)
-                if (notify) notifyDirect(device, R.string.direct_enabled, success = true)
-            } else {
-                registry.markDirectFailed(device.vendorId, device.productId, failure)
-                Log.i(TAG, "direct failed ${device.vendorId.toHex4()}:${device.productId.toHex4()} reason=$failure")
-                if (notify) notifyDirect(device, R.string.direct_failed, success = false)
+            val cur = _controllers.value[key] ?: return
+            val (next, effects) = reduce(cur, event)
+            _controllers.update { if (next == null) it - key else it + (key to next) }
+            val ctx = next ?: cur
+            for (fx in effects) execute(key, ctx, fx)
+            // Once the wait resolves to any other phase, a still-pending timeout is stale. Read the live
+            // phase rather than this event's immediate reduction so a nested transition into
+            // AwaitingFramework during effect execution (a claim that fails after stealing the interface)
+            // keeps the fresh timeout it just started instead of cancelling it.
+            if (_controllers.value[key]?.phase != UsbPhase.AwaitingFramework) timeouts.remove(key)?.cancel()
+        }
+
+        // A flat effect dispatch: many arms, each trivial. The branch count trips the complexity rule.
+        @Suppress("CyclomaticComplexMethod")
+        private fun execute(
+            key: Int,
+            c: UsbController,
+            fx: UsbEffect,
+        ) {
+            when (fx) {
+                UsbEffect.Claim -> runClaim(key)
+                UsbEffect.Reclaim -> runReclaim(key, c)
+                UsbEffect.Release -> releaseToFramework(key)
+                UsbEffect.RequestPermission -> usbDevices[key]?.let { requestPermission(it) }
+                UsbEffect.PromptTryDirect ->
+                    if (prompted.add(key)) usbDevices[key]?.let { promptTryDirect(it) }
+                is UsbEffect.BindFramework -> bindTo(fx.frameworkId, c.connId, c.type)
+                is UsbEffect.RemoveSynthetic -> {
+                    claimedConns.remove(key)?.let { runCatching { it.connection.close() } }
+                    registry.removeUsbSynthetic(fx.syntheticId)
+                }
+                UsbEffect.BeginHold -> registry.beginModelTransition(c.vendorId, c.productId)
+                UsbEffect.EndHold -> registry.endModelTransition(c.vendorId, c.productId)
+                UsbEffect.MarkNeedsReplug -> registry.markNeedsReplug(c.vendorId, c.productId)
+                UsbEffect.MarkRestoreStuck -> registry.markRestoreStuck(c.vendorId, c.productId)
+                UsbEffect.ClearRestoreStuck -> registry.clearRestoreStuck(c.vendorId, c.productId)
+                UsbEffect.StartTimeout -> startTimeout(key)
+                is UsbEffect.Notify -> notify(c, fx.notice)
+                is UsbEffect.SetPref -> pathPrefs.setChoice(c.vendorId, c.productId, fx.choice)
+                is UsbEffect.MarkFailure -> registry.markDirectFailed(c.vendorId, c.productId, fx.reason)
+                UsbEffect.ClearFailure -> registry.clearDirectFailed(c.vendorId, c.productId)
             }
         }
 
-        private fun attemptClaim(device: UsbDevice): PathReason? {
-            val key = keyFor(device)
-            if (claimedDevices.containsKey(key)) return null
+        private fun startTimeout(key: Int) {
+            timeouts.remove(key)?.cancel()
+            timeouts[key] =
+                scope.launch {
+                    delay(TRANSITION_TIMEOUT_MS)
+                    withContext(Dispatchers.Main) {
+                        timeouts.remove(key)
+                        applyEvent(key, UsbEvent.Timeout)
+                    }
+                }
+        }
+
+        // ── Effectors ────────────────────────────────────────────────────────
+
+        private fun runClaim(key: Int) {
+            when (val outcome = usbDevices[key]?.let { doClaim(it) }) {
+                is ClaimOutcome.Ok -> applyEvent(key, UsbEvent.ClaimSucceeded(outcome.syntheticId))
+                is ClaimOutcome.Fail -> applyEvent(key, UsbEvent.ClaimFailed(outcome.reason, outcome.frameworkStolen))
+                null -> applyEvent(key, UsbEvent.ClaimFailed(DirectClaimFailure.Busy, frameworkStolen = false))
+            }
+        }
+
+        private fun runReclaim(
+            key: Int,
+            c: UsbController,
+        ) {
+            val oldPlaceholder = c.syntheticId
+            val outcome = usbDevices[key]?.let { doClaim(it) }
+            oldPlaceholder?.let { registry.removeUsbSynthetic(it) }
+            when (outcome) {
+                is ClaimOutcome.Ok -> {
+                    bindTo(outcome.syntheticId, c.connId, c.type)
+                    applyEvent(key, UsbEvent.ClaimSucceeded(outcome.syntheticId))
+                }
+                is ClaimOutcome.Fail -> applyEvent(key, UsbEvent.ClaimFailed(outcome.reason, outcome.frameworkStolen))
+                null -> applyEvent(key, UsbEvent.ClaimFailed(DirectClaimFailure.Busy, frameworkStolen = false))
+            }
+        }
+
+        // Open + claim + native attach + register synthetic + initial bind. Reports the cause on failure
+        // and whether the framework interface was stolen (so the FSM knows if it must wait for re-enum).
+        @Suppress("ReturnCount")
+        private fun doClaim(device: UsbDevice): ClaimOutcome {
+            val key = vpk(device.vendorId, device.productId)
             val (intf, epIn, epOut) =
-                findInterruptInPair(device) ?: return PathReason.SupportedNoFastPathYet
-            val routedSlotId =
+                findInterruptInPair(device)
+                    ?: return ClaimOutcome.Fail(DirectClaimFailure.InitFailed, frameworkStolen = false)
+            val routedFrameworkId =
                 registry.devices.value.values
                     .firstOrNull {
-                        !it.isUsbSynthetic &&
-                            it.vendorId == device.vendorId &&
-                            it.productId == device.productId
+                        !it.isUsbSynthetic && it.vendorId == device.vendorId && it.productId == device.productId
                     }?.id
-                    ?.toString()
-            val conn = openAndClaim(device, intf) ?: return PathReason.Busy
+            val conn =
+                try {
+                    usbManager.openDevice(device)
+                } catch (e: SecurityException) {
+                    Log.w(TAG, "openDevice denied for ${device.vendorId.toHex4()}:${device.productId.toHex4()}", e)
+                    return ClaimOutcome.Fail(DirectClaimFailure.PermissionDenied, frameworkStolen = false)
+                } ?: return ClaimOutcome.Fail(DirectClaimFailure.Busy, frameworkStolen = false)
+            if (!conn.claimInterface(intf, true)) {
+                conn.close()
+                return ClaimOutcome.Fail(DirectClaimFailure.Busy, frameworkStolen = false)
+            }
+            // The interface is ours now: the kernel HID driver has been detached (framework stolen).
             val synthetic =
                 native.attachUsbDevice(
                     fd = conn.fileDescriptor,
@@ -200,63 +347,118 @@ class UsbGamepadManager
                     conn.releaseInterface(intf)
                     conn.close()
                 }
-                return PathReason.InitFailed
+                return ClaimOutcome.Fail(DirectClaimFailure.InitFailed, frameworkStolen = true)
             }
-            claimedDevices[key] = ClaimedDevice(device, conn, intf, synthetic)
-            val displayName = friendlyName(device)
-            val pollRateHz = computeUsbPollRateHz(epIn.interval, epIn.maxPacketSize)
+            claimedConns[key] = ClaimedConn(conn, intf, synthetic)
             registry.addUsbSynthetic(
                 deviceId = synthetic,
-                name = displayName,
+                name = friendlyName(device),
                 hasGyro = native.modelHasImu(device.vendorId, device.productId),
-                pollRateHz = pollRateHz,
+                pollRateHz = computeUsbPollRateHz(epIn.interval, epIn.maxPacketSize),
                 vendorId = device.vendorId,
                 productId = device.productId,
             )
-            connectionHubProvider.get().bindClaimedSynthetic(routedSlotId, synthetic.toString())
-            Log.i(TAG, "claimed ${device.vendorId.toHex4()}:${device.productId.toHex4()} ($displayName) → dev=$synthetic")
-            return null
+            connectionHubProvider.get().bindClaimedSynthetic(routedFrameworkId?.toString(), synthetic.toString())
+            // Drop the framework we just stole now, rather than leaving it in the 5s disconnect grace where
+            // it would collide with the framework that re-enumerates on a switch back to Standard and show a
+            // second card for one controller.
+            routedFrameworkId?.let { registry.forgetSupersededFramework(it) }
+            Log.i(TAG, "claimed ${device.vendorId.toHex4()}:${device.productId.toHex4()} → dev=$synthetic")
+            return ClaimOutcome.Ok(synthetic)
         }
 
-        private fun openAndClaim(
-            device: UsbDevice,
-            intf: UsbInterface,
-        ): UsbDeviceConnection? {
-            val conn = usbManager.openDevice(device) ?: return null
-            if (conn.claimInterface(intf, true)) return conn
-            conn.close()
-            return null
+        // Hand the interface back to the framework but keep the synthetic entry as a held loader
+        // placeholder so the slot stays visible while the framework device re-enumerates.
+        private fun releaseToFramework(key: Int) {
+            val claimed = claimedConns.remove(key) ?: return
+            native.detachUsbDevice(claimed.syntheticId)
+            runCatching {
+                claimed.connection.releaseInterface(claimed.intf)
+                claimed.connection.close()
+            }
+            // Capture the live binding so a return-to-Standard (or a rollback) preserves it.
+            val hub = connectionHubProvider.get()
+            val synthSlot = claimed.syntheticId.toString()
+            val connId = hub.bindings.value[synthSlot]
+            val type = connId?.let { hub.satTypes.value[it to synthSlot] }
+            _controllers.update { map ->
+                val c = map[key] ?: return@update map
+                map + (key to c.copy(connId = connId, type = type))
+            }
+            registry.setUsbSyntheticTransitioning(claimed.syntheticId, true)
         }
+
+        private fun bindTo(
+            deviceId: Int,
+            connId: String?,
+            type: Int?,
+        ) {
+            connId ?: return
+            val hub = connectionHubProvider.get()
+            hub.bind(deviceId.toString(), connId)
+            type?.let { hub.setSatelliteControllerType(connId, deviceId.toString(), it) }
+        }
+
+        private fun notify(
+            c: UsbController,
+            notice: UsbNotice,
+        ) {
+            val name = c.name
+            val titleRes =
+                when (notice) {
+                    UsbNotice.SwitchToDirectFailed -> R.string.direct_failed
+                    UsbNotice.NeedsReplug -> R.string.direct_restore_failed
+                    UsbNotice.RolledBackToDirect -> R.string.direct_revert_to_direct
+                    UsbNotice.RestoreFailed -> R.string.direct_restore_failed
+                }
+            // The card carries the persistent reason; the banner echoes it so the cause is visible at a glance.
+            val body = if (notice == UsbNotice.SwitchToDirectFailed) c.failure?.let { directFailureText(it) } else null
+            notifications.warn(
+                glyph = R.drawable.ic_gamepad,
+                title = context.getString(titleRes, name),
+                body = body,
+                key = "direct-result:${c.vendorId.toHex4()}:${c.productId.toHex4()}",
+            )
+        }
+
+        private fun directFailureText(reason: DirectClaimFailure): String =
+            context.getString(
+                when (reason) {
+                    DirectClaimFailure.Busy -> R.string.path_reason_busy
+                    DirectClaimFailure.InitFailed -> R.string.path_reason_init_failed
+                    DirectClaimFailure.PermissionDenied -> R.string.path_reason_permission_denied
+                    DirectClaimFailure.Dropped -> R.string.path_needs_replug
+                },
+            )
+
+        private fun resolvePath(
+            vendorId: Int,
+            productId: Int,
+        ): PathChoice =
+            pathPrefs.choiceFor(vendorId, productId)
+                ?: if (native.isKnownFastLaneModel(vendorId, productId) &&
+                    registry.directFailureFor(vendorId, productId) == null
+                ) {
+                    // No stored pick: auto-Direct a verified model, but not one that just failed to claim
+                    // (an explicit user pick still routes through Choose and claims regardless).
+                    PathChoice.Direct
+                } else {
+                    PathChoice.Standard
+                }
 
         private fun promptTryDirect(device: UsbDevice) {
-            if (!promptedDevices.add(keyFor(device))) return
-            val name = friendlyName(device)
             val vendorId = device.vendorId
             val productId = device.productId
             notifications.info(
                 glyph = R.drawable.ic_gamepad,
-                title = context.getString(R.string.direct_prompt_title, name),
+                title = context.getString(R.string.direct_prompt_title, friendlyName(device)),
                 action =
                     DishNotification.Action(
                         label = context.getString(R.string.direct_prompt_action),
                     ) { tryDirectMode(vendorId, productId) },
-                key = "direct-prompt:${keyFor(device)}",
+                key = "direct-prompt:${vendorId.toHex4()}:${productId.toHex4()}",
                 durationMs = DishNotification.DURATION_LONG,
             )
-        }
-
-        private fun notifyDirect(
-            device: UsbDevice,
-            titleRes: Int,
-            success: Boolean,
-        ) {
-            val title = context.getString(titleRes, friendlyName(device))
-            val key = "direct-result:${keyFor(device)}"
-            if (success) {
-                notifications.success(glyph = R.drawable.ic_gamepad, title = title, key = key)
-            } else {
-                notifications.warn(glyph = R.drawable.ic_gamepad, title = title, key = key)
-            }
         }
 
         private fun requestPermission(device: UsbDevice) {
@@ -268,16 +470,39 @@ class UsbGamepadManager
                     PendingIntent.FLAG_UPDATE_CURRENT
                 }
             val pending = PendingIntent.getBroadcast(context, device.deviceId, intent, flags)
-            scope.launch(Dispatchers.Main) {
-                usbManager.requestPermission(device, pending)
-            }
+            scope.launch(Dispatchers.Main) { usbManager.requestPermission(device, pending) }
         }
 
-        private fun isCandidate(device: UsbDevice): Boolean =
-            isGamepadShaped(device) &&
-                native.isKnownFastLaneModel(device.vendorId, device.productId)
+        // ── Pure-ish helpers ─────────────────────────────────────────────────
 
-        private fun keyFor(device: UsbDevice): String = device.deviceName
+        private fun vpk(
+            vendorId: Int,
+            productId: Int,
+        ): Int = (vendorId shl 16) or (productId and 0xFFFF)
+
+        private fun liveFrameworkFor(
+            devices: Map<Int, PhysicalGamepadRegistry.Device>,
+            vendorId: Int,
+            productId: Int,
+        ): Int? =
+            devices.values
+                .firstOrNull {
+                    !it.isUsbSynthetic &&
+                        !it.transitioning &&
+                        !it.needsReplug &&
+                        !it.isDisconnecting &&
+                        it.vendorId == vendorId &&
+                        it.productId == productId
+                }?.id
+
+        // Capture the framework device's current binding so it survives a Standard→Direct→Standard trip.
+        private fun UsbController.withCapturedBinding(frameworkId: Int?): UsbController {
+            frameworkId ?: return this
+            val hub = connectionHubProvider.get()
+            val slot = frameworkId.toString()
+            val connId = hub.bindings.value[slot] ?: return this
+            return copy(connId = connId, type = hub.satTypes.value[connId to slot])
+        }
 
         private fun friendlyName(device: UsbDevice): String {
             val known = native.lookupKnownModelName(device.vendorId, device.productId)
@@ -294,9 +519,7 @@ class UsbGamepadManager
                 if (!isHid && !isVendor) continue
                 for (e in 0 until intf.endpointCount) {
                     val ep = intf.getEndpoint(e)
-                    if (ep.type == UsbConstants.USB_ENDPOINT_XFER_INT &&
-                        ep.direction == UsbConstants.USB_DIR_IN
-                    ) {
+                    if (ep.type == UsbConstants.USB_ENDPOINT_XFER_INT && ep.direction == UsbConstants.USB_DIR_IN) {
                         return true
                     }
                 }
@@ -336,5 +559,6 @@ class UsbGamepadManager
         private companion object {
             const val TAG = "UsbGamepadManager"
             const val ACTION_USB_PERMISSION = "com.tinkernorth.dish.USB_PERMISSION"
+            const val TRANSITION_TIMEOUT_MS = 4000L
         }
     }

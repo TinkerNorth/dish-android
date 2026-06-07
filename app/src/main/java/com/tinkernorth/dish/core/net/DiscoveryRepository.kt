@@ -6,6 +6,7 @@ import android.util.Log
 import com.tinkernorth.dish.core.jni.SatelliteNative
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.DiscoverySource
+import com.tinkernorth.dish.core.model.stableKey
 import com.tinkernorth.dish.di.IoDispatcher
 import com.tinkernorth.dish.source.connection.MdnsDiscovery
 import kotlinx.coroutines.CoroutineDispatcher
@@ -55,10 +56,22 @@ class DiscoveryRepository
             deviceId: String,
             deviceName: String,
             pin: String,
+            clientPin: String = "",
         ): String =
             withContext(ioDispatcher) {
                 mutex.withLock {
-                    SatelliteHttpClient.pair(ip, port, deviceId, deviceName, pin)
+                    SatelliteHttpClient.pair(ip, port, deviceId, deviceName, pin, clientPin)
+                }
+            }
+
+        suspend fun pairStatus(
+            ip: String,
+            port: Int,
+            deviceId: String,
+        ): String =
+            withContext(ioDispatcher) {
+                mutex.withLock {
+                    SatelliteHttpClient.pairStatus(ip, port, deviceId)
                 }
             }
 
@@ -106,11 +119,13 @@ class DiscoveryRepository
             ): List<DiscoveredServer> {
                 val byKey = LinkedHashMap<String, DiscoveredServer>()
                 for (server in broadcast) {
-                    byKey["${server.ip}:${server.udpPort}"] =
+                    byKey[server.stableKey] =
                         server.copy(source = DiscoverySource.BROADCAST)
                 }
                 for (server in mdns) {
-                    val key = "${server.ip}:${server.udpPort}"
+                    // Same physical satellite heard on both paths collapses to
+                    // one BOTH-tagged row when their stable ids match.
+                    val key = server.stableKey
                     val source =
                         if (byKey.containsKey(key)) DiscoverySource.BOTH else DiscoverySource.MDNS
                     byKey[key] = server.copy(source = source)

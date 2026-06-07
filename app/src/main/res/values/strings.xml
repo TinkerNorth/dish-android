@@ -269,6 +269,11 @@
     <string name="pair_dialog_submit">Pair</string>
     <string name="pair_dialog_pairing">Pairing…</string>
     <string name="pair_dialog_error_empty">Enter the PIN shown on your satellite.</string>
+    <!-- Reverse-direction (Path B) pairing: this dish shows its own PIN and the
+         operator accepts it on the satellite instead of the user typing one. -->
+    <string name="pair_dialog_or_show_pin">Or show this device\'s PIN and accept it on the satellite:</string>
+    <string name="pair_dialog_request_approval">Accept on satellite</string>
+    <string name="pair_dialog_awaiting">Waiting for satellite…</string>
 
     <!-- Foreground service notification. -->
     <string name="streaming_channel_name">Streaming session</string>
@@ -351,19 +356,32 @@
     <string name="path_label_direct">Direct mode</string>
     <string name="path_label_direct_with_rate">Direct mode · %1$d Hz</string>
     <string name="path_label_standard">Standard mode</string>
-    <string name="path_direct_explainer">Lowest delay. Talking straight to the controller.</string>
-    <string name="path_reason_default">Works with every controller Android recognises.</string>
-    <string name="path_reason_bluetooth">Bluetooth controllers always use Standard mode.</string>
-    <string name="path_reason_onscreen">On-screen controllers use Standard mode.</string>
-    <string name="path_reason_unknown_model">This controller isn\'t in the fast-path list yet.</string>
+    <string name="path_label_bluetooth">Bluetooth</string>
     <string name="path_reason_busy">Another app is using this controller.</string>
     <string name="path_reason_init_failed">Couldn\'t set up Direct mode. Using Standard mode instead.</string>
-    <string name="path_reason_detached">Controller was unplugged.</string>
-    <string name="path_reason_not_yet">Direct mode for this controller is coming soon.</string>
-    <string name="path_action_try_direct">Try Direct mode</string>
+    <string name="path_reason_permission_denied">USB permission denied. Grant it to use Direct mode.</string>
     <string name="direct_prompt_title">Try Direct mode for %1$s?</string>
     <string name="direct_prompt_action">Try</string>
-    <string name="direct_enabled">%1$s is on Direct mode.</string>
     <string name="direct_failed">Couldn\'t switch %1$s to Direct mode.</string>
+
+    <!-- Input-path chooser in the expanded controller card: a Standard/Direct toggle plus the
+         per-device trade-off and risk copy. capMark passes ✓/✗ into the %s slots. -->
+    <string name="path_input_section_label">Input path</string>
+    <string name="path_choice_standard">Standard</string>
+    <string name="path_choice_direct">Direct</string>
+    <string name="path_caps_standard">Standard: rumble %1$s · motion %2$s</string>
+    <string name="path_caps_direct">Direct: rumble %1$s · motion %2$s</string>
+    <string name="path_risk_verified">Verified for Direct mode.</string>
+    <string name="path_risk_guessed">Not recognised. Direct mode guesses this controller\'s layout, so some inputs may read wrong. You can switch back anytime.</string>
+    <string name="path_risk_bluetooth">Direct mode needs a USB connection.</string>
+    <string name="path_restoring">Restoring Standard mode</string>
+    <string name="path_confirm_title">Try Direct mode?</string>
+    <string name="path_confirm_body">We don\'t recognise this controller. Direct mode guesses its button and stick layout, so some inputs may read wrong. You can switch back to Standard anytime.</string>
+    <string name="path_confirm_positive">Try Direct</string>
+    <string name="path_confirm_negative">Cancel</string>
+    <string name="direct_restore_failed">Couldn\'t restore Standard mode for %1$s. Unplug and replug it.</string>
+    <string name="direct_revert_to_direct">Couldn\'t switch %1$s to Standard. Still on Direct mode.</string>
+    <string name="path_restore_stuck">Standard mode isn\'t responding. Switch to Direct, or unplug and replug.</string>
+    <string name="path_needs_replug">Disconnected. Unplug and replug to use this controller.</string>
 
 </resources>

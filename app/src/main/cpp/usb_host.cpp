@@ -209,6 +209,22 @@ void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
     LOGI("dev=%d poll loop exited", ctx->syntheticDeviceId);
 }
 
+// Release our claim and re-bind the kernel HID driver the force-claim detached, so Android
+// re-enumerates the framework InputDevice and a fall back to Standard needs no physical replug.
+// Best effort; logs if the kernel refuses CONNECT.
+void releaseAndReattach(int fd, int interfaceNumber) {
+    if (interfaceNumber < 0) return;
+    unsigned int iface = (unsigned int)interfaceNumber;
+    ioctl(fd, USBDEVFS_RELEASEINTERFACE, &iface);
+    usbdevfs_ioctl reattach{};
+    reattach.ifno = interfaceNumber;
+    reattach.ioctl_code = USBDEVFS_CONNECT;
+    reattach.data = nullptr;
+    if (ioctl(fd, USBDEVFS_IOCTL, &reattach) < 0) {
+        LOGE("USBDEVFS_CONNECT re-attach iface %d failed: %s", interfaceNumber, strerror(errno));
+    }
+}
+
 void shutdownLocked(const std::shared_ptr<DeviceCtx>& ctx) {
     ctx->stop.store(true, std::memory_order_relaxed);
     if (ctx->poller.joinable()) {
@@ -218,10 +234,7 @@ void shutdownLocked(const std::shared_ptr<DeviceCtx>& ctx) {
     }
     // outMtx so an in-flight sendRumble finishes before the fd it is writing to is closed.
     std::lock_guard<std::mutex> lock(ctx->outMtx);
-    if (ctx->interfaceNumber >= 0) {
-        unsigned int iface = (unsigned int)ctx->interfaceNumber;
-        ioctl(ctx->fd, USBDEVFS_RELEASEINTERFACE, &iface);
-    }
+    releaseAndReattach(ctx->fd, ctx->interfaceNumber);
     if (ctx->fd >= 0) {
         ::close(ctx->fd);
         ctx->fd = -1;
@@ -284,6 +297,7 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
         unsigned int iface = (unsigned int)interfaceNumber;
         if (ioctl(fd, USBDEVFS_CLAIMINTERFACE, &iface) < 0 && errno != EBUSY) {
             LOGE("CLAIMINTERFACE %d failed: %s", interfaceNumber, strerror(errno));
+            releaseAndReattach(fd, interfaceNumber);
             ::close(fd);
             return out;
         }
@@ -292,10 +306,7 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
     if (!usbparsers::runInit(fd, epOut, parser, init)) {
         LOGI("attach %04X:%04X (%s): init failed, falling back to routed", vid, pid,
              modelName.c_str());
-        if (interfaceNumber >= 0) {
-            unsigned int iface = (unsigned int)interfaceNumber;
-            ioctl(fd, USBDEVFS_RELEASEINTERFACE, &iface);
-        }
+        releaseAndReattach(fd, interfaceNumber);
         ::close(fd);
         return out;
     }
@@ -303,10 +314,7 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
     if (!probeDecodable(fd, epIn, epInMaxPacket, parser)) {
         LOGI("attach %04X:%04X (%s): no parseable reports, releasing to framework", vid, pid,
              modelName.c_str());
-        if (interfaceNumber >= 0) {
-            unsigned int iface = (unsigned int)interfaceNumber;
-            ioctl(fd, USBDEVFS_RELEASEINTERFACE, &iface);
-        }
+        releaseAndReattach(fd, interfaceNumber);
         ::close(fd);
         return out;
     }

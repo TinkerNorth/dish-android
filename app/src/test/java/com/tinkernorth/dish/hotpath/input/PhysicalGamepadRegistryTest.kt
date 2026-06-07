@@ -6,8 +6,7 @@ import android.content.Context
 import android.hardware.input.InputManager
 import android.hardware.usb.UsbManager
 import android.view.InputDevice
-import com.tinkernorth.dish.source.usb.PathMode
-import com.tinkernorth.dish.source.usb.PathReason
+import com.tinkernorth.dish.source.usb.DirectClaimFailure
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
@@ -145,7 +144,7 @@ class PhysicalGamepadRegistryTest {
         val ctx = mockk<Context>()
         every { ctx.getSystemService(Context.INPUT_SERVICE) } returns mockk<InputManager>(relaxed = true)
         every { ctx.getSystemService(Context.USB_SERVICE) } returns mockk<UsbManager>(relaxed = true)
-        return PhysicalGamepadRegistry(ctx, CoroutineScope(SupervisorJob()), mockk(relaxed = true))
+        return PhysicalGamepadRegistry(ctx, CoroutineScope(SupervisorJob()), mockk(relaxed = true), mockk(relaxed = true))
     }
 
     @Test
@@ -162,8 +161,6 @@ class PhysicalGamepadRegistryTest {
         val d = registry.devices.value.getValue(-1000)
         assertEquals("DualSense", d.name)
         assertTrue(d.isUsbSynthetic)
-        assertEquals(PathMode.Direct, d.pathMode)
-        assertEquals(PathReason.None, d.pathReason)
         assertTrue(d.hasGyro)
         assertEquals(250, d.pollRateHz)
         assertEquals(0x054C, d.vendorId)
@@ -175,6 +172,14 @@ class PhysicalGamepadRegistryTest {
         val registry = buildRegistry()
         registry.addUsbSynthetic(-1000, "Pad", false, 0, 1, 2)
         registry.removeUsbSynthetic(-1000)
+        assertNull(registry.devices.value[-1000])
+    }
+
+    @Test
+    fun `forgetSupersededFramework drops the device immediately`() {
+        val registry = buildRegistry()
+        registry.addUsbSynthetic(-1000, "Pad", false, 0, 1, 2)
+        registry.forgetSupersededFramework(-1000)
         assertNull(registry.devices.value[-1000])
     }
 
@@ -223,11 +228,30 @@ class PhysicalGamepadRegistryTest {
     }
 
     @Test
-    fun `markDirectFailed does not touch a synthetic device of the same model`() {
+    fun `markDirectFailed records the cause for the model but not on a synthetic of it`() {
         val registry = buildRegistry()
         registry.addUsbSynthetic(-1000, "Pad", false, 0, vendorId = 1, productId = 2)
-        registry.markDirectFailed(1, 2, PathReason.Busy)
-        assertEquals(PathReason.None, registry.devices.value[-1000]?.pathReason)
+        registry.markDirectFailed(1, 2, DirectClaimFailure.Busy)
+        assertEquals(DirectClaimFailure.Busy, registry.directFailureFor(1, 2))
+        assertNull(registry.devices.value[-1000]?.directFailure)
+    }
+
+    @Test
+    fun `clearDirectFailed forgets the recorded cause`() {
+        val registry = buildRegistry()
+        registry.markDirectFailed(1, 2, DirectClaimFailure.InitFailed)
+        registry.clearDirectFailed(1, 2)
+        assertNull(registry.directFailureFor(1, 2))
+    }
+
+    @Test
+    fun `markRestoreStuck flips the held synthetic to an actionable card`() {
+        val registry = buildRegistry()
+        registry.addUsbSynthetic(-1000, "Pad", false, 0, vendorId = 1, productId = 2)
+        registry.markRestoreStuck(1, 2)
+        val d = registry.devices.value.getValue(-1000)
+        assertTrue(d.restoreStuck)
+        assertFalse(d.transitioning)
     }
 
     @Test

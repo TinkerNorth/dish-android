@@ -174,4 +174,23 @@ class MdnsDiscoveryMappingTest {
             )
         assertEquals(9882, s!!.udpPort)
     }
+
+    @Test
+    fun `machineId comes from the mid TXT record`() {
+        val s = mdnsServiceToServer("Sat", "10.0.0.1", 9876, mapOf("mid" to bytes("deadbeef")))
+        assertEquals("deadbeef", s!!.machineId)
+    }
+
+    @Test
+    fun `machineId is empty when no mid TXT record is present`() {
+        val s = mdnsServiceToServer("Sat", "10.0.0.1", 9876, emptyMap())
+        assertEquals("", s!!.machineId)
+    }
+
+    @Test
+    fun `txtString trims, and rejects empty or missing values`() {
+        assertEquals("x", mdnsTxtString(mapOf("mid" to bytes(" x ")), "mid"))
+        assertNull(mdnsTxtString(mapOf("mid" to bytes("   ")), "mid"))
+        assertNull(mdnsTxtString(emptyMap(), "mid"))
+    }
 }

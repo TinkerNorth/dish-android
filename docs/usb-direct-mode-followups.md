@@ -9,28 +9,21 @@ written so it can be picked up on its own. Verify file:line against current code
 
 ## 1. Xbox One (GIP) coverage is partial
 
-**Context:** `decodeXboxOneGip` only handles input report `0x20`. The Guide (Xbox) button arrives in
-a separate report and is never decoded, so it does nothing in Direct mode. The init is a single
-5-byte power-on (`runInit` / `InitKind::XBOX_ONE_POWERON`), which starts many controllers but not
-every Series/Elite model that expects the fuller GIP announce/identify handshake. `probeDecodable`
-gives up after ~320ms of no decodable report, so a slow-to-start GIP pad silently falls back to
-Routed.
+**Context:** `decodeXboxOneGip` handles input report `0x20` and the Guide button (decoded from the
+virtual-key `0x07` report and merged as a sticky `XUSB_GUIDE` bit via `ParserState`, covered by
+`usb_parsers_test.cpp`). Two gaps remain: the init is a single 5-byte power-on (`runInit` /
+`InitKind::XBOX_ONE_POWERON`) that starts many controllers but not every Series/Elite model
+expecting the fuller GIP announce/identify handshake, and `probeDecodable` gives up after ~320ms, so
+a slow-to-start GIP pad falls back to Routed.
 
-**Where:** `app/src/main/cpp/usb_parsers.cpp` (`decodeXboxOneGip`, `runInit`),
-`app/src/main/cpp/usb_host.cpp` (`probeDecodable` timeouts).
+**Where:** `app/src/main/cpp/usb_parsers.cpp` (`runInit`), `app/src/main/cpp/usb_host.cpp`
+(`probeDecodable` timeouts).
 
-**Task:** Decode the GIP guide-button report and map it (if a target XUSB bit is wanted). Consider a
-fuller GIP handshake for the models that stay silent. Re-evaluate the probe timeout/attempt counts so
-slow starters are not dropped.
+**Task:** Add the fuller GIP announce/identify handshake for the silent models, and re-evaluate the
+probe timeout/attempt counts so slow starters are not dropped. Both need that hardware to verify.
 
-**Status:** Guide-button decode is **done**. `decodeXboxOneGip` now handles the virtual-key report
-(0x07) and merges the sticky guide bit (`XUSB_GUIDE` = 0x0400) into the main 0x20 reports via
-`ParserState`; covered by `usb_parsers_test.cpp`. End-to-end depends on the satellite forwarding
-wButtons bit 0x0400 to ViGEm. Still open: the fuller GIP announce/identify handshake for silent
-Series/Elite models, and the probe timeout/attempt tuning (both need that hardware to verify).
-
-**Acceptance:** Guide button registers; a Series X|S and an Elite Series 2 both reach Direct mode
-reliably from cold plug-in.
+**Acceptance:** A Series X|S and an Elite Series 2 reach Direct mode reliably from cold plug-in.
+End-to-end Guide also needs the satellite to forward `wButtons` bit `0x0400` to ViGEm.
 
 ---
 
@@ -50,21 +43,12 @@ all three axes.
 
 ---
 
-## 3. Generic HID parser is unreachable
+## 3. Generic HID parser was unreachable (resolved)
 
-**Context:** `decodeGenericHidGamepad` exists in C, but the Kotlin claim gate (`isCandidate` ->
-`isKnownFastLaneModel`) only allows devices whose VID/PID is in the parser table, and no table entry
-uses `GENERIC_HID_GAMEPAD`. So the generic path never runs through the normal flow.
-
-**Where:** `app/src/main/java/.../source/usb/UsbGamepadManager.kt` (`isCandidate`),
-`app/src/main/cpp/usb_parsers.cpp` (`decodeGenericHidGamepad`).
-
-**Task:** Decide the intent. Either (a) wire up an explicit, clearly-labelled "try an unknown
-gamepad-shaped HID device" opt-in that routes to the generic parser, or (b) remove the unreachable
-generic parser to cut dead code.
-
-**Acceptance:** Either an unknown gamepad can be attempted via a deliberate user action, or the dead
-path is gone. No silent generic claims.
+**Resolved.** A per-controller path toggle (`PathCard` / `ControllerAdapter`) routes an unrecognised
+gamepad-shaped device to the generic parser behind a "layout is guessed, may read wrong" confirm.
+Auto-claim still requires a known model (`resolvePath` defaults unknown models to Standard), so the
+generic parser is reached only through that deliberate, reversible action. No silent generic claims.
 
 ---
 
@@ -86,50 +70,36 @@ section (snapshot the report under the lock, encrypt+send outside it) without br
 
 ---
 
-## 5. Framework device state leaks on lane switch
+## 5. Framework device state leaked on lane switch (resolved)
 
-**Context:** When a controller is claimed into Direct mode, its old framework `g_devices[fwId]` entry
-is never erased (the binding observer only `unbindPhysicalSlot`s it). It is a small per-claim leak
-that lives until process death. This is the existing behaviour for framework devices generally, just
-more frequent now.
-
-**Where:** `app/src/main/cpp/satellite_jni.cpp` (`g_devices`),
-`app/src/main/java/.../hotpath/input/PhysicalSlotBindingObserver.kt` (disappeared handling).
-
-**Task:** When a framework device is removed (or superseded by a synthetic twin), call
-`dispatch::forgetDevice(fwId)` so the entry is reclaimed.
-
-**Status:** **Done.** `SatelliteNative.forgetPhysicalDevice` exposes `dispatch::forgetDevice`, and
-`PhysicalSlotBindingObserver` calls it for every departed framework device id (non-negative; claimed
-synthetics are still freed by `detachUsbDevice`). The 5s registry disconnect-grace means the entry is
-reclaimed a few seconds after a claim/unplug rather than instantly.
-
-**Acceptance:** `g_devices` size returns to baseline after a plug -> claim -> unplug cycle.
+**Resolved.** `SatelliteNative.forgetPhysicalDevice` (calling `dispatch::forgetDevice`) is invoked by
+`PhysicalSlotBindingObserver` for every departed framework device id (claimed synthetics are still
+freed by `detachUsbDevice`), so `g_devices` returns to baseline a few seconds after a plug, claim,
+unplug cycle.
 
 ---
 
 ## 6. Move USB claim/detach off the main thread (safely)
 
-**Context:** The claim path (`attemptClaim`: USB init handshake + decode probe, up to ~400ms) and
-detach (`detachUsbDevice` joins the native poll thread) run synchronously on the broadcast/main
-thread, so a plug-in or unplug briefly hitches the UI. A first attempt to move them onto
-`Dispatchers.IO` REGRESSED streaming and was reverted: the claim path also mutates
-`PhysicalGamepadRegistry._devices` (via non-atomic `_devices.value = _devices.value + ...`) and the
-`directFailed` HashMap, both of which Android's `InputManager` callbacks write on the main thread.
-Off-main, `addUsbSynthetic` raced `onInputDeviceRemoved/Changed` for the just-stolen device, dropping
-the synthetic device so nothing registered on the host (symptoms: no virtual controller, multi-second
-"connecting", no timeout screen).
+**Context:** `attemptClaim` (USB init handshake + decode probe, up to ~400ms) and `detachUsbDevice`
+(joins the native poll thread) still run synchronously on the broadcast/main thread, so a plug-in or
+unplug briefly hitches the UI. A first attempt to move them to `Dispatchers.IO` regressed streaming
+and was reverted: the claim path mutates `PhysicalGamepadRegistry` state that Android's
+`InputManager` callbacks write on the main thread, so off-main `addUsbSynthetic` raced
+`onInputDeviceRemoved/Changed` for the just-stolen device and dropped the synthetic (no virtual
+controller, multi-second "connecting", no timeout screen).
 
-**Prerequisite before retrying:** make `PhysicalGamepadRegistry` writes thread-safe first. Convert
-every `_devices.value = _devices.value <op>` to `_devices.update { <op> }`, and guard or replace the
-`directFailed` HashMap (ConcurrentHashMap, or confine to one dispatcher). `claimedDevices` /
-`promptedDevices` also need guarding plus an in-flight guard so a unplug-during-claim does not leave a
-stale entry. Only then move `attemptClaim` / `detachUsbDevice` to IO.
+**Already done:** `reconcile` is idempotent (no-ops in the resolved state, skips a vid/pid with a
+recorded `directFailed`), so the repeated full-claim stall on every `onResume` is gone. The
+`PhysicalGamepadRegistry` writes are `_devices.update {}`, and `directFailed` / `claimedDevices` are
+concurrent.
 
-**Where:** `UsbGamepadManager.kt` (`claimAndReport`, `attemptClaim`, `handleDetached`),
-`PhysicalGamepadRegistry.kt` (all `_devices` mutations + `directFailed`).
+**Task:** Move `attemptClaim` / `detachUsbDevice` to `Dispatchers.IO`, with an in-flight guard so an
+unplug-during-claim cannot leave a stale synthetic. That is the actual fix for the plug-in hitch.
 
-**Acceptance:** Plug a recognised controller at app start with no UI hitch; repeated plug/unplug
+**Where:** `UsbGamepadManager.kt` (`claimAndReport`, `attemptClaim`, `handleDetached`).
+
+**Acceptance:** A recognised controller plugged at app start causes no UI hitch; repeated plug/unplug
 stress never drops the synthetic device or its host registration.
 
 ---

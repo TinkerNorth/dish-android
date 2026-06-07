@@ -42,6 +42,7 @@ import com.tinkernorth.dish.repository.RememberedBt
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.bluetooth.BtStaleReason
 import com.tinkernorth.dish.source.connection.ConnectionEvent
+import com.tinkernorth.dish.source.connection.PairingApproval
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.notification.DishNotifications
@@ -96,6 +97,8 @@ class ConnectionsActivity : AppCompatActivity() {
 
     private var pendingBtRegistration: PendingBtRegistration? = null
 
+    private var addAfterPermission = false
+
     private var discoverabilityExpiryJob: kotlinx.coroutines.Job? = null
 
     private var pinDialog: PairPinDialog? = null
@@ -106,9 +109,10 @@ class ConnectionsActivity : AppCompatActivity() {
         registerForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions(),
         ) { results ->
-            // OS doesn't broadcast permission changes; ProcessLifecycleOwner.onStart re-poll never fires here.
             btPermissionState.refresh()
-            if (results.values.all { it }) {
+            val continueToAdd = addAfterPermission
+            addAfterPermission = false
+            if (continueToAdd && results.values.all { it }) {
                 showProfilePicker()
             }
         }
@@ -228,7 +232,7 @@ class ConnectionsActivity : AppCompatActivity() {
                         action =
                             DishNotification.Action(
                                 label = getString(R.string.action_retry),
-                            ) { requestBtPermissions() },
+                            ) { requestBtPermissions(continueToAdd = true) },
                     )
                 }
             }
@@ -267,7 +271,7 @@ class ConnectionsActivity : AppCompatActivity() {
             labelSection.setText(R.string.section_bluetooth_hosts)
             btnSectionAction.visibility = View.VISIBLE
             btnSectionAction.setText(R.string.action_add)
-            btnSectionAction.setOnClickListener { requestBtPermissions() }
+            btnSectionAction.setOnClickListener { requestBtPermissions(continueToAdd = true) }
         }
     }
 
@@ -492,7 +496,7 @@ class ConnectionsActivity : AppCompatActivity() {
         return rb
     }
 
-    private fun requestBtPermissions() {
+    private fun requestBtPermissions(continueToAdd: Boolean) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
             notifyBtUnsupported()
             return
@@ -503,11 +507,12 @@ class ConnectionsActivity : AppCompatActivity() {
                     Manifest.permission.BLUETOOTH_CONNECT,
                 ).filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
             if (needed.isNotEmpty()) {
+                addAfterPermission = continueToAdd
                 btPermissionLauncher.launch(needed.toTypedArray())
                 return
             }
         }
-        showProfilePicker()
+        if (continueToAdd) showProfilePicker()
     }
 
     private fun showProfilePicker() {
@@ -540,8 +545,19 @@ class ConnectionsActivity : AppCompatActivity() {
     private fun showPairingDialog(server: com.tinkernorth.dish.core.model.DiscoveredServer) {
         pinDialog?.dismiss()
         pairingServer = server
+        // This dish's own PIN for the reverse direction. The operator can
+        // accept it on the satellite instead of the user typing the server PIN.
+        val clientPin = PairingApproval.generatePin()
         val dialog =
-            PairPinDialog(this) { pin ->
+            PairPinDialog(
+                this,
+                clientPin = clientPin,
+                onRequestApproval = {
+                    pinDialog?.setAwaitingApproval(true)
+                    pinDialog?.showError(null)
+                    satellite.requestApproval(server, clientPin)
+                },
+            ) { pin ->
                 pinDialog?.setBusy(true)
                 pinDialog?.showError(null)
                 satellite.pairWithPin(server, pin)
@@ -562,6 +578,11 @@ class ConnectionsActivity : AppCompatActivity() {
             }
         pinDialog = dialog
         dialog.show()
+        // Send the satellite request immediately so the operator is notified the
+        // moment the user taps Connect, with no extra "Accept on satellite" tap.
+        // The satellite-PIN field stays available as a fallback.
+        dialog.setAwaitingApproval(true)
+        satellite.requestApproval(server, clientPin)
     }
 
     private fun onConnectionError(message: String) {
@@ -569,6 +590,7 @@ class ConnectionsActivity : AppCompatActivity() {
         val pairing = pairingServer
         if (dialog != null && pairing != null) {
             dialog.setBusy(false)
+            dialog.setAwaitingApproval(false)
             dialog.showError(message)
             return
         }
@@ -588,7 +610,7 @@ class ConnectionsActivity : AppCompatActivity() {
             action =
                 DishNotification.Action(
                     label = getString(R.string.action_retry),
-                ) { requestBtPermissions() },
+                ) { requestBtPermissions(continueToAdd = true) },
             key = "bt-discoverability-denied",
         )
     }
@@ -641,7 +663,7 @@ class ConnectionsActivity : AppCompatActivity() {
                     action =
                         DishNotification.Action(
                             label = getString(R.string.action_grant),
-                        ) { requestBtPermissions() },
+                        ) { requestBtPermissions(continueToAdd = false) },
                     key = "bt-permission-denied",
                     durationMs = DishNotification.DURATION_PERSISTENT,
                 )
