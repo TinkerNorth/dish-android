@@ -97,6 +97,8 @@ class ConnectionsActivity : AppCompatActivity() {
 
     private var pendingBtRegistration: PendingBtRegistration? = null
 
+    private var addAfterPermission = false
+
     private var discoverabilityExpiryJob: kotlinx.coroutines.Job? = null
 
     private var pinDialog: PairPinDialog? = null
@@ -107,9 +109,10 @@ class ConnectionsActivity : AppCompatActivity() {
         registerForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions(),
         ) { results ->
-            // OS doesn't broadcast permission changes; ProcessLifecycleOwner.onStart re-poll never fires here.
             btPermissionState.refresh()
-            if (results.values.all { it }) {
+            val continueToAdd = addAfterPermission
+            addAfterPermission = false
+            if (continueToAdd && results.values.all { it }) {
                 showProfilePicker()
             }
         }
@@ -229,7 +232,7 @@ class ConnectionsActivity : AppCompatActivity() {
                         action =
                             DishNotification.Action(
                                 label = getString(R.string.action_retry),
-                            ) { requestBtPermissions() },
+                            ) { requestBtPermissions(continueToAdd = true) },
                     )
                 }
             }
@@ -268,7 +271,7 @@ class ConnectionsActivity : AppCompatActivity() {
             labelSection.setText(R.string.section_bluetooth_hosts)
             btnSectionAction.visibility = View.VISIBLE
             btnSectionAction.setText(R.string.action_add)
-            btnSectionAction.setOnClickListener { requestBtPermissions() }
+            btnSectionAction.setOnClickListener { requestBtPermissions(continueToAdd = true) }
         }
     }
 
@@ -493,7 +496,7 @@ class ConnectionsActivity : AppCompatActivity() {
         return rb
     }
 
-    private fun requestBtPermissions() {
+    private fun requestBtPermissions(continueToAdd: Boolean) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
             notifyBtUnsupported()
             return
@@ -504,11 +507,12 @@ class ConnectionsActivity : AppCompatActivity() {
                     Manifest.permission.BLUETOOTH_CONNECT,
                 ).filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
             if (needed.isNotEmpty()) {
+                addAfterPermission = continueToAdd
                 btPermissionLauncher.launch(needed.toTypedArray())
                 return
             }
         }
-        showProfilePicker()
+        if (continueToAdd) showProfilePicker()
     }
 
     private fun showProfilePicker() {
@@ -606,7 +610,7 @@ class ConnectionsActivity : AppCompatActivity() {
             action =
                 DishNotification.Action(
                     label = getString(R.string.action_retry),
-                ) { requestBtPermissions() },
+                ) { requestBtPermissions(continueToAdd = true) },
             key = "bt-discoverability-denied",
         )
     }
@@ -659,7 +663,7 @@ class ConnectionsActivity : AppCompatActivity() {
                     action =
                         DishNotification.Action(
                             label = getString(R.string.action_grant),
-                        ) { requestBtPermissions() },
+                        ) { requestBtPermissions(continueToAdd = false) },
                     key = "bt-permission-denied",
                     durationMs = DishNotification.DURATION_PERSISTENT,
                 )
