@@ -327,7 +327,7 @@ class SatelliteConnectionManager
                     _events.emit(ConnectionEvent.Error(SERVER_UNREACHABLE_MSG))
                     return@launch
                 }
-                // Already-paired short-circuit hands a key straight back — no operator step.
+                // An already-paired short-circuit hands a key straight back, skipping the operator step.
                 val immediate =
                     runCatching { json.decodeFromString(PairResponse.serializer(), raw) }.getOrNull()
                 if (immediate?.ok == true && immediate.sharedKey != null) {
@@ -338,7 +338,7 @@ class SatelliteConnectionManager
                 }
                 // Otherwise wait for the operator: poll until accept / deny / timeout.
                 // The satellite-PIN path (pairWithPin) shares this connection, so
-                // once it reaches Live we bail without touching it — otherwise this
+                // once it reaches Live we bail without touching it. Otherwise this
                 // poll's terminal paths (esp. the timeout) would tear down a live
                 // session the user just established by typing the PIN.
                 var waited = 0L
@@ -622,13 +622,13 @@ class SatelliteConnectionManager
 
             private const val APPROVAL_POLL_INTERVAL_MS = 2000L
 
-            // Matches the satellite's 2-minute pairing-request TTL — stop waiting
+            // Matches the satellite's 2-minute pairing-request TTL. Stop waiting
             // once the request can no longer be accepted on the other side.
             private const val APPROVAL_TIMEOUT_MS = 120_000L
 
             internal const val APPROVAL_DECLINED_MSG =
                 "The satellite declined the pairing request."
             internal const val APPROVAL_TIMEOUT_MSG =
-                "No response from the satellite — the pairing request timed out."
+                "No response from the satellite. The pairing request timed out."
         }
     }

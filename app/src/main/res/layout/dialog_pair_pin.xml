@@ -88,7 +88,7 @@
             android:text="@string/pair_dialog_submit" />
     </LinearLayout>
 
-    <!-- Path B — this dish shows its own PIN; the operator accepts it on the
+    <!-- Path B: this dish shows its own PIN; the operator accepts it on the
          satellite. Toggled GONE by PairPinDialog when no client PIN is set. -->
     <LinearLayout
         android:id="@+id/clientPinSection"

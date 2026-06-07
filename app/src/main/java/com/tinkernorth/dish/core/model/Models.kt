@@ -25,17 +25,17 @@ data class DiscoveredServer(
     val pairPort: Int = 9443,
     val httpPort: Int = 9443,
     // Stable per-install id from the broadcast beacon ("machineId") / mDNS TXT
-    // ("mid"). Empty for satellites that predate it — see [stableKey].
+    // ("mid"). Empty for satellites that predate it. See [stableKey].
     val machineId: String = "",
     @Transient val source: DiscoverySource = DiscoverySource.BROADCAST,
 )
 
 /**
- * The stable identity a dish keys a satellite on. Prefers [DiscoveredServer.machineId]
- * — a persisted per-install id that survives DHCP address changes — and falls
- * back to ip:udpPort for older satellites that don't advertise one. Both
- * discovery paths and the remembered-satellite store key on this so the same
- * physical receiver collapses to a single entry instead of one row per IP.
+ * The stable identity a dish keys a satellite on. Prefers [DiscoveredServer.machineId],
+ * a persisted per-install id that survives DHCP address changes, and falls back to
+ * ip:udpPort for older satellites that don't advertise one. Both discovery paths and
+ * the remembered-satellite store key on this, so the same physical receiver collapses
+ * to a single entry instead of one row per IP.
  */
 val DiscoveredServer.stableKey: String
     get() = if (machineId.isNotBlank()) "mid:$machineId" else "$ip:$udpPort"

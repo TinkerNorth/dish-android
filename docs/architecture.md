@@ -160,7 +160,7 @@ reactivity into the repository itself.
 own id (`keyOf(value: V): K`) — most real repos in this codebase
 look like this. The satellite id is `satellite:mid:<machineId>` when the
 receiver advertises a stable per-install id, else `satellite:<ip>:<udpPort>`
-for older satellites (see `DiscoveredServer.stableKey`) — keying on the stable
+for older satellites (see `DiscoveredServer.stableKey`). Keying on the stable
 id is what stops a receiver's DHCP address change spawning a duplicate row. The
 Bluetooth id is `bt:<MAC>`. The distinct `removeValue` name is
 deliberate: it avoids a JVM-erasure clash with `remove(K)`.

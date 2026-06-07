@@ -19,8 +19,8 @@ import com.tinkernorth.dish.ui.common.setLoading
 class PairPinDialog(
     context: Context,
     // The PIN this dish shows for Path-B (operator-accepts) pairing. "" hides
-    // that whole section, leaving a plain enter-the-satellite's-PIN dialog —
-    // which is why it and onRequestApproval default, keeping onSubmit the
+    // that whole section, leaving a plain enter-the-satellite's-PIN dialog.
+    // That's why it and onRequestApproval default, keeping onSubmit the
     // trailing lambda for existing call sites.
     private val clientPin: String = "",
     private val onRequestApproval: () -> Unit = {},
@@ -77,7 +77,7 @@ class PairPinDialog(
             onSubmit(pin)
         }
 
-        // Path B — show this dish's PIN for the operator to accept on the
+        // Path B: show this dish's PIN for the operator to accept on the
         // satellite. Hidden entirely when no client PIN was supplied.
         binding.tvClientPin.text = clientPin
         binding.clientPinSection.visibility =

@@ -41,7 +41,7 @@ class ConnectionStore
          * bug). Collapse them into the new stable id: adopt the shared key off
          * the current-ip:port legacy entry so the user isn't forced to re-pair
          * just because the id scheme changed, then forget every machineId-less
-         * entry for the same box — the one at this exact ip:port plus any sharing
+         * entry for the same box: the one at this exact ip:port plus any sharing
          * this name (its ghosts stranded at dead IPs). Conservative by design:
          * it only ever removes legacy (machineId-blank) rows, never another
          * stably-identified satellite.

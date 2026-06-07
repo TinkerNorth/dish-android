@@ -541,7 +541,7 @@ class ConnectionsActivity : AppCompatActivity() {
     private fun showPairingDialog(server: com.tinkernorth.dish.core.model.DiscoveredServer) {
         pinDialog?.dismiss()
         pairingServer = server
-        // This dish's own PIN for the reverse direction — the operator can
+        // This dish's own PIN for the reverse direction. The operator can
         // accept it on the satellite instead of the user typing the server PIN.
         val clientPin = PairingApproval.generatePin()
         val dialog =
@@ -575,8 +575,8 @@ class ConnectionsActivity : AppCompatActivity() {
         pinDialog = dialog
         dialog.show()
         // Send the satellite request immediately so the operator is notified the
-        // moment the user taps Connect — no extra "Accept on satellite" tap. The
-        // satellite-PIN field stays available as a fallback.
+        // moment the user taps Connect, with no extra "Accept on satellite" tap.
+        // The satellite-PIN field stays available as a fallback.
         dialog.setAwaitingApproval(true)
         satellite.requestApproval(server, clientPin)
     }

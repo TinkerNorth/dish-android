@@ -25,7 +25,7 @@ internal object PairingApproval {
 
         object Pending : Status
 
-        // Denied, expired, consumed, or an unparseable reply — all mean "stop polling".
+        // Denied, expired, consumed, or an unparseable reply: all mean "stop polling".
         object Declined : Status
     }
 
