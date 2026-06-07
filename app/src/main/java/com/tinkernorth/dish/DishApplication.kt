@@ -13,6 +13,7 @@ import com.tinkernorth.dish.hotpath.input.BluetoothGamepadBridge
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.PhysicalSlotBindingObserver
 import com.tinkernorth.dish.hotpath.input.RumbleBridge
+import com.tinkernorth.dish.hotpath.input.RumbleRouter
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.sensor.PhysicalBatterySource
 import com.tinkernorth.dish.source.sensor.PhysicalMotionSource
@@ -23,6 +24,8 @@ import com.tinkernorth.dish.source.system.BluetoothBondMonitor
 import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
 import com.tinkernorth.dish.source.system.ConnectionForegroundObserver
 import com.tinkernorth.dish.source.system.NetworkStateObserver
+import com.tinkernorth.dish.source.usb.PollRateSampler
+import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import javax.inject.Inject
@@ -58,6 +61,12 @@ class DishApplication : Application() {
     @Inject lateinit var crashReportingController: CrashReportingController
 
     @Inject lateinit var themePreferenceStore: ThemePreferenceStore
+
+    @Inject lateinit var usbGamepadManager: UsbGamepadManager
+
+    @Inject lateinit var pollRateSampler: PollRateSampler
+
+    @Inject lateinit var rumbleRouter: RumbleRouter
 
     // Exposed so StreamingService (framework-owned lifecycle) can reuse the Hilt singleton scope.
     @Inject lateinit var processScope: CoroutineScope
@@ -112,6 +121,8 @@ class DishApplication : Application() {
         lifecycle.addObserver(connectionForegroundObserver)
         // Process-scoped so bindings survive the MainActivity → GamepadOverlayActivity handoff.
         physicalGamepadRegistry.install()
+        usbGamepadManager.install()
+        pollRateSampler.install()
         lifecycle.addObserver(physicalSlotBindingObserver)
         lifecycle.addObserver(physicalBatterySource)
         lifecycle.addObserver(virtualBatterySource)
@@ -123,7 +134,7 @@ class DishApplication : Application() {
         lifecycle.addObserver(bluetoothPermissionStateObserver)
         lifecycle.addObserver(networkStateObserver)
         lifecycle.addObserver(streamingServiceController)
-        RumbleBridge.install(this)
+        RumbleBridge.install(rumbleRouter)
     }
 
     companion object {

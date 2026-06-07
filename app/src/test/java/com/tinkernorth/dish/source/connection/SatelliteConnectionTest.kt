@@ -5,17 +5,20 @@ package com.tinkernorth.dish.source.connection
 import com.tinkernorth.dish.core.jni.ControllerRepository
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import io.mockk.Runs
+import io.mockk.clearAllMocks
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -34,10 +37,12 @@ class SatelliteConnectionTest {
     private lateinit var repo: ControllerRepository
     private lateinit var scope: TestScope
     private lateinit var conn: SatelliteConnection
+    private val ackPollTimeoutMs = 500L
 
     @Before
     fun setUp() {
         repo = mockk(relaxed = true)
+        every { repo.receiveAck(any()) } answers { Thread.sleep(ackPollTimeoutMs) }
         scope = TestScope(StandardTestDispatcher())
         conn =
             SatelliteConnection(
@@ -51,6 +56,8 @@ class SatelliteConnectionTest {
     @After
     fun tearDown() {
         conn.markDisconnected()
+        scope.cancel()
+        clearAllMocks()
     }
 
     @Test
@@ -659,5 +666,46 @@ class SatelliteConnectionTest {
             }
 
             race.markDisconnected()
+        }
+
+    @Test
+    fun `renameSlot re-keys a present slot to a free id, preserves its binding, and returns true`() =
+        runTest {
+            conn.attachSlot(slotId = "a", controllerType = 1)
+            assertTrue(conn.renameSlot("a", "b"))
+            assertTrue(conn.slots.value.containsKey("b"))
+            assertFalse(conn.slots.value.containsKey("a"))
+            assertEquals(1, conn.slots.value["b"]?.controllerType)
+        }
+
+    @Test
+    fun `renameSlot onto itself returns whether that slot currently exists`() =
+        runTest {
+            conn.attachSlot(slotId = "a", controllerType = 0)
+            assertTrue(conn.renameSlot("a", "a"))
+            assertFalse(conn.renameSlot("x", "x"))
+        }
+
+    @Test
+    fun `renameSlot onto an already-present target does not merge and reports the target exists`() =
+        runTest {
+            conn.attachSlot(slotId = "a", controllerType = 0)
+            conn.attachSlot(slotId = "b", controllerType = 0)
+            assertTrue(conn.renameSlot("a", "b"))
+            assertTrue(conn.slots.value.containsKey("a"))
+            assertTrue(conn.slots.value.containsKey("b"))
+        }
+
+    @Test
+    fun `renameSlot of an absent source to an absent target returns false`() {
+        assertFalse(conn.renameSlot("ghost", "new"))
+        assertFalse(conn.slots.value.containsKey("new"))
+    }
+
+    @Test
+    fun `renameSlot of an absent source to a present target returns true`() =
+        runTest {
+            conn.attachSlot(slotId = "b", controllerType = 0)
+            assertTrue(conn.renameSlot("ghost", "b"))
         }
 }

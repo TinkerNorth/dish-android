@@ -42,6 +42,8 @@ interface SlotActionListener {
 
     fun onUnbind(slotId: String)
 
+    fun onTryDirectMode(slotId: String)
+
     fun onOpenGamepad()
 
     fun onChangeDeviceType(
@@ -65,11 +67,11 @@ interface SlotActionListener {
 
 internal fun LinkState.isAvailableForPicker(): Boolean =
     when (this) {
-        LinkState.Connected, LinkState.Unstable,
+        LinkState.Connected, LinkState.Unstable -> true
         LinkState.Connecting,
         LinkState.Ready, LinkState.Found,
-        -> true
-        LinkState.Saved, LinkState.Stale -> false
+        LinkState.Saved, LinkState.Stale,
+        -> false
     }
 
 internal fun connectionsVisibleInPicker(
@@ -86,6 +88,7 @@ class ControllerAdapter(
         val expanded: Boolean,
         val motionCap: MotionCapability = MotionCapability.Off,
         val touchpadModes: Map<String, String> = emptyMap(),
+        val pathBadge: PathBadge? = null,
     )
 
     private val expandedIds = mutableSetOf(VIRTUAL_SLOT_ID)
@@ -95,6 +98,7 @@ class ControllerAdapter(
         connections: List<ConnectionSummary>,
         motionCapabilities: Map<String, MotionCapability> = emptyMap(),
         touchpadModes: Map<String, String> = emptyMap(),
+        pathBadges: Map<String, PathBadge> = emptyMap(),
     ) {
         submitList(
             slots.map { slot ->
@@ -104,6 +108,7 @@ class ControllerAdapter(
                     expanded = expandedIds.contains(slot.id),
                     motionCap = motionCapabilities[slot.id] ?: MotionCapability.Off,
                     touchpadModes = touchpadModes,
+                    pathBadge = pathBadges[slot.id],
                 )
             },
         )
@@ -129,6 +134,7 @@ class ControllerAdapter(
             b.tvControllerName.text = slot.name
             b.tvSlotStatus.text = slotStatusText(slot)
             bindBattery(slot.battery)
+            bindPathBadge(row.pathBadge, slot.id)
 
             setDot(
                 b.dotStatus,
@@ -484,6 +490,46 @@ class ControllerAdapter(
                     else -> R.string.battery_state_discharging
                 }
             return ctx.getString(R.string.battery_desc, levelText, ctx.getString(stateRes))
+        }
+
+        private fun bindPathBadge(
+            badge: PathBadge?,
+            slotId: String,
+        ) {
+            if (badge == null) {
+                b.tvPathBadge.visibility = View.GONE
+                b.tvPathReason.visibility = View.GONE
+                b.tvPathReason.setOnClickListener(null)
+                return
+            }
+            val ctx = b.root.context
+            b.tvPathBadge.visibility = View.VISIBLE
+            b.tvPathBadge.text = badge.label
+            val colorRes = if (badge.isDirect) R.color.colorSuccess else R.color.colorMuted
+            b.tvPathBadge.setTextColor(ctx.getColor(colorRes))
+            val subtitle = badge.subtitle
+            if (subtitle.isNullOrBlank()) {
+                b.tvPathReason.visibility = View.GONE
+                b.tvPathReason.setOnClickListener(null)
+                return
+            }
+            b.tvPathReason.visibility = View.VISIBLE
+            b.tvPathReason.text = subtitle
+            if (badge.actionable) {
+                val attr = android.util.TypedValue()
+                ctx.theme.resolveAttribute(android.R.attr.selectableItemBackground, attr, true)
+                b.tvPathReason.setBackgroundResource(attr.resourceId)
+                b.tvPathReason.setTextColor(ctx.getColor(R.color.colorPrimary))
+                b.tvPathReason.isClickable = true
+                b.tvPathReason.isFocusable = true
+                b.tvPathReason.setOnClickListener { listener.onTryDirectMode(slotId) }
+            } else {
+                b.tvPathReason.setTextColor(ctx.getColor(R.color.colorMuted))
+                b.tvPathReason.setOnClickListener(null)
+                b.tvPathReason.isClickable = false
+                b.tvPathReason.isFocusable = false
+                b.tvPathReason.background = null
+            }
         }
 
         private fun slotStatusText(s: ControllerSlot): String {

@@ -113,6 +113,14 @@
                                 android:layout_weight="1"
                                 android:layout_marginStart="@dimen/spacing_2xl"
                                 android:text="@string/dashboard_connections_empty" />
+
+                            <ImageView
+                                android:id="@+id/ivConnectionsLoading"
+                                android:layout_width="@dimen/icon_battery"
+                                android:layout_height="@dimen/icon_battery"
+                                android:layout_marginStart="@dimen/spacing_md"
+                                android:importantForAccessibility="no"
+                                android:visibility="gone" />
                         </LinearLayout>
 
                         <com.google.android.material.button.MaterialButton

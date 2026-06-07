@@ -234,7 +234,7 @@ satellite                                  dish-android
   ├─ MSG_RUMBLE (encrypted UDP) ────────────────►├─ receiveAck (Dispatchers.IO)
                                                  │   ├─ decrypt + parse
                                                  │   └─ JNI → RumbleBridge.dispatchRumble
-                                                 │         └─ VibratorManager / Vibrator
+                                                 │         └─ RumbleRouter → actuator
 ```
 
 `receiveAck` runs on `Dispatchers.IO`, which is JVM-attached, so the
@@ -242,15 +242,21 @@ JNI side calls into Java directly with no `AttachCurrentThread`
 ceremony and no dispatcher thread. The dispatch is synchronous on
 the JNI caller.
 
-All actuation is routed to the phone's vibrators — there is no
-fallback path that drives a connected physical pad's actuators.
-Letting the phone body handle every rumble keeps actuation
-single-rooted and avoids a "which device should buzz?" decision
-when a player is paired with a physical pad. This is intentional,
-not a missing case.
+`RumbleRouter` routes each `MSG_RUMBLE` to the device that owns the
+targeted slot (reverse-resolved from the session `handle` + `ctrlIdx`
+through `SatelliteConnection.slots`) instead of always buzzing the
+phone: the on-screen pad drives the phone vibrator, a framework gamepad
+drives its own `InputDevice` vibrator, and a claimed USB-direct pad
+gets a device-specific report written to its USB OUT endpoint
+(`SatelliteNative.sendUsbRumble` to `usbhost::sendRumble` to
+`usbparsers::runRumble`). Routing is strict: a pad with no usable
+actuator stays silent rather than buzzing the phone. Slot-kind routing,
+magnitude/duration mapping, the USB report layouts, and the satellite
+feature requests are in [`rumble.md`](rumble.md).
 
-Pure rumble helpers (`rumbleMagnitudeTo255`, `rumbleSafeDurationMs`)
-are covered by `RumbleBridgeHelpersTest.kt`.
+Pure rumble helpers (`rumbleMagnitudeTo255`, `rumbleSafeDurationMs`,
+`resolveSlotId`, `classifyTarget`) are covered by
+`RumbleBridgeHelpersTest.kt` and `RumbleRouterTest.kt`.
 
 ## Host-testable C++ split
 

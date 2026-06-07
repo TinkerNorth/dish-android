@@ -46,6 +46,24 @@
                     style="@style/TextAppearance.Dish.BodySmall"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content" />
+
+                <TextView
+                    android:id="@+id/tvPathBadge"
+                    style="@style/TextAppearance.Dish.BodySmall"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_xs"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/tvPathReason"
+                    style="@style/TextAppearance.Dish.BodySmall"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingVertical="@dimen/spacing_xs"
+                    android:textColor="@color/colorMuted"
+                    android:visibility="gone" />
             </LinearLayout>
 
             <ImageView

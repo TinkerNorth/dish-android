@@ -13,6 +13,7 @@ import com.tinkernorth.dish.source.connection.ConnectIntent
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -643,6 +644,66 @@ class ConnectionHubTest {
     }
 
     @Test
+    fun `migrateSlotBinding carries binding and type to the new slot id and re-keys the satellite slot`() {
+        val satConn = mockk<SatelliteConnection>(relaxed = true)
+        every { satellite.get("s:1") } returns satConn
+        every { satConn.renameSlot("slot-fw", "slot-usb") } returns true
+        every { store.remembered() } returns
+            listOf(
+                RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
+            )
+        val hub = buildHub()
+
+        hub.bind("slot-fw", "s:1")
+        hub.setSatelliteControllerType("s:1", "slot-fw", CONTROLLER_TYPE_PLAYSTATION)
+        scope.testScheduler.runCurrent()
+
+        hub.migrateSlotBinding("slot-fw", "slot-usb")
+        scope.testScheduler.runCurrent()
+
+        assertEquals(mapOf("slot-usb" to "s:1"), hub.bindings.value)
+        val summary = hub.connections.value.first { it.id == "s:1" }
+        assertEquals(CONTROLLER_TYPE_PLAYSTATION, summary.satelliteControllerTypes["slot-usb"])
+        assertNull(summary.satelliteControllerTypes["slot-fw"])
+        verify { satConn.renameSlot("slot-fw", "slot-usb") }
+        verify(exactly = 0) { satConn.detachSlot(any()) }
+    }
+
+    @Test
+    fun `migrateSlotBinding does nothing when the source slot is unbound`() {
+        val satConn = mockk<SatelliteConnection>(relaxed = true)
+        every { satellite.get(any()) } returns satConn
+        val hub = buildHub()
+
+        hub.migrateSlotBinding("ghost", "slot-usb")
+        scope.testScheduler.runCurrent()
+
+        assertEquals(emptyMap<String, String>(), hub.bindings.value)
+        verify(exactly = 0) { satConn.renameSlot(any(), any()) }
+    }
+
+    @Test
+    fun `migrateSlotBinding attaches the new slot when the source slot was never registered`() {
+        val satConn = mockk<SatelliteConnection>(relaxed = true)
+        every { satellite.get("s:1") } returns satConn
+        every { satConn.renameSlot("slot-fw", "slot-usb") } returns false
+        every { store.remembered() } returns
+            listOf(
+                RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
+            )
+        val hub = buildHub()
+
+        hub.bind("slot-fw", "s:1")
+        scope.testScheduler.runCurrent()
+
+        hub.migrateSlotBinding("slot-fw", "slot-usb")
+        scope.testScheduler.runCurrent()
+
+        assertEquals(mapOf("slot-usb" to "s:1"), hub.bindings.value)
+        coVerify { satConn.attachSlot("slot-usb", any()) }
+    }
+
+    @Test
     fun `stale bt marker does not override a connected bt host`() {
         every { store.rememberedBt() } returns
             listOf(RememberedBt(id = "bt:AA", name = "Xbox", mac = "AA", profileName = "Xbox"))
@@ -670,5 +731,93 @@ class ConnectionHubTest {
                 .first { it.id == "bt:AA" }
                 .live,
         )
+    }
+
+    private fun liveConn(
+        id: String,
+        ip: String,
+    ): SatelliteConnection =
+        mockk(relaxed = true) {
+            every { this@mockk.id } returns id
+            every { state } returns MutableStateFlow(SatelliteSessionState.Live)
+            every { server } returns
+                MutableStateFlow(DiscoveredServer(name = id, ip = ip, udpPort = 1, pairPort = 2, httpPort = 3))
+            every { slots } returns MutableStateFlow(emptyMap())
+        }
+
+    @Test
+    fun `bindClaimedSynthetic carries a bound twin's binding to the synthetic slot`() {
+        val satConn = mockk<SatelliteConnection>(relaxed = true)
+        every { satellite.get("s:1") } returns satConn
+        every { satConn.renameSlot("slot-fw", "-1000") } returns true
+        every { store.remembered() } returns
+            listOf(
+                RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
+            )
+        val hub = buildHub()
+
+        hub.bind("slot-fw", "s:1")
+        scope.testScheduler.runCurrent()
+
+        hub.bindClaimedSynthetic(twinSlotId = "slot-fw", syntheticSlotId = "-1000")
+        scope.testScheduler.runCurrent()
+
+        assertEquals(mapOf("-1000" to "s:1"), hub.bindings.value)
+        verify { satConn.renameSlot("slot-fw", "-1000") }
+    }
+
+    @Test
+    fun `bindClaimedSynthetic auto-binds to the sole live satellite when the twin was unbound`() {
+        val conn = liveConn("s:1", "1.1.1.1")
+        every { satellite.get("s:1") } returns conn
+        satConnsFlow.value = mapOf("s:1" to conn)
+        val hub = buildHub()
+
+        hub.bindClaimedSynthetic(twinSlotId = null, syntheticSlotId = "-1000")
+        scope.testScheduler.runCurrent()
+
+        assertEquals(mapOf("-1000" to "s:1"), hub.bindings.value)
+    }
+
+    @Test
+    fun `bindClaimedSynthetic with a never-bound twin still falls back to the sole live satellite`() {
+        val conn = liveConn("s:1", "1.1.1.1")
+        every { satellite.get("s:1") } returns conn
+        satConnsFlow.value = mapOf("s:1" to conn)
+        val hub = buildHub()
+
+        hub.bindClaimedSynthetic(twinSlotId = "ghost-twin", syntheticSlotId = "-1000")
+        scope.testScheduler.runCurrent()
+
+        assertEquals(mapOf("-1000" to "s:1"), hub.bindings.value)
+    }
+
+    @Test
+    fun `bindClaimedSynthetic leaves the device unbound when no satellite is live`() {
+        every { store.remembered() } returns
+            listOf(
+                RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
+            )
+        val hub = buildHub()
+
+        hub.bindClaimedSynthetic(twinSlotId = null, syntheticSlotId = "-1000")
+        scope.testScheduler.runCurrent()
+
+        assertEquals(emptyMap<String, String>(), hub.bindings.value)
+    }
+
+    @Test
+    fun `bindClaimedSynthetic leaves the device unbound when more than one satellite is live`() {
+        val a = liveConn("s:1", "1.1.1.1")
+        val b = liveConn("s:2", "2.2.2.2")
+        every { satellite.get("s:1") } returns a
+        every { satellite.get("s:2") } returns b
+        satConnsFlow.value = mapOf("s:1" to a, "s:2" to b)
+        val hub = buildHub()
+
+        hub.bindClaimedSynthetic(twinSlotId = null, syntheticSlotId = "-1000")
+        scope.testScheduler.runCurrent()
+
+        assertEquals(emptyMap<String, String>(), hub.bindings.value)
     }
 }

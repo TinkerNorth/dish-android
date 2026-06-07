@@ -25,7 +25,9 @@ import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.source.store.OnboardingState
+import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.ui.common.DishSpinnerDrawable
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachGamepadHost
@@ -49,6 +51,8 @@ class MainActivity :
 
     @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
 
+    @Inject lateinit var usbGamepadManager: UsbGamepadManager
+
     @Inject lateinit var notifications: DishNotifications
 
     @Inject lateinit var onboarding: OnboardingPreferenceStore
@@ -56,6 +60,10 @@ class MainActivity :
     private lateinit var gamepadHost: GamepadActivityHost
 
     private val nav by lazy { DishNavigator(this) }
+
+    private val connectionsSpinner by lazy {
+        DishSpinnerDrawable(this, resources.getDimensionPixelSize(R.dimen.icon_battery))
+    }
 
     // Held by installSplashScreen()'s keep-on-screen gate; cleared either by the first
     // MainUiState render or the SPLASH_HOLD_MAX_MS fallback so a stalled ViewModel can't pin
@@ -105,10 +113,20 @@ class MainActivity :
         gamepadHost.cancelDimOnStop()
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (!com.tinkernorth.dish.DishApplication.nativeLoadFailed) {
+            usbGamepadManager.reconcileForeground()
+        }
+    }
+
     private fun setupUI() {
         binding.sectionConnections.labelSection.setText(R.string.section_connections)
         binding.sectionControllers.labelSection.setText(R.string.section_controllers)
+        binding.ivConnectionsLoading.setImageDrawable(connectionsSpinner)
         binding.rvControllers.adapter = controllerAdapter
+        (binding.rvControllers.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
+            ?.supportsChangeAnimations = false
         binding.btnManageConnections.setOnClickListener { nav.toConnections() }
         binding.btnSettings.setOnClickListener { nav.toSettings() }
         binding.cardDashboardHintInclude.btnDashboardHintOpen.setOnClickListener {
@@ -121,7 +139,9 @@ class MainActivity :
 
     private fun observeViewModel() {
         lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) { viewModel.uiState.collect { updateUI(it) } }
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.uiState.collect { updateUI(it) }
+            }
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) { viewModel.events.collect { handleEvent(it) } }
@@ -152,6 +172,9 @@ class MainActivity :
         splashHoldUntilFirstRender = false
         val liveCount = s.connections.count { it.live == LinkState.Connected }
         val totalCount = s.connections.size
+        val checking = s.anyConnecting
+        binding.ivConnectionsLoading.isVisible = checking
+        if (checking) connectionsSpinner.start() else connectionsSpinner.stop()
         binding.tvConnectionsSummary.text =
             when {
                 liveCount == 0 && totalCount == 0 -> getString(R.string.status_tap_manage)
@@ -164,6 +187,7 @@ class MainActivity :
             s.connections,
             s.motionCapabilities,
             s.touchpadModesBySatellite,
+            s.pathBadges,
         )
         refreshDashboardHint(onboarding.state.value, s)
     }
@@ -195,6 +219,14 @@ class MainActivity :
     }
 
     override fun onSlotTapped(slotId: String) = controllerAdapter.toggleExpanded(slotId)
+
+    override fun onTryDirectMode(slotId: String) {
+        val device =
+            viewModel.uiState.value.slots
+                .firstOrNull { it.id == slotId }
+                ?.let { gamepadRegistry.devices.value[it.physicalDeviceId] } ?: return
+        usbGamepadManager.tryDirectMode(device.vendorId, device.productId)
+    }
 
     override fun onBind(
         slotId: String,

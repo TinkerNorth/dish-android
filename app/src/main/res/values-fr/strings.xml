@@ -271,4 +271,21 @@
     <string name="settings_open_source_licenses_body">Mentions pour les bibliothèques sur lesquelles Dish s\'appuie.</string>
     <string name="licenses_open_external">Ouvrir la licence de %1$s</string>
     <string name="settings_version_label">VERSION</string>
+
+    <string name="path_label_direct">Mode direct</string>
+    <string name="path_label_direct_with_rate">Mode direct · %1$d Hz</string>
+    <string name="path_label_standard">Mode standard</string>
+    <string name="path_direct_explainer">Latence minimale. Communication directe avec la manette.</string>
+    <string name="path_reason_default">Compatible avec toute manette reconnue par Android.</string>
+    <string name="path_reason_bluetooth">Les manettes Bluetooth utilisent toujours le Mode standard.</string>
+    <string name="path_reason_onscreen">Les manettes à l\'écran utilisent le Mode standard.</string>    <string name="path_reason_unknown_model">Cette manette n\'est pas encore sur la liste rapide.</string>
+    <string name="path_reason_busy">Une autre app utilise cette manette.</string>
+    <string name="path_reason_init_failed">Impossible d\'activer le Mode direct. Mode standard utilisé.</string>
+    <string name="path_reason_detached">La manette a été déconnectée.</string>
+    <string name="path_reason_not_yet">Le Mode direct pour cette manette arrive bientôt.</string>
+    <string name="path_action_try_direct">Essayer le Mode direct</string>
+    <string name="direct_prompt_title">Essayer le Mode direct pour %1$s ?</string>
+    <string name="direct_prompt_action">Essayer</string>
+    <string name="direct_enabled">%1$s est en Mode direct.</string>
+    <string name="direct_failed">Impossible de passer %1$s en Mode direct.</string>
 </resources>

@@ -47,6 +47,17 @@ target_include_directories(wire_encoders_test PRIVATE "${SATELLITE_CPP}")
 target_compile_options(wire_encoders_test PRIVATE -Wall -Wextra -Wpedantic)
 target_link_libraries(wire_encoders_test PRIVATE GTest::gtest_main)
 
+# usb_parsers.cpp fences its USB I/O behind __ANDROID__, so the decoders and rumble
+# builders build and test host-side.
+add_executable(usb_parsers_test
+    usb_parsers_test.cpp
+    "${SATELLITE_CPP}/usb_parsers.cpp"
+)
+target_include_directories(usb_parsers_test PRIVATE "${SATELLITE_CPP}")
+target_compile_options(usb_parsers_test PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(usb_parsers_test PRIVATE GTest::gtest_main)
+
 include(GoogleTest)
 gtest_discover_tests(gamepad_input_test)
 gtest_discover_tests(wire_encoders_test)
+gtest_discover_tests(usb_parsers_test)

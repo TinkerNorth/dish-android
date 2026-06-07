@@ -255,16 +255,17 @@ weak           u16 BE
 durationMs     u16 BE
 ```
 
-Magnitudes are wire-format 0..65535. On Android they map to
-`VibrationEffect` amplitude 1..255 with rounding-up: any non-zero
+Magnitudes are wire-format 0..65535. On the target actuator they map
+to `VibrationEffect` amplitude 1..255 with rounding-up: any non-zero
 request produces a perceptible buzz. `durationMs` is clamped to
 `[1, 1500]` to bound the worst-case stranded buzz from a hung
 satellite.
 
-Rumble drives the **phone's** vibrator (`VibratorManager` on API 31+,
-`Vibrator` on older). Strong → vibrator id 0, weak → vibrator id 1
-if the device exposes two. There is no fallback to a connected
-physical pad — the actuator stays single-rooted.
+`ctrlIdx` selects which controller buzzes; the client reverse-maps it
+(via the session handle and `SatelliteConnection.slots`) to the bound
+slot and actuates that device. Per-slot-kind routing (phone vibrator,
+framework `InputDevice` vibrator, or a USB-direct OUT-endpoint report)
+and the strong/weak mapping are in [`rumble.md`](rumble.md).
 
 ### `MSG_LIGHTBAR` (0x000D) — 4 B payload
 

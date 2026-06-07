@@ -272,4 +272,21 @@
     <string name="settings_open_source_licenses_body">Avisos de las bibliotecas sobre las que se construye Dish.</string>
     <string name="licenses_open_external">Abrir licencia de %1$s</string>
     <string name="settings_version_label">VERSIÓN</string>
+
+    <string name="path_label_direct">Modo directo</string>
+    <string name="path_label_direct_with_rate">Modo directo · %1$d Hz</string>
+    <string name="path_label_standard">Modo estándar</string>
+    <string name="path_direct_explainer">Menor retraso. Comunicación directa con el mando.</string>
+    <string name="path_reason_default">Funciona con cualquier mando que Android reconozca.</string>
+    <string name="path_reason_bluetooth">Los mandos Bluetooth siempre usan Modo estándar.</string>
+    <string name="path_reason_onscreen">Los mandos en pantalla usan Modo estándar.</string>    <string name="path_reason_unknown_model">Este mando aún no está en la lista rápida.</string>
+    <string name="path_reason_busy">Otra app está usando este mando.</string>
+    <string name="path_reason_init_failed">No se pudo activar el Modo directo. Se usa Modo estándar.</string>
+    <string name="path_reason_detached">El mando se desconectó.</string>
+    <string name="path_reason_not_yet">El Modo directo para este mando llegará pronto.</string>
+    <string name="path_action_try_direct">Probar Modo directo</string>
+    <string name="direct_prompt_title">¿Probar Modo directo para %1$s?</string>
+    <string name="direct_prompt_action">Probar</string>
+    <string name="direct_enabled">%1$s está en Modo directo.</string>
+    <string name="direct_failed">No se pudo cambiar %1$s a Modo directo.</string>
 </resources>

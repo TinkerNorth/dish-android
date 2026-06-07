@@ -271,4 +271,21 @@
     <string name="settings_open_source_licenses_body">Napomene za biblioteke na kojima je Dish izgrađen.</string>
     <string name="licenses_open_external">Otvori licencu za %1$s</string>
     <string name="settings_version_label">VERZIJA</string>
+
+    <string name="path_label_direct">Brzi način</string>
+    <string name="path_label_direct_with_rate">Brzi način · %1$d Hz</string>
+    <string name="path_label_standard">Standardni način</string>
+    <string name="path_direct_explainer">Najmanje kašnjenje. Direktno do kontrolera.</string>
+    <string name="path_reason_default">Radi sa svakim kontrolerom koji Android prepoznaje.</string>
+    <string name="path_reason_bluetooth">Bluetooth kontroleri uvijek koriste Standardni način.</string>
+    <string name="path_reason_onscreen">Kontroleri na ekranu koriste Standardni način.</string>    <string name="path_reason_unknown_model">Ovaj kontroler još nije na brzoj listi.</string>
+    <string name="path_reason_busy">Druga aplikacija koristi ovaj kontroler.</string>
+    <string name="path_reason_init_failed">Nije moguće postaviti Brzi način. Koristi se Standardni način.</string>
+    <string name="path_reason_detached">Kontroler je isključen.</string>
+    <string name="path_reason_not_yet">Brzi način za ovaj kontroler dolazi uskoro.</string>
+    <string name="path_action_try_direct">Pokušaj Brzi način</string>
+    <string name="direct_prompt_title">Pokušati Brzi način za %1$s?</string>
+    <string name="direct_prompt_action">Pokušaj</string>
+    <string name="direct_enabled">%1$s sada koristi Brzi način.</string>
+    <string name="direct_failed">Nije moguće prebaciti %1$s na Brzi način.</string>
 </resources>
