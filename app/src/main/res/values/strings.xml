@@ -384,4 +384,60 @@
     <string name="path_restore_stuck">Standard mode isn\'t responding. Switch to Direct, or unplug and replug.</string>
     <string name="path_needs_replug">Disconnected. Unplug and replug to use this controller.</string>
 
+    <!-- Tri-zone controller card + Configure-bindings activity. -->
+    <string name="tz_label_connection">Connection</string>
+    <string name="tz_label_destination">Destination</string>
+    <string name="tz_label_emulate">Emulate as</string>
+    <string name="tz_label_functions">Functions</string>
+    <string name="tz_label_input">Input</string>
+    <string name="tz_label_binding">Binding</string>
+
+    <string name="tz_link_usb">USB</string>
+    <string name="tz_link_bluetooth">Bluetooth</string>
+    <string name="tz_link_onscreen">On-screen</string>
+    <string name="tz_mode_direct">Direct</string>
+    <string name="tz_mode_standard">Standard</string>
+
+    <string name="tz_func_rumble">Rumble</string>
+    <string name="tz_func_motion">Motion</string>
+    <string name="tz_func_touchpad">Touchpad</string>
+    <string name="tz_func_mouse">Mouse</string>
+    <string name="tz_func_gyro">Gyro</string>
+    <string name="tz_state_on">On</string>
+    <string name="tz_state_off">Off</string>
+    <string name="tz_func_value">%1$s · %2$s</string>
+
+    <string name="tz_card_not_bound">Not bound</string>
+    <string name="tz_card_no_functions">None</string>
+
+    <string name="tz_action_configure">Configure bindings</string>
+    <string name="tz_action_find_hosts">Find hosts</string>
+
+    <string name="tz_activity_title">Configure bindings</string>
+    <string name="tz_activity_title_bind">Bind controller</string>
+    <string name="tz_activity_apply">Apply</string>
+    <string name="tz_activity_bind">Bind</string>
+
+    <string name="tz_dest_carries">Carries</string>
+    <string name="tz_dest_no_channel">No channel</string>
+    <string name="tz_dest_host">Host</string>
+    <string name="tz_dest_bt_note">Phone pairs as a Bluetooth gamepad. Gyro, touchpad and mouse need a Satellite host.</string>
+    <string name="tz_host_hint_satellite">Satellite</string>
+    <string name="tz_host_hint_bt">BT</string>
+
+    <string name="tz_manage_destinations">Manage destinations</string>
+    <string name="tz_no_hosts_title">No hosts found</string>
+    <string name="tz_no_hosts_body">Scan your network for a Satellite host, or pair one over Bluetooth. Once a host appears, come back to bind %1$s.</string>
+
+    <string name="tz_apply_title">Applying binding…</string>
+    <string name="tz_apply_subtitle">Sending each setting to the host.</string>
+    <string name="tz_apply_success_title">Binding applied</string>
+    <string name="tz_apply_success_detail">%1$s is live on %2$s.</string>
+    <string name="tz_apply_error_title">Some settings didn\'t apply</string>
+    <string name="tz_apply_action_view">Done</string>
+    <string name="tz_apply_action_retry">Retry</string>
+    <string name="tz_host_fallback">the host</string>
+
+    <string name="tz_desc_back">Back</string>
+
 </resources>

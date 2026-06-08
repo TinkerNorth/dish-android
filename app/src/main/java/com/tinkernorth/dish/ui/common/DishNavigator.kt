@@ -34,6 +34,13 @@ class DishNavigator(
         controller.navigate(R.id.settingsActivity)
     }
 
+    fun toConfigureBindings(slotId: String) {
+        controller.navigate(
+            R.id.configureBindingsActivity,
+            Bundle().apply { putString("extra_slot_id", slotId) },
+        )
+    }
+
     fun toWelcome() {
         controller.navigate(R.id.welcomeActivity)
     }
