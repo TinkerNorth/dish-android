@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:id="@+id/ivInputIcon"
+            android:layout_width="@dimen/config_section_icon_size"
+            android:layout_height="@dimen/config_section_icon_size"
+            android:layout_marginEnd="@dimen/config_section_icon_gap"
+            android:importantForAccessibility="no"
+            app:tint="@color/colorMuted" />
+
+        <TextView
+            style="@style/TextAppearance.Dish.Label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/binding_label_input"
+            android:textAllCaps="true" />
+
+        <TextView
+            android:id="@+id/tvInputName"
+            style="@style/TextAppearance.Dish.Body.Mono"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/config_section_header_gap"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                style="@style/Widget.Dish.MicroLabel"
+                android:layout_width="@dimen/binding_label_column_width"
+                android:text="@string/binding_label_connection" />
+
+            <LinearLayout
+                style="@style/Widget.Dish.Pill"
+                android:background="@drawable/bg_binding_pill_fact">
+
+                <ImageView
+                    android:id="@+id/ivConnIcon"
+                    style="@style/Widget.Dish.Pill.Icon"
+                    app:tint="@color/colorOnSurface" />
+
+                <TextView
+                    android:id="@+id/tvConnText"
+                    style="@style/Widget.Dish.Pill.Text"
+                    android:textColor="@color/colorOnSurface" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1" />
+
+            <LinearLayout
+                android:id="@+id/directToggle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/ivDirectBolt"
+                    style="@style/Widget.Dish.Pill.Icon"
+                    android:src="@drawable/ic_bolt" />
+
+                <TextView
+                    android:id="@+id/tvDirectLabel"
+                    style="@style/TextAppearance.Dish.BodySmall"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/binding_mode_direct" />
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/swDirect"
+                    style="@style/Widget.Dish.Switch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/config_switch_gap" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/guessedCallout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_lg"
+            android:background="@drawable/bg_binding_callout"
+            android:orientation="horizontal"
+            android:padding="@dimen/config_callout_padding"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="@dimen/config_callout_icon_size"
+                android:layout_height="@dimen/config_callout_icon_size"
+                android:layout_marginTop="@dimen/border_thin"
+                android:layout_marginEnd="@dimen/config_callout_icon_gap"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_warning"
+                app:tint="@color/colorOnTertiaryContainer" />
+
+            <TextView
+                style="@style/TextAppearance.Dish.BodySmall"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/path_risk_guessed"
+                android:textColor="@color/colorOnTertiaryContainer" />
+        </LinearLayout>
+
+        <View
+            style="@style/Widget.Dish.Divider"
+            android:layout_marginTop="@dimen/config_row_gap"
+            android:layout_marginBottom="@dimen/config_row_gap" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                style="@style/Widget.Dish.MicroLabel"
+                android:layout_width="@dimen/binding_label_column_width"
+                android:text="@string/binding_label_functions" />
+
+            <LinearLayout
+                android:id="@+id/functionsContainer"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:divider="@drawable/binding_pill_gap"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:showDividers="middle" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

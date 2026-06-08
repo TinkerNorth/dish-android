@@ -47,6 +47,8 @@ sealed interface UsbEvent {
 
     object PermissionGranted : UsbEvent
 
+    object PermissionDenied : UsbEvent
+
     data class Choose(
         val choice: PathChoice,
         val userInitiated: Boolean,
@@ -83,8 +85,6 @@ sealed interface UsbEffect {
     object Release : UsbEffect
 
     object RequestPermission : UsbEffect
-
-    object PromptTryDirect : UsbEffect
 
     // Bind the carried connection to a device id (framework or synthetic).
     data class BindFramework(
@@ -189,6 +189,19 @@ private fun reduceRouted(
             val granted = c.copy(hasPermission = true)
             if (granted.desired == PathChoice.Direct) startClaim(granted) else stay(granted)
         }
+        is UsbEvent.PermissionDenied ->
+            if (c.desired == PathChoice.Direct) {
+                Reduction(
+                    c.copy(desired = PathChoice.Standard, failure = DirectClaimFailure.PermissionDenied),
+                    buildList {
+                        add(UsbEffect.SetPref(PathChoice.Standard))
+                        add(UsbEffect.MarkFailure(DirectClaimFailure.PermissionDenied))
+                        if (c.userInitiated) add(UsbEffect.Notify(UsbNotice.SwitchToDirectFailed))
+                    },
+                )
+            } else {
+                stay(c)
+            }
         is UsbEvent.Choose ->
             when (event.choice) {
                 PathChoice.Standard -> stay(c.copy(desired = PathChoice.Standard))
@@ -197,7 +210,7 @@ private fun reduceRouted(
                     when {
                         wanting.hasPermission -> startClaim(wanting)
                         event.userInitiated -> Reduction(wanting, listOf(UsbEffect.RequestPermission))
-                        else -> Reduction(wanting, listOf(UsbEffect.PromptTryDirect))
+                        else -> stay(wanting)
                     }
                 }
             }

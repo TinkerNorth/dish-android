@@ -1,80 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Rebuilt in the v6 deep-space cyan idiom: floating bg_pill banner for the
-     pre-dim countdown + a HUD-style dim overlay with letter-spaced monospace
-     labels sandwiching the clock and a faint "TAP TO WAKE" affordance.
-     View IDs and root types are preserved so LowPowerManager.Views still binds.
--->
-<merge xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto">
+<!-- Full-screen dim overlay for low-power mode (screen dimmed via window
+     brightness; this scrim + HUD float over everything and consume the
+     wake-tap). The streaming hint / pre-dim countdown chip lives in
+     overlay_low_power_chip, docked in each screen's content column so it
+     pushes content up instead of floating over it.
+     View IDs preserved so LowPowerManager.Views still binds. -->
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <LinearLayout
-        android:id="@+id/llStreamingHint"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="@dimen/spacing_6xl"
-        android:background="@drawable/bg_pill"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingHorizontal="@dimen/spacing_5xl"
-        android:paddingVertical="@dimen/spacing_lg"
-        android:alpha="0.85"
-        android:visibility="gone">
-
-        <ImageView
-            android:layout_width="@dimen/icon_card_glyph"
-            android:layout_height="@dimen/icon_card_glyph"
-            android:src="@drawable/ic_overlay_link"
-            app:tint="@color/colorPrimary"
-            android:importantForAccessibility="no"
-            android:layout_marginEnd="@dimen/spacing_md" />
-
-        <TextView
-            style="@style/TextAppearance.Dish.Label.Accent"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/low_power_streaming_hint" />
-    </LinearLayout>
-
-    <!-- ── Countdown banner (shown ~5s before the dim kicks in) ─────────── -->
-    <LinearLayout
-        android:id="@+id/llCountdownBanner"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="@dimen/spacing_6xl"
-        android:background="@drawable/bg_pill"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingHorizontal="@dimen/spacing_5xl"
-        android:paddingVertical="@dimen/spacing_lg"
-        android:visibility="gone">
-
-        <TextView
-            style="@style/TextAppearance.Dish.Label"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/low_power_in"
-            android:layout_marginEnd="@dimen/spacing_lg" />
-
-        <TextView
-            android:id="@+id/tvCountdownSeconds"
-            style="@style/TextAppearance.Dish.Display"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="@dimen/size_24"
-            android:gravity="center"
-            android:text="@string/low_power_countdown_placeholder" />
-
-        <TextView
-            style="@style/TextAppearance.Dish.BodyLarge"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/low_power_seconds_suffix"
-            android:layout_marginStart="@dimen/size_2" />
-    </LinearLayout>
-
-    <!-- ── Full-screen dim overlay when in low-power mode ───────────────── -->
     <FrameLayout
         android:id="@+id/flLowPowerOverlay"
         android:layout_width="match_parent"
@@ -84,7 +16,6 @@
         android:focusable="true"
         android:visibility="gone">
 
-        <!-- Centered HUD stack: brand label, clock, status. -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -100,7 +31,6 @@
                 android:textStyle="bold"
                 android:letterSpacing="0.32" />
 
-            <!-- Thin cyan-tinted rule under the section label. -->
             <View
                 android:layout_width="@dimen/size_56"
                 android:layout_height="@dimen/divider_height"
@@ -115,7 +45,6 @@
                 android:layout_marginTop="@dimen/spacing_2xl"
                 android:text="@string/low_power_clock_placeholder" />
 
-            <!-- Twin to the rule above the clock; brackets the time visually. -->
             <View
                 android:layout_width="@dimen/size_56"
                 android:layout_height="@dimen/divider_height"
@@ -136,13 +65,11 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_lg"
-                android:maxWidth="280dp"
+                android:maxWidth="@dimen/low_power_dim_body_max_width"
                 android:gravity="center_horizontal"
                 android:text="@string/low_power_dim_body" />
         </LinearLayout>
 
-        <!-- Faint affordance — screen is dimmed to ~1% brightness so this
-             reads as a hint, not a CTA. -->
         <TextView
             style="@style/TextAppearance.Dish.Caption"
             android:layout_width="wrap_content"

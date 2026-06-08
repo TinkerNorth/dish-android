@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <View
+        android:layout_width="@dimen/binding_status_dot"
+        android:layout_height="@dimen/binding_status_dot"
+        android:background="@drawable/dot_circle"
+        android:backgroundTint="@color/colorWarning" />
+
+    <TextView
+        style="@style/TextAppearance.Dish.Body"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/binding_pill_gap"
+        android:text="@string/binding_card_not_bound"
+        android:textColor="@color/colorWarning" />
+</LinearLayout>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:baselineAligned="false">
+
+    <View
+        android:layout_width="@dimen/icon_dot_lg"
+        android:layout_height="@dimen/icon_dot_lg"
+        android:layout_marginTop="@dimen/spacing_sm"
+        android:layout_marginEnd="@dimen/spacing_lg"
+        android:background="@drawable/bg_pulse_dot" />
+
+    <TextView
+        android:id="@+id/donateWhyText"
+        style="@style/TextAppearance.Dish.Body"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        tools:text="Hosting. dish.tinkernorth.com, tinkernorth.com, and every signed-installer mirror." />
+</LinearLayout>

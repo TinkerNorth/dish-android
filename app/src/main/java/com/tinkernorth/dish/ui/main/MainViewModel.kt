@@ -172,6 +172,10 @@ class MainViewModel
             hub.unbind(slotId)
         }
 
+        fun reconnectHosts() {
+            hub.autoReconnectAll()
+        }
+
         // No-op for Bluetooth — BT type fixed by remembered host's HID profile.
         fun setSatelliteControllerType(
             connectionId: String,

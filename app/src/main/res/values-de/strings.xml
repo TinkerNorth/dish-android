@@ -248,8 +248,7 @@
         <item quantity="other">Verknüpft · %1$d Controller</item>
     </plurals>
     <string name="low_power_streaming_hint">STREAMING · APP OFFEN LASSEN</string>
-    <string name="low_power_dim_body">Streaming läuft im gedimmten Modus weiter — Dish nicht schließen.</string>
-
+    <string name="low_power_dim_body">Streaming läuft im gedimmten Modus weiter. Dish nicht schließen.</string>
     <!-- Datenschutzerklärung-Link (in den Einstellungen) und gemeinsame Fehlermeldung. -->
     <string name="menu_privacy_policy">Datenschutzerklärung</string>
     <string name="error_open_url">Browser konnte nicht geöffnet werden</string>
@@ -278,10 +277,7 @@
     <string name="path_label_bluetooth">Bluetooth</string>
     <string name="path_reason_busy">Eine andere App verwendet diesen Controller.</string>
     <string name="path_reason_init_failed">Direktmodus konnte nicht eingerichtet werden. Standardmodus wird verwendet.</string>
-    <string name="path_reason_permission_denied">USB-Berechtigung verweigert. Erteile sie für den Direktmodus.</string>
-    <string name="direct_prompt_title">Direktmodus für %1$s versuchen?</string>
-    <string name="direct_prompt_action">Versuchen</string>
-    <string name="direct_failed">%1$s konnte nicht in den Direktmodus wechseln.</string>
+    <string name="path_reason_permission_denied">USB-Berechtigung verweigert. Erteile sie für den Direktmodus.</string>    <string name="direct_failed">%1$s konnte nicht in den Direktmodus wechseln.</string>
     <string name="path_input_section_label">Eingabepfad</string>
     <string name="path_choice_standard">Standard</string>
     <string name="path_choice_direct">Direkt</string>
@@ -299,4 +295,95 @@
     <string name="direct_revert_to_direct">%1$s konnte nicht auf Standard wechseln. Weiterhin im Direktmodus.</string>
     <string name="path_restore_stuck">Standardmodus reagiert nicht. Wechsle zu Direkt oder schließe den Controller neu an.</string>
     <string name="path_needs_replug">Getrennt. Trenne den Controller und schließe ihn erneut an, um ihn zu verwenden.</string>
+
+    <string name="binding_label_connection">Verbindung</string>
+    <string name="binding_label_destination">Ziel</string>
+    <string name="binding_choose_destination">Ziel auswählen</string>
+
+    <string name="binding_edge_host_lost_title">Verbindung verloren</string>
+    <string name="binding_edge_host_lost_detail">%1$s reagiert nicht mehr. Eingaben kommen nicht an. Möglicherweise im Ruhezustand oder nicht im Netzwerk.</string>
+    <string name="binding_edge_input_lost_title">Controller abgezogen</string>
+    <string name="binding_edge_input_lost_detail">Zuordnung wird gehalten, damit du erneut verbinden kannst. Wieder anschließen, um sie zu behalten.</string>
+    <string name="binding_edge_unsteady_title">Instabile Verbindung</string>
+    <string name="binding_edge_unsteady_detail">Leitet noch weiter, aber Pakete gehen verloren. Geh näher heran oder wechsle zu USB.</string>
+    <string name="binding_edge_action_reconnect">Erneut verbinden</string>
+    <string name="binding_edge_action_dismiss">Schließen</string>
+    <string name="binding_apply_error_no_connect">%1$s nicht erreichbar. Stelle sicher, dass es eingeschaltet und im Netzwerk ist, und versuche es erneut.</string>
+    <string name="binding_apply_warn_title">Direktmodus nicht verfügbar</string>
+    <string name="binding_apply_warn_detail">%1$s ist mit %2$s im Standardmodus verbunden.</string>
+    <string name="binding_label_emulate">Emulieren als</string>
+    <string name="binding_label_functions">Funktionen</string>
+    <string name="binding_label_input">Eingabe</string>
+    <string name="binding_label_binding">Zuordnung</string>
+    <string name="binding_link_usb">USB</string>
+    <string name="binding_link_bluetooth">Bluetooth</string>
+    <string name="binding_link_onscreen">Bildschirm</string>
+    <string name="binding_mode_direct">Direkt</string>
+    <string name="binding_mode_standard">Standard</string>
+    <string name="binding_func_rumble">Vibration</string>
+    <string name="binding_func_motion">Bewegung</string>
+    <string name="binding_func_touchpad">Touchpad</string>
+    <string name="binding_func_mouse">Maus</string>
+    <string name="binding_func_gyro">Gyro</string>
+    <string name="binding_state_on">Ein</string>
+    <string name="binding_state_off">Aus</string>
+    <string name="binding_func_value">%1$s · %2$s</string>
+    <string name="binding_card_not_bound">Nicht zugeordnet</string>
+    <string name="binding_card_no_functions">Keine</string>
+    <string name="binding_action_configure">Zuordnung konfigurieren</string>
+    <string name="binding_action_find_hosts">Hosts finden</string>
+    <string name="binding_activity_title">Zuordnung konfigurieren</string>
+    <string name="binding_activity_title_bind">Controller zuordnen</string>
+    <string name="binding_activity_apply">Übernehmen</string>
+    <string name="binding_activity_bind">Zuordnen</string>
+    <string name="binding_dest_carries">Überträgt</string>
+    <string name="binding_dest_no_channel">Kein Kanal</string>
+    <string name="binding_dest_host">Host</string>
+    <string name="binding_dest_bt_note">Das Telefon wird als Bluetooth-Gamepad gekoppelt. Gyro, Touchpad und Maus brauchen einen Satellit-Host.</string>
+    <string name="binding_host_hint_satellite">Satellit</string>
+    <string name="binding_host_hint_bt">BT</string>
+    <string name="binding_manage_destinations">Ziele verwalten</string>
+    <string name="binding_no_hosts_title">Keine Hosts gefunden</string>
+    <string name="binding_no_hosts_body">Durchsuche dein Netzwerk nach einem Satellit-Host oder koppele einen über Bluetooth. Sobald ein Host erscheint, komm zurück, um %1$s zuzuordnen.</string>
+    <string name="binding_apply_title">Zuordnung wird übernommen…</string>
+    <string name="binding_apply_subtitle">Jede Einstellung wird an den Host gesendet.</string>
+    <string name="binding_apply_success_title">Zuordnung übernommen</string>
+    <string name="binding_apply_success_detail">%1$s ist auf %2$s aktiv.</string>
+    <string name="binding_apply_error_title">Einige Einstellungen wurden nicht übernommen</string>    <string name="binding_apply_action_retry">Wiederholen</string>
+    <string name="binding_desc_back">Zurück</string>
+
+    <string name="donate_bar_headline">Dish ist kostenlos und Open Source.</string>
+    <string name="donate_bar_ask">Spende, damit es so bleibt →</string>
+    <string name="donate_bar_dismiss">Spendenbanner schließen</string>
+
+    <string name="donate_title">Dish unterstützen</string>
+    <string name="donate_eyebrow">Projekt unterstützen</string>
+    <string name="donate_h1">Dish läuft auf Kaffee und Wohlwollen.</string>
+    <string name="donate_lead">Dish, Satellite und jeder Dish-Client sind kostenlos, Open Source, werbefrei und analysefrei. Keine Paywall-Features, keine Upsells und keine Pläne in diese Richtung. Spenden sind das, was dafür sorgt, dass es so bleibt.</string>
+    <string name="donate_cta_recommended">Auf %1$s sponsern (empfohlen)</string>
+    <string name="donate_badge_recommended">Empfohlen</string>
+    <string name="donate_meta_cadence">Frequenz</string>
+    <string name="donate_meta_pays_with">Bezahlung mit</string>
+    <string name="donate_visit">%1$s öffnen →</string>
+    <string name="donate_cadence_recurring">Wiederkehrend</string>
+    <string name="donate_cadence_one_time">Einmalig</string>
+    <string name="donate_cadence_either">Beides</string>
+
+    <string name="donate_tier_sponsors_blurb">Monatliches Sponsoring, abgewickelt über GitHub. Niedrigste Gebühren, keine Plattformbeteiligung. Der stabilste Weg, Dish Monat für Monat zu unterstützen, und der einzige, den GitHub über den GitHub Sponsors Matching Fund Dollar für Dollar verdoppelt, wo förderfähig.</string>
+    <string name="donate_tier_sponsors_currencies">Karte, PayPal, GitHub-Guthaben</string>
+    <string name="donate_tier_kofi_blurb">Trinkgeldkasse. Spendier uns einen Kaffee, kein Konto nötig. Ko-fi nimmt bei einmaligen Trinkgeldern keine Gebühr, also kommt jeder Euro beim Projekt an.</string>
+    <string name="donate_tier_kofi_currencies">Karte, Apple Pay, Google Pay, PayPal</string>
+    <string name="donate_tier_bmac_blurb">Schnelles Einmal-Geschenk oder eine monatliche Mitgliedschaft. Karte, Apple Pay oder Google Pay. Ideal, wenn du kein GitHub-Konto hast.</string>
+    <string name="donate_tier_bmac_currencies">Karte, Apple Pay, Google Pay</string>
+
+    <string name="donate_why_title">Wofür deine Spende tatsächlich verwendet wird</string>
+    <string name="donate_why_hosting">Hosting. dish.tinkernorth.com, tinkernorth.com und jeder signierte Installer-Mirror. AWS ist nicht kostenlos, auch nicht bei unserem Traffic-Volumen.</string>
+    <string name="donate_why_signing">Code-Signing-Zertifikate. Windows SmartScreen spielt nur mit, weil wir jedes Jahr für ein EV-Zertifikat zahlen. Gleiches gilt für das Apple-Developer-Program-Konto für den kommenden macOS-Client.</string>
+    <string name="donate_why_play">Google-Play-Entwicklergebühr. Eine einmalige Gebühr von 25 $ plus die Zeit, die nötig ist, um den Play-Eintrag mit jeder neuen Richtlinienrunde konform zu halten.</string>
+    <string name="donate_why_time">Zeit. Ehrliche Antwort: das meiste davon. Dish ist ein Abend- und Wochenend-Projekt. Spenden erlauben mir, „ja“ zur Arbeit daran zu sagen, statt zusätzliches Consulting anzunehmen.</string>
+
+    <string name="donate_thanks">Danke. Jeder Euro, jeder Stern, jeder geteilte Link. Alles summiert sich. Emir</string>
+
+    <string name="settings_support_title">Dish unterstützen</string>
+    <string name="settings_support_body">Spende über GitHub Sponsors, Ko-fi oder Buy Me a Coffee.</string>
 </resources>

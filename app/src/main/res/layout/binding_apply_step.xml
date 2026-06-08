@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <FrameLayout
+        android:layout_width="@dimen/config_step_row_icon"
+        android:layout_height="@dimen/config_step_row_icon">
+
+        <ImageView
+            android:id="@+id/ivStepDone"
+            android:layout_width="@dimen/config_step_indicator_size"
+            android:layout_height="@dimen/config_step_indicator_size"
+            android:layout_gravity="center"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_check_circle"
+            android:visibility="gone"
+            app:tint="@color/colorSuccess" />
+
+        <ProgressBar
+            android:id="@+id/pbStepActive"
+            android:layout_width="@dimen/config_step_indicator_size"
+            android:layout_height="@dimen/config_step_indicator_size"
+            android:layout_gravity="center"
+            android:indeterminate="true"
+            android:indeterminateTint="@color/colorPrimary"
+            android:visibility="gone" />
+
+        <View
+            android:id="@+id/vStepPending"
+            android:layout_width="@dimen/config_step_pending_dot"
+            android:layout_height="@dimen/config_step_pending_dot"
+            android:layout_gravity="center"
+            android:background="@drawable/dot_circle"
+            android:backgroundTint="@color/colorMuted"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/tvStepLabel"
+        style="@style/TextAppearance.Dish.Body"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/spacing_lg"
+        android:textColor="@color/colorOnSurface" />
+</LinearLayout>

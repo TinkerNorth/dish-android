@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Streaming hint + pre-dim countdown chip. Included in each screen's content
+     column (not the floating overlay) so it docks at the base and pushes
+     content up rather than covering it. View IDs preserved for LowPowerManager. -->
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <LinearLayout
+        android:id="@+id/llStreamingHint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="@dimen/spacing_2xl"
+        android:layout_marginBottom="@dimen/spacing_2xl"
+        android:background="@drawable/bg_pill"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="@dimen/spacing_5xl"
+        android:paddingVertical="@dimen/spacing_lg"
+        android:alpha="0.85"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="@dimen/icon_card_glyph"
+            android:layout_height="@dimen/icon_card_glyph"
+            android:src="@drawable/ic_overlay_link"
+            app:tint="@color/colorPrimary"
+            android:importantForAccessibility="no"
+            android:layout_marginEnd="@dimen/spacing_md" />
+
+        <TextView
+            style="@style/TextAppearance.Dish.Label.Accent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/low_power_streaming_hint" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/llCountdownBanner"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="@dimen/spacing_2xl"
+        android:layout_marginBottom="@dimen/spacing_2xl"
+        android:background="@drawable/bg_pill"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="@dimen/spacing_5xl"
+        android:paddingVertical="@dimen/spacing_lg"
+        android:visibility="gone">
+
+        <TextView
+            style="@style/TextAppearance.Dish.Label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/low_power_in"
+            android:layout_marginEnd="@dimen/spacing_lg" />
+
+        <TextView
+            android:id="@+id/tvCountdownSeconds"
+            style="@style/TextAppearance.Dish.Display"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="@dimen/size_24"
+            android:gravity="center"
+            android:text="@string/low_power_countdown_placeholder" />
+
+        <TextView
+            style="@style/TextAppearance.Dish.BodyLarge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/low_power_seconds_suffix"
+            android:layout_marginStart="@dimen/size_2" />
+    </LinearLayout>
+</merge>

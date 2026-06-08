@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.Dish.Pill"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content">
+
+    <ImageView
+        android:id="@+id/ivPillIcon"
+        style="@style/Widget.Dish.Pill.Icon" />
+
+    <TextView
+        android:id="@+id/tvPillText"
+        style="@style/Widget.Dish.Pill.Text" />
+</LinearLayout>

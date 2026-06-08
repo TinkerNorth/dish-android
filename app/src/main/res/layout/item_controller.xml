@@ -12,244 +12,142 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <!-- ── Header row: icon + name + status dot ── -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:padding="@dimen/card_padding"
-            android:gravity="center_vertical">
+            android:padding="@dimen/card_padding">
 
             <ImageView
                 android:id="@+id/ivControllerType"
                 android:layout_width="@dimen/icon_controller"
                 android:layout_height="@dimen/icon_controller"
-                android:src="@drawable/ic_gamepad"
                 android:importantForAccessibility="no"
+                android:src="@drawable/ic_gamepad"
                 app:tint="@color/colorPrimary" />
 
-            <LinearLayout
+            <TextView
+                android:id="@+id/tvControllerName"
+                style="@style/TextAppearance.Dish.Title"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginStart="@dimen/spacing_2xl"
-                android:orientation="vertical">
-
-                <TextView
-                    android:id="@+id/tvControllerName"
-                    style="@style/TextAppearance.Dish.Title"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
-
-                <TextView
-                    android:id="@+id/tvSlotStatus"
-                    style="@style/TextAppearance.Dish.BodySmall"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
-
-                <TextView
-                    android:id="@+id/tvPathBadge"
-                    style="@style/TextAppearance.Dish.BodySmall"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/spacing_xs"
-                    android:textStyle="bold"
-                    android:visibility="gone" />
-            </LinearLayout>
-
-            <ImageView
-                android:id="@+id/ivOpenGamepadQuick"
-                android:layout_width="@dimen/icon_action"
-                android:layout_height="@dimen/icon_action"
-                android:layout_marginEnd="@dimen/spacing_sm"
-                android:padding="@dimen/size_2"
-                android:src="@drawable/ic_open_gamepad"
-                android:contentDescription="@string/desc_open_gamepad"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:clickable="true"
-                android:focusable="true"
-                android:visibility="gone"
-                app:tint="@color/colorPrimary" />
-
-            <!-- ── Battery indicator (Task 1.2): icon + percentage ──
-                 Collapsed to a single TextView with a leading compound
-                 drawable (perf: avoids an ImageView+LinearLayout in a
-                 RecyclerView item). The drawable is swapped per state and
-                 the contentDescription is set dynamically in
-                 ControllerAdapter.bindBattery(); no tint is applied — the
-                 battery glyphs are intentionally two-tone (teal hull +
-                 white overlay) and a flat tint would collapse the overlay. -->
-            <TextView
-                android:id="@+id/tvBattery"
-                style="@style/TextAppearance.Dish.BodySmall"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="@dimen/spacing_lg"
-                android:gravity="center_vertical"
-                android:drawablePadding="@dimen/size_3"
-                android:visibility="gone" />
-
-            <!-- v6 brand connection-target glyph. Mirrors the row this slot
-                 is bound to over on activity_connections.xml — a satellite
-                 row's icon family is satellite, a Bluetooth row's is the
-                 Berkana rune. Painted in ControllerAdapter.bind() from the
-                 slot's boundStatus; hidden when unbound. -->
-            <ImageView
-                android:id="@+id/ivBoundKind"
-                android:layout_width="@dimen/icon_brand_sm"
-                android:layout_height="@dimen/icon_brand_sm"
-                android:layout_marginEnd="@dimen/spacing_md"
-                android:contentDescription="@null"
-                android:visibility="gone"
-                android:src="@drawable/ic_satellite" />
-
-            <View
-                android:id="@+id/dotStatus"
-                style="@style/Widget.Dish.StatusDot.Large"
-                android:layout_marginEnd="@dimen/spacing_xl" />
-
-            <ImageView
-                android:id="@+id/ivChevron"
-                android:layout_width="@dimen/icon_chevron_lg"
-                android:layout_height="@dimen/icon_chevron_lg"
-                android:layout_marginStart="@dimen/spacing_sm"
-                android:src="@drawable/ic_chevron_down"
-                android:contentDescription="@string/desc_expand"
-                app:tint="@color/icon_secondary" />
+                android:ellipsize="end"
+                android:maxLines="1" />
         </LinearLayout>
 
-        <!-- ── Expandable body: bind-to-connection picker + actions ── -->
+        <View style="@style/Widget.Dish.Divider" />
+
         <LinearLayout
-            android:id="@+id/llBody"
+            android:id="@+id/llDecisions"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingHorizontal="@dimen/card_padding_horizontal"
-            android:paddingBottom="@dimen/card_padding_bottom"
+            android:paddingStart="@dimen/binding_zone_padding"
+            android:paddingTop="@dimen/binding_decisions_padding_top"
+            android:paddingEnd="@dimen/binding_zone_padding"
+            android:paddingBottom="@dimen/binding_zone_gap" />
+
+        <View style="@style/Widget.Dish.Divider" />
+
+        <LinearLayout
+            android:id="@+id/llActions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:divider="@drawable/binding_gap_vertical"
+            android:orientation="vertical"
+            android:paddingStart="@dimen/binding_zone_padding"
+            android:paddingTop="@dimen/binding_zone_gap"
+            android:paddingEnd="@dimen/binding_zone_padding"
+            android:paddingBottom="@dimen/binding_zone_padding"
+            android:showDividers="middle" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/edgeOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/colorOverlayScrim"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="@dimen/binding_edge_padding"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/ivEdgeIcon"
+            android:layout_width="@dimen/binding_edge_icon_size"
+            android:layout_height="@dimen/binding_edge_icon_size"
+            android:importantForAccessibility="no" />
+
+        <TextView
+            android:id="@+id/tvEdgeTitle"
+            style="@style/TextAppearance.Dish.Title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/binding_edge_gap"
+            android:gravity="center" />
+
+        <LinearLayout
+            android:id="@+id/edgeCountdownRow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/binding_edge_gap"
+            android:gravity="center"
+            android:orientation="horizontal"
             android:visibility="gone">
 
-            <!-- Input path: Standard (framework) vs Direct (claimed USB) for this device, with the
-                 trade-off and a way back. Bound only for physical slots; hidden for the on-screen pad. -->
             <TextView
-                android:id="@+id/labelInputPath"
-                style="@style/TextAppearance.Dish.Label"
-                android:layout_width="match_parent"
+                android:id="@+id/tvEdgeCountdown"
+                style="@style/TextAppearance.Dish.Display"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/path_input_section_label"
-                android:paddingBottom="@dimen/picker_section_padding_bottom" />
-
-            <com.google.android.material.button.MaterialButtonToggleGroup
-                android:id="@+id/toggleInputPath"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                app:singleSelection="true"
-                app:selectionRequired="true">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnPathStandard"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/path_choice_standard" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnPathDirect"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/path_choice_direct" />
-            </com.google.android.material.button.MaterialButtonToggleGroup>
+                android:textColor="@color/colorWarning" />
 
             <TextView
-                android:id="@+id/tvPathCaps"
-                style="@style/TextAppearance.Dish.BodySmall"
-                android:layout_width="match_parent"
+                style="@style/TextAppearance.Dish.Body.Mono"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_sm"
-                android:textColor="@color/colorMuted" />
-
-            <TextView
-                android:id="@+id/tvPathRisk"
-                style="@style/TextAppearance.Dish.BodySmall"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_xs" />
-
-            <LinearLayout
-                android:id="@+id/llPathRestoring"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_xs"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:visibility="gone">
-
-                <ProgressBar
-                    android:layout_width="@dimen/icon_battery"
-                    android:layout_height="@dimen/icon_battery"
-                    android:indeterminate="true" />
-
-                <TextView
-                    android:id="@+id/tvPathRestoring"
-                    style="@style/TextAppearance.Dish.BodySmall"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="@dimen/spacing_sm"
-                    android:text="@string/path_restoring"
-                    android:textColor="@color/colorMuted" />
-            </LinearLayout>
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="@dimen/picker_section_margin_top" />
-
-            <TextView
-                style="@style/TextAppearance.Dish.Label"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/slot_output_to_label"
-                android:paddingBottom="@dimen/picker_section_padding_bottom" />
-
-            <LinearLayout
-                android:id="@+id/llConnectionList"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnUnbind"
-                style="@style/Widget.Dish.Button.Outlined"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/picker_section_margin_top"
-                android:text="@string/action_unbind"
-                android:visibility="gone" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnOpenGamepad"
-                style="@style/Widget.Dish.Button"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/picker_section_margin_top"
-                android:text="@string/action_open_gamepad"
-                app:icon="@drawable/ic_open_gamepad"
-                app:iconGravity="textStart"
-                app:iconTint="@color/colorOnPrimary"
-                android:visibility="gone" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnOpenTouchpad"
-                style="@style/Widget.Dish.Button"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/picker_section_margin_top"
-                android:text="@string/action_open_touchpad"
-                app:icon="@drawable/ic_open_touchpad"
-                app:iconGravity="textStart"
-                app:iconTint="@color/colorOnPrimary"
-                android:visibility="gone" />
+                android:layout_marginStart="@dimen/spacing_xs"
+                android:text="@string/binding_edge_seconds"
+                android:textColor="@color/colorOnSurfaceVariant" />
         </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvEdgeDetail"
+            style="@style/TextAppearance.Dish.BodySmall"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/binding_edge_gap"
+            android:gravity="center"
+            android:textColor="@color/colorOnSurfaceVariant" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnEdgePrimary"
+            style="@style/Widget.Dish.Button.Tonal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/binding_edge_actions_gap"
+            app:iconGravity="textStart" />
+
+        <ProgressBar
+            android:id="@+id/pbEdgeReconnect"
+            android:layout_width="@dimen/binding_edge_spinner_size"
+            android:layout_height="@dimen/binding_edge_spinner_size"
+            android:layout_marginTop="@dimen/binding_edge_actions_gap"
+            android:indeterminate="true"
+            android:indeterminateTint="@color/colorPrimary"
+            android:visibility="gone" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnEdgeSecondary"
+            style="@style/Widget.Dish.Button.Text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/binding_edge_actions_gap"
+            android:visibility="gone" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

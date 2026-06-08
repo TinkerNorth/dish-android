@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -55,6 +56,7 @@ class DishNotifications
         val dismissals: SharedFlow<Long> = _dismissals.asSharedFlow()
 
         private val nextId = AtomicLong(1L)
+        private val deferred = AtomicReference<DishNotification?>(null)
 
         fun post(
             severity: DishNotification.Severity = DishNotification.Severity.INFO,
@@ -83,6 +85,28 @@ class DishNotifications
 
         fun dismiss(id: Long) {
             _dismissals.tryEmit(id)
+        }
+
+        // Held for the NEXT screen to render, so an activity can post a result then finish() (a live post dies with its view).
+        fun postDeferred(
+            severity: DishNotification.Severity = DishNotification.Severity.INFO,
+            title: String,
+            body: String? = null,
+            @DrawableRes glyph: Int? = null,
+            durationMs: Long = defaultDurationFor(severity),
+        ) {
+            deferred.set(
+                DishNotification(
+                    id = nextId.getAndIncrement(),
+                    severity = severity,
+                    title = title,
+                    body = body,
+                    glyph = glyph,
+                    action = null,
+                    key = null,
+                    durationMs = durationMs,
+                ),
+            )
         }
 
         fun info(
@@ -135,6 +159,7 @@ class DishNotifications
 
             scope.launch {
                 owner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    deferred.getAndSet(null)?.let { attachment.handlePost(it) }
                     launch {
                         posts.onEach { n -> attachment.handlePost(n) }.launchIn(this)
                     }

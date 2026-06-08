@@ -38,7 +38,14 @@
             android:id="@+id/toolbar"
             style="@style/Widget.Dish.Toolbar"
             android:layout_width="match_parent"
-            app:title="@string/settings_title" />
+            app:title="@string/settings_title">
+
+            <include
+                layout="@layout/view_donate_heart_button"
+                android:layout_width="@dimen/icon_settings_button"
+                android:layout_height="@dimen/icon_settings_button"
+                android:layout_gravity="end" />
+        </com.google.android.material.appbar.MaterialToolbar>
 
         <androidx.core.widget.NestedScrollView
             android:layout_width="match_parent"
@@ -258,10 +265,40 @@
                     android:layout_marginBottom="@dimen/section_header_gap_below" />
 
                 <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardSupport"
+                    style="@style/Widget.Dish.Card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground">
+
+                    <LinearLayout
+                        style="@style/Widget.Dish.Card.RowContainer"
+                        android:gravity="center_vertical">
+
+                        <include
+                            android:id="@+id/cardRowSupport"
+                            layout="@layout/card_row_icon_label_value"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1" />
+
+                        <ImageView
+                            android:layout_width="@dimen/icon_card_glyph"
+                            android:layout_height="@dimen/icon_card_glyph"
+                            android:layout_marginStart="@dimen/spacing_xl"
+                            android:src="@drawable/ic_chevron_right"
+                            android:importantForAccessibility="no" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
                     android:id="@+id/cardPrivacyPolicy"
                     style="@style/Widget.Dish.Card"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/card_margin_bottom"
                     android:clickable="true"
                     android:focusable="true"
                     android:foreground="?attr/selectableItemBackground">
