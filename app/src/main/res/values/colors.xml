@@ -155,6 +155,10 @@
          containers. -->
     <color name="colorSurfaceDim">@color/cloud_400</color>
 
+    <color name="colorPulse">@color/pulse_pink_500</color>
+    <color name="colorOnPulse">@color/navy_900</color>
+    <color name="colorPulseFill">@color/pulse_pink_200</color>
+
     <!-- ===== Severity =====
          Status tones are shared across both modes — green / red / amber
          500 read on light and dark backgrounds. -->

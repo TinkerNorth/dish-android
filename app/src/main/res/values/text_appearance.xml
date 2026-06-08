@@ -93,6 +93,14 @@
         <item name="android:textStyle">normal</item>
     </style>
 
+    <style name="TextAppearance.Dish.Label.Micro" parent="">
+        <item name="android:textSize">@dimen/text_caption</item>
+        <item name="android:textColor">@color/colorMuted</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:letterSpacing">0.12</item>
+    </style>
+
     <!-- ============================================================
          BODY SMALL — secondary copy under titles (slot status, empty
          hints, dialog subtitles).

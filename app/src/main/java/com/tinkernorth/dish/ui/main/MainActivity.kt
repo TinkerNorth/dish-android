@@ -24,13 +24,14 @@ import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.source.store.OnboardingState
-import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.DishSpinnerDrawable
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
+import com.tinkernorth.dish.ui.common.attachDonatePill
 import com.tinkernorth.dish.ui.common.attachGamepadHost
+import com.tinkernorth.dish.ui.common.wireDonateButton
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -101,6 +102,8 @@ class MainActivity :
         gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications)
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()
+        attachDonatePill()
+        wireDonateButton()
         controllerAdapter = ControllerAdapter(this)
         setupUI()
         observeViewModel()
@@ -219,37 +222,21 @@ class MainActivity :
         nav.toConnectionsForPairing(connectionId)
     }
 
-    override fun onSlotTapped(slotId: String) = controllerAdapter.toggleExpanded(slotId)
-
-    override fun onSelectInputPath(
-        slotId: String,
-        choice: PathChoice,
-    ) {
-        viewModel.setInputPath(slotId, choice)
+    override fun onConfigure(slotId: String) {
+        nav.toConfigureBindings(slotId)
     }
 
-    override fun onBind(
-        slotId: String,
-        connectionId: String,
-    ) = viewModel.bindSlot(slotId, connectionId)
+    override fun onManageDestinations() {
+        nav.toConnections()
+    }
 
-    override fun onUnbind(slotId: String) = viewModel.unbindSlot(slotId)
+    override fun onReconnect(slotId: String) {
+        viewModel.reconnectHosts()
+    }
 
-    override fun onChangeDeviceType(
-        slotId: String,
-        connectionId: String,
-        type: Int,
-    ) = viewModel.setSatelliteControllerType(connectionId, slotId, type)
-
-    override fun onMotionEnabledChanged(
-        slotId: String,
-        enabled: Boolean,
-    ) = viewModel.setMotionEnabled(slotId, enabled)
-
-    override fun onChangeTouchpadMode(
-        connectionId: String,
-        mode: String,
-    ) = viewModel.setSatelliteTouchpadMode(connectionId, mode)
+    override fun onUnbind(slotId: String) {
+        viewModel.unbindSlot(slotId)
+    }
 
     override fun onOpenTouchpad(slotId: String) {
         val state = viewModel.uiState.value
@@ -259,10 +246,11 @@ class MainActivity :
         nav.toTouchpad(connectionId = cid, touchpadMode = mode, slotId = slotId)
     }
 
-    override fun onOpenGamepad() {
-        val v = viewModel.uiState.value.virtualSlot
+    override fun onOpenGamepad(slotId: String) {
+        val state = viewModel.uiState.value
+        val slot = state.slots.firstOrNull { it.id == slotId } ?: return
         val cid =
-            v.boundConnectionId ?: run {
+            slot.boundConnectionId ?: run {
                 notifications.info(
                     glyph = R.drawable.ic_gamepad,
                     title = getString(R.string.notif_bind_first_title),
@@ -270,10 +258,10 @@ class MainActivity :
                 )
                 return
             }
-        val summary = v.boundStatus
+        val summary = slot.boundStatus
         val usePs =
             summary?.btProfile == "PlayStation" ||
-                summary?.satelliteControllerTypes?.get(VIRTUAL_SLOT_ID) ==
+                summary?.satelliteControllerTypes?.get(slotId) ==
                 com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
         nav.toGamepad(connectionId = cid, usePsLayout = usePs)
     }

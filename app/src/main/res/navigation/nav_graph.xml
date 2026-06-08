@@ -61,6 +61,16 @@
         android:label="@string/settings_title" />
 
     <activity
+        android:id="@+id/configureBindingsActivity"
+        android:name="com.tinkernorth.dish.ui.main.ConfigureBindingsActivity"
+        android:label="@string/binding_activity_title">
+
+        <argument
+            android:name="extra_slot_id"
+            app:argType="string" />
+    </activity>
+
+    <activity
         android:id="@+id/welcomeActivity"
         android:name="com.tinkernorth.dish.ui.onboarding.WelcomeActivity"
         android:label="@string/welcome_step1_title" />
@@ -74,6 +84,11 @@
         android:id="@+id/helpActivity"
         android:name="com.tinkernorth.dish.ui.onboarding.HelpActivity"
         android:label="@string/help_title" />
+
+    <activity
+        android:id="@+id/donateActivity"
+        android:name="com.tinkernorth.dish.ui.donate.DonateActivity"
+        android:label="@string/donate_title" />
 
     <!-- ═══ INPUT OVERLAYS ════════════════════════════════════════════ -->
     <activity

@@ -251,8 +251,7 @@
         <item quantity="other">Liées · %1$d manettes</item>
     </plurals>
     <string name="low_power_streaming_hint">DIFFUSION · GARDEZ L\'APPLI OUVERTE</string>
-    <string name="low_power_dim_body">La diffusion continue à l\'écran tamisé — ne fermez pas Dish.</string>
-
+    <string name="low_power_dim_body">La diffusion continue à l\'écran tamisé. Ne fermez pas Dish.</string>
     <!-- Lien Politique de confidentialité (dans Paramètres) et message d\'erreur partagé. -->
     <string name="menu_privacy_policy">Politique de confidentialité</string>
     <string name="error_open_url">Impossible d\'ouvrir le navigateur</string>
@@ -281,10 +280,7 @@
     <string name="path_label_bluetooth">Bluetooth</string>
     <string name="path_reason_busy">Une autre app utilise cette manette.</string>
     <string name="path_reason_init_failed">Impossible d\'activer le Mode direct. Mode standard utilisé.</string>
-    <string name="path_reason_permission_denied">Autorisation USB refusée. Accordez-la pour le Mode direct.</string>
-    <string name="direct_prompt_title">Essayer le Mode direct pour %1$s ?</string>
-    <string name="direct_prompt_action">Essayer</string>
-    <string name="direct_failed">Impossible de passer %1$s en Mode direct.</string>
+    <string name="path_reason_permission_denied">Autorisation USB refusée. Accordez-la pour le Mode direct.</string>    <string name="direct_failed">Impossible de passer %1$s en Mode direct.</string>
     <string name="path_input_section_label">Voie d\'entrée</string>
     <string name="path_choice_standard">Standard</string>
     <string name="path_choice_direct">Direct</string>
@@ -302,4 +298,95 @@
     <string name="direct_revert_to_direct">Impossible de passer %1$s en Standard. Toujours en Mode direct.</string>
     <string name="path_restore_stuck">Le Mode standard ne répond pas. Passez en Direct ou rebranchez la manette.</string>
     <string name="path_needs_replug">Déconnectée. Débranchez puis rebranchez pour utiliser cette manette.</string>
+
+    <string name="binding_label_connection">Connexion</string>
+    <string name="binding_label_destination">Destination</string>
+    <string name="binding_choose_destination">Choisir une destination</string>
+
+    <string name="binding_edge_host_lost_title">Connexion perdue</string>
+    <string name="binding_edge_host_lost_detail">%1$s ne répond plus. Les entrées ne passent pas. L\'appareil est peut-être en veille ou hors du réseau.</string>
+    <string name="binding_edge_input_lost_title">Manette débranchée</string>
+    <string name="binding_edge_input_lost_detail">La liaison est conservée pour vous permettre de reconnecter. Rebranchez pour la garder.</string>
+    <string name="binding_edge_unsteady_title">Liaison instable</string>
+    <string name="binding_edge_unsteady_detail">Toujours en cours d\'acheminement, mais des paquets sont perdus. Rapprochez-vous ou passez à l\'USB.</string>
+    <string name="binding_edge_action_reconnect">Reconnecter</string>
+    <string name="binding_edge_action_dismiss">Ignorer</string>
+    <string name="binding_apply_error_no_connect">Impossible de joindre %1$s. Vérifiez qu\'il est allumé et sur votre réseau, puis réessayez.</string>
+    <string name="binding_apply_warn_title">Mode Direct indisponible</string>
+    <string name="binding_apply_warn_detail">%1$s est lié à %2$s en mode Standard à la place.</string>
+    <string name="binding_label_emulate">Émuler comme</string>
+    <string name="binding_label_functions">Fonctions</string>
+    <string name="binding_label_input">Entrée</string>
+    <string name="binding_label_binding">Liaison</string>
+    <string name="binding_link_usb">USB</string>
+    <string name="binding_link_bluetooth">Bluetooth</string>
+    <string name="binding_link_onscreen">À l\'écran</string>
+    <string name="binding_mode_direct">Direct</string>
+    <string name="binding_mode_standard">Standard</string>
+    <string name="binding_func_rumble">Vibration</string>
+    <string name="binding_func_motion">Mouvement</string>
+    <string name="binding_func_touchpad">Pavé tactile</string>
+    <string name="binding_func_mouse">Souris</string>
+    <string name="binding_func_gyro">Gyro</string>
+    <string name="binding_state_on">Activé</string>
+    <string name="binding_state_off">Désactivé</string>
+    <string name="binding_func_value">%1$s · %2$s</string>
+    <string name="binding_card_not_bound">Non liée</string>
+    <string name="binding_card_no_functions">Aucune</string>
+    <string name="binding_action_configure">Configurer la liaison</string>
+    <string name="binding_action_find_hosts">Trouver des hôtes</string>
+    <string name="binding_activity_title">Configurer la liaison</string>
+    <string name="binding_activity_title_bind">Lier la manette</string>
+    <string name="binding_activity_apply">Appliquer</string>
+    <string name="binding_activity_bind">Lier</string>
+    <string name="binding_dest_carries">Transmet</string>
+    <string name="binding_dest_no_channel">Aucun canal</string>
+    <string name="binding_dest_host">Hôte</string>
+    <string name="binding_dest_bt_note">Le téléphone s\'appaire comme manette Bluetooth. Le gyro, le pavé tactile et la souris nécessitent un hôte Satellite.</string>
+    <string name="binding_host_hint_satellite">Satellite</string>
+    <string name="binding_host_hint_bt">BT</string>
+    <string name="binding_manage_destinations">Gérer les destinations</string>
+    <string name="binding_no_hosts_title">Aucun hôte trouvé</string>
+    <string name="binding_no_hosts_body">Recherchez un hôte Satellite sur votre réseau, ou appairez-en un via Bluetooth. Dès qu\'un hôte apparaît, revenez pour lier %1$s.</string>
+    <string name="binding_apply_title">Application de la liaison…</string>
+    <string name="binding_apply_subtitle">Envoi de chaque paramètre à l\'hôte.</string>
+    <string name="binding_apply_success_title">Liaison appliquée</string>
+    <string name="binding_apply_success_detail">%1$s est actif sur %2$s.</string>
+    <string name="binding_apply_error_title">Certains paramètres n\'ont pas été appliqués</string>    <string name="binding_apply_action_retry">Réessayer</string>
+    <string name="binding_desc_back">Retour</string>
+
+    <string name="donate_bar_headline">Dish est gratuit et open source.</string>
+    <string name="donate_bar_ask">Faites un don pour que cela continue →</string>
+    <string name="donate_bar_dismiss">Fermer la bannière de don</string>
+
+    <string name="donate_title">Soutenir Dish</string>
+    <string name="donate_eyebrow">Soutenir le projet</string>
+    <string name="donate_h1">Dish tourne au café et à la bonne volonté.</string>
+    <string name="donate_lead">Dish, Satellite et chaque client Dish sont gratuits, open source, sans publicité et sans analyse. Pas de fonctionnalités payantes, pas d\'upsell, et aucune intention d\'en avoir. Les dons sont ce qui les garde fidèles à ce principe.</string>
+    <string name="donate_cta_recommended">Sponsoriser sur %1$s (recommandé)</string>
+    <string name="donate_badge_recommended">Recommandé</string>
+    <string name="donate_meta_cadence">Cadence</string>
+    <string name="donate_meta_pays_with">Paie avec</string>
+    <string name="donate_visit">Ouvrir %1$s →</string>
+    <string name="donate_cadence_recurring">Récurrent</string>
+    <string name="donate_cadence_one_time">Ponctuel</string>
+    <string name="donate_cadence_either">Au choix</string>
+
+    <string name="donate_tier_sponsors_blurb">Sponsorisation mensuelle traitée par GitHub. Frais les plus bas, sans commission de plateforme. La façon la plus stable de soutenir Dish mois après mois, et la seule que GitHub abonde dollar pour dollar via le GitHub Sponsors Matching Fund quand vous êtes éligible.</string>
+    <string name="donate_tier_sponsors_currencies">Carte, PayPal, crédit GitHub</string>
+    <string name="donate_tier_kofi_blurb">Pot à pourboires. Offrez-nous un café, sans compte requis. Ko-fi ne prend rien sur les pourboires ponctuels, donc chaque euro arrive au projet.</string>
+    <string name="donate_tier_kofi_currencies">Carte, Apple Pay, Google Pay, PayPal</string>
+    <string name="donate_tier_bmac_blurb">Cadeau ponctuel rapide ou abonnement mensuel. Carte, Apple Pay ou Google Pay. Parfait si vous n\'avez pas de compte GitHub.</string>
+    <string name="donate_tier_bmac_currencies">Carte, Apple Pay, Google Pay</string>
+
+    <string name="donate_why_title">À quoi sert réellement votre don</string>
+    <string name="donate_why_hosting">Hébergement. dish.tinkernorth.com, tinkernorth.com, et chaque miroir d\'installateur signé. AWS n\'est pas gratuit, même à notre échelle de trafic.</string>
+    <string name="donate_why_signing">Certificats de signature de code. Windows SmartScreen ne joue le jeu que parce que nous payons un certificat EV chaque année. Idem pour le compte Apple Developer Program pour le futur client macOS.</string>
+    <string name="donate_why_play">Frais de développeur Google Play. 25 $ uniques plus le temps nécessaire pour garder la fiche Play conforme à chaque nouvelle vague de règles.</string>
+    <string name="donate_why_time">Le temps. Réponse honnête : la majeure partie. Dish est un projet du soir et du week-end. Les dons me permettent de dire « oui » à y travailler plutôt que d\'accepter des contrats supplémentaires.</string>
+
+    <string name="donate_thanks">Merci. Chaque don, chaque favori, chaque lien partagé. Tout s\'additionne. Emir</string>
+
+    <string name="settings_support_title">Soutenir Dish</string>
+    <string name="settings_support_body">Faites un don via GitHub Sponsors, Ko-fi ou Buy Me a Coffee.</string>
 </resources>

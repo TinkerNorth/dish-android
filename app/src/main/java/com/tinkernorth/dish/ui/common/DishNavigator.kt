@@ -34,6 +34,13 @@ class DishNavigator(
         controller.navigate(R.id.settingsActivity)
     }
 
+    fun toConfigureBindings(slotId: String) {
+        controller.navigate(
+            R.id.configureBindingsActivity,
+            Bundle().apply { putString("extra_slot_id", slotId) },
+        )
+    }
+
     fun toWelcome() {
         controller.navigate(R.id.welcomeActivity)
     }
@@ -44,6 +51,10 @@ class DishNavigator(
 
     fun toHelp() {
         controller.navigate(R.id.helpActivity)
+    }
+
+    fun toDonate() {
+        controller.navigate(R.id.donateActivity)
     }
 
     fun toTouchpad(

@@ -46,6 +46,11 @@
                     android:contentDescription="@string/menu_settings"
                     android:padding="@dimen/spacing_md"
                     android:scaleType="fitCenter" />
+
+                <include
+                    layout="@layout/view_donate_heart_button"
+                    android:layout_width="@dimen/icon_settings_button"
+                    android:layout_height="@dimen/icon_settings_button" />
             </LinearLayout>
 
             <include
@@ -121,15 +126,30 @@
         </LinearLayout>
 
         <!-- Scrollable slot list + telemetry -->
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rvControllers"
+        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1"
-            android:clipToPadding="false"
-            android:paddingHorizontal="@dimen/spacing_5xl"
-            android:paddingBottom="@dimen/spacing_3xl"
-            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
+            android:layout_weight="1">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvControllers"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingHorizontal="@dimen/spacing_5xl"
+                android:paddingBottom="@dimen/spacing_3xl"
+                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
+
+            <include
+                layout="@layout/view_donate_pill"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|center_horizontal"
+                android:layout_marginBottom="@dimen/spacing_5xl"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <include layout="@layout/overlay_low_power_chip" />
     </LinearLayout>
 
     <!-- Low-power overlays. The Snackbar-based feedback layer doesn't need

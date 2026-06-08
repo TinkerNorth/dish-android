@@ -15,7 +15,14 @@
             android:id="@+id/toolbar"
             style="@style/Widget.Dish.Toolbar"
             android:layout_width="match_parent"
-            app:title="@string/wizard_title" />
+            app:title="@string/wizard_title">
+
+            <include
+                layout="@layout/view_donate_heart_button"
+                android:layout_width="@dimen/icon_settings_button"
+                android:layout_height="@dimen/icon_settings_button"
+                android:layout_gravity="end" />
+        </com.google.android.material.appbar.MaterialToolbar>
 
         <androidx.core.widget.NestedScrollView
             android:layout_width="match_parent"

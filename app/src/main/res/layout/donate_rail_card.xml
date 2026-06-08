@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    style="@style/Widget.Dish.Card"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="@dimen/card_padding">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:baselineAligned="false">
+
+            <TextView
+                android:id="@+id/donateRailTitle"
+                style="@style/TextAppearance.Dish.Title"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="@color/colorPulse"
+                tools:text="GitHub Sponsors" />
+
+            <TextView
+                android:id="@+id/donateRailBadge"
+                style="@style/TextAppearance.Dish.Label.Micro"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/spacing_md"
+                android:background="@drawable/bg_recommended_badge"
+                android:paddingHorizontal="@dimen/spacing_md"
+                android:paddingVertical="@dimen/recommended_pill_vertical_padding"
+                android:textColor="@color/colorOnPulse"
+                android:textAllCaps="true"
+                android:visibility="gone"
+                android:text="@string/donate_badge_recommended"
+                tools:visibility="visible" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/donateRailBlurb"
+            style="@style/TextAppearance.Dish.Body"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_md"
+            tools:text="Monthly sponsorship, processed by GitHub. Lowest fees, no platform cut." />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="@dimen/spacing_lg"
+            android:baselineAligned="false">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/TextAppearance.Dish.Label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/colorTertiary"
+                    android:textAllCaps="true"
+                    android:text="@string/donate_meta_cadence" />
+
+                <TextView
+                    android:id="@+id/donateRailCadenceValue"
+                    style="@style/TextAppearance.Dish.BodySmall"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/colorOnSurface"
+                    tools:text="Recurring" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/TextAppearance.Dish.Label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/colorTertiary"
+                    android:textAllCaps="true"
+                    android:text="@string/donate_meta_pays_with" />
+
+                <TextView
+                    android:id="@+id/donateRailPaysValue"
+                    style="@style/TextAppearance.Dish.BodySmall"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/colorOnSurface"
+                    tools:text="Card, PayPal, GitHub credit" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/donateRailVisit"
+            style="@style/TextAppearance.Dish.BodySmall"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_md"
+            android:textColor="@color/colorPulse"
+            tools:text="Open GitHub Sponsors →" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

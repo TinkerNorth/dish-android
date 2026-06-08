@@ -263,6 +263,27 @@
         <item name="rippleColor">@color/colorPrimaryDark</item>
     </style>
 
+    <style name="Widget.Dish.Button.Tonal" parent="Widget.Material3.Button.TonalButton">
+        <item name="backgroundTint">@color/colorIconContainerFill</item>
+        <item name="android:textColor">@color/colorPrimary</item>
+        <item name="iconTint">@color/colorPrimary</item>
+        <item name="strokeColor">@color/colorOutline</item>
+        <item name="strokeWidth">@dimen/border_thin</item>
+        <item name="cornerRadius">@dimen/corner_button</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="rippleColor">@color/colorPrimaryMid</item>
+    </style>
+
+    <style name="Widget.Dish.Button.Text" parent="Widget.Material3.Button.TextButton">
+        <item name="android:textColor">@color/colorPrimary</item>
+        <item name="iconTint">@color/colorPrimary</item>
+        <item name="cornerRadius">@dimen/corner_button</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="rippleColor">@color/colorPrimaryDark</item>
+    </style>
+
     <!-- Custom dialog theme: transparent window background so the bg_pill
          surface's rounded corners + cyan outline are the only visible shape,
          dim behind so the activity recedes (matches the dim-on-low-power

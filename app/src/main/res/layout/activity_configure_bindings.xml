@@ -1,0 +1,255 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/colorBackground">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/colorBackground"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="@dimen/spacing_md"
+            android:paddingTop="@dimen/spacing_md"
+            android:paddingEnd="@dimen/spacing_xl"
+            android:paddingBottom="@dimen/spacing_md">
+
+            <ImageButton
+                android:id="@+id/btnBack"
+                android:layout_width="@dimen/icon_settings_button"
+                android:layout_height="@dimen/icon_settings_button"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/binding_desc_back"
+                android:src="@drawable/ic_chevron_left"
+                app:tint="@color/colorOnSurface" />
+
+            <TextView
+                android:id="@+id/tvTitle"
+                style="@style/TextAppearance.Dish.Title.Large"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="@dimen/spacing_sm"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/binding_activity_title" />
+
+            <include
+                layout="@layout/view_donate_heart_button"
+                android:layout_width="@dimen/icon_settings_button"
+                android:layout_height="@dimen/icon_settings_button" />
+        </LinearLayout>
+
+        <androidx.core.widget.NestedScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:paddingHorizontal="@dimen/spacing_5xl"
+            android:paddingVertical="@dimen/spacing_3xl">
+
+            <LinearLayout
+                android:id="@+id/content"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <include
+                    android:id="@+id/sectionInput"
+                    layout="@layout/binding_section_input"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <include
+                    android:id="@+id/sectionDestination"
+                    layout="@layout/binding_section_destination"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/config_section_gap" />
+
+                <include
+                    android:id="@+id/sectionBinding"
+                    layout="@layout/binding_section_binding"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/config_section_gap" />
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+
+        <LinearLayout
+            android:id="@+id/bottomBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/colorBackground"
+            android:orientation="vertical">
+
+            <View style="@style/Widget.Dish.Divider" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingStart="@dimen/spacing_5xl"
+                android:paddingTop="@dimen/spacing_xl"
+                android:paddingEnd="@dimen/spacing_5xl"
+                android:paddingBottom="@dimen/spacing_3xl">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCancel"
+                    style="@style/Widget.Dish.Button.Outlined"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/action_cancel" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnUnbind"
+                    style="@style/Widget.Dish.Button.Outlined"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="@dimen/spacing_xl"
+                    android:text="@string/action_unbind"
+                    android:textColor="@color/colorError"
+                    android:visibility="gone" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnApply"
+                    style="@style/Widget.Dish.Button"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="@dimen/spacing_xl"
+                    android:text="@string/binding_activity_apply" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <include layout="@layout/overlay_low_power_chip" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/applyOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/colorOverlayScrim"
+        android:clickable="true"
+        android:focusable="true"
+        android:padding="@dimen/spacing_6xl"
+        android:visibility="gone">
+
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.Dish.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="@dimen/spacing_4xl">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ProgressBar
+                        android:layout_width="@dimen/icon_battery"
+                        android:layout_height="@dimen/icon_battery"
+                        android:indeterminate="true"
+                        android:indeterminateTint="@color/colorPrimary" />
+
+                    <TextView
+                        style="@style/TextAppearance.Dish.Title"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="@dimen/spacing_xl"
+                        android:text="@string/binding_apply_title" />
+                </LinearLayout>
+
+                <TextView
+                    style="@style/TextAppearance.Dish.BodySmall"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_xs"
+                    android:text="@string/binding_apply_subtitle" />
+
+                <LinearLayout
+                    android:id="@+id/applySteps"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_2xl"
+                    android:divider="@drawable/binding_gap_vertical"
+                    android:orientation="vertical"
+                    android:showDividers="middle" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+    </FrameLayout>
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/toast"
+        style="@style/Widget.Dish.Card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_margin="@dimen/spacing_xl"
+        app:cardCornerRadius="@dimen/corner_notification"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="@dimen/spacing_xl">
+
+            <ImageView
+                android:id="@+id/ivToastIcon"
+                android:layout_width="@dimen/icon_battery"
+                android:layout_height="@dimen/icon_battery"
+                android:layout_marginEnd="@dimen/spacing_xl"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_check_circle"
+                app:tint="@color/colorSuccess" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tvToastTitle"
+                    style="@style/TextAppearance.Dish.BodyLarge.Bold"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <TextView
+                    android:id="@+id/tvToastDetail"
+                    style="@style/TextAppearance.Dish.BodySmall"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_xs"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnToastAction"
+                style="@style/Widget.Dish.Button.Tonal"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/spacing_md" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <include layout="@layout/overlay_low_power" />
+</FrameLayout>

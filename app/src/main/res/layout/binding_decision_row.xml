@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingTop="@dimen/binding_row_padding_vertical"
+    android:paddingBottom="@dimen/binding_row_padding_vertical">
+
+    <TextView
+        android:id="@+id/tvRowLabel"
+        style="@style/Widget.Dish.MicroLabel"
+        android:layout_width="@dimen/binding_label_column_width" />
+
+    <LinearLayout
+        android:id="@+id/valueContainer"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:divider="@drawable/binding_pill_gap"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:showDividers="middle" />
+</LinearLayout>

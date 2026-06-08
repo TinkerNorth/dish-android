@@ -303,8 +303,7 @@
         <item quantity="other">Bound · %1$d controllers</item>
     </plurals>
     <string name="low_power_streaming_hint">STREAMING · KEEP APP OPEN</string>
-    <string name="low_power_dim_body">Streaming continues while dimmed — don\'t close Dish.</string>
-
+    <string name="low_power_dim_body">Streaming continues while dimmed. Don\'t close Dish.</string>
     <!-- Numeric placeholders rendered before the runtime value lands. Kept as
          resources (translatable=false) so layout previews and lint pass, but
          the runtime always overwrites them. -->
@@ -359,10 +358,7 @@
     <string name="path_label_bluetooth">Bluetooth</string>
     <string name="path_reason_busy">Another app is using this controller.</string>
     <string name="path_reason_init_failed">Couldn\'t set up Direct mode. Using Standard mode instead.</string>
-    <string name="path_reason_permission_denied">USB permission denied. Grant it to use Direct mode.</string>
-    <string name="direct_prompt_title">Try Direct mode for %1$s?</string>
-    <string name="direct_prompt_action">Try</string>
-    <string name="direct_failed">Couldn\'t switch %1$s to Direct mode.</string>
+    <string name="path_reason_permission_denied">USB permission denied. Grant it to use Direct mode.</string>    <string name="direct_failed">Couldn\'t switch %1$s to Direct mode.</string>
 
     <!-- Input-path chooser in the expanded controller card: a Standard/Direct toggle plus the
          per-device trade-off and risk copy. capMark passes ✓/✗ into the %s slots. -->
@@ -383,5 +379,116 @@
     <string name="direct_revert_to_direct">Couldn\'t switch %1$s to Standard. Still on Direct mode.</string>
     <string name="path_restore_stuck">Standard mode isn\'t responding. Switch to Direct, or unplug and replug.</string>
     <string name="path_needs_replug">Disconnected. Unplug and replug to use this controller.</string>
+
+    <!-- Tri-zone controller card + Configure-bindings activity. -->
+    <string name="binding_label_connection">Connection</string>
+    <string name="binding_label_destination">Destination</string>
+    <string name="binding_label_emulate">Emulate as</string>
+    <string name="binding_label_functions">Functions</string>
+    <string name="binding_label_input">Input</string>
+    <string name="binding_label_binding">Binding</string>
+
+    <string name="binding_link_usb">USB</string>
+    <string name="binding_link_bluetooth">Bluetooth</string>
+    <string name="binding_link_onscreen">On-screen</string>
+    <string name="binding_mode_direct">Direct</string>
+    <string name="binding_mode_standard">Standard</string>
+
+    <string name="binding_func_rumble">Rumble</string>
+    <string name="binding_func_motion">Motion</string>
+    <string name="binding_func_touchpad">Touchpad</string>
+    <string name="binding_func_mouse">Mouse</string>
+    <string name="binding_func_gyro">Gyro</string>
+    <string name="binding_state_on">On</string>
+    <string name="binding_state_off">Off</string>
+    <string name="binding_func_value">%1$s · %2$s</string>
+
+    <string name="binding_card_not_bound">Not bound</string>
+    <string name="binding_card_no_functions">None</string>
+
+    <string name="binding_action_configure">Configure bindings</string>
+    <string name="binding_action_find_hosts">Find hosts</string>
+
+    <string name="binding_activity_title">Configure bindings</string>
+    <string name="binding_activity_title_bind">Bind controller</string>
+    <string name="binding_activity_apply">Apply</string>
+    <string name="binding_activity_bind">Bind</string>
+
+    <string name="binding_dest_carries">Carries</string>
+    <string name="binding_dest_no_channel">No channel</string>
+    <string name="binding_dest_host">Host</string>
+    <string name="binding_dest_bt_note">Phone pairs as a Bluetooth gamepad. Gyro, touchpad and mouse need a Satellite host.</string>
+    <string name="binding_host_hint_satellite">Satellite</string>
+    <string name="binding_host_hint_bt">BT</string>
+    <string name="binding_choose_destination">Choose a destination</string>
+
+    <string name="binding_edge_host_lost_title">Connection lost</string>
+    <string name="binding_edge_host_lost_detail">%1$s stopped responding. Input isn\'t getting through. It may be asleep or off your network.</string>
+    <string name="binding_edge_input_lost_title">Controller unplugged</string>
+    <string name="binding_edge_input_lost_detail">Holding the binding so you can reconnect. Re-plug to keep it.</string>
+    <string name="binding_edge_unsteady_title">Unsteady link</string>
+    <string name="binding_edge_unsteady_detail">Still routing, but packets are dropping. Move closer or switch to USB.</string>
+    <string name="binding_edge_action_reconnect">Reconnect</string>
+    <string name="binding_edge_action_dismiss">Dismiss</string>
+    <string name="binding_apply_error_no_connect">Couldn\'t reach %1$s. Make sure it\'s on and on your network, then try again.</string>
+    <string name="binding_apply_warn_title">Direct mode unavailable</string>
+    <string name="binding_apply_warn_detail">%1$s is bound to %2$s on Standard mode instead.</string>
+    <string name="binding_edge_seconds" translatable="false">s</string>
+
+    <string name="binding_manage_destinations">Manage destinations</string>
+    <string name="binding_no_hosts_title">No hosts found</string>
+    <string name="binding_no_hosts_body">Scan your network for a Satellite host, or pair one over Bluetooth. Once a host appears, come back to bind %1$s.</string>
+
+    <string name="binding_apply_title">Applying binding…</string>
+    <string name="binding_apply_subtitle">Sending each setting to the host.</string>
+    <string name="binding_apply_success_title">Binding applied</string>
+    <string name="binding_apply_success_detail">%1$s is live on %2$s.</string>
+    <string name="binding_apply_error_title">Some settings didn\'t apply</string>    <string name="binding_apply_action_retry">Retry</string>
+
+    <string name="binding_desc_back">Back</string>
+
+    <string name="donate_bar_headline">Dish is free and open source.</string>
+    <string name="donate_bar_ask">Donate to keep it that way →</string>
+    <string name="donate_bar_dismiss">Dismiss donation banner</string>
+
+    <string name="donate_title">Support Dish</string>
+    <string name="donate_eyebrow">Support the project</string>
+    <string name="donate_h1">Dish runs on coffee and goodwill.</string>
+    <string name="donate_lead">Dish, Satellite, and every Dish client are free, open source, ad-free, and analytics-free. No paywalled features, no upsells, and no plans for any of that. Donations are what keep them true.</string>
+    <string name="donate_cta_recommended">Sponsor on %1$s (recommended)</string>
+    <string name="donate_badge_recommended">Recommended</string>
+    <string name="donate_meta_cadence">Cadence</string>
+    <string name="donate_meta_pays_with">Pays with</string>
+    <string name="donate_visit">Open %1$s →</string>
+    <string name="donate_cadence_recurring">Recurring</string>
+    <string name="donate_cadence_one_time">One-time</string>
+    <string name="donate_cadence_either">Either</string>
+
+    <string name="donate_rail_sponsors_name" translatable="false">GitHub Sponsors</string>
+    <string name="donate_rail_kofi_name" translatable="false">Ko-fi</string>
+    <string name="donate_rail_bmac_name" translatable="false">Buy Me a Coffee</string>
+
+    <string name="donate_tier_sponsors_blurb">Monthly sponsorship, processed by GitHub. Lowest fees, no platform cut. The most stable way to support Dish month after month, and the only one that GitHub matches dollar-for-dollar through the GitHub Sponsors Matching Fund where eligible.</string>
+    <string name="donate_tier_sponsors_currencies">Card, PayPal, GitHub credit</string>
+    <string name="donate_tier_kofi_blurb">Tip jar. Buy us a coffee, no account required. Ko-fi takes no cut on one-time tips, so every dollar reaches the project.</string>
+    <string name="donate_tier_kofi_currencies">Card, Apple Pay, Google Pay, PayPal</string>
+    <string name="donate_tier_bmac_blurb">Quick one-time gift or a monthly membership. Card, Apple Pay, or Google Pay. Great if you don\'t have a GitHub account.</string>
+    <string name="donate_tier_bmac_currencies">Card, Apple Pay, Google Pay</string>
+
+    <string name="donate_why_title">What your donation pays for</string>
+    <string name="donate_why_hosting">Hosting. dish.tinkernorth.com, tinkernorth.com, and every signed-installer mirror. AWS isn\'t free, even at our traffic scale.</string>
+    <string name="donate_why_signing">Code-signing certificates. Windows SmartScreen only plays nice because we pay for an EV certificate every year. The same goes for the Apple Developer Program account for the upcoming macOS client.</string>
+    <string name="donate_why_play">Google Play developer fee. A one-time $25 fee plus the time required to keep the Play listing compliant with every new policy round.</string>
+    <string name="donate_why_time">Time. Honest answer: most of it. Dish is a nights-and-weekends project. Donations let me say \"yes\" to working on it instead of taking on extra consulting.</string>
+
+    <string name="donate_thanks">Thank you. Every dollar, every star, every shared link. They all add up. Emir</string>
+
+    <string name="settings_support_title">Support Dish</string>
+    <string name="settings_support_body">Donate via GitHub Sponsors, Ko-fi, or Buy Me a Coffee.</string>
+
+    <string name="url_donate" translatable="false">https://dish.tinkernorth.com/donate/</string>
+    <string name="url_sponsors" translatable="false">https://github.com/sponsors/TinkerNorth</string>
+    <string name="url_kofi" translatable="false">https://ko-fi.com/tinkernorth</string>
+    <string name="url_bmac" translatable="false">https://buymeacoffee.com/tinkernorth</string>
 
 </resources>

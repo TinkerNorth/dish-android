@@ -251,8 +251,7 @@
         <item quantity="other">Vezano · %1$d kontrolera</item>
     </plurals>
     <string name="low_power_streaming_hint">STRIMING · NE ZATVARAJTE APLIKACIJU</string>
-    <string name="low_power_dim_body">Striming se nastavlja dok je ekran zatamnjen — ne zatvarajte Dish.</string>
-
+    <string name="low_power_dim_body">Striming se nastavlja dok je ekran zatamnjen. Ne zatvarajte Dish.</string>
     <!-- Link na politiku privatnosti (u Postavkama) i zajednička poruka greške. -->
     <string name="menu_privacy_policy">Politika privatnosti</string>
     <string name="error_open_url">Nije moguće otvoriti preglednik</string>
@@ -281,10 +280,7 @@
     <string name="path_label_bluetooth">Bluetooth</string>
     <string name="path_reason_busy">Druga aplikacija koristi ovaj kontroler.</string>
     <string name="path_reason_init_failed">Nije moguće postaviti Brzi način. Koristi se Standardni način.</string>
-    <string name="path_reason_permission_denied">USB dozvola odbijena. Odobrite je za Brzi način.</string>
-    <string name="direct_prompt_title">Pokušati Brzi način za %1$s?</string>
-    <string name="direct_prompt_action">Pokušaj</string>
-    <string name="direct_failed">Nije moguće prebaciti %1$s na Brzi način.</string>
+    <string name="path_reason_permission_denied">USB dozvola odbijena. Odobrite je za Brzi način.</string>    <string name="direct_failed">Nije moguće prebaciti %1$s na Brzi način.</string>
     <string name="path_input_section_label">Način unosa</string>
     <string name="path_choice_standard">Standardni</string>
     <string name="path_choice_direct">Brzi</string>
@@ -302,4 +298,95 @@
     <string name="direct_revert_to_direct">Nije moguće prebaciti %1$s na Standardni. I dalje je na Brzom načinu.</string>
     <string name="path_restore_stuck">Standardni način ne reagira. Prebacite na Brzi ili ponovo priključite.</string>
     <string name="path_needs_replug">Prekinuto. Isključite i ponovo priključite da koristite ovaj kontroler.</string>
+
+    <string name="binding_label_connection">Veza</string>
+    <string name="binding_label_destination">Odredište</string>
+    <string name="binding_choose_destination">Odaberite odredište</string>
+
+    <string name="binding_edge_host_lost_title">Veza prekinuta</string>
+    <string name="binding_edge_host_lost_detail">%1$s je prestao odgovarati. Unos ne prolazi. Možda je u mirovanju ili izvan vaše mreže.</string>
+    <string name="binding_edge_input_lost_title">Kontroler isključen</string>
+    <string name="binding_edge_input_lost_detail">Povezivanje se zadržava da se možete ponovo povezati. Ponovo priključite da ga zadržite.</string>
+    <string name="binding_edge_unsteady_title">Nestabilna veza</string>
+    <string name="binding_edge_unsteady_detail">I dalje prosljeđuje, ali paketi se gube. Približite se ili pređite na USB.</string>
+    <string name="binding_edge_action_reconnect">Ponovo poveži</string>
+    <string name="binding_edge_action_dismiss">Odbaci</string>
+    <string name="binding_apply_error_no_connect">Nije moguće dosegnuti %1$s. Provjerite je li uključen i na vašoj mreži, pa pokušajte ponovo.</string>
+    <string name="binding_apply_warn_title">Brzi način nije dostupan</string>
+    <string name="binding_apply_warn_detail">%1$s je povezan s %2$s u Standardnom načinu.</string>
+    <string name="binding_label_emulate">Emuliraj kao</string>
+    <string name="binding_label_functions">Funkcije</string>
+    <string name="binding_label_input">Ulaz</string>
+    <string name="binding_label_binding">Povezivanje</string>
+    <string name="binding_link_usb">USB</string>
+    <string name="binding_link_bluetooth">Bluetooth</string>
+    <string name="binding_link_onscreen">Na ekranu</string>
+    <string name="binding_mode_direct">Brzi</string>
+    <string name="binding_mode_standard">Standardni</string>
+    <string name="binding_func_rumble">Vibracija</string>
+    <string name="binding_func_motion">Pokret</string>
+    <string name="binding_func_touchpad">Dodirna ploča</string>
+    <string name="binding_func_mouse">Miš</string>
+    <string name="binding_func_gyro">Žiro</string>
+    <string name="binding_state_on">Uključeno</string>
+    <string name="binding_state_off">Isključeno</string>
+    <string name="binding_func_value">%1$s · %2$s</string>
+    <string name="binding_card_not_bound">Nije povezano</string>
+    <string name="binding_card_no_functions">Nijedna</string>
+    <string name="binding_action_configure">Podesi povezivanje</string>
+    <string name="binding_action_find_hosts">Pronađi hostove</string>
+    <string name="binding_activity_title">Podesi povezivanje</string>
+    <string name="binding_activity_title_bind">Poveži kontroler</string>
+    <string name="binding_activity_apply">Primijeni</string>
+    <string name="binding_activity_bind">Poveži</string>
+    <string name="binding_dest_carries">Prenosi</string>
+    <string name="binding_dest_no_channel">Nema kanala</string>
+    <string name="binding_dest_host">Host</string>
+    <string name="binding_dest_bt_note">Telefon se uparuje kao Bluetooth kontroler. Žiro, dodirna ploča i miš trebaju Satelit host.</string>
+    <string name="binding_host_hint_satellite">Satelit</string>
+    <string name="binding_host_hint_bt">BT</string>
+    <string name="binding_manage_destinations">Upravljaj odredištima</string>
+    <string name="binding_no_hosts_title">Nema pronađenih hostova</string>
+    <string name="binding_no_hosts_body">Skenirajte mrežu za Satelit host ili uparite jedan preko Bluetootha. Kada se host pojavi, vratite se da povežete %1$s.</string>
+    <string name="binding_apply_title">Primjenjuje se povezivanje…</string>
+    <string name="binding_apply_subtitle">Šalje se svaka postavka hostu.</string>
+    <string name="binding_apply_success_title">Povezivanje primijenjeno</string>
+    <string name="binding_apply_success_detail">%1$s je aktivan na %2$s.</string>
+    <string name="binding_apply_error_title">Neke postavke nisu primijenjene</string>    <string name="binding_apply_action_retry">Pokušaj ponovo</string>
+    <string name="binding_desc_back">Nazad</string>
+
+    <string name="donate_bar_headline">Dish je besplatan i otvorenog koda.</string>
+    <string name="donate_bar_ask">Donirajte da tako i ostane →</string>
+    <string name="donate_bar_dismiss">Zatvori baner za donaciju</string>
+
+    <string name="donate_title">Podrži Dish</string>
+    <string name="donate_eyebrow">Podržite projekat</string>
+    <string name="donate_h1">Dish radi na kafi i dobroj volji.</string>
+    <string name="donate_lead">Dish, Satellite i svaki Dish klijent su besplatni, otvorenog koda, bez reklama i bez analitike. Bez funkcija iza paywalla, bez upsellova i bez planova za bilo šta od toga. Donacije su ono što ih drži takvima.</string>
+    <string name="donate_cta_recommended">Sponzorišite na %1$s (preporučeno)</string>
+    <string name="donate_badge_recommended">Preporučeno</string>
+    <string name="donate_meta_cadence">Učestalost</string>
+    <string name="donate_meta_pays_with">Plaća se sa</string>
+    <string name="donate_visit">Otvori %1$s →</string>
+    <string name="donate_cadence_recurring">Mjesečno</string>
+    <string name="donate_cadence_one_time">Jednokratno</string>
+    <string name="donate_cadence_either">Oboje</string>
+
+    <string name="donate_tier_sponsors_blurb">Mjesečno sponzorstvo, obrađuje ga GitHub. Najniže naknade, bez rezanja platforme. Najstabilniji način podrške Dish-u iz mjeseca u mjesec, i jedini koji GitHub uparuje dolar za dolar kroz GitHub Sponsors Matching Fund gdje je moguće.</string>
+    <string name="donate_tier_sponsors_currencies">Kartica, PayPal, GitHub kredit</string>
+    <string name="donate_tier_kofi_blurb">Tegla za napojnice. Kupite nam kafu, bez potrebe za nalogom. Ko-fi ne uzima ništa na jednokratne napojnice, tako da svaki dolar stiže do projekta.</string>
+    <string name="donate_tier_kofi_currencies">Kartica, Apple Pay, Google Pay, PayPal</string>
+    <string name="donate_tier_bmac_blurb">Brzi jednokratni poklon ili mjesečno članstvo. Kartica, Apple Pay ili Google Pay. Odlično ako nemate GitHub nalog.</string>
+    <string name="donate_tier_bmac_currencies">Kartica, Apple Pay, Google Pay</string>
+
+    <string name="donate_why_title">Šta vaša donacija zapravo plaća</string>
+    <string name="donate_why_hosting">Hosting. dish.tinkernorth.com, tinkernorth.com i svaki signed-installer mirror. AWS nije besplatan, čak ni na našem obimu saobraćaja.</string>
+    <string name="donate_why_signing">Code-signing sertifikati. Windows SmartScreen sarađuje samo zato što plaćamo EV sertifikat svake godine. Isto vrijedi za Apple Developer Program nalog za nadolazeći macOS klijent.</string>
+    <string name="donate_why_play">Google Play developer naknada. Jednokratna naknada od 25 dolara plus vrijeme potrebno za održavanje Play oglasa usklađenim sa svakom novom rundom politika.</string>
+    <string name="donate_why_time">Vrijeme. Iskren odgovor: većina toga. Dish je projekat noći i vikenda. Donacije mi dozvoljavaju da kažem „da“ radu na njemu umjesto preuzimanju dodatnog konsultantskog posla.</string>
+
+    <string name="donate_thanks">Hvala vam. Svaki dolar, svaka zvjezdica, svaki podijeljeni link. Sve to zbraja. Emir</string>
+
+    <string name="settings_support_title">Podrži Dish</string>
+    <string name="settings_support_body">Donirajte preko GitHub Sponsors, Ko-fi ili Buy Me a Coffee.</string>
 </resources>

@@ -23,6 +23,11 @@ import com.tinkernorth.dish.source.notification.DishNotifications
 fun AppCompatActivity.setupDishToolbar(toolbar: Toolbar) {
     setSupportActionBar(toolbar)
     toolbar.setNavigationOnClickListener { finish() }
+    wireDonateButton()
+}
+
+fun AppCompatActivity.wireDonateButton() {
+    findViewById<View>(R.id.btnDonate)?.setOnClickListener { DishNavigator(this).toDonate() }
 }
 
 fun AppCompatActivity.attachGamepadHost(
@@ -79,7 +84,7 @@ fun AppCompatActivity.applyDishActivityTransitions() {
  * format (Settings.Global.getFloat throws SettingNotFoundException on a
  * missing key; older OS images sometimes do).
  */
-private fun Activity.animationsDisabled(): Boolean =
+internal fun Activity.animationsDisabled(): Boolean =
     try {
         Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE) == 0f
     } catch (_: Settings.SettingNotFoundException) {

@@ -27,4 +27,6 @@
     <integer name="motion_duration_bolt_pulse">750</integer>
 
     <integer name="motion_duration_medium">250</integer>
+
+    <integer name="motion_duration_pulse">750</integer>
 </resources>
