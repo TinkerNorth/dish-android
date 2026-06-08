@@ -3,9 +3,11 @@
 package com.tinkernorth.dish.ui.settings
 
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.os.Bundle
 import android.text.TextUtils
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -20,6 +22,7 @@ import com.tinkernorth.dish.source.store.ThemePreferenceStore
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
+import com.tinkernorth.dish.ui.common.attachDonatePill
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -43,6 +46,7 @@ class SettingsActivity : AppCompatActivity() {
         setupDishToolbar(binding.toolbar)
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()
+        attachDonatePill()
 
         binding.sectionSetup.labelSection.setText(R.string.settings_section_setup)
         binding.sectionAppearance.labelSection.setText(R.string.settings_section_appearance)
@@ -96,6 +100,13 @@ class SettingsActivity : AppCompatActivity() {
         binding.cardOpenSourceLicenses.setOnClickListener {
             startActivity(Intent(this, LicensesActivity::class.java))
         }
+
+        binding.cardRowSupport.cardRowIcon.setImageResource(R.drawable.ic_heart)
+        binding.cardRowSupport.cardRowIcon.imageTintList =
+            ColorStateList.valueOf(ContextCompat.getColor(this, R.color.colorPulse))
+        binding.cardRowSupport.cardRowTitle.setText(R.string.settings_support_title)
+        binding.cardRowSupport.cardRowSubtitle.setText(R.string.settings_support_body)
+        binding.cardSupport.setOnClickListener { nav.toDonate() }
 
         // Observe-then-bind: opposite order would re-write the persisted preference on the first frame.
         lifecycleScope.launch {

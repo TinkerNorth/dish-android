@@ -85,6 +85,11 @@
         android:name="com.tinkernorth.dish.ui.onboarding.HelpActivity"
         android:label="@string/help_title" />
 
+    <activity
+        android:id="@+id/donateActivity"
+        android:name="com.tinkernorth.dish.ui.donate.DonateActivity"
+        android:label="@string/donate_title" />
+
     <!-- ═══ INPUT OVERLAYS ════════════════════════════════════════════ -->
     <activity
         android:id="@+id/touchpadOverlayActivity"

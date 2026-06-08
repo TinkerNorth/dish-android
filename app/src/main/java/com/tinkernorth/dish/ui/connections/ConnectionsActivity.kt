@@ -54,6 +54,7 @@ import com.tinkernorth.dish.source.system.NetworkState
 import com.tinkernorth.dish.source.system.NetworkStateObserver
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
+import com.tinkernorth.dish.ui.common.attachDonatePill
 import com.tinkernorth.dish.ui.common.attachGamepadHost
 import com.tinkernorth.dish.ui.common.dotColorForState
 import com.tinkernorth.dish.ui.common.glyphForConnection
@@ -139,6 +140,7 @@ class ConnectionsActivity : AppCompatActivity() {
         setupDishToolbar(binding.toolbar)
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()
+        attachDonatePill()
         bindSectionHeaders()
 
         observeSatelliteHub()

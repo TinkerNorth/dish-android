@@ -144,6 +144,15 @@
             android:parentActivityName=".ui.settings.SettingsActivity"
             tools:targetApi="p" />
 
+        <activity
+            android:name=".ui.donate.DonateActivity"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:theme="@style/Theme.Dish"
+            android:configChanges="keyboardHidden"
+            android:parentActivityName=".ui.main.MainActivity"
+            tools:targetApi="p" />
+
         <service
             android:name=".composer.StreamingService"
             android:exported="false"

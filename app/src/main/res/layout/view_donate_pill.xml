@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/donatePill"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground"
+    app:cardBackgroundColor="@color/colorSurface"
+    app:cardCornerRadius="@dimen/corner_pill"
+    app:cardElevation="@dimen/elevation_floating"
+    app:strokeColor="@color/colorPulse"
+    app:strokeWidth="@dimen/border_thin">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="@dimen/spacing_md"
+        android:paddingEnd="@dimen/spacing_xs"
+        android:paddingVertical="@dimen/spacing_md"
+        android:baselineAligned="false">
+
+        <FrameLayout
+            android:layout_width="@dimen/donate_heart_badge_size"
+            android:layout_height="@dimen/donate_heart_badge_size"
+            android:background="@drawable/bg_pulse_badge">
+
+            <ImageView
+                android:id="@+id/donatePillHeart"
+                android:layout_width="@dimen/donate_heart_size"
+                android:layout_height="@dimen/donate_heart_size"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_heart"
+                android:importantForAccessibility="no" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginStart="@dimen/spacing_lg"
+            android:layout_marginEnd="@dimen/spacing_sm">
+
+            <TextView
+                android:id="@+id/donatePillHeadline"
+                style="@style/TextAppearance.Dish.Title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxWidth="@dimen/donate_pill_max_width"
+                android:text="@string/donate_bar_headline" />
+
+            <TextView
+                android:id="@+id/donatePillAsk"
+                style="@style/TextAppearance.Dish.BodySmall"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxWidth="@dimen/donate_pill_max_width"
+                android:textColor="@color/colorPulse"
+                android:text="@string/donate_bar_ask" />
+        </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/donatePillDismiss"
+            android:layout_width="@dimen/icon_settings_button"
+            android:layout_height="@dimen/icon_settings_button"
+            android:src="@drawable/ic_close"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="@dimen/spacing_md"
+            android:scaleType="fitCenter"
+            app:tint="@color/colorMuted"
+            android:contentDescription="@string/donate_bar_dismiss" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

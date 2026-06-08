@@ -94,4 +94,8 @@
          backs the M3 attr per spec); this is the brand-specific
          "slightly lifted from surface" role. -->
     <color name="colorSurfaceDim">@color/navy_700</color>
+
+    <color name="colorPulse">@color/pulse_pink_500</color>
+    <color name="colorOnPulse">@color/navy_900</color>
+    <color name="colorPulseFill">@color/pulse_pink_200</color>
 </resources>

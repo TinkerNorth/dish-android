@@ -35,6 +35,9 @@
     <color name="signal_cyan_200">#1F4FE3FF</color>
     <color name="signal_cyan_300">#2E4FE3FF</color>
 
+    <color name="pulse_pink_500">#FFFF6FB5</color>
+    <color name="pulse_pink_200">#1FFF6FB5</color>
+
     <!-- ===== Navy — deep-space surface scale. =====
          900 is the app background (darkest); 800 is the elevated surface
          (cards, dialogs); 700 is a slightly lifted variant for empty-state

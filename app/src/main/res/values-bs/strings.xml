@@ -354,4 +354,39 @@
     <string name="binding_apply_success_detail">%1$s je aktivan na %2$s.</string>
     <string name="binding_apply_error_title">Neke postavke nisu primijenjene</string>    <string name="binding_apply_action_retry">Pokušaj ponovo</string>
     <string name="binding_desc_back">Nazad</string>
+
+    <string name="donate_bar_headline">Dish je besplatan i otvorenog koda.</string>
+    <string name="donate_bar_ask">Donirajte da tako i ostane →</string>
+    <string name="donate_bar_dismiss">Zatvori baner za donaciju</string>
+
+    <string name="donate_title">Podrži Dish</string>
+    <string name="donate_eyebrow">Podržite projekat</string>
+    <string name="donate_h1">Dish radi na kafi i dobroj volji.</string>
+    <string name="donate_lead">Dish, Satellite i svaki Dish klijent su besplatni, otvorenog koda, bez reklama i bez analitike. Bez funkcija iza paywalla, bez upsellova i bez planova za bilo šta od toga. Donacije su ono što ih drži takvima.</string>
+    <string name="donate_cta_recommended">Sponzorišite na %1$s (preporučeno)</string>
+    <string name="donate_badge_recommended">Preporučeno</string>
+    <string name="donate_meta_cadence">Učestalost</string>
+    <string name="donate_meta_pays_with">Plaća se sa</string>
+    <string name="donate_visit">Otvori %1$s →</string>
+    <string name="donate_cadence_recurring">Mjesečno</string>
+    <string name="donate_cadence_one_time">Jednokratno</string>
+    <string name="donate_cadence_either">Oboje</string>
+
+    <string name="donate_tier_sponsors_blurb">Mjesečno sponzorstvo, obrađuje ga GitHub. Najniže naknade, bez rezanja platforme. Najstabilniji način podrške Dish-u iz mjeseca u mjesec, i jedini koji GitHub uparuje dolar za dolar kroz GitHub Sponsors Matching Fund gdje je moguće.</string>
+    <string name="donate_tier_sponsors_currencies">Kartica, PayPal, GitHub kredit</string>
+    <string name="donate_tier_kofi_blurb">Tegla za napojnice. Kupite nam kafu, bez potrebe za nalogom. Ko-fi ne uzima ništa na jednokratne napojnice, tako da svaki dolar stiže do projekta.</string>
+    <string name="donate_tier_kofi_currencies">Kartica, Apple Pay, Google Pay, PayPal</string>
+    <string name="donate_tier_bmac_blurb">Brzi jednokratni poklon ili mjesečno članstvo. Kartica, Apple Pay ili Google Pay. Odlično ako nemate GitHub nalog.</string>
+    <string name="donate_tier_bmac_currencies">Kartica, Apple Pay, Google Pay</string>
+
+    <string name="donate_why_title">Šta vaša donacija zapravo plaća</string>
+    <string name="donate_why_hosting">Hosting. dish.tinkernorth.com, tinkernorth.com i svaki signed-installer mirror. AWS nije besplatan, čak ni na našem obimu saobraćaja.</string>
+    <string name="donate_why_signing">Code-signing sertifikati. Windows SmartScreen sarađuje samo zato što plaćamo EV sertifikat svake godine. Isto vrijedi za Apple Developer Program nalog za nadolazeći macOS klijent.</string>
+    <string name="donate_why_play">Google Play developer naknada. Jednokratna naknada od 25 dolara plus vrijeme potrebno za održavanje Play oglasa usklađenim sa svakom novom rundom politika.</string>
+    <string name="donate_why_time">Vrijeme. Iskren odgovor: većina toga. Dish je projekat noći i vikenda. Donacije mi dozvoljavaju da kažem „da“ radu na njemu umjesto preuzimanju dodatnog konsultantskog posla.</string>
+
+    <string name="donate_thanks">Hvala vam. Svaki dolar, svaka zvjezdica, svaki podijeljeni link. Sve to zbraja. Emir</string>
+
+    <string name="settings_support_title">Podrži Dish</string>
+    <string name="settings_support_body">Donirajte preko GitHub Sponsors, Ko-fi ili Buy Me a Coffee.</string>
 </resources>

@@ -354,4 +354,39 @@
     <string name="binding_apply_success_detail">%1$s est actif sur %2$s.</string>
     <string name="binding_apply_error_title">Certains paramètres n\'ont pas été appliqués</string>    <string name="binding_apply_action_retry">Réessayer</string>
     <string name="binding_desc_back">Retour</string>
+
+    <string name="donate_bar_headline">Dish est gratuit et open source.</string>
+    <string name="donate_bar_ask">Faites un don pour que cela continue →</string>
+    <string name="donate_bar_dismiss">Fermer la bannière de don</string>
+
+    <string name="donate_title">Soutenir Dish</string>
+    <string name="donate_eyebrow">Soutenir le projet</string>
+    <string name="donate_h1">Dish tourne au café et à la bonne volonté.</string>
+    <string name="donate_lead">Dish, Satellite et chaque client Dish sont gratuits, open source, sans publicité et sans analyse. Pas de fonctionnalités payantes, pas d\'upsell, et aucune intention d\'en avoir. Les dons sont ce qui les garde fidèles à ce principe.</string>
+    <string name="donate_cta_recommended">Sponsoriser sur %1$s (recommandé)</string>
+    <string name="donate_badge_recommended">Recommandé</string>
+    <string name="donate_meta_cadence">Cadence</string>
+    <string name="donate_meta_pays_with">Paie avec</string>
+    <string name="donate_visit">Ouvrir %1$s →</string>
+    <string name="donate_cadence_recurring">Récurrent</string>
+    <string name="donate_cadence_one_time">Ponctuel</string>
+    <string name="donate_cadence_either">Au choix</string>
+
+    <string name="donate_tier_sponsors_blurb">Sponsorisation mensuelle traitée par GitHub. Frais les plus bas, sans commission de plateforme. La façon la plus stable de soutenir Dish mois après mois, et la seule que GitHub abonde dollar pour dollar via le GitHub Sponsors Matching Fund quand vous êtes éligible.</string>
+    <string name="donate_tier_sponsors_currencies">Carte, PayPal, crédit GitHub</string>
+    <string name="donate_tier_kofi_blurb">Pot à pourboires. Offrez-nous un café, sans compte requis. Ko-fi ne prend rien sur les pourboires ponctuels, donc chaque euro arrive au projet.</string>
+    <string name="donate_tier_kofi_currencies">Carte, Apple Pay, Google Pay, PayPal</string>
+    <string name="donate_tier_bmac_blurb">Cadeau ponctuel rapide ou abonnement mensuel. Carte, Apple Pay ou Google Pay. Parfait si vous n\'avez pas de compte GitHub.</string>
+    <string name="donate_tier_bmac_currencies">Carte, Apple Pay, Google Pay</string>
+
+    <string name="donate_why_title">À quoi sert réellement votre don</string>
+    <string name="donate_why_hosting">Hébergement. dish.tinkernorth.com, tinkernorth.com, et chaque miroir d\'installateur signé. AWS n\'est pas gratuit, même à notre échelle de trafic.</string>
+    <string name="donate_why_signing">Certificats de signature de code. Windows SmartScreen ne joue le jeu que parce que nous payons un certificat EV chaque année. Idem pour le compte Apple Developer Program pour le futur client macOS.</string>
+    <string name="donate_why_play">Frais de développeur Google Play. 25 $ uniques plus le temps nécessaire pour garder la fiche Play conforme à chaque nouvelle vague de règles.</string>
+    <string name="donate_why_time">Le temps. Réponse honnête : la majeure partie. Dish est un projet du soir et du week-end. Les dons me permettent de dire « oui » à y travailler plutôt que d\'accepter des contrats supplémentaires.</string>
+
+    <string name="donate_thanks">Merci. Chaque don, chaque favori, chaque lien partagé. Tout s\'additionne. Emir</string>
+
+    <string name="settings_support_title">Soutenir Dish</string>
+    <string name="settings_support_body">Faites un don via GitHub Sponsors, Ko-fi ou Buy Me a Coffee.</string>
 </resources>

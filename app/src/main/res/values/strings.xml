@@ -447,4 +447,48 @@
 
     <string name="binding_desc_back">Back</string>
 
+    <string name="donate_bar_headline">Dish is free and open source.</string>
+    <string name="donate_bar_ask">Donate to keep it that way →</string>
+    <string name="donate_bar_dismiss">Dismiss donation banner</string>
+
+    <string name="donate_title">Support Dish</string>
+    <string name="donate_eyebrow">Support the project</string>
+    <string name="donate_h1">Dish runs on coffee and goodwill.</string>
+    <string name="donate_lead">Dish, Satellite, and every Dish client are free, open source, ad-free, and analytics-free. No paywalled features, no upsells, and no plans for any of that. Donations are what keep them true.</string>
+    <string name="donate_cta_recommended">Sponsor on %1$s (recommended)</string>
+    <string name="donate_badge_recommended">Recommended</string>
+    <string name="donate_meta_cadence">Cadence</string>
+    <string name="donate_meta_pays_with">Pays with</string>
+    <string name="donate_visit">Open %1$s →</string>
+    <string name="donate_cadence_recurring">Recurring</string>
+    <string name="donate_cadence_one_time">One-time</string>
+    <string name="donate_cadence_either">Either</string>
+
+    <string name="donate_rail_sponsors_name" translatable="false">GitHub Sponsors</string>
+    <string name="donate_rail_kofi_name" translatable="false">Ko-fi</string>
+    <string name="donate_rail_bmac_name" translatable="false">Buy Me a Coffee</string>
+
+    <string name="donate_tier_sponsors_blurb">Monthly sponsorship, processed by GitHub. Lowest fees, no platform cut. The most stable way to support Dish month after month, and the only one that GitHub matches dollar-for-dollar through the GitHub Sponsors Matching Fund where eligible.</string>
+    <string name="donate_tier_sponsors_currencies">Card, PayPal, GitHub credit</string>
+    <string name="donate_tier_kofi_blurb">Tip jar. Buy us a coffee, no account required. Ko-fi takes no cut on one-time tips, so every dollar reaches the project.</string>
+    <string name="donate_tier_kofi_currencies">Card, Apple Pay, Google Pay, PayPal</string>
+    <string name="donate_tier_bmac_blurb">Quick one-time gift or a monthly membership. Card, Apple Pay, or Google Pay. Great if you don\'t have a GitHub account.</string>
+    <string name="donate_tier_bmac_currencies">Card, Apple Pay, Google Pay</string>
+
+    <string name="donate_why_title">What your donation pays for</string>
+    <string name="donate_why_hosting">Hosting. dish.tinkernorth.com, tinkernorth.com, and every signed-installer mirror. AWS isn\'t free, even at our traffic scale.</string>
+    <string name="donate_why_signing">Code-signing certificates. Windows SmartScreen only plays nice because we pay for an EV certificate every year. The same goes for the Apple Developer Program account for the upcoming macOS client.</string>
+    <string name="donate_why_play">Google Play developer fee. A one-time $25 fee plus the time required to keep the Play listing compliant with every new policy round.</string>
+    <string name="donate_why_time">Time. Honest answer: most of it. Dish is a nights-and-weekends project. Donations let me say \"yes\" to working on it instead of taking on extra consulting.</string>
+
+    <string name="donate_thanks">Thank you. Every dollar, every star, every shared link. They all add up. Emir</string>
+
+    <string name="settings_support_title">Support Dish</string>
+    <string name="settings_support_body">Donate via GitHub Sponsors, Ko-fi, or Buy Me a Coffee.</string>
+
+    <string name="url_donate" translatable="false">https://dish.tinkernorth.com/donate/</string>
+    <string name="url_sponsors" translatable="false">https://github.com/sponsors/TinkerNorth</string>
+    <string name="url_kofi" translatable="false">https://ko-fi.com/tinkernorth</string>
+    <string name="url_bmac" translatable="false">https://buymeacoffee.com/tinkernorth</string>
+
 </resources>

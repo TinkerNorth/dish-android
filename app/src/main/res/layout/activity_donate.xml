@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            style="@style/Widget.Dish.Toolbar"
+            android:layout_width="match_parent"
+            app:title="@string/donate_title" />
+
+        <androidx.core.widget.NestedScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:paddingHorizontal="@dimen/spacing_5xl"
+            android:paddingTop="@dimen/spacing_md"
+            android:paddingBottom="@dimen/spacing_6xl">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal"
+                    android:paddingBottom="@dimen/spacing_6xl">
+
+                    <FrameLayout
+                        android:layout_width="@dimen/donate_hero_heart_badge_size"
+                        android:layout_height="@dimen/donate_hero_heart_badge_size"
+                        android:background="@drawable/bg_pulse_badge">
+
+                        <ImageView
+                            android:id="@+id/donateHeroHeart"
+                            android:layout_width="@dimen/donate_hero_heart_size"
+                            android:layout_height="@dimen/donate_hero_heart_size"
+                            android:layout_gravity="center"
+                            android:src="@drawable/ic_heart"
+                            android:importantForAccessibility="no" />
+                    </FrameLayout>
+
+                    <TextView
+                        style="@style/TextAppearance.Dish.Label"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_xl"
+                        android:textColor="@color/colorPulse"
+                        android:textAllCaps="true"
+                        android:text="@string/donate_eyebrow" />
+
+                    <TextView
+                        style="@style/TextAppearance.Dish.Title.Large"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_md"
+                        android:gravity="center"
+                        android:text="@string/donate_h1" />
+
+                    <TextView
+                        style="@style/TextAppearance.Dish.Body"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_lg"
+                        android:gravity="center"
+                        android:text="@string/donate_lead" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnDonateCta"
+                        style="@style/Widget.Dish.Button"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_6xl"
+                        app:backgroundTint="@color/colorPulse"
+                        android:textColor="@color/colorOnPulse"
+                        app:icon="@drawable/ic_heart"
+                        app:iconTint="@color/colorOnPulse"
+                        app:iconGravity="textStart"
+                        tools:text="Sponsor on GitHub Sponsors (recommended)" />
+                </LinearLayout>
+
+                <include
+                    android:id="@+id/railSponsors"
+                    layout="@layout/donate_rail_card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <include
+                    android:id="@+id/railKofi"
+                    layout="@layout/donate_rail_card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/card_margin_bottom" />
+
+                <include
+                    android:id="@+id/railBmac"
+                    layout="@layout/donate_rail_card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/card_margin_bottom" />
+
+                <com.google.android.material.card.MaterialCardView
+                    style="@style/Widget.Dish.Card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="@dimen/card_padding">
+
+                        <TextView
+                            style="@style/TextAppearance.Dish.Title"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/donate_why_title" />
+
+                        <include
+                            android:id="@+id/whyHosting"
+                            layout="@layout/donate_why_row"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/spacing_lg" />
+
+                        <include
+                            android:id="@+id/whySigning"
+                            layout="@layout/donate_why_row"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/spacing_lg" />
+
+                        <include
+                            android:id="@+id/whyPlay"
+                            layout="@layout/donate_why_row"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/spacing_lg" />
+
+                        <include
+                            android:id="@+id/whyTime"
+                            layout="@layout/donate_why_row"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/spacing_lg" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <TextView
+                    style="@style/TextAppearance.Dish.BodySmall"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
+                    android:gravity="center"
+                    android:text="@string/donate_thanks" />
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+    </LinearLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

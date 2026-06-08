@@ -29,6 +29,7 @@ import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.DishSpinnerDrawable
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
+import com.tinkernorth.dish.ui.common.attachDonatePill
 import com.tinkernorth.dish.ui.common.attachGamepadHost
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -100,6 +101,7 @@ class MainActivity :
         gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications)
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()
+        attachDonatePill()
         controllerAdapter = ControllerAdapter(this)
         setupUI()
         observeViewModel()

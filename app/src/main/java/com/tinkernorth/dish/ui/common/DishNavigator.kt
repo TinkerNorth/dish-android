@@ -53,6 +53,10 @@ class DishNavigator(
         controller.navigate(R.id.helpActivity)
     }
 
+    fun toDonate() {
+        controller.navigate(R.id.donateActivity)
+    }
+
     fun toTouchpad(
         connectionId: String,
         touchpadMode: String,
