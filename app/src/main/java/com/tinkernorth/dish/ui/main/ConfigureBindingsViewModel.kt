@@ -114,7 +114,6 @@ sealed interface ApplyState {
 }
 
 @HiltViewModel
-@Suppress("LongParameterList", "TooManyFunctions")
 class ConfigureBindingsViewModel
     @Inject
     constructor(

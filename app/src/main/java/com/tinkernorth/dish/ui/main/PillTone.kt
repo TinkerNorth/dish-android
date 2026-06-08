@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-@file:Suppress("MatchingDeclarationName") // pairs PillTone with its inflateBindingPill helper, so named for the group
-
 package com.tinkernorth.dish.ui.main
 
 import android.content.res.ColorStateList
