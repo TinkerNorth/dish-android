@@ -63,7 +63,7 @@
     <activity
         android:id="@+id/configureBindingsActivity"
         android:name="com.tinkernorth.dish.ui.main.ConfigureBindingsActivity"
-        android:label="@string/tz_activity_title">
+        android:label="@string/binding_activity_title">
 
         <argument
             android:name="extra_slot_id"

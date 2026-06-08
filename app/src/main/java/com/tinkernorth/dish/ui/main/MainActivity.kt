@@ -226,6 +226,14 @@ class MainActivity :
         nav.toConnections()
     }
 
+    override fun onReconnect(slotId: String) {
+        viewModel.reconnectHosts()
+    }
+
+    override fun onUnbind(slotId: String) {
+        viewModel.unbindSlot(slotId)
+    }
+
     override fun onOpenTouchpad(slotId: String) {
         val state = viewModel.uiState.value
         val slot = state.slots.firstOrNull { it.id == slotId } ?: return

@@ -15,16 +15,16 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:padding="@dimen/card_padding"
-            android:gravity="center_vertical">
+            android:padding="@dimen/card_padding">
 
             <ImageView
                 android:id="@+id/ivControllerType"
                 android:layout_width="@dimen/icon_controller"
                 android:layout_height="@dimen/icon_controller"
-                android:src="@drawable/ic_gamepad"
                 android:importantForAccessibility="no"
+                android:src="@drawable/ic_gamepad"
                 app:tint="@color/colorPrimary" />
 
             <TextView
@@ -38,16 +38,116 @@
                 android:maxLines="1" />
         </LinearLayout>
 
+        <View style="@style/Widget.Dish.Divider" />
+
         <LinearLayout
             android:id="@+id/llDecisions"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical" />
+            android:orientation="vertical"
+            android:paddingStart="@dimen/binding_zone_padding"
+            android:paddingTop="@dimen/binding_decisions_padding_top"
+            android:paddingEnd="@dimen/binding_zone_padding"
+            android:paddingBottom="@dimen/binding_zone_gap" />
+
+        <View style="@style/Widget.Dish.Divider" />
 
         <LinearLayout
             android:id="@+id/llActions"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical" />
+            android:divider="@drawable/binding_gap_vertical"
+            android:orientation="vertical"
+            android:paddingStart="@dimen/binding_zone_padding"
+            android:paddingTop="@dimen/binding_zone_gap"
+            android:paddingEnd="@dimen/binding_zone_padding"
+            android:paddingBottom="@dimen/binding_zone_padding"
+            android:showDividers="middle" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/edgeOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/colorOverlayScrim"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="@dimen/binding_edge_padding"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/ivEdgeIcon"
+            android:layout_width="@dimen/binding_edge_icon_size"
+            android:layout_height="@dimen/binding_edge_icon_size"
+            android:importantForAccessibility="no" />
+
+        <TextView
+            android:id="@+id/tvEdgeTitle"
+            style="@style/TextAppearance.Dish.Title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/binding_edge_gap"
+            android:gravity="center" />
+
+        <LinearLayout
+            android:id="@+id/edgeCountdownRow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/binding_edge_gap"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/tvEdgeCountdown"
+                style="@style/TextAppearance.Dish.Display"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/colorWarning" />
+
+            <TextView
+                style="@style/TextAppearance.Dish.Body.Mono"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/spacing_xs"
+                android:text="@string/binding_edge_seconds"
+                android:textColor="@color/colorOnSurfaceVariant" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvEdgeDetail"
+            style="@style/TextAppearance.Dish.BodySmall"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/binding_edge_gap"
+            android:gravity="center"
+            android:textColor="@color/colorOnSurfaceVariant" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnEdgePrimary"
+            style="@style/Widget.Dish.Button.Tonal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/binding_edge_actions_gap"
+            app:iconGravity="textStart" />
+
+        <ProgressBar
+            android:id="@+id/pbEdgeReconnect"
+            android:layout_width="@dimen/binding_edge_spinner_size"
+            android:layout_height="@dimen/binding_edge_spinner_size"
+            android:layout_marginTop="@dimen/binding_edge_actions_gap"
+            android:indeterminate="true"
+            android:indeterminateTint="@color/colorPrimary"
+            android:visibility="gone" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnEdgeSecondary"
+            style="@style/Widget.Dish.Button.Text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/binding_edge_actions_gap"
+            android:visibility="gone" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

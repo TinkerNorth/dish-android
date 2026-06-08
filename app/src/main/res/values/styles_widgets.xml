@@ -294,4 +294,56 @@
          explicit BACK button. Re-introduce the style when an overlay
          button comes back. -->
 
+    <style name="Widget.Dish.Pill" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:paddingStart">@dimen/binding_pill_padding_horizontal</item>
+        <item name="android:paddingEnd">@dimen/binding_pill_padding_horizontal</item>
+        <item name="android:paddingTop">@dimen/binding_pill_padding_vertical</item>
+        <item name="android:paddingBottom">@dimen/binding_pill_padding_vertical</item>
+    </style>
+
+    <style name="Widget.Dish.Pill.Icon" parent="">
+        <item name="android:layout_width">@dimen/binding_pill_icon_size</item>
+        <item name="android:layout_height">@dimen/binding_pill_icon_size</item>
+        <item name="android:layout_marginEnd">@dimen/binding_pill_icon_gap</item>
+        <item name="android:importantForAccessibility">no</item>
+    </style>
+
+    <style name="Widget.Dish.Pill.Text" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textAppearance">@style/TextAppearance.Dish.BodySmall</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="Widget.Dish.MicroLabel" parent="">
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textAppearance">@style/TextAppearance.Dish.Label.Micro</item>
+        <item name="android:textAllCaps">true</item>
+    </style>
+
+    <style name="Widget.Dish.Segment" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingStart">@dimen/config_segment_padding_horizontal</item>
+        <item name="android:paddingEnd">@dimen/config_segment_padding_horizontal</item>
+        <item name="android:paddingTop">@dimen/binding_row_padding_vertical</item>
+        <item name="android:paddingBottom">@dimen/binding_row_padding_vertical</item>
+        <item name="android:textAppearance">@style/TextAppearance.Dish.BodySmall</item>
+        <item name="android:textColor">@color/binding_segment_text</item>
+        <item name="android:background">@drawable/bg_binding_segment</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
+    <style name="Widget.Dish.Divider" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">@dimen/divider_height</item>
+        <item name="android:background">@color/colorOutlineVariant</item>
+    </style>
+
 </resources>

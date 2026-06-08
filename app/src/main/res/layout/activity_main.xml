@@ -130,6 +130,8 @@
             android:paddingHorizontal="@dimen/spacing_5xl"
             android:paddingBottom="@dimen/spacing_3xl"
             app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
+
+        <include layout="@layout/overlay_low_power_chip" />
     </LinearLayout>
 
     <!-- Low-power overlays. The Snackbar-based feedback layer doesn't need

@@ -27,7 +27,7 @@
                 android:layout_width="@dimen/icon_settings_button"
                 android:layout_height="@dimen/icon_settings_button"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/tz_desc_back"
+                android:contentDescription="@string/binding_desc_back"
                 android:src="@drawable/ic_chevron_left"
                 app:tint="@color/colorOnSurface" />
 
@@ -40,16 +40,7 @@
                 android:layout_marginStart="@dimen/spacing_sm"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:text="@string/tz_activity_title" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnApply"
-                style="@style/Widget.Dish.Button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/tz_activity_apply"
-                app:icon="@drawable/ic_check_circle"
-                app:iconGravity="textStart" />
+                android:text="@string/binding_activity_title" />
         </LinearLayout>
 
         <androidx.core.widget.NestedScrollView
@@ -63,8 +54,79 @@
                 android:id="@+id/content"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical" />
+                android:orientation="vertical">
+
+                <include
+                    android:id="@+id/sectionInput"
+                    layout="@layout/binding_section_input"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <include
+                    android:id="@+id/sectionDestination"
+                    layout="@layout/binding_section_destination"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/config_section_gap" />
+
+                <include
+                    android:id="@+id/sectionBinding"
+                    layout="@layout/binding_section_binding"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/config_section_gap" />
+            </LinearLayout>
         </androidx.core.widget.NestedScrollView>
+
+        <LinearLayout
+            android:id="@+id/bottomBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/colorBackground"
+            android:orientation="vertical">
+
+            <View style="@style/Widget.Dish.Divider" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingStart="@dimen/spacing_5xl"
+                android:paddingTop="@dimen/spacing_xl"
+                android:paddingEnd="@dimen/spacing_5xl"
+                android:paddingBottom="@dimen/spacing_3xl">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCancel"
+                    style="@style/Widget.Dish.Button.Outlined"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/action_cancel" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnUnbind"
+                    style="@style/Widget.Dish.Button.Outlined"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="@dimen/spacing_xl"
+                    android:text="@string/action_unbind"
+                    android:textColor="@color/colorError"
+                    android:visibility="gone" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnApply"
+                    style="@style/Widget.Dish.Button"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="@dimen/spacing_xl"
+                    android:text="@string/binding_activity_apply" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <include layout="@layout/overlay_low_power_chip" />
     </LinearLayout>
 
     <FrameLayout
@@ -106,7 +168,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="@dimen/spacing_xl"
-                        android:text="@string/tz_apply_title" />
+                        android:text="@string/binding_apply_title" />
                 </LinearLayout>
 
                 <TextView
@@ -114,14 +176,16 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/spacing_xs"
-                    android:text="@string/tz_apply_subtitle" />
+                    android:text="@string/binding_apply_subtitle" />
 
                 <LinearLayout
                     android:id="@+id/applySteps"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/spacing_2xl"
-                    android:orientation="vertical" />
+                    android:divider="@drawable/binding_gap_vertical"
+                    android:orientation="vertical"
+                    android:showDividers="middle" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
     </FrameLayout>
@@ -181,4 +245,6 @@
                 android:layout_marginStart="@dimen/spacing_md" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
+
+    <include layout="@layout/overlay_low_power" />
 </FrameLayout>

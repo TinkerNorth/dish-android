@@ -30,9 +30,9 @@
     {
       "group": "androidx.annotation",
       "artifact": "annotation",
-      "version": "1.9.1",
+      "version": "1.10.0",
       "name": "Annotation",
-      "url": "https://developer.android.com/jetpack/androidx/releases/annotation#1.9.1",
+      "url": "https://developer.android.com/jetpack/androidx/releases/annotation#1.10.0",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -56,9 +56,9 @@
     {
       "group": "androidx.annotation",
       "artifact": "annotation-jvm",
-      "version": "1.9.1",
+      "version": "1.10.0",
       "name": "Annotation",
-      "url": "https://developer.android.com/jetpack/androidx/releases/annotation#1.9.1",
+      "url": "https://developer.android.com/jetpack/androidx/releases/annotation#1.10.0",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -238,9 +238,9 @@
     {
       "group": "androidx.core",
       "artifact": "core",
-      "version": "1.18.0",
+      "version": "1.19.0",
       "name": "Core",
-      "url": "https://developer.android.com/jetpack/androidx/releases/core#1.18.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/core#1.19.0",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -251,9 +251,9 @@
     {
       "group": "androidx.core",
       "artifact": "core-ktx",
-      "version": "1.18.0",
+      "version": "1.19.0",
       "name": "Core Kotlin Extensions",
-      "url": "https://developer.android.com/jetpack/androidx/releases/core#1.18.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/core#1.19.0",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -264,9 +264,9 @@
     {
       "group": "androidx.core",
       "artifact": "core-splashscreen",
-      "version": "1.0.1",
+      "version": "1.2.0",
       "name": "SplashScreen",
-      "url": "https://developer.android.com/jetpack/androidx/releases/core#1.0.1",
+      "url": "https://developer.android.com/jetpack/androidx/releases/core#1.2.0",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -1096,9 +1096,9 @@
     {
       "group": "androidx.window",
       "artifact": "window",
-      "version": "1.4.0",
+      "version": "1.5.1",
       "name": "WindowManager",
-      "url": "https://developer.android.com/jetpack/androidx/releases/window#1.4.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/window#1.5.1",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -1109,9 +1109,9 @@
     {
       "group": "androidx.window",
       "artifact": "window-core",
-      "version": "1.4.0",
+      "version": "1.5.1",
       "name": "WindowManager Core",
-      "url": "https://developer.android.com/jetpack/androidx/releases/window#1.4.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/window#1.5.1",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -1122,9 +1122,9 @@
     {
       "group": "androidx.window",
       "artifact": "window-core-android",
-      "version": "1.4.0",
+      "version": "1.5.1",
       "name": "WindowManager Core",
-      "url": "https://developer.android.com/jetpack/androidx/releases/window#1.4.0",
+      "url": "https://developer.android.com/jetpack/androidx/releases/window#1.5.1",
       "licenses": [
         {
           "name": "The Apache Software License, Version 2.0",
@@ -1304,7 +1304,7 @@
     {
       "group": "com.google.firebase",
       "artifact": "firebase-bom",
-      "version": "34.13.0",
+      "version": "34.14.0",
       "name": "com.google.firebase:firebase-bom",
       "url": null,
       "licenses": [

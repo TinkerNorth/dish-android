@@ -53,10 +53,11 @@ class UsbPathMachineTest {
     }
 
     @Test
-    fun `routed + auto choose direct without permission only prompts`() {
+    fun `routed + auto choose direct without permission stays put`() {
         val r = reduce(controller(UsbPhase.Routed, hasPermission = false), UsbEvent.Choose(PathChoice.Direct, userInitiated = false))
         assertEquals(UsbPhase.Routed, r.next?.phase)
-        assertEquals(listOf(UsbEffect.PromptTryDirect), r.effects)
+        assertEquals(PathChoice.Direct, r.next?.desired)
+        assertTrue(r.effects.isEmpty())
     }
 
     @Test
@@ -65,6 +66,26 @@ class UsbPathMachineTest {
         assertEquals(UsbPhase.Claiming, r.next?.phase)
         assertTrue(r.next!!.hasPermission)
         assertEquals(listOf(UsbEffect.ClearFailure, UsbEffect.BeginHold, UsbEffect.Claim), r.effects)
+    }
+
+    @Test
+    fun `routed + permission denied while wanting direct falls back to standard with the reason`() {
+        val r =
+            reduce(
+                controller(UsbPhase.Routed, desired = PathChoice.Direct, userInitiated = true),
+                UsbEvent.PermissionDenied,
+            )
+        assertEquals(UsbPhase.Routed, r.next?.phase)
+        assertEquals(PathChoice.Standard, r.next?.desired)
+        assertEquals(DirectClaimFailure.PermissionDenied, r.next?.failure)
+        assertEquals(
+            listOf(
+                UsbEffect.SetPref(PathChoice.Standard),
+                UsbEffect.MarkFailure(DirectClaimFailure.PermissionDenied),
+                UsbEffect.Notify(UsbNotice.SwitchToDirectFailed),
+            ),
+            r.effects,
+        )
     }
 
     @Test
@@ -338,6 +359,7 @@ class UsbPathMachineTest {
                 UsbEvent.FrameworkDown,
                 UsbEvent.UsbUnplugged,
                 UsbEvent.PermissionGranted,
+                UsbEvent.PermissionDenied,
                 UsbEvent.Choose(PathChoice.Direct, userInitiated = true),
                 UsbEvent.Choose(PathChoice.Standard, userInitiated = true),
                 UsbEvent.ClaimSucceeded(-2000),

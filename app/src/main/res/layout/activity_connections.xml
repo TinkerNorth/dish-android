@@ -86,6 +86,8 @@
 
             </LinearLayout>
         </androidx.core.widget.NestedScrollView>
+
+        <include layout="@layout/overlay_low_power_chip" />
     </LinearLayout>
 
     <!-- Low-power overlays (countdown banner + dim screen). Included last so

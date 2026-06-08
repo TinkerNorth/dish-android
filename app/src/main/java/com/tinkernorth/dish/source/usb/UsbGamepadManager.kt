@@ -19,7 +19,6 @@ import androidx.core.content.ContextCompat
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionHub
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
-import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.store.UsbPathPreferenceStore
@@ -68,7 +67,6 @@ class UsbGamepadManager
         private val claimedConns = HashMap<Int, ClaimedConn>()
         private val lastFrameworkId = HashMap<Int, Int?>()
         private val timeouts = HashMap<Int, Job>()
-        private val prompted = HashSet<Int>()
 
         @Volatile private var installed = false
 
@@ -146,6 +144,8 @@ class UsbGamepadManager
                             if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
                                 onUsbPresent(device)
                                 applyEvent(vpk(device.vendorId, device.productId), UsbEvent.PermissionGranted)
+                            } else {
+                                applyEvent(vpk(device.vendorId, device.productId), UsbEvent.PermissionDenied)
                             }
                     }
                 }
@@ -192,7 +192,6 @@ class UsbGamepadManager
             usbDevices.remove(key)
             timeouts.remove(key)?.cancel()
             lastFrameworkId.remove(key)
-            prompted.remove(key)
             claimedConns.remove(key)?.let { runCatching { it.connection.close() } }
             // A fresh plug-in of this model should re-evaluate Direct rather than inherit a stale failure.
             registry.clearDirectFailed(device.vendorId, device.productId)
@@ -248,8 +247,6 @@ class UsbGamepadManager
                 UsbEffect.Reclaim -> runReclaim(key, c)
                 UsbEffect.Release -> releaseToFramework(key)
                 UsbEffect.RequestPermission -> usbDevices[key]?.let { requestPermission(it) }
-                UsbEffect.PromptTryDirect ->
-                    if (prompted.add(key)) usbDevices[key]?.let { promptTryDirect(it) }
                 is UsbEffect.BindFramework -> bindTo(fx.frameworkId, c.connId, c.type)
                 is UsbEffect.RemoveSynthetic -> {
                     claimedConns.remove(key)?.let { runCatching { it.connection.close() } }
@@ -445,21 +442,6 @@ class UsbGamepadManager
                 } else {
                     PathChoice.Standard
                 }
-
-        private fun promptTryDirect(device: UsbDevice) {
-            val vendorId = device.vendorId
-            val productId = device.productId
-            notifications.info(
-                glyph = R.drawable.ic_gamepad,
-                title = context.getString(R.string.direct_prompt_title, friendlyName(device)),
-                action =
-                    DishNotification.Action(
-                        label = context.getString(R.string.direct_prompt_action),
-                    ) { tryDirectMode(vendorId, productId) },
-                key = "direct-prompt:${vendorId.toHex4()}:${productId.toHex4()}",
-                durationMs = DishNotification.DURATION_LONG,
-            )
-        }
 
         private fun requestPermission(device: UsbDevice) {
             val intent = Intent(ACTION_USB_PERMISSION).setPackage(context.packageName)

@@ -14,6 +14,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.jni.SatelliteNative
 import com.tinkernorth.dish.databinding.OverlayLowPowerBinding
+import com.tinkernorth.dish.databinding.OverlayLowPowerChipBinding
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.lowpower.LowPowerManager
 import com.tinkernorth.dish.source.notification.DishNotifications
@@ -37,18 +38,19 @@ class GamepadActivityHost(
     private var snackbarAnchorJob: Job? = null
 
     init {
-        val bindings = OverlayLowPowerBinding.bind(rootView)
-        countdownBannerView = bindings.llCountdownBanner
+        val overlay = OverlayLowPowerBinding.bind(rootView)
+        val chip = OverlayLowPowerChipBinding.bind(rootView)
+        countdownBannerView = chip.llCountdownBanner
         lowPowerManager =
             LowPowerManager(window).apply {
                 views =
                     LowPowerManager.Views(
-                        llCountdownBanner = bindings.llCountdownBanner,
-                        tvCountdownSeconds = bindings.tvCountdownSeconds,
-                        flLowPowerOverlay = bindings.flLowPowerOverlay,
-                        tvLowPowerTime = bindings.tvLowPowerTime,
-                        tvLowPowerStatus = bindings.tvLowPowerStatus,
-                        llStreamingHint = bindings.llStreamingHint,
+                        llCountdownBanner = chip.llCountdownBanner,
+                        tvCountdownSeconds = chip.tvCountdownSeconds,
+                        flLowPowerOverlay = overlay.flLowPowerOverlay,
+                        tvLowPowerTime = overlay.tvLowPowerTime,
+                        tvLowPowerStatus = overlay.tvLowPowerStatus,
+                        llStreamingHint = chip.llStreamingHint,
                     )
                 activeControllerCount = { wakeState.streamingSlotCount.value }
             }

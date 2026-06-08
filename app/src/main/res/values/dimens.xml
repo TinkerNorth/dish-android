@@ -173,4 +173,49 @@
     <dimen name="notification_text_title">@dimen/text_13</dimen>
     <dimen name="notification_text_body">@dimen/text_11</dimen>
     <dimen name="notification_text_action">@dimen/text_12</dimen>
+
+    <dimen name="binding_pill_padding_vertical">@dimen/spacing_xs</dimen>
+    <dimen name="binding_pill_padding_horizontal">@dimen/size_9</dimen>
+    <dimen name="binding_pill_icon_size">@dimen/size_14</dimen>
+    <dimen name="binding_pill_icon_gap">@dimen/spacing_xs</dimen>
+    <dimen name="binding_pill_dash_on">@dimen/size_3</dimen>
+    <dimen name="binding_pill_dash_off">@dimen/size_2</dimen>
+    <dimen name="binding_pill_gap">@dimen/spacing_sm</dimen>
+
+    <dimen name="binding_label_column_width">@dimen/size_80</dimen>
+    <dimen name="binding_legend_label_column_width">@dimen/size_96</dimen>
+
+    <dimen name="binding_zone_padding">@dimen/card_padding</dimen>
+    <dimen name="binding_zone_gap">@dimen/spacing_xl</dimen>
+    <dimen name="binding_decisions_padding_top">@dimen/spacing_xs</dimen>
+    <dimen name="binding_row_padding_vertical">@dimen/size_5</dimen>
+    <dimen name="binding_action_gap">@dimen/spacing_md</dimen>
+    <dimen name="binding_status_dot">@dimen/size_7</dimen>
+
+    <dimen name="binding_edge_padding">@dimen/size_22</dimen>
+    <dimen name="binding_edge_icon_size">@dimen/size_28</dimen>
+    <dimen name="binding_edge_gap">@dimen/size_9</dimen>
+    <dimen name="binding_edge_actions_gap">@dimen/size_8</dimen>
+    <dimen name="binding_edge_spinner_size">@dimen/size_28</dimen>
+
+    <dimen name="low_power_dim_body_max_width">@dimen/size_280</dimen>
+
+    <dimen name="config_section_gap">@dimen/spacing_5xl</dimen>
+    <dimen name="config_section_header_gap">@dimen/spacing_lg</dimen>
+    <dimen name="config_section_icon_size">@dimen/size_15</dimen>
+    <dimen name="config_section_icon_gap">@dimen/size_7</dimen>
+    <dimen name="config_row_icon_size">@dimen/icon_card_glyph</dimen>
+    <dimen name="config_row_icon_gap">@dimen/size_11</dimen>
+    <dimen name="config_row_gap">@dimen/size_11</dimen>
+    <dimen name="config_legend_row_gap">@dimen/size_2</dimen>
+    <dimen name="config_callout_padding">@dimen/size_11</dimen>
+    <dimen name="config_callout_corner">@dimen/corner_picker_row</dimen>
+    <dimen name="config_callout_icon_size">@dimen/spacing_3xl</dimen>
+    <dimen name="config_callout_icon_gap">@dimen/size_9</dimen>
+    <dimen name="config_empty_glyph_size">@dimen/size_40</dimen>
+    <dimen name="config_segment_padding_horizontal">@dimen/spacing_xl</dimen>
+    <dimen name="config_step_indicator_size">@dimen/spacing_3xl</dimen>
+    <dimen name="config_step_pending_dot">@dimen/size_15</dimen>
+    <dimen name="config_step_row_icon">@dimen/spacing_4xl</dimen>
+    <dimen name="config_switch_gap">@dimen/spacing_md</dimen>
 </resources>

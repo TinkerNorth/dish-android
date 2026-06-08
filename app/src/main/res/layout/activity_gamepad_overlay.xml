@@ -48,6 +48,8 @@
                 android:paddingTop="@dimen/spacing_lg"
                 android:paddingBottom="@dimen/spacing_2xl" />
         </FrameLayout>
+
+        <include layout="@layout/overlay_low_power_chip" />
     </LinearLayout>
 
     <!-- Low-power overlays (countdown banner + dim screen). Included last

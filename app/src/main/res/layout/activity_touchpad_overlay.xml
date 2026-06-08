@@ -74,6 +74,8 @@
                     android:layout_marginStart="@dimen/spacing_md" />
             </LinearLayout>
         </FrameLayout>
+
+        <include layout="@layout/overlay_low_power_chip" />
     </LinearLayout>
 
     <!-- Low-power overlays (countdown banner + dim screen). Same include

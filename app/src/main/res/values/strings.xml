@@ -303,8 +303,7 @@
         <item quantity="other">Bound · %1$d controllers</item>
     </plurals>
     <string name="low_power_streaming_hint">STREAMING · KEEP APP OPEN</string>
-    <string name="low_power_dim_body">Streaming continues while dimmed — don\'t close Dish.</string>
-
+    <string name="low_power_dim_body">Streaming continues while dimmed. Don\'t close Dish.</string>
     <!-- Numeric placeholders rendered before the runtime value lands. Kept as
          resources (translatable=false) so layout previews and lint pass, but
          the runtime always overwrites them. -->
@@ -359,10 +358,7 @@
     <string name="path_label_bluetooth">Bluetooth</string>
     <string name="path_reason_busy">Another app is using this controller.</string>
     <string name="path_reason_init_failed">Couldn\'t set up Direct mode. Using Standard mode instead.</string>
-    <string name="path_reason_permission_denied">USB permission denied. Grant it to use Direct mode.</string>
-    <string name="direct_prompt_title">Try Direct mode for %1$s?</string>
-    <string name="direct_prompt_action">Try</string>
-    <string name="direct_failed">Couldn\'t switch %1$s to Direct mode.</string>
+    <string name="path_reason_permission_denied">USB permission denied. Grant it to use Direct mode.</string>    <string name="direct_failed">Couldn\'t switch %1$s to Direct mode.</string>
 
     <!-- Input-path chooser in the expanded controller card: a Standard/Direct toggle plus the
          per-device trade-off and risk copy. capMark passes ✓/✗ into the %s slots. -->
@@ -385,59 +381,70 @@
     <string name="path_needs_replug">Disconnected. Unplug and replug to use this controller.</string>
 
     <!-- Tri-zone controller card + Configure-bindings activity. -->
-    <string name="tz_label_connection">Connection</string>
-    <string name="tz_label_destination">Destination</string>
-    <string name="tz_label_emulate">Emulate as</string>
-    <string name="tz_label_functions">Functions</string>
-    <string name="tz_label_input">Input</string>
-    <string name="tz_label_binding">Binding</string>
+    <string name="binding_label_connection">Connection</string>
+    <string name="binding_label_destination">Destination</string>
+    <string name="binding_label_emulate">Emulate as</string>
+    <string name="binding_label_functions">Functions</string>
+    <string name="binding_label_input">Input</string>
+    <string name="binding_label_binding">Binding</string>
 
-    <string name="tz_link_usb">USB</string>
-    <string name="tz_link_bluetooth">Bluetooth</string>
-    <string name="tz_link_onscreen">On-screen</string>
-    <string name="tz_mode_direct">Direct</string>
-    <string name="tz_mode_standard">Standard</string>
+    <string name="binding_link_usb">USB</string>
+    <string name="binding_link_bluetooth">Bluetooth</string>
+    <string name="binding_link_onscreen">On-screen</string>
+    <string name="binding_mode_direct">Direct</string>
+    <string name="binding_mode_standard">Standard</string>
 
-    <string name="tz_func_rumble">Rumble</string>
-    <string name="tz_func_motion">Motion</string>
-    <string name="tz_func_touchpad">Touchpad</string>
-    <string name="tz_func_mouse">Mouse</string>
-    <string name="tz_func_gyro">Gyro</string>
-    <string name="tz_state_on">On</string>
-    <string name="tz_state_off">Off</string>
-    <string name="tz_func_value">%1$s · %2$s</string>
+    <string name="binding_func_rumble">Rumble</string>
+    <string name="binding_func_motion">Motion</string>
+    <string name="binding_func_touchpad">Touchpad</string>
+    <string name="binding_func_mouse">Mouse</string>
+    <string name="binding_func_gyro">Gyro</string>
+    <string name="binding_state_on">On</string>
+    <string name="binding_state_off">Off</string>
+    <string name="binding_func_value">%1$s · %2$s</string>
 
-    <string name="tz_card_not_bound">Not bound</string>
-    <string name="tz_card_no_functions">None</string>
+    <string name="binding_card_not_bound">Not bound</string>
+    <string name="binding_card_no_functions">None</string>
 
-    <string name="tz_action_configure">Configure bindings</string>
-    <string name="tz_action_find_hosts">Find hosts</string>
+    <string name="binding_action_configure">Configure bindings</string>
+    <string name="binding_action_find_hosts">Find hosts</string>
 
-    <string name="tz_activity_title">Configure bindings</string>
-    <string name="tz_activity_title_bind">Bind controller</string>
-    <string name="tz_activity_apply">Apply</string>
-    <string name="tz_activity_bind">Bind</string>
+    <string name="binding_activity_title">Configure bindings</string>
+    <string name="binding_activity_title_bind">Bind controller</string>
+    <string name="binding_activity_apply">Apply</string>
+    <string name="binding_activity_bind">Bind</string>
 
-    <string name="tz_dest_carries">Carries</string>
-    <string name="tz_dest_no_channel">No channel</string>
-    <string name="tz_dest_host">Host</string>
-    <string name="tz_dest_bt_note">Phone pairs as a Bluetooth gamepad. Gyro, touchpad and mouse need a Satellite host.</string>
-    <string name="tz_host_hint_satellite">Satellite</string>
-    <string name="tz_host_hint_bt">BT</string>
+    <string name="binding_dest_carries">Carries</string>
+    <string name="binding_dest_no_channel">No channel</string>
+    <string name="binding_dest_host">Host</string>
+    <string name="binding_dest_bt_note">Phone pairs as a Bluetooth gamepad. Gyro, touchpad and mouse need a Satellite host.</string>
+    <string name="binding_host_hint_satellite">Satellite</string>
+    <string name="binding_host_hint_bt">BT</string>
+    <string name="binding_choose_destination">Choose a destination</string>
 
-    <string name="tz_manage_destinations">Manage destinations</string>
-    <string name="tz_no_hosts_title">No hosts found</string>
-    <string name="tz_no_hosts_body">Scan your network for a Satellite host, or pair one over Bluetooth. Once a host appears, come back to bind %1$s.</string>
+    <string name="binding_edge_host_lost_title">Connection lost</string>
+    <string name="binding_edge_host_lost_detail">%1$s stopped responding. Input isn\'t getting through. It may be asleep or off your network.</string>
+    <string name="binding_edge_input_lost_title">Controller unplugged</string>
+    <string name="binding_edge_input_lost_detail">Holding the binding so you can reconnect. Re-plug to keep it.</string>
+    <string name="binding_edge_unsteady_title">Unsteady link</string>
+    <string name="binding_edge_unsteady_detail">Still routing, but packets are dropping. Move closer or switch to USB.</string>
+    <string name="binding_edge_action_reconnect">Reconnect</string>
+    <string name="binding_edge_action_dismiss">Dismiss</string>
+    <string name="binding_apply_error_no_connect">Couldn\'t reach %1$s. Make sure it\'s on and on your network, then try again.</string>
+    <string name="binding_apply_warn_title">Direct mode unavailable</string>
+    <string name="binding_apply_warn_detail">%1$s is bound to %2$s on Standard mode instead.</string>
+    <string name="binding_edge_seconds" translatable="false">s</string>
 
-    <string name="tz_apply_title">Applying binding…</string>
-    <string name="tz_apply_subtitle">Sending each setting to the host.</string>
-    <string name="tz_apply_success_title">Binding applied</string>
-    <string name="tz_apply_success_detail">%1$s is live on %2$s.</string>
-    <string name="tz_apply_error_title">Some settings didn\'t apply</string>
-    <string name="tz_apply_action_view">Done</string>
-    <string name="tz_apply_action_retry">Retry</string>
-    <string name="tz_host_fallback">the host</string>
+    <string name="binding_manage_destinations">Manage destinations</string>
+    <string name="binding_no_hosts_title">No hosts found</string>
+    <string name="binding_no_hosts_body">Scan your network for a Satellite host, or pair one over Bluetooth. Once a host appears, come back to bind %1$s.</string>
 
-    <string name="tz_desc_back">Back</string>
+    <string name="binding_apply_title">Applying binding…</string>
+    <string name="binding_apply_subtitle">Sending each setting to the host.</string>
+    <string name="binding_apply_success_title">Binding applied</string>
+    <string name="binding_apply_success_detail">%1$s is live on %2$s.</string>
+    <string name="binding_apply_error_title">Some settings didn\'t apply</string>    <string name="binding_apply_action_retry">Retry</string>
+
+    <string name="binding_desc_back">Back</string>
 
 </resources>

@@ -252,8 +252,7 @@
         <item quantity="other">Vinculados · %1$d controles</item>
     </plurals>
     <string name="low_power_streaming_hint">TRANSMITINDO · MANTENHA O APP ABERTO</string>
-    <string name="low_power_dim_body">A transmissão continua com a tela esmaecida — não feche o Dish.</string>
-
+    <string name="low_power_dim_body">A transmissão continua com a tela esmaecida. Não feche o Dish.</string>
     <!-- Link da Política de Privacidade (em Configurações) e mensagem de erro compartilhada. -->
     <string name="menu_privacy_policy">Política de privacidade</string>
     <string name="error_open_url">Não foi possível abrir o navegador</string>
@@ -282,10 +281,7 @@
     <string name="path_label_bluetooth">Bluetooth</string>
     <string name="path_reason_busy">Outro app está usando este controle.</string>
     <string name="path_reason_init_failed">Não foi possível ativar o Modo direto. Usando Modo padrão.</string>
-    <string name="path_reason_permission_denied">Permissão de USB negada. Conceda-a para usar o Modo direto.</string>
-    <string name="direct_prompt_title">Tentar Modo direto para %1$s?</string>
-    <string name="direct_prompt_action">Tentar</string>
-    <string name="direct_failed">Não foi possível mudar %1$s para o Modo direto.</string>
+    <string name="path_reason_permission_denied">Permissão de USB negada. Conceda-a para usar o Modo direto.</string>    <string name="direct_failed">Não foi possível mudar %1$s para o Modo direto.</string>
     <string name="path_input_section_label">Caminho de entrada</string>
     <string name="path_choice_standard">Padrão</string>
     <string name="path_choice_direct">Direto</string>
@@ -303,4 +299,60 @@
     <string name="direct_revert_to_direct">Não foi possível mudar %1$s para Padrão. Ainda no Modo direto.</string>
     <string name="path_restore_stuck">O Modo padrão não está respondendo. Mude para Direto ou reconecte.</string>
     <string name="path_needs_replug">Desconectado. Desconecte e conecte novamente para usar este controle.</string>
+
+    <string name="binding_label_connection">Conexão</string>
+    <string name="binding_label_destination">Destino</string>
+    <string name="binding_choose_destination">Escolha um destino</string>
+
+    <string name="binding_edge_host_lost_title">Conexão perdida</string>
+    <string name="binding_edge_host_lost_detail">%1$s parou de responder. A entrada não está chegando. Pode estar em suspensão ou fora da sua rede.</string>
+    <string name="binding_edge_input_lost_title">Controle desconectado</string>
+    <string name="binding_edge_input_lost_detail">Mantendo o vínculo para você reconectar. Conecte novamente para mantê-lo.</string>
+    <string name="binding_edge_unsteady_title">Conexão instável</string>
+    <string name="binding_edge_unsteady_detail">Ainda roteando, mas pacotes estão sendo perdidos. Aproxime-se ou mude para USB.</string>
+    <string name="binding_edge_action_reconnect">Reconectar</string>
+    <string name="binding_edge_action_dismiss">Dispensar</string>
+    <string name="binding_apply_error_no_connect">Não foi possível alcançar %1$s. Verifique se está ligado e na sua rede e tente novamente.</string>
+    <string name="binding_apply_warn_title">Modo Direto indisponível</string>
+    <string name="binding_apply_warn_detail">%1$s está vinculado a %2$s no modo Padrão.</string>
+    <string name="binding_label_emulate">Emular como</string>
+    <string name="binding_label_functions">Funções</string>
+    <string name="binding_label_input">Entrada</string>
+    <string name="binding_label_binding">Vínculo</string>
+    <string name="binding_link_usb">USB</string>
+    <string name="binding_link_bluetooth">Bluetooth</string>
+    <string name="binding_link_onscreen">Na tela</string>
+    <string name="binding_mode_direct">Direto</string>
+    <string name="binding_mode_standard">Padrão</string>
+    <string name="binding_func_rumble">Vibração</string>
+    <string name="binding_func_motion">Movimento</string>
+    <string name="binding_func_touchpad">Touchpad</string>
+    <string name="binding_func_mouse">Mouse</string>
+    <string name="binding_func_gyro">Giroscópio</string>
+    <string name="binding_state_on">Ligado</string>
+    <string name="binding_state_off">Desligado</string>
+    <string name="binding_func_value">%1$s · %2$s</string>
+    <string name="binding_card_not_bound">Sem vínculo</string>
+    <string name="binding_card_no_functions">Nenhuma</string>
+    <string name="binding_action_configure">Configurar vínculos</string>
+    <string name="binding_action_find_hosts">Encontrar hosts</string>
+    <string name="binding_activity_title">Configurar vínculos</string>
+    <string name="binding_activity_title_bind">Vincular o controle</string>
+    <string name="binding_activity_apply">Aplicar</string>
+    <string name="binding_activity_bind">Vincular</string>
+    <string name="binding_dest_carries">Transmite</string>
+    <string name="binding_dest_no_channel">Sem canal</string>
+    <string name="binding_dest_host">Host</string>
+    <string name="binding_dest_bt_note">O telefone pareia como controle Bluetooth. Giroscópio, touchpad e mouse precisam de um host Satélite.</string>
+    <string name="binding_host_hint_satellite">Satélite</string>
+    <string name="binding_host_hint_bt">BT</string>
+    <string name="binding_manage_destinations">Gerenciar destinos</string>
+    <string name="binding_no_hosts_title">Nenhum host encontrado</string>
+    <string name="binding_no_hosts_body">Procure um host Satélite na sua rede ou pareie um por Bluetooth. Quando um host aparecer, volte para vincular %1$s.</string>
+    <string name="binding_apply_title">Aplicando o vínculo…</string>
+    <string name="binding_apply_subtitle">Enviando cada configuração ao host.</string>
+    <string name="binding_apply_success_title">Vínculo aplicado</string>
+    <string name="binding_apply_success_detail">%1$s está ativo em %2$s.</string>
+    <string name="binding_apply_error_title">Algumas configurações não foram aplicadas</string>    <string name="binding_apply_action_retry">Tentar novamente</string>
+    <string name="binding_desc_back">Voltar</string>
 </resources>

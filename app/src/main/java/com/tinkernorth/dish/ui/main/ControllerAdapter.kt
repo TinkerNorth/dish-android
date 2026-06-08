@@ -4,29 +4,26 @@ package com.tinkernorth.dish.ui.main
 
 import android.content.Context
 import android.content.res.ColorStateList
-import android.graphics.Color
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
-import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.LinearLayout
-import android.widget.TextView
-import androidx.annotation.ColorInt
 import androidx.annotation.DrawableRes
-import androidx.appcompat.content.res.AppCompatResources
-import androidx.core.widget.TextViewCompat
+import androidx.annotation.StringRes
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.MotionCapability
+import com.tinkernorth.dish.databinding.BindingDecisionRowBinding
+import com.tinkernorth.dish.databinding.BindingValueMonoBinding
+import com.tinkernorth.dish.databinding.BindingValueNoneBinding
+import com.tinkernorth.dish.databinding.BindingValueNotBoundBinding
 import com.tinkernorth.dish.databinding.ItemControllerBinding
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.repository.TouchpadModeValue
@@ -39,6 +36,10 @@ interface SlotActionListener {
     fun onOpenTouchpad(slotId: String)
 
     fun onManageDestinations()
+
+    fun onReconnect(slotId: String)
+
+    fun onUnbind(slotId: String)
 }
 
 internal fun LinkState.isAvailableForPicker(): Boolean =
@@ -61,6 +62,8 @@ internal fun LinkState.isLiveLink(): Boolean = this == LinkState.Connected || th
 class ControllerAdapter(
     private val listener: SlotActionListener,
 ) : ListAdapter<ControllerAdapter.Row, ControllerAdapter.VH>(Diff) {
+    private val dismissedUnsteady = mutableSetOf<String>()
+
     data class Row(
         val slot: ControllerSlot,
         val connections: List<ConnectionSummary>,
@@ -93,6 +96,7 @@ class ControllerAdapter(
         private val b: ItemControllerBinding,
     ) : RecyclerView.ViewHolder(b.root) {
         private val ctx: Context get() = b.root.context
+        private val inflater: LayoutInflater get() = LayoutInflater.from(ctx)
 
         fun bind(row: Row) {
             val slot = row.slot
@@ -102,7 +106,12 @@ class ControllerAdapter(
                 if (isVirtual) R.drawable.ic_gamepad_virtual else R.drawable.ic_gamepad,
             )
             b.tvControllerName.text = slot.name
-            b.root.alpha = if (slot.isDisconnecting) 0.5f else 1f
+
+            val edge = edgeOf(slot)
+            if (edge != EdgeState.UNSTEADY) dismissedUnsteady.remove(slot.id)
+            val showEdge =
+                edge != EdgeState.NONE && !(edge == EdgeState.UNSTEADY && slot.id in dismissedUnsteady)
+            b.root.alpha = if (!showEdge && slot.isDisconnecting) 0.5f else 1f
 
             b.llDecisions.removeAllViews()
             b.llActions.removeAllViews()
@@ -113,31 +122,164 @@ class ControllerAdapter(
                 buildBoundDecisions(row, slot.boundStatus)
             }
             buildActions(row)
+            bindEdge(if (showEdge) edge else EdgeState.NONE, row)
         }
 
         private fun buildBoundDecisions(
             row: Row,
             bound: ConnectionSummary,
         ) {
-            val inner = decisionsContainer()
-            inner.addView(decisionRow(ctx.getString(R.string.tz_label_connection), connectionPills(row, bound.kind)))
-            inner.addView(decisionRow(ctx.getString(R.string.tz_label_destination), listOf(monoValue(bound.label))))
-            typePill(row, bound)?.let {
-                inner.addView(decisionRow(ctx.getString(R.string.tz_label_emulate), listOf(it)))
+            addDecisionRow(R.string.binding_label_connection) { c -> connectionPills(c, row, bound.kind) }
+            addDecisionRow(R.string.binding_label_destination) { c -> c.addView(monoValue(c, bound.label)) }
+            typePillLabel(row, bound)?.let { label ->
+                addDecisionRow(R.string.binding_label_emulate) { c -> c.addView(c.inflateBindingPill(label, null, PillTone.FACT)) }
             }
-            inner.addView(functionRow(functionPills(row, bound)))
-            b.llDecisions.addView(divider())
-            b.llDecisions.addView(inner)
+            // Function chips render label-less (full-width row), so pass no row label.
+            addDecisionRow(null) { c -> functionPills(c, row, bound) }
         }
 
         private fun buildUnboundDecisions(row: Row) {
-            val inner = decisionsContainer()
             // Unbound shows the connection without a mode chip; Direct/Standard is only chosen at bind time.
-            inner.addView(decisionRow(ctx.getString(R.string.tz_label_connection), connectionPills(row, null)))
-            inner.addView(decisionRow(ctx.getString(R.string.tz_label_destination), listOf(notBoundValue())))
-            b.llDecisions.addView(divider())
-            b.llDecisions.addView(inner)
+            addDecisionRow(R.string.binding_label_connection) { c -> connectionPills(c, row, null) }
+            addDecisionRow(R.string.binding_label_destination) { c -> c.addView(notBoundValue(c)) }
         }
+
+        private fun addDecisionRow(
+            labelRes: Int?,
+            buildValues: (ViewGroup) -> Unit,
+        ) {
+            val rowB = BindingDecisionRowBinding.inflate(inflater, b.llDecisions, false)
+            if (labelRes != null) rowB.tvRowLabel.setText(labelRes) else rowB.tvRowLabel.visibility = View.GONE
+            buildValues(rowB.valueContainer)
+            b.llDecisions.addView(rowB.root)
+        }
+
+        private fun connectionPills(
+            container: ViewGroup,
+            row: Row,
+            kind: ConnectionKind?,
+        ) {
+            val card = row.pathCard
+            val virtual = row.slot.inputType == SlotInputType.VIRTUAL
+            val isUsb = !virtual && card?.transport == Transport.Usb
+            val isBt = !virtual && card?.transport == Transport.Bluetooth
+            val (label, icon) =
+                when {
+                    virtual -> R.string.binding_link_onscreen to R.drawable.ic_gamepad_virtual
+                    isBt -> R.string.binding_link_bluetooth to R.drawable.ic_bluetooth
+                    else -> R.string.binding_link_usb to R.drawable.ic_usb
+                }
+            addPill(container, label, icon, PillTone.FACT)
+            // The Direct/Standard mode chip only applies once a USB controller is on a known path.
+            if (isUsb && kind != null && card != null) addUsbModePill(container, card)
+        }
+
+        private fun addPill(
+            container: ViewGroup,
+            @StringRes label: Int,
+            @DrawableRes icon: Int,
+            tone: PillTone,
+        ) {
+            container.addView(container.inflateBindingPill(ctx.getString(label), icon, tone))
+        }
+
+        private fun addUsbModePill(
+            container: ViewGroup,
+            card: PathCard,
+        ) {
+            if (card.currentMode == InputPathMode.Direct) {
+                val tone = if (card.risk == PathRisk.GuessedLayout) PillTone.WARN else PillTone.ON
+                addPill(container, R.string.binding_mode_direct, R.drawable.ic_bolt, tone)
+            } else {
+                addPill(container, R.string.binding_mode_standard, R.drawable.ic_cable, PillTone.CAP)
+            }
+        }
+
+        private fun typePillLabel(
+            row: Row,
+            bound: ConnectionSummary,
+        ): String? =
+            when (bound.kind) {
+                ConnectionKind.SATELLITE -> {
+                    val type = bound.satelliteControllerTypes[row.slot.id] ?: CONTROLLER_TYPE_XBOX
+                    ctx.getString(if (type == CONTROLLER_TYPE_PLAYSTATION) R.string.picker_type_playstation else R.string.picker_type_xbox)
+                }
+                ConnectionKind.BLUETOOTH -> bound.btProfile
+            }
+
+        // Reports the configured (not live-gated) routing: motion only carries on a Satellite host
+        // emulating PlayStation; touchpad only on a Satellite host.
+        private fun functionPills(
+            container: ViewGroup,
+            row: Row,
+            bound: ConnectionSummary,
+        ) {
+            val before = container.childCount
+            val card = row.pathCard
+            val rumblePresent =
+                card != null &&
+                    (if (card.currentMode == InputPathMode.Direct) card.direct.rumble else card.standard.rumble)
+            if (rumblePresent) {
+                container.addView(
+                    container.inflateBindingPill(
+                        funcValue(R.string.binding_func_rumble, R.string.binding_state_on),
+                        R.drawable.ic_rumble,
+                        PillTone.ON,
+                    ),
+                )
+            }
+
+            val type = bound.satelliteControllerTypes[row.slot.id] ?: CONTROLLER_TYPE_XBOX
+            val motionAvailable =
+                row.motionCap.hasGyro &&
+                    bound.kind == ConnectionKind.SATELLITE &&
+                    type == CONTROLLER_TYPE_PLAYSTATION
+            if (motionAvailable) {
+                val on = row.motionCap.userEnabled
+                val state = if (on) R.string.binding_state_on else R.string.binding_state_off
+                val tone = if (on) PillTone.ON else PillTone.OFF
+                container.addView(container.inflateBindingPill(funcValue(R.string.binding_func_motion, state), R.drawable.ic_motion, tone))
+            }
+
+            if (bound.kind == ConnectionKind.SATELLITE) {
+                val mode = row.touchpadModes[row.slot.boundConnectionId] ?: TouchpadModeValue.OFF
+                val valueRes =
+                    when (mode) {
+                        TouchpadModeValue.DS4 -> R.string.touchpad_mode_pad
+                        TouchpadModeValue.MOUSE -> R.string.touchpad_mode_mouse
+                        else -> R.string.touchpad_mode_off
+                    }
+                val label =
+                    ctx.getString(
+                        R.string.binding_func_value,
+                        ctx.getString(R.string.binding_func_touchpad),
+                        ctx.getString(valueRes),
+                    )
+                val icon = if (mode == TouchpadModeValue.MOUSE) R.drawable.ic_mouse else R.drawable.ic_touchpad
+                val tone = if (mode == TouchpadModeValue.OFF) PillTone.OFF else PillTone.ON
+                container.addView(container.inflateBindingPill(label, icon, tone))
+            }
+
+            if (container.childCount == before) container.addView(noneValue(container))
+        }
+
+        private fun funcValue(
+            nameRes: Int,
+            valueRes: Int,
+        ): String = ctx.getString(R.string.binding_func_value, ctx.getString(nameRes), ctx.getString(valueRes))
+
+        private fun monoValue(
+            parent: ViewGroup,
+            text: String,
+        ): View {
+            val mono = BindingValueMonoBinding.inflate(inflater, parent, false)
+            mono.root.text = text
+            return mono.root
+        }
+
+        private fun notBoundValue(parent: ViewGroup): View = BindingValueNotBoundBinding.inflate(inflater, parent, false).root
+
+        private fun noneValue(parent: ViewGroup): View = BindingValueNoneBinding.inflate(inflater, parent, false).root
 
         private fun buildActions(row: Row) {
             val slot = row.slot
@@ -146,34 +288,58 @@ class ControllerAdapter(
             if (bound == null || slot.boundConnectionId == null) {
                 actions +=
                     if (row.connections.isEmpty()) {
-                        CardAction(R.drawable.ic_satellite, ctx.getString(R.string.tz_action_find_hosts), outlined = false, kind = ActionKind.FIND_HOSTS)
+                        CardAction(
+                            R.drawable.ic_satellite,
+                            ctx.getString(R.string.binding_action_find_hosts),
+                            outlined = false,
+                            kind = ActionKind.FIND_HOSTS,
+                        )
                     } else {
-                        CardAction(R.drawable.ic_tune, ctx.getString(R.string.tz_action_configure), outlined = true, kind = ActionKind.CONFIGURE)
+                        CardAction(
+                            R.drawable.ic_tune,
+                            ctx.getString(R.string.binding_action_configure),
+                            outlined = true,
+                            kind = ActionKind.CONFIGURE,
+                        )
                     }
             } else {
                 val connected = bound.live == LinkState.Connected
                 if (slot.inputType == SlotInputType.VIRTUAL && connected) {
-                    actions += CardAction(R.drawable.ic_open_gamepad, ctx.getString(R.string.action_open_gamepad), outlined = false, kind = ActionKind.GAMEPAD)
+                    actions +=
+                        CardAction(
+                            R.drawable.ic_open_gamepad,
+                            ctx.getString(R.string.action_open_gamepad),
+                            outlined = false,
+                            kind = ActionKind.GAMEPAD,
+                        )
                 }
                 val touchpadMode = row.touchpadModes[slot.boundConnectionId] ?: TouchpadModeValue.OFF
                 if (bound.kind == ConnectionKind.SATELLITE && connected && touchpadMode != TouchpadModeValue.OFF) {
-                    actions += CardAction(R.drawable.ic_open_touchpad, ctx.getString(R.string.action_open_touchpad), outlined = false, kind = ActionKind.TOUCHPAD)
+                    actions +=
+                        CardAction(
+                            R.drawable.ic_open_touchpad,
+                            ctx.getString(R.string.action_open_touchpad),
+                            outlined = false,
+                            kind = ActionKind.TOUCHPAD,
+                        )
                 }
-                actions += CardAction(R.drawable.ic_tune, ctx.getString(R.string.tz_action_configure), outlined = true, kind = ActionKind.CONFIGURE)
+                actions +=
+                    CardAction(
+                        R.drawable.ic_tune,
+                        ctx.getString(R.string.binding_action_configure),
+                        outlined = true,
+                        kind = ActionKind.CONFIGURE,
+                    )
             }
 
-            val inner = LinearLayout(ctx)
-            inner.orientation = LinearLayout.VERTICAL
-            inner.setPaddingRelative(dp(14), dp(12), dp(14), dp(14))
-            actions.forEachIndexed { i, action ->
-                val btn = actionButton(inner, action) { dispatch(action.kind, slot.id) }
-                val lp = btn.layoutParams as LinearLayout.LayoutParams
-                if (i > 0) lp.topMargin = dp(8)
-                btn.layoutParams = lp
-                inner.addView(btn)
+            for (action in actions) {
+                val layoutRes = if (action.outlined) R.layout.binding_action_button_outlined else R.layout.binding_action_button
+                val btn = inflater.inflate(layoutRes, b.llActions, false) as MaterialButton
+                btn.text = action.label
+                btn.setIconResource(action.icon)
+                btn.setOnClickListener { dispatch(action.kind, slot.id) }
+                b.llActions.addView(btn)
             }
-            b.llActions.addView(divider())
-            b.llActions.addView(inner)
         }
 
         private fun dispatch(
@@ -188,293 +354,98 @@ class ControllerAdapter(
             }
         }
 
-        private fun connectionPills(
-            row: Row,
-            kind: ConnectionKind?,
-        ): List<View> {
-            val card = row.pathCard
-            val isUsb = card?.transport == Transport.Usb
-            val isBt = row.slot.inputType == SlotInputType.PHYSICAL && card?.transport == Transport.Bluetooth
-            return when {
-                row.slot.inputType == SlotInputType.VIRTUAL ->
-                    listOf(factPill(ctx.getString(R.string.tz_link_onscreen), R.drawable.ic_gamepad_virtual))
-                isUsb -> {
-                    val out = mutableListOf<View>(factPill(ctx.getString(R.string.tz_link_usb), R.drawable.ic_usb))
-                    if (kind != null && card != null) {
-                        out +=
-                            if (card.currentMode == InputPathMode.Direct) {
-                                if (card.risk == PathRisk.GuessedLayout) {
-                                    warnPill(ctx.getString(R.string.tz_mode_direct), R.drawable.ic_bolt)
-                                } else {
-                                    onPill(ctx.getString(R.string.tz_mode_direct), R.drawable.ic_bolt)
-                                }
-                            } else {
-                                capPill(ctx.getString(R.string.tz_mode_standard), R.drawable.ic_cable)
-                            }
-                    }
-                    out
-                }
-                isBt -> listOf(factPill(ctx.getString(R.string.tz_link_bluetooth), R.drawable.ic_bluetooth))
-                else -> listOf(factPill(ctx.getString(R.string.tz_link_usb), R.drawable.ic_usb))
+        private fun edgeOf(slot: ControllerSlot): EdgeState {
+            val bound = slot.boundStatus
+            if (bound == null || slot.boundConnectionId == null) return EdgeState.NONE
+            if (slot.isDisconnecting) return EdgeState.INPUT_LOST
+            return when (bound.live) {
+                LinkState.Unstable -> EdgeState.UNSTEADY
+                LinkState.Connected -> EdgeState.NONE
+                // Connecting (incl. a global reconnect in flight) keeps showing "lost" so the badge doesn't flicker off.
+                else -> EdgeState.HOST_LOST
             }
         }
 
-        private fun typePill(
+        private fun bindEdge(
+            edge: EdgeState,
             row: Row,
-            bound: ConnectionSummary,
-        ): View? {
-            val label =
-                when (bound.kind) {
-                    ConnectionKind.SATELLITE -> {
-                        val type = bound.satelliteControllerTypes[row.slot.id] ?: com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
-                        if (type == CONTROLLER_TYPE_PLAYSTATION) {
-                            ctx.getString(R.string.picker_type_playstation)
+        ) {
+            b.edgeOverlay.visibility = if (edge == EdgeState.NONE) View.GONE else View.VISIBLE
+            if (edge == EdgeState.NONE) return
+            val slot = row.slot
+            b.pbEdgeReconnect.visibility = View.GONE
+            val accent =
+                when (edge) {
+                    EdgeState.HOST_LOST -> {
+                        b.ivEdgeIcon.setImageResource(R.drawable.ic_error)
+                        b.tvEdgeTitle.setText(R.string.binding_edge_host_lost_title)
+                        b.tvEdgeDetail.text =
+                            ctx.getString(R.string.binding_edge_host_lost_detail, slot.boundStatus?.label ?: "")
+                        b.edgeCountdownRow.visibility = View.GONE
+                        if (row.connections.any { it.live == LinkState.Connecting }) {
+                            hideEdgePrimary()
+                            b.pbEdgeReconnect.visibility = View.VISIBLE
                         } else {
-                            ctx.getString(R.string.picker_type_xbox)
+                            setEdgePrimary(R.drawable.ic_refresh, R.string.binding_edge_action_reconnect) { listener.onReconnect(slot.id) }
                         }
+                        setEdgeSecondary(R.string.binding_action_configure) { listener.onConfigure(slot.id) }
+                        R.color.colorError
                     }
-                    ConnectionKind.BLUETOOTH -> bound.btProfile
+                    EdgeState.INPUT_LOST -> {
+                        b.ivEdgeIcon.setImageResource(R.drawable.ic_usb)
+                        b.tvEdgeTitle.setText(R.string.binding_edge_input_lost_title)
+                        b.tvEdgeDetail.setText(R.string.binding_edge_input_lost_detail)
+                        b.edgeCountdownRow.visibility = View.VISIBLE
+                        b.tvEdgeCountdown.text = slot.disconnectTimeLeft.toString()
+                        setEdgePrimary(R.drawable.ic_link_off, R.string.action_unbind) { listener.onUnbind(slot.id) }
+                        hideEdgeSecondary()
+                        R.color.colorWarning
+                    }
+                    EdgeState.UNSTEADY -> {
+                        b.ivEdgeIcon.setImageResource(R.drawable.ic_warning)
+                        b.tvEdgeTitle.setText(R.string.binding_edge_unsteady_title)
+                        b.tvEdgeDetail.setText(R.string.binding_edge_unsteady_detail)
+                        b.edgeCountdownRow.visibility = View.GONE
+                        hideEdgePrimary()
+                        setEdgeSecondary(R.string.binding_edge_action_dismiss) {
+                            dismissedUnsteady.add(slot.id)
+                            val pos = bindingAdapterPosition
+                            if (pos != RecyclerView.NO_POSITION) notifyItemChanged(pos)
+                        }
+                        R.color.colorWarning
+                    }
+                    EdgeState.NONE -> R.color.colorWarning
                 }
-            return label?.let { factPill(it, null) }
+            b.ivEdgeIcon.imageTintList = ColorStateList.valueOf(ctx.getColor(accent))
         }
 
-        // Reports the configured (not live-gated) routing: motion only carries on a Satellite host
-        // emulating PlayStation; touchpad only on a Satellite host.
-        private fun functionPills(
-            row: Row,
-            bound: ConnectionSummary,
-        ): List<View> {
-            val out = mutableListOf<View>()
-            val card = row.pathCard
-            val rumblePresent =
-                card != null &&
-                    (if (card.currentMode == InputPathMode.Direct) card.direct.rumble else card.standard.rumble)
-            if (rumblePresent) {
-                out += onPill(funcValue(R.string.tz_func_rumble, R.string.tz_state_on), R.drawable.ic_rumble)
-            }
-
-            val type = bound.satelliteControllerTypes[row.slot.id] ?: com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
-            val motionAvailable =
-                row.motionCap.hasGyro &&
-                    bound.kind == ConnectionKind.SATELLITE &&
-                    type == CONTROLLER_TYPE_PLAYSTATION
-            if (motionAvailable) {
-                val on = row.motionCap.userEnabled
-                out +=
-                    if (on) {
-                        onPill(funcValue(R.string.tz_func_motion, R.string.tz_state_on), R.drawable.ic_motion)
-                    } else {
-                        offPill(funcValue(R.string.tz_func_motion, R.string.tz_state_off), R.drawable.ic_motion)
-                    }
-            }
-
-            if (bound.kind == ConnectionKind.SATELLITE) {
-                val mode = row.touchpadModes[row.slot.boundConnectionId] ?: TouchpadModeValue.OFF
-                val valueRes =
-                    when (mode) {
-                        TouchpadModeValue.DS4 -> R.string.touchpad_mode_pad
-                        TouchpadModeValue.MOUSE -> R.string.touchpad_mode_mouse
-                        else -> R.string.touchpad_mode_off
-                    }
-                val label = ctx.getString(R.string.tz_func_value, ctx.getString(R.string.tz_func_touchpad), ctx.getString(valueRes))
-                val icon = if (mode == TouchpadModeValue.MOUSE) R.drawable.ic_mouse else R.drawable.ic_touchpad
-                out += if (mode == TouchpadModeValue.OFF) offPill(label, icon) else onPill(label, icon)
-            }
-            return out
-        }
-
-        private fun funcValue(
-            nameRes: Int,
-            valueRes: Int,
-        ): String = ctx.getString(R.string.tz_func_value, ctx.getString(nameRes), ctx.getString(valueRes))
-
-        private fun decisionsContainer(): LinearLayout {
-            val inner = LinearLayout(ctx)
-            inner.orientation = LinearLayout.VERTICAL
-            inner.setPaddingRelative(dp(14), dp(4), dp(14), dp(12))
-            return inner
-        }
-
-        private fun decisionRow(
-            label: String,
-            values: List<View>,
-        ): View {
-            val row = LinearLayout(ctx)
-            row.orientation = LinearLayout.HORIZONTAL
-            row.gravity = Gravity.CENTER_VERTICAL
-            row.setPaddingRelative(0, dp(5), 0, dp(5))
-            row.addView(microLabel(label), LinearLayout.LayoutParams(dp(76), ViewGroup.LayoutParams.WRAP_CONTENT))
-            val container = LinearLayout(ctx)
-            container.orientation = LinearLayout.HORIZONTAL
-            container.gravity = Gravity.CENTER_VERTICAL
-            values.forEachIndexed { i, v ->
-                val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                if (i > 0) lp.marginStart = dp(6)
-                container.addView(v, lp)
-            }
-            row.addView(container, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            return row
-        }
-
-        private fun functionRow(pills: List<View>): View {
-            val row = LinearLayout(ctx)
-            row.orientation = LinearLayout.HORIZONTAL
-            row.setPaddingRelative(0, dp(8), 0, dp(2))
-            if (pills.isEmpty()) {
-                val none = TextView(ctx)
-                none.text = ctx.getString(R.string.tz_card_no_functions)
-                none.setTextColor(color(R.color.colorMuted))
-                none.textSize = 12f
-                row.addView(none)
-            } else {
-                pills.forEachIndexed { i, v ->
-                    val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                    if (i > 0) lp.marginStart = dp(6)
-                    row.addView(v, lp)
-                }
-            }
-            return row
-        }
-
-        private fun microLabel(text: String): TextView {
-            val tv = TextView(ctx)
-            tv.text = text
-            tv.setTextColor(color(R.color.colorMuted))
-            tv.textSize = 10f
-            tv.typeface = Typeface.MONOSPACE
-            tv.isAllCaps = true
-            tv.letterSpacing = 0.08f
-            tv.includeFontPadding = false
-            return tv
-        }
-
-        private fun monoValue(text: String): TextView {
-            val tv = TextView(ctx)
-            tv.text = text
-            tv.setTextColor(color(R.color.colorOnSurface))
-            tv.textSize = 12.5f
-            tv.typeface = Typeface.MONOSPACE
-            tv.ellipsize = android.text.TextUtils.TruncateAt.END
-            tv.maxLines = 1
-            return tv
-        }
-
-        private fun notBoundValue(): View {
-            val container = LinearLayout(ctx)
-            container.orientation = LinearLayout.HORIZONTAL
-            container.gravity = Gravity.CENTER_VERTICAL
-            val dot = View(ctx)
-            val dotBg = GradientDrawable()
-            dotBg.shape = GradientDrawable.OVAL
-            dotBg.setColor(color(R.color.colorWarning))
-            dot.background = dotBg
-            container.addView(dot, LinearLayout.LayoutParams(dp(7), dp(7)))
-            val tv = TextView(ctx)
-            tv.text = ctx.getString(R.string.tz_card_not_bound)
-            tv.setTextColor(color(R.color.colorWarning))
-            tv.textSize = 13f
-            tv.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-            lp.marginStart = dp(6)
-            container.addView(tv, lp)
-            return container
-        }
-
-        private fun divider(): View {
-            val v = View(ctx)
-            v.setBackgroundColor(color(R.color.colorOutlineVariant))
-            v.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1))
-            return v
-        }
-
-        private fun actionButton(
-            parent: ViewGroup,
-            action: CardAction,
+        private fun setEdgePrimary(
+            @DrawableRes icon: Int,
+            labelRes: Int,
             onClick: () -> Unit,
-        ): MaterialButton {
-            val btn = LayoutInflater.from(ctx).inflate(R.layout.tz_action_button, parent, false) as MaterialButton
-            btn.text = action.label
-            btn.setIconResource(action.icon)
-            if (action.outlined) {
-                btn.backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
-                btn.setTextColor(color(R.color.colorOnSurface))
-            }
-            btn.setOnClickListener { onClick() }
-            return btn
+        ) {
+            b.btnEdgePrimary.visibility = View.VISIBLE
+            b.btnEdgePrimary.setIconResource(icon)
+            b.btnEdgePrimary.setText(labelRes)
+            b.btnEdgePrimary.setOnClickListener { onClick() }
         }
 
-        private fun factPill(
-            text: String,
-            @DrawableRes icon: Int?,
-        ): TextView =
-            pill(text, icon, color(R.color.colorOnSurface), color(R.color.colorSurfaceVariant), color(R.color.colorOutlineVariant))
-
-        private fun onPill(
-            text: String,
-            @DrawableRes icon: Int?,
-        ): TextView =
-            pill(text, icon, color(R.color.colorPrimary), color(R.color.colorIconContainerFill), color(R.color.colorOutline))
-
-        private fun warnPill(
-            text: String,
-            @DrawableRes icon: Int?,
-        ): TextView =
-            pill(text, icon, color(R.color.colorTertiary), color(R.color.colorTertiaryContainer), Color.TRANSPARENT)
-
-        private fun capPill(
-            text: String,
-            @DrawableRes icon: Int?,
-        ): TextView =
-            pill(text, icon, color(R.color.colorOnSurfaceVariant), Color.TRANSPARENT, color(R.color.colorOutlineVariant))
-
-        private fun offPill(
-            text: String,
-            @DrawableRes icon: Int?,
-        ): TextView =
-            pill(text, icon, color(R.color.colorMuted), Color.TRANSPARENT, color(R.color.colorOutlineVariant), dashed = true, alpha = 0.6f)
-
-        private fun pill(
-            text: String,
-            @DrawableRes icon: Int?,
-            @ColorInt fg: Int,
-            @ColorInt bg: Int,
-            @ColorInt stroke: Int,
-            dashed: Boolean = false,
-            alpha: Float = 1f,
-        ): TextView {
-            val tv = TextView(ctx)
-            tv.text = text
-            tv.setTextColor(fg)
-            tv.textSize = 11.5f
-            tv.includeFontPadding = false
-            tv.gravity = Gravity.CENTER_VERTICAL
-            tv.alpha = alpha
-            val startPad = if (icon != null) dp(7) else dp(9)
-            tv.setPaddingRelative(startPad, dp(4), dp(9), dp(4))
-            val gd = GradientDrawable()
-            gd.cornerRadius = dp(4).toFloat()
-            gd.setColor(bg)
-            if (dashed) {
-                gd.setStroke(dp(1), stroke, dp(3).toFloat(), dp(2).toFloat())
-            } else {
-                gd.setStroke(dp(1), stroke)
-            }
-            tv.background = gd
-            if (icon != null) {
-                val d = AppCompatResources.getDrawable(ctx, icon)
-                val s = dp(14)
-                d?.setBounds(0, 0, s, s)
-                tv.setCompoundDrawablesRelative(d, null, null, null)
-                tv.compoundDrawablePadding = dp(4)
-                TextViewCompat.setCompoundDrawableTintList(tv, ColorStateList.valueOf(fg))
-            }
-            return tv
+        private fun hideEdgePrimary() {
+            b.btnEdgePrimary.visibility = View.GONE
         }
 
-        @ColorInt
-        private fun color(res: Int): Int = ctx.getColor(res)
+        private fun setEdgeSecondary(
+            labelRes: Int,
+            onClick: () -> Unit,
+        ) {
+            b.btnEdgeSecondary.visibility = View.VISIBLE
+            b.btnEdgeSecondary.setText(labelRes)
+            b.btnEdgeSecondary.setOnClickListener { onClick() }
+        }
 
-        private fun dp(value: Int): Int = (value * ctx.resources.displayMetrics.density).toInt()
+        private fun hideEdgeSecondary() {
+            b.btnEdgeSecondary.visibility = View.GONE
+        }
     }
 
     private data class CardAction(
@@ -485,6 +456,8 @@ class ControllerAdapter(
     )
 
     private enum class ActionKind { GAMEPAD, TOUCHPAD, CONFIGURE, FIND_HOSTS }
+
+    private enum class EdgeState { NONE, HOST_LOST, INPUT_LOST, UNSTEADY }
 
     override fun onCreateViewHolder(
         parent: ViewGroup,
