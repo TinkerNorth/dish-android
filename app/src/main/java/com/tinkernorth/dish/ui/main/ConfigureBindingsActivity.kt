@@ -31,6 +31,7 @@ import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachGamepadHost
+import com.tinkernorth.dish.ui.common.wireDonateButton
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -57,6 +58,7 @@ class ConfigureBindingsActivity : AppCompatActivity() {
         gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications)
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()
+        wireDonateButton()
 
         val slotId = intent.getStringExtra(EXTRA_SLOT_ID)
         if (slotId == null) {

@@ -31,6 +31,7 @@ import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachDonatePill
 import com.tinkernorth.dish.ui.common.attachGamepadHost
+import com.tinkernorth.dish.ui.common.wireDonateButton
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -102,6 +103,7 @@ class MainActivity :
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()
         attachDonatePill()
+        wireDonateButton()
         controllerAdapter = ControllerAdapter(this)
         setupUI()
         observeViewModel()

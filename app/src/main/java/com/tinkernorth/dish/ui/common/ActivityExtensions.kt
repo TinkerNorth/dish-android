@@ -23,6 +23,11 @@ import com.tinkernorth.dish.source.notification.DishNotifications
 fun AppCompatActivity.setupDishToolbar(toolbar: Toolbar) {
     setSupportActionBar(toolbar)
     toolbar.setNavigationOnClickListener { finish() }
+    wireDonateButton()
+}
+
+fun AppCompatActivity.wireDonateButton() {
+    findViewById<View>(R.id.btnDonate)?.setOnClickListener { DishNavigator(this).toDonate() }
 }
 
 fun AppCompatActivity.attachGamepadHost(

@@ -14,6 +14,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.edit
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import com.tinkernorth.dish.R
 
@@ -25,6 +26,16 @@ private const val HEARTBEAT_SCALE = 1.12f
 fun AppCompatActivity.attachDonatePill() {
     if (donatePillDismissed(this)) return
 
+    val docked = findViewById<View>(R.id.donatePill)
+    if (docked != null) {
+        docked.isVisible = true
+        wireDonatePill(docked) { hideDockedPill(docked) }
+    } else {
+        attachFloatingDonatePill()
+    }
+}
+
+private fun AppCompatActivity.attachFloatingDonatePill() {
     val content = findViewById<ViewGroup>(android.R.id.content) ?: return
     val pill = layoutInflater.inflate(R.layout.view_donate_pill, content, false)
     val baseGap = resources.getDimensionPixelSize(R.dimen.spacing_5xl)
@@ -44,13 +55,19 @@ fun AppCompatActivity.attachDonatePill() {
         insets
     }
 
+    content.addView(pill)
+    wireDonatePill(pill) { dismissPill(pill, content) }
+}
+
+private fun AppCompatActivity.wireDonatePill(
+    pill: View,
+    onDismiss: () -> Unit,
+) {
     pill.setOnClickListener { DishNavigator(this).toDonate() }
     pill.findViewById<View>(R.id.donatePillDismiss).setOnClickListener {
         dismissDonatePill(this)
-        dismissPill(pill, content)
+        onDismiss()
     }
-
-    content.addView(pill)
     animatePillIn(pill)
     startHeartbeat(pill.findViewById(R.id.donatePillHeart))
 }
@@ -91,6 +108,16 @@ private fun dismissPill(
         .translationY(pill.height.toFloat())
         .setDuration(pill.resources.getInteger(R.integer.motion_duration_medium).toLong())
         .withEndAction { content.removeView(pill) }
+        .start()
+}
+
+private fun hideDockedPill(pill: View) {
+    pill
+        .animate()
+        .alpha(0f)
+        .translationY(pill.height.toFloat())
+        .setDuration(pill.resources.getInteger(R.integer.motion_duration_medium).toLong())
+        .withEndAction { pill.isVisible = false }
         .start()
 }
 
