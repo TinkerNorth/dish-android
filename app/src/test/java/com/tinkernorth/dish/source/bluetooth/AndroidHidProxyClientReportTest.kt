@@ -7,9 +7,11 @@ import android.bluetooth.BluetoothHidDevice
 import android.content.Context
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.unmockkAll
 import io.mockk.verify
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -64,5 +66,20 @@ class AndroidHidProxyClientReportTest {
     @Test
     fun `sendReport returns false when nothing is connected`() {
         assertFalse(client.sendReport(ByteArray(14)))
+    }
+
+    @Test
+    fun `sendReport forwards the payload with the report-id byte stripped`() {
+        val device = mockk<BluetoothDevice>(relaxed = true)
+        val payload = slot<ByteArray>()
+        val hid =
+            mockk<BluetoothHidDevice> {
+                every { sendReport(any(), any(), capture(payload)) } returns true
+            }
+        setField("hidDevice", hid)
+        setField("connectedDevice", device)
+
+        assertTrue(client.sendReport(ByteArray(14) { it.toByte() }))
+        assertArrayEquals(ByteArray(13) { (it + 1).toByte() }, payload.captured)
     }
 }

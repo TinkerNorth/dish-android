@@ -203,6 +203,7 @@ internal object SatelliteHttpClient {
         val url = URL("https", ip, port, path)
         Log.i(TAG, "$method https://$ip:$port$path")
         var conn: HttpsURLConnection? = null
+        var pooled = false
         return try {
             conn =
                 (url.openConnection() as HttpsURLConnection).apply {
@@ -212,7 +213,6 @@ internal object SatelliteHttpClient {
                     connectTimeout = CONNECT_TIMEOUT_MS
                     readTimeout = READ_TIMEOUT_MS
                     setRequestProperty("Content-Type", "application/json")
-                    setRequestProperty("Connection", "close")
                     if (deviceId != null) {
                         setRequestProperty("X-Device-Id", deviceId)
                     }
@@ -225,12 +225,14 @@ internal object SatelliteHttpClient {
             val stream = if (status in 200..299) conn.inputStream else conn.errorStream
             val text = stream?.use { it.readBytes().toString(Charsets.UTF_8) }.orEmpty()
             Log.i(TAG, "$method $path -> HTTP $status (${text.length} bytes)")
+            // Fully drained: leave the socket in the keep-alive pool so the approval poll reuses the TLS session.
+            pooled = true
             text
         } catch (e: IOException) {
             Log.e(TAG, "$method $path failed: ${e.message}")
             """{"error":"${jsonEscape("request failed: ${e.message}")}"}"""
         } finally {
-            conn?.disconnect()
+            if (!pooled) conn?.disconnect()
         }
     }
 

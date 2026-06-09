@@ -14,6 +14,7 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import com.tinkernorth.dish.core.input.BluetoothGamepad
 import com.tinkernorth.dish.core.input.REPORT_ID
+import com.tinkernorth.dish.core.input.REPORT_SIZE
 import com.tinkernorth.dish.core.input.buildHidDescriptor
 
 @RequiresApi(Build.VERSION_CODES.P)
@@ -29,6 +30,10 @@ class AndroidHidProxyClient(
 
     @Volatile private var connectedDevice: BluetoothDevice? = null
     private var currentProfile: BluetoothGamepad.GamepadProfile? = null
+
+    // Per-thread (sendReport is reached from the BT dispatch and on-screen-pad threads); avoids a
+    // payload allocation per report.
+    private val payloadScratch = ThreadLocal.withInitial { ByteArray(REPORT_SIZE - 1) }
 
     override fun isAdapterEnabled(): Boolean {
         val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
@@ -115,8 +120,10 @@ class AndroidHidProxyClient(
         return runCatching {
             val hid = hidDevice ?: return false
             val device = connectedDevice ?: return false
-            // Strip report-id byte: BluetoothHidDevice.sendReport takes it separately from the payload.
-            hid.sendReport(device, REPORT_ID, report.sliceArray(1 until report.size))
+            // Strip report-id byte into per-thread scratch: sendReport takes it separately from the payload.
+            val payload = payloadScratch.get()
+            System.arraycopy(report, 1, payload, 0, REPORT_SIZE - 1)
+            hid.sendReport(device, REPORT_ID, payload)
         }.getOrDefault(false)
     }
 

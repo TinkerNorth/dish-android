@@ -5,6 +5,7 @@ package com.tinkernorth.dish.source.connection
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.net.wifi.WifiManager
 import android.util.Log
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.DiscoverySource
@@ -37,32 +38,48 @@ class MdnsDiscovery
                 val found = Channel<NsdServiceInfo>(Channel.UNLIMITED)
                 val listener = discoveryListener(found)
 
+                // Many devices drop inbound mDNS multicast in Wi-Fi power-save unless a lock is held.
+                val multicastLock = acquireMulticastLock()
                 try {
-                    nsd.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, listener)
-                } catch (e: IllegalArgumentException) {
-                    Log.w(TAG, "discoverServices rejected: ${e.message}")
-                    return@withContext emptyList()
-                }
+                    try {
+                        nsd.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, listener)
+                    } catch (e: IllegalArgumentException) {
+                        Log.w(TAG, "discoverServices rejected: ${e.message}")
+                        return@withContext emptyList()
+                    }
 
-                val results = LinkedHashMap<String, DiscoveredServer>()
-                try {
-                    withTimeoutOrNull(timeoutMs.toLong()) {
-                        for (info in found) {
-                            val server = resolveOne(nsd, info)
-                            if (server != null) {
-                                // Key on the stable id so a satellite that also
-                                // answers the broadcast beacon merges to one row.
-                                results[server.stableKey] = server
+                    val results = LinkedHashMap<String, DiscoveredServer>()
+                    try {
+                        withTimeoutOrNull(timeoutMs.toLong()) {
+                            for (info in found) {
+                                val server = resolveOne(nsd, info)
+                                if (server != null) {
+                                    // Key on the stable id so a satellite that also
+                                    // answers the broadcast beacon merges to one row.
+                                    results[server.stableKey] = server
+                                }
                             }
                         }
+                    } finally {
+                        // MUST run on cancellation too, or the DiscoveryListener leaks for the process' life.
+                        runCatching { nsd.stopServiceDiscovery(listener) }
+                        found.close()
                     }
+                    results.values.toList()
                 } finally {
-                    // MUST run on cancellation too — otherwise the DiscoveryListener leaks for the process' life.
-                    runCatching { nsd.stopServiceDiscovery(listener) }
-                    found.close()
+                    multicastLock?.let { if (it.isHeld) runCatching { it.release() } }
                 }
-                results.values.toList()
             }
+
+        private fun acquireMulticastLock(): WifiManager.MulticastLock? {
+            val wifi = context.getSystemService(Context.WIFI_SERVICE) as? WifiManager ?: return null
+            return runCatching {
+                wifi.createMulticastLock(MULTICAST_LOCK_TAG).apply {
+                    setReferenceCounted(false)
+                    acquire()
+                }
+            }.getOrNull()
+        }
 
         private fun discoveryListener(found: Channel<NsdServiceInfo>): NsdManager.DiscoveryListener =
             object : NsdManager.DiscoveryListener {
@@ -131,6 +148,7 @@ class MdnsDiscovery
         private companion object {
             const val TAG = "MdnsDiscovery"
             const val SERVICE_TYPE = "_satellite._udp."
+            const val MULTICAST_LOCK_TAG = "Dish::Discovery"
         }
     }
 

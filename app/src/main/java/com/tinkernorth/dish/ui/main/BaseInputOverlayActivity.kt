@@ -3,6 +3,9 @@
 package com.tinkernorth.dish.ui.main
 
 import android.os.Build
+import android.os.Handler
+import android.os.HandlerThread
+import android.os.Process
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.Surface
@@ -31,7 +34,7 @@ import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.ui.common.FoldAwareSession
 import com.tinkernorth.dish.ui.common.Posture
 import com.tinkernorth.dish.ui.common.hingeInsetsFor
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.android.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -54,6 +57,10 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
     protected lateinit var gamepadHost: GamepadActivityHost
 
     protected var connectionId: String = ""
+
+    // Dedicated URGENT_AUDIO thread so the 250 Hz resend cadence isn't jittered by the shared Default pool.
+    private val resendThread = HandlerThread("dish-resend", Process.THREAD_PRIORITY_URGENT_AUDIO).also { it.start() }
+    private val resendDispatcher = Handler(resendThread.looper).asCoroutineDispatcher()
 
     protected abstract fun rootView(): View
 
@@ -111,8 +118,8 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
             }
         }
 
-        // Deadline-paced on Dispatchers.Default; main-thread JNI+vsync would inflate cycle time past 250 Hz.
-        lifecycleScope.launch(Dispatchers.Default) {
+        // Deadline-paced on a dedicated URGENT_AUDIO thread; main-thread JNI+vsync would inflate cycle time past 250 Hz.
+        lifecycleScope.launch(resendDispatcher) {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 runResendLoop()
             }
@@ -230,6 +237,11 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
         gamepadHost.cancelDimOnStop()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        resendThread.quitSafely()
     }
 
     companion object {

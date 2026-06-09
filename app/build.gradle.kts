@@ -319,7 +319,10 @@ tasks.register("generateLicenseManifest") {
     }
 }
 
-tasks.named("preBuild") { dependsOn("generateLicenseManifest") }
+// Release-scoped (matched lazily; AGP registers preReleaseBuild after this script runs): keeps
+// debug/test/lint builds configuration-cache eligible while the shipped APK still gets a freshly
+// generated license manifest. The task itself is not config-cache compatible.
+tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn("generateLicenseManifest") }
 
 fun parsePomFile(pomFile: java.io.File): Map<String, Any?>? {
     return try {
