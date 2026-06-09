@@ -12,10 +12,15 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.KeyEvent
+import android.view.Menu
+import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
@@ -24,6 +29,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionHub
 import com.tinkernorth.dish.composer.ConnectionKind
@@ -32,6 +39,7 @@ import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.input.BluetoothGamepad
 import com.tinkernorth.dish.core.model.DiscoveredServer
+import com.tinkernorth.dish.core.model.DiscoverySource
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.databinding.ActivityConnectionsBinding
 import com.tinkernorth.dish.databinding.RowConnectionBinding
@@ -39,6 +47,7 @@ import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedBt
+import com.tinkernorth.dish.source.bluetooth.BluetoothDeviceScanner
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.bluetooth.BtStaleReason
 import com.tinkernorth.dish.source.connection.ConnectionEvent
@@ -62,6 +71,8 @@ import com.tinkernorth.dish.ui.common.setLoading
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.common.statusChipText
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -70,6 +81,8 @@ class ConnectionsActivity : AppCompatActivity() {
     @Inject lateinit var satellite: SatelliteConnectionManager
 
     @Inject lateinit var btRegistry: BluetoothGamepadRegistry
+
+    @Inject lateinit var btScanner: BluetoothDeviceScanner
 
     @Inject lateinit var hub: ConnectionHub
 
@@ -102,6 +115,10 @@ class ConnectionsActivity : AppCompatActivity() {
 
     private var discoverabilityExpiryJob: kotlinx.coroutines.Job? = null
 
+    // Set before launching the discoverability prompt so the result routes back to the active
+    // caller (the new wait-for-host-first flow), bypassing the legacy pendingBtRegistration path.
+    private var onDiscoverableResult: ((granted: Boolean, durationSec: Int) -> Unit)? = null
+
     private var pinDialog: PairPinDialog? = null
 
     private var pairingServer: com.tinkernorth.dish.core.model.DiscoveredServer? = null
@@ -109,11 +126,11 @@ class ConnectionsActivity : AppCompatActivity() {
     private val btPermissionLauncher =
         registerForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions(),
-        ) { results ->
+        ) { _ ->
             btPermissionState.refresh()
             val continueToAdd = addAfterPermission
             addAfterPermission = false
-            if (continueToAdd && results.values.all { it }) {
+            if (continueToAdd && !btPermissionState.state.value.connectMissing) {
                 showProfilePicker()
             }
         }
@@ -122,13 +139,22 @@ class ConnectionsActivity : AppCompatActivity() {
         registerForActivityResult(
             ActivityResultContracts.StartActivityForResult(),
         ) { result ->
+            val granted = result.resultCode != Activity.RESULT_CANCELED
+            // RESULT_OK for this intent carries the granted duration in seconds; fall back to our request.
+            val durationSec = if (result.resultCode > 0) result.resultCode else DISCOVERABLE_SECONDS
+            val callback = onDiscoverableResult
+            onDiscoverableResult = null
+            if (callback != null) {
+                callback(granted, durationSec)
+                return@registerForActivityResult
+            }
             val pending = pendingBtRegistration
             pendingBtRegistration = null
-            if (result.resultCode == Activity.RESULT_CANCELED || pending == null) {
+            if (!granted || pending == null) {
                 notifyDiscoverabilityDenied()
                 return@registerForActivityResult
             }
-            btRegistry.start(pending.tempId, pending.profile)
+            btRegistry.start(pending.tempId, pending.profile, pending.autoConnectMac)
             armDiscoverabilityExpiryTimer(pending.tempId)
         }
 
@@ -149,6 +175,20 @@ class ConnectionsActivity : AppCompatActivity() {
 
         handlePairPromptIntent(intent)
     }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.menu_connections, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean =
+        when (item.itemId) {
+            R.id.action_add_satellite -> {
+                showAddSatelliteDialog()
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
 
     private fun observeSatelliteHub() {
         lifecycleScope.launch {
@@ -507,6 +547,7 @@ class ConnectionsActivity : AppCompatActivity() {
             val needed =
                 arrayOf(
                     Manifest.permission.BLUETOOTH_CONNECT,
+                    Manifest.permission.BLUETOOTH_SCAN,
                 ).filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
             if (needed.isNotEmpty()) {
                 addAfterPermission = continueToAdd
@@ -522,16 +563,205 @@ class ConnectionsActivity : AppCompatActivity() {
         val names = profiles.map { it.profileName }.toTypedArray()
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.dialog_controller_profile_title)
-            .setItems(names) { _, which -> startBtRegistration(profiles[which]) }
+            .setItems(names) { _, which -> onBtProfileChosen(profiles[which]) }
             .setNegativeButton(R.string.action_cancel, null)
             .show()
     }
 
-    private fun startBtRegistration(profile: BluetoothGamepad.GamepadProfile) {
+    private fun onBtProfileChosen(profile: BluetoothGamepad.GamepadProfile) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            startBtRegistration(profile)
+            return
+        }
+        val tempId = "bt-pending-${System.currentTimeMillis()}"
+        requestDiscoverable { granted, durationSec ->
+            val discoverableUntilMs =
+                if (granted) {
+                    btRegistry.start(tempId, profile, autoConnectMac = null)
+                    armDiscoverabilityExpiryTimer(tempId)
+                    System.currentTimeMillis() + durationSec * 1000L
+                } else {
+                    null
+                }
+            showDevicePicker(profile, tempId, discoverableUntilMs)
+        }
+    }
+
+    private fun requestDiscoverable(onResult: (granted: Boolean, durationSec: Int) -> Unit) {
+        onDiscoverableResult = onResult
+        val intent =
+            Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).apply {
+                putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, DISCOVERABLE_SECONDS)
+            }
+        btDiscoverableLauncher.launch(intent)
+    }
+
+    private fun showDevicePicker(
+        profile: BluetoothGamepad.GamepadProfile,
+        tempId: String,
+        initialDiscoverableUntilMs: Long?,
+    ) {
+        DevicePickerSession(profile, tempId, initialDiscoverableUntilMs).show()
+    }
+
+    private inner class DevicePickerSession(
+        private val profile: BluetoothGamepad.GamepadProfile,
+        private val tempId: String,
+        initialDiscoverableUntilMs: Long?,
+    ) {
+        private val view = layoutInflater.inflate(R.layout.dialog_bt_device_picker, null)
+        private val container = view.findViewById<LinearLayout>(R.id.deviceContainer)
+        private val progress = view.findViewById<TextView>(R.id.scanProgress)
+        private val empty = view.findViewById<TextView>(R.id.deviceEmpty)
+        private val canScan = !btPermissionState.state.value.scanMissing
+        private var discoverableUntilMs = initialDiscoverableUntilMs
+
+        // Hosts already linked before this attempt; a newly connected id means our host arrived.
+        private var baselineConnected = connectedIds()
+
+        private val dialog =
+            MaterialAlertDialogBuilder(this@ConnectionsActivity)
+                .setTitle(R.string.dialog_bt_device_title)
+                .setView(view)
+                .setNeutralButton(R.string.bt_wait_for_host, null)
+                .setNegativeButton(R.string.action_cancel, null)
+                .create()
+
+        fun show() {
+            view.findViewById<TextView>(R.id.scanNote).visibility =
+                if (canScan) View.GONE else View.VISIBLE
+            val job =
+                lifecycleScope.launch {
+                    launch { collectScan() }
+                    launch { tickCountdown() }
+                    launch { dismissOnConnect() }
+                }
+            dialog.setOnDismissListener { job.cancel() }
+            dialog.setOnShowListener {
+                refreshWaitButton()
+                dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setOnClickListener { onWaitForHostClicked() }
+            }
+            dialog.show()
+        }
+
+        private fun connectedIds(): Set<String> {
+            val slots = btRegistry.states.value
+            return slots.filterValues { it.connected }.keys
+        }
+
+        private fun remainingSeconds(): Int {
+            val until = discoverableUntilMs ?: return 0
+            val remainingMs = until - System.currentTimeMillis()
+            return (remainingMs / 1000L).toInt().coerceAtLeast(0)
+        }
+
+        private fun refreshWaitButton() {
+            val button = dialog.getButton(AlertDialog.BUTTON_NEUTRAL) ?: return
+            if (remainingSeconds() > 0) {
+                button.isEnabled = false
+                button.text = getString(R.string.bt_waiting_for_host_timer, remainingSeconds())
+            } else {
+                discoverableUntilMs = null
+                button.isEnabled = true
+                button.text = getString(R.string.bt_wait_for_host)
+            }
+        }
+
+        private fun beginRegistration(
+            autoConnectMac: String?,
+            durationSec: Int,
+        ) {
+            discoverableUntilMs = System.currentTimeMillis() + durationSec * 1000L
+            btRegistry.start(tempId, profile, autoConnectMac)
+            armDiscoverabilityExpiryTimer(tempId)
+            baselineConnected = connectedIds()
+            refreshWaitButton()
+        }
+
+        private fun onWaitForHostClicked() {
+            requestDiscoverable { granted, durationSec ->
+                if (granted) beginRegistration(autoConnectMac = null, durationSec) else refreshWaitButton()
+            }
+        }
+
+        private fun onDevicePicked(mac: String) {
+            if (remainingSeconds() > 0) {
+                btRegistry.start(tempId, profile, mac)
+                dialog.dismiss()
+                return
+            }
+            requestDiscoverable { granted, durationSec ->
+                if (granted) {
+                    beginRegistration(mac, durationSec)
+                    dialog.dismiss()
+                } else {
+                    refreshWaitButton()
+                }
+            }
+        }
+
+        private suspend fun collectScan() {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                btScanner.start(canScan)
+                try {
+                    btScanner.state.collect { renderScan(it) }
+                } finally {
+                    btScanner.stop()
+                }
+            }
+        }
+
+        private fun renderScan(state: BluetoothDeviceScanner.State) {
+            progress.visibility = if (state.scanning) View.VISIBLE else View.GONE
+            empty.visibility = if (state.devices.isEmpty() && !state.scanning) View.VISIBLE else View.GONE
+            renderDeviceRows(container, state.devices) { onDevicePicked(it.mac) }
+        }
+
+        private suspend fun tickCountdown() {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (isActive) {
+                    refreshWaitButton()
+                    delay(COUNTDOWN_TICK_MS)
+                }
+            }
+        }
+
+        private suspend fun dismissOnConnect() {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                btRegistry.states.collect { states ->
+                    val connectedNow = states.filterValues { it.connected }.keys
+                    if ((connectedNow - baselineConnected).isNotEmpty()) dialog.dismiss()
+                }
+            }
+        }
+    }
+
+    private fun renderDeviceRows(
+        container: LinearLayout,
+        devices: List<BluetoothDeviceScanner.Device>,
+        onPick: (BluetoothDeviceScanner.Device) -> Unit,
+    ) {
+        container.removeAllViews()
+        for (device in devices) {
+            val row = layoutInflater.inflate(R.layout.row_bt_device, container, false)
+            row.findViewById<TextView>(R.id.tvDeviceName).text =
+                device.name?.takeIf { it.isNotBlank() } ?: device.mac
+            row.findViewById<TextView>(R.id.tvDeviceTag).setText(
+                if (device.bonded) R.string.bt_device_tag_paired else R.string.bt_device_tag_available,
+            )
+            row.setOnClickListener { onPick(device) }
+            container.addView(row)
+        }
+    }
+
+    private fun startBtRegistration(
+        profile: BluetoothGamepad.GamepadProfile,
+        autoConnectMac: String? = null,
+    ) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
         val tempId = "bt-pending-${System.currentTimeMillis()}"
         // Defer HID registration until discoverability granted, else slot sits "Acquiring…" on deny.
-        pendingBtRegistration = PendingBtRegistration(tempId, profile)
+        pendingBtRegistration = PendingBtRegistration(tempId, profile, autoConnectMac)
         val intent =
             Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).apply {
                 putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, DISCOVERABLE_SECONDS)
@@ -542,7 +772,65 @@ class ConnectionsActivity : AppCompatActivity() {
     private data class PendingBtRegistration(
         val tempId: String,
         val profile: BluetoothGamepad.GamepadProfile,
+        val autoConnectMac: String? = null,
     )
+
+    private fun showAddSatelliteDialog() {
+        val view = layoutInflater.inflate(R.layout.dialog_add_satellite, null)
+        val hostLayout = view.findViewById<TextInputLayout>(R.id.tilSatelliteHost)
+        val httpsLayout = view.findViewById<TextInputLayout>(R.id.tilSatelliteHttpsPort)
+        val udpLayout = view.findViewById<TextInputLayout>(R.id.tilSatelliteUdpPort)
+        val hostField = view.findViewById<TextInputEditText>(R.id.etSatelliteHost)
+        val httpsField = view.findViewById<TextInputEditText>(R.id.etSatelliteHttpsPort)
+        val udpField = view.findViewById<TextInputEditText>(R.id.etSatelliteUdpPort)
+        httpsField.setText(DEFAULT_HTTPS_PORT.toString())
+        udpField.setText(DEFAULT_UDP_PORT.toString())
+
+        val dialog =
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.action_add_custom_satellite)
+                .setView(view)
+                .setPositiveButton(R.string.action_connect, null)
+                .setNegativeButton(R.string.action_cancel, null)
+                .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val host =
+                    hostField.text
+                        ?.toString()
+                        ?.trim()
+                        .orEmpty()
+                val httpsPort = parsePort(httpsField)
+                val udpPort = parsePort(udpField)
+                hostLayout.error = if (host.isEmpty()) getString(R.string.add_satellite_error_host) else null
+                httpsLayout.error = if (httpsPort == null) getString(R.string.add_satellite_error_port) else null
+                udpLayout.error = if (udpPort == null) getString(R.string.add_satellite_error_port) else null
+                if (host.isNotEmpty() && httpsPort != null && udpPort != null) {
+                    satellite.connect(
+                        DiscoveredServer(
+                            name = host,
+                            ip = host,
+                            udpPort = udpPort,
+                            pairPort = httpsPort,
+                            httpPort = httpsPort,
+                            source = DiscoverySource.MANUAL,
+                        ),
+                    )
+                    dialog.dismiss()
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun parsePort(field: TextInputEditText): Int? {
+        val port =
+            field.text
+                ?.toString()
+                ?.trim()
+                ?.toIntOrNull() ?: return null
+        return if (port in 1..MAX_PORT) port else null
+    }
 
     private fun showPairingDialog(server: com.tinkernorth.dish.core.model.DiscoveredServer) {
         pinDialog?.dismiss()
@@ -654,23 +942,35 @@ class ConnectionsActivity : AppCompatActivity() {
             }
     }
 
-    private fun applyBtPermissionBanner(state: com.tinkernorth.dish.source.system.BluetoothPermissionState) {
+    private fun applyBtPermissionBanner(state: BluetoothPermissionState) {
         btPermissionBannerId?.let { notifications.dismiss(it) }
         btPermissionBannerId =
-            if (state == com.tinkernorth.dish.source.system.BluetoothPermissionState.DENIED) {
-                notifications.warn(
-                    glyph = R.drawable.ic_bluetooth_off,
-                    title = getString(R.string.notif_bt_permission_title),
-                    body = getString(R.string.notif_bt_permission_body),
-                    action =
-                        DishNotification.Action(
-                            label = getString(R.string.action_grant),
-                        ) { requestBtPermissions(continueToAdd = false) },
-                    key = "bt-permission-denied",
-                    durationMs = DishNotification.DURATION_PERSISTENT,
-                )
-            } else {
-                null
+            when {
+                state.connectMissing ->
+                    notifications.warn(
+                        glyph = R.drawable.ic_bluetooth_off,
+                        title = getString(R.string.notif_bt_permission_title),
+                        body = getString(R.string.notif_bt_permission_body),
+                        action =
+                            DishNotification.Action(
+                                label = getString(R.string.action_grant),
+                            ) { requestBtPermissions(continueToAdd = false) },
+                        key = "bt-permission-denied",
+                        durationMs = DishNotification.DURATION_PERSISTENT,
+                    )
+                state.scanMissing ->
+                    notifications.info(
+                        glyph = R.drawable.ic_bluetooth_off,
+                        title = getString(R.string.notif_bt_scan_permission_title),
+                        body = getString(R.string.notif_bt_scan_permission_body),
+                        action =
+                            DishNotification.Action(
+                                label = getString(R.string.action_grant),
+                            ) { requestBtPermissions(continueToAdd = false) },
+                        key = "bt-scan-permission-denied",
+                        durationMs = DishNotification.DURATION_PERSISTENT,
+                    )
+                else -> null
             }
     }
 
@@ -748,8 +1048,10 @@ class ConnectionsActivity : AppCompatActivity() {
         discoverabilityExpiryJob =
             lifecycleScope.launch {
                 kotlinx.coroutines.delay(DISCOVERABLE_SECONDS * 1000L)
-                val state = btRegistry.state(connId)
-                if (state.connected) return@launch
+                // The slot re-keys from the temp id to bt:<mac> on connect, so check the live
+                // session (single BT host at a time), not just connId.
+                val slots = btRegistry.states.value.values
+                if (slots.any { it.connected }) return@launch
                 notifications.warn(
                     glyph = R.drawable.ic_bluetooth_off,
                     title = getString(R.string.notif_discoverability_expired_title),
@@ -807,5 +1109,9 @@ class ConnectionsActivity : AppCompatActivity() {
         const val EXTRA_PAIR_PROMPT_FOR_ID = "extra_pair_prompt_for_id"
 
         private const val DISCOVERABLE_SECONDS = 120
+        private const val COUNTDOWN_TICK_MS = 500L
+        private const val DEFAULT_HTTPS_PORT = 9443
+        private const val DEFAULT_UDP_PORT = 9876
+        private const val MAX_PORT = 65535
     }
 }

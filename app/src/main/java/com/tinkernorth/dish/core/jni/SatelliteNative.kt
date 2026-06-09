@@ -37,6 +37,7 @@ object SatelliteNative {
         handle: Int,
         controllerIndex: Int,
         capabilities: Int,
+        controllerType: Int,
     )
 
     external fun controllerRemove(

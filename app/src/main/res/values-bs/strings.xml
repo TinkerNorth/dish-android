@@ -187,6 +187,22 @@
     <!-- Tekst Dish obavještenja. -->
     <string name="notif_bt_permission_title">Potrebna Bluetooth dozvola</string>
     <string name="notif_bt_permission_body">Dish-u treba pristup Bluetooth-u da registruje kontroler.</string>
+    <string name="notif_bt_scan_permission_title">Dozvoli Bluetooth skeniranje</string>
+    <string name="notif_bt_scan_permission_body">Dodijelite dozvolu za uređaje u blizini da pronađete nove hostove. Upareni uređaji rade i bez nje.</string>
+    <string name="discovery_source_manual">Ručno</string>
+    <string name="action_add_custom_satellite">Dodaj prilagođeni satelit</string>
+    <string name="add_satellite_host_hint">IP adresa ili naziv hosta</string>
+    <string name="add_satellite_https_hint">HTTPS port</string>
+    <string name="add_satellite_udp_hint">UDP port</string>
+    <string name="add_satellite_error_host">Unesite IP adresu ili naziv hosta</string>
+    <string name="add_satellite_error_port">Unesite port od 1 do 65535</string>
+    <string name="dialog_bt_device_title">Poveži se s uređajem</string>
+    <string name="bt_wait_for_host">Čekaj host</string>
+    <string name="bt_waiting_for_host_timer">Čekanje hosta (%1$ds)</string>
+    <string name="bt_device_empty">Još nema pronađenih uređaja</string>
+    <string name="bt_device_tag_paired">Uparen</string>
+    <string name="bt_device_tag_available">Dostupan</string>
+    <string name="bt_scan_permission_note">Skeniranje zahtijeva dozvolu za uređaje u blizini. Upareni uređaji se prikazuju i bez nje.</string>
     <string name="notif_bt_discoverability_denied_title">Vidljivost odbijena</string>
     <string name="notif_bt_discoverability_denied_body">Vaš host ne može vidjeti ovaj telefon dok ga ne učinite vidljivim.</string>
     <string name="notif_bt_adapter_off_title">Bluetooth je isključen</string>

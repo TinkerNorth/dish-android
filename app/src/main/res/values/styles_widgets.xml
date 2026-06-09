@@ -208,6 +208,28 @@
         <item name="android:fontFamily">monospace</item>
     </style>
 
+    <style name="Widget.Dish.TextInputLayout" parent="Widget.Material3.TextInputLayout.OutlinedBox">
+        <item name="boxStrokeColor">@color/colorPrimary</item>
+        <item name="boxStrokeWidth">@dimen/border_thin</item>
+        <item name="boxStrokeWidthFocused">@dimen/border_thin</item>
+        <item name="boxStrokeErrorColor">@color/colorError</item>
+        <item name="boxBackgroundColor">@color/colorBackground</item>
+        <item name="boxCornerRadiusTopStart">@dimen/corner_picker_row</item>
+        <item name="boxCornerRadiusTopEnd">@dimen/corner_picker_row</item>
+        <item name="boxCornerRadiusBottomStart">@dimen/corner_picker_row</item>
+        <item name="boxCornerRadiusBottomEnd">@dimen/corner_picker_row</item>
+        <item name="hintTextColor">@color/colorPrimary</item>
+        <item name="android:textColorHint">@color/colorMuted</item>
+        <item name="errorEnabled">true</item>
+        <item name="errorIconDrawable">@null</item>
+        <item name="errorTextColor">@color/colorError</item>
+    </style>
+
+    <style name="Widget.Dish.EditText" parent="Widget.Material3.TextInputEditText.OutlinedBox">
+        <item name="android:textColor">@color/colorOnSurface</item>
+        <item name="android:textColorHint">@color/colorMuted</item>
+    </style>
+
     <!-- ============================================================
          CHIP — the pickable chip used by the controller card's inline
          pickers (Type: Xbox/PS, Touchpad mode: Off/Pad/Mouse). MaterialChip

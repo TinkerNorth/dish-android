@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingHorizontal="@dimen/spacing_4xl"
+    android:paddingTop="@dimen/spacing_lg">
+
+    <TextView
+        android:id="@+id/scanNote"
+        style="@style/TextAppearance.Dish.BodySmall"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="@dimen/spacing_lg"
+        android:text="@string/bt_scan_permission_note"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/scanProgress"
+        style="@style/TextAppearance.Dish.Label.Accent"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="@dimen/spacing_sm"
+        android:text="@string/action_scanning"
+        android:visibility="gone" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <LinearLayout
+            android:id="@+id/deviceContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </ScrollView>
+
+    <TextView
+        android:id="@+id/deviceEmpty"
+        style="@style/TextAppearance.Dish.BodySmall"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingVertical="@dimen/spacing_xl"
+        android:text="@string/bt_device_empty"
+        android:visibility="gone" />
+</LinearLayout>

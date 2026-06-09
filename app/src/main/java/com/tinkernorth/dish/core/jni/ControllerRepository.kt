@@ -44,8 +44,9 @@ class ControllerRepository
             handle: Int,
             index: Int,
             capabilities: Int,
+            controllerType: Int,
         ) {
-            SatelliteNative.controllerAdd(handle, index, capabilities)
+            SatelliteNative.controllerAdd(handle, index, capabilities, controllerType)
         }
 
         fun removeController(

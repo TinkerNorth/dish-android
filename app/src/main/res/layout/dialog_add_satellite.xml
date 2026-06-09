@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingHorizontal="@dimen/spacing_4xl"
+    android:paddingTop="@dimen/spacing_lg">
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/tilSatelliteHost"
+        style="@style/Widget.Dish.TextInputLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="@string/add_satellite_host_hint">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etSatelliteHost"
+            style="@style/Widget.Dish.EditText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textUri"
+            android:singleLine="true"
+            android:imeOptions="actionNext"
+            android:importantForAutofill="no"
+            tools:targetApi="26" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/tilSatelliteHttpsPort"
+        style="@style/Widget.Dish.TextInputLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_lg"
+        android:hint="@string/add_satellite_https_hint">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etSatelliteHttpsPort"
+            style="@style/Widget.Dish.EditText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="number"
+            android:maxLength="5"
+            android:singleLine="true"
+            android:imeOptions="actionNext"
+            android:importantForAutofill="no"
+            tools:targetApi="26" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/tilSatelliteUdpPort"
+        style="@style/Widget.Dish.TextInputLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_lg"
+        android:hint="@string/add_satellite_udp_hint">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etSatelliteUdpPort"
+            style="@style/Widget.Dish.EditText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="number"
+            android:maxLength="5"
+            android:singleLine="true"
+            android:imeOptions="actionDone"
+            android:importantForAutofill="no"
+            tools:targetApi="26" />
+    </com.google.android.material.textfield.TextInputLayout>
+</LinearLayout>

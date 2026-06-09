@@ -2,10 +2,12 @@
 
 package com.tinkernorth.dish.di
 
+import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.os.Build
 import android.util.Log
 import com.tinkernorth.dish.source.bluetooth.AndroidHidProxyClient
+import com.tinkernorth.dish.source.bluetooth.BluetoothDeviceScanner
 import com.tinkernorth.dish.source.bluetooth.BluetoothHidSession
 import com.tinkernorth.dish.source.bluetooth.HidProxyClient
 import dagger.Module
@@ -77,6 +79,16 @@ object AppModule {
     @Provides
     @Singleton
     fun provideBluetoothHidSession(factory: @JvmSuppressWildcards () -> HidProxyClient): BluetoothHidSession = BluetoothHidSession(factory)
+
+    // Adapter resolved per call so a runtime BT toggle is reflected without re-injection.
+    @Provides
+    @Singleton
+    fun provideBluetoothDeviceScanner(
+        @ApplicationContext context: Context,
+    ): BluetoothDeviceScanner =
+        BluetoothDeviceScanner(context) {
+            (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
+        }
 }
 
 private object UnavailableHidProxyClient : HidProxyClient {

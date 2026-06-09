@@ -50,10 +50,10 @@ Mapping rules the client applies:
 - **Magnitude:** wire 0..65535 maps to amplitude 1..255, rounding up so
   any non-zero request is felt (`rumbleMagnitudeTo255`).
 - **Strong / weak:** sent to vibrator id 0 / id 1 when the target
-  exposes two actuators; single-actuator targets use one magnitude
-  (`max(strong, weak)` on the legacy path, strong-priority on the
-  combined path). Real dual-motor separation is only reachable on
-  USB-direct pads.
+  exposes two actuators; single-actuator targets fold to one magnitude
+  (`max(strong, weak)`) on both the legacy and combined paths, so a
+  weak-dominant effect is still felt. Real dual-motor separation is
+  only reachable on USB-direct pads.
 - **Duration:** clamped to `[1, 1500]` ms (`rumbleSafeDurationMs`) to
   bound a stranded buzz from a hung satellite.
 

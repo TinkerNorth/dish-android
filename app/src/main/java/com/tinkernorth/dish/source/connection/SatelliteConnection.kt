@@ -186,7 +186,26 @@ class SatelliteConnection(
         val snap = info ?: return
         if (snap.registered && handle >= 0) {
             withContext(ioDispatcher) {
+                controllerRepo.resetControllerAck(handle)
                 controllerRepo.sendControllerType(handle, snap.controllerIndex, controllerType)
+                var ack = -1
+                repeat(ACK_WAIT_ATTEMPTS) {
+                    ack = controllerRepo.getLastControllerAck(handle)
+                    if (ack != -1) return@repeat
+                    delay(ACK_WAIT_INTERVAL_MS)
+                }
+                if (ack != -1) {
+                    val motionFlags = controllerRepo.getLastControllerMotionFlags(handle)
+                    if (motionFlags >= 0) {
+                        motionBackendStatusStore?.setStatus(
+                            id,
+                            slotId,
+                            SatelliteMotionBackendStatus.fromFlags(motionFlags),
+                        )
+                    } else {
+                        motionBackendStatusStore?.clear(id, slotId)
+                    }
+                }
             }
         }
     }
@@ -202,7 +221,9 @@ class SatelliteConnection(
                 for (attempt in 1..ADD_MAX_ATTEMPTS) {
                     if (handle < 0) return@withContext
                     controllerRepo.resetControllerAck(handle)
-                    controllerRepo.addController(handle, info.controllerIndex, caps)
+                    // Single-call connect: the type travels in the add, so the receiver
+                    // plugs the correct virtual device on the first try (no replug).
+                    controllerRepo.addController(handle, info.controllerIndex, caps, info.controllerType)
                     var ack = -1
                     repeat(ACK_WAIT_ATTEMPTS) {
                         ack = controllerRepo.getLastControllerAck(handle)
@@ -227,6 +248,12 @@ class SatelliteConnection(
                     } else {
                         motionBackendStatusStore?.clear(id, slotId)
                     }
+                    // Backward-compat fallback: the type already travels in the add
+                    // (single-call connect), but a PRE-extension satellite ignores
+                    // that byte and plugs the default Xbox device. Re-send the type
+                    // so an old receiver still gets it. On a current receiver the
+                    // device is already the right type, so this is a no-op (same
+                    // type → no replug, no bounce).
                     controllerRepo.sendControllerType(handle, info.controllerIndex, info.controllerType)
                     // Close composer-emission-during-ACK race before flipping registered=true.
                     val currentCaps = BASE_CAPABILITIES or motionCapsBitsFor(slotId)

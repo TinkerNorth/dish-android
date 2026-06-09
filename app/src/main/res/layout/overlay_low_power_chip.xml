@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Streaming hint + pre-dim countdown chip. Included in each screen's content
-     column (not the floating overlay) so it docks at the base and pushes
-     content up rather than covering it. View IDs preserved for LowPowerManager. -->
+<!-- Streaming hint + pre-dim countdown chip. On the dashboard it docks at the
+     base of the content column and pushes content up; on the input overlays it
+     is bottom-gravity so it floats over the controls without stealing height.
+     View IDs preserved for LowPowerManager. -->
 <merge xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
@@ -9,7 +10,7 @@
         android:id="@+id/llStreamingHint"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal"
+        android:layout_gravity="bottom|center_horizontal"
         android:layout_marginTop="@dimen/spacing_2xl"
         android:layout_marginBottom="@dimen/spacing_2xl"
         android:background="@drawable/bg_pill"
@@ -39,7 +40,7 @@
         android:id="@+id/llCountdownBanner"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal"
+        android:layout_gravity="bottom|center_horizontal"
         android:layout_marginTop="@dimen/spacing_2xl"
         android:layout_marginBottom="@dimen/spacing_2xl"
         android:background="@drawable/bg_pill"
