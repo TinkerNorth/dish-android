@@ -61,10 +61,12 @@ class WakeStateController
         }
 
         private fun apply(wake: WakeState) {
-            setState(wake)
-            _streamingSlotCount.value = wake.streamingSlotCount
             synchronized(lock) {
+                // Drop a composer emission that lands after onStop: publishing the count here would let
+                // StreamingServiceController restart the foreground service while the app is stopped.
                 if (stopped) return
+                setState(wake)
+                _streamingSlotCount.value = wake.streamingSlotCount
                 val keep = wake.shouldKeepScreenOn
                 if (keep == _shouldKeepScreenOn.value) return
                 _shouldKeepScreenOn.value = keep

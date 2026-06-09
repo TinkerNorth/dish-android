@@ -5,8 +5,8 @@ package com.tinkernorth.dish.composer
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
-import com.tinkernorth.dish.architecture.abstracts.AbstractStateSource
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -22,7 +22,7 @@ class StreamingServiceController
         @ApplicationContext private val context: Context,
         private val wakeState: WakeStateController,
         private val scope: CoroutineScope,
-    ) : AbstractStateSource<Unit>(Unit) {
+    ) : DefaultLifecycleObserver {
         private var job: Job? = null
         private var running = false
 

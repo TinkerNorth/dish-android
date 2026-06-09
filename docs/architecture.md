@@ -102,9 +102,12 @@ classes own their own `SharedFlow`s directly
 (`SatelliteConnectionManager`, `DishNotifications`). Keep the base
 tight: state + optional lifecycle.
 
-`S = Unit` is allowed when the class is purely a lifecycle hook with
-no observable state (e.g. `ConnectionForegroundObserver`). Most
-subclasses have a meaningful `S`.
+A class that is purely a lifecycle hook with no observable state
+(e.g. `ConnectionForegroundObserver`, `StreamingServiceController`)
+implements `DefaultLifecycleObserver` directly rather than
+`AbstractStateSource<Unit>`: a state holder that holds no state is
+just noise. Every `AbstractStateSource` subclass therefore has a
+meaningful `S`.
 
 ### `AbstractComposer<S>`
 

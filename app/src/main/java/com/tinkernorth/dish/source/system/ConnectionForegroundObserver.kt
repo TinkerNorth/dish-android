@@ -2,8 +2,8 @@
 
 package com.tinkernorth.dish.source.system
 
+import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
-import com.tinkernorth.dish.architecture.abstracts.AbstractStateSource
 import com.tinkernorth.dish.composer.ConnectionHub
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -13,7 +13,7 @@ class ConnectionForegroundObserver
     @Inject
     constructor(
         private val hub: ConnectionHub,
-    ) : AbstractStateSource<Unit>(Unit) {
+    ) : DefaultLifecycleObserver {
         override fun onStart(owner: LifecycleOwner) {
             hub.autoReconnectAll()
         }

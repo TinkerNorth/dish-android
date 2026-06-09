@@ -125,6 +125,7 @@ class UsbPathMachineTest {
         assertEquals(
             listOf(
                 UsbEffect.EndHold,
+                UsbEffect.SetPref(PathChoice.Standard),
                 UsbEffect.MarkFailure(DirectClaimFailure.Busy),
                 UsbEffect.Notify(UsbNotice.SwitchToDirectFailed),
             ),
@@ -140,7 +141,10 @@ class UsbPathMachineTest {
                 UsbEvent.ClaimFailed(DirectClaimFailure.Busy, frameworkStolen = false),
             )
         assertEquals(UsbPhase.Routed, r.next?.phase)
-        assertEquals(listOf(UsbEffect.EndHold, UsbEffect.MarkFailure(DirectClaimFailure.Busy)), r.effects)
+        assertEquals(
+            listOf(UsbEffect.EndHold, UsbEffect.SetPref(PathChoice.Standard), UsbEffect.MarkFailure(DirectClaimFailure.Busy)),
+            r.effects,
+        )
     }
 
     @Test
@@ -237,8 +241,14 @@ class UsbPathMachineTest {
     fun `awaiting from claim-fail + timeout needs replug`() {
         val r = reduce(controller(UsbPhase.AwaitingFramework, syntheticId = null), UsbEvent.Timeout)
         assertEquals(UsbPhase.NeedsReplug, r.next?.phase)
+        assertEquals(DirectClaimFailure.Dropped, r.next?.failure)
         assertEquals(
-            listOf(UsbEffect.MarkNeedsReplug, UsbEffect.SetPref(PathChoice.Standard), UsbEffect.Notify(UsbNotice.NeedsReplug)),
+            listOf(
+                UsbEffect.MarkNeedsReplug,
+                UsbEffect.MarkFailure(DirectClaimFailure.Dropped),
+                UsbEffect.SetPref(PathChoice.Standard),
+                UsbEffect.Notify(UsbNotice.NeedsReplug),
+            ),
             r.effects,
         )
     }
@@ -276,7 +286,11 @@ class UsbPathMachineTest {
                 UsbEvent.ClaimFailed(DirectClaimFailure.InitFailed, frameworkStolen = true),
             )
         assertEquals(UsbPhase.NeedsReplug, r.next?.phase)
-        assertEquals(listOf(UsbEffect.Notify(UsbNotice.RestoreFailed)), r.effects)
+        assertEquals(DirectClaimFailure.Dropped, r.next?.failure)
+        assertEquals(
+            listOf(UsbEffect.MarkFailure(DirectClaimFailure.Dropped), UsbEffect.Notify(UsbNotice.RestoreFailed)),
+            r.effects,
+        )
     }
 
     @Test

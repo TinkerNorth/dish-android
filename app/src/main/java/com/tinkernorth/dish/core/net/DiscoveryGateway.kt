@@ -8,6 +8,7 @@ import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.DiscoverySource
 import com.tinkernorth.dish.core.model.stableKey
 import com.tinkernorth.dish.di.IoDispatcher
+import com.tinkernorth.dish.repository.SatellitePinRepository
 import com.tinkernorth.dish.source.connection.MdnsDiscovery
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.async
@@ -19,20 +20,23 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class DiscoveryRepository
+class DiscoveryGateway
     @Inject
     constructor(
         private val mdns: MdnsDiscovery,
+        private val pins: SatellitePinRepository,
         @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     ) {
-        private val mutex = Mutex()
+        // Guards ONLY the native+mDNS discovery single-flight. Per-host HTTP is deliberately
+        // left off this lock: a hung satellite must not block HTTP to a healthy one.
+        private val discoveryMutex = Mutex()
 
         suspend fun discoverServers(
             port: Int,
             timeoutMs: Int,
         ): List<DiscoveredServer> =
             withContext(ioDispatcher) {
-                mutex.withLock {
+                discoveryMutex.withLock {
                     coroutineScope {
                         val broadcast =
                             async { parseServers(SatelliteNative.discoverServers(port, timeoutMs)) }
@@ -50,6 +54,9 @@ class DiscoveryRepository
                 }
             }
 
+        // satelliteId is an optional trailing param (constant "" default, resolved to the host
+        // in-body) so existing positional callers stay source-compatible. The cert pin protects
+        // "the box at this address", which is the right key for TLS pinning on a CA-less LAN.
         suspend fun pair(
             ip: String,
             port: Int,
@@ -57,33 +64,30 @@ class DiscoveryRepository
             deviceName: String,
             pin: String,
             clientPin: String = "",
+            satelliteId: String = "",
         ): String =
             withContext(ioDispatcher) {
-                mutex.withLock {
-                    SatelliteHttpClient.pair(ip, port, deviceId, deviceName, pin, clientPin)
-                }
+                SatelliteHttpClient.pair(ip, port, deviceId, deviceName, pin, pinId(satelliteId, ip), pins, clientPin)
             }
 
         suspend fun pairStatus(
             ip: String,
             port: Int,
             deviceId: String,
+            satelliteId: String = "",
         ): String =
             withContext(ioDispatcher) {
-                mutex.withLock {
-                    SatelliteHttpClient.pairStatus(ip, port, deviceId)
-                }
+                SatelliteHttpClient.pairStatus(ip, port, deviceId, pinId(satelliteId, ip), pins)
             }
 
         suspend fun connect(
             ip: String,
             port: Int,
             deviceId: String,
+            satelliteId: String = "",
         ): String =
             withContext(ioDispatcher) {
-                mutex.withLock {
-                    SatelliteHttpClient.connect(ip, port, deviceId)
-                }
+                SatelliteHttpClient.connect(ip, port, deviceId, pinId(satelliteId, ip), pins)
             }
 
         suspend fun disconnect(
@@ -91,11 +95,10 @@ class DiscoveryRepository
             port: Int,
             connectionId: String,
             deviceId: String,
+            satelliteId: String = "",
         ): String =
             withContext(ioDispatcher) {
-                mutex.withLock {
-                    SatelliteHttpClient.disconnect(ip, port, connectionId, deviceId)
-                }
+                SatelliteHttpClient.disconnect(ip, port, connectionId, deviceId, pinId(satelliteId, ip), pins)
             }
 
         suspend fun setTouchpadMode(
@@ -103,15 +106,20 @@ class DiscoveryRepository
             port: Int,
             deviceId: String,
             mode: String,
+            satelliteId: String = "",
         ): String =
             withContext(ioDispatcher) {
-                mutex.withLock {
-                    SatelliteHttpClient.setTouchpadMode(ip, port, deviceId, mode)
-                }
+                SatelliteHttpClient.setTouchpadMode(ip, port, deviceId, mode, pinId(satelliteId, ip), pins)
             }
 
         companion object {
-            private const val TAG = "DiscoveryRepository"
+            private const val TAG = "DiscoveryGateway"
+
+            // Empty satelliteId means "caller didn't override": key the pin on the host.
+            internal fun pinId(
+                satelliteId: String,
+                ip: String,
+            ): String = satelliteId.ifEmpty { ip }
 
             internal fun mergeDiscovered(
                 broadcast: List<DiscoveredServer>,

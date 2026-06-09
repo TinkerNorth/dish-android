@@ -432,16 +432,11 @@ class UsbGamepadManager
             vendorId: Int,
             productId: Int,
         ): PathChoice =
-            pathPrefs.choiceFor(vendorId, productId)
-                ?: if (native.isKnownFastLaneModel(vendorId, productId) &&
-                    registry.directFailureFor(vendorId, productId) == null
-                ) {
-                    // No stored pick: auto-Direct a verified model, but not one that just failed to claim
-                    // (an explicit user pick still routes through Choose and claims regardless).
-                    PathChoice.Direct
-                } else {
-                    PathChoice.Standard
-                }
+            resolvePathChoice(
+                stored = pathPrefs.choiceFor(vendorId, productId),
+                isFastLaneModel = native.isKnownFastLaneModel(vendorId, productId),
+                priorFailure = registry.directFailureFor(vendorId, productId),
+            )
 
         private fun requestPermission(device: UsbDevice) {
             val intent = Intent(ACTION_USB_PERMISSION).setPackage(context.packageName)
@@ -544,3 +539,11 @@ class UsbGamepadManager
             const val TRANSITION_TIMEOUT_MS = 4000L
         }
     }
+
+// An explicit stored pick always wins; absent one, auto-Direct only a verified fast-lane model
+// that has not just failed to claim.
+internal fun resolvePathChoice(
+    stored: PathChoice?,
+    isFastLaneModel: Boolean,
+    priorFailure: DirectClaimFailure?,
+): PathChoice = stored ?: if (isFastLaneModel && priorFailure == null) PathChoice.Direct else PathChoice.Standard
