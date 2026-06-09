@@ -143,7 +143,7 @@ The test cannot drive these screens by mutating production `@Singleton` classes 
 |---|---|---|---|
 | `MainUiStateProvider` | `DefaultMainUiStateProvider` | `FakeMainUiStateProvider` | `MainActivity` dashboard state |
 | `WakeStateSource` | `WakeStateController` | `FakeWakeStateSource` | Streaming pill, screen-on flag |
-| `ConnectionsSource` | `ConnectionHub` (implements directly) | `FakeConnectionsSource` | `ConnectionsActivity` list, overlay connection chip |
+| `ConnectionsSource` | `ConnectionCoordinator` (implements directly) | `FakeConnectionsSource` | `ConnectionsActivity` list, overlay connection chip |
 
 Each interface exposes only the read-only `StateFlow` surface the consumer needs. Production code mutates through the concrete classes; the test pushes literal `MainUiState` / `ConnectionSummary` values into the fakes.
 

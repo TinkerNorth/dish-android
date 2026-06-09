@@ -4,6 +4,7 @@ package com.tinkernorth.dish.source.bluetooth
 
 import com.tinkernorth.dish.core.input.BluetoothGamepad.GamepadProfile
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -116,5 +117,43 @@ class BluetoothHidSessionTest {
         fake.fireHostDisconnected("OTHER")
 
         assertTrue(session.state.value is BluetoothSessionState.Connected)
+    }
+
+    @Test
+    fun `onHostConnected for a foreign mac is ignored when started for a specific host`() {
+        session.start(GamepadProfile.XBOX, autoConnectMac = "AA:BB")
+        fake.fireAcquired()
+        fake.fireAppRegistered()
+
+        fake.fireHostConnected("CC:DD", "Stranger PC")
+
+        val s = session.state.value as BluetoothSessionState.Registered
+        assertEquals("AA:BB", s.autoConnectMac)
+        assertFalse(session.sendReport(ByteArray(14)))
+        assertTrue(fake.calls.none { it is FakeHidProxyClient.Call.SendReport })
+    }
+
+    @Test
+    fun `onHostConnected for the intended mac is accepted when started for a specific host`() {
+        session.start(GamepadProfile.XBOX, autoConnectMac = "AA:BB")
+        fake.fireAcquired()
+        fake.fireAppRegistered()
+
+        fake.fireHostConnected("aa:bb", "My PC")
+
+        val s = session.state.value as BluetoothSessionState.Connected
+        assertEquals("aa:bb", s.mac)
+        assertEquals("My PC", s.name)
+        assertEquals(GamepadProfile.XBOX, s.profile)
+    }
+
+    @Test
+    fun `onHostConnected is rejected before the app is registered`() {
+        session.start(GamepadProfile.XBOX, autoConnectMac = null)
+        fake.fireAcquired()
+
+        fake.fireHostConnected("11:22", "Premature PC")
+
+        assertTrue(session.state.value is BluetoothSessionState.Acquiring)
     }
 }

@@ -5,6 +5,11 @@ package com.tinkernorth.dish.ui.main
 import androidx.annotation.ColorRes
 import androidx.annotation.StringRes
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.composer.ConnectionKind
+import com.tinkernorth.dish.composer.ConnectionSummary
+import com.tinkernorth.dish.composer.LinkState
+import com.tinkernorth.dish.composer.MotionCapability
+import com.tinkernorth.dish.source.sensor.MotionStreamState
 
 enum class MotionIndicatorState(
     @param:StringRes val labelRes: Int,
@@ -53,4 +58,36 @@ enum class MotionIndicatorState(
                 else -> PAUSED
             }
     }
+}
+
+/**
+ * Translate the three live overlay inputs into the boolean flags of
+ * [MotionIndicatorState.of]. Pure so the toolbar-paint decision is testable
+ * outside the Activity.
+ */
+fun motionIndicatorFor(
+    summary: ConnectionSummary?,
+    capability: MotionCapability,
+    source: MotionStreamState,
+): MotionIndicatorState {
+    // A null summary (connection not resolved yet) is treated as motion-capable but
+    // not-yet-connected: PAUSED is rendered until the kind + liveness resolve, then the next
+    // paint self-corrects.
+    val carriesMotion = summary?.kind != ConnectionKind.BLUETOOTH
+    val connected = summary?.live == LinkState.Connected
+    val isAvailable = source != MotionStreamState.Disabled
+    val isStreaming =
+        source == MotionStreamState.Streaming ||
+            source == MotionStreamState.Stalled
+    val isStalled = source == MotionStreamState.Stalled
+    return MotionIndicatorState.of(
+        isAvailable = isAvailable,
+        isStreaming = isStreaming,
+        connectionCarriesMotion = carriesMotion,
+        connectionConnected = connected,
+        userEnabled = capability.userEnabled,
+        hostHasSinkForType = capability.hostHasSinkForType,
+        satelliteBackendOk = capability.satelliteBackendStatus?.backendOk,
+        isStalled = isStalled,
+    )
 }

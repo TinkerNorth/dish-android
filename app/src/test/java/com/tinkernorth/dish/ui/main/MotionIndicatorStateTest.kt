@@ -2,6 +2,12 @@
 
 package com.tinkernorth.dish.ui.main
 
+import com.tinkernorth.dish.composer.ConnectionKind
+import com.tinkernorth.dish.composer.ConnectionSummary
+import com.tinkernorth.dish.composer.LinkState
+import com.tinkernorth.dish.composer.MotionCapability
+import com.tinkernorth.dish.source.sensor.MotionStreamState
+import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -438,6 +444,191 @@ class MotionIndicatorStateTest {
                 hostHasSinkForType = true,
                 satelliteBackendOk = false,
                 isStalled = true,
+            ),
+        )
+    }
+
+    // ---- motionIndicatorFor: the Activity-extracted input translation ----
+
+    private fun summary(
+        kind: ConnectionKind,
+        live: LinkState,
+    ): ConnectionSummary =
+        ConnectionSummary(
+            id = "c1",
+            kind = kind,
+            label = "label",
+            detail = "detail",
+            live = live,
+            boundSlotIds = emptyList(),
+        )
+
+    private val fullCapability =
+        MotionCapability(
+            hasGyro = true,
+            carriesOnConnection = true,
+            userEnabled = true,
+            hostHasSinkForType = true,
+            satelliteBackendStatus = null,
+        )
+
+    @Test
+    fun `motionIndicatorFor null summary with a streaming source maps to PAUSED`() {
+        // Null summary is treated as motion-capable (carries) but not-yet-connected, so a started
+        // source still reads PAUSED until liveness resolves.
+        assertEquals(
+            MotionIndicatorState.PAUSED,
+            motionIndicatorFor(
+                summary = null,
+                capability = fullCapability,
+                source = MotionStreamState.Streaming,
+            ),
+        )
+    }
+
+    @Test
+    fun `motionIndicatorFor connected satellite streaming maps to STREAMING`() {
+        assertEquals(
+            MotionIndicatorState.STREAMING,
+            motionIndicatorFor(
+                summary = summary(ConnectionKind.SATELLITE, LinkState.Connected),
+                capability = fullCapability,
+                source = MotionStreamState.Streaming,
+            ),
+        )
+    }
+
+    @Test
+    fun `motionIndicatorFor bluetooth summary streaming maps to NOT_FORWARDED`() {
+        assertEquals(
+            MotionIndicatorState.NOT_FORWARDED,
+            motionIndicatorFor(
+                summary = summary(ConnectionKind.BLUETOOTH, LinkState.Connected),
+                capability = fullCapability,
+                source = MotionStreamState.Streaming,
+            ),
+        )
+    }
+
+    @Test
+    fun `motionIndicatorFor stalled source over a connected satellite maps to STALLED`() {
+        // Stalled is folded into isStreaming, and also raises the isStalled flag.
+        assertEquals(
+            MotionIndicatorState.STALLED,
+            motionIndicatorFor(
+                summary = summary(ConnectionKind.SATELLITE, LinkState.Connected),
+                capability = fullCapability,
+                source = MotionStreamState.Stalled,
+            ),
+        )
+    }
+
+    @Test
+    fun `motionIndicatorFor disabled source maps to UNAVAILABLE`() {
+        // The no-gyro / off condition reaches this function as a Disabled source, not via
+        // capability.hasGyro (which this translation never reads).
+        assertEquals(
+            MotionIndicatorState.UNAVAILABLE,
+            motionIndicatorFor(
+                summary = summary(ConnectionKind.SATELLITE, LinkState.Connected),
+                capability = fullCapability,
+                source = MotionStreamState.Disabled,
+            ),
+        )
+    }
+
+    @Test
+    fun `motionIndicatorFor a Disabled source dominates regardless of summary and capability`() {
+        // Mirrors the existing precedence test: UNAVAILABLE wins. Note the dominating input here is
+        // the source being Disabled, not MotionCapability.hasGyro, which motionIndicatorFor ignores.
+        val richCapability =
+            MotionCapability(
+                hasGyro = true,
+                carriesOnConnection = true,
+                userEnabled = false,
+                hostHasSinkForType = false,
+                satelliteBackendStatus =
+                    SatelliteMotionBackendStatus(sinkSupportedForType = false, backendOk = false),
+            )
+        for (kind in ConnectionKind.entries) {
+            for (live in LinkState.entries) {
+                assertEquals(
+                    "kind=$kind live=$live must stay UNAVAILABLE when source is Disabled",
+                    MotionIndicatorState.UNAVAILABLE,
+                    motionIndicatorFor(
+                        summary = summary(kind, live),
+                        capability = richCapability,
+                        source = MotionStreamState.Disabled,
+                    ),
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `motionIndicatorFor a Stopped source over a connected satellite maps to PAUSED`() {
+        // Stopped is neither Disabled (so available) nor Streaming/Stalled (so not streaming).
+        assertEquals(
+            MotionIndicatorState.PAUSED,
+            motionIndicatorFor(
+                summary = summary(ConnectionKind.SATELLITE, LinkState.Connected),
+                capability = fullCapability,
+                source = MotionStreamState.Stopped,
+            ),
+        )
+    }
+
+    @Test
+    fun `motionIndicatorFor a not-yet-connected satellite reads PAUSED, not STREAMING`() {
+        assertEquals(
+            MotionIndicatorState.PAUSED,
+            motionIndicatorFor(
+                summary = summary(ConnectionKind.SATELLITE, LinkState.Connecting),
+                capability = fullCapability,
+                source = MotionStreamState.Streaming,
+            ),
+        )
+    }
+
+    @Test
+    fun `motionIndicatorFor passes through capability userEnabled to USER_DISABLED`() {
+        assertEquals(
+            MotionIndicatorState.USER_DISABLED,
+            motionIndicatorFor(
+                summary = summary(ConnectionKind.SATELLITE, LinkState.Connected),
+                capability = fullCapability.copy(userEnabled = false),
+                source = MotionStreamState.Streaming,
+            ),
+        )
+    }
+
+    @Test
+    fun `motionIndicatorFor passes through capability hostHasSinkForType to NO_HOST_SINK`() {
+        assertEquals(
+            MotionIndicatorState.NO_HOST_SINK,
+            motionIndicatorFor(
+                summary = summary(ConnectionKind.SATELLITE, LinkState.Connected),
+                capability = fullCapability.copy(hostHasSinkForType = false),
+                source = MotionStreamState.Streaming,
+            ),
+        )
+    }
+
+    @Test
+    fun `motionIndicatorFor passes through satellite backend status to BACKEND_BROKEN`() {
+        assertEquals(
+            MotionIndicatorState.BACKEND_BROKEN,
+            motionIndicatorFor(
+                summary = summary(ConnectionKind.SATELLITE, LinkState.Connected),
+                capability =
+                    fullCapability.copy(
+                        satelliteBackendStatus =
+                            SatelliteMotionBackendStatus(
+                                sinkSupportedForType = true,
+                                backendOk = false,
+                            ),
+                    ),
+                source = MotionStreamState.Streaming,
             ),
         )
     }

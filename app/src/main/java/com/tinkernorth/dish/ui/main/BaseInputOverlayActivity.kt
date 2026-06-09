@@ -19,7 +19,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.model.DishNotification
@@ -41,7 +41,7 @@ import javax.inject.Inject
 import kotlin.math.max
 
 abstract class BaseInputOverlayActivity : AppCompatActivity() {
-    @Inject lateinit var hub: ConnectionHub
+    @Inject lateinit var hub: ConnectionCoordinator
 
     @Inject lateinit var satellite: SatelliteConnectionManager
 

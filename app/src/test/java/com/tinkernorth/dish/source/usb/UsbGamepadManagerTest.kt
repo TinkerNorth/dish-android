@@ -11,7 +11,7 @@ import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
 import android.util.Log
-import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.notification.DishNotifications
@@ -46,7 +46,7 @@ class UsbGamepadManagerTest {
     private val registry = mockk<PhysicalGamepadRegistry>(relaxed = true)
     private val native = mockk<PhysicalInputNative>(relaxed = true)
     private val notifications = mockk<DishNotifications>(relaxed = true)
-    private val hub = mockk<ConnectionHub>(relaxed = true)
+    private val hub = mockk<ConnectionCoordinator>(relaxed = true)
     private val pathPrefs = mockk<UsbPathPreferenceStore>(relaxed = true)
     private val device = gamepadDevice()
 

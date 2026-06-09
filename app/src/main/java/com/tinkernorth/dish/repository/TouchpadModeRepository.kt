@@ -55,6 +55,11 @@ class TouchpadModeRepository
             key: String,
             value: TouchpadModePreference,
         ) {
+            // Reject unknown modes so a typo never persists a value the satellite cannot route.
+            if (!TouchpadModeValue.isValid(value.mode)) {
+                Log.w(TAG, "Ignoring put of invalid touchpad mode '${value.mode}' for $key")
+                return
+            }
             synchronized(writeLock) {
                 val list = all().toMutableList()
                 list.removeAll { it.satelliteId == key }

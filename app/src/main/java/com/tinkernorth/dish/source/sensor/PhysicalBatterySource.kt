@@ -12,7 +12,7 @@ import android.view.InputDevice
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
-import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.PhysicalReachability
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.connection.SatelliteConnection
@@ -36,7 +36,7 @@ class PhysicalBatterySource
     constructor(
         @ApplicationContext private val context: Context,
         private val registry: PhysicalGamepadRegistry,
-        private val hub: ConnectionHub,
+        private val hub: ConnectionCoordinator,
         private val satellite: SatelliteConnectionManager,
         private val statusStore: BatteryStatusStore,
         private val scope: CoroutineScope,

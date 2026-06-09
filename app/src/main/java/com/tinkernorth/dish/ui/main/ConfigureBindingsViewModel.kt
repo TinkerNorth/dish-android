@@ -8,7 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
-import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.MotionCapabilityComposer
@@ -118,7 +118,7 @@ class ConfigureBindingsViewModel
     @Inject
     constructor(
         @ApplicationContext private val context: Context,
-        private val hub: ConnectionHub,
+        private val hub: ConnectionCoordinator,
         private val gamepadRegistry: PhysicalGamepadRegistry,
         private val motionEnabledStore: MotionEnabledStore,
         private val motionCapability: MotionCapabilityComposer,
@@ -337,18 +337,6 @@ class ConfigureBindingsViewModel
                 else ->
                     context.getString(R.string.touchpad_mode_error_unknown, err ?: reply)
             }
-        }
-
-        private fun extractJsonErrorField(json: String): String? {
-            val keyIdx = json.indexOf("\"error\"")
-            if (keyIdx < 0) return null
-            val colon = json.indexOf(':', startIndex = keyIdx + "\"error\"".length)
-            if (colon < 0) return null
-            val openQuote = json.indexOf('"', startIndex = colon + 1)
-            if (openQuote < 0) return null
-            val closeQuote = json.indexOf('"', startIndex = openQuote + 1)
-            if (closeQuote < 0) return null
-            return json.substring(openQuote + 1, closeQuote)
         }
 
         private fun buildSnapshot(slotId: String): BindingSnapshot {

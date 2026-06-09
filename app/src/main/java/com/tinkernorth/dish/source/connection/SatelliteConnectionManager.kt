@@ -9,8 +9,9 @@ import com.tinkernorth.dish.core.jni.ControllerRepository
 import com.tinkernorth.dish.core.model.ConnectResponse
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.PairResponse
-import com.tinkernorth.dish.core.net.DiscoveryRepository
+import com.tinkernorth.dish.core.net.DiscoveryGateway
 import com.tinkernorth.dish.core.net.hexToBytes
+import com.tinkernorth.dish.core.net.isPrivateHostLiteral
 import com.tinkernorth.dish.di.IoDispatcher
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedSatellite
@@ -18,6 +19,7 @@ import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,7 +57,7 @@ class SatelliteConnectionManager
     constructor(
         @ApplicationContext private val context: Context,
         private val scope: CoroutineScope,
-        private val discoveryRepo: DiscoveryRepository,
+        private val discoveryRepo: DiscoveryGateway,
         val controllerRepo: ControllerRepository,
         private val store: ConnectionStore,
         private val json: Json,
@@ -90,6 +92,11 @@ class SatelliteConnectionManager
 
         private val deviceId by lazy { getOrCreateDeviceId() }
         private val deviceName by lazy { android.os.Build.MODEL ?: "Android" }
+
+        // Path-B approval polls run up to APPROVAL_TIMEOUT_MS and can call openSession
+        // long after the user forgot the satellite. Keyed by id so disconnect/forget
+        // (and a re-issued request) can cancel the in-flight poll.
+        private val approvalPollJobs = java.util.concurrent.ConcurrentHashMap<String, Job>()
 
         init {
             // Project to cap-bits-by-slot so unrelated composer emissions don't fire no-op wire updates.
@@ -310,71 +317,84 @@ class SatelliteConnectionManager
                     }[id] ?: return
             conn.updateServer(server)
             conn.markConnecting()
-            scope.launch {
-                val raw =
-                    runCatching {
-                        discoveryRepo.pair(
-                            server.ip,
-                            server.pairPort,
-                            deviceId,
-                            deviceName,
-                            pin = "",
-                            clientPin = clientPin,
-                        )
-                    }.getOrNull()
-                if (raw.isNullOrBlank()) {
-                    conn.markDisconnected()
-                    _events.emit(ConnectionEvent.Error(SERVER_UNREACHABLE_MSG))
-                    return@launch
-                }
-                // An already-paired short-circuit hands a key straight back, skipping the operator step.
-                val immediate =
-                    runCatching { json.decodeFromString(PairResponse.serializer(), raw) }.getOrNull()
-                if (immediate?.ok == true && immediate.sharedKey != null) {
-                    clearStale(id)
-                    store.setSatelliteSharedKey(id, immediate.sharedKey)
-                    openSession(conn, server, ConnectIntent.USER_INITIATED)
-                    return@launch
-                }
-                // Otherwise wait for the operator: poll until accept / deny / timeout.
-                // The satellite-PIN path (pairWithPin) shares this connection, so
-                // once it reaches Live we bail without touching it. Otherwise this
-                // poll's terminal paths (esp. the timeout) would tear down a live
-                // session the user just established by typing the PIN.
-                var waited = 0L
-                while (waited < APPROVAL_TIMEOUT_MS) {
-                    if (conn.state.value == SatelliteSessionState.Live) return@launch
-                    kotlinx.coroutines.delay(APPROVAL_POLL_INTERVAL_MS)
-                    waited += APPROVAL_POLL_INTERVAL_MS
-                    val statusRaw =
-                        runCatching { discoveryRepo.pairStatus(server.ip, server.httpPort, deviceId) }
-                            .getOrNull()
-                    // A transient null reply is treated as still-pending, not a refusal.
-                    val st =
-                        if (statusRaw.isNullOrBlank()) {
-                            PairingApproval.Status.Pending
-                        } else {
-                            PairingApproval.classifyStatus(statusRaw)
-                        }
-                    // Re-check: Live may have flipped during the poll round-trip.
-                    if (conn.state.value == SatelliteSessionState.Live) return@launch
-                    if (st is PairingApproval.Status.Approved) {
+            // A re-issued request supersedes any prior poll for this id; cancel it
+            // so two polls can't race to openSession on the same satellite.
+            cancelApprovalPoll(id)
+            val job =
+                scope.launch {
+                    val raw =
+                        runCatching {
+                            discoveryRepo.pair(
+                                server.ip,
+                                server.pairPort,
+                                deviceId,
+                                deviceName,
+                                pin = "",
+                                clientPin = clientPin,
+                            )
+                        }.getOrNull()
+                    if (raw.isNullOrBlank()) {
+                        conn.markDisconnected()
+                        _events.emit(ConnectionEvent.Error(SERVER_UNREACHABLE_MSG))
+                        return@launch
+                    }
+                    // An already-paired short-circuit hands a key straight back, skipping the operator step.
+                    val immediate =
+                        runCatching { json.decodeFromString(PairResponse.serializer(), raw) }.getOrNull()
+                    if (immediate?.ok == true && immediate.sharedKey != null) {
                         clearStale(id)
-                        store.setSatelliteSharedKey(id, st.sharedKeyHex)
+                        store.setSatelliteSharedKey(id, immediate.sharedKey)
                         openSession(conn, server, ConnectIntent.USER_INITIATED)
                         return@launch
                     }
-                    if (st is PairingApproval.Status.Declined) {
+                    // Otherwise wait for the operator: poll until accept / deny / timeout.
+                    // The satellite-PIN path (pairWithPin) shares this connection, so
+                    // once it reaches Live we bail without touching it. Otherwise this
+                    // poll's terminal paths (esp. the timeout) would tear down a live
+                    // session the user just established by typing the PIN.
+                    var waited = 0L
+                    while (waited < APPROVAL_TIMEOUT_MS) {
+                        if (conn.state.value == SatelliteSessionState.Live) return@launch
+                        kotlinx.coroutines.delay(APPROVAL_POLL_INTERVAL_MS)
+                        waited += APPROVAL_POLL_INTERVAL_MS
+                        val statusRaw =
+                            runCatching { discoveryRepo.pairStatus(server.ip, server.httpPort, deviceId) }
+                                .getOrNull()
+                        // A transient null reply is treated as still-pending, not a refusal.
+                        val st =
+                            if (statusRaw.isNullOrBlank()) {
+                                PairingApproval.Status.Pending
+                            } else {
+                                PairingApproval.classifyStatus(statusRaw)
+                            }
+                        // Re-check: Live may have flipped during the poll round-trip.
+                        if (conn.state.value == SatelliteSessionState.Live) return@launch
+                        if (st is PairingApproval.Status.Approved) {
+                            clearStale(id)
+                            store.setSatelliteSharedKey(id, st.sharedKeyHex)
+                            openSession(conn, server, ConnectIntent.USER_INITIATED)
+                            return@launch
+                        }
+                        if (st is PairingApproval.Status.Declined) {
+                            conn.markDisconnected()
+                            _events.emit(ConnectionEvent.Error(APPROVAL_DECLINED_MSG))
+                            return@launch
+                        }
+                    }
+                    if (conn.state.value != SatelliteSessionState.Live) {
                         conn.markDisconnected()
-                        _events.emit(ConnectionEvent.Error(APPROVAL_DECLINED_MSG))
-                        return@launch
+                        _events.emit(ConnectionEvent.Error(APPROVAL_TIMEOUT_MSG))
                     }
                 }
-                if (conn.state.value != SatelliteSessionState.Live) {
-                    conn.markDisconnected()
-                    _events.emit(ConnectionEvent.Error(APPROVAL_TIMEOUT_MSG))
-                }
-            }
+            approvalPollJobs[id] = job
+            // Self-remove so a completed/cancelled poll doesn't linger in the map;
+            // guarded so we never evict a newer poll that already replaced this id.
+            job.invokeOnCompletion { approvalPollJobs.remove(id, job) }
+        }
+
+        // Cancels and deregisters an in-flight Path-B approval poll for [id], if any.
+        private fun cancelApprovalPoll(id: String) {
+            approvalPollJobs.remove(id)?.cancel()
         }
 
         private suspend fun openSession(
@@ -383,18 +403,28 @@ class SatelliteConnectionManager
             intent: ConnectIntent,
         ) = withContext(ioDispatcher) {
             val id = SatelliteConnection.idFor(server)
-            val keyHex = sharedKeyFor(server) ?: ""
-            if (keyHex.length != 64) {
+            // Vet the discovered address before any socket: an unauthenticated
+            // mDNS/broadcast beacon must not steer us at a public or non-literal
+            // host. Every connect path funnels through here, so both discovery
+            // transports are covered at one choke point.
+            if (!isPrivateHostLiteral(server.ip)) {
                 conn.markDisconnected()
-                // The local key is bogus — drop it so a subsequent
-                // user-initiated Connect goes through the pair handshake fresh
-                // rather than re-trying with the same broken value.
+                emitErrorIfUserInitiated(intent, SERVER_UNREACHABLE_MSG)
+                return@withContext
+            }
+            val keyHex = sharedKeyFor(server) ?: ""
+            // A 64-char value can still be non-hex (hexToBytes throws), so decode
+            // here and treat a decode failure as the same bogus-key case as a
+            // wrong length: drop the local key and re-pair on the next user tap
+            // rather than retrying the broken value.
+            val key = if (keyHex.length == 64) runCatching { hexToBytes(keyHex) }.getOrNull() else null
+            if (key == null) {
+                conn.markDisconnected()
                 store.forgetSatelliteSharedKey(id)
                 markStale(id)
                 emitErrorIfUserInitiated(intent, "No shared key — re-pair needed")
                 return@withContext
             }
-            val key = hexToBytes(keyHex)
             val rawConn = runCatching { discoveryRepo.connect(server.ip, server.httpPort, deviceId) }
             val rawConnText = rawConn.getOrNull()
             if (rawConn.isFailure || rawConnText.isNullOrBlank()) {
@@ -429,8 +459,10 @@ class SatelliteConnectionManager
                 )
                 return@withContext
             }
-            val token = hexToBytes(tokenHex)
-            if (token.size != 4 || key.size != 32) {
+            // Token is server-supplied: a malformed (non-hex) value must degrade
+            // like a wrong-size token, not crash the coroutine.
+            val token = runCatching { hexToBytes(tokenHex) }.getOrNull()
+            if (token == null || token.size != 4 || key.size != 32) {
                 conn.markDisconnected()
                 return@withContext
             }
@@ -515,6 +547,9 @@ class SatelliteConnectionManager
         }
 
         fun disconnect(id: String) {
+            // Stop any reverse-pairing poll first: otherwise it could call
+            // openSession seconds after the user tore the connection down.
+            cancelApprovalPoll(id)
             val conn = _connections.value[id] ?: return
             val srv = conn.server.value
             val cid = conn.connectionId

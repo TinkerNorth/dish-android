@@ -51,11 +51,12 @@ class MotionCapabilityComposerTest {
         satelliteBackendStatus: MutableStateFlow<Map<Pair<String, String>, SatelliteMotionBackendStatus>> =
             MutableStateFlow(emptyMap()),
     ): MotionCapabilityComposer {
+        // hasGyro is a constant hardware fact; snapshot the flow's current value at construction.
         val availability: PhoneMotionAvailability =
-            mockk { every { state } returns phoneAvailable }
+            mockk { every { hasGyro } returns phoneAvailable.value }
         val registry: PhysicalGamepadRegistry =
             mockk { every { this@mockk.devices } returns devices }
-        val hub: ConnectionHub =
+        val hub: ConnectionCoordinator =
             mockk {
                 every { this@mockk.bindings } returns bindings
                 every { this@mockk.connections } returns connections
@@ -125,21 +126,22 @@ class MotionCapabilityComposerTest {
             )
         }
 
+    // hasGyro is fixed hardware, resolved once: assert the constant rides through, both values.
     @Test
     fun `virtual slot hasGyro mirrors PhoneMotionAvailability`() =
         composerTest {
-            val phoneAvail = MutableStateFlow(true)
             val devices = MutableStateFlow<Map<Int, PhysicalGamepadRegistry.Device>>(emptyMap())
             val bindings = MutableStateFlow<Map<String, String>>(emptyMap())
             val conns = MutableStateFlow<List<ConnectionSummary>>(emptyList())
 
-            val probe = composerFor(phoneAvail, devices, bindings, conns, backgroundScope).probe(this)
+            val present =
+                composerFor(MutableStateFlow(true), devices, bindings, conns, backgroundScope).probe(this)
+            val absent =
+                composerFor(MutableStateFlow(false), devices, bindings, conns, backgroundScope).probe(this)
             testScheduler.runCurrent()
-            assertEquals(true, probe.latest[VIRTUAL_SLOT_ID]?.hasGyro)
 
-            phoneAvail.value = false
-            testScheduler.runCurrent()
-            assertEquals(false, probe.latest[VIRTUAL_SLOT_ID]?.hasGyro)
+            assertEquals(true, present.latest[VIRTUAL_SLOT_ID]?.hasGyro)
+            assertEquals(false, absent.latest[VIRTUAL_SLOT_ID]?.hasGyro)
         }
 
     @Test

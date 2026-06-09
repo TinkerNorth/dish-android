@@ -3,6 +3,10 @@
 package com.tinkernorth.dish.core.net
 
 import android.util.Log
+import com.tinkernorth.dish.repository.SatellitePinRepository
+import com.tinkernorth.dish.repository.TofuVerdict
+import com.tinkernorth.dish.repository.sha256FingerprintHex
+import com.tinkernorth.dish.repository.tofuVerdict
 import java.io.IOException
 import java.net.URL
 import java.security.SecureRandom
@@ -14,8 +18,10 @@ import javax.net.ssl.SSLSession
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
-// Satellite presents a self-signed cert on a LAN IP; approved decision to skip TLS validation
-// (curl --insecure equivalent). UDP gamepad channel has its own ChaCha20-Poly1305 auth.
+// Satellite presents a self-signed cert on a LAN IP (no CA to validate against), so the
+// X509TrustManager stays permissive to let the handshake complete. MITM protection instead
+// comes from trust-on-first-use cert PINNING in the hostname verifier below.
+// UDP gamepad channel has its own ChaCha20-Poly1305 auth.
 // All methods BLOCK — call from Dispatchers.IO.
 internal object SatelliteHttpClient {
     private const val TAG = "SatelliteHttpClient"
@@ -48,13 +54,39 @@ internal object SatelliteHttpClient {
             }.socketFactory
     }
 
-    private val allowAllHostnames =
-        HostnameVerifier { _: String?, _: SSLSession? -> true }
+    // Per-call TOFU verifier: the X509TrustManager accepts any (self-signed) cert, so this
+    // is the sole MITM gate. It fingerprints the negotiated peer cert and pins it to this
+    // satellite id on first contact, then rejects any future cert that doesn't match.
+    // TRADEOFF: pairing's FIRST contact has no prior pin, so that one handshake is
+    // unauthenticated (an attacker already on-path at pairing time can still impersonate).
+    // internal (not private) so the verifier decision is unit-testable with a mocked session.
+    internal fun tofuHostnameVerifier(
+        satelliteId: String,
+        pins: SatellitePinRepository,
+    ): HostnameVerifier =
+        HostnameVerifier { _: String?, session: SSLSession? ->
+            val cert = session?.peerCertificates?.firstOrNull() ?: return@HostnameVerifier false
+            val presented = sha256FingerprintHex(cert.encoded)
+            when (tofuVerdict(pins.pinnedFingerprint(satelliteId), presented)) {
+                TofuVerdict.TRUST_FIRST_USE -> {
+                    pins.pin(satelliteId, presented)
+                    Log.i(TAG, "pinned cert for $satelliteId on first use")
+                    true
+                }
+                TofuVerdict.MATCH -> true
+                TofuVerdict.MISMATCH -> {
+                    Log.e(TAG, "cert pin MISMATCH for $satelliteId — aborting (possible MITM)")
+                    false
+                }
+            }
+        }
 
     fun connect(
         ip: String,
         port: Int,
         deviceId: String,
+        satelliteId: String,
+        pins: SatellitePinRepository,
     ): String =
         request(
             method = "POST",
@@ -63,6 +95,8 @@ internal object SatelliteHttpClient {
             path = "/api/connections",
             deviceId = deviceId,
             body = """{"deviceId":"${jsonEscape(deviceId)}"}""",
+            satelliteId = satelliteId,
+            pins = pins,
         )
 
     fun disconnect(
@@ -70,6 +104,8 @@ internal object SatelliteHttpClient {
         port: Int,
         connectionId: String,
         deviceId: String,
+        satelliteId: String,
+        pins: SatellitePinRepository,
     ): String =
         request(
             method = "DELETE",
@@ -78,6 +114,8 @@ internal object SatelliteHttpClient {
             path = "/api/connections/$connectionId",
             deviceId = deviceId,
             body = """{"deviceId":"${jsonEscape(deviceId)}"}""",
+            satelliteId = satelliteId,
+            pins = pins,
         )
 
     // Body field is "id" (matches handler route-param); device id for auth goes in X-Device-Id header.
@@ -86,6 +124,8 @@ internal object SatelliteHttpClient {
         port: Int,
         deviceId: String,
         mode: String,
+        satelliteId: String,
+        pins: SatellitePinRepository,
     ): String =
         request(
             method = "POST",
@@ -96,6 +136,8 @@ internal object SatelliteHttpClient {
             body =
                 """{"id":"${jsonEscape(deviceId)}",""" +
                     """"mode":"${jsonEscape(mode)}"}""",
+            satelliteId = satelliteId,
+            pins = pins,
         )
 
     // No X-Device-Id — /api/pair is the only client route that bypasses clientAuthorized.
@@ -108,6 +150,8 @@ internal object SatelliteHttpClient {
         deviceId: String,
         deviceName: String,
         pin: String,
+        satelliteId: String,
+        pins: SatellitePinRepository,
         clientPin: String = "",
     ): String =
         request(
@@ -121,6 +165,8 @@ internal object SatelliteHttpClient {
                     """"deviceName":"${jsonEscape(deviceName)}",""" +
                     """"pin":"${jsonEscape(pin)}",""" +
                     """"clientPin":"${jsonEscape(clientPin)}"}""",
+            satelliteId = satelliteId,
+            pins = pins,
         )
 
     // Poll for the operator's accept/deny decision on a Path-B request.
@@ -128,6 +174,8 @@ internal object SatelliteHttpClient {
         ip: String,
         port: Int,
         deviceId: String,
+        satelliteId: String,
+        pins: SatellitePinRepository,
     ): String =
         request(
             method = "GET",
@@ -136,6 +184,8 @@ internal object SatelliteHttpClient {
             path = "/api/pair/status?deviceId=" + java.net.URLEncoder.encode(deviceId, "UTF-8"),
             deviceId = null,
             body = null,
+            satelliteId = satelliteId,
+            pins = pins,
         )
 
     // Never throws — transport failure surfaces as a JSON {error} body so callers' decode path stays unchanged.
@@ -147,6 +197,8 @@ internal object SatelliteHttpClient {
         path: String,
         deviceId: String?,
         body: String?,
+        satelliteId: String,
+        pins: SatellitePinRepository,
     ): String {
         val url = URL("https", ip, port, path)
         Log.i(TAG, "$method https://$ip:$port$path")
@@ -155,7 +207,7 @@ internal object SatelliteHttpClient {
             conn =
                 (url.openConnection() as HttpsURLConnection).apply {
                     sslSocketFactory = insecureSocketFactory
-                    hostnameVerifier = allowAllHostnames
+                    hostnameVerifier = tofuHostnameVerifier(satelliteId, pins)
                     requestMethod = method
                     connectTimeout = CONNECT_TIMEOUT_MS
                     readTimeout = READ_TIMEOUT_MS

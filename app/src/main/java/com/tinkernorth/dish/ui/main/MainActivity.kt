@@ -14,7 +14,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.google.androidgamesdk.GameActivity
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
-import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.databinding.ActivityMainBinding
@@ -46,7 +46,7 @@ class MainActivity :
 
     @Inject lateinit var satellite: SatelliteConnectionManager
 
-    @Inject lateinit var hub: ConnectionHub
+    @Inject lateinit var hub: ConnectionCoordinator
 
     @Inject lateinit var wakeState: WakeStateController
 
@@ -128,6 +128,7 @@ class MainActivity :
         binding.sectionControllers.labelSection.setText(R.string.section_controllers)
         binding.ivConnectionsLoading.setImageDrawable(connectionsSpinner)
         binding.rvControllers.adapter = controllerAdapter
+        binding.rvControllers.setHasFixedSize(true)
         (binding.rvControllers.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
             ?.supportsChangeAnimations = false
         binding.btnManageConnections.setOnClickListener { nav.toConnections() }

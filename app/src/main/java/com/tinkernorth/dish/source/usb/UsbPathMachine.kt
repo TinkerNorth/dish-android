@@ -237,11 +237,14 @@ private fun reduceClaiming(
                 )
             } else {
                 // Open/claim was rejected without ever stealing the interface, so the framework slot is
-                // still live; drop straight back to Standard and say why Direct didn't happen.
+                // still live; drop straight back to Standard and say why Direct didn't happen. Persist
+                // Standard too, or the failed pick is silently re-attempted on every reconnect (mirrors
+                // the permission-denied path).
                 Reduction(
                     c.copy(phase = UsbPhase.Routed, desired = PathChoice.Standard, syntheticId = null, failure = event.reason),
                     buildList {
                         add(UsbEffect.EndHold)
+                        add(UsbEffect.SetPref(PathChoice.Standard))
                         add(UsbEffect.MarkFailure(event.reason))
                         if (c.userInitiated) add(UsbEffect.Notify(UsbNotice.SwitchToDirectFailed))
                     },
@@ -311,10 +314,16 @@ private fun reduceAwaiting(
                 )
             } else {
                 // Failed claim never recovered; the device is gone from the OS. Keep the held placeholder
-                // visible as a "needs replug" card rather than letting it disappear.
+                // visible as a "needs replug" card, and mark the reason Dropped so the card asks for a
+                // physical replug instead of echoing the stale claim error.
                 Reduction(
-                    c.copy(phase = UsbPhase.NeedsReplug, desired = PathChoice.Standard),
-                    listOf(UsbEffect.MarkNeedsReplug, UsbEffect.SetPref(PathChoice.Standard), UsbEffect.Notify(UsbNotice.NeedsReplug)),
+                    c.copy(phase = UsbPhase.NeedsReplug, desired = PathChoice.Standard, failure = DirectClaimFailure.Dropped),
+                    listOf(
+                        UsbEffect.MarkNeedsReplug,
+                        UsbEffect.MarkFailure(DirectClaimFailure.Dropped),
+                        UsbEffect.SetPref(PathChoice.Standard),
+                        UsbEffect.Notify(UsbNotice.NeedsReplug),
+                    ),
                 )
             }
         is UsbEvent.PermissionGranted -> stay(c.copy(hasPermission = true))
@@ -349,11 +358,11 @@ private fun reduceRestoreStuck(
                 listOf(UsbEffect.SetPref(PathChoice.Direct), UsbEffect.ClearFailure, UsbEffect.Notify(UsbNotice.RolledBackToDirect)),
             )
         // Reclaim failed too: the device is gone. The synthetic placeholder is dropped by the Reclaim
-        // effector, so there is nothing left to mark; the banner carries the news.
+        // effector; surface a Dropped reason so the NeedsReplug card asks for a physical replug.
         is UsbEvent.ClaimFailed ->
             Reduction(
-                c.copy(phase = UsbPhase.NeedsReplug, syntheticId = null),
-                listOf(UsbEffect.Notify(UsbNotice.RestoreFailed)),
+                c.copy(phase = UsbPhase.NeedsReplug, syntheticId = null, failure = DirectClaimFailure.Dropped),
+                listOf(UsbEffect.MarkFailure(DirectClaimFailure.Dropped), UsbEffect.Notify(UsbNotice.RestoreFailed)),
             )
         // The framework finally came back on its own: settle on Standard.
         is UsbEvent.FrameworkUp -> {

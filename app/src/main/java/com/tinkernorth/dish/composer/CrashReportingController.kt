@@ -4,16 +4,14 @@ package com.tinkernorth.dish.composer
 
 import android.content.Context
 import android.util.Log
-import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.google.firebase.FirebaseApp
 import com.google.firebase.crashlytics.FirebaseCrashlytics
+import com.tinkernorth.dish.architecture.abstracts.AbstractController
 import com.tinkernorth.dish.source.store.CrashReportingStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -23,34 +21,25 @@ class CrashReportingController
     constructor(
         @ApplicationContext private val context: Context,
         private val store: CrashReportingStore,
-        private val scope: CoroutineScope,
-    ) : DefaultLifecycleObserver {
-        private var job: Job? = null
+        scope: CoroutineScope,
+    ) : AbstractController<Boolean>(scope) {
+        override fun upstream(): Flow<Boolean> = store.state
 
-        override fun onStart(owner: LifecycleOwner) {
-            if (job != null) return
-            job =
-                store.state
-                    .onEach(::applyToCrashlytics)
-                    .launchIn(scope)
-        }
+        // Process-scoped: do not cancel. Must propagate opt-in flips across activity restarts.
+        override fun onStop(owner: LifecycleOwner) = Unit
 
-        override fun onStop(owner: LifecycleOwner) {
-            // Process-scoped: do not cancel — must propagate opt-in flips across activity restarts.
-        }
-
-        private fun applyToCrashlytics(enabled: Boolean) {
+        override fun apply(value: Boolean) {
             if (FirebaseApp.getApps(context).isEmpty()) {
                 Log.i(
                     TAG,
-                    "Firebase not initialised (no google-services.json) — opt-in preference recorded but Crashlytics call skipped.",
+                    "Firebase not initialised (no google-services.json). Opt-in preference recorded but Crashlytics call skipped.",
                 )
                 return
             }
             runCatching {
-                FirebaseCrashlytics.getInstance().isCrashlyticsCollectionEnabled = enabled
+                FirebaseCrashlytics.getInstance().isCrashlyticsCollectionEnabled = value
             }.onFailure {
-                Log.e(TAG, "Failed to apply Crashlytics collection=$enabled", it)
+                Log.e(TAG, "Failed to apply Crashlytics collection=$value", it)
             }
         }
 

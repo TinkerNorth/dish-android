@@ -6,6 +6,7 @@ import com.tinkernorth.dish.architecture.abstracts.AbstractComposer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -22,7 +23,7 @@ data class WakeState(
 class WakeStateComposer
     @Inject
     constructor(
-        private val hub: ConnectionHub,
+        private val hub: ConnectionCoordinator,
         scope: CoroutineScope,
     ) : AbstractComposer<WakeState>(scope, WakeState.Idle) {
         override fun upstream(): Flow<WakeState> =
@@ -33,5 +34,5 @@ class WakeStateComposer
                         byId[cid]?.live == LinkState.Connected
                     }
                 WakeState(streamingSlotCount = count, shouldKeepScreenOn = count > 0)
-            }
+            }.distinctUntilChanged()
     }

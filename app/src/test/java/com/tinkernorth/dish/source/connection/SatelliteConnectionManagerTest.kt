@@ -8,13 +8,14 @@ import com.tinkernorth.dish.composer.MotionCapability
 import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.core.jni.ControllerRepository
 import com.tinkernorth.dish.core.model.DiscoveredServer
-import com.tinkernorth.dish.core.net.DiscoveryRepository
+import com.tinkernorth.dish.core.net.DiscoveryGateway
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
@@ -31,7 +32,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class SatelliteConnectionManagerTest {
     private lateinit var context: Context
-    private lateinit var discoveryRepo: DiscoveryRepository
+    private lateinit var discoveryRepo: DiscoveryGateway
     private lateinit var controllerRepo: ControllerRepository
     private lateinit var store: ConnectionStore
     private lateinit var prefs: SharedPreferences
@@ -349,5 +350,98 @@ class SatelliteConnectionManagerTest {
                 "second subscriber must see no replayed events: $secondEvents",
                 secondEvents.isEmpty(),
             )
+        }
+
+    @Test
+    fun `forget cancels an in-flight reverse-pairing poll`() =
+        runMgrTest { mgr, _ ->
+            // Pair accepts the request (no immediate key), then status stays pending.
+            coEvery { discoveryRepo.pair(any(), any(), any(), any(), any(), any()) } returns
+                """{"status":"pending"}"""
+            var pollCount = 0
+            coEvery { discoveryRepo.pairStatus(any(), any(), any()) } coAnswers {
+                pollCount++
+                """{"status":"pending"}"""
+            }
+
+            mgr.requestApproval(server, "4242")
+            // Let a couple of poll rounds run so we know the loop is live before we forget.
+            scope.testScheduler.advanceTimeBy(5000)
+            scope.testScheduler.runCurrent()
+            assertTrue("poll should have run at least once before forget", pollCount > 0)
+
+            mgr.forget(serverId)
+            val afterForget = pollCount
+            // Advance well past the 2-minute timeout: a leaked poll would keep calling pairStatus.
+            scope.testScheduler.advanceUntilIdle()
+
+            assertEquals("no pairStatus calls after forget", afterForget, pollCount)
+            coVerify(exactly = 0) { discoveryRepo.connect(any(), any(), any()) }
+            verify(exactly = 0) { controllerRepo.openSocket(any(), any()) }
+        }
+
+    @Test
+    fun `disconnect cancels an in-flight reverse-pairing poll`() =
+        runMgrTest { mgr, _ ->
+            coEvery { discoveryRepo.pair(any(), any(), any(), any(), any(), any()) } returns
+                """{"status":"pending"}"""
+            var pollCount = 0
+            coEvery { discoveryRepo.pairStatus(any(), any(), any()) } coAnswers {
+                pollCount++
+                """{"status":"pending"}"""
+            }
+
+            mgr.requestApproval(server, "4242")
+            scope.testScheduler.advanceTimeBy(5000)
+            scope.testScheduler.runCurrent()
+            assertTrue("poll should have run at least once before disconnect", pollCount > 0)
+
+            mgr.disconnect(serverId)
+            val afterDisconnect = pollCount
+            scope.testScheduler.advanceUntilIdle()
+
+            assertEquals("no pairStatus calls after disconnect", afterDisconnect, pollCount)
+            coVerify(exactly = 0) { discoveryRepo.connect(any(), any(), any()) }
+            verify(exactly = 0) { controllerRepo.openSocket(any(), any()) }
+        }
+
+    @Test
+    fun `malformed (non-hex) server token degrades gracefully without crashing`() =
+        runMgrTest { mgr, _ ->
+            every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
+            // Auth-shape OK (connectionId + token present) but the token is non-hex,
+            // so hexToBytes throws. The session must fail closed, not crash the coroutine.
+            coEvery { discoveryRepo.connect(any(), any(), any()) } returns
+                """{"connectionId":"c1","token":"zzzz"}"""
+
+            mgr.connect(server)
+            scope.testScheduler.advanceUntilIdle()
+
+            assertEquals(SatelliteSessionState.Idle, mgr.get(serverId)?.state?.value)
+            verify(exactly = 0) { controllerRepo.openSocket(any(), any()) }
+        }
+
+    @Test
+    fun `connect to a public ip is refused before any socket is opened`() =
+        runMgrTest { mgr, _ ->
+            val publicServer = server.copy(ip = "8.8.8.8")
+            val publicId = SatelliteConnection.idFor(publicServer)
+            // Stored key routes both straight to openSession (the IP choke point).
+            every { store.satelliteSharedKey(publicId) } returns "aa".repeat(32)
+            every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
+            coEvery { discoveryRepo.connect(any(), any(), any()) } returns ""
+
+            mgr.connect(publicServer)
+            scope.testScheduler.advanceUntilIdle()
+
+            // Public address: rejected before contacting the host or opening a socket.
+            coVerify(exactly = 0) { discoveryRepo.connect("8.8.8.8", any(), any()) }
+            verify(exactly = 0) { controllerRepo.openSocket("8.8.8.8", any()) }
+            assertEquals(SatelliteSessionState.Idle, mgr.get(publicId)?.state?.value)
+
+            // Private address: passes the guard and proceeds to the connect call.
+            mgr.connect(server)
+            scope.testScheduler.advanceUntilIdle()
+            coVerify(exactly = 1) { discoveryRepo.connect("10.0.0.5", any(), any()) }
         }
 }

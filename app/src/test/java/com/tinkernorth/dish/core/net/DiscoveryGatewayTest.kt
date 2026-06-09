@@ -8,7 +8,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class DiscoveryRepositoryTest {
+class DiscoveryGatewayTest {
     private fun server(
         name: String,
         ip: String,
@@ -18,7 +18,7 @@ class DiscoveryRepositoryTest {
     @Test
     fun broadcastOnlyServerIsTaggedBroadcast() {
         val merged =
-            DiscoveryRepository.mergeDiscovered(
+            DiscoveryGateway.mergeDiscovered(
                 broadcast = listOf(server("A", "10.0.0.1")),
                 mdns = emptyList(),
             )
@@ -29,7 +29,7 @@ class DiscoveryRepositoryTest {
     @Test
     fun mdnsOnlyServerIsTaggedMdns() {
         val merged =
-            DiscoveryRepository.mergeDiscovered(
+            DiscoveryGateway.mergeDiscovered(
                 broadcast = emptyList(),
                 mdns = listOf(server("B", "10.0.0.2")),
             )
@@ -40,7 +40,7 @@ class DiscoveryRepositoryTest {
     @Test
     fun serverHeardOnBothPathsIsTaggedBoth() {
         val merged =
-            DiscoveryRepository.mergeDiscovered(
+            DiscoveryGateway.mergeDiscovered(
                 broadcast = listOf(server("Sat", "10.0.0.9")),
                 mdns = listOf(server("Sat", "10.0.0.9")),
             )
@@ -51,7 +51,7 @@ class DiscoveryRepositoryTest {
     @Test
     fun distinctServersFromEachPathAreKept() {
         val merged =
-            DiscoveryRepository.mergeDiscovered(
+            DiscoveryGateway.mergeDiscovered(
                 broadcast = listOf(server("Alpha", "10.0.0.1")),
                 mdns = listOf(server("Bravo", "10.0.0.2")),
             )
@@ -63,7 +63,7 @@ class DiscoveryRepositoryTest {
     @Test
     fun samePairIpDifferentPortAreDistinctEntries() {
         val merged =
-            DiscoveryRepository.mergeDiscovered(
+            DiscoveryGateway.mergeDiscovered(
                 broadcast = listOf(server("One", "10.0.0.1", udp = 9876)),
                 mdns = listOf(server("Two", "10.0.0.1", udp = 9900)),
             )
@@ -73,7 +73,7 @@ class DiscoveryRepositoryTest {
     @Test
     fun resultIsSortedByName() {
         val merged =
-            DiscoveryRepository.mergeDiscovered(
+            DiscoveryGateway.mergeDiscovered(
                 broadcast = listOf(server("Zulu", "10.0.0.3"), server("Alpha", "10.0.0.1")),
                 mdns = listOf(server("Mike", "10.0.0.2")),
             )
@@ -83,7 +83,7 @@ class DiscoveryRepositoryTest {
     @Test
     fun emptyInputsYieldEmptyResult() {
         assertTrue(
-            DiscoveryRepository.mergeDiscovered(emptyList(), emptyList()).isEmpty(),
+            DiscoveryGateway.mergeDiscovered(emptyList(), emptyList()).isEmpty(),
         )
     }
 
@@ -97,5 +97,18 @@ class DiscoveryRepositoryTest {
             )
         assertTrue("a discovery-source label resource is unset", labels.all { it != 0 })
         assertEquals("each discovery source needs its own label", labels.size, labels.toSet().size)
+    }
+
+    @Test
+    fun pinIdFallsBackToHostWhenCallerPassesNoSatelliteId() {
+        assertEquals("10.0.0.7", DiscoveryGateway.pinId(satelliteId = "", ip = "10.0.0.7"))
+    }
+
+    @Test
+    fun pinIdPrefersExplicitSatelliteIdOverHost() {
+        assertEquals(
+            "satellite:mid:abc",
+            DiscoveryGateway.pinId(satelliteId = "satellite:mid:abc", ip = "10.0.0.7"),
+        )
     }
 }

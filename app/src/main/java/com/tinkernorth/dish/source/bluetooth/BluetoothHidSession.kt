@@ -133,8 +133,13 @@ class BluetoothHidSession(
                 mac: String,
                 name: String?,
             ) = ifCurrent(gen) {
-                val profile = currentProfileLocked() ?: return@ifCurrent
-                emitLocked(BluetoothSessionState.Connected(profile, mac, name))
+                // Only accept inbound connections from a state that is awaiting one (Registered).
+                // When started for a specific host, reject any other mac the OS reports, mirroring
+                // the onHostDisconnected mac guard so a stray/foreign host cannot hijack the session.
+                val registered = _state.value as? BluetoothSessionState.Registered ?: return@ifCurrent
+                val intendedMac = registered.autoConnectMac
+                if (intendedMac != null && !intendedMac.equals(mac, ignoreCase = true)) return@ifCurrent
+                emitLocked(BluetoothSessionState.Connected(registered.profile, mac, name))
             }
 
             override fun onHostDisconnected(mac: String) =
@@ -149,14 +154,6 @@ class BluetoothHidSession(
                     teardownLocked()
                     emitLocked(BluetoothSessionState.Failed(message))
                 }
-        }
-
-    private fun currentProfileLocked(): BluetoothGamepad.GamepadProfile? =
-        when (val s = _state.value) {
-            is BluetoothSessionState.Acquiring -> s.profile
-            is BluetoothSessionState.Registered -> s.profile
-            is BluetoothSessionState.Connected -> s.profile
-            else -> null
         }
 
     private inline fun ifCurrent(

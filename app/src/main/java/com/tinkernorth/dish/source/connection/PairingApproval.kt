@@ -38,7 +38,9 @@ internal object PairingApproval {
         val status = jsonGet(json, "status")
         val key = jsonGet(json, "sharedKey")
         return when {
-            status == "approved" && key != null && key.length == SHARED_KEY_HEX_LEN ->
+            // Require the hex alphabet, not just the length: a 64-char non-hex
+            // key would otherwise decode to garbage downstream in hexToBytes.
+            status == "approved" && key != null && SHARED_KEY_HEX.matches(key) ->
                 Status.Approved(key)
             status == "pending" -> Status.Pending
             else -> Status.Declined
@@ -46,5 +48,5 @@ internal object PairingApproval {
     }
 
     private const val PIN_DIGITS = 4
-    private const val SHARED_KEY_HEX_LEN = 64
+    private val SHARED_KEY_HEX = Regex("[0-9a-fA-F]{64}")
 }

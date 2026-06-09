@@ -5,7 +5,10 @@ package com.tinkernorth.dish.core.net
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class NetworkUtilsTest {
@@ -78,6 +81,72 @@ class NetworkUtilsTest {
         val hex = "0123456789abcdef".repeat(4)
         val bytes = hexToBytes(hex)
         assertEquals(32, bytes.size)
+    }
+
+    @Test
+    fun `hexToBytes rejects a non-hex character`() {
+        try {
+            hexToBytes("0g")
+            fail("expected IllegalArgumentException for non-hex input")
+        } catch (e: IllegalArgumentException) {
+            // expected
+        }
+    }
+
+    @Test
+    fun `hexToBytes rejects odd-length input`() {
+        try {
+            hexToBytes("abc")
+            fail("expected IllegalArgumentException for odd-length input")
+        } catch (e: IllegalArgumentException) {
+            // expected
+        }
+    }
+
+    @Test
+    fun `hexToBytes decodes valid mixed-case hex correctly`() {
+        assertArrayEquals(
+            byteArrayOf(0x00, 0x1F.toByte(), 0xA0.toByte(), 0xFf.toByte()),
+            hexToBytes("001fA0fF"),
+        )
+    }
+
+    @Test
+    fun `isPrivateHostLiteral accepts private and local literals`() {
+        val privateHosts =
+            listOf(
+                "10.0.0.5",
+                "172.16.0.1",
+                "172.31.255.255",
+                "192.168.1.1",
+                "169.254.1.1",
+                "127.0.0.1",
+                "::1",
+                "fe80::1",
+                "[fe80::1]",
+                "fc00::1",
+            )
+        for (h in privateHosts) {
+            assertTrue("expected $h to be private", isPrivateHostLiteral(h))
+        }
+    }
+
+    @Test
+    fun `isPrivateHostLiteral rejects public, out-of-range, and non-literals`() {
+        val nonPrivateHosts =
+            listOf(
+                "8.8.8.8",
+                "172.32.0.1", // just past the 172.16/12 upper bound
+                "11.0.0.1", // only 10.0.0.0/8 is private, not 11.x
+                "172.15.0.1", // just below the 172.16/12 lower bound
+                "example.com",
+                "",
+                "999.1.1.1", // octet out of range
+                "1.2.3", // too few octets
+            )
+        for (h in nonPrivateHosts) {
+            assertFalse("expected $h to be non-private", isPrivateHostLiteral(h))
+        }
     }
 
     @Test

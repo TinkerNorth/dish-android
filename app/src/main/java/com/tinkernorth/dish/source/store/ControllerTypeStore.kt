@@ -44,6 +44,10 @@ class ControllerTypeStore
             }
         }
 
+        fun clearConnection(connectionId: String) {
+            setState { current -> current.filterNot { (k, _) -> k.first == connectionId } }
+        }
+
         fun slotTypesFor(
             connectionId: String,
             boundSlotIds: List<String>,

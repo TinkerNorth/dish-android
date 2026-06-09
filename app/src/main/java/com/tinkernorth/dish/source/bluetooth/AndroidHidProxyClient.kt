@@ -22,8 +22,12 @@ class AndroidHidProxyClient(
     private val context: Context,
 ) : HidProxyClient {
     private var events: HidProxyClient.Events? = null
-    private var hidDevice: BluetoothHidDevice? = null
-    private var connectedDevice: BluetoothDevice? = null
+
+    // Read on the JNI report thread (sendReport) but mutated on the binder callback thread
+    // (onConnectionStateChanged / onServiceDisconnected); volatile publishes those writes.
+    @Volatile private var hidDevice: BluetoothHidDevice? = null
+
+    @Volatile private var connectedDevice: BluetoothDevice? = null
     private var currentProfile: BluetoothGamepad.GamepadProfile? = null
 
     override fun isAdapterEnabled(): Boolean {
@@ -105,10 +109,15 @@ class AndroidHidProxyClient(
     }
 
     override fun sendReport(report: ByteArray): Boolean {
-        val hid = hidDevice ?: return false
-        val device = connectedDevice ?: return false
-        // Strip report-id byte: BluetoothHidDevice.sendReport takes it separately from the payload.
-        return hid.sendReport(device, REPORT_ID, report.sliceArray(1 until report.size))
+        // runCatching: a concurrent teardown can null the stack out from under us, so hid.sendReport
+        // may throw IllegalStateException after the proxy closed. This runs on the JNI report thread,
+        // which must never crash; swallow and report failure instead.
+        return runCatching {
+            val hid = hidDevice ?: return false
+            val device = connectedDevice ?: return false
+            // Strip report-id byte: BluetoothHidDevice.sendReport takes it separately from the payload.
+            hid.sendReport(device, REPORT_ID, report.sliceArray(1 until report.size))
+        }.getOrDefault(false)
     }
 
     override fun unregisterAndRelease() {
