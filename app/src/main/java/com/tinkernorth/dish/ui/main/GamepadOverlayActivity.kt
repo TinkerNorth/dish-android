@@ -250,31 +250,8 @@ class GamepadOverlayActivity :
         MenuItemCompat.setIconTintList(item, ColorStateList.valueOf(getColor(state.dotColorRes)))
     }
 
-    private fun motionStateOf(paint: OverlayMotionPaint): MotionIndicatorState {
-        val summary = paint.summary
-        // A null summary (connection not resolved yet) is treated as motion-capable but
-        // not-yet-connected: PAUSED is rendered until the kind + liveness resolve, then the next
-        // paint self-corrects.
-        val carriesMotion = summary?.kind != ConnectionKind.BLUETOOTH
-        val connected = summary?.live == LinkState.Connected
-        val cap = paint.capability
-        val sourceState = paint.sourceState
-        val isAvailable = sourceState != MotionStreamState.Disabled
-        val isStreaming =
-            sourceState == MotionStreamState.Streaming ||
-                sourceState == MotionStreamState.Stalled
-        val isStalled = sourceState == MotionStreamState.Stalled
-        return MotionIndicatorState.of(
-            isAvailable = isAvailable,
-            isStreaming = isStreaming,
-            connectionCarriesMotion = carriesMotion,
-            connectionConnected = connected,
-            userEnabled = cap.userEnabled,
-            hostHasSinkForType = cap.hostHasSinkForType,
-            satelliteBackendOk = cap.satelliteBackendStatus?.backendOk,
-            isStalled = isStalled,
-        )
-    }
+    private fun motionStateOf(paint: OverlayMotionPaint): MotionIndicatorState =
+        motionIndicatorFor(paint.summary, paint.capability, paint.sourceState)
 
     private fun showMotionDialog() {
         val state = currentMotionState ?: currentPaint?.let(::motionStateOf) ?: return

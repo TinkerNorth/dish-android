@@ -13,6 +13,7 @@ import androidx.annotation.RequiresApi
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.connection.SatelliteSessionState
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -74,7 +75,7 @@ class RumbleRouter
         ) {
             val target = resolveTarget(sessionHandle, controllerIndex)
             if (target is RumbleTarget.None) return
-            if (durationMs == 0 || (strongMagnitude == 0 && weakMagnitude == 0)) {
+            if (isRumbleStop(strongMagnitude, weakMagnitude, durationMs)) {
                 cancel(target)
                 return
             }
@@ -86,13 +87,17 @@ class RumbleRouter
             sessionHandle: Int,
             controllerIndex: Int,
         ): RumbleTarget {
-            if (sessionHandle < 0) return RumbleTarget.None
-            val conn =
-                satellite.connections.value.values
-                    .firstOrNull { it.handle == sessionHandle }
-                    ?: return RumbleTarget.None
-            val slotId = resolveSlotId(conn.slots.value, controllerIndex) ?: return RumbleTarget.None
-            return classifyTarget(slotId)
+            // Read each StateFlow once into a flat snapshot so the routing decision is pure and
+            // testable; the native receive thread never re-reads the live manager mid-resolve.
+            val snapshot =
+                satellite.connections.value.values.map { conn ->
+                    RumbleConnectionSnapshot(
+                        handle = conn.handle,
+                        connected = conn.state.value == SatelliteSessionState.Live,
+                        slots = conn.slots.value,
+                    )
+                }
+            return resolveRumble(snapshot, sessionHandle, controllerIndex)
         }
 
         private fun actuate(
@@ -197,6 +202,35 @@ class RumbleRouter
             }
         }
     }
+
+// Flat, immutable view of one connection captured once per dispatch so resolveRumble stays pure.
+data class RumbleConnectionSnapshot(
+    val handle: Int,
+    val connected: Boolean,
+    val slots: Map<String, SatelliteConnection.SlotBinding>,
+)
+
+// Pure target resolver. Collision rule: a connected match wins over a non-connected one with the
+// same handle so a stale session can't steal a live controller's rumble; among equally-connected
+// matches the first wins (deterministic over the snapshot order).
+fun resolveRumble(
+    connections: List<RumbleConnectionSnapshot>,
+    sessionHandle: Int,
+    controllerIndex: Int,
+): RumbleTarget {
+    if (sessionHandle < 0) return RumbleTarget.None
+    val matches = connections.filter { it.handle == sessionHandle }
+    val conn = matches.firstOrNull { it.connected } ?: matches.firstOrNull() ?: return RumbleTarget.None
+    val slotId = resolveSlotId(conn.slots, controllerIndex) ?: return RumbleTarget.None
+    return classifyTarget(slotId)
+}
+
+// Zero duration or zero strong+weak means stop/cancel, never a positive vibration.
+internal fun isRumbleStop(
+    strongMagnitude: Int,
+    weakMagnitude: Int,
+    durationMs: Int,
+): Boolean = durationMs == 0 || (strongMagnitude == 0 && weakMagnitude == 0)
 
 internal fun resolveSlotId(
     slots: Map<String, SatelliteConnection.SlotBinding>,

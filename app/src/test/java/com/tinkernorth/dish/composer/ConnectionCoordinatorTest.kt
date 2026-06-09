@@ -29,7 +29,7 @@ import org.junit.Before
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class ConnectionHubTest {
+class ConnectionCoordinatorTest {
     private lateinit var satellite: SatelliteConnectionManager
     private lateinit var bt: BluetoothGamepadRegistry
     private lateinit var store: ConnectionStore
@@ -44,18 +44,27 @@ class ConnectionHubTest {
     private val staleSatFlow = MutableStateFlow<Set<String>>(emptySet())
     private val staleBtFlow = MutableStateFlow<Map<String, com.tinkernorth.dish.source.bluetooth.BtStaleReason>>(emptyMap())
 
+    private val satEntriesFlow = MutableStateFlow<List<RememberedSatellite>>(emptyList())
+    private val btEntriesFlow = MutableStateFlow<List<RememberedBt>>(emptyList())
+
     @Before
     fun setUp() {
         satellite = mockk(relaxed = true)
         bt = mockk(relaxed = true)
         store = mockk(relaxed = true)
+        satEntriesFlow.value = emptyList()
+        btEntriesFlow.value = emptyList()
         every { satellite.connections } returns satConnsFlow
         every { satellite.discoveredServers } returns discoveredFlow
         every { satellite.staleSatelliteIds } returns staleSatFlow
         every { bt.states } returns btStatesFlow
         every { bt.staleBtIds } returns staleBtFlow
-        every { store.remembered() } returns emptyList()
-        every { store.rememberedBt() } returns emptyList()
+        // The composer derives from the observable flows; the hub still reads remembered() directly,
+        // so both are backed by the same per-test flow value.
+        every { store.rememberedSatellitesFlow } returns satEntriesFlow
+        every { store.rememberedBtFlow } returns btEntriesFlow
+        every { store.remembered() } answers { satEntriesFlow.value }
+        every { store.rememberedBt() } answers { btEntriesFlow.value }
         scope = TestScope(StandardTestDispatcher())
     }
 
@@ -83,7 +92,7 @@ class ConnectionHubTest {
         return ctx
     }
 
-    private fun buildHub(): ConnectionHub {
+    private fun buildHub(): ConnectionCoordinator {
         val bindingStore =
             com.tinkernorth.dish.source.store
                 .SlotBindingStore()
@@ -101,7 +110,7 @@ class ConnectionHubTest {
                 scope = scope,
             )
         val hub =
-            ConnectionHub(
+            ConnectionCoordinator(
                 satellite = satellite,
                 bt = bt,
                 store = store,
@@ -123,8 +132,35 @@ class ConnectionHubTest {
         }
 
     @Test
+    fun `forgetConnection clears the binding and type then forgets the satellite`() {
+        val hub = buildHub()
+        hub.bind("slot-A", "sat:1")
+        hub.setSatelliteControllerType("sat:1", "slot-A", CONTROLLER_TYPE_PLAYSTATION)
+        scope.testScheduler.runCurrent()
+        assertEquals(CONTROLLER_TYPE_PLAYSTATION, hub.satTypes.value["sat:1" to "slot-A"])
+
+        hub.forgetConnection("sat:1")
+        scope.testScheduler.runCurrent()
+
+        assertNull(hub.bindings.value["slot-A"])
+        assertNull(hub.satTypes.value["sat:1" to "slot-A"])
+        verify { satellite.forget("sat:1") }
+    }
+
+    @Test
+    fun `forgetConnection forgets a remembered bluetooth host`() {
+        btEntriesFlow.value =
+            listOf(RememberedBt(id = "bt:AA", name = "Pad", mac = "AA", profileName = "XBOX"))
+        val hub = buildHub()
+
+        hub.forgetConnection("bt:AA")
+
+        verify { store.forgetBt("bt:AA") }
+    }
+
+    @Test
     fun `remembered satellite entries appear as IDLE summaries`() {
-        every { store.remembered() } returns
+        satEntriesFlow.value =
             listOf(
                 RememberedSatellite(
                     id = "satellite:10.0.0.1:9876",
@@ -147,7 +183,7 @@ class ConnectionHubTest {
 
     @Test
     fun `remembered bt entries surface their profile in detail`() {
-        every { store.rememberedBt() } returns
+        btEntriesFlow.value =
             listOf(
                 RememberedBt(id = "bt:AA:BB", name = "PS5", mac = "AA:BB", profileName = "PLAYSTATION"),
             )
@@ -161,7 +197,7 @@ class ConnectionHubTest {
 
     @Test
     fun `bt connected state propagates from registry`() {
-        every { store.rememberedBt() } returns
+        btEntriesFlow.value =
             listOf(
                 RememberedBt(id = "bt:X", name = "Xbox", mac = "X", profileName = "XBOX"),
             )
@@ -177,7 +213,7 @@ class ConnectionHubTest {
 
     @Test
     fun `acquiring on a remembered bt host shows CONNECTING`() {
-        every { store.rememberedBt() } returns
+        btEntriesFlow.value =
             listOf(
                 RememberedBt(id = "bt:X", name = "Xbox", mac = "X", profileName = "Xbox"),
             )
@@ -248,7 +284,7 @@ class ConnectionHubTest {
 
     @Test
     fun `transient slot disappears once registry re-keys to bt-mac and host is remembered`() {
-        every { store.rememberedBt() } returns
+        btEntriesFlow.value =
             listOf(
                 RememberedBt(id = "bt:AA:BB", name = "PS5", mac = "AA:BB", profileName = "PlayStation"),
             )
@@ -275,7 +311,7 @@ class ConnectionHubTest {
 
     @Test
     fun `idle remembered bt host with no registry state stays IDLE`() {
-        every { store.rememberedBt() } returns
+        btEntriesFlow.value =
             listOf(
                 RememberedBt(id = "bt:Z", name = "Pad", mac = "Z", profileName = "Xbox"),
             )
@@ -288,7 +324,7 @@ class ConnectionHubTest {
 
     @Test
     fun `bind sets slot to connection and binding is reflected in summary`() {
-        every { store.remembered() } returns
+        satEntriesFlow.value =
             listOf(
                 RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
             )
@@ -310,7 +346,7 @@ class ConnectionHubTest {
     fun `binding two slots to the same satellite keeps both attached`() {
         val satConn = mockk<SatelliteConnection>(relaxed = true)
         every { satellite.get("s:1") } returns satConn
-        every { store.remembered() } returns
+        satEntriesFlow.value =
             listOf(
                 RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
             )
@@ -331,7 +367,7 @@ class ConnectionHubTest {
 
     @Test
     fun `bind evicts the prior slot for a bluetooth host`() {
-        every { store.rememberedBt() } returns
+        btEntriesFlow.value =
             listOf(
                 RememberedBt(id = "bt:X", name = "Xbox", mac = "X", profileName = "XBOX"),
             )
@@ -350,7 +386,7 @@ class ConnectionHubTest {
         val sat2 = mockk<SatelliteConnection>(relaxed = true)
         every { satellite.get("s:1") } returns sat1
         every { satellite.get("s:2") } returns sat2
-        every { store.remembered() } returns
+        satEntriesFlow.value =
             listOf(
                 RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
                 RememberedSatellite(id = "s:2", name = "B", ip = "2", udpPort = 4, pairPort = 5, httpPort = 6),
@@ -368,7 +404,7 @@ class ConnectionHubTest {
     fun `unbind removes the binding and detaches the satellite slot by id`() {
         val satConn = mockk<SatelliteConnection>(relaxed = true)
         every { satellite.get("s:1") } returns satConn
-        every { store.remembered() } returns
+        satEntriesFlow.value =
             listOf(
                 RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
             )
@@ -383,7 +419,7 @@ class ConnectionHubTest {
 
     @Test
     fun `bind seeds a default Xbox controller type for new satellite slots`() {
-        every { store.remembered() } returns
+        satEntriesFlow.value =
             listOf(
                 RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
             )
@@ -400,7 +436,7 @@ class ConnectionHubTest {
     fun `setSatelliteControllerType updates the summary and pushes to the connection`() {
         val satConn = mockk<SatelliteConnection>(relaxed = true)
         every { satellite.get("s:1") } returns satConn
-        every { store.remembered() } returns
+        satEntriesFlow.value =
             listOf(
                 RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
             )
@@ -416,7 +452,7 @@ class ConnectionHubTest {
 
     @Test
     fun `summary returns the entry matching id or null`() {
-        every { store.remembered() } returns
+        satEntriesFlow.value =
             listOf(
                 RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
             )
@@ -430,7 +466,7 @@ class ConnectionHubTest {
     fun `autoReconnectAll connects each remembered satellite that is not live`() {
         val live = RememberedSatellite(id = "s:live", name = "L", ip = "1.1.1.1", udpPort = 1, pairPort = 2, httpPort = 3)
         val idle = RememberedSatellite(id = "s:idle", name = "I", ip = "2.2.2.2", udpPort = 4, pairPort = 5, httpPort = 6)
-        every { store.remembered() } returns listOf(live, idle)
+        satEntriesFlow.value = listOf(live, idle)
         val liveConn =
             mockk<SatelliteConnection>(relaxed = true) {
                 every { state } returns MutableStateFlow(SatelliteSessionState.Live)
@@ -451,7 +487,7 @@ class ConnectionHubTest {
 
     @Test
     fun `autoReconnectAll tries the first remembered bt host when none are live`() {
-        every { store.rememberedBt() } returns
+        btEntriesFlow.value =
             listOf(
                 RememberedBt(id = "bt:A", name = "A", mac = "A", profileName = "XBOX"),
                 RememberedBt(id = "bt:B", name = "B", mac = "B", profileName = "XBOX"),
@@ -466,7 +502,7 @@ class ConnectionHubTest {
 
     @Test
     fun `connections re-emits when an inner SatelliteConnection state transitions`() {
-        every { store.remembered() } returns
+        satEntriesFlow.value =
             listOf(
                 RememberedSatellite(
                     id = "satellite:1.1.1.1:9876",
@@ -517,7 +553,7 @@ class ConnectionHubTest {
 
     @Test
     fun `connections re-emits when an inner SatelliteConnection drops back to IDLE`() {
-        every { store.remembered() } returns
+        satEntriesFlow.value =
             listOf(
                 RememberedSatellite(
                     id = "satellite:1.1.1.1:9876",
@@ -560,7 +596,7 @@ class ConnectionHubTest {
 
     @Test
     fun `autoReconnectAll skips bt when a remembered host is already registered`() {
-        every { store.rememberedBt() } returns
+        btEntriesFlow.value =
             listOf(
                 RememberedBt(id = "bt:A", name = "A", mac = "A", profileName = "XBOX"),
             )
@@ -574,7 +610,7 @@ class ConnectionHubTest {
 
     @Test
     fun `stale satellite id lifts an idle remembered satellite to LinkState Stale`() {
-        every { store.remembered() } returns
+        satEntriesFlow.value =
             listOf(
                 RememberedSatellite(
                     id = "satellite:10.0.0.1:9876",
@@ -629,7 +665,7 @@ class ConnectionHubTest {
 
     @Test
     fun `stale bt id lifts an idle remembered host to LinkState Stale`() {
-        every { store.rememberedBt() } returns
+        btEntriesFlow.value =
             listOf(RememberedBt(id = "bt:AA", name = "Xbox", mac = "AA", profileName = "Xbox"))
         every { bt.state(any()) } returns BluetoothGamepadRegistry.SlotState()
         staleBtFlow.value = mapOf("bt:AA" to com.tinkernorth.dish.source.bluetooth.BtStaleReason.KEY_MISSING)
@@ -648,7 +684,7 @@ class ConnectionHubTest {
         val satConn = mockk<SatelliteConnection>(relaxed = true)
         every { satellite.get("s:1") } returns satConn
         every { satConn.renameSlot("slot-fw", "slot-usb") } returns true
-        every { store.remembered() } returns
+        satEntriesFlow.value =
             listOf(
                 RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
             )
@@ -687,7 +723,7 @@ class ConnectionHubTest {
         val satConn = mockk<SatelliteConnection>(relaxed = true)
         every { satellite.get("s:1") } returns satConn
         every { satConn.renameSlot("slot-fw", "slot-usb") } returns false
-        every { store.remembered() } returns
+        satEntriesFlow.value =
             listOf(
                 RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
             )
@@ -705,7 +741,7 @@ class ConnectionHubTest {
 
     @Test
     fun `stale bt marker does not override a connected bt host`() {
-        every { store.rememberedBt() } returns
+        btEntriesFlow.value =
             listOf(RememberedBt(id = "bt:AA", name = "Xbox", mac = "AA", profileName = "Xbox"))
         every { bt.state(any()) } returns
             BluetoothGamepadRegistry.SlotState(
@@ -750,7 +786,7 @@ class ConnectionHubTest {
         val satConn = mockk<SatelliteConnection>(relaxed = true)
         every { satellite.get("s:1") } returns satConn
         every { satConn.renameSlot("slot-fw", "-1000") } returns true
-        every { store.remembered() } returns
+        satEntriesFlow.value =
             listOf(
                 RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
             )
@@ -794,7 +830,7 @@ class ConnectionHubTest {
 
     @Test
     fun `bindClaimedSynthetic leaves the device unbound when no satellite is live`() {
-        every { store.remembered() } returns
+        satEntriesFlow.value =
             listOf(
                 RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
             )

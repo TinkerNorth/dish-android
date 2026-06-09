@@ -12,7 +12,7 @@ import android.util.Log
 import android.view.InputDevice
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
-import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.MotionCapability
 import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.composer.PhysicalReachability
@@ -32,7 +32,7 @@ class PhysicalMotionSource
     @Inject
     constructor(
         private val registry: PhysicalGamepadRegistry,
-        private val hub: ConnectionHub,
+        private val hub: ConnectionCoordinator,
         private val satellite: SatelliteConnectionManager,
         private val motionCapability: MotionCapabilityComposer,
         private val scope: CoroutineScope,

@@ -7,7 +7,6 @@ import android.hardware.Sensor
 import android.hardware.SensorManager
 import io.mockk.every
 import io.mockk.mockk
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -24,13 +23,13 @@ class PhoneMotionAvailabilityTest {
     @Test
     fun `phone with a gyroscope is motion-available`() {
         val src = PhoneMotionAvailability(contextWithSensor(mockk()))
-        assertTrue(src.state.value)
+        assertTrue(src.hasGyro)
     }
 
     @Test
     fun `phone without a gyroscope is not motion-available`() {
         val src = PhoneMotionAvailability(contextWithSensor(sensor = null))
-        assertFalse(src.state.value)
+        assertFalse(src.hasGyro)
     }
 
     @Test
@@ -40,13 +39,6 @@ class PhoneMotionAvailabilityTest {
                 every { getSystemService(Context.SENSOR_SERVICE) } returns null
             }
         val src = PhoneMotionAvailability(ctx)
-        assertFalse(src.state.value)
-    }
-
-    @Test
-    fun `state flow exposes the same boolean as state value`() {
-        val src = PhoneMotionAvailability(contextWithSensor(mockk()))
-        assertEquals(src.state.value, src.state.value)
-        assertTrue(src.state.value)
+        assertFalse(src.hasGyro)
     }
 }

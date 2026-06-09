@@ -31,7 +31,7 @@ class WakeStateControllerTest {
     private lateinit var context: Context
     private lateinit var powerManager: PowerManager
     private lateinit var wakeLock: PowerManager.WakeLock
-    private lateinit var hub: ConnectionHub
+    private lateinit var hub: ConnectionCoordinator
     private lateinit var scope: TestScope
 
     private val bindingsFlow = MutableStateFlow<Map<String, String>>(emptyMap())
@@ -239,5 +239,26 @@ class WakeStateControllerTest {
 
             verify(exactly = 0) { wakeLock.acquire() }
             verify(exactly = 0) { wakeLock.release() }
+        }
+
+    @Test
+    fun `an upstream change after ON_STOP does not repopulate the streaming count`() =
+        runTest(scope.testScheduler) {
+            val (controller, owner) = buildAndStart()
+            connectionsFlow.value = listOf(summary("s:1", LinkState.Connected))
+            bindingsFlow.value = mapOf("virtual" to "s:1")
+            scope.testScheduler.runCurrent()
+            assertEquals(1, controller.streamingSlotCount.value)
+
+            owner.registry.currentState = Lifecycle.State.CREATED
+            scope.testScheduler.runCurrent()
+            assertEquals(0, controller.streamingSlotCount.value)
+
+            // Once stopped, a late upstream change must keep the count at zero so the foreground service
+            // is not restarted while the app is backgrounded.
+            connectionsFlow.value = listOf(summary("s:1", LinkState.Connected))
+            bindingsFlow.value = mapOf("virtual" to "s:1", "5" to "s:1")
+            scope.testScheduler.runCurrent()
+            assertEquals(0, controller.streamingSlotCount.value)
         }
 }

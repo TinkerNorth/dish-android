@@ -5,7 +5,9 @@ package com.tinkernorth.dish.hotpath.input
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RumbleRouterTest {
@@ -91,5 +93,76 @@ class RumbleRouterTest {
     @Test
     fun `combinedRumblePlan yields nothing when there are no actuators`() {
         assertEquals(emptyList<Pair<Int, Int>>(), combinedRumblePlan(vibratorCount = 0, strongAmp = 200, weakAmp = 100))
+    }
+
+    private fun conn(
+        handle: Int,
+        connected: Boolean = true,
+        slots: Map<String, SatelliteConnection.SlotBinding> = emptyMap(),
+    ) = RumbleConnectionSnapshot(handle = handle, connected = connected, slots = slots)
+
+    @Test
+    fun `resolveRumble routes to the framework slot bound at the controller index`() {
+        val snapshot = listOf(conn(handle = 7, slots = mapOf("1234" to slot(0))))
+        assertEquals(RumbleTarget.Framework(1234), resolveRumble(snapshot, sessionHandle = 7, controllerIndex = 0))
+    }
+
+    @Test
+    fun `resolveRumble routes the virtual slot to the phone`() {
+        val snapshot = listOf(conn(handle = 7, slots = mapOf(VIRTUAL_SLOT_ID to slot(0))))
+        assertEquals(RumbleTarget.Phone, resolveRumble(snapshot, sessionHandle = 7, controllerIndex = 0))
+    }
+
+    @Test
+    fun `resolveRumble routes a synthetic slot to the USB-direct path`() {
+        val snapshot = listOf(conn(handle = 7, slots = mapOf("-1000" to slot(2))))
+        assertEquals(RumbleTarget.DirectUsb(-1000), resolveRumble(snapshot, sessionHandle = 7, controllerIndex = 2))
+    }
+
+    @Test
+    fun `resolveRumble yields None when no connection has the session handle`() {
+        val snapshot = listOf(conn(handle = 7, slots = mapOf("1234" to slot(0))))
+        assertEquals(RumbleTarget.None, resolveRumble(snapshot, sessionHandle = 99, controllerIndex = 0))
+        assertEquals(RumbleTarget.None, resolveRumble(emptyList(), sessionHandle = 7, controllerIndex = 0))
+    }
+
+    @Test
+    fun `resolveRumble yields None for a negative session handle`() {
+        val snapshot = listOf(conn(handle = -1, slots = mapOf("1234" to slot(0))))
+        assertEquals(RumbleTarget.None, resolveRumble(snapshot, sessionHandle = -1, controllerIndex = 0))
+    }
+
+    @Test
+    fun `resolveRumble yields None when the matched connection has no slot at the index`() {
+        val snapshot = listOf(conn(handle = 7, slots = mapOf("1234" to slot(0))))
+        assertEquals(RumbleTarget.None, resolveRumble(snapshot, sessionHandle = 7, controllerIndex = 5))
+    }
+
+    @Test
+    fun `resolveRumble prefers the connected connection when two share a handle`() {
+        val stale = conn(handle = 7, connected = false, slots = mapOf("1111" to slot(0)))
+        val live = conn(handle = 7, connected = true, slots = mapOf("2222" to slot(0)))
+        // Stale listed first: the connected match must still win, not first-match.
+        assertEquals(RumbleTarget.Framework(2222), resolveRumble(listOf(stale, live), sessionHandle = 7, controllerIndex = 0))
+        assertEquals(RumbleTarget.Framework(2222), resolveRumble(listOf(live, stale), sessionHandle = 7, controllerIndex = 0))
+    }
+
+    @Test
+    fun `resolveRumble falls back to the first match when no sharing connection is connected`() {
+        val first = conn(handle = 7, connected = false, slots = mapOf("1111" to slot(0)))
+        val second = conn(handle = 7, connected = false, slots = mapOf("2222" to slot(0)))
+        assertEquals(RumbleTarget.Framework(1111), resolveRumble(listOf(first, second), sessionHandle = 7, controllerIndex = 0))
+    }
+
+    @Test
+    fun `isRumbleStop is true when both magnitudes are zero or duration is zero`() {
+        assertTrue(isRumbleStop(strongMagnitude = 0, weakMagnitude = 0, durationMs = 100))
+        assertTrue(isRumbleStop(strongMagnitude = 500, weakMagnitude = 500, durationMs = 0))
+    }
+
+    @Test
+    fun `isRumbleStop is false when there is a positive magnitude and duration`() {
+        assertFalse(isRumbleStop(strongMagnitude = 500, weakMagnitude = 0, durationMs = 100))
+        assertFalse(isRumbleStop(strongMagnitude = 0, weakMagnitude = 500, durationMs = 100))
     }
 }

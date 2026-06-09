@@ -29,7 +29,7 @@ class WakeStateComposerTest {
         connections: MutableStateFlow<List<ConnectionSummary>>,
         scope: kotlinx.coroutines.CoroutineScope,
     ): WakeStateComposer {
-        val hub: ConnectionHub =
+        val hub: ConnectionCoordinator =
             mockk {
                 every { this@mockk.bindings } returns bindings
                 every { this@mockk.connections } returns connections

@@ -20,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import javax.inject.Inject
@@ -67,6 +68,12 @@ internal fun satelliteLinkState(
             }
     }
 
+private data class KnownSatellites(
+    val discovered: List<DiscoveredServer>,
+    val remembered: List<RememberedSatellite>,
+    val rememberedBt: List<RememberedBt>,
+)
+
 @Singleton
 class ConnectionsComposer
     @Inject
@@ -90,26 +97,39 @@ class ConnectionsComposer
                 }
             }
 
+        // The persisted "known" universe, folded into the combine so a remember/forget re-derives the
+        // list instead of an out-of-band store read that could leave a ghost or a missing row.
+        private val knownSatellites: Flow<KnownSatellites> =
+            combine(
+                satellite.discoveredServers,
+                store.rememberedSatellitesFlow,
+                store.rememberedBtFlow,
+            ) { discovered, remembered, rememberedBt ->
+                KnownSatellites(discovered, remembered, rememberedBt)
+            }
+
         override fun upstream(): Flow<List<ConnectionSummary>> =
             combine7(
                 flatSatConnections,
                 bt.states,
-                satellite.discoveredServers,
+                knownSatellites,
                 bindingStore.state,
                 typeStore.state,
                 satellite.staleSatelliteIds,
                 bt.staleBtIds,
-            ) { satMap, btStates, discovered, bindings, satTypes, staleSat, staleBt ->
+            ) { satMap, btStates, known, bindings, satTypes, staleSat, staleBt ->
                 buildSummaries(
                     satMap = satMap,
                     btStates = btStates,
-                    discoveredIds = discoveredIdSet(discovered),
+                    discoveredIds = discoveredIdSet(known.discovered),
+                    remembered = known.remembered,
+                    rememberedBt = known.rememberedBt,
                     bindings = bindings,
                     satTypes = satTypes,
                     staleSatIds = staleSat,
                     staleBtIds = staleBt.keys,
                 )
-            }
+            }.distinctUntilChanged()
 
         private fun discoveredIdSet(discovered: List<DiscoveredServer>): Set<String> =
             discovered.mapTo(mutableSetOf()) { SatelliteConnection.idFor(it) }
@@ -118,6 +138,8 @@ class ConnectionsComposer
             satMap: Map<String, SatelliteConnection>,
             btStates: Map<String, BluetoothGamepadRegistry.SlotState>,
             discoveredIds: Set<String>,
+            remembered: List<RememberedSatellite>,
+            rememberedBt: List<RememberedBt>,
             bindings: Map<String, String>,
             satTypes: Map<Pair<String, String>, Int>,
             staleSatIds: Set<String> = emptySet(),
@@ -125,13 +147,13 @@ class ConnectionsComposer
         ): List<ConnectionSummary> {
             val result = mutableListOf<ConnectionSummary>()
 
-            val remembered = store.remembered().associateBy { it.id }
-            val satIds = (remembered.keys + satMap.keys).toSet()
+            val rememberedById = remembered.associateBy { it.id }
+            val satIds = (rememberedById.keys + satMap.keys).toSet()
             for (id in satIds) {
                 buildSatelliteSummary(
                     id,
                     satMap[id],
-                    remembered[id],
+                    rememberedById[id],
                     bindings,
                     satTypes,
                     discoveredIds,
@@ -140,7 +162,7 @@ class ConnectionsComposer
             }
 
             val rememberedBtIds = mutableSetOf<String>()
-            for (entry in store.rememberedBt()) {
+            for (entry in rememberedBt) {
                 rememberedBtIds += entry.id
                 result +=
                     buildRememberedBtSummary(

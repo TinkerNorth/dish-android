@@ -4,6 +4,7 @@ package com.tinkernorth.dish.repository
 
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.source.connection.SatelliteConnection
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -16,6 +17,11 @@ class ConnectionStore
         val bt: RememberedBtRepository,
         val satelliteKeys: SatelliteSharedKeyRepository,
     ) {
+        // Observable projections so the connections composer derives purely from flows, with no
+        // out-of-band prefs read that a remember/forget could leave stale.
+        val rememberedSatellitesFlow: StateFlow<List<RememberedSatellite>> = satellites.entries
+        val rememberedBtFlow: StateFlow<List<RememberedBt>> = bt.entries
+
         fun remembered(): List<RememberedSatellite> = satellites.all()
 
         fun rememberSatellite(server: DiscoveredServer) {
@@ -51,15 +57,18 @@ class ConnectionStore
             id: String,
         ) {
             val legacyId = "satellite:${server.ip}:${server.udpPort}"
-            if (satelliteKeys.get(id) == null) {
-                satelliteKeys.get(legacyId)?.let { satelliteKeys.put(id, it) }
-            }
             for (entry in satellites.all()) {
                 if (entry.id == id) continue
                 val isGhostOfThisBox =
                     entry.machineId.isBlank() &&
                         (entry.id == legacyId || entry.name == server.name)
-                if (isGhostOfThisBox) forgetSatellite(entry.id)
+                if (!isGhostOfThisBox) continue
+                // Adopt the ghost's key before dropping its row: a box that only just gained a machineId
+                // (or moved IP) must keep its pairing rather than be silently forced to re-pair.
+                if (satelliteKeys.get(id) == null) {
+                    satelliteKeys.get(entry.id)?.let { satelliteKeys.put(id, it) }
+                }
+                forgetSatellite(entry.id)
             }
         }
 

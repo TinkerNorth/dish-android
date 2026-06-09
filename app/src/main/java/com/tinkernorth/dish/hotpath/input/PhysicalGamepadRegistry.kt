@@ -70,6 +70,27 @@ class PhysicalGamepadRegistry
             val hasRumble: Boolean,
         )
 
+        // Build the pure transient projection of a Device. restoreStuck is gated on isUsbSynthetic, so
+        // that identity flag rides along for the reducer's guards.
+        private fun Device.placeholderState(): PlaceholderState =
+            PlaceholderState(
+                transitioning = transitioning,
+                needsReplug = needsReplug,
+                restoreStuck = restoreStuck,
+                disconnectingTimeLeftSec = disconnectingTimeLeftSec,
+                isUsbSynthetic = isUsbSynthetic,
+            )
+
+        // Copy a reducer result back onto a Device. Only the transient fields move; identity and the
+        // hot-path fields are untouched.
+        private fun Device.withPlaceholder(state: PlaceholderState): Device =
+            copy(
+                transitioning = state.transitioning,
+                needsReplug = state.needsReplug,
+                restoreStuck = state.restoreStuck,
+                disconnectingTimeLeftSec = state.disconnectingTimeLeftSec,
+            )
+
         private val inputManager =
             context.getSystemService(Context.INPUT_SERVICE) as InputManager
 
@@ -268,7 +289,7 @@ class PhysicalGamepadRegistry
             _devices.update { map ->
                 map.mapValues { (_, d) ->
                     if (d.transitioning && !d.isUsbSynthetic && d.vendorId == vendorId && d.productId == productId) {
-                        d.copy(transitioning = false, needsReplug = true)
+                        d.withPlaceholder(placeholderTransition(d.placeholderState(), PlaceholderEvent.MarkNeedsReplug))
                     } else {
                         d
                     }
@@ -285,7 +306,7 @@ class PhysicalGamepadRegistry
             _devices.update { map ->
                 map.mapValues { (_, d) ->
                     if (d.isUsbSynthetic && d.vendorId == vendorId && d.productId == productId) {
-                        d.copy(transitioning = false, restoreStuck = true)
+                        d.withPlaceholder(placeholderTransition(d.placeholderState(), PlaceholderEvent.MarkRestoreStuck))
                     } else {
                         d
                     }
@@ -301,7 +322,7 @@ class PhysicalGamepadRegistry
             _devices.update { map ->
                 map.mapValues { (_, d) ->
                     if (d.isUsbSynthetic && d.vendorId == vendorId && d.productId == productId) {
-                        d.copy(restoreStuck = false, transitioning = true)
+                        d.withPlaceholder(placeholderTransition(d.placeholderState(), PlaceholderEvent.ClearRestoreStuck))
                     } else {
                         d
                     }
@@ -315,7 +336,16 @@ class PhysicalGamepadRegistry
         ) {
             _devices.update { map ->
                 val cur = map[deviceId] ?: return@update map
-                if (cur.transitioning == value) map else map + (deviceId to cur.copy(transitioning = value))
+                // Same idempotent short-circuit as before: if the flag is unchanged, do not re-emit.
+                if (cur.transitioning == value) {
+                    map
+                } else {
+                    val next =
+                        cur.withPlaceholder(
+                            placeholderTransition(cur.placeholderState(), PlaceholderEvent.SetSyntheticTransitioning(value)),
+                        )
+                    map + (deviceId to next)
+                }
             }
         }
 
@@ -327,7 +357,8 @@ class PhysicalGamepadRegistry
             disconnectJobs.remove(deviceId)?.cancel()
             _devices.update { map ->
                 val cur = map[deviceId] ?: return@update map
-                map + (deviceId to cur.copy(transitioning = true, disconnectingTimeLeftSec = null))
+                val next = cur.withPlaceholder(placeholderTransition(cur.placeholderState(), PlaceholderEvent.HoldAsTransitioning))
+                map + (deviceId to next)
             }
         }
 
@@ -522,3 +553,73 @@ internal fun isGamepadDeviceFromCapabilities(
     return (sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
         (sources and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
 }
+
+// Pure projection of a device's transient ("placeholder") fields plus the identity flag that gates
+// them. Mutators compute the next value via placeholderTransition and copy it back onto the Device
+// unchanged. Keeping the booleans (not a single enum) is deliberate: transitioning, needsReplug,
+// restoreStuck and the disconnect countdown are independent fields on Device that consumers read
+// directly, so collapsing them would be lossy.
+internal data class PlaceholderState(
+    val transitioning: Boolean,
+    val needsReplug: Boolean,
+    val restoreStuck: Boolean,
+    val disconnectingTimeLeftSec: Int?,
+    val isUsbSynthetic: Boolean,
+)
+
+internal sealed interface PlaceholderEvent {
+    // A removed framework device held as a loader placeholder rather than reaped.
+    data object HoldAsTransitioning : PlaceholderEvent
+
+    // setUsbSyntheticTransitioning(value): flips only the loader flag.
+    data class SetSyntheticTransitioning(
+        val value: Boolean,
+    ) : PlaceholderEvent
+
+    // The OS never returned a held framework device: settle the loader into a replug card.
+    data object MarkNeedsReplug : PlaceholderEvent
+
+    // A held synthetic's return-to-Standard never re-enumerated: keep it actionable.
+    data object MarkRestoreStuck : PlaceholderEvent
+
+    // Retry: drop the stuck look and go back to the held-loader look.
+    data object ClearRestoreStuck : PlaceholderEvent
+}
+
+// Pure (state, event) -> state for the per-device placeholder phase. No StateFlow, native, or map
+// access. Each imperative mutator matches the same device subset it did before and applies this
+// result; events are never dispatched to a device the mutator's filter excludes.
+internal fun placeholderTransition(
+    current: PlaceholderState,
+    event: PlaceholderEvent,
+): PlaceholderState =
+    when (event) {
+        // Entering the loader look also clears any in-flight disconnect countdown, exactly as
+        // holdAsTransitioning did inline.
+        PlaceholderEvent.HoldAsTransitioning ->
+            current.copy(transitioning = true, disconnectingTimeLeftSec = null)
+
+        is PlaceholderEvent.SetSyntheticTransitioning ->
+            current.copy(transitioning = event.value)
+
+        // Contradictory-combo guard: a device cannot be both transitioning and needsReplug, so
+        // settling to needsReplug clears the loader flag.
+        PlaceholderEvent.MarkNeedsReplug ->
+            current.copy(transitioning = false, needsReplug = true)
+
+        // restoreStuck only applies to a synthetic; on anything else this is a no-op. Callers already
+        // filter to synthetics, the guard makes the invariant explicit in the reducer.
+        PlaceholderEvent.MarkRestoreStuck ->
+            if (current.isUsbSynthetic) {
+                current.copy(transitioning = false, restoreStuck = true)
+            } else {
+                current
+            }
+
+        PlaceholderEvent.ClearRestoreStuck ->
+            if (current.isUsbSynthetic) {
+                current.copy(restoreStuck = false, transitioning = true)
+            } else {
+                current
+            }
+    }

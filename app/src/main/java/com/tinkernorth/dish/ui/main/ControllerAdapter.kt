@@ -7,6 +7,7 @@ import android.content.res.ColorStateList
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.LinearLayout
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.recyclerview.widget.DiffUtil
@@ -21,6 +22,7 @@ import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.MotionCapability
 import com.tinkernorth.dish.databinding.BindingDecisionRowBinding
+import com.tinkernorth.dish.databinding.BindingPillBinding
 import com.tinkernorth.dish.databinding.BindingValueMonoBinding
 import com.tinkernorth.dish.databinding.BindingValueNoneBinding
 import com.tinkernorth.dish.databinding.BindingValueNotBoundBinding
@@ -98,6 +100,40 @@ class ControllerAdapter(
         private val ctx: Context get() = b.root.context
         private val inflater: LayoutInflater get() = LayoutInflater.from(ctx)
 
+        private val connectionRow = decisionRow(R.string.binding_label_connection)
+        private val destinationRow = decisionRow(R.string.binding_label_destination)
+        private val emulateRow = decisionRow(R.string.binding_label_emulate)
+        private val functionRow = decisionRow(null)
+
+        private val connectionPills = PillPool(connectionRow.valueContainer)
+        private val emulatePills = PillPool(emulateRow.valueContainer)
+        private val functionPills = PillPool(functionRow.valueContainer)
+
+        private val destinationMono = BindingValueMonoBinding.inflate(inflater, destinationRow.valueContainer, true)
+        private val destinationNotBound = BindingValueNotBoundBinding.inflate(inflater, destinationRow.valueContainer, true)
+        private val functionNone = BindingValueNoneBinding.inflate(inflater, functionRow.valueContainer, true)
+
+        private val filledActions =
+            List(MAX_FILLED_ACTIONS) {
+                inflater.inflate(R.layout.binding_action_button, b.llActions, false) as MaterialButton
+            }
+        private val outlinedAction =
+            inflater.inflate(R.layout.binding_action_button_outlined, b.llActions, false) as MaterialButton
+
+        init {
+            listOf(connectionRow, destinationRow, emulateRow, functionRow).forEach { b.llDecisions.addView(it.root) }
+            filledActions.forEach { b.llActions.addView(it) }
+            b.llActions.addView(outlinedAction)
+        }
+
+        private fun decisionRow(
+            @StringRes labelRes: Int?,
+        ): BindingDecisionRowBinding {
+            val row = BindingDecisionRowBinding.inflate(inflater, b.llDecisions, false)
+            if (labelRes != null) row.tvRowLabel.setText(labelRes) else row.tvRowLabel.visibility = View.GONE
+            return row
+        }
+
         fun bind(row: Row) {
             val slot = row.slot
             val isVirtual = slot.inputType == SlotInputType.VIRTUAL
@@ -113,52 +149,62 @@ class ControllerAdapter(
                 edge != EdgeState.NONE && !(edge == EdgeState.UNSTEADY && slot.id in dismissedUnsteady)
             b.root.alpha = if (!showEdge && slot.isDisconnecting) 0.5f else 1f
 
-            b.llDecisions.removeAllViews()
-            b.llActions.removeAllViews()
-
             if (slot.boundStatus == null || slot.boundConnectionId == null) {
-                buildUnboundDecisions(row)
+                bindUnbound(row)
             } else {
-                buildBoundDecisions(row, slot.boundStatus)
+                bindBound(row, slot.boundStatus)
             }
-            buildActions(row)
+            bindActions(row)
             bindEdge(if (showEdge) edge else EdgeState.NONE, row)
         }
 
-        private fun buildBoundDecisions(
+        private fun bindBound(
             row: Row,
             bound: ConnectionSummary,
         ) {
-            addDecisionRow(R.string.binding_label_connection) { c -> connectionPills(c, row, bound.kind) }
-            addDecisionRow(R.string.binding_label_destination) { c -> c.addView(monoValue(c, bound.label)) }
-            typePillLabel(row, bound)?.let { label ->
-                addDecisionRow(R.string.binding_label_emulate) { c -> c.addView(c.inflateBindingPill(label, null, PillTone.FACT)) }
+            connectionRow.root.visibility = View.VISIBLE
+            connectionPills.bind(connectionSpecs(row, bound.kind))
+
+            destinationRow.root.visibility = View.VISIBLE
+            showDestination(bound.label)
+
+            val emulate = typePillLabel(row, bound)
+            if (emulate != null) {
+                emulateRow.root.visibility = View.VISIBLE
+                emulatePills.bind(listOf(PillSpec(emulate, null, PillTone.FACT)))
+            } else {
+                emulateRow.root.visibility = View.GONE
             }
-            // Function chips render label-less (full-width row), so pass no row label.
-            addDecisionRow(null) { c -> functionPills(c, row, bound) }
+
+            functionRow.root.visibility = View.VISIBLE
+            bindFunctionPills(functionSpecs(row, bound))
         }
 
-        private fun buildUnboundDecisions(row: Row) {
+        private fun bindUnbound(row: Row) {
             // Unbound shows the connection without a mode chip; Direct/Standard is only chosen at bind time.
-            addDecisionRow(R.string.binding_label_connection) { c -> connectionPills(c, row, null) }
-            addDecisionRow(R.string.binding_label_destination) { c -> c.addView(notBoundValue(c)) }
+            connectionRow.root.visibility = View.VISIBLE
+            connectionPills.bind(connectionSpecs(row, kind = null))
+            destinationRow.root.visibility = View.VISIBLE
+            showDestination(null)
+            emulateRow.root.visibility = View.GONE
+            functionRow.root.visibility = View.GONE
         }
 
-        private fun addDecisionRow(
-            labelRes: Int?,
-            buildValues: (ViewGroup) -> Unit,
-        ) {
-            val rowB = BindingDecisionRowBinding.inflate(inflater, b.llDecisions, false)
-            if (labelRes != null) rowB.tvRowLabel.setText(labelRes) else rowB.tvRowLabel.visibility = View.GONE
-            buildValues(rowB.valueContainer)
-            b.llDecisions.addView(rowB.root)
+        private fun showDestination(monoText: String?) {
+            if (monoText != null) {
+                destinationMono.root.text = monoText
+                destinationMono.root.visibility = View.VISIBLE
+                destinationNotBound.root.visibility = View.GONE
+            } else {
+                destinationMono.root.visibility = View.GONE
+                destinationNotBound.root.visibility = View.VISIBLE
+            }
         }
 
-        private fun connectionPills(
-            container: ViewGroup,
+        private fun connectionSpecs(
             row: Row,
             kind: ConnectionKind?,
-        ) {
+        ): List<PillSpec> {
             val card = row.pathCard
             val virtual = row.slot.inputType == SlotInputType.VIRTUAL
             val isUsb = !virtual && card?.transport == Transport.Usb
@@ -169,31 +215,19 @@ class ControllerAdapter(
                     isBt -> R.string.binding_link_bluetooth to R.drawable.ic_bluetooth
                     else -> R.string.binding_link_usb to R.drawable.ic_usb
                 }
-            addPill(container, label, icon, PillTone.FACT)
+            val specs = mutableListOf(PillSpec(ctx.getString(label), icon, PillTone.FACT))
             // The Direct/Standard mode chip only applies once a USB controller is on a known path.
-            if (isUsb && kind != null && card != null) addUsbModePill(container, card)
+            if (isUsb && kind != null && card != null) specs.add(usbModeSpec(card))
+            return specs
         }
 
-        private fun addPill(
-            container: ViewGroup,
-            @StringRes label: Int,
-            @DrawableRes icon: Int,
-            tone: PillTone,
-        ) {
-            container.addView(container.inflateBindingPill(ctx.getString(label), icon, tone))
-        }
-
-        private fun addUsbModePill(
-            container: ViewGroup,
-            card: PathCard,
-        ) {
+        private fun usbModeSpec(card: PathCard): PillSpec =
             if (card.currentMode == InputPathMode.Direct) {
                 val tone = if (card.risk == PathRisk.GuessedLayout) PillTone.WARN else PillTone.ON
-                addPill(container, R.string.binding_mode_direct, R.drawable.ic_bolt, tone)
+                PillSpec(ctx.getString(R.string.binding_mode_direct), R.drawable.ic_bolt, tone)
             } else {
-                addPill(container, R.string.binding_mode_standard, R.drawable.ic_cable, PillTone.CAP)
+                PillSpec(ctx.getString(R.string.binding_mode_standard), R.drawable.ic_cable, PillTone.CAP)
             }
-        }
 
         private fun typePillLabel(
             row: Row,
@@ -207,26 +241,29 @@ class ControllerAdapter(
                 ConnectionKind.BLUETOOTH -> bound.btProfile
             }
 
+        private fun bindFunctionPills(specs: List<PillSpec>) {
+            if (specs.isEmpty()) {
+                functionPills.hideAll()
+                functionNone.root.visibility = View.VISIBLE
+            } else {
+                functionNone.root.visibility = View.GONE
+                functionPills.bind(specs)
+            }
+        }
+
         // Reports the configured (not live-gated) routing: motion only carries on a Satellite host
         // emulating PlayStation; touchpad only on a Satellite host.
-        private fun functionPills(
-            container: ViewGroup,
+        private fun functionSpecs(
             row: Row,
             bound: ConnectionSummary,
-        ) {
-            val before = container.childCount
+        ): List<PillSpec> {
+            val specs = mutableListOf<PillSpec>()
             val card = row.pathCard
             val rumblePresent =
                 card != null &&
                     (if (card.currentMode == InputPathMode.Direct) card.direct.rumble else card.standard.rumble)
             if (rumblePresent) {
-                container.addView(
-                    container.inflateBindingPill(
-                        funcValue(R.string.binding_func_rumble, R.string.binding_state_on),
-                        R.drawable.ic_rumble,
-                        PillTone.ON,
-                    ),
-                )
+                specs.add(PillSpec(funcValue(R.string.binding_func_rumble, R.string.binding_state_on), R.drawable.ic_rumble, PillTone.ON))
             }
 
             val type = bound.satelliteControllerTypes[row.slot.id] ?: CONTROLLER_TYPE_XBOX
@@ -238,7 +275,7 @@ class ControllerAdapter(
                 val on = row.motionCap.userEnabled
                 val state = if (on) R.string.binding_state_on else R.string.binding_state_off
                 val tone = if (on) PillTone.ON else PillTone.OFF
-                container.addView(container.inflateBindingPill(funcValue(R.string.binding_func_motion, state), R.drawable.ic_motion, tone))
+                specs.add(PillSpec(funcValue(R.string.binding_func_motion, state), R.drawable.ic_motion, tone))
             }
 
             if (bound.kind == ConnectionKind.SATELLITE) {
@@ -257,10 +294,9 @@ class ControllerAdapter(
                     )
                 val icon = if (mode == TouchpadModeValue.MOUSE) R.drawable.ic_mouse else R.drawable.ic_touchpad
                 val tone = if (mode == TouchpadModeValue.OFF) PillTone.OFF else PillTone.ON
-                container.addView(container.inflateBindingPill(label, icon, tone))
+                specs.add(PillSpec(label, icon, tone))
             }
-
-            if (container.childCount == before) container.addView(noneValue(container))
+            return specs
         }
 
         private fun funcValue(
@@ -268,25 +304,25 @@ class ControllerAdapter(
             valueRes: Int,
         ): String = ctx.getString(R.string.binding_func_value, ctx.getString(nameRes), ctx.getString(valueRes))
 
-        private fun monoValue(
-            parent: ViewGroup,
-            text: String,
-        ): View {
-            val mono = BindingValueMonoBinding.inflate(inflater, parent, false)
-            mono.root.text = text
-            return mono.root
+        private fun bindActions(row: Row) {
+            val actions = computeActions(row)
+            filledActions.forEach { it.visibility = View.GONE }
+            outlinedAction.visibility = View.GONE
+            var filledIndex = 0
+            for (action in actions) {
+                val btn = if (action.outlined) outlinedAction else filledActions[filledIndex++]
+                btn.visibility = View.VISIBLE
+                btn.text = action.label
+                btn.setIconResource(action.icon)
+                btn.setOnClickListener { dispatch(action.kind, row.slot.id) }
+            }
         }
 
-        private fun notBoundValue(parent: ViewGroup): View = BindingValueNotBoundBinding.inflate(inflater, parent, false).root
-
-        private fun noneValue(parent: ViewGroup): View = BindingValueNoneBinding.inflate(inflater, parent, false).root
-
-        private fun buildActions(row: Row) {
+        private fun computeActions(row: Row): List<CardAction> {
             val slot = row.slot
-            val actions = mutableListOf<CardAction>()
             val bound = slot.boundStatus
             if (bound == null || slot.boundConnectionId == null) {
-                actions +=
+                return listOf(
                     if (row.connections.isEmpty()) {
                         CardAction(
                             R.drawable.ic_satellite,
@@ -301,45 +337,38 @@ class ControllerAdapter(
                             outlined = true,
                             kind = ActionKind.CONFIGURE,
                         )
-                    }
-            } else {
-                val connected = bound.live == LinkState.Connected
-                if (slot.inputType == SlotInputType.VIRTUAL && connected) {
-                    actions +=
-                        CardAction(
-                            R.drawable.ic_open_gamepad,
-                            ctx.getString(R.string.action_open_gamepad),
-                            outlined = false,
-                            kind = ActionKind.GAMEPAD,
-                        )
-                }
-                val touchpadMode = row.touchpadModes[slot.boundConnectionId] ?: TouchpadModeValue.OFF
-                if (bound.kind == ConnectionKind.SATELLITE && connected && touchpadMode != TouchpadModeValue.OFF) {
-                    actions +=
-                        CardAction(
-                            R.drawable.ic_open_touchpad,
-                            ctx.getString(R.string.action_open_touchpad),
-                            outlined = false,
-                            kind = ActionKind.TOUCHPAD,
-                        )
-                }
+                    },
+                )
+            }
+            val actions = mutableListOf<CardAction>()
+            val connected = bound.live == LinkState.Connected
+            if (slot.inputType == SlotInputType.VIRTUAL && connected) {
                 actions +=
                     CardAction(
-                        R.drawable.ic_tune,
-                        ctx.getString(R.string.binding_action_configure),
-                        outlined = true,
-                        kind = ActionKind.CONFIGURE,
+                        R.drawable.ic_open_gamepad,
+                        ctx.getString(R.string.action_open_gamepad),
+                        outlined = false,
+                        kind = ActionKind.GAMEPAD,
                     )
             }
-
-            for (action in actions) {
-                val layoutRes = if (action.outlined) R.layout.binding_action_button_outlined else R.layout.binding_action_button
-                val btn = inflater.inflate(layoutRes, b.llActions, false) as MaterialButton
-                btn.text = action.label
-                btn.setIconResource(action.icon)
-                btn.setOnClickListener { dispatch(action.kind, slot.id) }
-                b.llActions.addView(btn)
+            val touchpadMode = row.touchpadModes[slot.boundConnectionId] ?: TouchpadModeValue.OFF
+            if (bound.kind == ConnectionKind.SATELLITE && connected && touchpadMode != TouchpadModeValue.OFF) {
+                actions +=
+                    CardAction(
+                        R.drawable.ic_open_touchpad,
+                        ctx.getString(R.string.action_open_touchpad),
+                        outlined = false,
+                        kind = ActionKind.TOUCHPAD,
+                    )
             }
+            actions +=
+                CardAction(
+                    R.drawable.ic_tune,
+                    ctx.getString(R.string.binding_action_configure),
+                    outlined = true,
+                    kind = ActionKind.CONFIGURE,
+                )
+            return actions
         }
 
         private fun dispatch(
@@ -479,5 +508,34 @@ class ControllerAdapter(
             o: Row,
             n: Row,
         ) = o == n
+    }
+}
+
+private const val MAX_FILLED_ACTIONS = 2
+
+private class PillPool(
+    private val container: LinearLayout,
+) {
+    private val pills = mutableListOf<BindingPillBinding>()
+
+    fun bind(specs: List<PillSpec>) {
+        specs.forEachIndexed { i, spec ->
+            obtain(i).also { pill ->
+                pill.bindPill(spec)
+                pill.root.visibility = View.VISIBLE
+            }
+        }
+        for (i in specs.size until pills.size) pills[i].root.visibility = View.GONE
+    }
+
+    fun hideAll() {
+        for (pill in pills) pill.root.visibility = View.GONE
+    }
+
+    private fun obtain(index: Int): BindingPillBinding {
+        while (pills.size <= index) {
+            pills.add(BindingPillBinding.inflate(LayoutInflater.from(container.context), container, true))
+        }
+        return pills[index]
     }
 }

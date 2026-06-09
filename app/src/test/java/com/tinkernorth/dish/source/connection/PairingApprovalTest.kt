@@ -57,4 +57,14 @@ class PairingApprovalTest {
     fun `an unparseable body is Declined`() {
         assertEquals(PairingApproval.Status.Declined, PairingApproval.classifyStatus("not json"))
     }
+
+    @Test
+    fun `a 64-char non-hex sharedKey is Declined`() {
+        // Right length but wrong alphabet: must not be trusted as a session key.
+        val notHex = "g".repeat(64)
+        assertEquals(
+            PairingApproval.Status.Declined,
+            PairingApproval.classifyStatus("""{"status":"approved","sharedKey":"$notHex"}"""),
+        )
+    }
 }

@@ -3,7 +3,7 @@
 package com.tinkernorth.dish.ui.main
 
 import android.content.Context
-import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
@@ -43,7 +43,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModelTest {
     private val dispatcher: TestDispatcher = StandardTestDispatcher()
-    private lateinit var hub: ConnectionHub
+    private lateinit var hub: ConnectionCoordinator
     private lateinit var satellite: SatelliteConnectionManager
     private lateinit var gamepadRegistry: PhysicalGamepadRegistry
     private lateinit var batteryStore: BatteryStatusStore

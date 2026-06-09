@@ -10,7 +10,6 @@ import android.view.Window
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.architecture.abstracts.AbstractStateSource
 import java.util.Calendar
@@ -72,13 +71,11 @@ class LowPowerManager(
         }
     }
 
+    // Teardown is driven explicitly by the host activity via cancel(); this is not a registered
+    // lifecycle observer, so it deliberately does not override onStop.
     fun cancel() {
         inactivityHandler.removeCallbacks(inactivityRunnable)
         exit()
-    }
-
-    override fun onStop(owner: LifecycleOwner) {
-        cancel()
     }
 
     private fun resetInactivityTimer() {

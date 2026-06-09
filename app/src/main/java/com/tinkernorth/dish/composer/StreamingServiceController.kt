@@ -6,12 +6,10 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.lifecycle.LifecycleOwner
-import com.tinkernorth.dish.architecture.abstracts.AbstractStateSource
+import com.tinkernorth.dish.architecture.abstracts.AbstractController
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -21,28 +19,23 @@ class StreamingServiceController
     constructor(
         @ApplicationContext private val context: Context,
         private val wakeState: WakeStateController,
-        private val scope: CoroutineScope,
-    ) : AbstractStateSource<Unit>(Unit) {
-        private var job: Job? = null
+        scope: CoroutineScope,
+    ) : AbstractController<Int>(scope) {
         private var running = false
 
-        override fun onStart(owner: LifecycleOwner) {
-            if (job != null) return
-            job =
-                wakeState.streamingSlotCount
-                    .onEach { count ->
-                        val shouldRun = count > 0
-                        if (shouldRun && !running) {
-                            startService()
-                        } else if (!shouldRun && running) {
-                            stopService()
-                        }
-                    }.launchIn(scope)
+        override fun upstream(): Flow<Int> = wakeState.streamingSlotCount
+
+        override fun apply(value: Int) {
+            val shouldRun = value > 0
+            if (shouldRun && !running) {
+                startService()
+            } else if (!shouldRun && running) {
+                stopService()
+            }
         }
 
         override fun onStop(owner: LifecycleOwner) {
-            job?.cancel()
-            job = null
+            cancelCollection()
             if (running) stopService()
         }
 
