@@ -17,7 +17,7 @@ import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.notification.DishNotifications
@@ -50,7 +50,7 @@ class UsbGamepadManager
     constructor(
         @ApplicationContext private val context: Context,
         private val registry: PhysicalGamepadRegistry,
-        private val connectionHubProvider: Provider<ConnectionHub>,
+        private val connectionHubProvider: Provider<ConnectionCoordinator>,
         private val notifications: DishNotifications,
         private val scope: CoroutineScope,
         private val native: PhysicalInputNative,

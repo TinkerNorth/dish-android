@@ -90,15 +90,20 @@ class RememberedBtRepositoryTest {
     }
 
     @Test
-    fun `corrupt JSON is dropped silently with no WARN breadcrumb`() {
+    fun `corrupt JSON logs a WARN breadcrumb`() {
         val (ctx, store) = mapBackedPrefs()
         store["bt_list"] = "{not valid json"
         val repo = RememberedBtRepository(ctx, json)
         repo.all()
 
-        // Unlike MotionPreferenceRepository, this repo logs nothing on a decode failure.
-        // See summary: a corrupt blob forgets every paired controller with no trace.
-        verify(exactly = 0) { Log.w(any<String>(), any<String>()) }
-        verify(exactly = 0) { Log.w(any<String>(), any<String>(), any<Throwable>()) }
+        // Parity with MotionPreferenceRepository: a corrupt blob forgets every paired controller, so
+        // leave a trace instead of failing silently. The eager observable mirror reads once at
+        // construction too, so this is at-least-one rather than exactly-one.
+        verify(atLeast = 1) {
+            Log.w(
+                any<String>(),
+                match<String> { it.contains("Failed to decode remembered-Bluetooth list") },
+            )
+        }
     }
 }

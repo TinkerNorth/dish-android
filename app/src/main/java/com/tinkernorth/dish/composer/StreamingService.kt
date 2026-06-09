@@ -30,7 +30,7 @@ import javax.inject.Inject
 class StreamingService : Service() {
     @Inject lateinit var wakeState: WakeStateController
 
-    @Inject lateinit var hub: ConnectionHub
+    @Inject lateinit var hub: ConnectionCoordinator
 
     @Inject lateinit var satellite: SatelliteConnectionManager
 

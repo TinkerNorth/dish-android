@@ -29,7 +29,7 @@ import org.junit.Before
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class ConnectionHubTest {
+class ConnectionCoordinatorTest {
     private lateinit var satellite: SatelliteConnectionManager
     private lateinit var bt: BluetoothGamepadRegistry
     private lateinit var store: ConnectionStore
@@ -92,7 +92,7 @@ class ConnectionHubTest {
         return ctx
     }
 
-    private fun buildHub(): ConnectionHub {
+    private fun buildHub(): ConnectionCoordinator {
         val bindingStore =
             com.tinkernorth.dish.source.store
                 .SlotBindingStore()
@@ -110,7 +110,7 @@ class ConnectionHubTest {
                 scope = scope,
             )
         val hub =
-            ConnectionHub(
+            ConnectionCoordinator(
                 satellite = satellite,
                 bt = bt,
                 store = store,

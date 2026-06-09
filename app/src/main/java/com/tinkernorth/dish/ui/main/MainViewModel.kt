@@ -6,7 +6,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.MotionCapability
@@ -45,7 +45,7 @@ class MainViewModel
     constructor(
         @ApplicationContext private val context: Context,
         val satellite: SatelliteConnectionManager,
-        val hub: ConnectionHub,
+        val hub: ConnectionCoordinator,
         private val gamepadRegistry: PhysicalGamepadRegistry,
         private val batteryStatusStore: BatteryStatusStore,
         private val motionEnabledStore: MotionEnabledStore,
@@ -228,19 +228,6 @@ class MainViewModel
             }
         }
 
-        // Avoids a JSON dep; server always emits `{"error":"…"}` as first key with no nesting/escapes.
-        private fun extractJsonErrorField(json: String): String? {
-            val keyIdx = json.indexOf("\"error\"")
-            if (keyIdx < 0) return null
-            val colon = json.indexOf(':', startIndex = keyIdx + "\"error\"".length)
-            if (colon < 0) return null
-            val openQuote = json.indexOf('"', startIndex = colon + 1)
-            if (openQuote < 0) return null
-            val closeQuote = json.indexOf('"', startIndex = openQuote + 1)
-            if (closeQuote < 0) return null
-            return json.substring(openQuote + 1, closeQuote)
-        }
-
         private fun pathCardFor(
             slot: ControllerSlot,
             devices: Map<Int, PhysicalGamepadRegistry.Device>,
@@ -306,3 +293,17 @@ class MainViewModel
             val ASSUMED_SUPPORTED_TOUCHPAD_MODES: Set<String> = TouchpadModeValue.ALL.toSet()
         }
     }
+
+// Avoids a JSON dep; server always emits `{"error":"…"}` as first key with no nesting/escapes.
+// Shared by MainViewModel and ConfigureBindingsViewModel so the two touchpad-error mappers parse identically.
+fun extractJsonErrorField(json: String): String? {
+    val keyIdx = json.indexOf("\"error\"")
+    if (keyIdx < 0) return null
+    val colon = json.indexOf(':', startIndex = keyIdx + "\"error\"".length)
+    if (colon < 0) return null
+    val openQuote = json.indexOf('"', startIndex = colon + 1)
+    if (openQuote < 0) return null
+    val closeQuote = json.indexOf('"', startIndex = openQuote + 1)
+    if (closeQuote < 0) return null
+    return json.substring(openQuote + 1, closeQuote)
+}

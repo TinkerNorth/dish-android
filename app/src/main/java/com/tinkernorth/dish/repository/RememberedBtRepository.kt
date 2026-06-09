@@ -3,6 +3,7 @@
 package com.tinkernorth.dish.repository
 
 import android.content.Context
+import android.util.Log
 import androidx.core.content.edit
 import com.tinkernorth.dish.architecture.interfaces.KeyedRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -40,7 +41,16 @@ class RememberedBtRepository
             val raw = prefs.getString(KEY_BT, null) ?: return emptyList()
             return runCatching {
                 json.decodeFromString(ListSerializer(RememberedBt.serializer()), raw)
-            }.getOrDefault(emptyList())
+            }.getOrElse { err ->
+                // Fall back to empty on parse failure: forgetting paired controllers beats crashing on corrupt prefs.
+                Log.w(
+                    TAG,
+                    "Failed to decode remembered-Bluetooth list; treating as empty. " +
+                        "User-facing impact: every paired controller is forgotten. " +
+                        "Cause: ${err.javaClass.simpleName}: ${err.message}",
+                )
+                emptyList()
+            }
         }
 
         override fun put(
@@ -77,6 +87,7 @@ class RememberedBtRepository
         }
 
         private companion object {
+            const val TAG = "RememberedBtRepository"
             const val PREFS_NAME = "connection_store"
             const val KEY_BT = "bt_list"
         }

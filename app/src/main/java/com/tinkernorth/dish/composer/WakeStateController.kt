@@ -5,15 +5,13 @@ package com.tinkernorth.dish.composer
 import android.content.Context
 import android.os.PowerManager
 import androidx.lifecycle.LifecycleOwner
-import com.tinkernorth.dish.architecture.abstracts.AbstractStateSource
+import com.tinkernorth.dish.architecture.abstracts.AbstractController
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -23,8 +21,8 @@ class WakeStateController
     constructor(
         @ApplicationContext context: Context,
         private val composer: WakeStateComposer,
-        private val scope: CoroutineScope,
-    ) : AbstractStateSource<WakeState>(WakeState.Idle) {
+        scope: CoroutineScope,
+    ) : AbstractController<WakeState>(scope) {
         private val powerManager =
             context.getSystemService(Context.POWER_SERVICE) as PowerManager
 
@@ -37,15 +35,12 @@ class WakeStateController
         private val lock = Any()
         private var wakeLock: PowerManager.WakeLock? = null
         private var stopped = false
-        private var job: Job? = null
 
-        override fun onStart(owner: LifecycleOwner) {
-            if (job != null) return
+        override fun upstream(): Flow<WakeState> = composer.state
+
+        // Re-arm the stopped guard under [lock] before the base launches the collector.
+        override fun onStarting() {
             synchronized(lock) { stopped = false }
-            job =
-                composer.state
-                    .onEach(::apply)
-                    .launchIn(scope)
         }
 
         override fun onStop(owner: LifecycleOwner) {
@@ -53,21 +48,18 @@ class WakeStateController
                 stopped = true
                 release()
             }
-            job?.cancel()
-            job = null
-            setState(WakeState.Idle)
+            cancelCollection()
             _streamingSlotCount.value = 0
             _shouldKeepScreenOn.value = false
         }
 
-        private fun apply(wake: WakeState) {
+        override fun apply(value: WakeState) {
             synchronized(lock) {
                 // Drop a composer emission that lands after onStop: publishing the count here would let
                 // StreamingServiceController restart the foreground service while the app is stopped.
                 if (stopped) return
-                setState(wake)
-                _streamingSlotCount.value = wake.streamingSlotCount
-                val keep = wake.shouldKeepScreenOn
+                _streamingSlotCount.value = value.streamingSlotCount
+                val keep = value.shouldKeepScreenOn
                 if (keep == _shouldKeepScreenOn.value) return
                 _shouldKeepScreenOn.value = keep
                 if (keep) acquire() else release()

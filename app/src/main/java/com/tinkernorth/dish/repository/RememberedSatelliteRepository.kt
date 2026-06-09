@@ -3,6 +3,7 @@
 package com.tinkernorth.dish.repository
 
 import android.content.Context
+import android.util.Log
 import androidx.core.content.edit
 import com.tinkernorth.dish.architecture.interfaces.KeyedRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -41,7 +42,16 @@ class RememberedSatelliteRepository
             val raw = prefs.getString(KEY_SATELLITES, null) ?: return emptyList()
             return runCatching {
                 json.decodeFromString(ListSerializer(RememberedSatellite.serializer()), raw)
-            }.getOrDefault(emptyList())
+            }.getOrElse { err ->
+                // Fall back to empty on parse failure: forgetting satellites beats crashing on corrupt prefs.
+                Log.w(
+                    TAG,
+                    "Failed to decode satellite list; treating as empty. " +
+                        "User-facing impact: every remembered satellite is forgotten. " +
+                        "Cause: ${err.javaClass.simpleName}: ${err.message}",
+                )
+                emptyList()
+            }
         }
 
         override fun put(
@@ -78,6 +88,7 @@ class RememberedSatelliteRepository
         }
 
         private companion object {
+            const val TAG = "RememberedSatelliteRepo"
             const val PREFS_NAME = "connection_store"
             const val KEY_SATELLITES = "satellite_list"
         }

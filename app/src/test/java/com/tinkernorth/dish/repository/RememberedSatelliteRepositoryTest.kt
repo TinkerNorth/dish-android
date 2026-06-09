@@ -16,8 +16,8 @@ import org.junit.Before
 import org.junit.Test
 
 // Behavioral coverage for the satellite list repository beyond the generic AbstractRepositoryContract:
-// in particular the corrupt-decode fallback and its (current) silence. Mirrors RememberedBtRepositoryTest
-// so the two list repositories document the same trace-less-loss behavior side by side.
+// in particular the corrupt-decode fallback and its WARN breadcrumb. Mirrors RememberedBtRepositoryTest
+// so the two list repositories document the same loss-with-a-trace behavior side by side.
 class RememberedSatelliteRepositoryTest {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -73,16 +73,20 @@ class RememberedSatelliteRepositoryTest {
     }
 
     @Test
-    fun `corrupt JSON is dropped silently with no WARN breadcrumb`() {
+    fun `corrupt JSON logs a WARN breadcrumb`() {
         val (ctx, store) = mapBackedPrefs()
         store["satellite_list"] = "{not valid json"
         val repo = RememberedSatelliteRepository(ctx, json)
         repo.all()
 
-        // Unlike MotionPreferenceRepository / TouchpadModeRepository, this repo logs nothing on a
-        // decode failure, so a corrupt blob forgets every remembered satellite with no trace.
-        // See summary: add a WARN breadcrumb for parity.
-        verify(exactly = 0) { Log.w(any<String>(), any<String>()) }
-        verify(exactly = 0) { Log.w(any<String>(), any<String>(), any<Throwable>()) }
+        // Parity with MotionPreferenceRepository / TouchpadModeRepository: a corrupt blob forgets
+        // every remembered satellite, so leave a trace instead of failing silently. The eager
+        // observable mirror reads once at construction too, so this is at-least-one, not exactly-one.
+        verify(atLeast = 1) {
+            Log.w(
+                any<String>(),
+                match<String> { it.contains("Failed to decode satellite list") },
+            )
+        }
     }
 }

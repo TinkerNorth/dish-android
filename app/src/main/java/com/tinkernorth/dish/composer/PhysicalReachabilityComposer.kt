@@ -20,7 +20,7 @@ class PhysicalReachabilityComposer
     @Inject
     constructor(
         private val registry: PhysicalGamepadRegistry,
-        private val hub: ConnectionHub,
+        private val hub: ConnectionCoordinator,
         private val satellite: SatelliteConnectionManager,
         scope: CoroutineScope,
     ) : AbstractComposer<Map<String, SatelliteConnection>>(scope, emptyMap()) {

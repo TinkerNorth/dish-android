@@ -12,6 +12,8 @@ import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOf
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -62,14 +64,15 @@ class MotionCapabilityComposer
     constructor(
         private val phoneAvailability: PhoneMotionAvailability,
         private val registry: PhysicalGamepadRegistry,
-        private val hub: ConnectionHub,
+        private val hub: ConnectionCoordinator,
         private val motionEnabledStore: MotionEnabledStore,
         private val satelliteMotionBackendStatusStore: SatelliteMotionBackendStatusStore,
         scope: CoroutineScope,
     ) : AbstractComposer<Map<String, MotionCapability>>(scope, emptyMap()) {
         override fun upstream(): Flow<Map<String, MotionCapability>> =
             combine6(
-                phoneAvailability.state,
+                // Constant fact, lifted into the combine so the per-slot shape stays uniform.
+                flowOf(phoneAvailability.hasGyro),
                 registry.devices,
                 hub.bindings,
                 hub.connections,
@@ -102,7 +105,7 @@ class MotionCapabilityComposer
                         )
                 }
                 out
-            }
+            }.distinctUntilChanged()
 
         fun capabilityFor(slotId: String): MotionCapability = state.value[slotId] ?: MotionCapability.Off
 

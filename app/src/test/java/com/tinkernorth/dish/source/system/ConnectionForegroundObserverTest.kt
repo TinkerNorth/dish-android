@@ -5,7 +5,7 @@ package com.tinkernorth.dish.source.system
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
-import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.composer.ConnectionCoordinator
 import io.mockk.mockk
 import io.mockk.verify
 import org.junit.Test
@@ -19,7 +19,7 @@ class ConnectionForegroundObserverTest {
 
     @Test
     fun `ON_START triggers autoReconnectAll on the hub`() {
-        val hub = mockk<ConnectionHub>(relaxed = true)
+        val hub = mockk<ConnectionCoordinator>(relaxed = true)
         val owner = TestOwner()
         val observer = ConnectionForegroundObserver(hub)
         owner.registry.addObserver(observer)
@@ -31,7 +31,7 @@ class ConnectionForegroundObserverTest {
 
     @Test
     fun `ON_STOP does not call autoReconnectAll`() {
-        val hub = mockk<ConnectionHub>(relaxed = true)
+        val hub = mockk<ConnectionCoordinator>(relaxed = true)
         val owner = TestOwner()
         val observer = ConnectionForegroundObserver(hub)
         owner.registry.addObserver(observer)
@@ -44,7 +44,7 @@ class ConnectionForegroundObserverTest {
 
     @Test
     fun `repeated ON_START triggers autoReconnectAll each time the app comes back`() {
-        val hub = mockk<ConnectionHub>(relaxed = true)
+        val hub = mockk<ConnectionCoordinator>(relaxed = true)
         val owner = TestOwner()
         val observer = ConnectionForegroundObserver(hub)
         owner.registry.addObserver(observer)

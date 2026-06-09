@@ -34,7 +34,7 @@ data class ConnectionSummary(
 )
 
 @Singleton
-class ConnectionHub
+class ConnectionCoordinator
     @Inject
     constructor(
         private val satellite: SatelliteConnectionManager,

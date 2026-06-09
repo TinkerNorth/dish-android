@@ -134,12 +134,6 @@ The combine runs on whichever dispatcher `upstream` is collected on
 (by default the composer's `scope` dispatcher). UI consumers `collect`
 on `Main`.
 
-`ConnectionHub` is the coordinator over `SlotBindingStore`,
-`ControllerTypeStore`, and `ConnectionsComposer`. Its
-`connections` field is `composer.state` *directly* — no hub-local
-mirror, which would create a two-writer race between the composer's
-`onEach` and the hub's imperative `bind`/`unbind` paths.
-
 ### `Repository<K, V>` / `KeyedRepository<K, V>`
 
 Synchronous CRUD over a single durable backing store. Lives in
@@ -167,6 +161,114 @@ for older satellites (see `DiscoveredServer.stableKey`). Keying on the stable
 id is what stops a receiver's DHCP address change spawning a duplicate row. The
 Bluetooth id is `bt:<MAC>`. The distinct `removeValue` name is
 deliberate: it avoids a JVM-erasure clash with `remove(K)`.
+
+## Patterns beyond the base classes
+
+The three base classes cover owned state, derived state, and storage.
+Five more patterns recur often enough to name, even though four are
+conventions (plus one small base class) rather than a shared
+supertype. Pick the one that matches what a class actually does: most
+architectural drift is a class wearing the wrong one of these.
+
+### Coordinator
+
+Imperative orchestration over several sources, stores, or gateways. A
+coordinator owns the cross-cutting commands (bind a slot, connect a
+satellite, auto-reconnect) and the invariants that span more than one
+store. It does not derive state (that is a composer) and it is not a
+lifecycle actuator (that is a controller).
+
+- `ConnectionCoordinator` sequences `SlotBindingStore`,
+  `ControllerTypeStore`, and each `SatelliteConnection`, and re-exposes
+  `ConnectionsComposer.state` as `connections` directly: no
+  coordinator-local mirror, which would create a two-writer race with
+  the composer's `onEach`.
+- `SatelliteConnectionManager` owns the connect/pair/retry lifecycle
+  and the live `SatelliteConnection` map.
+
+Rule: a coordinator may read flows and call commands, but it never
+becomes the source of truth for state another class already owns.
+
+### Gateway
+
+The boundary to something outside the process (a socket, an HTTP
+endpoint, the native library) behind a narrow Kotlin surface. A
+gateway holds no domain state and never derives: it translates a call
+into IO and back.
+
+- `DiscoveryGateway` serializes native discovery and per-host HTTP.
+- `SatelliteHttpClient` is the HTTPS gateway. The self-signed-cert
+  trust manager and trust-on-first-use pinning live here, not in
+  callers.
+- The JNI wrappers (`ControllerRepository`, `PhysicalInputNative`) are
+  gateways over `SatelliteNative`.
+
+A gateway is mockable by construction: callers depend on the gateway
+type, never on the raw socket or JNI object, so a test injects a fake.
+Name it `*Gateway` or `*Client`, never `*Repository`: a repository is
+keyed local storage, not an IO boundary.
+
+### Reducer (pure transition or decision function)
+
+A pure `(state, event) -> result` (or `(inputs) -> decision`) function
+with sealed input and output types and no side effects, so the whole
+decision space is unit-testable without standing up the machine.
+Effects are returned as data and executed by the caller.
+
+- `UsbPathMachine.reduce(UsbController, UsbEvent): Reduction` is the
+  canonical full state machine: every `(phase x event)` pair is total,
+  and effects (`Claim`, `SetPref`, `MarkFailure`, and so on) are a
+  returned list the coordinator runs.
+- `reconcileSlots`, `resolveRumble`, `resolvePathChoice`, and the
+  registry's placeholder-lifecycle transition are smaller pure decision
+  functions lifted out of Android- or JNI-coupled coordinators for the
+  same reason.
+
+Rule: keep the transition pure. If you need a socket or a StateFlow
+read inside the function, you are writing a coordinator, not a reducer:
+read the live state once at the call site and pass it in.
+
+### Mapper
+
+A pure function from domain state to a UI or value shape, with no
+Android view types. Mappers are the testable seam under the
+humble-object Activities and Views.
+
+- `PathCardMapper`, `motionIndicatorFor`, `satelliteLinkState`,
+  `connectionsVisibleInPicker`.
+
+Rule: a mapper takes data in and returns data out. The moment it
+touches a `View`, a `Context` for anything but `getString`, or a
+StateFlow, it has stopped being a mapper.
+
+### `AbstractController<S>`
+
+A lifecycle actuator: it subscribes to one upstream `Flow<S>` and
+turns each value into a side effect (a wakelock, a foreground service,
+a Crashlytics opt-in). It is the mirror image of a composer: a composer
+derives state from inputs, a controller drives effects from state.
+
+The base (`architecture/abstracts/AbstractController.kt`) provides:
+
+- `protected abstract fun upstream(): Flow<S>` and
+  `protected abstract fun apply(value: S)`.
+- an idempotent `onStart` (re-entrant lifecycle callbacks do not stack
+  collectors), an `onStarting()` hook for setup a subclass must run
+  under its own lock before the collector launches, and a
+  `cancelCollection()` helper.
+- an open `onStop`, because teardown genuinely differs:
+  `WakeStateController` cancels and releases its wakelock under the
+  `stopped` guard that drops a post-stop emission;
+  `StreamingServiceController` cancels and stops the service;
+  `CrashReportingController` deliberately does not cancel, so the
+  opt-in survives an Activity restart.
+
+Harness: `ControllerProbe` (`architecture/testing/`), the controller
+analogue of `ComposerProbe` and `StateSourceProbe`.
+
+Rule: if a class both derives a value and effects something, split it
+(derive in a composer, effect in a controller) rather than collapsing
+the two.
 
 ## Multi-session model
 
@@ -225,7 +327,7 @@ Key invariants:
   entry. The UI sees a single stable row.
 - **Stale markers.** `BluetoothBondMonitor` reports `KEY_MISSING` or
   unexpected `BOND_NONE` for remembered MACs; the registry surfaces
-  these as a `Stale` lift on `ConnectionHub`. `KEY_MISSING` is the
+  these as a `Stale` lift on `ConnectionCoordinator`. `KEY_MISSING` is the
   more specific signal — if both arrive for the same host, the
   registry promotes `BOND_REMOVED` to `KEY_MISSING` so the user
   copy reads *"Re-pair X"* instead of the weaker *"X was unpaired"*.

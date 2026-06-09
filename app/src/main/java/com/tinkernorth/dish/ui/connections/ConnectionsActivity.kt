@@ -32,7 +32,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
@@ -84,7 +84,7 @@ class ConnectionsActivity : AppCompatActivity() {
 
     @Inject lateinit var btScanner: BluetoothDeviceScanner
 
-    @Inject lateinit var hub: ConnectionHub
+    @Inject lateinit var hub: ConnectionCoordinator
 
     @Inject lateinit var store: com.tinkernorth.dish.repository.ConnectionStore
 

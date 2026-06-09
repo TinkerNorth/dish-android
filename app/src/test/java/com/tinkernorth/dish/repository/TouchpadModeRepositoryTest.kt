@@ -82,6 +82,26 @@ class TouchpadModeRepositoryTest {
     }
 
     @Test
+    fun `put of an invalid mode does not round-trip`() {
+        val (ctx, _) = fakePrefs()
+        val repo = TouchpadModeRepository(ctx, json)
+        repo.put(TouchpadModePreference("sat-a", "garbage"))
+
+        // Rejected at the door: nothing persisted, so a typo cannot survive a reload.
+        assertNull(repo.get("sat-a"))
+        assertTrue(repo.all().isEmpty())
+    }
+
+    @Test
+    fun `put of an invalid mode does not overwrite an existing valid mode`() {
+        val (ctx, _) = fakePrefs()
+        val repo = TouchpadModeRepository(ctx, json)
+        repo.put(TouchpadModePreference("sat-a", TouchpadModeValue.DS4))
+        repo.put(TouchpadModePreference("sat-a", "garbage"))
+        assertEquals(TouchpadModeValue.DS4, repo.get("sat-a")?.mode)
+    }
+
+    @Test
     fun `remove of one satellite does not disturb other satellites' modes`() {
         val (ctx, _) = fakePrefs()
         val repo = TouchpadModeRepository(ctx, json)

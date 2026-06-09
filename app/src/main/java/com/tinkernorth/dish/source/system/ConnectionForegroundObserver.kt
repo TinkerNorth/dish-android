@@ -4,7 +4,7 @@ package com.tinkernorth.dish.source.system
 
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
-import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.composer.ConnectionCoordinator
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -12,7 +12,7 @@ import javax.inject.Singleton
 class ConnectionForegroundObserver
     @Inject
     constructor(
-        private val hub: ConnectionHub,
+        private val hub: ConnectionCoordinator,
     ) : DefaultLifecycleObserver {
         override fun onStart(owner: LifecycleOwner) {
             hub.autoReconnectAll()

@@ -31,7 +31,7 @@ class WakeStateControllerTest {
     private lateinit var context: Context
     private lateinit var powerManager: PowerManager
     private lateinit var wakeLock: PowerManager.WakeLock
-    private lateinit var hub: ConnectionHub
+    private lateinit var hub: ConnectionCoordinator
     private lateinit var scope: TestScope
 
     private val bindingsFlow = MutableStateFlow<Map<String, String>>(emptyMap())

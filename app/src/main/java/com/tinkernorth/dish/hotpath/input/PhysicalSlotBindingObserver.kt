@@ -4,7 +4,7 @@ package com.tinkernorth.dish.hotpath.input
 
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
-import com.tinkernorth.dish.composer.ConnectionHub
+import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
@@ -117,7 +117,7 @@ class PhysicalSlotBindingObserver
     @Inject
     constructor(
         private val registry: PhysicalGamepadRegistry,
-        private val hub: ConnectionHub,
+        private val hub: ConnectionCoordinator,
         private val satellite: SatelliteConnectionManager,
         private val bt: BluetoothGamepadRegistry,
         private val scope: CoroutineScope,
