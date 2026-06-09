@@ -7,7 +7,6 @@ import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -16,7 +15,6 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,10 +22,13 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
-import androidx.core.view.isNotEmpty
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.recyclerview.widget.ConcatAdapter
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.SimpleItemAnimator
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
@@ -42,7 +43,6 @@ import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.DiscoverySource
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.databinding.ActivityConnectionsBinding
-import com.tinkernorth.dish.databinding.RowConnectionBinding
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
 import com.tinkernorth.dish.repository.ConnectionStore
@@ -61,15 +61,12 @@ import com.tinkernorth.dish.source.system.BluetoothPermissionState
 import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
 import com.tinkernorth.dish.source.system.NetworkState
 import com.tinkernorth.dish.source.system.NetworkStateObserver
+import com.tinkernorth.dish.ui.common.StaticViewAdapter
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachDonatePill
 import com.tinkernorth.dish.ui.common.attachGamepadHost
-import com.tinkernorth.dish.ui.common.dotColorForState
-import com.tinkernorth.dish.ui.common.glyphForConnection
-import com.tinkernorth.dish.ui.common.setLoading
 import com.tinkernorth.dish.ui.common.setupDishToolbar
-import com.tinkernorth.dish.ui.common.statusChipText
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -102,6 +99,64 @@ class ConnectionsActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityConnectionsBinding
     private lateinit var gamepadHost: GamepadActivityHost
+
+    private lateinit var satelliteHeader: SectionHeaderAdapter
+    private lateinit var bluetoothHeader: SectionHeaderAdapter
+    private lateinit var satelliteList: SatelliteListAdapter
+    private lateinit var bluetoothList: BluetoothListAdapter
+
+    private val satelliteRowListener =
+        object : SatelliteRowListener {
+            override fun onConnect(row: SatelliteRow) {
+                when (row) {
+                    is SatelliteRow.Known -> {
+                        val remembered = satellite.remembered().firstOrNull { it.id == row.summary.id } ?: return
+                        satellite.connect(remembered.toDiscovered())
+                    }
+                    is SatelliteRow.Discovered -> satellite.connect(row.server)
+                    is SatelliteRow.Empty -> Unit
+                }
+            }
+
+            override fun onDisconnect(id: String) {
+                satellite.disconnect(id)
+            }
+
+            override fun onRepair(id: String) {
+                val remembered = satellite.remembered().firstOrNull { it.id == id } ?: return
+                showPairingDialog(remembered.toDiscovered())
+            }
+
+            override fun onForget(id: String) {
+                hub.forgetConnection(id)
+            }
+        }
+
+    private val bluetoothRowListener =
+        object : BluetoothRowListener {
+            override fun onConnect(id: String) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) btRegistry.tryAutoReconnect(id)
+            }
+
+            override fun onDisconnect(id: String) {
+                btRegistry.stop(id)
+            }
+
+            override fun onRepair(id: String) {
+                val entry = store.rememberedBt().firstOrNull { it.id == id } ?: return
+                openBluetoothDeviceDetails(entry.mac)
+            }
+
+            override fun onSecondary(summary: ConnectionSummary) {
+                val remembered = store.rememberedBt().firstOrNull { it.id == summary.id }
+                if (remembered != null) {
+                    confirmForgetBt(summary.id, remembered)
+                } else {
+                    btRegistry.stop(summary.id)
+                    render()
+                }
+            }
+        }
 
     private var btAdapterBannerId: Long? = null
     private var btPermissionBannerId: Long? = null
@@ -167,7 +222,7 @@ class ConnectionsActivity : AppCompatActivity() {
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()
         attachDonatePill()
-        bindSectionHeaders()
+        setupList()
 
         observeSatelliteHub()
         observeSystemStateBanners()
@@ -194,7 +249,7 @@ class ConnectionsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 hub.connections.collect { conns ->
-                    render(conns)
+                    render()
                     // Success path emits no ConnectionEvent, so observe state directly to dismiss PIN dialog.
                     val pairing = pairingServer
                     if (pairing != null) {
@@ -209,23 +264,19 @@ class ConnectionsActivity : AppCompatActivity() {
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                satellite.discoveredServers.collect { render(hub.connections.value) }
+                satellite.discoveredServers.collect { render() }
             }
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 satellite.isScanning.collect { scanning ->
-                    binding.sectionSatellites.btnSectionAction.setLoading(
-                        loading = scanning,
-                        loadingText = getString(R.string.action_scanning),
-                        restingText = getString(R.string.action_scan),
-                    )
+                    satelliteHeader.setLoading(scanning, getString(R.string.action_scanning))
                 }
             }
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                satellite.lastScanAtMs.collect { _ -> renderEmptyState() }
+                satellite.lastScanAtMs.collect { render() }
             }
         }
         lifecycleScope.launch {
@@ -298,60 +349,92 @@ class ConnectionsActivity : AppCompatActivity() {
         gamepadHost.cancelDimOnStop()
     }
 
-    private fun bindSectionHeaders() {
-        with(binding.sectionSatellites) {
-            iconSection.visibility = View.VISIBLE
-            iconSection.setImageResource(R.drawable.ic_satellite)
-            labelSection.setText(R.string.section_satellites)
-            btnSectionAction.visibility = View.VISIBLE
-            btnSectionAction.setText(R.string.action_scan)
-            btnSectionAction.setOnClickListener { satellite.startDiscovery() }
-        }
-        with(binding.sectionBluetooth) {
-            iconSection.visibility = View.VISIBLE
-            iconSection.setImageResource(R.drawable.ic_bluetooth)
-            labelSection.setText(R.string.section_bluetooth_hosts)
-            btnSectionAction.visibility = View.VISIBLE
-            btnSectionAction.setText(R.string.action_add)
-            btnSectionAction.setOnClickListener { requestBtPermissions(continueToAdd = true) }
-        }
-    }
-
-    private fun render(conns: List<ConnectionSummary>) {
-        val satConns = conns.filter { it.kind == ConnectionKind.SATELLITE }
-        val discovered = satellite.discoveredServers.value
-        val knownIds = satConns.map { it.id }.toSet()
-        val list = binding.llSatelliteList
-        list.removeAllViews()
-        satConns.forEach { list.addView(satelliteRow(it)) }
-        for (s in discovered) {
-            val id = SatelliteConnection.idFor(s)
-            if (id !in knownIds) list.addView(discoveredSatelliteRow(s))
-        }
-        renderEmptyState()
-
-        val btConns = conns.filter { it.kind == ConnectionKind.BLUETOOTH }
-        binding.llBtList.removeAllViews()
-        btConns.forEach { binding.llBtList.addView(btRow(it)) }
-        binding.tvBtEmpty.visibility =
-            if (btConns.isEmpty()) View.VISIBLE else View.GONE
-    }
-
-    private fun renderEmptyState() {
-        val hasRows = binding.llSatelliteList.isNotEmpty()
-        if (hasRows) {
-            binding.tvSatelliteEmpty.visibility = View.GONE
+    private fun setupList() {
+        satelliteHeader =
+            SectionHeaderAdapter(
+                R.drawable.ic_satellite,
+                R.string.section_satellites,
+                R.string.action_scan,
+            ) { satellite.startDiscovery() }
+        bluetoothHeader =
+            SectionHeaderAdapter(
+                R.drawable.ic_bluetooth,
+                R.string.section_bluetooth_hosts,
+                R.string.action_add,
+            ) { requestBtPermissions(continueToAdd = true) }
+        satelliteList = SatelliteListAdapter(satelliteRowListener)
+        bluetoothList = BluetoothListAdapter(bluetoothRowListener)
+        val single = binding.rvConnections
+        if (single != null) {
+            single.bindConnectionColumn(
+                ConcatAdapter(
+                    satelliteHeader,
+                    satelliteList,
+                    StaticViewAdapter(R.layout.item_connection_divider),
+                    bluetoothHeader,
+                    bluetoothList,
+                ),
+            )
             return
         }
-        binding.tvSatelliteEmpty.visibility = View.VISIBLE
-        val lastScan = satellite.lastScanAtMs.value
-        binding.tvSatelliteEmpty.text =
-            if (lastScan == null) {
-                getString(R.string.discovery_empty_never_scanned)
-            } else {
-                val time = formatClock(lastScan)
-                getString(R.string.discovery_empty_no_results, time)
+        binding.rvSatellites?.bindConnectionColumn(ConcatAdapter(satelliteHeader, satelliteList))
+        binding.rvBluetooth?.bindConnectionColumn(ConcatAdapter(bluetoothHeader, bluetoothList))
+    }
+
+    private fun RecyclerView.bindConnectionColumn(concat: ConcatAdapter) {
+        layoutManager = LinearLayoutManager(this@ConnectionsActivity)
+        adapter = concat
+        setHasFixedSize(true)
+        (itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
+    }
+
+    private fun render() {
+        val conns = hub.connections.value
+        renderSatellites(conns)
+        renderBluetooth(conns)
+    }
+
+    private fun renderSatellites(conns: List<ConnectionSummary>) {
+        val satConns = conns.filter { it.kind == ConnectionKind.SATELLITE }
+        val knownIds = satConns.mapTo(mutableSetOf()) { it.id }
+        val rows =
+            buildList {
+                satConns.forEach { add(SatelliteRow.Known(it)) }
+                satellite.discoveredServers.value.forEach { server ->
+                    if (SatelliteConnection.idFor(server) !in knownIds) add(SatelliteRow.Discovered(server))
+                }
             }
+        satelliteList.submitList(rows.ifEmpty { listOf(SatelliteRow.Empty(satelliteEmptyMessage())) })
+    }
+
+    private fun satelliteEmptyMessage(): String {
+        val lastScan = satellite.lastScanAtMs.value ?: return getString(R.string.discovery_empty_never_scanned)
+        return getString(R.string.discovery_empty_no_results, formatClock(lastScan))
+    }
+
+    private fun renderBluetooth(conns: List<ConnectionSummary>) {
+        val rows =
+            conns
+                .filter { it.kind == ConnectionKind.BLUETOOTH }
+                .map { c ->
+                    BluetoothRow.Item(
+                        BtRowUi(
+                            summary = c,
+                            connectingLabel = if (c.live == LinkState.Connecting) btConnectingLabel(c.id) else null,
+                            secondaryIsForget = store.rememberedBt().any { it.id == c.id },
+                        ),
+                    )
+                }
+        bluetoothList.submitList(rows.ifEmpty { listOf(BluetoothRow.Empty(getString(R.string.bt_hosts_empty))) })
+    }
+
+    private fun btConnectingLabel(id: String): String {
+        val state = btRegistry.state(id)
+        return when {
+            state.registered -> getString(R.string.bt_row_pair_from_host)
+            state.acquiring -> getString(R.string.bt_row_acquiring)
+            else -> getString(R.string.bt_row_waiting)
+        }
     }
 
     private fun formatClock(epochMs: Long): String {
@@ -363,125 +446,6 @@ class ConnectionsActivity : AppCompatActivity() {
             cal.get(java.util.Calendar.HOUR_OF_DAY),
             cal.get(java.util.Calendar.MINUTE),
         )
-    }
-
-    private fun satelliteRow(c: ConnectionSummary): View {
-        val rb =
-            inflateRow(
-                binding.llSatelliteList,
-                c.label,
-                c.detail,
-                statusChipText(this, c.live),
-                kind = ConnectionKind.SATELLITE,
-                state = c.live,
-            )
-        when (c.live) {
-            LinkState.Connected, LinkState.Unstable -> {
-                rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = getString(R.string.action_disconnect))
-                rb.btnRowAction.setOnClickListener { satellite.disconnect(c.id) }
-            }
-            LinkState.Connecting -> {
-                rb.btnRowAction.setLoading(
-                    loading = true,
-                    loadingText = getString(R.string.chip_status_connecting),
-                    restingText = getString(R.string.action_connect),
-                )
-                rb.btnRowAction.setOnClickListener(null)
-            }
-            LinkState.Stale -> {
-                rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = getString(R.string.action_repair_short))
-                rb.btnRowAction.setOnClickListener {
-                    val remembered =
-                        satellite.remembered().firstOrNull { it.id == c.id } ?: return@setOnClickListener
-                    showPairingDialog(remembered.toDiscovered())
-                }
-            }
-            LinkState.Saved, LinkState.Ready, LinkState.Found -> {
-                rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = getString(R.string.action_connect))
-                rb.btnRowAction.setOnClickListener {
-                    val remembered = satellite.remembered().firstOrNull { it.id == c.id } ?: return@setOnClickListener
-                    satellite.connect(remembered.toDiscovered())
-                }
-            }
-        }
-        rb.btnRowSecondary.visibility = View.VISIBLE
-        rb.btnRowSecondary.text = getString(R.string.action_forget_short)
-        rb.btnRowSecondary.setOnClickListener { hub.forgetConnection(c.id) }
-        return rb.root
-    }
-
-    private fun discoveredSatelliteRow(s: com.tinkernorth.dish.core.model.DiscoveredServer): View {
-        val rb =
-            inflateRow(
-                binding.llSatelliteList,
-                s.name.ifEmpty { s.ip },
-                getString(R.string.discovered_row_detail, s.ip, s.udpPort),
-                getString(R.string.discovered_row_status, getString(s.source.labelRes)),
-                kind = ConnectionKind.SATELLITE,
-                state = LinkState.Found,
-            )
-        rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = getString(R.string.action_connect))
-        rb.btnRowAction.setOnClickListener { satellite.connect(s) }
-        return rb.root
-    }
-
-    private fun btRow(c: ConnectionSummary): View {
-        val rb =
-            inflateRow(
-                binding.llBtList,
-                c.label,
-                c.detail,
-                statusChipText(this, c.live),
-                kind = ConnectionKind.BLUETOOTH,
-                state = c.live,
-            )
-        when (c.live) {
-            LinkState.Connected, LinkState.Unstable -> {
-                rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = getString(R.string.action_disconnect))
-                rb.btnRowAction.setOnClickListener { btRegistry.stop(c.id) }
-            }
-            LinkState.Connecting -> {
-                val state = btRegistry.state(c.id)
-                val label =
-                    when {
-                        state.registered -> getString(R.string.bt_row_pair_from_host)
-                        state.acquiring -> getString(R.string.bt_row_acquiring)
-                        else -> getString(R.string.bt_row_waiting)
-                    }
-                rb.btnRowAction.setLoading(
-                    loading = true,
-                    loadingText = label,
-                    restingText = getString(R.string.action_connect),
-                )
-                rb.btnRowAction.setOnClickListener(null)
-            }
-            LinkState.Stale -> {
-                rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = getString(R.string.action_repair_short))
-                rb.btnRowAction.setOnClickListener {
-                    val entry = store.rememberedBt().firstOrNull { it.id == c.id } ?: return@setOnClickListener
-                    openBluetoothDeviceDetails(entry.mac)
-                }
-            }
-            LinkState.Saved, LinkState.Ready, LinkState.Found -> {
-                rb.btnRowAction.setLoading(loading = false, loadingText = "", restingText = getString(R.string.action_connect))
-                rb.btnRowAction.setOnClickListener {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) btRegistry.tryAutoReconnect(c.id)
-                }
-            }
-        }
-        rb.btnRowSecondary.visibility = View.VISIBLE
-        val rememberedEntry = store.rememberedBt().firstOrNull { it.id == c.id }
-        val isRemembered = rememberedEntry != null
-        rb.btnRowSecondary.text = getString(if (isRemembered) R.string.action_forget_short else R.string.action_cancel)
-        rb.btnRowSecondary.setOnClickListener {
-            if (isRemembered) {
-                confirmForgetBt(c.id, rememberedEntry)
-            } else {
-                btRegistry.stop(c.id)
-                render(hub.connections.value)
-            }
-        }
-        return rb.root
     }
 
     private fun confirmForgetBt(
@@ -503,7 +467,7 @@ class ConnectionsActivity : AppCompatActivity() {
     private fun commitForgetBt(id: String) {
         btRegistry.stop(id)
         hub.forgetConnection(id)
-        render(hub.connections.value)
+        render()
     }
 
     private fun openBluetoothDeviceDetails(mac: String) {
@@ -519,23 +483,6 @@ class ConnectionsActivity : AppCompatActivity() {
             }
         runCatching { startActivity(deepLink) }
             .onFailure { startActivity(fallback) }
-    }
-
-    private fun inflateRow(
-        parent: ViewGroup,
-        title: String,
-        detail: String,
-        status: String,
-        kind: ConnectionKind,
-        state: LinkState,
-    ): RowConnectionBinding {
-        val rb = RowConnectionBinding.inflate(layoutInflater, parent, false)
-        rb.tvRowTitle.text = title
-        rb.tvRowDetail.text = detail
-        rb.tvRowStatus.text = status
-        (rb.dotRow.background as GradientDrawable).setColor(getColor(dotColorForState(state)))
-        rb.ivRowGlyph.setImageResource(glyphForConnection(kind, state))
-        return rb
     }
 
     private fun requestBtPermissions(continueToAdd: Boolean) {

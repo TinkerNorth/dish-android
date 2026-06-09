@@ -128,6 +128,7 @@ class MainActivity :
         binding.sectionControllers.labelSection.setText(R.string.section_controllers)
         binding.ivConnectionsLoading.setImageDrawable(connectionsSpinner)
         binding.rvControllers.adapter = controllerAdapter
+        binding.rvControllers.setHasFixedSize(true)
         (binding.rvControllers.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
             ?.supportsChangeAnimations = false
         binding.btnManageConnections.setOnClickListener { nav.toConnections() }

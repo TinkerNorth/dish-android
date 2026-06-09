@@ -23,67 +23,18 @@
             android:paddingHorizontal="@dimen/spacing_5xl"
             android:paddingVertical="@dimen/spacing_3xl">
 
-            <androidx.core.widget.NestedScrollView
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvSatellites"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:layout_marginEnd="@dimen/spacing_5xl">
+                android:layout_marginEnd="@dimen/spacing_5xl" />
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical">
-
-                    <include
-                        android:id="@+id/sectionSatellites"
-                        layout="@layout/section_header"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content" />
-
-                    <LinearLayout
-                        android:id="@+id/llSatelliteList"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:paddingTop="@dimen/spacing_md" />
-
-                    <TextView
-                        android:id="@+id/tvSatelliteEmpty"
-                        style="@style/Widget.Dish.EmptyStateText.Section"
-                        android:text="@string/discovery_empty_never_scanned"
-                        android:visibility="gone" />
-                </LinearLayout>
-            </androidx.core.widget.NestedScrollView>
-
-            <androidx.core.widget.NestedScrollView
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvBluetooth"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:layout_weight="1">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical">
-
-                    <include
-                        android:id="@+id/sectionBluetooth"
-                        layout="@layout/section_header"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content" />
-
-                    <LinearLayout
-                        android:id="@+id/llBtList"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:paddingTop="@dimen/spacing_md" />
-
-                    <TextView
-                        android:id="@+id/tvBtEmpty"
-                        style="@style/Widget.Dish.EmptyStateText.Section"
-                        android:text="@string/bt_hosts_empty" />
-                </LinearLayout>
-            </androidx.core.widget.NestedScrollView>
+                android:layout_weight="1" />
         </LinearLayout>
     </LinearLayout>
 

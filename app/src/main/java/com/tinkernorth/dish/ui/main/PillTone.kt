@@ -22,7 +22,28 @@ internal enum class PillTone(
     OFF(R.drawable.bg_binding_pill_off, R.color.colorMuted),
 }
 
+internal data class PillSpec(
+    val text: String,
+    @DrawableRes val icon: Int?,
+    val tone: PillTone,
+)
+
 private const val PILL_ALPHA_OFF = 0.6f
+
+internal fun BindingPillBinding.bindPill(spec: PillSpec) {
+    val fg = root.context.getColor(spec.tone.foreground)
+    tvPillText.text = spec.text
+    tvPillText.setTextColor(fg)
+    root.setBackgroundResource(spec.tone.background)
+    if (spec.icon != null) {
+        ivPillIcon.visibility = View.VISIBLE
+        ivPillIcon.setImageResource(spec.icon)
+        ivPillIcon.imageTintList = ColorStateList.valueOf(fg)
+    } else {
+        ivPillIcon.visibility = View.GONE
+    }
+    root.alpha = if (spec.tone == PillTone.OFF) PILL_ALPHA_OFF else 1f
+}
 
 internal fun ViewGroup.inflateBindingPill(
     text: String,
@@ -30,16 +51,6 @@ internal fun ViewGroup.inflateBindingPill(
     tone: PillTone,
 ): View {
     val b = BindingPillBinding.inflate(LayoutInflater.from(context), this, false)
-    b.tvPillText.text = text
-    b.root.setBackgroundResource(tone.background)
-    val fg = context.getColor(tone.foreground)
-    b.tvPillText.setTextColor(fg)
-    if (icon != null) {
-        b.ivPillIcon.setImageResource(icon)
-        b.ivPillIcon.imageTintList = ColorStateList.valueOf(fg)
-    } else {
-        b.ivPillIcon.visibility = View.GONE
-    }
-    b.root.alpha = if (tone == PillTone.OFF) PILL_ALPHA_OFF else 1f
+    b.bindPill(PillSpec(text, icon, tone))
     return b.root
 }
