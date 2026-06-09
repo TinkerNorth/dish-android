@@ -89,7 +89,7 @@ hot path takes no userspace lock.
 |---|---|---|---|
 | `0x0001` | `MSG_GAMEPAD_DATA` | 13 B | per-event XUSB report |
 | `0x0002` | `MSG_HEARTBEAT_PING` | 0 B | keepalive (250 ms cadence) |
-| `0x0004` | `MSG_CONTROLLER_ADD` | 3 B | register slot |
+| `0x0004` | `MSG_CONTROLLER_ADD` | 3–4 B | register slot |
 | `0x0005` | `MSG_CONTROLLER_REMOVE` | 1 B | unregister slot |
 | `0x0008` | `MSG_CONTROLLER_TYPE` | 2 B | Xbox vs PlayStation hint |
 | `0x000A` | `MSG_MOTION` | 17 B | IMU sample (rate-limited) |
@@ -134,12 +134,17 @@ Sticks follow the XInput convention: pushing up is **positive Y**.
 Android `AXIS_Y` is inverted (up is `-1.0f`), so the producer negates
 before scaling to `i16`.
 
-### `MSG_CONTROLLER_ADD` (0x0004) — 3 B
+### `MSG_CONTROLLER_ADD` (0x0004) — 3–4 B
 
 ```
-ctrlIdx       u8
-capabilities  u16 LE   (see "Capability bits" below)
+ctrlIdx        u8
+capabilities   u16 LE   (see "Capability bits" below)
+controllerType u8       optional: 0 = Xbox, 1 = PlayStation
 ```
+
+The optional trailing `controllerType` byte lets the receiver plug the correct
+virtual device on the first add (no follow-up `MSG_CONTROLLER_TYPE` / replug).
+Omitting it leaves the slot's existing type untouched on the receiver.
 
 ### `MSG_CONTROLLER_REMOVE` (0x0005) — 1 B
 

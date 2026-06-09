@@ -166,17 +166,13 @@ class RumbleRouter
         ) {
             val ids = mgr.vibratorIds
             if (ids.isEmpty()) return
-            val combinedBuilder = CombinedVibration.startParallel()
             val strongAmp = rumbleMagnitudeTo255(strongMagnitude)
             val weakAmp = rumbleMagnitudeTo255(weakMagnitude)
-            if (strongAmp > 0) {
-                combinedBuilder.addVibrator(ids[0], VibrationEffect.createOneShot(durationMs, strongAmp))
-            }
-            if (ids.size >= 2 && weakAmp > 0) {
-                combinedBuilder.addVibrator(ids[1], VibrationEffect.createOneShot(durationMs, weakAmp))
-            } else if (ids.size < 2 && weakAmp > 0 && strongAmp == 0) {
-                // Single actuator + weak-only: still drive ids[0], else vibrate on an empty combination is a no-op.
-                combinedBuilder.addVibrator(ids[0], VibrationEffect.createOneShot(durationMs, weakAmp))
+            val plan = combinedRumblePlan(ids.size, strongAmp, weakAmp)
+            if (plan.isEmpty()) return
+            val combinedBuilder = CombinedVibration.startParallel()
+            for ((vibratorIndex, amplitude) in plan) {
+                combinedBuilder.addVibrator(ids[vibratorIndex], VibrationEffect.createOneShot(durationMs, amplitude))
             }
             try {
                 mgr.vibrate(combinedBuilder.combine())
@@ -211,6 +207,25 @@ internal fun classifyTarget(slotId: String): RumbleTarget {
     if (slotId == VIRTUAL_SLOT_ID) return RumbleTarget.Phone
     val id = slotId.toIntOrNull() ?: return RumbleTarget.None
     return if (id < 0) RumbleTarget.DirectUsb(id) else RumbleTarget.Framework(id)
+}
+
+// Two-actuator targets separate strong to index 0 / weak to index 1; a single actuator folds to
+// max(strong, weak) so a weak-only effect is still felt. Zero amplitudes are dropped so an empty
+// vibration combination is never submitted.
+internal fun combinedRumblePlan(
+    vibratorCount: Int,
+    strongAmp: Int,
+    weakAmp: Int,
+): List<Pair<Int, Int>> {
+    if (vibratorCount <= 0) return emptyList()
+    if (vibratorCount >= 2) {
+        return buildList {
+            if (strongAmp > 0) add(0 to strongAmp)
+            if (weakAmp > 0) add(1 to weakAmp)
+        }
+    }
+    val amp = maxOf(strongAmp, weakAmp)
+    return if (amp > 0) listOf(0 to amp) else emptyList()
 }
 
 // Returns 0 only for exact zero; tiny magnitudes clamp to 1 so on/off response matches a physical pad.

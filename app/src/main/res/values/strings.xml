@@ -53,6 +53,23 @@
     <!-- Bluetooth-profile picker dialog. -->
     <string name="dialog_controller_profile_title">Controller Profile</string>
 
+    <!-- Bluetooth device picker (paired + scanned hosts). -->
+    <string name="dialog_bt_device_title">Connect to a device</string>
+    <string name="bt_wait_for_host">Wait for host</string>
+    <string name="bt_waiting_for_host_timer">Waiting for host (%1$ds)</string>
+    <string name="bt_device_empty">No devices found yet</string>
+    <string name="bt_device_tag_paired">Paired</string>
+    <string name="bt_device_tag_available">Available</string>
+    <string name="bt_scan_permission_note">Scanning needs the Nearby devices permission. Paired devices are shown without it.</string>
+
+    <!-- Add-custom-satellite dialog (manual IP + ports). -->
+    <string name="action_add_custom_satellite">Add custom satellite</string>
+    <string name="add_satellite_host_hint">IP address or hostname</string>
+    <string name="add_satellite_https_hint">HTTPS port</string>
+    <string name="add_satellite_udp_hint">UDP port</string>
+    <string name="add_satellite_error_host">Enter an IP address or hostname</string>
+    <string name="add_satellite_error_port">Enter a port from 1 to 65535</string>
+
     <!-- Discoverability-expired banner posted from ConnectionsActivity. -->
     <string name="notif_discoverability_expired_title">Discoverability expired</string>
     <string name="notif_discoverability_expired_body">No host paired in time. Re-extend to keep trying.</string>
@@ -220,6 +237,7 @@
     <string name="discovery_source_broadcast">UDP broadcast</string>
     <string name="discovery_source_mdns">mDNS</string>
     <string name="discovery_source_both">mDNS + broadcast</string>
+    <string name="discovery_source_manual">Manual</string>
 
     <!-- DishNotification action labels. Short, imperative, sentence-case
          to match the modern (M3) button label convention. -->
@@ -234,6 +252,8 @@
          across data + UI sites. -->
     <string name="notif_bt_permission_title">Bluetooth permission needed</string>
     <string name="notif_bt_permission_body">Dish needs Bluetooth access to register a controller.</string>
+    <string name="notif_bt_scan_permission_title">Allow Bluetooth scanning</string>
+    <string name="notif_bt_scan_permission_body">Grant the Nearby devices permission to find new hosts. Paired devices still work without it.</string>
     <string name="notif_bt_discoverability_denied_title">Discoverability denied</string>
     <string name="notif_bt_discoverability_denied_body">Your host can\'t see this phone until you make it discoverable.</string>
     <string name="notif_bt_adapter_off_title">Bluetooth is off</string>

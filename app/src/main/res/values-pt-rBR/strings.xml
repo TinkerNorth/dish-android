@@ -190,6 +190,22 @@
     <!-- Texto das notificações Dish. -->
     <string name="notif_bt_permission_title">Permissão de Bluetooth necessária</string>
     <string name="notif_bt_permission_body">O Dish precisa de acesso ao Bluetooth para registrar um controle.</string>
+    <string name="notif_bt_scan_permission_title">Permitir busca por Bluetooth</string>
+    <string name="notif_bt_scan_permission_body">Conceda a permissão de dispositivos por perto para encontrar novos hosts. Dispositivos pareados continuam funcionando sem ela.</string>
+    <string name="discovery_source_manual">Manual</string>
+    <string name="action_add_custom_satellite">Adicionar satélite personalizado</string>
+    <string name="add_satellite_host_hint">Endereço IP ou nome do host</string>
+    <string name="add_satellite_https_hint">Porta HTTPS</string>
+    <string name="add_satellite_udp_hint">Porta UDP</string>
+    <string name="add_satellite_error_host">Digite um endereço IP ou nome do host</string>
+    <string name="add_satellite_error_port">Digite uma porta de 1 a 65535</string>
+    <string name="dialog_bt_device_title">Conectar a um dispositivo</string>
+    <string name="bt_wait_for_host">Aguardar host</string>
+    <string name="bt_waiting_for_host_timer">Aguardando host (%1$ds)</string>
+    <string name="bt_device_empty">Nenhum dispositivo encontrado ainda</string>
+    <string name="bt_device_tag_paired">Pareado</string>
+    <string name="bt_device_tag_available">Disponível</string>
+    <string name="bt_scan_permission_note">A busca precisa da permissão de dispositivos por perto. Dispositivos pareados aparecem sem ela.</string>
     <string name="notif_bt_discoverability_denied_title">Visibilidade recusada</string>
     <string name="notif_bt_discoverability_denied_body">Seu host não consegue ver este telefone até você torná-lo visível.</string>
     <string name="notif_bt_adapter_off_title">Bluetooth desativado</string>
