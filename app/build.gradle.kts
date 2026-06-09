@@ -1,4 +1,8 @@
-import java.util.concurrent.TimeUnit
+import org.gradle.api.provider.ValueSource
+import org.gradle.api.provider.ValueSourceParameters
+import org.gradle.process.ExecOperations
+import java.io.ByteArrayOutputStream
+import javax.inject.Inject
 
 plugins {
     alias(libs.plugins.android.application)
@@ -18,38 +22,44 @@ if (firebaseEnabled) {
     apply(plugin = "com.google.firebase.crashlytics")
 }
 
+// Config-cache safe: git runs inside a ValueSource and env vars come from providers, so the version is
+// not read via process/exec state at configuration time the way System.getenv/ProcessBuilder would be.
+abstract class GitDescribeValueSource : ValueSource<String, ValueSourceParameters.None> {
+    @get:Inject abstract val execOps: ExecOperations
+
+    override fun obtain(): String {
+        val stdout = ByteArrayOutputStream()
+        val ran =
+            runCatching {
+                execOps.exec {
+                    commandLine("git", "describe", "--tags", "--match", "v*", "--abbrev=0")
+                    standardOutput = stdout
+                    errorOutput = ByteArrayOutputStream()
+                    isIgnoreExitValue = true
+                }
+            }
+        return if (ran.isSuccess) stdout.toString().trim() else ""
+    }
+}
+
 data class ResolvedVersion(
     val code: Int,
     val name: String,
 )
 
 fun resolveVersion(): ResolvedVersion {
-    System.getenv("DISH_VERSION_CODE")?.toIntOrNull()?.let { code ->
-        System.getenv("DISH_VERSION_NAME")?.takeIf { it.isNotBlank() }?.let { name ->
-            return ResolvedVersion(code, name)
-        }
-    }
-    runCatching {
-        val proc =
-            ProcessBuilder("git", "describe", "--tags", "--match", "v*", "--abbrev=0")
-                .redirectErrorStream(true)
-                .start()
-        val out =
-            proc.inputStream
-                .bufferedReader()
-                .readText()
-                .trim()
-        if (!proc.waitFor(2, TimeUnit.SECONDS) || proc.exitValue() != 0 || out.isEmpty()) {
-            return@runCatching null
-        }
-        val match = Regex("^v(\\d+)\\.(\\d+)\\.(\\d+)").find(out) ?: return@runCatching null
-        val (major, minor, patch) = match.destructured
-        ResolvedVersion(
-            code = major.toInt() * 10000 + minor.toInt() * 100 + patch.toInt(),
-            name = out.removePrefix("v"),
-        )
-    }.getOrNull()?.let { return it }
-    return ResolvedVersion(1, "1.0")
+    val envCode = providers.environmentVariable("DISH_VERSION_CODE").orNull?.toIntOrNull()
+    val envName = providers.environmentVariable("DISH_VERSION_NAME").orNull?.takeIf { it.isNotBlank() }
+    if (envCode != null && envName != null) return ResolvedVersion(envCode, envName)
+
+    val describe = providers.of(GitDescribeValueSource::class.java) {}.get()
+    val match =
+        Regex("^v(\\d+)\\.(\\d+)\\.(\\d+)").find(describe) ?: return ResolvedVersion(1, "1.0")
+    val (major, minor, patch) = match.destructured
+    return ResolvedVersion(
+        code = major.toInt() * 10000 + minor.toInt() * 100 + patch.toInt(),
+        name = describe.removePrefix("v"),
+    )
 }
 
 val resolvedVersion = resolveVersion()
@@ -93,6 +103,8 @@ android {
                 "proguard-rules.pro",
             )
             signingConfig = signingConfigs.findByName("release")
+            // Emit native-debug-symbols.zip for Play Console and strip the shipped .so.
+            ndk { debugSymbolLevel = "FULL" }
         }
     }
 
@@ -113,7 +125,8 @@ android {
     }
     packaging {
         jniLibs {
-            useLegacyPackaging = true
+            // Map the 16KB-aligned .so straight from the APK instead of extracting to disk on install.
+            useLegacyPackaging = false
         }
     }
     externalNativeBuild {
@@ -254,6 +267,9 @@ tasks.register("generateLicenseManifest") {
     group = "build"
     description =
         "Generate src/main/assets/licenses/licenses.json from the release runtime classpath POMs."
+    // Resolves dependency POM metadata at execution time: degrade gracefully (skip the cache for this
+    // build) rather than failing config-cache, leaving the license/resource generation logic untouched.
+    notCompatibleWithConfigurationCache("Resolves dependency POM metadata at execution time.")
 
     outputs.file(licensesOutputFile)
 

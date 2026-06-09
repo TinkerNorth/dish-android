@@ -31,6 +31,7 @@
 
 #include "dispatch.h"
 #include "gamepad_input.h"
+#include "thread_priority.h"
 #include "usb_host.h"
 #include "usb_parsers.h"
 #include "wire_encoders.h"
@@ -159,6 +160,7 @@ static void btDispatchLoop() {
         LOGE("btDispatchLoop: AttachCurrentThread failed");
         return;
     }
+    dish::elevateCurrentThreadToInputPriority();
     LOGI("BT dispatch thread started");
     while (g_btDispatchRunning.load(std::memory_order_relaxed)) {
         BtReport r;

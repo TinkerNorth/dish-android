@@ -19,6 +19,7 @@
 
 #include "dispatch.h"
 #include "gamepad_input.h"
+#include "thread_priority.h"
 #include "usb_parsers.h"
 
 #define TAG "SatelliteUsbHost"
@@ -84,6 +85,7 @@ struct UrbSlot {
 };
 
 void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
+    dish::elevateCurrentThreadToInputPriority();
     std::unique_ptr<UrbSlot> slotStorage[kInFlightUrbs];
     UrbSlot* slots[kInFlightUrbs];
     for (int i = 0; i < kInFlightUrbs; i++) {

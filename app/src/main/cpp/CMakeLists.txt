@@ -55,7 +55,9 @@ target_compile_definitions(sodium_static PRIVATE
     __STDC_LIMIT_MACROS=1
     __STDC_CONSTANT_MACROS=1
 )
-target_compile_options(sodium_static PRIVATE -O2 -fvisibility=hidden -Wno-unused-function -Wno-unused-variable)
+target_compile_options(sodium_static PRIVATE
+    $<IF:$<CONFIG:Debug>,-O0,-O3>
+    -fvisibility=hidden -Wno-unused-function -Wno-unused-variable)
 
 # ── Main satellite library ──────────────────────────────────────────────────
 add_library(satellite SHARED
@@ -64,8 +66,18 @@ add_library(satellite SHARED
     usb_host.cpp
     usb_parsers.cpp)
 
-target_compile_options(satellite PRIVATE -O2 -Wall -Wextra -Wpedantic)
-target_link_options(satellite PRIVATE "-Wl,-z,max-page-size=16384")
+# Release (RelWithDebInfo) is the streaming hot path: -O3 + ThinLTO cross-inlines the JNI dispatch,
+# parsers, and encoders; --gc-sections drops the dead code that opens up. Debug stays -O0 for fast
+# iteration (AGP still supplies -g).
+target_compile_options(satellite PRIVATE
+    $<IF:$<CONFIG:Debug>,-O0,-O3>
+    $<$<NOT:$<CONFIG:Debug>>:-flto=thin>
+    -ffunction-sections -fdata-sections
+    -Wall -Wextra -Wpedantic)
+target_link_options(satellite PRIVATE
+    "-Wl,-z,max-page-size=16384"
+    -Wl,--gc-sections
+    $<$<NOT:$<CONFIG:Debug>>:-flto=thin>)
 
 target_link_libraries(satellite
     log

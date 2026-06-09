@@ -2,6 +2,9 @@
 
 package com.tinkernorth.dish.hotpath.overlay
 
+import android.os.Build
+import android.os.PowerManager
+import android.view.Display
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -36,6 +39,8 @@ class GamepadActivityHost(
     private val countdownBannerView: View
     private var notificationsAttachment: DishNotifications.Attachment? = null
     private var snackbarAnchorJob: Job? = null
+    private var unbufferedJoystickRequested = false
+    private var performanceHintsApplied = false
 
     init {
         val overlay = OverlayLowPowerBinding.bind(rootView)
@@ -99,8 +104,12 @@ class GamepadActivityHost(
 
     fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
         val isJoy =
-            (event.source and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK ||
+            isJoystickMotionSource(event.source) ||
                 event.deviceId in gamepadRegistry.devices.value
+        if (shouldRequestUnbufferedJoystick(isJoy, unbufferedJoystickRequested)) {
+            unbufferedJoystickRequested = true
+            requestUnbufferedJoystickDispatch(event)
+        }
         return isJoy &&
             SatelliteNative.processGamepadMotionEvent(
                 event.deviceId,
@@ -135,7 +144,13 @@ class GamepadActivityHost(
 
     // Release reports on focus loss so no button stays held across shades, calls, or back-button nav.
     fun onWindowFocusChanged(hasFocus: Boolean) {
-        if (!hasFocus) SatelliteNative.releaseAllPhysicalReports()
+        if (!hasFocus) {
+            SatelliteNative.releaseAllPhysicalReports()
+            return
+        }
+        if (performanceHintsApplied) return
+        performanceHintsApplied = true
+        applyPerformanceWindowHints()
     }
 
     private fun applyScreenOn(active: Boolean) {
@@ -150,4 +165,41 @@ class GamepadActivityHost(
     private fun isGamepadSource(source: Int): Boolean =
         (source and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
             (source and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+
+    // Joystick MotionEvents are vsync-batched by default; unbuffered dispatch delivers each sample as it lands.
+    private fun requestUnbufferedJoystickDispatch(event: MotionEvent) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            rootView.requestUnbufferedDispatch(InputDevice.SOURCE_CLASS_JOYSTICK)
+        } else {
+            rootView.requestUnbufferedDispatch(event)
+        }
+    }
+
+    private fun applyPerformanceWindowHints() {
+        val powerManager = activity.getSystemService(PowerManager::class.java)
+        // Trade peak clock for a stable one so latency doesn't drift as the SoC heats over a long session.
+        if (powerManager?.isSustainedPerformanceModeSupported == true) {
+            window.setSustainedPerformanceMode(true)
+        }
+        val display = currentDisplay() ?: return
+        val current = display.mode ?: return
+        val modeId =
+            highestRefreshRateModeId(
+                display.supportedModes.map { it.toInfo() },
+                current.toInfo(),
+            )
+        if (modeId != 0) {
+            window.attributes = window.attributes.apply { preferredDisplayModeId = modeId }
+        }
+    }
+
+    private fun currentDisplay(): Display? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            activity.display
+        } else {
+            @Suppress("DEPRECATION")
+            activity.windowManager.defaultDisplay
+        }
+
+    private fun Display.Mode.toInfo(): DisplayModeInfo = DisplayModeInfo(modeId, physicalWidth, physicalHeight, refreshRate)
 }

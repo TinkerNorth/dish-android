@@ -3,6 +3,8 @@
 package com.tinkernorth.dish.composer
 
 import android.content.Context
+import android.net.wifi.WifiManager
+import android.os.Build
 import android.os.PowerManager
 import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.architecture.abstracts.AbstractController
@@ -26,6 +28,9 @@ class WakeStateController
         private val powerManager =
             context.getSystemService(Context.POWER_SERVICE) as PowerManager
 
+        private val wifiManager =
+            context.getSystemService(Context.WIFI_SERVICE) as WifiManager
+
         private val _streamingSlotCount = MutableStateFlow(0)
         val streamingSlotCount: StateFlow<Int> = _streamingSlotCount.asStateFlow()
 
@@ -34,6 +39,7 @@ class WakeStateController
 
         private val lock = Any()
         private var wakeLock: PowerManager.WakeLock? = null
+        private var wifiLock: WifiManager.WifiLock? = null
         private var stopped = false
 
         override fun upstream(): Flow<WakeState> = composer.state
@@ -73,18 +79,35 @@ class WakeStateController
                 powerManager
                     .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
                     .apply { acquire(WAKE_LOCK_TIMEOUT_MS) }
+            // Keep the radio out of Wi-Fi power-save so input/rumble packets aren't delayed by PSM wakeups.
+            wifiLock =
+                wifiManager
+                    .createWifiLock(wifiLockMode(Build.VERSION.SDK_INT), WIFI_LOCK_TAG)
+                    .apply { acquire() }
         }
 
         // Call under [lock] only.
         private fun release() {
             wakeLock?.let { if (it.isHeld) it.release() }
             wakeLock = null
+            wifiLock?.let { if (it.isHeld) it.release() }
+            wifiLock = null
         }
 
         private companion object {
             const val WAKE_LOCK_TAG = "Dish::ControllerStream"
+            const val WIFI_LOCK_TAG = "Dish::ControllerWifi"
 
             // OS safety-net release; foreground service is the actual session keep-alive.
             const val WAKE_LOCK_TIMEOUT_MS = 60L * 60L * 1000L
         }
+    }
+
+// WIFI_MODE_FULL_LOW_LATENCY disables Wi-Fi power-save for real-time traffic; HIGH_PERF is the pre-29 fallback.
+internal fun wifiLockMode(sdkInt: Int): Int =
+    if (sdkInt >= Build.VERSION_CODES.Q) {
+        WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+    } else {
+        @Suppress("DEPRECATION")
+        WifiManager.WIFI_MODE_FULL_HIGH_PERF
     }
