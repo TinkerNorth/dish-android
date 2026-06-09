@@ -132,6 +132,33 @@ class ConnectionCoordinatorTest {
         }
 
     @Test
+    fun `forgetConnection clears the binding and type then forgets the satellite`() {
+        val hub = buildHub()
+        hub.bind("slot-A", "sat:1")
+        hub.setSatelliteControllerType("sat:1", "slot-A", CONTROLLER_TYPE_PLAYSTATION)
+        scope.testScheduler.runCurrent()
+        assertEquals(CONTROLLER_TYPE_PLAYSTATION, hub.satTypes.value["sat:1" to "slot-A"])
+
+        hub.forgetConnection("sat:1")
+        scope.testScheduler.runCurrent()
+
+        assertNull(hub.bindings.value["slot-A"])
+        assertNull(hub.satTypes.value["sat:1" to "slot-A"])
+        verify { satellite.forget("sat:1") }
+    }
+
+    @Test
+    fun `forgetConnection forgets a remembered bluetooth host`() {
+        btEntriesFlow.value =
+            listOf(RememberedBt(id = "bt:AA", name = "Pad", mac = "AA", profileName = "XBOX"))
+        val hub = buildHub()
+
+        hub.forgetConnection("bt:AA")
+
+        verify { store.forgetBt("bt:AA") }
+    }
+
+    @Test
     fun `remembered satellite entries appear as IDLE summaries`() {
         satEntriesFlow.value =
             listOf(

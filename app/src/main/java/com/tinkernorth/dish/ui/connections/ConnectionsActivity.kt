@@ -406,7 +406,7 @@ class ConnectionsActivity : AppCompatActivity() {
         }
         rb.btnRowSecondary.visibility = View.VISIBLE
         rb.btnRowSecondary.text = getString(R.string.action_forget_short)
-        rb.btnRowSecondary.setOnClickListener { satellite.forget(c.id) }
+        rb.btnRowSecondary.setOnClickListener { hub.forgetConnection(c.id) }
         return rb.root
     }
 
@@ -502,7 +502,7 @@ class ConnectionsActivity : AppCompatActivity() {
 
     private fun commitForgetBt(id: String) {
         btRegistry.stop(id)
-        store.forgetBt(id)
+        hub.forgetConnection(id)
         render(hub.connections.value)
     }
 

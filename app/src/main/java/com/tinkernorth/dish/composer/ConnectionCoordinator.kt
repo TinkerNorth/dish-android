@@ -92,6 +92,20 @@ class ConnectionCoordinator
             typeStore.clear(connId, slotId)
         }
 
+        // Forget a remembered connection and its local state. Unbind its slots (which drops their
+        // per-slot types), clear any orphaned type rows, then forget the backing host. Clearing the
+        // whole connection here is what stops a dead connection id leaking controller-type entries;
+        // it is done on forget, not on a transient disconnect, so a brief drop keeps the user's pick.
+        fun forgetConnection(connectionId: String) {
+            bindingStore.slotsFor(connectionId).toList().forEach(::unbind)
+            typeStore.clearConnection(connectionId)
+            if (store.rememberedBt().any { it.id == connectionId }) {
+                store.forgetBt(connectionId)
+            } else {
+                satellite.forget(connectionId)
+            }
+        }
+
         fun migrateSlotBinding(
             fromSlotId: String,
             toSlotId: String,

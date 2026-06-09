@@ -76,8 +76,22 @@ class ControllerTypeStoreTest {
         store.clear("conn-1", "slot-A")
 
         assertNull(store.typeFor("conn-1", "slot-A"))
-        // No bulk clearConnection(connectionId) exists, so slot-B's type survives the connection going away.
+        // clear is per-slot: slot-B survives. clearConnection drops a whole connection at once.
         assertEquals(playstation, store.typeFor("conn-1", "slot-B"))
+    }
+
+    @Test
+    fun `clearConnection drops every slot for a connection and leaves other connections`() {
+        val store = ControllerTypeStore()
+        store.setType("conn-1", "slot-A", xbox)
+        store.setType("conn-1", "slot-B", playstation)
+        store.setType("conn-2", "slot-A", playstation)
+
+        store.clearConnection("conn-1")
+
+        assertNull(store.typeFor("conn-1", "slot-A"))
+        assertNull(store.typeFor("conn-1", "slot-B"))
+        assertEquals(playstation, store.typeFor("conn-2", "slot-A"))
     }
 
     @Test
