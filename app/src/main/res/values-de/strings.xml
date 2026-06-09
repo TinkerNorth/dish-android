@@ -188,6 +188,22 @@
     <!-- Text der Dish-Benachrichtigungen. -->
     <string name="notif_bt_permission_title">Bluetooth-Berechtigung nötig</string>
     <string name="notif_bt_permission_body">Dish braucht Bluetooth-Zugriff, um einen Controller zu registrieren.</string>
+    <string name="notif_bt_scan_permission_title">Bluetooth-Scannen erlauben</string>
+    <string name="notif_bt_scan_permission_body">Erteile die Berechtigung für Geräte in der Nähe, um neue Hosts zu finden. Gekoppelte Geräte funktionieren auch ohne sie.</string>
+    <string name="discovery_source_manual">Manuell</string>
+    <string name="action_add_custom_satellite">Eigenen Satelliten hinzufügen</string>
+    <string name="add_satellite_host_hint">IP-Adresse oder Hostname</string>
+    <string name="add_satellite_https_hint">HTTPS-Port</string>
+    <string name="add_satellite_udp_hint">UDP-Port</string>
+    <string name="add_satellite_error_host">IP-Adresse oder Hostname eingeben</string>
+    <string name="add_satellite_error_port">Port von 1 bis 65535 eingeben</string>
+    <string name="dialog_bt_device_title">Mit einem Gerät verbinden</string>
+    <string name="bt_wait_for_host">Auf Host warten</string>
+    <string name="bt_waiting_for_host_timer">Warte auf Host (%1$ds)</string>
+    <string name="bt_device_empty">Noch keine Geräte gefunden</string>
+    <string name="bt_device_tag_paired">Gekoppelt</string>
+    <string name="bt_device_tag_available">Verfügbar</string>
+    <string name="bt_scan_permission_note">Zum Scannen wird die Berechtigung für Geräte in der Nähe benötigt. Gekoppelte Geräte werden auch ohne sie angezeigt.</string>
     <string name="notif_bt_discoverability_denied_title">Sichtbarkeit abgelehnt</string>
     <string name="notif_bt_discoverability_denied_body">Dein Host kann dieses Telefon erst sehen, wenn du es sichtbar machst.</string>
     <string name="notif_bt_adapter_off_title">Bluetooth ist aus</string>

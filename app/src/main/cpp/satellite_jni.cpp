@@ -570,15 +570,18 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendRe
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_controllerAdd(
-    JNIEnv*, jobject, jint handle, jint controllerIndex, jint capabilities) {
+    JNIEnv*, jobject, jint handle, jint controllerIndex, jint capabilities, jint controllerType) {
     auto s = getSession(handle);
     if (!s) return;
-    uint8_t payload[3];
+    // 4-byte payload: idx(1) + caps(2 BE) + type(1). The trailing type byte lets
+    // the receiver plug the correct virtual device on the first add — no replug.
+    uint8_t payload[4];
     payload[0] = (uint8_t)(controllerIndex & 0xFF);
     putBE16(payload + 1, (uint16_t)(capabilities & 0xFFFF));
-    sendEncrypted(s.get(), MSG_CONTROLLER_ADD, payload, 3);
-    LOGI("Session %d: sent controller add idx=%d caps=0x%04X", handle, controllerIndex,
-         capabilities);
+    payload[3] = (uint8_t)(controllerType & 0xFF);
+    sendEncrypted(s.get(), MSG_CONTROLLER_ADD, payload, 4);
+    LOGI("Session %d: sent controller add idx=%d caps=0x%04X type=%d", handle, controllerIndex,
+         capabilities, controllerType);
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_controllerRemove(

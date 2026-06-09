@@ -47,4 +47,49 @@ class RumbleRouterTest {
         assertEquals(RumbleTarget.None, classifyTarget("not-an-int"))
         assertEquals(RumbleTarget.None, classifyTarget(""))
     }
+
+    @Test
+    fun `combinedRumblePlan separates strong and weak across two actuators`() {
+        assertEquals(listOf(0 to 200, 1 to 100), combinedRumblePlan(vibratorCount = 2, strongAmp = 200, weakAmp = 100))
+    }
+
+    @Test
+    fun `combinedRumblePlan drops a zero-strong actuator on a dual target`() {
+        assertEquals(listOf(1 to 100), combinedRumblePlan(vibratorCount = 2, strongAmp = 0, weakAmp = 100))
+    }
+
+    @Test
+    fun `combinedRumblePlan drops a zero-weak actuator on a dual target`() {
+        assertEquals(listOf(0 to 200), combinedRumblePlan(vibratorCount = 2, strongAmp = 200, weakAmp = 0))
+    }
+
+    @Test
+    fun `combinedRumblePlan yields nothing when both amplitudes are zero on a dual target`() {
+        assertEquals(emptyList<Pair<Int, Int>>(), combinedRumblePlan(vibratorCount = 2, strongAmp = 0, weakAmp = 0))
+    }
+
+    @Test
+    fun `combinedRumblePlan folds a strong-dominant effect onto a single actuator`() {
+        assertEquals(listOf(0 to 200), combinedRumblePlan(vibratorCount = 1, strongAmp = 200, weakAmp = 50))
+    }
+
+    @Test
+    fun `combinedRumblePlan folds a weak-dominant effect onto a single actuator`() {
+        assertEquals(listOf(0 to 180), combinedRumblePlan(vibratorCount = 1, strongAmp = 40, weakAmp = 180))
+    }
+
+    @Test
+    fun `combinedRumblePlan drives the single actuator when only weak is set`() {
+        assertEquals(listOf(0 to 90), combinedRumblePlan(vibratorCount = 1, strongAmp = 0, weakAmp = 90))
+    }
+
+    @Test
+    fun `combinedRumblePlan yields nothing for a single actuator with no amplitude`() {
+        assertEquals(emptyList<Pair<Int, Int>>(), combinedRumblePlan(vibratorCount = 1, strongAmp = 0, weakAmp = 0))
+    }
+
+    @Test
+    fun `combinedRumblePlan yields nothing when there are no actuators`() {
+        assertEquals(emptyList<Pair<Int, Int>>(), combinedRumblePlan(vibratorCount = 0, strongAmp = 200, weakAmp = 100))
+    }
 }

@@ -43,8 +43,7 @@
             android:id="@+id/overlayContentFrame"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1"
-            android:paddingBottom="?attr/actionBarSize">
+            android:layout_weight="1">
 
             <!-- Trackpad row. Horizontal LinearLayout with weightSum=2
                  splits 50/50 between the two pads; margin_md on each
@@ -74,9 +73,9 @@
                     android:layout_marginStart="@dimen/spacing_md" />
             </LinearLayout>
         </FrameLayout>
-
-        <include layout="@layout/overlay_low_power_chip" />
     </LinearLayout>
+
+    <include layout="@layout/overlay_low_power_chip" />
 
     <!-- Low-power overlays (countdown banner + dim screen). Same include
          the gamepad overlay uses; the dim FrameLayout sits on top of the

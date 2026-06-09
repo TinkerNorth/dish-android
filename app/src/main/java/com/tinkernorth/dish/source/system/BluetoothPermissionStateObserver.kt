@@ -13,10 +13,21 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-enum class BluetoothPermissionState {
-    NOT_REQUIRED,
-    GRANTED,
-    DENIED,
+data class BluetoothPermissionState(
+    val required: Boolean,
+    val connectGranted: Boolean,
+    val scanGranted: Boolean,
+) {
+    val connectMissing: Boolean get() = required && !connectGranted
+
+    val scanMissing: Boolean get() = required && !scanGranted
+
+    val anyMissing: Boolean get() = connectMissing || scanMissing
+
+    companion object {
+        // Pre-S relies on the install-time BLUETOOTH/BLUETOOTH_ADMIN grants.
+        val SATISFIED = BluetoothPermissionState(required = false, connectGranted = true, scanGranted = true)
+    }
 }
 
 @Singleton
@@ -24,7 +35,7 @@ class BluetoothPermissionStateObserver
     @Inject
     constructor(
         @ApplicationContext private val context: Context,
-    ) : AbstractStateSource<BluetoothPermissionState>(BluetoothPermissionState.NOT_REQUIRED) {
+    ) : AbstractStateSource<BluetoothPermissionState>(BluetoothPermissionState.SATISFIED) {
         init {
             setState(currentState())
         }
@@ -39,10 +50,14 @@ class BluetoothPermissionStateObserver
         }
 
         private fun currentState(): BluetoothPermissionState {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return BluetoothPermissionState.NOT_REQUIRED
-            val granted =
-                ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
-                    PackageManager.PERMISSION_GRANTED
-            return if (granted) BluetoothPermissionState.GRANTED else BluetoothPermissionState.DENIED
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return BluetoothPermissionState.SATISFIED
+            return BluetoothPermissionState(
+                required = true,
+                connectGranted = granted(Manifest.permission.BLUETOOTH_CONNECT),
+                scanGranted = granted(Manifest.permission.BLUETOOTH_SCAN),
+            )
         }
+
+        private fun granted(permission: String): Boolean =
+            ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
     }

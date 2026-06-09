@@ -4,6 +4,7 @@ package com.tinkernorth.dish.source.connection
 
 import com.tinkernorth.dish.core.jni.ControllerRepository
 import com.tinkernorth.dish.core.model.DiscoveredServer
+import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
 import io.mockk.Runs
 import io.mockk.clearAllMocks
 import io.mockk.coVerify
@@ -185,7 +186,7 @@ class SatelliteConnectionTest {
             conn.attachSlot(slotId = "slot-1", controllerType = 0)
             assertEquals(0, conn.slots.value["slot-1"]?.controllerIndex)
             assertEquals(false, conn.slots.value["slot-1"]?.registered)
-            coVerify(exactly = 0) { repo.addController(any(), any(), any()) }
+            coVerify(exactly = 0) { repo.addController(any(), any(), any(), any()) }
         }
 
     @Test
@@ -200,7 +201,9 @@ class SatelliteConnectionTest {
             conn.markConnected(handle = 8, connectionId = "c") {}
             conn.attachSlot(slotId = "slot-1", controllerType = 0)
 
-            coVerify { repo.addController(8, 0, any()) }
+            // Type travels in the add (single-call connect)...
+            coVerify { repo.addController(8, 0, any(), 0) }
+            // ...and is re-sent as a backward-compat fallback for pre-extension receivers.
             verify { repo.sendControllerType(8, 0, 0) }
             assertEquals(true, conn.slots.value["slot-1"]?.registered)
         }
@@ -244,7 +247,7 @@ class SatelliteConnectionTest {
             conn.attachSlot(slotId = "slot-1", controllerType = 0)
 
             coVerify {
-                repo.addController(8, 0, match { (it and 0x0004) != 0 })
+                repo.addController(8, 0, match { (it and 0x0004) != 0 }, any())
             }
         }
 
@@ -269,10 +272,10 @@ class SatelliteConnectionTest {
             noMotion.attachSlot(slotId = "slot-1", controllerType = 0)
 
             coVerify {
-                repo.addController(8, 0, match { (it and 0x0004) == 0 })
+                repo.addController(8, 0, match { (it and 0x0004) == 0 }, any())
             }
             coVerify {
-                repo.addController(8, 0, match { (it and 0x0001) != 0 && (it and 0x0002) != 0 })
+                repo.addController(8, 0, match { (it and 0x0001) != 0 && (it and 0x0002) != 0 }, any())
             }
 
             noMotion.markDisconnected()
@@ -299,7 +302,7 @@ class SatelliteConnectionTest {
             withMotion.attachSlot(slotId = "slot-1", controllerType = 0)
 
             coVerify {
-                repo.addController(8, 0, match { (it and 0x0004) != 0 })
+                repo.addController(8, 0, match { (it and 0x0004) != 0 }, any())
             }
             withMotion.markDisconnected()
         }
@@ -331,8 +334,8 @@ class SatelliteConnectionTest {
 
             assertTrue(askedFor.contains("slot-A"))
             assertTrue(askedFor.contains("slot-B"))
-            coVerify { repo.addController(8, 0, match { (it and 0x0004) != 0 }) }
-            coVerify { repo.addController(8, 1, match { (it and 0x0004) == 0 }) }
+            coVerify { repo.addController(8, 0, match { (it and 0x0004) != 0 }, any()) }
+            coVerify { repo.addController(8, 1, match { (it and 0x0004) == 0 }, any()) }
             perSlot.markDisconnected()
         }
 
@@ -367,8 +370,8 @@ class SatelliteConnectionTest {
 
             assertEquals(0, conn.slots.value["slot-A"]?.controllerIndex)
             assertEquals(1, conn.slots.value["slot-B"]?.controllerIndex)
-            coVerify { repo.addController(4, 0, any()) }
-            coVerify { repo.addController(4, 1, any()) }
+            coVerify { repo.addController(4, 0, any(), any()) }
+            coVerify { repo.addController(4, 1, any(), any()) }
         }
 
     @Test
@@ -425,9 +428,49 @@ class SatelliteConnectionTest {
             conn.attachSlot("slot-A", controllerType = 0)
             conn.setControllerType("slot-A", controllerType = 1)
 
+            coVerify { repo.addController(6, 0, any(), 0) }
+            // registration re-sends the type as a compat fallback (type 0)...
             verify { repo.sendControllerType(6, 0, 0) }
+            // ...then the explicit change sends type 1.
             verify { repo.sendControllerType(6, 0, 1) }
             assertEquals(1, conn.slots.value["slot-A"]?.controllerType)
+        }
+
+    @Test
+    fun `setControllerType refreshes the motion backend status from the replug ACK`() =
+        runTest {
+            every { repo.resetControllerAck(any()) } just Runs
+            every { repo.startHeartbeat(any()) } just Runs
+            every { repo.isConnectionAlive(any()) } returns false
+            every { repo.getLastControllerAck(any()) } returns 0
+            every { repo.getLastControllerMotionFlags(any()) } returnsMany listOf(0x02, 0x03)
+
+            val store = SatelliteMotionBackendStatusStore()
+            val connId = SatelliteConnection.idFor(server)
+            val withStore =
+                SatelliteConnection(
+                    id = connId,
+                    server = server,
+                    scope = scope,
+                    controllerRepo = repo,
+                    motionBackendStatusStore = store,
+                )
+            withStore.markConnecting()
+            withStore.markConnected(handle = 6, connectionId = "c") {}
+            withStore.attachSlot("slot-A", controllerType = 0)
+
+            val afterAdd = store.statusFor(connId, "slot-A")
+            assertEquals(false, afterAdd?.sinkSupportedForType)
+            assertEquals(true, afterAdd?.backendOk)
+
+            withStore.setControllerType("slot-A", controllerType = 1)
+
+            val afterType = store.statusFor(connId, "slot-A")
+            assertEquals(true, afterType?.sinkSupportedForType)
+            assertEquals(true, afterType?.backendOk)
+            verify { repo.sendControllerType(6, 0, 1) }
+
+            withStore.markDisconnected()
         }
 
     @Test
@@ -461,7 +504,7 @@ class SatelliteConnectionTest {
             conn.attachSlot("slot-A", controllerType = 0)
             conn.attachSlot("slot-A", controllerType = 1)
 
-            coVerify(exactly = 1) { repo.addController(1, 0, any()) }
+            coVerify(exactly = 1) { repo.addController(1, 0, any(), any()) }
             assertEquals(0, conn.slots.value["slot-A"]?.controllerType)
         }
 
@@ -545,7 +588,7 @@ class SatelliteConnectionTest {
             reactive.attachSlot(slotId = "slot-1", controllerType = 0)
 
             coVerify {
-                repo.addController(8, 0, match { (it and 0x0004) != 0 })
+                repo.addController(8, 0, match { (it and 0x0004) != 0 }, any())
             }
 
             capsBit = 0

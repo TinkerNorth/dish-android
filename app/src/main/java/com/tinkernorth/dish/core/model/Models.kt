@@ -14,6 +14,7 @@ enum class DiscoverySource(
     BROADCAST(R.string.discovery_source_broadcast),
     MDNS(R.string.discovery_source_mdns),
     BOTH(R.string.discovery_source_both),
+    MANUAL(R.string.discovery_source_manual),
 }
 
 @Serializable

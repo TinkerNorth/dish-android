@@ -189,6 +189,22 @@
     <!-- Texte des notifications Dish. -->
     <string name="notif_bt_permission_title">Autorisation Bluetooth nécessaire</string>
     <string name="notif_bt_permission_body">Dish a besoin de l\'accès Bluetooth pour enregistrer une manette.</string>
+    <string name="notif_bt_scan_permission_title">Autoriser l\'analyse Bluetooth</string>
+    <string name="notif_bt_scan_permission_body">Accordez l\'autorisation Appareils à proximité pour trouver de nouveaux hôtes. Les appareils associés fonctionnent sans elle.</string>
+    <string name="discovery_source_manual">Manuel</string>
+    <string name="action_add_custom_satellite">Ajouter un satellite personnalisé</string>
+    <string name="add_satellite_host_hint">Adresse IP ou nom d\'hôte</string>
+    <string name="add_satellite_https_hint">Port HTTPS</string>
+    <string name="add_satellite_udp_hint">Port UDP</string>
+    <string name="add_satellite_error_host">Saisissez une adresse IP ou un nom d\'hôte</string>
+    <string name="add_satellite_error_port">Saisissez un port de 1 à 65535</string>
+    <string name="dialog_bt_device_title">Se connecter à un appareil</string>
+    <string name="bt_wait_for_host">Attendre l\'hôte</string>
+    <string name="bt_waiting_for_host_timer">En attente de l\'hôte (%1$ds)</string>
+    <string name="bt_device_empty">Aucun appareil trouvé pour l\'instant</string>
+    <string name="bt_device_tag_paired">Associé</string>
+    <string name="bt_device_tag_available">Disponible</string>
+    <string name="bt_scan_permission_note">L\'analyse nécessite l\'autorisation Appareils à proximité. Les appareils associés s\'affichent sans elle.</string>
     <string name="notif_bt_discoverability_denied_title">Visibilité refusée</string>
     <string name="notif_bt_discoverability_denied_body">Votre hôte ne peut pas voir ce téléphone tant que vous ne l\'avez pas rendu visible.</string>
     <string name="notif_bt_adapter_off_title">Bluetooth désactivé</string>
