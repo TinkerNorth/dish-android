@@ -164,9 +164,20 @@ class MainViewModelTest {
         }
 
     @Test
-    fun `bindSlot delegates to hub`() {
+    fun `bindSlot delegates to hub with the slot's remembered type`() {
+        every { hub.satTypes } returns
+            kotlinx.coroutines.flow.MutableStateFlow(
+                mapOf(("s:1" to "slot-X") to com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION),
+            )
         vm.bindSlot(slotId = "slot-X", connectionId = "s:1")
-        verify { hub.bind("slot-X", "s:1") }
+        verify { hub.bind("slot-X", "s:1", com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION) }
+    }
+
+    @Test
+    fun `bindSlot falls back to Xbox only when no choice was ever made`() {
+        every { hub.satTypes } returns kotlinx.coroutines.flow.MutableStateFlow(emptyMap())
+        vm.bindSlot(slotId = "slot-X", connectionId = "s:1")
+        verify { hub.bind("slot-X", "s:1", com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX) }
     }
 
     @Test

@@ -72,11 +72,6 @@
     <string name="touchpad_mode_off">Aus</string>
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Maus</string>
-    <string name="touchpad_mode_unsupported_here">Dieser Empfänger unterstützt diesen Modus nicht.</string>
-    <string name="touchpad_mode_error_not_paired">Satellit erkennt dieses Gerät nicht — erneut koppeln, um anzuwenden.</string>
-    <string name="touchpad_mode_error_unauthorized">Satellit hat die Anfrage abgelehnt — erneut koppeln, um anzuwenden.</string>
-    <string name="touchpad_mode_error_transport">Satellit nicht erreichbar — läuft er?</string>
-    <string name="touchpad_mode_error_unknown">Touchpad-Modus konnte nicht gesetzt werden: %1$s</string>
 
     <!-- Slot-Statustext im ControllerAdapter (unter dem Namen). -->
     <string name="slot_status_disconnecting">Trennt… %1$ds</string>
@@ -324,6 +319,7 @@
     <string name="binding_edge_unsteady_detail">Leitet noch weiter, aber Pakete gehen verloren. Geh näher heran oder wechsle zu USB.</string>
     <string name="binding_edge_action_reconnect">Erneut verbinden</string>
     <string name="binding_edge_action_dismiss">Schließen</string>
+    <string name="binding_apply_error_slot_gone">%1$s ist nicht mehr verfügbar — trennen und neu verbinden, dann erneut versuchen.</string>
     <string name="binding_apply_error_no_connect">%1$s nicht erreichbar. Stelle sicher, dass es eingeschaltet und im Netzwerk ist, und versuche es erneut.</string>
     <string name="binding_apply_warn_title">Direktmodus nicht verfügbar</string>
     <string name="binding_apply_warn_detail">%1$s ist mit %2$s im Standardmodus verbunden.</string>

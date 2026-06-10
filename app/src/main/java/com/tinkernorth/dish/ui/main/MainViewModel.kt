@@ -6,6 +6,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
@@ -35,7 +36,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
@@ -165,7 +165,10 @@ class MainViewModel
             slotId: String,
             connectionId: String,
         ) {
-            hub.bind(slotId, connectionId)
+            // Quick-bind keeps the slot's remembered type; Xbox only when the
+            // user never made a choice for this pairing.
+            val type = hub.satTypes.value[connectionId to slotId] ?: CONTROLLER_TYPE_XBOX
+            hub.bind(slotId, connectionId, type)
         }
 
         fun unbindSlot(slotId: String) {
@@ -195,36 +198,20 @@ class MainViewModel
         // Use this in render code — absence and `false` differ in the store but mean the same to the user.
         fun isMotionEnabled(slotId: String): Boolean = motionEnabledStore.isEnabled(slotId)
 
-        // Local write is unconditional so a recovered server picks up the user's pick on reconnect.
+        // Local write is unconditional so a recovered server picks up the user's
+        // pick on reconnect. Routing rides each bound slot's DESCRIPTOR (one
+        // declarative per-controller PUT each, no bespoke mode endpoint);
+        // failures surface through the connection-manager event stream.
         fun setSatelliteTouchpadMode(
             connectionId: String,
             mode: String,
         ) {
             if (!TouchpadModeValue.isValid(mode)) return
             touchpadModeStore.setMode(connectionId, mode)
-            viewModelScope.launch {
-                val reply = satellite.setTouchpadMode(connectionId, mode)
-                if (reply.contains("\"ok\":true")) return@launch
-                _events.emit(MainEvent.ShowToast(toastForTouchpadModeError(reply)))
-            }
-        }
-
-        private fun toastForTouchpadModeError(reply: String): String {
-            val err = extractJsonErrorField(reply)
-            return when {
-                reply.contains("\"supported\":false") ->
-                    context.getString(R.string.touchpad_mode_unsupported_here)
-                err == "device not paired" ->
-                    context.getString(R.string.touchpad_mode_error_not_paired)
-                err == "unauthorized" ->
-                    context.getString(R.string.touchpad_mode_error_unauthorized)
-                err?.startsWith("request failed:") == true ->
-                    context.getString(R.string.touchpad_mode_error_transport)
-                else ->
-                    context.getString(
-                        R.string.touchpad_mode_error_unknown,
-                        err ?: reply,
-                    )
+            for (slotId in hub.bindings.value
+                .filterValues { it == connectionId }
+                .keys) {
+                hub.setSatelliteTouchpadMode(connectionId, slotId, mode)
             }
         }
 
@@ -293,17 +280,3 @@ class MainViewModel
             val ASSUMED_SUPPORTED_TOUCHPAD_MODES: Set<String> = TouchpadModeValue.ALL.toSet()
         }
     }
-
-// Avoids a JSON dep; server always emits `{"error":"…"}` as first key with no nesting/escapes.
-// Shared by MainViewModel and ConfigureBindingsViewModel so the two touchpad-error mappers parse identically.
-fun extractJsonErrorField(json: String): String? {
-    val keyIdx = json.indexOf("\"error\"")
-    if (keyIdx < 0) return null
-    val colon = json.indexOf(':', startIndex = keyIdx + "\"error\"".length)
-    if (colon < 0) return null
-    val openQuote = json.indexOf('"', startIndex = colon + 1)
-    if (openQuote < 0) return null
-    val closeQuote = json.indexOf('"', startIndex = openQuote + 1)
-    if (closeQuote < 0) return null
-    return json.substring(openQuote + 1, closeQuote)
-}

@@ -80,36 +80,124 @@ class DiscoveryGateway
                 SatelliteHttpClient.pairStatus(ip, port, deviceId, pinId(satelliteId, ip), pins)
             }
 
-        suspend fun connect(
+        @Suppress("LongParameterList")
+        suspend fun putSession(
             ip: String,
             port: Int,
             deviceId: String,
+            deviceName: String,
+            hmacProof: String,
+            descriptorsJson: String,
+            requestMouseControl: Boolean,
             satelliteId: String = "",
         ): String =
             withContext(ioDispatcher) {
-                SatelliteHttpClient.connect(ip, port, deviceId, pinId(satelliteId, ip), pins)
+                SatelliteHttpClient.putSession(
+                    ip,
+                    port,
+                    deviceId,
+                    deviceName,
+                    hmacProof,
+                    descriptorsJson,
+                    requestMouseControl,
+                    pinId(satelliteId, ip),
+                    pins,
+                )
             }
 
+        suspend fun getSession(
+            ip: String,
+            port: Int,
+            connectionId: String,
+            deviceId: String,
+            hmacProof: String,
+            satelliteId: String = "",
+        ): String =
+            withContext(ioDispatcher) {
+                SatelliteHttpClient.getSession(ip, port, connectionId, deviceId, hmacProof, pinId(satelliteId, ip), pins)
+            }
+
+        @Suppress("LongParameterList")
+        suspend fun putController(
+            ip: String,
+            port: Int,
+            connectionId: String,
+            ctrlIdx: Int,
+            deviceId: String,
+            hmacProof: String,
+            descriptorJson: String,
+            satelliteId: String = "",
+        ): String =
+            withContext(ioDispatcher) {
+                SatelliteHttpClient.putController(
+                    ip,
+                    port,
+                    connectionId,
+                    ctrlIdx,
+                    deviceId,
+                    hmacProof,
+                    descriptorJson,
+                    pinId(satelliteId, ip),
+                    pins,
+                )
+            }
+
+        @Suppress("LongParameterList")
+        suspend fun deleteController(
+            ip: String,
+            port: Int,
+            connectionId: String,
+            ctrlIdx: Int,
+            deviceId: String,
+            hmacProof: String,
+            satelliteId: String = "",
+        ): String =
+            withContext(ioDispatcher) {
+                SatelliteHttpClient.deleteController(
+                    ip,
+                    port,
+                    connectionId,
+                    ctrlIdx,
+                    deviceId,
+                    hmacProof,
+                    pinId(satelliteId, ip),
+                    pins,
+                )
+            }
+
+        @Suppress("LongParameterList")
         suspend fun disconnect(
             ip: String,
             port: Int,
             connectionId: String,
             deviceId: String,
+            hmacProof: String,
             satelliteId: String = "",
         ): String =
             withContext(ioDispatcher) {
-                SatelliteHttpClient.disconnect(ip, port, connectionId, deviceId, pinId(satelliteId, ip), pins)
+                SatelliteHttpClient.disconnect(ip, port, connectionId, deviceId, hmacProof, pinId(satelliteId, ip), pins)
             }
 
-        suspend fun setTouchpadMode(
+        suspend fun unpair(
             ip: String,
             port: Int,
             deviceId: String,
-            mode: String,
+            hmacProof: String,
             satelliteId: String = "",
         ): String =
             withContext(ioDispatcher) {
-                SatelliteHttpClient.setTouchpadMode(ip, port, deviceId, mode, pinId(satelliteId, ip), pins)
+                SatelliteHttpClient.unpair(ip, port, deviceId, hmacProof, pinId(satelliteId, ip), pins)
+            }
+
+        suspend fun catalog(
+            ip: String,
+            port: Int,
+            acceptLanguage: String,
+            etag: String?,
+            satelliteId: String = "",
+        ): HttpReply =
+            withContext(ioDispatcher) {
+                SatelliteHttpClient.getCatalog(ip, port, acceptLanguage, etag, pinId(satelliteId, ip), pins)
             }
 
         companion object {

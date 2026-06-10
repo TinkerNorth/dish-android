@@ -73,11 +73,6 @@
     <string name="touchpad_mode_off">Désactivé</string>
     <string name="touchpad_mode_pad">Pavé</string>
     <string name="touchpad_mode_mouse">Souris</string>
-    <string name="touchpad_mode_unsupported_here">Ce récepteur ne prend pas en charge ce mode.</string>
-    <string name="touchpad_mode_error_not_paired">Le satellite ne reconnaît pas cet appareil — réappairer pour appliquer.</string>
-    <string name="touchpad_mode_error_unauthorized">Le satellite a rejeté la requête — réappairer pour appliquer.</string>
-    <string name="touchpad_mode_error_transport">Impossible de joindre le satellite — est-il en cours d\'exécution ?</string>
-    <string name="touchpad_mode_error_unknown">Impossible de définir le mode pavé tactile : %1$s</string>
 
     <!-- Texte du statut de l\'emplacement dans ControllerAdapter (sous le nom). -->
     <string name="slot_status_disconnecting">Déconnexion… %1$ds</string>
@@ -327,6 +322,7 @@
     <string name="binding_edge_unsteady_detail">Toujours en cours d\'acheminement, mais des paquets sont perdus. Rapprochez-vous ou passez à l\'USB.</string>
     <string name="binding_edge_action_reconnect">Reconnecter</string>
     <string name="binding_edge_action_dismiss">Ignorer</string>
+    <string name="binding_apply_error_slot_gone">%1$s n\'est plus disponible — débranchez-le et reconnectez-le, puis réessayez.</string>
     <string name="binding_apply_error_no_connect">Impossible de joindre %1$s. Vérifiez qu\'il est allumé et sur votre réseau, puis réessayez.</string>
     <string name="binding_apply_warn_title">Mode Direct indisponible</string>
     <string name="binding_apply_warn_detail">%1$s est lié à %2$s en mode Standard à la place.</string>

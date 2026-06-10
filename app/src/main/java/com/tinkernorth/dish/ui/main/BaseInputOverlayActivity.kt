@@ -33,6 +33,7 @@ import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.ui.common.FoldAwareSession
 import com.tinkernorth.dish.ui.common.Posture
+import com.tinkernorth.dish.ui.common.ResendPacer
 import com.tinkernorth.dish.ui.common.hingeInsetsFor
 import kotlinx.coroutines.android.asCoroutineDispatcher
 import kotlinx.coroutines.delay
@@ -58,15 +59,21 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
 
     protected var connectionId: String = ""
 
-    // Dedicated URGENT_AUDIO thread so the 250 Hz resend cadence isn't jittered by the shared Default pool.
+    // Dedicated URGENT_AUDIO thread so edge-burst resends aren't jittered by the shared Default pool.
     private val resendThread = HandlerThread("dish-resend", Process.THREAD_PRIORITY_URGENT_AUDIO).also { it.start() }
     private val resendDispatcher = Handler(resendThread.looper).asCoroutineDispatcher()
+
+    // Resend-thread-only (single-threaded Handler dispatcher).
+    private val resendPacer = ResendPacer()
 
     protected abstract fun rootView(): View
 
     protected abstract val resendIntervalNs: Long
 
     protected abstract fun resendOneIfReady()
+
+    /** Pacing gate for [resendOneIfReady] implementations — see [ResendPacer]. */
+    protected fun resendDue(changed: Boolean): Boolean = resendPacer.resendDue(changed)
 
     protected open fun onConnectionSummaryChanged(summary: ConnectionSummary?) = Unit
 
@@ -118,7 +125,7 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
             }
         }
 
-        // Deadline-paced on a dedicated URGENT_AUDIO thread; main-thread JNI+vsync would inflate cycle time past 250 Hz.
+        // Deadline-paced on the dedicated URGENT_AUDIO thread; main-thread vsync+touch dispatch would jitter the burst ticks.
         lifecycleScope.launch(resendDispatcher) {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 runResendLoop()
@@ -247,8 +254,10 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_CONNECTION_ID = "extra_connection_id"
 
-        // 4 ms ≈ 250 Hz — matches wired Xbox/PS poll rate that ViGEm/uinput backends are tuned for.
-        const val RESEND_INTERVAL_MS_DEFAULT = 4L
+        // Tick = the resend SCHEDULER granularity (burst spacing + worst-case
+        // single-loss heal time), not a send rate — real input is event-driven
+        // at the full touch sampling rate and never waits on this clock.
+        const val RESEND_INTERVAL_MS_DEFAULT = 50L
         const val RESEND_INTERVAL_NS_DEFAULT = RESEND_INTERVAL_MS_DEFAULT * 1_000_000L
 
         const val MAX_BACKLOG_FACTOR = 5L

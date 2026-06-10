@@ -74,11 +74,6 @@
     <string name="touchpad_mode_off">Desligado</string>
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Mouse</string>
-    <string name="touchpad_mode_unsupported_here">Este receptor não oferece suporte a este modo.</string>
-    <string name="touchpad_mode_error_not_paired">O satélite não reconhece este dispositivo — pareie novamente para aplicar.</string>
-    <string name="touchpad_mode_error_unauthorized">O satélite rejeitou a solicitação — pareie novamente para aplicar.</string>
-    <string name="touchpad_mode_error_transport">Não foi possível contatar o satélite — ele está em execução?</string>
-    <string name="touchpad_mode_error_unknown">Não foi possível definir o modo do touchpad: %1$s</string>
 
     <!-- Texto de status do slot no ControllerAdapter (abaixo do nome). -->
     <string name="slot_status_disconnecting">Desconectando… %1$ds</string>
@@ -328,6 +323,7 @@
     <string name="binding_edge_unsteady_detail">Ainda roteando, mas pacotes estão sendo perdidos. Aproxime-se ou mude para USB.</string>
     <string name="binding_edge_action_reconnect">Reconectar</string>
     <string name="binding_edge_action_dismiss">Dispensar</string>
+    <string name="binding_apply_error_slot_gone">%1$s não está mais disponível — desconecte e reconecte, depois tente novamente.</string>
     <string name="binding_apply_error_no_connect">Não foi possível alcançar %1$s. Verifique se está ligado e na sua rede e tente novamente.</string>
     <string name="binding_apply_warn_title">Modo Direto indisponível</string>
     <string name="binding_apply_warn_detail">%1$s está vinculado a %2$s no modo Padrão.</string>

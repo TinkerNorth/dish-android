@@ -136,14 +136,26 @@ class MdnsDiscovery
             }
 
         // NsdServiceInfo.host deprecated on API 34+; single-address host still correct on API 24–33.
+        // API 34+ exposes the full address list — prefer an IPv4 from it: the UDP
+        // data path is IPv4-only, so an IPv6-resolved host can't carry a session
+        // (openSocket refuses non-IPv4 literals rather than streaming to 0.0.0.0).
         @Suppress("DEPRECATION")
-        private fun toServer(info: NsdServiceInfo): DiscoveredServer? =
-            mdnsServiceToServer(
+        private fun toServer(info: NsdServiceInfo): DiscoveredServer? {
+            val hostAddress =
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    val addresses = info.hostAddresses
+                    (addresses.firstOrNull { it is java.net.Inet4Address } ?: addresses.firstOrNull())
+                        ?.hostAddress
+                } else {
+                    info.host?.hostAddress
+                }
+            return mdnsServiceToServer(
                 serviceName = info.serviceName.orEmpty(),
-                hostAddress = info.host?.hostAddress,
+                hostAddress = hostAddress,
                 srvPort = info.port,
                 txt = info.attributes.orEmpty(),
             )
+        }
 
         private companion object {
             const val TAG = "MdnsDiscovery"

@@ -246,7 +246,10 @@ tasks.named("check") {
 }
 
 tasks.withType<Test>().configureEach {
-    maxHeapSize = "512m"
+    maxHeapSize = "1g"
+    // An OOM in a test worker must kill the worker loudly, not wedge the
+    // JVM mid-instrumentation and hang the build until a CI timeout.
+    jvmArgs("-XX:+ExitOnOutOfMemoryError")
 }
 
 val licensesOutputFile =

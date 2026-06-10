@@ -52,7 +52,7 @@ class GamepadOverlayActivity :
 
     override val resendIntervalNs: Long = BaseInputOverlayActivity.RESEND_INTERVAL_NS_DEFAULT
 
-    // @Volatile for main-thread write / Dispatchers.Default read.
+    // @Volatile for main-thread write / resend-thread read.
     @Volatile private var lastReportedState: GamepadTouchView.GamepadState? = null
 
     private lateinit var motionSource: PhoneMotionSource
@@ -103,25 +103,27 @@ class GamepadOverlayActivity :
                 }
             }
         }
-
-        // Connection-events collector + resend-loop coroutine live in
-        // BaseInputOverlayActivity.installBaseScaffolding(). This activity
-        // only owns the gamepad-specific motion/battery combine above.
     }
 
+    // Resend-thread-only (single-threaded Handler dispatcher).
+    private var lastResentSnapshot: GamepadTouchView.GamepadState? = null
+
     /**
-     * Resend-loop tick — pulled out of the inline coroutine so the shared
-     * 250 Hz pacing lives in [BaseInputOverlayActivity.runResendLoop]. Only
-     * fires the wire when (a) the user has touched the pad at least once,
-     * and (b) the bound connection is a Connected satellite. Bluetooth is
-     * intentionally excluded — BT-HID has its own polling discipline and
-     * a bounded native dispatch queue.
+     * Resend-loop tick; pacing is [resendDue] (edge burst, then keepalive).
+     * Fires only after the pad was touched once and only at a Connected
+     * satellite — Bluetooth is excluded (BT-HID has its own polling
+     * discipline and a bounded native dispatch queue).
      */
     override fun resendOneIfReady() {
         val state = lastReportedState ?: return
         val summary = hub.summary(connectionId) ?: return
         if (summary.kind != ConnectionKind.SATELLITE) return
         if (summary.live != LinkState.Connected) return
+        // The live state object mutates on the UI thread — copy() is the
+        // stable comparison base (a torn read just costs one extra burst).
+        val changed = state != lastResentSnapshot
+        if (changed) lastResentSnapshot = state.copy()
+        if (!resendDue(changed)) return
         sendSatelliteReport(state)
     }
 
@@ -133,31 +135,19 @@ class GamepadOverlayActivity :
         batterySource.start(lifecycleScope) { level, status ->
             satellite.get(connectionId)?.sendBattery(VIRTUAL_SLOT_ID, level, status)
         }
-        // motion source start/stop and indicator paint are driven by the single
-        // combine collector in onCreate — repeatOnLifecycle re-subscribes on
-        // STARTED so the StateFlow tuple re-emits its current values and the
-        // collector handles the gate + repaint. No explicit work needed here.
+        // Motion gate + indicator repaint stay with the combine collector,
+        // which repeatOnLifecycle re-subscribes on STARTED — nothing to do here.
     }
 
     override fun onPause() {
         super.onPause()
         batterySource.stop()
-        // Indicator repaint is driven by the source-state change inside the
-        // combine collector; no explicit refresh here.
     }
 
-    // onStop / dispatchKeyEvent / dispatchGenericMotionEvent / dispatchTouchEvent
-    // / onWindowFocusChanged / hideSystemBars / currentRotation —
-    // all live in BaseInputOverlayActivity now.
-
     /**
-     * One coherent snapshot of the three inputs that drive both toolbar
-     * indicators and the gyro-listener gate. Composed from [hub.connections] +
-     * [motionCapability.state] + [motionSource.state] in one combine, so
-     * every paint reads from the same emission rather than racing three
-     * collectors against three independent reads (which could paint a
-     * transient inconsistent state during reconnects). See the combine
-     * collector in [onCreate].
+     * One coherent snapshot of the three inputs behind the toolbar indicators
+     * and the gyro gate — a single combine, so a paint never mixes emissions
+     * (three racing collectors could paint inconsistently during reconnects).
      */
     private data class OverlayMotionPaint(
         val summary: ConnectionSummary?,
@@ -165,14 +155,8 @@ class GamepadOverlayActivity :
         val sourceState: MotionStreamState,
     )
 
-    /**
-     * Build a [OverlayMotionPaint] from whatever values the underlying
-     * sources have already published. Used for the initial paint in
-     * [onCreate] before the lifecycle collector starts — the StateFlow
-     * tuple won't emit until something subscribes, but the "no gyroscope"
-     * indicator state must be ready before onCreateOptionsMenu fires so the
-     * toolbar icon paints right the first time on phones with no IMU.
-     */
+    // Initial paint before the collector starts: the "no gyroscope" state must
+    // be ready before onCreateOptionsMenu on phones with no IMU.
     private fun currentMotionPaint(): OverlayMotionPaint =
         OverlayMotionPaint(
             summary = hub.summary(connectionId),
@@ -180,13 +164,9 @@ class GamepadOverlayActivity :
             sourceState = motionSource.state.value,
         )
 
-    /**
-     * Listener-gate side-effect — start/stop the IMU listener so the
-     * sensor never runs when the slot is ineligible for motion (gyro
-     * absent, BT-HID, user toggled off, satellite not connected). Lives
-     * inside the combine collector so the gate decision and the indicator
-     * paint share one snapshot.
-     */
+    // Start/stop the IMU listener so the sensor never runs while the slot is
+    // ineligible for motion; lives in the combine collector so the gate and
+    // the indicator paint share one snapshot.
     private fun applyMotionGate(capability: MotionCapability) {
         val effective = capability.effective
         if (effective && !motionSource.isStreaming) {
@@ -306,13 +286,8 @@ class GamepadOverlayActivity :
         }
     }
 
-    /**
-     * Emit one MSG_GAMEPAD_DATA report to the bound satellite. The touch
-     * view emits HID-layout button bits plus a separate hat-switch; the
-     * satellite path wants an XUSB `wButtons` with the d-pad folded back
-     * into the low nibble. Shared between the touch-driven [onGamepadStateChanged]
-     * and the periodic resend loop in [onCreate].
-     */
+    // The touch view emits HID-layout button bits + a separate hat-switch; the
+    // satellite path wants XUSB `wButtons` with the d-pad folded into the low nibble.
     private fun sendSatelliteReport(state: GamepadTouchView.GamepadState) {
         val wButtons = hidToXusb(state.buttons, state.hatSwitch)
         satellite.get(connectionId)?.sendReport(
@@ -328,12 +303,8 @@ class GamepadOverlayActivity :
     }
 
     companion object {
-        /**
-         * Re-export of [BaseInputOverlayActivity.EXTRA_CONNECTION_ID] so
-         * existing callers (e.g. `MainActivity`) keep their qualified
-         * reference. Kotlin companion-object members aren't inherited; this
-         * forward keeps the call sites untouched.
-         */
+        // Companion members aren't inherited — re-export keeps existing
+        // qualified call sites compiling.
         const val EXTRA_CONNECTION_ID = BaseInputOverlayActivity.EXTRA_CONNECTION_ID
         const val EXTRA_USE_PS_LAYOUT = "extra_use_ps_layout"
     }

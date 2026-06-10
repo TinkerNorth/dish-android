@@ -316,10 +316,14 @@ class ConfigureBindingsActivity : AppCompatActivity() {
         pm.show()
     }
 
+    // Rendered from the satellite's catalog: bundled labels override the slugs
+    // this app recognizes; a controller type newer than the app still shows,
+    // server-named — never a blank row, never an error.
     private fun showTypeMenu(anchor: View) {
         val pm = PopupMenu(this, anchor)
-        pm.menu.add(0, CONTROLLER_TYPE_PLAYSTATION, 0, getString(R.string.picker_type_playstation))
-        pm.menu.add(0, CONTROLLER_TYPE_XBOX, 1, getString(R.string.picker_type_xbox))
+        viewModel.ui.value.typeOptions.forEachIndexed { order, option ->
+            pm.menu.add(0, option.id, order, option.label)
+        }
         pm.setOnMenuItemClickListener { item ->
             viewModel.setType(item.itemId)
             true
@@ -328,7 +332,10 @@ class ConfigureBindingsActivity : AppCompatActivity() {
     }
 
     private fun typeLabel(type: Int): String =
-        getString(if (type == CONTROLLER_TYPE_PLAYSTATION) R.string.picker_type_playstation else R.string.picker_type_xbox)
+        viewModel.ui.value.typeOptions
+            .firstOrNull { it.id == type }
+            ?.label
+            ?: getString(if (type == CONTROLLER_TYPE_PLAYSTATION) R.string.picker_type_playstation else R.string.picker_type_xbox)
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean = gamepadHost.dispatchKeyEvent(event) || super.dispatchKeyEvent(event)
 
