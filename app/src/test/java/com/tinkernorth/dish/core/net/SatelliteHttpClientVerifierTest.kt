@@ -96,6 +96,44 @@ class SatelliteHttpClientVerifierTest {
     }
 
     @Test
+    fun `a mismatch reports through the onMismatch callback`() {
+        val pins = pinRepo()
+        var mismatches = 0
+        val verifier = SatelliteHttpClient.tofuHostnameVerifier(sat, pins, onMismatch = { mismatches++ })
+        verifier.verify("1.2.3.4", sessionWith(byteArrayOf(1, 2, 3)))
+
+        verifier.verify("1.2.3.4", sessionWith(byteArrayOf(9, 9, 9)))
+
+        assertEquals(1, mismatches)
+    }
+
+    @Test
+    fun `first use and match never invoke onMismatch`() {
+        val pins = pinRepo()
+        var mismatches = 0
+        val verifier = SatelliteHttpClient.tofuHostnameVerifier(sat, pins, onMismatch = { mismatches++ })
+
+        verifier.verify("1.2.3.4", sessionWith(byteArrayOf(1, 2, 3)))
+        verifier.verify("1.2.3.4", sessionWith(byteArrayOf(1, 2, 3)))
+
+        assertEquals(0, mismatches)
+    }
+
+    @Test
+    fun `a missing peer certificate does not count as a pin mismatch`() {
+        val pins = pinRepo()
+        var mismatches = 0
+        val session = mockk<SSLSession>()
+        every { session.peerCertificates } returns emptyArray()
+
+        SatelliteHttpClient
+            .tofuHostnameVerifier(sat, pins, onMismatch = { mismatches++ })
+            .verify("1.2.3.4", session)
+
+        assertEquals(0, mismatches)
+    }
+
+    @Test
     fun `pins are keyed per satellite id`() {
         val pins = pinRepo()
         SatelliteHttpClient.tofuHostnameVerifier("a", pins).verify("h", sessionWith(byteArrayOf(1, 2, 3)))

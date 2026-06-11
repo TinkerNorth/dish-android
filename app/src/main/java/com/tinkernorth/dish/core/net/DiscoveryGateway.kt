@@ -65,7 +65,7 @@ class DiscoveryGateway
             pin: String,
             clientPin: String = "",
             satelliteId: String = "",
-        ): String =
+        ): HttpReply =
             withContext(ioDispatcher) {
                 SatelliteHttpClient.pair(ip, port, deviceId, deviceName, pin, pinId(satelliteId, ip), pins, clientPin)
             }
@@ -75,7 +75,7 @@ class DiscoveryGateway
             port: Int,
             deviceId: String,
             satelliteId: String = "",
-        ): String =
+        ): HttpReply =
             withContext(ioDispatcher) {
                 SatelliteHttpClient.pairStatus(ip, port, deviceId, pinId(satelliteId, ip), pins)
             }
@@ -90,7 +90,7 @@ class DiscoveryGateway
             descriptorsJson: String,
             requestMouseControl: Boolean,
             satelliteId: String = "",
-        ): String =
+        ): HttpReply =
             withContext(ioDispatcher) {
                 SatelliteHttpClient.putSession(
                     ip,
@@ -112,7 +112,7 @@ class DiscoveryGateway
             deviceId: String,
             hmacProof: String,
             satelliteId: String = "",
-        ): String =
+        ): HttpReply =
             withContext(ioDispatcher) {
                 SatelliteHttpClient.getSession(ip, port, connectionId, deviceId, hmacProof, pinId(satelliteId, ip), pins)
             }
@@ -127,7 +127,7 @@ class DiscoveryGateway
             hmacProof: String,
             descriptorJson: String,
             satelliteId: String = "",
-        ): String =
+        ): HttpReply =
             withContext(ioDispatcher) {
                 SatelliteHttpClient.putController(
                     ip,
@@ -151,7 +151,7 @@ class DiscoveryGateway
             deviceId: String,
             hmacProof: String,
             satelliteId: String = "",
-        ): String =
+        ): HttpReply =
             withContext(ioDispatcher) {
                 SatelliteHttpClient.deleteController(
                     ip,
@@ -173,7 +173,7 @@ class DiscoveryGateway
             deviceId: String,
             hmacProof: String,
             satelliteId: String = "",
-        ): String =
+        ): HttpReply =
             withContext(ioDispatcher) {
                 SatelliteHttpClient.disconnect(ip, port, connectionId, deviceId, hmacProof, pinId(satelliteId, ip), pins)
             }
@@ -184,7 +184,7 @@ class DiscoveryGateway
             deviceId: String,
             hmacProof: String,
             satelliteId: String = "",
-        ): String =
+        ): HttpReply =
             withContext(ioDispatcher) {
                 SatelliteHttpClient.unpair(ip, port, deviceId, hmacProof, pinId(satelliteId, ip), pins)
             }

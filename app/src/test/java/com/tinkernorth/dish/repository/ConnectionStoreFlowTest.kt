@@ -19,6 +19,7 @@ class ConnectionStoreFlowTest {
             RememberedSatelliteRepository(ctx, json),
             RememberedBtRepository(ctx, json),
             SatelliteSharedKeyRepository(ctx),
+            SatellitePinRepository(ctx),
         )
     }
 

@@ -13,6 +13,7 @@ import com.tinkernorth.dish.core.model.SessionResponse
 import com.tinkernorth.dish.core.model.SessionViewDto
 import com.tinkernorth.dish.core.net.ControllerDescriptor
 import com.tinkernorth.dish.core.net.DiscoveryGateway
+import com.tinkernorth.dish.core.net.HttpReply
 import com.tinkernorth.dish.core.net.SessionCrypto
 import com.tinkernorth.dish.core.net.hexToBytes
 import com.tinkernorth.dish.core.net.isPrivateHostLiteral
@@ -53,6 +54,23 @@ sealed class ConnectionEvent {
     data class Error(
         val message: String,
     ) : ConnectionEvent()
+}
+
+internal data class LateSlotConverge(
+    val resyncs: List<Int>,
+    val deletes: List<Int>,
+)
+
+internal fun lateSlotConverge(
+    sent: List<ControllerDescriptor>,
+    desired: List<ControllerDescriptor>,
+): LateSlotConverge {
+    val sentByIdx = sent.associateBy { it.ctrlIdx }
+    val desiredIdx = desired.mapTo(mutableSetOf()) { it.ctrlIdx }
+    return LateSlotConverge(
+        resyncs = desired.filter { sentByIdx[it.ctrlIdx] != it }.map { it.ctrlIdx },
+        deletes = sent.map { it.ctrlIdx }.filter { it !in desiredIdx },
+    )
 }
 
 @Singleton
@@ -134,6 +152,13 @@ class SatelliteConnectionManager
             if (!_isScanning.compareAndSet(expect = false, update = true)) return
             scope.launch {
                 val servers = discoveryRepo.discoverServers(DISC_PORT, DISC_TIMEOUT_MS)
+                store.refreshFromDiscovery(servers)
+                servers.forEach { server ->
+                    val conn = _connections.value[SatelliteConnection.idFor(server)]
+                    if (conn != null && conn.state.value == SatelliteSessionState.Idle) {
+                        conn.updateServer(server)
+                    }
+                }
                 _discoveredServers.value = servers
                 _lastScanAtMs.value = System.currentTimeMillis()
                 _isScanning.value = false
@@ -212,15 +237,21 @@ class SatelliteConnectionManager
             intent: ConnectIntent,
         ) {
             val id = SatelliteConnection.idFor(server)
-            val raw = runCatching { discoveryRepo.pair(server.ip, server.pairPort, deviceId, deviceName, "") }
-            val rawText = raw.getOrNull()
-            if (raw.isFailure || rawText.isNullOrBlank()) {
+            val reply =
+                runCatching { discoveryRepo.pair(server.ip, server.pairPort, deviceId, deviceName, "") }
+                    .getOrNull()
+            if (reply == null || reply.unreachable) {
                 conn.markDisconnected()
-                emitErrorIfUserInitiated(intent, SERVER_UNREACHABLE_MSG)
+                emitErrorIfUserInitiated(intent, unreachableMessage(reply))
+                return
+            }
+            if (reply.status == HTTP_CONFLICT) {
+                conn.markDisconnected()
+                emitErrorIfUserInitiated(intent, PROTOCOL_MISMATCH_MSG)
                 return
             }
             val pair =
-                runCatching { json.decodeFromString(PairResponse.serializer(), rawText) }
+                runCatching { json.decodeFromString(PairResponse.serializer(), reply.body) }
                     .getOrNull()
             if (pair == null) {
                 conn.markDisconnected()
@@ -261,15 +292,21 @@ class SatelliteConnectionManager
             conn.updateServer(server)
             conn.markConnecting()
             scope.launch {
-                val raw = runCatching { discoveryRepo.pair(server.ip, server.pairPort, deviceId, deviceName, pin) }
-                val rawText = raw.getOrNull()
-                if (raw.isFailure || rawText.isNullOrBlank()) {
+                val reply =
+                    runCatching { discoveryRepo.pair(server.ip, server.pairPort, deviceId, deviceName, pin) }
+                        .getOrNull()
+                if (reply == null || reply.unreachable) {
                     conn.markDisconnected()
-                    _events.emit(ConnectionEvent.Error(SERVER_UNREACHABLE_MSG))
+                    _events.emit(ConnectionEvent.Error(unreachableMessage(reply)))
+                    return@launch
+                }
+                if (reply.status == HTTP_CONFLICT) {
+                    conn.markDisconnected()
+                    _events.emit(ConnectionEvent.Error(PROTOCOL_MISMATCH_MSG))
                     return@launch
                 }
                 val pair =
-                    runCatching { json.decodeFromString(PairResponse.serializer(), rawText) }
+                    runCatching { json.decodeFromString(PairResponse.serializer(), reply.body) }
                         .getOrNull()
                 if (pair == null) {
                     conn.markDisconnected()
@@ -308,7 +345,7 @@ class SatelliteConnectionManager
             cancelApprovalPoll(id)
             val job =
                 scope.launch {
-                    val raw =
+                    val reply =
                         runCatching {
                             discoveryRepo.pair(
                                 server.ip,
@@ -319,9 +356,14 @@ class SatelliteConnectionManager
                                 clientPin = clientPin,
                             )
                         }.getOrNull()
-                    if (raw.isNullOrBlank()) {
+                    if (reply == null || reply.unreachable) {
                         conn.markDisconnected()
-                        _events.emit(ConnectionEvent.Error(SERVER_UNREACHABLE_MSG))
+                        _events.emit(ConnectionEvent.Error(unreachableMessage(reply)))
+                        return@launch
+                    }
+                    if (reply.status == HTTP_CONFLICT) {
+                        conn.markDisconnected()
+                        _events.emit(ConnectionEvent.Error(PROTOCOL_MISMATCH_MSG))
                         return@launch
                     }
                     // Poll until accept / deny / timeout. pairWithPin shares this
@@ -335,6 +377,8 @@ class SatelliteConnectionManager
                         val statusRaw =
                             runCatching { discoveryRepo.pairStatus(server.ip, server.httpPort, deviceId) }
                                 .getOrNull()
+                                ?.takeIf { !it.unreachable }
+                                ?.body
                         // A transient null reply is treated as still-pending, not a refusal.
                         val st =
                             if (statusRaw.isNullOrBlank()) {
@@ -416,7 +460,7 @@ class SatelliteConnectionManager
                 return@withContext
             }
             val descriptors = conn.desiredDescriptors()
-            val rawResp =
+            val reply =
                 runCatching {
                     discoveryRepo.putSession(
                         server.ip,
@@ -428,20 +472,20 @@ class SatelliteConnectionManager
                         conn.wantsMouseControl(),
                     )
                 }.getOrNull()
-            if (rawResp.isNullOrBlank()) {
-                conn.markDisconnected()
-                emitErrorIfUserInitiated(intent, SERVER_UNREACHABLE_MSG)
-                scheduleRetry(conn, server, intent)
-                return@withContext
+            if (reply?.pinMismatch == true) {
+                return@withContext failSession(conn, server, intent, IDENTITY_CHANGED_MSG, retry = false)
+            }
+            if (reply == null || reply.unreachable) {
+                return@withContext failSession(conn, server, intent, SERVER_UNREACHABLE_MSG, retry = true)
+            }
+            if (reply.status == HTTP_CONFLICT) {
+                return@withContext failSession(conn, server, intent, PROTOCOL_MISMATCH_MSG, retry = false)
             }
             val resp =
-                runCatching { json.decodeFromString(SessionResponse.serializer(), rawResp) }
+                runCatching { json.decodeFromString(SessionResponse.serializer(), reply.body) }
                     .getOrNull()
             if (resp == null) {
-                conn.markDisconnected()
-                emitErrorIfUserInitiated(intent, SERVER_UNREACHABLE_MSG)
-                scheduleRetry(conn, server, intent)
-                return@withContext
+                return@withContext failSession(conn, server, intent, SERVER_UNREACHABLE_MSG, retry = true)
             }
             if (resp.unauthorized) {
                 // Terminal by contract: the server no longer trusts our key (or
@@ -456,10 +500,7 @@ class SatelliteConnectionManager
             val tokenHex = resp.token
             val saltHex = resp.sessionSalt
             if (connId == null || tokenHex == null || saltHex == null) {
-                conn.markDisconnected()
-                emitErrorIfUserInitiated(intent, "Error: ${resp.error ?: "connection failed"}")
-                scheduleRetry(conn, server, intent)
-                return@withContext
+                return@withContext failSession(conn, server, intent, "Error: ${resp.error ?: "connection failed"}", retry = true)
             }
             // Token + salt are server-supplied: malformed values must degrade
             // like a refused connect, not crash the coroutine.
@@ -507,6 +548,20 @@ class SatelliteConnectionManager
                     }
                 },
             )
+            convergeSlotChangesSinceSnapshot(id, conn, descriptors)
+        }
+
+        private suspend fun convergeSlotChangesSinceSnapshot(
+            id: String,
+            conn: SatelliteConnection,
+            sent: List<ControllerDescriptor>,
+        ) {
+            if (conn.state.value != SatelliteSessionState.Live) return
+            val converge = lateSlotConverge(sent, conn.desiredDescriptors())
+            converge.deletes.forEach { ctrlIdx -> deleteSlot(id, ctrlIdx) }
+            converge.resyncs.forEach { ctrlIdx ->
+                conn.slotIdForIndex(ctrlIdx)?.let { slotId -> syncSlot(id, slotId) }
+            }
         }
 
         /**
@@ -552,7 +607,8 @@ class SatelliteConnectionManager
                 if (_connections.value[id]?.state?.value == SatelliteSessionState.Idle &&
                     id !in _staleSatelliteIds.value
                 ) {
-                    connect(server, ConnectIntent.RETRY_AFTER_DEATH)
+                    val target = store.remembered().firstOrNull { it.id == id }?.toDiscovered() ?: server
+                    connect(target, ConnectIntent.RETRY_AFTER_DEATH)
                 }
             }
         }
@@ -577,7 +633,7 @@ class SatelliteConnectionManager
                 val raw =
                     runCatching {
                         discoveryRepo.getSession(server.ip, server.httpPort, connId, deviceId, creds.proof)
-                    }.getOrNull() ?: return
+                    }.getOrNull()?.takeIf { !it.unreachable }?.body ?: return
                 val view =
                     runCatching { json.decodeFromString(SessionViewDto.serializer(), raw) }
                         .getOrNull() ?: return
@@ -626,7 +682,7 @@ class SatelliteConnectionManager
                         creds.proof,
                         descriptor.toJson(),
                     )
-                }.getOrNull() ?: return
+                }.getOrNull()?.takeIf { !it.unreachable }?.body ?: return
             val resp =
                 runCatching { json.decodeFromString(ControllerPutResponse.serializer(), raw) }
                     .getOrNull() ?: return
@@ -681,11 +737,27 @@ class SatelliteConnectionManager
                         deviceId,
                         creds.proof,
                     )
-                }.getOrNull() ?: return
+                }.getOrNull()?.takeIf { !it.unreachable }?.body ?: return
             val resp =
                 runCatching { json.decodeFromString(ControllerPutResponse.serializer(), raw) }
                     .getOrNull() ?: return
             if (resp.error == null) conn.adoptEpoch(resp.epoch)
+        }
+
+        private fun unreachableMessage(reply: HttpReply?): String =
+            if (reply?.pinMismatch == true) IDENTITY_CHANGED_MSG else SERVER_UNREACHABLE_MSG
+
+        @Suppress("LongParameterList")
+        private suspend fun failSession(
+            conn: SatelliteConnection,
+            server: DiscoveredServer,
+            intent: ConnectIntent,
+            message: String,
+            retry: Boolean,
+        ) {
+            conn.markDisconnected()
+            emitErrorIfUserInitiated(intent, message)
+            if (retry) scheduleRetry(conn, server, intent)
         }
 
         // Errors surface only for "I asked for this"; on the silent intents the
@@ -771,6 +843,14 @@ class SatelliteConnectionManager
 
             internal const val REPAIR_NEEDED_MSG =
                 "This satellite no longer recognizes this device — re-pair needed."
+
+            internal const val IDENTITY_CHANGED_MSG =
+                "This satellite's security identity changed. If it was reinstalled, forget it here and pair again."
+
+            internal const val PROTOCOL_MISMATCH_MSG =
+                "This app and the satellite speak different protocol versions. Update both to the latest version."
+
+            private const val HTTP_CONFLICT = 409
 
             private const val APPROVAL_POLL_INTERVAL_MS = 2000L
 

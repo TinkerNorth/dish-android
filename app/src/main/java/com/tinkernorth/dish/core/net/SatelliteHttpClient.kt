@@ -25,8 +25,11 @@ data class HttpReply(
     val status: Int,
     val body: String,
     val etag: String?,
+    val pinMismatch: Boolean = false,
 ) {
     val notModified: Boolean get() = status == 304
+
+    val unreachable: Boolean get() = status == 0 || body.isBlank()
 }
 
 // Satellite presents a self-signed cert on a LAN IP (no CA to validate against), so the
@@ -77,6 +80,7 @@ internal object SatelliteHttpClient {
     internal fun tofuHostnameVerifier(
         satelliteId: String,
         pins: SatellitePinRepository,
+        onMismatch: () -> Unit = {},
     ): HostnameVerifier =
         HostnameVerifier { _: String?, session: SSLSession? ->
             val cert = session?.peerCertificates?.firstOrNull() ?: return@HostnameVerifier false
@@ -90,6 +94,7 @@ internal object SatelliteHttpClient {
                 TofuVerdict.MATCH -> true
                 TofuVerdict.MISMATCH -> {
                     Log.e(TAG, "cert pin MISMATCH for $satelliteId — aborting (possible MITM)")
+                    onMismatch()
                     false
                 }
             }
@@ -108,7 +113,7 @@ internal object SatelliteHttpClient {
         requestMouseControl: Boolean,
         satelliteId: String,
         pins: SatellitePinRepository,
-    ): String =
+    ): HttpReply =
         request(
             method = "PUT",
             ip = ip,
@@ -135,7 +140,7 @@ internal object SatelliteHttpClient {
         hmacProof: String,
         satelliteId: String,
         pins: SatellitePinRepository,
-    ): String =
+    ): HttpReply =
         request(
             method = "GET",
             ip = ip,
@@ -161,7 +166,7 @@ internal object SatelliteHttpClient {
         descriptorJson: String,
         satelliteId: String,
         pins: SatellitePinRepository,
-    ): String =
+    ): HttpReply =
         request(
             method = "PUT",
             ip = ip,
@@ -184,7 +189,7 @@ internal object SatelliteHttpClient {
         hmacProof: String,
         satelliteId: String,
         pins: SatellitePinRepository,
-    ): String =
+    ): HttpReply =
         request(
             method = "DELETE",
             ip = ip,
@@ -205,7 +210,7 @@ internal object SatelliteHttpClient {
         hmacProof: String,
         satelliteId: String,
         pins: SatellitePinRepository,
-    ): String =
+    ): HttpReply =
         request(
             method = "DELETE",
             ip = ip,
@@ -227,7 +232,7 @@ internal object SatelliteHttpClient {
         hmacProof: String,
         satelliteId: String,
         pins: SatellitePinRepository,
-    ): String =
+    ): HttpReply =
         request(
             method = "DELETE",
             ip = ip,
@@ -281,7 +286,7 @@ internal object SatelliteHttpClient {
         satelliteId: String,
         pins: SatellitePinRepository,
         clientPin: String = "",
-    ): String =
+    ): HttpReply =
         request(
             method = "POST",
             ip = ip,
@@ -306,7 +311,7 @@ internal object SatelliteHttpClient {
         deviceId: String,
         satelliteId: String,
         pins: SatellitePinRepository,
-    ): String =
+    ): HttpReply =
         request(
             method = "GET",
             ip = ip,
@@ -319,6 +324,7 @@ internal object SatelliteHttpClient {
             pins = pins,
         )
 
+    @Suppress("LongParameterList")
     private fun request(
         method: String,
         ip: String,
@@ -329,7 +335,7 @@ internal object SatelliteHttpClient {
         body: String?,
         satelliteId: String,
         pins: SatellitePinRepository,
-    ): String = requestWithMeta(method, ip, port, path, deviceId, hmacProof, body, satelliteId, pins).body
+    ): HttpReply = requestWithMeta(method, ip, port, path, deviceId, hmacProof, body, satelliteId, pins)
 
     // Never throws — transport failure surfaces as a JSON {error} body (status 0)
     // so callers' decode path stays uniform.
@@ -350,11 +356,12 @@ internal object SatelliteHttpClient {
         Log.i(TAG, "$method https://$ip:$port$path")
         var conn: HttpsURLConnection? = null
         var pooled = false
+        var pinMismatch = false
         return try {
             conn =
                 (url.openConnection() as HttpsURLConnection).apply {
                     sslSocketFactory = insecureSocketFactory
-                    hostnameVerifier = tofuHostnameVerifier(satelliteId, pins)
+                    hostnameVerifier = tofuHostnameVerifier(satelliteId, pins, onMismatch = { pinMismatch = true })
                     requestMethod = method
                     connectTimeout = CONNECT_TIMEOUT_MS
                     readTimeout = READ_TIMEOUT_MS
@@ -380,7 +387,7 @@ internal object SatelliteHttpClient {
             HttpReply(status, text, conn.getHeaderField("ETag"))
         } catch (e: IOException) {
             Log.e(TAG, "$method $path failed: ${e.message}")
-            HttpReply(0, """{"error":"${jsonEscape("request failed: ${e.message}")}"}""", null)
+            HttpReply(0, """{"error":"${jsonEscape("request failed: ${e.message}")}"}""", null, pinMismatch)
         } finally {
             if (!pooled) conn?.disconnect()
         }

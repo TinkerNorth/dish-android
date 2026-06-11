@@ -339,6 +339,11 @@ class SatelliteConnection(
     /** The complete desired set, in slot order — the session PUT body. */
     internal fun desiredDescriptors(): List<ControllerDescriptor> = _slots.value.keys.mapNotNull { descriptorFor(it) }
 
+    internal fun slotIdForIndex(ctrlIdx: Int): String? =
+        _slots.value.entries
+            .firstOrNull { it.value.controllerIndex == ctrlIdx }
+            ?.key
+
     internal fun wantsMouseControl(): Boolean = _slots.value.values.any { it.touchpadMode == ControllerDescriptor.TOUCHPAD_MODE_MOUSE }
 
     /**

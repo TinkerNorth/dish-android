@@ -20,7 +20,7 @@ class ConnectionStoreIdentityTest {
         val satellites = RememberedSatelliteRepository(ctx, json)
         val bt = RememberedBtRepository(ctx, json)
         val keys = SatelliteSharedKeyRepository(ctx)
-        return ConnectionStore(satellites, bt, keys)
+        return ConnectionStore(satellites, bt, keys, SatellitePinRepository(ctx))
     }
 
     private fun server(

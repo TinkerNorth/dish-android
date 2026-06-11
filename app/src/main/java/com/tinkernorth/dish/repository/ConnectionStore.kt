@@ -16,6 +16,7 @@ class ConnectionStore
         val satellites: RememberedSatelliteRepository,
         val bt: RememberedBtRepository,
         val satelliteKeys: SatelliteSharedKeyRepository,
+        val satellitePins: SatellitePinRepository,
     ) {
         // Observable projections so the connections composer derives purely from flows, with no
         // out-of-band prefs read that a remember/forget could leave stale.
@@ -33,7 +34,8 @@ class ConnectionStore
             if (server.machineId.isBlank() && refreshKnownBox(server)) return
             val id = SatelliteConnection.idFor(server)
             if (server.machineId.isNotBlank()) collapseLegacyGhosts(server, id)
-            satellites.put(
+            migratePinOnAddressChange(satellites.get(id)?.ip, server.ip)
+            val row =
                 RememberedSatellite(
                     id = id,
                     name = server.name,
@@ -42,8 +44,19 @@ class ConnectionStore
                     pairPort = server.pairPort,
                     httpPort = server.httpPort,
                     machineId = server.machineId,
-                ),
-            )
+                )
+            if (satellites.get(id) != row) satellites.put(row)
+        }
+
+        fun refreshFromDiscovery(discovered: List<DiscoveredServer>) {
+            val rows = satellites.all()
+            val knownIds = rows.mapTo(mutableSetOf()) { it.id }
+            discovered
+                .filter { it.machineId.isNotBlank() }
+                .filter { server ->
+                    SatelliteConnection.idFor(server) in knownIds ||
+                        rows.any { it.machineId.isBlank() && it.ip == server.ip && it.udpPort == server.udpPort }
+                }.forEach(::rememberSatellite)
         }
 
         // The box may already be known under its stable id: refresh that row
@@ -82,7 +95,19 @@ class ConnectionStore
                 }
         }
 
+        private fun migratePinOnAddressChange(
+            oldIp: String?,
+            newIp: String,
+        ) {
+            if (oldIp == null || oldIp == newIp) return
+            if (satellitePins.pinnedFingerprint(newIp) == null) {
+                satellitePins.pinnedFingerprint(oldIp)?.let { satellitePins.pin(newIp, it) }
+            }
+            satellitePins.forget(oldIp)
+        }
+
         fun forgetSatellite(id: String) {
+            satellites.get(id)?.ip?.let(satellitePins::forget)
             // Key first: a crash between removes leaves a re-pairable satellite, not an orphan key.
             satelliteKeys.remove(id)
             satellites.remove(id)
