@@ -15,148 +15,161 @@
         android:layout_height="match_parent"
         android:orientation="vertical">
 
-        <!-- Fixed header -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
+            android:layout_marginBottom="@dimen/size_2"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
             android:paddingHorizontal="@dimen/spacing_5xl"
             android:paddingTop="@dimen/spacing_6xl">
 
-            <LinearLayout
-                android:layout_width="match_parent"
+            <TextView
+                style="@style/TextAppearance.Dish.Display.Large"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="@dimen/size_2">
+                android:layout_weight="1"
+                android:text="@string/brand_name" />
 
-                <TextView
-                    style="@style/TextAppearance.Dish.Display.Large"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/brand_name" />
-
-                <ImageButton
-                    android:id="@+id/btnSettings"
-                    android:layout_width="@dimen/icon_settings_button"
-                    android:layout_height="@dimen/icon_settings_button"
-                    android:src="@drawable/ic_settings"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/menu_settings"
-                    android:padding="@dimen/spacing_md"
-                    android:scaleType="fitCenter" />
-
-                <include
-                    layout="@layout/view_donate_heart_button"
-                    android:layout_width="@dimen/icon_settings_button"
-                    android:layout_height="@dimen/icon_settings_button" />
-            </LinearLayout>
+            <ImageButton
+                android:id="@+id/btnSettings"
+                android:layout_width="@dimen/icon_settings_button"
+                android:layout_height="@dimen/icon_settings_button"
+                android:src="@drawable/ic_settings"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/menu_settings"
+                android:padding="@dimen/spacing_md"
+                android:scaleType="fitCenter" />
 
             <include
-                android:id="@+id/cardDashboardHintInclude"
-                layout="@layout/dashboard_hint_card"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/card_margin_bottom" />
-
-            <include
-                android:id="@+id/sectionConnections"
-                layout="@layout/section_header"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/section_header_gap_above"
-                android:layout_marginBottom="@dimen/section_header_gap_below" />
-
-            <!-- Connections summary card -->
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/cardConnections"
-                style="@style/Widget.Dish.Card"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:padding="@dimen/card_padding">
-
-                    <ImageView
-                        android:layout_width="@dimen/icon_controller"
-                        android:layout_height="@dimen/icon_controller"
-                        android:src="@drawable/ic_overlay_link"
-                        android:importantForAccessibility="no"
-                        app:tint="@color/colorPrimary" />
-
-                    <TextView
-                        android:id="@+id/tvConnectionsSummary"
-                        style="@style/TextAppearance.Dish.BodyLarge.Bold"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:layout_marginStart="@dimen/spacing_2xl"
-                        android:text="@string/dashboard_connections_empty" />
-
-                    <ImageView
-                        android:id="@+id/ivConnectionsLoading"
-                        android:layout_width="@dimen/icon_battery"
-                        android:layout_height="@dimen/icon_battery"
-                        android:layout_marginStart="@dimen/spacing_md"
-                        android:layout_marginEnd="@dimen/spacing_md"
-                        android:importantForAccessibility="no"
-                        android:visibility="gone" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnManageConnections"
-                        style="@style/Widget.Dish.Button.Outlined"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/action_manage" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <include
-                android:id="@+id/sectionControllers"
-                layout="@layout/section_header"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/section_header_gap_above"
-                android:layout_marginBottom="@dimen/section_header_gap_below" />
+                layout="@layout/view_donate_heart_button"
+                android:layout_width="@dimen/icon_settings_button"
+                android:layout_height="@dimen/icon_settings_button" />
         </LinearLayout>
 
-        <!-- Scrollable slot list + telemetry -->
-        <FrameLayout
+        <LinearLayout
+            android:id="@+id/llPanes"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1">
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvControllers"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:clipToPadding="false"
-                android:paddingHorizontal="@dimen/spacing_5xl"
-                android:paddingBottom="@dimen/low_power_chip_scroll_clearance"
-                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
+            android:layout_weight="1"
+            android:orientation="vertical">
 
             <LinearLayout
-                android:layout_width="wrap_content"
+                android:id="@+id/llInfoPane"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_gravity="bottom|center_horizontal"
                 android:orientation="vertical"
-                android:gravity="center_horizontal">
+                android:paddingHorizontal="@dimen/spacing_5xl">
 
                 <include
-                    layout="@layout/view_donate_pill"
-                    android:layout_width="wrap_content"
+                    android:id="@+id/cardDashboardHintInclude"
+                    layout="@layout/dashboard_hint_card"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="@dimen/spacing_5xl"
-                    android:visibility="gone" />
+                    android:layout_marginTop="@dimen/card_margin_bottom" />
 
-                <include layout="@layout/overlay_low_power_chip" />
+                <include
+                    android:id="@+id/sectionConnections"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+                <!-- Connections summary card -->
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardConnections"
+                    style="@style/Widget.Dish.Card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:padding="@dimen/card_padding">
+
+                        <ImageView
+                            android:layout_width="@dimen/icon_controller"
+                            android:layout_height="@dimen/icon_controller"
+                            android:src="@drawable/ic_overlay_link"
+                            android:importantForAccessibility="no"
+                            app:tint="@color/colorPrimary" />
+
+                        <TextView
+                            android:id="@+id/tvConnectionsSummary"
+                            style="@style/TextAppearance.Dish.BodyLarge.Bold"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="@dimen/spacing_2xl"
+                            android:text="@string/dashboard_connections_empty" />
+
+                        <ImageView
+                            android:id="@+id/ivConnectionsLoading"
+                            android:layout_width="@dimen/icon_battery"
+                            android:layout_height="@dimen/icon_battery"
+                            android:layout_marginStart="@dimen/spacing_md"
+                            android:layout_marginEnd="@dimen/spacing_md"
+                            android:importantForAccessibility="no"
+                            android:visibility="gone" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnManageConnections"
+                            style="@style/Widget.Dish.Button.Outlined"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/action_manage" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
-        </FrameLayout>
+
+            <LinearLayout
+                android:id="@+id/llControllersPane"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <include
+                    android:id="@+id/sectionControllers"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/spacing_5xl"
+                    android:layout_marginEnd="@dimen/spacing_5xl"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvControllers"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:clipToPadding="false"
+                    android:paddingHorizontal="@dimen/spacing_5xl"
+                    android:paddingBottom="@dimen/low_power_chip_scroll_clearance"
+                    app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:orientation="vertical"
+        android:gravity="center_horizontal">
+
+        <include
+            layout="@layout/view_donate_pill"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="@dimen/spacing_5xl"
+            android:visibility="gone" />
+
+        <include layout="@layout/overlay_low_power_chip" />
     </LinearLayout>
 
     <!-- Low-power overlays. The Snackbar-based feedback layer doesn't need
