@@ -141,6 +141,8 @@
                     android:layout_marginTop="@dimen/card_margin_bottom" />
             </LinearLayout>
         </LinearLayout>
+
+        <include layout="@layout/overlay_low_power_chip" />
     </LinearLayout>
 
     <include layout="@layout/overlay_low_power" />
