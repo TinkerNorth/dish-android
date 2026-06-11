@@ -18,6 +18,8 @@ import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.inputrate.InputRateStore
+import com.tinkernorth.dish.source.inputrate.SlotInputRates
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.TouchpadModeStore
@@ -54,6 +56,7 @@ class MainViewModel
         private val native: PhysicalInputNative,
         private val pathPrefs: UsbPathPreferenceStore,
         private val usbGamepadManager: UsbGamepadManager,
+        private val inputRateStore: InputRateStore,
     ) : ViewModel() {
         // Absence means "user has not toggled"; use isMotionEnabled() for default rather than reading directly.
         val motionEnabled: StateFlow<Map<String, Boolean>> = motionEnabledStore.state
@@ -113,13 +116,19 @@ class MainViewModel
             combine(
                 slotsBase,
                 pathPrefs.state,
-            ) { base, _ ->
+                inputRateStore.state,
+            ) { base, _, rates ->
                 val pathCards =
                     base.slots
                         .mapNotNull { slot ->
                             pathCardFor(slot, base.devices)?.let { slot.id to it }
                         }.toMap()
-                SlotsRender(base.slots, base.connections, base.motionCapabilities, pathCards)
+                val inputRates =
+                    base.slots
+                        .mapNotNull { slot ->
+                            rates.slots[slot.id]?.let { slot.id to it }
+                        }.toMap()
+                SlotsRender(base.slots, base.connections, base.motionCapabilities, pathCards, inputRates, rates.screenPeakHz)
             }.onEach { render ->
                 _uiState.update { prev ->
                     prev.copy(
@@ -127,6 +136,8 @@ class MainViewModel
                         connections = render.connections,
                         motionCapabilities = render.motionCapabilities,
                         pathCards = render.pathCards,
+                        inputRates = render.inputRates,
+                        screenPeakHz = render.screenPeakHz,
                     )
                 }
             }.launchIn(viewModelScope)
@@ -274,6 +285,8 @@ class MainViewModel
             val connections: List<ConnectionSummary>,
             val motionCapabilities: Map<String, MotionCapability>,
             val pathCards: Map<String, PathCard>,
+            val inputRates: Map<String, SlotInputRates>,
+            val screenPeakHz: Int,
         )
 
         private companion object {

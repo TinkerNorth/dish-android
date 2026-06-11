@@ -29,6 +29,7 @@ import com.tinkernorth.dish.databinding.BindingValueNotBoundBinding
 import com.tinkernorth.dish.databinding.ItemControllerBinding
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.repository.TouchpadModeValue
+import com.tinkernorth.dish.source.inputrate.SlotInputRates
 
 interface SlotActionListener {
     fun onConfigure(slotId: String)
@@ -61,6 +62,26 @@ internal fun connectionsVisibleInPicker(
 // Unstable is degraded but still routing, so it counts as live alongside Connected.
 internal fun LinkState.isLiveLink(): Boolean = this == LinkState.Connected || this == LinkState.Unstable
 
+// The motion source can stream while motion is user-facing off (no host sink for the emulated
+// type, broken backend): the card's motion rate hides in exactly the states the motion indicator
+// renders as muted, so the two never disagree.
+internal fun motionRateUserFacingOn(cap: MotionCapability): Boolean =
+    cap.effective && cap.hostHasSinkForType && cap.satelliteBackendStatus?.backendOk != false
+
+// Screen input can drive a slot only while an overlay surface exists for it: the on-screen
+// gamepad for the virtual slot, or the slot's satellite touchpad surface when its mode is
+// enabled. Outside those states the card's screen rate reads Off.
+internal fun screenRateUserFacingOn(
+    inputType: SlotInputType,
+    boundKind: ConnectionKind?,
+    touchpadMode: String?,
+): Boolean =
+    inputType == SlotInputType.VIRTUAL ||
+        (
+            boundKind == ConnectionKind.SATELLITE &&
+                (touchpadMode ?: TouchpadModeValue.OFF) != TouchpadModeValue.OFF
+        )
+
 class ControllerAdapter(
     private val listener: SlotActionListener,
 ) : ListAdapter<ControllerAdapter.Row, ControllerAdapter.VH>(Diff) {
@@ -72,6 +93,8 @@ class ControllerAdapter(
         val motionCap: MotionCapability = MotionCapability.Off,
         val touchpadModes: Map<String, String> = emptyMap(),
         val pathCard: PathCard? = null,
+        val inputRates: SlotInputRates? = null,
+        val screenPeakHz: Int = 0,
     )
 
     fun submitSlots(
@@ -80,6 +103,8 @@ class ControllerAdapter(
         motionCapabilities: Map<String, MotionCapability> = emptyMap(),
         touchpadModes: Map<String, String> = emptyMap(),
         pathCards: Map<String, PathCard> = emptyMap(),
+        inputRates: Map<String, SlotInputRates> = emptyMap(),
+        screenPeakHz: Int = 0,
     ) {
         submitList(
             slots.map { slot ->
@@ -89,6 +114,8 @@ class ControllerAdapter(
                     motionCap = motionCapabilities[slot.id] ?: MotionCapability.Off,
                     touchpadModes = touchpadModes,
                     pathCard = pathCards[slot.id],
+                    inputRates = inputRates[slot.id],
+                    screenPeakHz = screenPeakHz,
                 )
             },
         )
@@ -104,10 +131,12 @@ class ControllerAdapter(
         private val destinationRow = decisionRow(R.string.binding_label_destination)
         private val emulateRow = decisionRow(R.string.binding_label_emulate)
         private val functionRow = decisionRow(null)
+        private val rateRow = decisionRow(null)
 
         private val connectionPills = PillPool(connectionRow.valueContainer)
         private val emulatePills = PillPool(emulateRow.valueContainer)
         private val functionPills = PillPool(functionRow.valueContainer)
+        private val ratePills = PillPool(rateRow.valueContainer)
 
         private val destinationMono = BindingValueMonoBinding.inflate(inflater, destinationRow.valueContainer, true)
         private val destinationNotBound = BindingValueNotBoundBinding.inflate(inflater, destinationRow.valueContainer, true)
@@ -121,7 +150,7 @@ class ControllerAdapter(
             inflater.inflate(R.layout.binding_action_button_outlined, b.llActions, false) as MaterialButton
 
         init {
-            listOf(connectionRow, destinationRow, emulateRow, functionRow).forEach { b.llDecisions.addView(it.root) }
+            listOf(connectionRow, destinationRow, emulateRow, functionRow, rateRow).forEach { b.llDecisions.addView(it.root) }
             filledActions.forEach { b.llActions.addView(it) }
             b.llActions.addView(outlinedAction)
         }
@@ -154,6 +183,7 @@ class ControllerAdapter(
             } else {
                 bindBound(row, slot.boundStatus)
             }
+            bindRates(row)
             bindActions(row)
             bindEdge(if (showEdge) edge else EdgeState.NONE, row)
         }
@@ -303,6 +333,93 @@ class ControllerAdapter(
             nameRes: Int,
             valueRes: Int,
         ): String = ctx.getString(R.string.binding_func_value, ctx.getString(nameRes), ctx.getString(valueRes))
+
+        // The measurement line exists exactly on bound cards and always renders every pill the
+        // slot can have (value, pending, or Off), so a bound card's height never changes as
+        // measurements arrive. A physical slot measures screen, gyro, and controller; the
+        // virtual slot has no controller, so it measures screen and gyro.
+        private fun bindRates(row: Row) {
+            val slot = row.slot
+            if (slot.boundStatus == null || slot.boundConnectionId == null) {
+                rateRow.root.visibility = View.GONE
+                return
+            }
+            rateRow.root.visibility = View.VISIBLE
+            ratePills.bind(rateSpecs(row))
+        }
+
+        // Direct streams reports continuously, so the live window is the measurement; routed
+        // paths (USB Standard, Bluetooth) and touch only deliver events while the user is
+        // pressing, so their peak window approximates the delivery rate and is shown with "~".
+        // The icons carry the metric distinction; Direct's measured rates render in the success
+        // tone to set them apart from the routed approximations. A pending glyph shows until a
+        // metric's first measurement and Off while it cannot compute.
+        private fun rateSpecs(row: Row): List<PillSpec> {
+            val direct = row.pathCard?.currentMode == InputPathMode.Direct
+            val measuredTone = if (direct) PillTone.SUCCESS else PillTone.FACT
+            val specs = mutableListOf(screenRatePill(row), gyroRatePill(row, measuredTone))
+            if (row.slot.inputType == SlotInputType.PHYSICAL) {
+                specs.add(controllerRatePill(row, direct, measuredTone))
+            }
+            return specs
+        }
+
+        // The value is the device-wide touch measurement: there is one screen, so every slot
+        // that can use it shows the same speed.
+        private fun screenRatePill(row: Row): PillSpec {
+            val computes =
+                screenRateUserFacingOn(
+                    inputType = row.slot.inputType,
+                    boundKind = row.slot.boundStatus?.kind,
+                    touchpadMode = row.touchpadModes[row.slot.boundConnectionId],
+                )
+            return when {
+                !computes ->
+                    PillSpec(ctx.getString(R.string.binding_state_off), R.drawable.ic_touchpad, PillTone.OFF)
+                row.screenPeakHz > 0 ->
+                    PillSpec(ctx.getString(R.string.binding_rate_hz_peak, row.screenPeakHz), R.drawable.ic_touchpad, PillTone.FACT)
+                else ->
+                    PillSpec(ctx.getString(R.string.binding_rate_pending), R.drawable.ic_touchpad, PillTone.CAP)
+            }
+        }
+
+        private fun gyroRatePill(
+            row: Row,
+            measuredTone: PillTone,
+        ): PillSpec {
+            val gyroHz = row.inputRates?.gyroHz ?: 0
+            return when {
+                !motionRateUserFacingOn(row.motionCap) ->
+                    PillSpec(ctx.getString(R.string.binding_state_off), R.drawable.ic_motion, PillTone.OFF)
+                gyroHz > 0 ->
+                    PillSpec(ctx.getString(R.string.binding_rate_hz, gyroHz), R.drawable.ic_motion, measuredTone)
+                else ->
+                    PillSpec(ctx.getString(R.string.binding_rate_pending), R.drawable.ic_motion, PillTone.CAP)
+            }
+        }
+
+        private fun controllerRatePill(
+            row: Row,
+            direct: Boolean,
+            measuredTone: PillTone,
+        ): PillSpec {
+            val hz = row.inputRates?.let { controllerRateText(it, direct) }
+            return if (hz != null) {
+                PillSpec(hz, R.drawable.ic_gamepad, measuredTone)
+            } else {
+                PillSpec(ctx.getString(R.string.binding_rate_pending), R.drawable.ic_gamepad, PillTone.CAP)
+            }
+        }
+
+        private fun controllerRateText(
+            rates: SlotInputRates,
+            direct: Boolean,
+        ): String? =
+            when {
+                direct && rates.controllerHz > 0 -> ctx.getString(R.string.binding_rate_hz, rates.controllerHz)
+                rates.controllerPeakHz > 0 -> ctx.getString(R.string.binding_rate_hz_peak, rates.controllerPeakHz)
+                else -> null
+            }
 
         private fun bindActions(row: Row) {
             val actions = computeActions(row)

@@ -48,6 +48,10 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
 
         setupDishToolbar(binding.overlayToolbar)
         binding.overlayToolbar.setTitle(R.string.overlay_title_touchpad)
+        installRateReadout(
+            slotId = slotId,
+            motionOn = null,
+        ) { binding.overlayToolbar.subtitle = it }
 
         bindPad(
             pad = binding.touchpadClickPad,
@@ -79,6 +83,7 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
             object : TouchpadSurfaceView.Listener {
                 override fun onTouchpadStateChanged(state: TouchpadSurfaceView.TouchpadState) {
                     if (!padCoordinator.mayWrite(pad)) return
+                    inputRateStore.recordScreenSample()
                     lastReportedState = state
                     val summary = hub.summary(connectionId) ?: return
                     if (summary.live != LinkState.Connected) return

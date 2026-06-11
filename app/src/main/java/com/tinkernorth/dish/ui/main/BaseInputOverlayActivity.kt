@@ -30,6 +30,8 @@ import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.inputrate.InputRateStore
+import com.tinkernorth.dish.source.lowpower.LowPowerSignal
 import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.ui.common.FoldAwareSession
 import com.tinkernorth.dish.ui.common.Posture
@@ -37,7 +39,10 @@ import com.tinkernorth.dish.ui.common.ResendPacer
 import com.tinkernorth.dish.ui.common.hingeInsetsFor
 import kotlinx.coroutines.android.asCoroutineDispatcher
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -54,6 +59,10 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
     @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
 
     @Inject lateinit var notifications: DishNotifications
+
+    @Inject lateinit var lowPowerSignal: LowPowerSignal
+
+    @Inject lateinit var inputRateStore: InputRateStore
 
     protected lateinit var gamepadHost: GamepadActivityHost
 
@@ -92,7 +101,7 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
         }
 
         gamepadHost =
-            GamepadActivityHost(this, rootView(), wakeState, gamepadRegistry)
+            GamepadActivityHost(this, rootView(), wakeState, gamepadRegistry, lowPowerSignal)
                 .also { it.install(notifications) }
         hideSystemBars()
 
@@ -176,6 +185,63 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
                         ) { finish() },
                 )
         }
+    }
+
+    // Renders the slot's measured rates from InputRateStore as an unobtrusive readout (toolbar
+    // subtitle). The store is the single source of truth: it owns the trackers and the
+    // low-power freeze, so the readout survives activity recreation and re-entry shows the
+    // last measurements instead of starting over. The readout is always populated: a metric
+    // shows a pending glyph until its first measurement and Off while it cannot compute.
+    // motionOn gates the motion line: the source may stream while motion is user-facing off
+    // (no host sink for the emulated type), and the readout must agree with the motion
+    // indicator, not with the raw sample flow; null means the screen has no motion line.
+    protected fun installRateReadout(
+        slotId: String,
+        motionOn: Flow<Boolean>?,
+        apply: (String) -> Unit,
+    ) {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                combine(
+                    inputRateStore.state,
+                    motionOn ?: flowOf(false),
+                ) { rates, on ->
+                    formatRateReadout(
+                        screenPeakHz = rates.screenPeakHz,
+                        gyroHz = rates.slots[slotId]?.gyroHz ?: 0,
+                        hasMotion = motionOn != null,
+                        motionOn = on,
+                    )
+                }.distinctUntilChanged().collect { apply(it) }
+            }
+        }
+    }
+
+    private fun formatRateReadout(
+        screenPeakHz: Int,
+        gyroHz: Int,
+        hasMotion: Boolean,
+        motionOn: Boolean,
+    ): String {
+        val touchValue =
+            if (screenPeakHz > 0) {
+                getString(R.string.binding_rate_hz_peak, screenPeakHz)
+            } else {
+                getString(R.string.binding_rate_pending)
+            }
+        val touchPart = getString(R.string.overlay_rate_touch, touchValue)
+        if (!hasMotion) return touchPart
+        val motionValue =
+            when {
+                !motionOn -> getString(R.string.binding_state_off)
+                gyroHz > 0 -> getString(R.string.binding_rate_hz, gyroHz)
+                else -> getString(R.string.binding_rate_pending)
+            }
+        return getString(
+            R.string.binding_func_value,
+            touchPart,
+            getString(R.string.overlay_rate_motion, motionValue),
+        )
     }
 
     protected fun currentRotation(): Int =

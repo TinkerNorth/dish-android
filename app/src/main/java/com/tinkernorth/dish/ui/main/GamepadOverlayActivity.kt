@@ -32,6 +32,7 @@ import com.tinkernorth.dish.ui.common.paintConnectionMenuItem
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.common.showConnectionDialog
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -59,7 +60,7 @@ class GamepadOverlayActivity :
     private lateinit var batterySource: PhoneBatterySource
 
     private var optionsMenu: Menu? = null
-    private var currentPaint: OverlayMotionPaint? = null
+    private val currentPaint = MutableStateFlow<OverlayMotionPaint?>(null)
     private var currentMotionState: MotionIndicatorState? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,6 +73,10 @@ class GamepadOverlayActivity :
         binding.gamepadTouchView.usePlayStation = intent.getBooleanExtra(EXTRA_USE_PS_LAYOUT, false)
         setupDishToolbar(binding.overlayToolbar)
         binding.overlayToolbar.setTitle(R.string.overlay_title_gamepad)
+        installRateReadout(
+            slotId = VIRTUAL_SLOT_ID,
+            motionOn = currentPaint.map(::paintMotionOn),
+        ) { binding.overlayToolbar.subtitle = it }
 
         val sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         // Supplier re-reads live rotation on each start(); landscape may resolve to ROTATION_90 or ROTATION_270.
@@ -171,6 +176,7 @@ class GamepadOverlayActivity :
         val effective = capability.effective
         if (effective && !motionSource.isStreaming) {
             motionSource.start { sample, deltaUs ->
+                inputRateStore.recordMotionSample(VIRTUAL_SLOT_ID)
                 satellite.get(connectionId)?.sendMotion(
                     VIRTUAL_SLOT_ID,
                     sample.gyroX,
@@ -190,14 +196,14 @@ class GamepadOverlayActivity :
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.menu_gamepad_overlay, menu)
         optionsMenu = menu
-        currentPaint?.let(::paintMenu)
+        currentPaint.value?.let(::paintMenu)
         return true
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean =
         when (item.itemId) {
             R.id.action_connection_info -> {
-                showConnectionDialog(currentPaint?.summary)
+                showConnectionDialog(currentPaint.value?.summary)
                 true
             }
             R.id.action_motion_info -> {
@@ -208,7 +214,7 @@ class GamepadOverlayActivity :
         }
 
     private fun repaintFrom(paint: OverlayMotionPaint) {
-        currentPaint = paint
+        currentPaint.value = paint
         paintMenu(paint)
     }
 
@@ -233,8 +239,20 @@ class GamepadOverlayActivity :
     private fun motionStateOf(paint: OverlayMotionPaint): MotionIndicatorState =
         motionIndicatorFor(paint.summary, paint.capability, paint.sourceState)
 
+    // The readout's motion entry shows a rate (or the pending glyph) in the states where motion
+    // is user-facing on, and Off in the muted indicator states. STALLED/PAUSED count as on: no
+    // samples flow there, so the entry reads pending rather than a misleading Off.
+    private fun paintMotionOn(paint: OverlayMotionPaint?): Boolean =
+        when (paint?.let(::motionStateOf)) {
+            MotionIndicatorState.STREAMING,
+            MotionIndicatorState.STALLED,
+            MotionIndicatorState.PAUSED,
+            -> true
+            else -> false
+        }
+
     private fun showMotionDialog() {
-        val state = currentMotionState ?: currentPaint?.let(::motionStateOf) ?: return
+        val state = currentMotionState ?: currentPaint.value?.let(::motionStateOf) ?: return
         val message =
             buildString {
                 append(getString(state.labelRes))
@@ -260,6 +278,7 @@ class GamepadOverlayActivity :
         }
 
     override fun onGamepadStateChanged(state: GamepadTouchView.GamepadState) {
+        inputRateStore.recordScreenSample()
         // Stored before the connection-status gate so input captured while
         // the session is still Linking is replayed by the resend loop the
         // moment it flips to Connected.

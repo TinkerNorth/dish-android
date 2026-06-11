@@ -20,6 +20,7 @@ import com.tinkernorth.dish.databinding.OverlayLowPowerBinding
 import com.tinkernorth.dish.databinding.OverlayLowPowerChipBinding
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.lowpower.LowPowerManager
+import com.tinkernorth.dish.source.lowpower.LowPowerSignal
 import com.tinkernorth.dish.source.notification.DishNotifications
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.launchIn
@@ -32,6 +33,7 @@ class GamepadActivityHost(
     private val rootView: View,
     private val wakeState: WakeStateController,
     private val gamepadRegistry: PhysicalGamepadRegistry,
+    private val lowPowerSignal: LowPowerSignal,
 ) {
     private val window = activity.window
     private val lowPowerTouchGate = LowPowerTouchGate()
@@ -62,6 +64,9 @@ class GamepadActivityHost(
     }
 
     fun install(notifications: DishNotifications? = null) {
+        lowPowerManager.state
+            .onEach { lowPowerSignal.setActive(it == LowPowerManager.State.ACTIVE) }
+            .launchIn(activity.lifecycleScope)
         activity.lifecycleScope.launch {
             activity.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 wakeState.shouldKeepScreenOn.collect(::applyScreenOn)

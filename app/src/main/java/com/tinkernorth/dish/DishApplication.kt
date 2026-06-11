@@ -15,6 +15,7 @@ import com.tinkernorth.dish.hotpath.input.PhysicalSlotBindingObserver
 import com.tinkernorth.dish.hotpath.input.RumbleBridge
 import com.tinkernorth.dish.hotpath.input.RumbleRouter
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
+import com.tinkernorth.dish.source.inputrate.InputRateStore
 import com.tinkernorth.dish.source.sensor.PhysicalBatterySource
 import com.tinkernorth.dish.source.sensor.PhysicalMotionSource
 import com.tinkernorth.dish.source.sensor.VirtualBatterySource
@@ -65,6 +66,8 @@ class DishApplication : Application() {
     @Inject lateinit var usbGamepadManager: UsbGamepadManager
 
     @Inject lateinit var pollRateSampler: PollRateSampler
+
+    @Inject lateinit var inputRateStore: InputRateStore
 
     @Inject lateinit var rumbleRouter: RumbleRouter
 
@@ -123,6 +126,7 @@ class DishApplication : Application() {
         physicalGamepadRegistry.install()
         usbGamepadManager.install()
         pollRateSampler.install()
+        inputRateStore.install()
         lifecycle.addObserver(physicalSlotBindingObserver)
         lifecycle.addObserver(physicalBatterySource)
         lifecycle.addObserver(virtualBatterySource)

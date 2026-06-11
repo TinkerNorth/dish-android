@@ -114,6 +114,8 @@
     <string name="overlay_connection_kind_bluetooth">Bluetooth</string>
     <string name="overlay_title_gamepad">Gamepad</string>
     <string name="overlay_title_touchpad">Dodirna ploča</string>
+    <string name="overlay_rate_touch">Dodir %1$s</string>
+    <string name="overlay_rate_motion">Pokret %1$s</string>
     <string name="touchpad_pad_click_label">Klik + Pomak</string>
     <string name="touchpad_pad_move_label">Pomak</string>
     <string name="touchpad_pad_click_hint">Povucite za klik i pomak</string>
@@ -343,6 +345,10 @@
     <string name="binding_state_on">Uključeno</string>
     <string name="binding_state_off">Isključeno</string>
     <string name="binding_func_value">%1$s · %2$s</string>
+
+    <string name="binding_rate_hz">%1$d Hz</string>
+    <string name="binding_rate_hz_peak">~%1$d Hz</string>
+    <string name="binding_rate_pending">…</string>
     <string name="binding_card_not_bound">Nije povezano</string>
     <string name="binding_card_no_functions">Nijedna</string>
     <string name="binding_action_configure">Podesi povezivanje</string>

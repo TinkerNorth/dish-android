@@ -10,7 +10,8 @@
     <TextView
         android:id="@+id/tvRowLabel"
         style="@style/Widget.Dish.MicroLabel"
-        android:layout_width="@dimen/binding_label_column_width" />
+        android:layout_width="@dimen/binding_label_column_width"
+        android:layout_marginEnd="@dimen/binding_label_gap" />
 
     <LinearLayout
         android:id="@+id/valueContainer"

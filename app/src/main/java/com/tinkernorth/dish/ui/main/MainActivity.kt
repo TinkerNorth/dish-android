@@ -21,6 +21,7 @@ import com.tinkernorth.dish.databinding.ActivityMainBinding
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.lowpower.LowPowerSignal
 import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.source.store.OnboardingState
@@ -55,6 +56,8 @@ class MainActivity :
     @Inject lateinit var usbGamepadManager: UsbGamepadManager
 
     @Inject lateinit var notifications: DishNotifications
+
+    @Inject lateinit var lowPowerSignal: LowPowerSignal
 
     @Inject lateinit var onboarding: OnboardingPreferenceStore
 
@@ -99,7 +102,7 @@ class MainActivity :
         }
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications)
+        gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications, lowPowerSignal)
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()
         attachDonatePill()
@@ -193,6 +196,8 @@ class MainActivity :
             s.motionCapabilities,
             s.touchpadModesBySatellite,
             s.pathCards,
+            s.inputRates,
+            s.screenPeakHz,
         )
         refreshDashboardHint(onboarding.state.value, s)
     }

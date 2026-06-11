@@ -47,6 +47,7 @@ struct DeviceCtx {
     int64_t lastMotionNs = 0;
 
     std::atomic<uint64_t> urbCount{0};
+    std::atomic<uint64_t> motionCount{0};
 
     // Guards rumble writes to epOut against the detach that closes fd; outSeq is the output report
     // counter for protocols that carry one (Xbox One serial, Switch Pro packet number).
@@ -181,6 +182,7 @@ void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
                                                    ? 0
                                                    : (uint32_t)((nowNs - ctx->lastMotionNs) / 1000);
                             ctx->lastMotionNs = nowNs;
+                            ctx->motionCount.fetch_add(1, std::memory_order_relaxed);
                             dispatch::applyUsbMotion(ctx->syntheticDeviceId, scratch.gyroX,
                                                      scratch.gyroY, scratch.gyroZ, scratch.accelX,
                                                      scratch.accelY, scratch.accelZ, deltaUs);
@@ -372,6 +374,13 @@ uint64_t getUrbCount(int32_t deviceId) {
     auto it = g_devices.find(deviceId);
     if (it == g_devices.end()) return 0;
     return it->second->urbCount.load(std::memory_order_relaxed);
+}
+
+uint64_t getMotionCount(int32_t deviceId) {
+    std::lock_guard<std::mutex> lock(g_mtx);
+    auto it = g_devices.find(deviceId);
+    if (it == g_devices.end()) return 0;
+    return it->second->motionCount.load(std::memory_order_relaxed);
 }
 
 void sendRumble(int32_t syntheticDeviceId, uint16_t strong, uint16_t weak) {

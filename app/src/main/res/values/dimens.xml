@@ -190,6 +190,7 @@
     <dimen name="binding_pill_gap">@dimen/spacing_sm</dimen>
 
     <dimen name="binding_label_column_width">@dimen/size_80</dimen>
+    <dimen name="binding_label_gap">@dimen/spacing_md</dimen>
     <dimen name="binding_legend_label_column_width">@dimen/size_96</dimen>
 
     <dimen name="binding_zone_padding">@dimen/card_padding</dimen>

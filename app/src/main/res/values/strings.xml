@@ -141,6 +141,8 @@
          user always sees which input surface they're on. -->
     <string name="overlay_title_gamepad">Gamepad</string>
     <string name="overlay_title_touchpad">Touchpad</string>
+    <string name="overlay_rate_touch">Touch %1$s</string>
+    <string name="overlay_rate_motion">Motion %1$s</string>
 
     <!-- Labels for the two side-by-side trackpads in the touchpad overlay.
          The "click" pad routes touches as click+position (drag, text
@@ -404,6 +406,10 @@
     <string name="binding_state_on">On</string>
     <string name="binding_state_off">Off</string>
     <string name="binding_func_value">%1$s · %2$s</string>
+
+    <string name="binding_rate_hz">%1$d Hz</string>
+    <string name="binding_rate_hz_peak">~%1$d Hz</string>
+    <string name="binding_rate_pending">…</string>
 
     <string name="binding_card_not_bound">Not bound</string>
     <string name="binding_card_no_functions">None</string>

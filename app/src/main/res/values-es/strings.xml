@@ -115,6 +115,8 @@
     <string name="overlay_connection_kind_bluetooth">Bluetooth</string>
     <string name="overlay_title_gamepad">Mando</string>
     <string name="overlay_title_touchpad">Panel táctil</string>
+    <string name="overlay_rate_touch">Táctil %1$s</string>
+    <string name="overlay_rate_motion">Movimiento %1$s</string>
     <string name="touchpad_pad_click_label">Clic + Mover</string>
     <string name="touchpad_pad_move_label">Mover</string>
     <string name="touchpad_pad_click_hint">Arrastra para hacer clic y mover</string>
@@ -344,6 +346,10 @@
     <string name="binding_state_on">Encendido</string>
     <string name="binding_state_off">Apagado</string>
     <string name="binding_func_value">%1$s · %2$s</string>
+
+    <string name="binding_rate_hz">%1$d Hz</string>
+    <string name="binding_rate_hz_peak">~%1$d Hz</string>
+    <string name="binding_rate_pending">…</string>
     <string name="binding_card_not_bound">Sin vincular</string>
     <string name="binding_card_no_functions">Ninguna</string>
     <string name="binding_action_configure">Configurar vínculos</string>

@@ -181,6 +181,12 @@ object SatelliteNative {
 
     external fun getDeviceUrbCount(deviceId: Int): Long
 
+    // Direct-mode MSG_MOTION sends for a synthetic device (post 125 Hz throttle).
+    external fun getDeviceMotionCount(deviceId: Int): Long
+
+    // Framework KeyEvent/MotionEvent updates applied for a routed device (USB Standard or Bluetooth).
+    external fun getDeviceInputEventCount(deviceId: Int): Long
+
     // Flat parameter list (not packed) so each axis stays primitive Float — no per-event allocation.
     @Suppress("LongParameterList")
     external fun processGamepadMotionEvent(

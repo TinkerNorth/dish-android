@@ -26,6 +26,7 @@ import com.tinkernorth.dish.databinding.BindingValueNoneBinding
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
 import com.tinkernorth.dish.repository.TouchpadModeValue
+import com.tinkernorth.dish.source.lowpower.LowPowerSignal
 import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
@@ -44,6 +45,8 @@ class ConfigureBindingsActivity : AppCompatActivity() {
 
     @Inject lateinit var notifications: DishNotifications
 
+    @Inject lateinit var lowPowerSignal: LowPowerSignal
+
     private lateinit var binding: ActivityConfigureBindingsBinding
     private lateinit var gamepadHost: GamepadActivityHost
     private val viewModel: ConfigureBindingsViewModel by viewModels()
@@ -55,7 +58,7 @@ class ConfigureBindingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityConfigureBindingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications)
+        gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications, lowPowerSignal)
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()
         wireDonateButton()

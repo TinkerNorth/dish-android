@@ -127,6 +127,7 @@ struct SlotBinding {
 
 static std::mutex g_devicesMtx;
 static std::unordered_map<int32_t, DeviceState> g_devices;
+static std::unordered_map<int32_t, uint64_t> g_frameworkEventCounts;
 
 static std::mutex g_slotsMtx;
 static std::unordered_map<int32_t, SlotBinding> g_slots;
@@ -286,6 +287,7 @@ void resetAndPublish(int32_t deviceId) {
 void forgetDevice(int32_t deviceId) {
     std::lock_guard<std::mutex> lock(g_devicesMtx);
     g_devices.erase(deviceId);
+    g_frameworkEventCounts.erase(deviceId);
 }
 
 void applyUsbMotion(int32_t deviceId, int16_t gyroX, int16_t gyroY, int16_t gyroZ, int16_t accelX,
@@ -320,6 +322,7 @@ static bool gamepadKeyFilter(const GameActivityKeyEvent* ev) {
     if (action == AKEY_EVENT_ACTION_DOWN || action == AKEY_EVENT_ACTION_UP) {
         int32_t deviceId = ev->deviceId;
         std::lock_guard<std::mutex> lock(g_devicesMtx);
+        g_frameworkEventCounts[deviceId]++;
         auto& state = g_devices[deviceId];
         if (gamepad::applyKey(state, kc, action == AKEY_EVENT_ACTION_DOWN)) {
             publishIfChanged(deviceId, state);
@@ -342,6 +345,7 @@ static bool gamepadMotionFilter(const GameActivityMotionEvent* ev) {
         return true;
     }
     if (action != AMOTION_EVENT_ACTION_MOVE) return true;
+    g_frameworkEventCounts[deviceId]++;
 
     // Latest sample wins — historicals are intermediate states the next apply overwrites anyway.
     float z = axisCur(ev, AMOTION_EVENT_AXIS_Z);
@@ -894,6 +898,7 @@ Java_com_tinkernorth_dish_core_jni_SatelliteNative_processGamepadKeyEvent(
     if (!isMappedKey) return JNI_FALSE;
     if (action != AKEY_EVENT_ACTION_DOWN && action != AKEY_EVENT_ACTION_UP) return JNI_FALSE;
     std::lock_guard<std::mutex> lock(g_devicesMtx);
+    g_frameworkEventCounts[deviceId]++;
     auto& state = g_devices[deviceId];
     if (gamepad::applyKey(state, keyCode, action == AKEY_EVENT_ACTION_DOWN)) {
         publishIfChanged(deviceId, state);
@@ -916,6 +921,7 @@ Java_com_tinkernorth_dish_core_jni_SatelliteNative_processGamepadMotionEvent(
         return JNI_TRUE;
     }
     if (maskedAction != AMOTION_EVENT_ACTION_MOVE) return JNI_TRUE;
+    g_frameworkEventCounts[deviceId]++;
     // Right-stick layout varies (Z/RZ vs RX/RY); pick the larger-magnitude pair.
     float rightX = std::fabs(z) >= std::fabs(rx) ? z : rx;
     float rightY = std::fabs(rz) >= std::fabs(ry) ? rz : ry;
@@ -1025,6 +1031,18 @@ JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_mo
 JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDeviceUrbCount(
     JNIEnv*, jobject, jint deviceId) {
     return (jlong)usbhost::getUrbCount((int32_t)deviceId);
+}
+
+JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDeviceMotionCount(
+    JNIEnv*, jobject, jint deviceId) {
+    return (jlong)usbhost::getMotionCount((int32_t)deviceId);
+}
+
+JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDeviceInputEventCount(
+    JNIEnv*, jobject, jint deviceId) {
+    std::lock_guard<std::mutex> lock(g_devicesMtx);
+    auto it = g_frameworkEventCounts.find((int32_t)deviceId);
+    return it == g_frameworkEventCounts.end() ? 0 : (jlong)it->second;
 }
 }
 
