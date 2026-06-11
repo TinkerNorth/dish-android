@@ -137,19 +137,26 @@
                 android:layout_height="match_parent"
                 android:clipToPadding="false"
                 android:paddingHorizontal="@dimen/spacing_5xl"
-                android:paddingBottom="@dimen/spacing_3xl"
+                android:paddingBottom="@dimen/low_power_chip_scroll_clearance"
                 app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
 
-            <include
-                layout="@layout/view_donate_pill"
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="bottom|center_horizontal"
-                android:layout_marginBottom="@dimen/spacing_5xl"
-                android:visibility="gone" />
-        </FrameLayout>
+                android:orientation="vertical"
+                android:gravity="center_horizontal">
 
-        <include layout="@layout/overlay_low_power_chip" />
+                <include
+                    layout="@layout/view_donate_pill"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="@dimen/spacing_5xl"
+                    android:visibility="gone" />
+
+                <include layout="@layout/overlay_low_power_chip" />
+            </LinearLayout>
+        </FrameLayout>
     </LinearLayout>
 
     <!-- Low-power overlays. The Snackbar-based feedback layer doesn't need

@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Streaming hint + pre-dim countdown chip. On the dashboard it docks at the
-     base of the content column and pushes content up; on the input overlays it
-     is bottom-gravity so it floats over the controls without stealing height.
-     View IDs preserved for LowPowerManager. -->
+<!-- Streaming hint + pre-dim countdown chip. View IDs preserved for
+     LowPowerManager. -->
 <merge xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
