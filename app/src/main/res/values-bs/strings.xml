@@ -324,6 +324,7 @@
     <string name="binding_edge_unsteady_detail">I dalje prosljeđuje, ali paketi se gube. Približite se ili pređite na USB.</string>
     <string name="binding_edge_action_reconnect">Ponovo poveži</string>
     <string name="binding_edge_action_dismiss">Odbaci</string>
+    <string name="binding_blocker_input_lost_body">Ponovo povežite kontroler da nastavite podešavanje ili zatvorite ovaj ekran.</string>
     <string name="binding_apply_error_slot_gone">%1$s više nije dostupan — isključite ga i ponovo povežite, zatim pokušajte ponovo.</string>
     <string name="binding_apply_error_no_connect">Nije moguće dosegnuti %1$s. Provjerite je li uključen i na vašoj mreži, pa pokušajte ponovo.</string>
     <string name="binding_apply_warn_title">Brzi način nije dostupan</string>

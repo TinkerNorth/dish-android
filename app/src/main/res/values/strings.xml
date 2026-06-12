@@ -438,6 +438,7 @@
     <string name="binding_edge_unsteady_detail">Still routing, but packets are dropping. Move closer or switch to USB.</string>
     <string name="binding_edge_action_reconnect">Reconnect</string>
     <string name="binding_edge_action_dismiss">Dismiss</string>
+    <string name="binding_blocker_input_lost_body">Reconnect the controller to keep configuring, or close this screen.</string>
     <string name="binding_apply_error_slot_gone">%1$s is no longer available — unplug and reconnect it, then try again.</string>
     <string name="binding_apply_error_no_connect">Couldn\'t reach %1$s. Make sure it\'s on and on your network, then try again.</string>
     <string name="binding_apply_warn_title">Direct mode unavailable</string>

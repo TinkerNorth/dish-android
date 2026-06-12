@@ -321,6 +321,7 @@
     <string name="binding_edge_unsteady_detail">Leitet noch weiter, aber Pakete gehen verloren. Geh näher heran oder wechsle zu USB.</string>
     <string name="binding_edge_action_reconnect">Erneut verbinden</string>
     <string name="binding_edge_action_dismiss">Schließen</string>
+    <string name="binding_blocker_input_lost_body">Verbinde den Controller erneut, um weiter zu konfigurieren, oder schließe diesen Bildschirm.</string>
     <string name="binding_apply_error_slot_gone">%1$s ist nicht mehr verfügbar — trennen und neu verbinden, dann erneut versuchen.</string>
     <string name="binding_apply_error_no_connect">%1$s nicht erreichbar. Stelle sicher, dass es eingeschaltet und im Netzwerk ist, und versuche es erneut.</string>
     <string name="binding_apply_warn_title">Direktmodus nicht verfügbar</string>

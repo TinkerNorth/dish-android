@@ -11,8 +11,6 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.KeyEvent
-import android.view.Menu
-import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.widget.LinearLayout
@@ -233,20 +231,6 @@ class ConnectionsActivity : AppCompatActivity() {
         handlePairPromptIntent(intent)
     }
 
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.menu_connections, menu)
-        return true
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean =
-        when (item.itemId) {
-            R.id.action_add_satellite -> {
-                showAddSatelliteDialog()
-                true
-            }
-            else -> super.onOptionsItemSelected(item)
-        }
-
     private fun observeSatelliteHub() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -357,6 +341,8 @@ class ConnectionsActivity : AppCompatActivity() {
                 R.drawable.ic_satellite,
                 R.string.section_satellites,
                 R.string.action_scan,
+                secondaryActionLabel = R.string.action_add,
+                onSecondaryAction = ::showAddSatelliteDialog,
             ) { satellite.startDiscovery() }
         bluetoothHeader =
             SectionHeaderAdapter(

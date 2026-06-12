@@ -10,6 +10,7 @@ import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
+import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
@@ -76,16 +77,48 @@ data class BindingDraft(
     val touchpadMode: String,
 )
 
+sealed interface BindingBlocker {
+    data object InputLost : BindingBlocker
+
+    data class HostLost(
+        val hostLabel: String,
+        val reconnecting: Boolean,
+    ) : BindingBlocker
+
+    data object HostUnsteady : BindingBlocker
+}
+
 data class ConfigUiState(
     val loaded: Boolean = false,
     val snapshot: BindingSnapshot? = null,
     val hosts: List<BindingHost> = emptyList(),
     val draft: BindingDraft? = null,
     val typeOptions: List<TypeOption> = emptyList(),
+    val connections: List<ConnectionSummary> = emptyList(),
+    val knownHostLabels: Map<String, String> = emptyMap(),
+    val controllerPresent: Boolean = true,
+    val dismissedUnsteadyHostIds: Set<String> = emptySet(),
 ) {
     val selectedHost: BindingHost? get() = hosts.firstOrNull { it.id == draft?.hostId }
     val noHosts: Boolean get() = hosts.isEmpty()
     val hostChosen: Boolean get() = selectedHost != null
+
+    val blocker: BindingBlocker?
+        get() {
+            if (!loaded) return null
+            if (!controllerPresent) return BindingBlocker.InputLost
+            val hostId = draft?.hostId ?: return null
+            val summary = connections.firstOrNull { it.id == hostId }
+            return when {
+                summary == null || !summary.live.isLiveLink() ->
+                    BindingBlocker.HostLost(
+                        hostLabel = summary?.label ?: knownHostLabels[hostId].orEmpty(),
+                        reconnecting = summary?.live == LinkState.Connecting,
+                    )
+                summary.live == LinkState.Unstable && hostId !in dismissedUnsteadyHostIds -> BindingBlocker.HostUnsteady
+                else -> null
+            }
+        }
 
     // Motion only carries on a Satellite host emulating PlayStation (Xbox has no gyro sink,
     // Bluetooth no motion channel); touchpad only on Satellite; DS4 "Pad" is PlayStation-only.
@@ -155,6 +188,7 @@ class ConfigureBindingsViewModel
             val snapshot = buildSnapshot(slotId)
             val hosts = buildHosts()
             val draft = buildSeedDraft(slotId)
+            val conns = hub.connections.value
             _ui.value =
                 ConfigUiState(
                     loaded = true,
@@ -162,11 +196,24 @@ class ConfigureBindingsViewModel
                     hosts = hosts,
                     draft = draft,
                     typeOptions = bundledTypeOptions(),
+                    connections = conns,
+                    knownHostLabels = conns.associate { it.id to it.label },
+                    controllerPresent = controllerPresent(snapshot),
                 )
             draft.hostId?.let { refreshTypeOptions(it) }
             // Refresh the host list as connections come and go, without disturbing the in-progress draft.
             hub.connections
-                .onEach { _ui.update { state -> state.copy(hosts = buildHosts()) } }
+                .onEach { latest ->
+                    _ui.update { state ->
+                        state.copy(
+                            hosts = buildHosts(),
+                            connections = latest,
+                            knownHostLabels = state.knownHostLabels + latest.associate { it.id to it.label },
+                        )
+                    }
+                }.launchIn(viewModelScope)
+            gamepadRegistry.devices
+                .onEach { _ui.update { state -> state.copy(controllerPresent = controllerPresent(state.snapshot)) } }
                 .launchIn(viewModelScope)
         }
 
@@ -199,6 +246,27 @@ class ConfigureBindingsViewModel
 
         fun unbind() {
             loadedSlotId?.let { hub.unbind(it) }
+        }
+
+        fun reconnectHosts() {
+            hub.autoReconnectAll()
+        }
+
+        fun dismissUnsteady() =
+            _ui.update { state ->
+                val hostId = state.draft?.hostId ?: return@update state
+                state.copy(dismissedUnsteadyHostIds = state.dismissedUnsteadyHostIds + hostId)
+            }
+
+        private fun controllerPresent(snapshot: BindingSnapshot?): Boolean {
+            if (snapshot == null || snapshot.link == BindingLink.ONSCREEN) return true
+            val id = snapshot.slotId.toIntOrNull() ?: return true
+            val twins =
+                gamepadRegistry.devices.value.values.filter { device ->
+                    device.id == id ||
+                        (snapshot.vendorId != 0 && device.vendorId == snapshot.vendorId && device.productId == snapshot.productId)
+                }
+            return twins.any { !it.isDisconnecting }
         }
 
         /**

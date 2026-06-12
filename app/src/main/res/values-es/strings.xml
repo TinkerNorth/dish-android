@@ -325,6 +325,7 @@
     <string name="binding_edge_unsteady_detail">Sigue enrutando, pero se pierden paquetes. Acércate o cambia a USB.</string>
     <string name="binding_edge_action_reconnect">Reconectar</string>
     <string name="binding_edge_action_dismiss">Descartar</string>
+    <string name="binding_blocker_input_lost_body">Vuelve a conectar el mando para seguir configurando o cierra esta pantalla.</string>
     <string name="binding_apply_error_slot_gone">%1$s ya no está disponible — desconéctalo y vuelve a conectarlo, luego inténtalo de nuevo.</string>
     <string name="binding_apply_error_no_connect">No se pudo conectar con %1$s. Comprueba que esté encendido y en tu red, y vuelve a intentarlo.</string>
     <string name="binding_apply_warn_title">Modo Directo no disponible</string>

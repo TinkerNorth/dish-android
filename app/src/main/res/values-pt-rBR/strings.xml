@@ -325,6 +325,7 @@
     <string name="binding_edge_unsteady_detail">Ainda roteando, mas pacotes estão sendo perdidos. Aproxime-se ou mude para USB.</string>
     <string name="binding_edge_action_reconnect">Reconectar</string>
     <string name="binding_edge_action_dismiss">Dispensar</string>
+    <string name="binding_blocker_input_lost_body">Reconecte o controle para continuar configurando ou feche esta tela.</string>
     <string name="binding_apply_error_slot_gone">%1$s não está mais disponível — desconecte e reconecte, depois tente novamente.</string>
     <string name="binding_apply_error_no_connect">Não foi possível alcançar %1$s. Verifique se está ligado e na sua rede e tente novamente.</string>
     <string name="binding_apply_warn_title">Modo Direto indisponível</string>
