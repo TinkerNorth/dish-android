@@ -96,7 +96,7 @@ class PhysicalMotionSource
 
             private fun onAccel(values: FloatArray) {
                 if (values.size < 3) return
-                // No remap — a controller's IMU is already in the wire frame.
+                // No remap: a controller's IMU is already in the wire frame.
                 accelX = MotionScaling.accelMssToWire(values[0])
                 accelY = MotionScaling.accelMssToWire(values[1])
                 accelZ = MotionScaling.accelMssToWire(values[2])
@@ -136,7 +136,7 @@ class PhysicalMotionSource
 
         @Volatile private var reachable: Map<String, SatelliteConnection> = emptyMap()
 
-        // Guarded by listenersLock — a final reachability update racing onStop could leak a listener.
+        // Guarded by listenersLock: a final reachability update racing onStop could leak a listener.
         private val listeners = HashMap<String, PadListener>()
         private val listenersLock = Any()
 
@@ -162,7 +162,7 @@ class PhysicalMotionSource
         override fun onStop(owner: LifecycleOwner) {
             bindingsJob?.cancel()
             bindingsJob = null
-            // Release listeners — a leaked gyro listener drains both pad and phone.
+            // Release listeners: a leaked gyro listener drains both pad and phone.
             synchronized(listenersLock) {
                 listeners.values.forEach { it.release() }
                 listeners.clear()
@@ -223,7 +223,7 @@ class PhysicalMotionSource
                     cap.hasGyro && cap.userEnabled
                 }
 
-            // Identity axis remap — controller IMU body frame already matches wire convention.
+            // Identity axis remap: controller IMU body frame already matches wire convention.
             fun convertControllerSample(
                 gyroX: Float,
                 gyroY: Float,

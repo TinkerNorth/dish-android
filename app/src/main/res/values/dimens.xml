@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    SEMANTIC TOKENS — names by use, mapped to primitives.
+    SEMANTIC TOKENS: names by use, mapped to primitives.
 
     This is the file every layout XML and Kotlin source should reference.
     Primitives are in `dimens_primitives.xml`; if a semantic token here
@@ -8,14 +8,14 @@
     first, then point the semantic name at it.
 
     Three families:
-      - Generic SPACING tokens (T-shirt sizes) — for margins and gaps that
+      - Generic SPACING tokens (T-shirt sizes): for margins and gaps that
         don't have a strong identity. New code defaults to spacing_md and
         only reaches for sm/lg when there's a layout reason.
-      - PER-COMPONENT tokens (e.g. `card_padding`, `chip_corner_radius`) —
+      - PER-COMPONENT tokens (e.g. `card_padding`, `chip_corner_radius`):
         for sizes that are an integral part of a specific component's
         visual identity. Changing card_padding moves cards in lockstep
         without affecting unrelated rows.
-      - TEXT tokens — sp scale named by role (caption / label / body /
+      - TEXT tokens: sp scale named by role (caption / label / body /
         title / display) instead of pixel size, so a future type-scale
         adjustment is one file.
 
@@ -53,7 +53,7 @@
     <dimen name="corner_pill">@dimen/size_20</dimen>
 
     <!-- ============================================================
-         ICON SIZES (in-layout — vector drawable canvases stay literal)
+         ICON SIZES (in-layout: vector drawable canvases stay literal)
          ============================================================ -->
     <dimen name="icon_dot_lg">@dimen/size_8</dimen>        <!-- slot-card status indicator -->
     <dimen name="icon_battery">@dimen/size_20</dimen>      <!-- battery glyph in slot card -->
@@ -72,19 +72,19 @@
          SECTION HEADER (section_header.xml)
 
          Canonical rhythm for the eyebrow include:
-           gap_above — applied as `layout_marginTop` on the include when
+           gap_above: applied as `layout_marginTop` on the include when
              the eyebrow sits between two stacked sections (typical:
              card → eyebrow → card). Omit when the eyebrow is the first
              child of its container, or when a divider/marginVertical
              above already carries the gap.
-           gap_below — applied as `layout_marginBottom` on the include
+           gap_below: applied as `layout_marginBottom` on the include
              when the next sibling does NOT carry its own top breathing
              room. Omit when the next sibling has a `paddingTop` (e.g.
              a list with `paddingTop=spacing_md`) that already provides
              the gap.
 
          The Settings ABOUT eyebrow previously used the icon primitive
-         `size_22` (22dp) as its top margin — that was drift, not intent.
+         `size_22` (22dp) as its top margin. That was drift, not intent.
          The canonical above-gap is 14dp; the Settings card density
          tolerates the tighter rhythm.
          ============================================================ -->
@@ -161,7 +161,7 @@
     <dimen name="notification_text_leading_indent">@dimen/size_12</dimen>
 
     <!-- ============================================================
-         TEXT SIZES — role-named, mapped to the sp scale
+         TEXT SIZES: role-named, mapped to the sp scale
          ============================================================ -->
     <dimen name="text_caption">@dimen/text_10</dimen>
     <dimen name="text_label">@dimen/text_11</dimen>        <!-- muted monospace labels -->

@@ -9,7 +9,7 @@ on:
         description: "Tag to release (must already exist)"
         required: true
 
-# Required secrets (optional — workflow falls back to unsigned artifacts
+# Required secrets (optional: workflow falls back to unsigned artifacts
 # for workflow_dispatch on feature branches; tagged releases on main are
 # blocked by `required-secrets` if any are missing):
 #
@@ -23,7 +23,7 @@ on:
 #
 # Optional secrets (not blocking, but enable observability features):
 #
-#   GOOGLE_SERVICES_JSON_BASE64   base64 of app/google-services.json — when
+#   GOOGLE_SERVICES_JSON_BASE64   base64 of app/google-services.json. When
 #                                 set, Crashlytics is wired into the build
 #                                 and the R8 mapping is auto-uploaded to
 #                                 Firebase. When unset, the build still
@@ -81,7 +81,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${{ github.ref_type }}" != "tag" ] || [ "${{ startsWith(github.ref, 'refs/tags/v') }}" != "true" ]; then
-            echo "::notice::Non-tag release run — unsigned fallback permitted."
+            echo "::notice::Non-tag release run. Unsigned fallback permitted."
             exit 0
           fi
           missing=()
@@ -125,7 +125,7 @@ jobs:
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::KEYSTORE_BASE64 not set — release artifacts will be unsigned."
+            echo "::warning::KEYSTORE_BASE64 not set. Release artifacts will be unsigned."
           fi
 
       - name: Decode google-services.json (if secret present)
@@ -139,7 +139,7 @@ jobs:
             echo "Firebase Crashlytics will be enabled in this build."
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::GOOGLE_SERVICES_JSON_BASE64 not set — Crashlytics will not be wired into this build."
+            echo "::warning::GOOGLE_SERVICES_JSON_BASE64 not set. Crashlytics will not be wired into this build."
           fi
 
       - name: Compute version from tag
@@ -156,7 +156,7 @@ jobs:
             patch="${BASH_REMATCH[3]}"
             code=$((major * 10000 + minor * 100 + patch))
           else
-            echo "::warning::Tag '$tag' does not match vMAJOR.MINOR.PATCH — falling back to versionCode=1."
+            echo "::warning::Tag '$tag' does not match vMAJOR.MINOR.PATCH, falling back to versionCode=1."
             code=1
           fi
           echo "code=$code" >> "$GITHUB_OUTPUT"
@@ -210,7 +210,7 @@ jobs:
           # Crashlytics replacement) can de-obfuscate without GCP access.
           mapping=$(find app/build/outputs/mapping/release -name 'mapping.txt' | head -1)
           [ -n "$mapping" ] && cp "$mapping" "dist/dish-${tag}${suffix}-mapping.txt"
-          # Native debug symbols for the JNI .so — lets crash reporters
+          # Native debug symbols for the JNI .so: lets crash reporters
           # symbolize native stack frames from the encrypted-wire / rumble
           # hot path.
           native_symbols=$(find app/build/intermediates/merged_native_libs/release -name '*.so' 2>/dev/null | head -1)
@@ -287,7 +287,7 @@ jobs:
           if [ "${COSIGN_SHA256}" != "TODO_REPLACE_WITH_UPSTREAM_SHA256" ]; then
             echo "${COSIGN_SHA256}  /tmp/cosign" | sha256sum -c -
           else
-            echo "::warning::COSIGN_SHA256 is unset — replace with the upstream SHA-256 to enforce binary integrity."
+            echo "::warning::COSIGN_SHA256 is unset. Replace with the upstream SHA-256 to enforce binary integrity."
           fi
           chmod +x /tmp/cosign
           sudo mv /tmp/cosign /usr/local/bin/cosign

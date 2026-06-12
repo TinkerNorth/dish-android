@@ -75,15 +75,5 @@ obj/
 # Kotlin
 .kotlin/
 
-# Comment-refactor scratch (local mining material — not for repo)
-COMMENTS.md
-comments_scratch/
-
-# Claude Code local session state
-.claude/
-
-# Local design previews / scratch artifacts
-preview_*.html
-
 # Gradle dependency verification metadata (locally generated)
 gradle/verification-metadata.xml

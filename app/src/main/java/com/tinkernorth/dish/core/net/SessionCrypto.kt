@@ -9,7 +9,7 @@ import javax.crypto.spec.SecretKeySpec
  * Client side of the contract's crypto (satellite docs/contract.md §Crypto /
  * §hmacProof). Pure JVM so it unit-tests against the satellite's pinned
  * interop vectors; the derived session key is handed to the native layer,
- * which only ever sees per-session material — never the pairing key.
+ * which only ever sees per-session material, never the pairing key.
  */
 object SessionCrypto {
     private const val HMAC_ALGORITHM = "HmacSHA256"
@@ -33,7 +33,7 @@ object SessionCrypto {
 
     /**
      * sessionKey = HKDF-SHA256(ikm = pairingKey, salt = sessionSalt,
-     * info = "satellite-session-v1" || token(4 BE)) — RFC 5869, one output
+     * info = "satellite-session-v1" || token(4 BE)). RFC 5869, one output
      * block. Token and salt come from the session PUT response; both ends
      * derive the same key, so counters restart per session with no
      * cross-session nonce reuse.

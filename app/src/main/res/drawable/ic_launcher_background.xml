@@ -2,8 +2,8 @@
 <!-- Adaptive launcher icon background. Pinned to the dark-navy primitive
      rather than the day/night-aware `@color/colorBackground` semantic
      token: the launcher icon is the brand's identity on the home screen
-     and must stay visually consistent across day and night devices —
-     the cyan dish glyph in `ic_launcher_foreground.png` is designed for
+     and must stay visually consistent across day and night devices.
+     The cyan dish glyph in `ic_launcher_foreground.png` is designed for
      a deep-space backdrop, so flipping this to the light cloud surface
      in day mode (which `@color/colorBackground` resolves to under
      `values/colors.xml`) would render the icon nearly invisible against
@@ -11,7 +11,7 @@
 
      The in-app splash window does the opposite: `Theme.App.Starting`
      keeps `@color/colorBackground` so the splash *does* follow the OS
-     day/night state — see the comment on that style in themes.xml. -->
+     day/night state. See the comment on that style in themes.xml. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
     <solid android:color="@color/navy_900" />
 </shape>

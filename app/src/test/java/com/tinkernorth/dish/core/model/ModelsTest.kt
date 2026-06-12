@@ -109,7 +109,7 @@ class ModelsTest {
         val catalog = json.decodeFromString(CatalogDto.serializer(), body)
         assertEquals("de", catalog.locale)
         assertEquals(2, catalog.controllerTypes.size)
-        // A type newer than this app still parses fully — name and unknown
+        // A type newer than this app still parses fully: name and unknown
         // feature slugs included (the UI offers the type, skips the feature).
         assertEquals(7, catalog.controllerTypes[1].id)
         assertEquals("HyperPad 9000", catalog.controllerTypes[1].name)

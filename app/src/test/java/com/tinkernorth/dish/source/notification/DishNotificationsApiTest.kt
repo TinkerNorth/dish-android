@@ -78,7 +78,7 @@ class DishNotificationsApiTest {
         }
 
     @Test
-    fun `posts has replay=0 — late subscriber sees only future emissions`() =
+    fun `posts has replay=0 - late subscriber sees only future emissions`() =
         runTest {
             val notifications = DishNotifications()
             notifications.post(title = "early")
@@ -114,7 +114,7 @@ class DishNotificationsApiTest {
         }
 
     @Test
-    fun `dismissals has replay=0 — late subscriber misses prior dismiss calls`() =
+    fun `dismissals has replay=0 - late subscriber misses prior dismiss calls`() =
         runTest {
             val notifications = DishNotifications()
             notifications.dismiss(id = 1L)
@@ -192,7 +192,7 @@ class DishNotificationsApiTest {
         }
 
     @Test
-    fun `warn defaults to DURATION_LONG — regression for prior persistent-by-default bug`() =
+    fun `warn defaults to DURATION_LONG - regression for prior persistent-by-default bug`() =
         runTest {
             val notifications = DishNotifications()
             notifications.posts.test {
@@ -268,7 +268,7 @@ class DishNotificationsApiTest {
         }
 
     @Test
-    fun `burst posts do not block — buffer absorbs them`() {
+    fun `burst posts do not block, buffer absorbs them`() {
         val notifications = DishNotifications()
         val ids = (1..100).map { notifications.post(title = "burst-$it") }
         assertEquals(100, ids.size)

@@ -119,7 +119,7 @@ class SatelliteConnectionManagerTest {
             val collector = scope.launch { mgr.events.collect { events += it } }
             block(mgr, events)
             // A live session's heartbeat poll reschedules itself forever, so
-            // the scheduler can never go idle while one exists — tear all
+            // the scheduler can never go idle while one exists. Tear all
             // sessions down before the final drain.
             mgr.connections.value.keys
                 .forEach(mgr::disconnect)
@@ -274,7 +274,7 @@ class SatelliteConnectionManagerTest {
         }
 
     @Test
-    fun `a coded 401 is terminal — key dropped, row stale, no retry loop`() =
+    fun `a coded 401 is terminal - key dropped, row stale, no retry loop`() =
         runMgrTest { mgr, events ->
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             coEvery {
@@ -625,7 +625,7 @@ class SatelliteConnectionManagerTest {
         }
 
     @Test
-    fun `benign epoch drift reconciles by adopting the epoch — no session re-PUT`() =
+    fun `benign epoch drift reconciles by adopting the epoch, no session re-PUT`() =
         runMgrTest { mgr, _ ->
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             coEvery {
@@ -657,7 +657,7 @@ class SatelliteConnectionManagerTest {
             scope.testScheduler.runCurrent()
 
             // Ack says epoch 9 but the applied state still matches the desired
-            // set — adopt the epoch instead of churning token/keys with a re-PUT.
+            // set. Adopt the epoch instead of churning token/keys with a re-PUT.
             every { controllerRepo.getServerEpoch(any()) } returns 9
             every { controllerRepo.getActiveBitmap(any()) } returns 0b1
             scope.testScheduler.advanceTimeBy(1100)
@@ -670,7 +670,7 @@ class SatelliteConnectionManagerTest {
         }
 
     @Test
-    fun `an unpaired close-notify is terminal — key dropped, row stale, no silent retry`() =
+    fun `an unpaired close-notify is terminal - key dropped, row stale, no silent retry`() =
         runMgrTest { mgr, _ ->
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             coEvery {
@@ -713,7 +713,7 @@ class SatelliteConnectionManagerTest {
             } coAnswers {
                 sentDescriptors += arg<String>(5)
                 mouseRequests += arg<Boolean>(6)
-                // The grant is computed ONLY here — and this server keeps denying it.
+                // The grant is computed ONLY here, and this server keeps denying it.
                 ok(
                     """{"connectionId":"conn_1","token":"00000001","sessionSalt":"0102030405060708",""" +
                         """"epoch":1,"controllers":[{"ctrlIdx":0,"result":"ok","appliedType":1,""" +

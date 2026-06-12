@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Background for the per-connection picker row inside an expanded slot
-     card. State-list keyed by android:selected — selected = "this slot is
+     card. State-list keyed by android:selected. Selected = "this slot is
      currently bound to this connection" so the border flips to colorPrimary;
      otherwise muted colorOutline. The adapter just sets `view.isSelected =
      bound`; no hand-rolled GradientDrawable per row. -->

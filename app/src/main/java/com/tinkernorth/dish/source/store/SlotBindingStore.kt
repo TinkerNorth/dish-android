@@ -19,7 +19,7 @@ class SlotBindingStore
                 .filter { it.value == connectionId }
                 .map { it.key }
 
-        // No side effects — caller drives detach/attach on the satellite connection.
+        // No side effects: caller drives detach/attach on the satellite connection.
         fun bind(
             slotId: String,
             connectionId: String,

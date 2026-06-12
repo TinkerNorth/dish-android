@@ -1,4 +1,4 @@
-# TinkerNorth — canonical clang-tidy configuration.
+# TinkerNorth: canonical clang-tidy configuration.
 # This exact file is shared by satellite, dish-android (JNI), dish-linux,
 # and dish-mac (any C/C++ source).
 #

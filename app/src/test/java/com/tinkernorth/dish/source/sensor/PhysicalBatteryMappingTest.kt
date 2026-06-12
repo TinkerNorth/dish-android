@@ -59,7 +59,7 @@ class PhysicalBatteryMappingTest {
 
     @Test
     fun `capacity above 1 is clamped to 100`() {
-        // Some HID descriptors report slightly-over-1.0 capacity — clamp rather than letting validator reject >100.
+        // Some HID descriptors report slightly-over-1.0 capacity. Clamp rather than letting validator reject >100.
         assertEquals(
             100,
             PhysicalBatteryMapping
@@ -117,7 +117,7 @@ class PhysicalBatteryMappingTest {
 
     @Test
     fun `not-charging status reads as discharging`() {
-        // Plugged-but-held (charge limiter) — matches the phone-battery choice from the player's view.
+        // Plugged-but-held (charge limiter): matches the phone-battery choice from the player's view.
         assertEquals(
             BatteryValidator.STATUS_DISCHARGING,
             PhysicalBatteryMapping.statusToWire(PhysicalBatteryMapping.ANDROID_STATUS_NOT_CHARGING),

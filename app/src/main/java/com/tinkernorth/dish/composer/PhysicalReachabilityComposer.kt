@@ -77,7 +77,7 @@ class PhysicalReachabilityComposer
     }
 
 @Deprecated(
-    "Inject PhysicalReachabilityComposer instead — its state flow is the same shape.",
+    "Inject PhysicalReachabilityComposer instead. Its state flow is the same shape.",
     ReplaceWith("PhysicalReachabilityComposer"),
 )
 internal object PhysicalReachability {

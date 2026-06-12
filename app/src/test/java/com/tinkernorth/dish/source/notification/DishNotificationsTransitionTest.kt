@@ -159,7 +159,7 @@ class DishNotificationsTransitionTest {
         }
 
     @Test
-    fun `same-key dedup is per-attachment — A's key does not affect B`() =
+    fun `same-key dedup is per-attachment - A's key does not affect B`() =
         runTest {
             val notifications = DishNotifications()
             val ownerA = TestLifecycleOwner()

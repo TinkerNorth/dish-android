@@ -28,7 +28,7 @@ class ConnectionStore
         // Identity is machineId-only (satellite docs/contract.md §Identity):
         // one physical receiver is exactly one remembered row. idFor still has
         // to mint an ip:port id while the machineId is unknown (manual add), so
-        // the upsert itself keeps the invariant across an identity upgrade —
+        // the upsert itself keeps the invariant across an identity upgrade:
         // there is no separate reconciliation pass to run, or forget to run.
         fun rememberSatellite(server: DiscoveredServer) {
             if (server.machineId.isBlank() && refreshKnownBox(server)) return

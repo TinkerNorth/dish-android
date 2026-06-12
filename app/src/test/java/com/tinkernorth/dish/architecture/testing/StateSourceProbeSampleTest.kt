@@ -39,7 +39,7 @@ class StateSourceProbeSampleTest {
 
             probe.assertState(GateState.OPEN)
             assert(probe.states.containsAll(listOf(GateState.CLOSED, GateState.OPENING, GateState.OPEN))) {
-                "Expected CLOSED, OPENING, OPEN — got ${probe.states}"
+                "Expected CLOSED, OPENING, OPEN, got ${probe.states}"
             }
         }
 

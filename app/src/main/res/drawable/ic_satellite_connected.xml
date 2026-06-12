@@ -1,4 +1,4 @@
-<!-- "satellite-connected" — satellite glyph + uplink dot above the
+<!-- "satellite-connected": satellite glyph + uplink dot above the
      antenna tip. Mirrors satellite-assets/satellite-connected.svg. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"

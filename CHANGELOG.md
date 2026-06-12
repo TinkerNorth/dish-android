@@ -15,7 +15,7 @@ four repos share a version number.
 
 ## [Unreleased]
 
-### Changed — control-plane rewrite (protocol 1) `[wire-coordinated]`
+### Changed: control-plane rewrite (protocol 1) `[wire-coordinated]`
 
 Clean-break rewrite of the satellite control plane against
 `satellite/docs/contract.md` (Android mapping: `docs/contract.md`,
@@ -25,7 +25,7 @@ replacing the former `docs/wire-format.md`).
   identity, an `hmacProof` of the pairing key, and the full controller
   topology; the response is the applied state. Re-PUT converges;
   `connectionId` is stable, the token rotates. Single-slot changes (type,
-  motion caps, touchpad routing) ride per-controller PUT/DELETE routes —
+  motion caps, touchpad routing) ride per-controller PUT/DELETE routes:
   no token rotation for a toggle.
 - UDP no longer mutates topology: the controller ADD/REMOVE/TYPE/CAPS
   opcodes, the ACK-retry choreography, the registration mutex, and the
@@ -40,7 +40,7 @@ replacing the former `docs/wire-format.md`).
   dropped, the row reads "needs pairing", and retries stop. Silent
   reconnects use bounded exponential backoff (1 s → 60 s) instead of a
   fixed 1.5 s loop.
-- Binding commits the user's chosen type WITH the bind — the
+- Binding commits the user's chosen type WITH the bind. The
   default-then-correct Xbox phase is gone end to end (USB-direct claims
   adopt the remembered type too). `bind` refuses slot ids the registry no
   longer knows (the zombie-slot guard) and the apply flow re-resolves the
@@ -70,7 +70,7 @@ replacing the former `docs/wire-format.md`).
   `app/google-services.json` so local builds without a Firebase project
   still compile and run (Crashlytics no-ops at runtime via a
   `FirebaseApp.getApps` check).
-- In-app crash-reporting opt-out — `SettingsActivity` reachable from
+- In-app crash-reporting opt-out: `SettingsActivity` reachable from
   the gear icon on the main screen → *Share crash reports*. Backed by
   `CrashReportingStore` (separate `user_preferences.xml`
   SharedPreferences, included in cloud backup) and
@@ -101,7 +101,7 @@ replacing the former `docs/wire-format.md`).
 
 - Overlay resends are edge-burst + keepalive: real input stays event-driven;
   a state change is re-sent 3 scheduler ticks in a row (50 ms apart) to heal
-  a lost edge frame, then the stream idles at a 1 Hz keepalive — replacing
+  a lost edge frame, then the stream idles at a 1 Hz keepalive, replacing
   the previous constant 250 Hz re-send of the last state.
 - `versionCode` and `versionName` are now derived from CI environment
   variables (`DISH_VERSION_CODE` / `DISH_VERSION_NAME`), with a
@@ -119,7 +119,7 @@ binary cares about.
 
 ---
 
-## [1.0.0] — TBD
+## [1.0.0] - TBD
 
 Initial public release. Tag will be created when the Play Store internal
 testing track is opened.

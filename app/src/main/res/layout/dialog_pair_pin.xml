@@ -2,13 +2,13 @@
 <!-- Custom PIN dialog. Replaces the MaterialAlertDialogBuilder pattern so the
      Pair button can host an in-flight DishSpinner and the dialog doesn't
      auto-dismiss on submit (the old behaviour reset the user's PIN typing on
-     every retry). Surface is bg_pill — matches every other floating banner /
-     dim-overlay pill in the v6 theme — and the title/subtitle labels all
+     every retry). Surface is bg_pill (matches every other floating banner /
+     dim-overlay pill in the v6 theme) and the title/subtitle labels all
      follow the monospace + letter-spaced chrome convention.
 
      PIN input is a TextInputLayout (OutlinedBox via Widget.Dish.TextInputLayout.Pin)
      wrapping a TextInputEditText. The inline error TextView that used to
-     live under the field was retired during the M3 audit — TextInputLayout's
+     live under the field was retired during the M3 audit: TextInputLayout's
      own .setError(msg) drives the error stroke + the helper-text row + the
      a11y live-region announcement in one call, which is both spec-correct
      and announces failures to TalkBack users (the prior TextView did not). -->

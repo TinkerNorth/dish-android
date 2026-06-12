@@ -28,7 +28,7 @@
     <string name="action_scan">Buscar</string>
     <string name="action_scanning">Buscando…</string>
     <string name="action_add">Adicionar</string>
-    <string name="bt_hosts_empty">Nenhum host lembrado — toque em Adicionar para registrar um novo</string>
+    <string name="bt_hosts_empty">Nenhum host lembrado. Toque em Adicionar para registrar um novo</string>
 
     <!-- row_connection.xml + rótulos dinâmicos de linha no ConnectionsActivity. -->
     <string name="action_connect">Conectar</string>
@@ -43,7 +43,7 @@
 
     <!-- Diálogo de confirmação de esquecimento de host Bluetooth. -->
     <string name="dialog_forget_bt_title">Esquecer %1$s?</string>
-    <string name="dialog_forget_bt_message">O Dish deixará de lembrar este host. O telefone mantém o pareamento no nível do sistema — abra as configurações de Bluetooth para removê-lo por completo.</string>
+    <string name="dialog_forget_bt_message">O Dish deixará de lembrar este host. O telefone mantém o pareamento no nível do sistema. Abra as configurações de Bluetooth para removê-lo por completo.</string>
     <string name="dialog_forget_bt_positive">Abrir configurações</string>
     <string name="dialog_forget_bt_negative">Agora não</string>
 
@@ -82,7 +82,7 @@
     <string name="slot_status_tap_to_bind">Toque para vincular</string>
 
     <!-- Linhas do seletor por slot no ControllerAdapter. -->
-    <string name="picker_empty_no_connections">Nenhuma conexão ainda — toque em Gerenciar acima</string>
+    <string name="picker_empty_no_connections">Nenhuma conexão ainda. Toque em Gerenciar acima</string>
     <string name="picker_empty_no_available">Nenhuma conexão disponível agora</string>
     <string name="picker_title_with_status">%1$s%2$s</string>
     <string name="picker_status_online"> • on-line</string>
@@ -129,7 +129,7 @@
     <!-- Subtítulo da linha Bluetooth e estado transitório do slot durante o
          pareamento. -->
     <string name="bt_row_detail">%1$s • %2$s</string>
-    <string name="bt_transient_ready_to_pair">Pronto para parear — procure este dispositivo no seu host</string>
+    <string name="bt_transient_ready_to_pair">Pronto para parear. Procure este dispositivo no seu host</string>
     <string name="bt_transient_acquiring">Adquirindo perfil HID…</string>
     <string name="bt_transient_idle">Inativo</string>
 
@@ -144,13 +144,13 @@
     <string name="motion_unavailable">Movimento: sem giroscópio</string>
     <string name="motion_unavailable_detail">Este telefone não tem giroscópio, então o movimento (mira giroscópica / inclinação) não é enviado.</string>
     <string name="motion_not_forwarded_detail">Esta conexão Bluetooth não tem canal de movimento. Use uma conexão por satélite para enviar mira giroscópica / inclinação.</string>
-    <string name="motion_stalled_detail">Sensor de movimento travado — tente pressionar o botão Voltar para reiniciá-lo, ou reinicie o Dish.</string>
+    <string name="motion_stalled_detail">Sensor de movimento travado. Tente pressionar o botão Voltar para reiniciá-lo, ou reinicie o Dish.</string>
     <string name="motion_user_disabled">Movimento: desligado</string>
     <string name="motion_no_host_sink">Movimento: o host não consegue receber</string>
     <string name="motion_backend_broken">Movimento: o servidor não consegue entregar</string>
     <string name="motion_user_disabled_detail">Você desativou o movimento para este slot. Ative a chave Movimento na linha do controle para voltar a enviar giroscópio.</string>
     <string name="motion_no_host_sink_detail">Um controle virtual estilo Xbox não tem superfície de movimento no host. Mude o controle para PlayStation para mira giroscópica / inclinação.</string>
-    <string name="motion_backend_broken_detail">O satélite aceitou este controle mas não conseguiu criar seu dispositivo de movimento — provavelmente um problema de permissão ou de kernel no servidor. Reinicie o satélite ou verifique seus logs.</string>
+    <string name="motion_backend_broken_detail">O satélite aceitou este controle mas não conseguiu criar seu dispositivo de movimento, provavelmente um problema de permissão ou de kernel no servidor. Reinicie o satélite ou verifique seus logs.</string>
     <string name="controller_motion_toggle_label">Movimento (giroscópio)</string>
     <string name="controller_motion_toggle_subtitle_on">Enviando mira giroscópica / inclinação para o host.</string>
     <string name="controller_motion_toggle_subtitle_off">Nenhuma amostra de giroscópio está sendo enviada para este slot.</string>
@@ -224,7 +224,7 @@
 
     <!-- Estado vazio dinâmico para a lista de satélites. -->
     <string name="discovery_empty_never_scanned">Toque em Buscar para encontrar satélites na sua rede</string>
-    <string name="discovery_empty_no_results">Nenhum satélite encontrado às %1$s — verifique o Wi-Fi e se seu host está ligado.</string>
+    <string name="discovery_empty_no_results">Nenhum satélite encontrado às %1$s. Verifique o Wi-Fi e se seu host está ligado.</string>
 
     <!-- Diálogo PIN personalizado. -->
     <string name="pair_dialog_title">Parear com satélite</string>
@@ -326,7 +326,7 @@
     <string name="binding_edge_action_reconnect">Reconectar</string>
     <string name="binding_edge_action_dismiss">Dispensar</string>
     <string name="binding_blocker_input_lost_body">Reconecte o controle para continuar configurando ou feche esta tela.</string>
-    <string name="binding_apply_error_slot_gone">%1$s não está mais disponível — desconecte e reconecte, depois tente novamente.</string>
+    <string name="binding_apply_error_slot_gone">%1$s não está mais disponível. Desconecte e reconecte, depois tente novamente.</string>
     <string name="binding_apply_error_no_connect">Não foi possível alcançar %1$s. Verifique se está ligado e na sua rede e tente novamente.</string>
     <string name="binding_apply_warn_title">Modo Direto indisponível</string>
     <string name="binding_apply_warn_detail">%1$s está vinculado a %2$s no modo Padrão.</string>

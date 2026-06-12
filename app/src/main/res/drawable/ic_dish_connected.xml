@@ -1,4 +1,4 @@
-<!-- "dish-connected" — default dish + a small lock-on indicator at the
+<!-- "dish-connected": default dish + a small lock-on indicator at the
      upper-right. Mirrors dish-assets/dish-connected.svg. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"

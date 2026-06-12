@@ -69,7 +69,7 @@ class SettingsActivity : AppCompatActivity() {
         chooseChip(themePreferenceStore.state.value)
         binding.chipGroupTheme.setOnCheckedStateChangeListener { _, checkedIds ->
             // selectionRequired guarantees one id, but a configuration-change rebind can briefly
-            // observe an empty selection — guard rather than crash.
+            // observe an empty selection. Guard rather than crash.
             val mode =
                 when (checkedIds.firstOrNull()) {
                     R.id.chipThemeLight -> ThemeMode.LIGHT

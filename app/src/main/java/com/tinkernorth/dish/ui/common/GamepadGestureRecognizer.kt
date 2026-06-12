@@ -317,7 +317,7 @@ internal class GamepadGestureRecognizer {
             state.buttons = state.buttons and GamepadTouchView.BTN_RB.inv()
             return
         }
-        // Centre / stick-click buttons aren't pointer-tracked — drop all on any unmatched up.
+        // Centre / stick-click buttons aren't pointer-tracked: drop all on any unmatched up.
         state.buttons =
             state.buttons and
             (

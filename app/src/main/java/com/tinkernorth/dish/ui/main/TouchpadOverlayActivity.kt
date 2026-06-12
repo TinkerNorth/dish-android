@@ -110,7 +110,7 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
         val summary = hub.summary(connectionId) ?: return
         if (summary.kind != ConnectionKind.SATELLITE) return
         if (summary.live != LinkState.Connected) return
-        // The live state object mutates on the UI thread — copy() is the
+        // The live state object mutates on the UI thread: copy() is the
         // stable comparison base (a torn read just costs one extra burst).
         val changed = state != lastResentSnapshot
         if (changed) lastResentSnapshot = state.copy()

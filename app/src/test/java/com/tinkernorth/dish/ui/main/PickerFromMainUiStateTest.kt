@@ -55,7 +55,7 @@ class PickerFromMainUiStateTest {
     }
 
     @Test
-    fun `only live connections populate the picker — discovered-but-not-connected are hidden`() {
+    fun `only live connections populate the picker - discovered-but-not-connected are hidden`() {
         val live = summary("s:1", LinkState.Connected)
         val ready = summary("s:2", LinkState.Ready)
         val found = summary("s:3", LinkState.Found)
@@ -81,7 +81,7 @@ class PickerFromMainUiStateTest {
     }
 
     @Test
-    fun `spec — after bind, picker still shows the bound connection`() {
+    fun `spec - after bind, picker still shows the bound connection`() {
         val online = summary("s:1", LinkState.Connected, boundSlots = listOf(VIRTUAL_SLOT_ID))
         val state =
             MainUiState(
@@ -93,7 +93,7 @@ class PickerFromMainUiStateTest {
     }
 
     @Test
-    fun `spec — when the bound connection drops to Saved, picker keeps it as the holdover`() {
+    fun `spec - when the bound connection drops to Saved, picker keeps it as the holdover`() {
         val offlineHeld = summary("s:1", LinkState.Saved, boundSlots = listOf(VIRTUAL_SLOT_ID))
         val state =
             MainUiState(
@@ -105,7 +105,7 @@ class PickerFromMainUiStateTest {
     }
 
     @Test
-    fun `spec — auto-recovery restores normal availability`() {
+    fun `spec - auto-recovery restores normal availability`() {
         val recovered = summary("s:1", LinkState.Connected, boundSlots = listOf(VIRTUAL_SLOT_ID))
         val state =
             MainUiState(
@@ -117,7 +117,7 @@ class PickerFromMainUiStateTest {
     }
 
     @Test
-    fun `spec — unbind while offline drops the row from the picker`() {
+    fun `spec - unbind while offline drops the row from the picker`() {
         val nowUnboundOffline = summary("s:1", LinkState.Saved, boundSlots = emptyList())
         val state =
             MainUiState(
@@ -129,7 +129,7 @@ class PickerFromMainUiStateTest {
     }
 
     @Test
-    fun `spec — Stale on the bound connection also stays as a holdover`() {
+    fun `spec - Stale on the bound connection also stays as a holdover`() {
         val stale = summary("s:1", LinkState.Stale, boundSlots = listOf(VIRTUAL_SLOT_ID))
         val state =
             MainUiState(
@@ -163,7 +163,7 @@ class PickerFromMainUiStateTest {
     }
 
     @Test
-    fun `slot A keeps offline holdover, slot B does not — bound-ness is per-slot`() {
+    fun `slot A keeps offline holdover, slot B does not - bound-ness is per-slot`() {
         val sat1Off = summary("s:1", LinkState.Saved, boundSlots = listOf("p1"))
         val sat2On = summary("s:2", LinkState.Connected)
         val state =
@@ -237,7 +237,7 @@ class PickerFromMainUiStateTest {
     }
 
     @Test
-    fun `crowded picker — one online, one connecting, one stale-held, one offline-unbound`() {
+    fun `crowded picker - one online, one connecting, one stale-held, one offline-unbound`() {
         val online = summary("s:1", LinkState.Connected)
         val connecting = summary("s:2", LinkState.Connecting)
         val staleHeld = summary("s:3", LinkState.Stale, boundSlots = listOf(VIRTUAL_SLOT_ID))

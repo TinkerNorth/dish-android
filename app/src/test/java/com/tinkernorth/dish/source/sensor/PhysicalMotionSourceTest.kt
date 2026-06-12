@@ -106,7 +106,7 @@ class PhysicalMotionSourceTest {
 
     @Test
     fun `filterByCapability drops a reachable slot that is missing from caps`() {
-        // Startup race: reachability emits before the capability composer — treat unknown as no-motion (safe).
+        // Startup race: reachability emits before the capability composer. Treat unknown as no-motion (safe).
         val reachable = mapOf("9" to fakeConn())
         val caps = emptyMap<String, MotionCapability>()
         assertTrue(PhysicalMotionSource.filterByCapability(reachable, caps).isEmpty())
@@ -134,7 +134,7 @@ class PhysicalMotionSourceTest {
     }
 
     @Test
-    fun `filterByCapability per-slot — keeps the enabled one, drops the disabled one`() {
+    fun `filterByCapability per-slot - keeps the enabled one, drops the disabled one`() {
         val connA = fakeConn()
         val connB = fakeConn()
         val reachable = mapOf("A" to connA, "B" to connB)

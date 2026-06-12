@@ -3,7 +3,7 @@
      selected chip in an inline picker (Type / Touchpad mode) reads as a
      filled cyan tile and the unselected siblings stay flat against the page
      background. Replaces @drawable/chip_pickable_bg (selector-on-state-list
-     drawable) — MaterialChip consumes a ColorStateList directly, so the
+     drawable): MaterialChip consumes a ColorStateList directly, so the
      shape/corner/stroke pieces now live on Widget.Dish.Chip itself. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_checked="true" android:color="@color/colorPrimary" />

@@ -5,7 +5,7 @@ package com.tinkernorth.dish.source.sensor
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
 
 object PhysicalBatteryMapping {
-    // Mirror of android.os.BatteryState.STATUS_* — kept framework-free for pure JVM tests.
+    // Mirror of android.os.BatteryState.STATUS_*, kept framework-free for pure JVM tests.
     const val ANDROID_STATUS_UNKNOWN = 1
     const val ANDROID_STATUS_CHARGING = 2
     const val ANDROID_STATUS_DISCHARGING = 3

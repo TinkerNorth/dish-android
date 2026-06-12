@@ -130,7 +130,7 @@ class SatelliteConnectionTest {
     }
 
     // The alive-poll loop never goes idle on its own, so a connected test MUST
-    // stop the connection before the body returns — runTest drains the shared
+    // stop the connection before the body returns: runTest drains the shared
     // scheduler until idle, and an undisconnected poll spins virtual time
     // forever while MockK records every stubbed call (OOM, not a failure).
     private fun connTest(block: suspend TestScope.() -> Unit) =
@@ -197,7 +197,7 @@ class SatelliteConnectionTest {
         assertEquals(1, descriptor?.type)
         assertEquals("ds4", descriptor?.touchpadMode)
         assertEquals(0, descriptor?.ctrlIdx)
-        // Idle: nothing to sync against yet — it rides the session PUT.
+        // Idle: nothing to sync against yet. It rides the session PUT.
         assertTrue(slotSyncs.isEmpty())
     }
 

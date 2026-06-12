@@ -19,7 +19,7 @@ import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
 // One HTTP exchange's outcome. Public (unlike the client itself) because the
-// gateway surfaces it to callers that need status/ETag — the catalog's 304
+// gateway surfaces it to callers that need status/ETag: the catalog's 304
 // revalidation can't ride a body-only return.
 data class HttpReply(
     val status: Int,
@@ -36,13 +36,13 @@ data class HttpReply(
 // X509TrustManager stays permissive to let the handshake complete. MITM protection instead
 // comes from trust-on-first-use cert PINNING in the hostname verifier below.
 // UDP gamepad channel has its own ChaCha20-Poly1305 auth.
-// All methods BLOCK — call from Dispatchers.IO.
+// All methods BLOCK. Call from Dispatchers.IO.
 internal object SatelliteHttpClient {
     private const val TAG = "SatelliteHttpClient"
     private const val CONNECT_TIMEOUT_MS = 5_000
     private const val READ_TIMEOUT_MS = 5_000
 
-    // docs/contract.md §Versioning — rides in every pairing/session request.
+    // docs/contract.md §Versioning. Rides in every pairing/session request.
     const val PROTOCOL_VERSION = 1
 
     @Suppress("CustomX509TrustManager")
@@ -93,14 +93,14 @@ internal object SatelliteHttpClient {
                 }
                 TofuVerdict.MATCH -> true
                 TofuVerdict.MISMATCH -> {
-                    Log.e(TAG, "cert pin MISMATCH for $satelliteId — aborting (possible MITM)")
+                    Log.e(TAG, "cert pin MISMATCH for $satelliteId, aborting (possible MITM)")
                     onMismatch()
                     false
                 }
             }
         }
 
-    // PUT /api/connections — the declarative session upsert. `descriptorsJson`
+    // PUT /api/connections: the declarative session upsert. `descriptorsJson`
     // is the prebuilt `[{...}, ...]` controllers array (ControllerDescriptor
     // owns its shape so it stays unit-testable without a socket).
     fun putSession(
@@ -131,7 +131,7 @@ internal object SatelliteHttpClient {
             pins = pins,
         )
 
-    // GET /api/connections/{id} — the reconcile endpoint (applied state + epoch).
+    // GET /api/connections/{id}: the reconcile endpoint (applied state + epoch).
     fun getSession(
         ip: String,
         port: Int,
@@ -153,7 +153,7 @@ internal object SatelliteHttpClient {
             pins = pins,
         )
 
-    // PUT /api/connections/{id}/controllers/{idx} — single-slot descriptor
+    // PUT /api/connections/{id}/controllers/{idx}: single-slot descriptor
     // upsert. Converges type/caps/touchpadMode without touching the session
     // (no token rotation), so toggles never churn the UDP channel.
     fun putController(
@@ -179,7 +179,7 @@ internal object SatelliteHttpClient {
             pins = pins,
         )
 
-    // DELETE .../controllers/{idx} — removes the SLOT only; the session lives on.
+    // DELETE .../controllers/{idx}: removes the SLOT only; the session lives on.
     fun deleteController(
         ip: String,
         port: Int,
@@ -223,7 +223,7 @@ internal object SatelliteHttpClient {
             pins = pins,
         )
 
-    // DELETE /api/pair — self-unpair (forget on the dish also forgets us on
+    // DELETE /api/pair: self-unpair (forget on the dish also forgets us on
     // the satellite, closing any live session server-side).
     fun unpair(
         ip: String,
@@ -245,7 +245,7 @@ internal object SatelliteHttpClient {
             pins = pins,
         )
 
-    // GET /api/catalog — localized controller-type catalog. Unauthenticated by
+    // GET /api/catalog: localized controller-type catalog. Unauthenticated by
     // design (the picker renders before pairing). `acceptLanguage` is the
     // device locale chain; ETag revalidation rides If-None-Match (304 → empty
     // body, caller serves its cache).
@@ -273,7 +273,7 @@ internal object SatelliteHttpClient {
         )
     }
 
-    // No X-Device-Id — /api/pair is the only client route that bypasses clientAuthorized.
+    // No X-Device-Id: /api/pair is the only client route that bypasses clientAuthorized.
     // `pin` drives Path A (the dish entered the satellite's PIN); `clientPin` drives
     // Path B (the dish shows its own PIN for the operator to accept). Both ride in the
     // body; the satellite uses a valid `pin` first and only falls back to `clientPin`.
@@ -337,7 +337,7 @@ internal object SatelliteHttpClient {
         pins: SatellitePinRepository,
     ): HttpReply = requestWithMeta(method, ip, port, path, deviceId, hmacProof, body, satelliteId, pins)
 
-    // Never throws — transport failure surfaces as a JSON {error} body (status 0)
+    // Never throws: transport failure surfaces as a JSON {error} body (status 0)
     // so callers' decode path stays uniform.
     @Suppress("NestedBlockDepth", "LongParameterList")
     private fun requestWithMeta(

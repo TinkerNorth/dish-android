@@ -62,7 +62,7 @@ The Kotlin → JNI → `sendto()` chain runs at gamepad polling rate
 
 - No `withContext`, no `runBlocking`, no `Dispatchers.IO` on the
   send path.
-- No allocations per event — the JNI uses a preallocated
+- No allocations per event: the JNI uses a preallocated
   `XUSB_REPORT` and a packed `Int` for HID button + hat (a `Pair`
   would burn ~6 KB/s of garbage at 250 Hz).
 - The session map's `mutex` is the only lock the send path takes,
@@ -75,7 +75,7 @@ Anything that wants to ride the hot path lives in `hotpath/` (e.g.
 package is forbidden from making JNI calls from the input thread
 besides `sendReport`.
 
-## Base classes — what lives where
+## Base classes: what lives where
 
 The `architecture/` package fixes three contracts. Subclassing the
 wrong base is the most common architectural mistake in the codebase;
@@ -90,10 +90,10 @@ with optional lifecycle hooks.
 Use this for any class wrapping a sensor, socket, BroadcastReceiver,
 system service, timer, or in-memory cache. Provides:
 
-- `state: StateFlow<S>` — the only public read surface.
-- `protected setState(...)` — atomic updates via
+- `state: StateFlow<S>`: the only public read surface.
+- `protected setState(...)`: atomic updates via
   `MutableStateFlow.update`.
-- `DefaultLifecycleObserver` integration — opt-in. Sources whose
+- `DefaultLifecycleObserver` integration: opt-in. Sources whose
   lifecycle is registry-managed (e.g. `SatelliteConnection`) simply
   don't override the hooks.
 
@@ -123,13 +123,13 @@ The base provides:
 - a `StateFlow<S>` named `state`, started **eagerly** on the supplied
   scope so consumers never see a one-frame flicker on Activity
   resume;
-- exactly one extension point — `upstream: Flow<S>` — so subclasses
+- exactly one extension point (`upstream: Flow<S>`) so subclasses
   can't smuggle in extra surface;
 - explicit `initial: S` so the StateFlow has a sane value before the
   first emission.
 
 If you find yourself reaching for an event channel inside a composer,
-you're not writing an `AbstractComposer` — you're writing an
+you're not writing an `AbstractComposer`: you're writing an
 `AbstractStateSource` that happens to combine inputs. Switch base
 classes rather than add the field.
 
@@ -140,7 +140,7 @@ on `Main`.
 ### `Repository<K, V>` / `KeyedRepository<K, V>`
 
 Synchronous CRUD over a single durable backing store. Lives in
-`interfaces/` because it's a pure contract — no inheritable state.
+`interfaces/` because it's a pure contract: no inheritable state.
 
 - Shaped like `get / all / put / remove / clear`.
 - No flows, no lifecycle, no events, no scope. Repositories are dumb
@@ -157,7 +157,7 @@ that observes the backing store and republishes. Don't fold
 reactivity into the repository itself.
 
 `KeyedRepository<K, V>` is the variant where the value carries its
-own id (`keyOf(value: V): K`) — most real repos in this codebase
+own id (`keyOf(value: V): K`). Most real repos in this codebase
 look like this. The satellite id is `satellite:mid:<machineId>` when the
 receiver advertises a stable per-install id, else `satellite:<ip>:<udpPort>`
 for older satellites (see `DiscoveredServer.stableKey`). Keying on the stable
@@ -289,7 +289,7 @@ a shared pointer, after which the lock is released.
 Slot bindings (physical Android `deviceId` → which session + which
 controller index) live in `g_slots`, also keyed by id, in
 `hotpath/input/`. The same physical pad can be reassigned between
-satellites without touching the per-slot deadzone configuration —
+satellites without touching the per-slot deadzone configuration:
 deadzones are per-device, not per-event.
 
 ## Bluetooth lifecycle
@@ -331,7 +331,7 @@ Key invariants:
 - **Stale markers.** `BluetoothBondMonitor` reports `KEY_MISSING` or
   unexpected `BOND_NONE` for remembered MACs; the registry surfaces
   these as a `Stale` lift on `ConnectionCoordinator`. `KEY_MISSING` is the
-  more specific signal — if both arrive for the same host, the
+  more specific signal: if both arrive for the same host, the
   registry promotes `BOND_REMOVED` to `KEY_MISSING` so the user
   copy reads *"Re-pair X"* instead of the weaker *"X was unpaired"*.
 
@@ -374,17 +374,17 @@ Pure rumble helpers (`rumbleMagnitudeTo255`, `rumbleSafeDurationMs`,
 `app/src/main/cpp/` is split so the parts of the JNI that the JVM
 can't reach are still unit-testable from a host build:
 
-- `gamepad_input.{cpp,h}` — pure gamepad-input processing. Owns
+- `gamepad_input.{cpp,h}`: pure gamepad-input processing. Owns
   per-device button/axis state, the keycode → XUSB bit mapping, and
-  the send-on-change gate. No Android, JNI, or sodium headers — it
+  the send-on-change gate. No Android, JNI, or sodium headers: it
   builds against `app/src/test/cpp/` with googletest.
-- `wire_encoders.h` — pure byte-layout encoders for `MSG_MOTION`,
+- `wire_encoders.h`: pure byte-layout encoders for `MSG_MOTION`,
   `MSG_BATTERY`, `MSG_TOUCHPAD`, and `MSG_LIGHTBAR`. Same host-build
   rule; the wire layout is type-checked against the contract
   (`satellite/docs/contract.md`).
-- `satellite_jni.cpp` — the Android-only glue. Owns sockets, libsodium,
+- `satellite_jni.cpp`: the Android-only glue. Owns sockets, libsodium,
   the session map, the rumble + Bluetooth callbacks, and the JNI
-  registration. This file does **not** ship pure helpers — anything
+  registration. This file does **not** ship pure helpers: anything
   testable belongs in one of the headers above.
 
 The split is the reason `gamepad_input.h` mirrors Android keycodes
@@ -411,11 +411,11 @@ nav.toTouchpad(connectionId = cid, touchpadMode = mode, slotId = slotId)
 
 The input overlays (`GamepadOverlayActivity`, `TouchpadOverlayActivity`)
 intentionally bypass the activity-transition scaffolding and the
-edge-to-edge inset wiring — they prioritise zero-latency display and
+edge-to-edge inset wiring: they prioritise zero-latency display and
 own their own immersive-mode setup through `BaseInputOverlayActivity`.
 
 Overlay input is event-driven; the shared resend loop exists only to
 heal a lost edge frame (button-up, finger-up, stick-to-neutral) over
 plain UDP. Pacing is `ui/common/ResendPacer`: a changed state is
 re-sent 3 scheduler ticks in a row (50 ms apart), then the stream
-idles at a 1 Hz keepalive — there is no constant-rate re-send.
+idles at a 1 Hz keepalive. There is no constant-rate re-send.

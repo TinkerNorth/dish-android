@@ -1,4 +1,4 @@
-# Dish Android — Design System
+# Dish Android: Design System
 
 A rigid, two-tier token system plus a small library of `TextAppearance` /
 `Widget` / composite-layout / activity-extension building blocks. Every UI
@@ -6,7 +6,7 @@ attribute that repeats in the app reaches its callsite through one of the
 names enumerated below.
 
 If a value is missing from this document, it is either deliberately one-off
-(documented at the bottom of this file) or new drift to clean up — open the
+(documented at the bottom of this file) or new drift to clean up: open the
 file it lives in, give it a name here, and route the callsite through it.
 
 ---
@@ -15,9 +15,9 @@ file it lives in, give it a name here, and route the callsite through it.
 
 Two layers, every time:
 
-1. **Primitives** — raw values (hex, dp, sp, ms). Lives in `*_primitives.xml`.
+1. **Primitives**: raw values (hex, dp, sp, ms). Lives in `*_primitives.xml`.
    Never referenced directly from layouts, drawables, or Kotlin.
-2. **Semantic** — names by role (`colorPrimary`, `spacing_md`, `card_padding`,
+2. **Semantic**: names by role (`colorPrimary`, `spacing_md`, `card_padding`,
    `corner_card`, `text_label`, `elevation_floating`,
    `motion_duration_spinner`). The only names callsites use.
 
@@ -74,7 +74,7 @@ way a device-wide uiMode change does.
 
 The full primitive palette (including the M3 container family, surface
 hierarchy, tertiary, and inverse slots) lives in
-`colors_primitives.xml` — callsites should never reference primitives
+`colors_primitives.xml`. Callsites should never reference primitives
 directly; route through a semantic name and add one if the slot you
 need doesn't exist.
 
@@ -87,7 +87,7 @@ there carry the M3-spec rationale for each pin.
 
 **Theme parent.** `Theme.Material3Expressive.DayNight.NoActionBar.FocusRings`.
 The `FocusRings` parent swaps the platform's near-invisible focus-state
-layer for an M3 ring drawable on every focusable widget — important here
+layer for an M3 ring drawable on every focusable widget, important here
 because the app's primary use case is a gamepad-driven controller picker,
 where keyboard / D-pad / gamepad navigation has to show what's focused.
 
@@ -102,7 +102,7 @@ values file holds the registry index + any state-list-only semantic aliases.
 | `icon_secondary.xml` | always `colorMuted` (selector-shaped for naming clarity) |
 
 Disabled-state selectors (`text_disabled.xml` / `icon_interactive.xml`) are
-intentionally absent — they were dropped in the post-Phase-4 cleanup. Add
+intentionally absent: they were dropped in the post-Phase-4 cleanup. Add
 them back the first time a layout actually needs to toggle `isEnabled` on a
 text/icon view (the recipe is a one-line `<selector>` in `res/color/`).
 
@@ -112,7 +112,7 @@ text/icon view (the recipe is a one-line `<selector>` in `res/color/`).
 
 - dp scale: `size_1, _2, _3, _4, _6, _8, _10, _11, _12, _14, _16, _18, _20,
   _22, _24, _28, _32, _36, _40, _56, _64, _280` (literal dp value in name).
-  `0dp` is intentionally NOT here — it is reserved as the idiomatic Android
+  `0dp` is intentionally NOT here: it is reserved as the idiomatic Android
   "weight-distributed child" sentinel.
 - sp scale: `text_10` through `text_24`, plus `text_64` (hero clock).
 
@@ -128,7 +128,7 @@ text/icon view (the recipe is a one-line `<selector>` in `res/color/`).
 | chip | `chip_padding_horizontal/_vertical`, `chip_margin_end` |
 | dialog / overlay | `dialog_inline_max_width` |
 | notification | `notification_rail_width`, `notification_elevation`, `notification_padding_horizontal/_vertical`, `notification_text_leading_indent`, `notification_text_title/_body/_action` |
-| text sizes (role-named sp) | `text_caption` (10) → `text_hero` (64) — see `text_appearance.xml` for the canonical mapping into TextAppearance styles |
+| text sizes (role-named sp) | `text_caption` (10) → `text_hero` (64); see `text_appearance.xml` for the canonical mapping into TextAppearance styles |
 
 ### Elevation → `values/elevations.xml`
 
@@ -141,13 +141,13 @@ values so a global shadow-depth adjustment is one file.
 | `elevation_floating` | 6dp | Snackbars, FABs (`notification_elevation` aliases this) |
 
 `elevation_raised` (2dp) and `elevation_modal` (12dp) used to exist but
-were dropped in the post-Phase-4 cleanup — no current callsite needed
+were dropped in the post-Phase-4 cleanup: no current callsite needed
 them. Re-introduce when a surface needs to pin to the canonical scale
 (see "When to add a new token").
 
 ### Motion → `values/motion.xml` + `interpolator/*.xml`
 
-**Durations** (millisecond integers — use via
+**Durations** (millisecond integers: use via
 `android:duration="@integer/…"` in AVDs and
 `context.resources.getInteger(R.integer.…).toLong()` from Kotlin):
 
@@ -160,7 +160,7 @@ them. Re-introduce when a surface needs to pin to the canonical scale
 | `motion_duration_battery` | 3600 ms | charging-battery AVD full ramp |
 | `motion_duration_bolt_pulse` | 750 ms | charging-battery bolt sinusoidal opacity loop |
 
-*UI speed scale (medium only — short/long re-added when consumed):*
+*UI speed scale (medium only; short/long re-added when consumed):*
 
 | Token | Value | Use |
 |---|---|---|
@@ -179,18 +179,18 @@ sibling tokens together as a paired set so the scale stays coherent.
 | `dish_ease_standard.xml` | cubic-bezier(0.4, 0.0, 0.2, 1.0) | default UI transitions (used by `ic_battery_charging` bolt-pulse loop + activity fade-through) |
 
 The `dish_ease_in.xml` / `dish_ease_out.xml` / `dish_ease_linear.xml`
-interpolators were dropped in the post-Phase-4 cleanup — no animation
+interpolators were dropped in the post-Phase-4 cleanup: no animation
 consumes them today. Re-introduce when an AVD or ObjectAnimator needs
 a curve other than the standard easing.
 
-**Activity transitions** — `app/src/main/res/anim/`:
+**Activity transitions** (`app/src/main/res/anim/`):
 
 | File | Use |
 |---|---|
 | `fade_through_enter.xml` | OPEN/CLOSE enter half of the activity fade-through. Alpha 0 → 1 over `motion_duration_medium` with `dish_ease_standard`. |
 | `fade_through_exit.xml` | OPEN/CLOSE exit half. Alpha 1 → 0 over the same duration and curve. |
 
-Wired into chrome activities via `applyDishActivityTransitions()` — see
+Wired into chrome activities via `applyDishActivityTransitions()`. See
 the Activity Scaffolding table below. The Gamepad / Touchpad overlays
 intentionally do NOT call this (immersive input surfaces prioritise
 zero-latency display over a 250 ms fade).
@@ -199,40 +199,40 @@ zero-latency display over a 250 ms fade).
 
 14 canonical `TextAppearance.Dish.*` styles. Every TextView in
 `res/layout/*.xml` adopts one via `style="@style/…"` (NOT
-`android:textAppearance` — the `style="…"` form applies every attribute
+`android:textAppearance`: the `style="…"` form applies every attribute
 including `lineSpacingMultiplier`; `android:textAppearance` silently drops
 line spacing).
 
 Letter-spacing canon (single source of truth, do not drift):
-- `0.04` — Hero (giant numerals).
-- `0.12` — Label / Label.Accent / Display.Large (eyebrows + brand wordmark).
-- `0.18` — Caption (small mono micro-eyebrow / footer).
+- `0.04`: Hero (giant numerals).
+- `0.12`: Label / Label.Accent / Display.Large (eyebrows + brand wordmark).
+- `0.18`: Caption (small mono micro-eyebrow / footer).
 - Everything else is callsite-specific override (the low-power HUD treatments
   ride on top of Label/Body styles).
 
-`Widget.Dish.Button` + `Widget.Dish.Button.Outlined` are NOT in this canon —
+`Widget.Dish.Button` + `Widget.Dish.Button.Outlined` are NOT in this canon:
 the M3 base sets `letterSpacing=0` (no tracking) and `textAllCaps=false`
 (sentence-case). Strings supply their own capitalisation. The old M2-era
 "tracked uppercase" treatment retired with the M3 migration.
 
 | Style | size | color | family | weight | spacing | line × |
 |---|---|---|---|---|---|---|
-| `Caption` | 10sp | muted | monospace | normal | 0.18 | — |
-| `Label` | 11sp | muted | monospace | normal | 0.12 | — |
-| `Label.Accent` | 11sp | primary | monospace | normal | 0.12 | — |
-| `Label.Plain` | 11sp | muted | sans-serif | normal | — | — |
-| `BodySmall` | 12sp | muted | sans-serif | normal | — | — |
-| `Body` | 13sp | muted | sans-serif | normal | — | 1.35 |
-| `Body.Mono` | 13sp | on-surface | monospace | normal | — | — |
-| `BodyLarge` | 14sp | muted | monospace | normal | — | — |
-| `BodyLarge.Bold` | 14sp | on-surface | sans-serif | bold | — | — |
-| `Title` | 15sp | on-surface | sans-serif-medium | normal | — | 1.3 |
-| `Title.Large` | 18sp | on-surface | sans-serif | bold | — | — |
-| `Display` | 22sp | primary | monospace | bold | — | — |
-| `Display.Large` | 24sp | primary | sans-serif | bold | 0.12 | — |
-| `Hero` | 64sp | primary | monospace | bold | 0.04 | — |
+| `Caption` | 10sp | muted | monospace | normal | 0.18 | none |
+| `Label` | 11sp | muted | monospace | normal | 0.12 | none |
+| `Label.Accent` | 11sp | primary | monospace | normal | 0.12 | none |
+| `Label.Plain` | 11sp | muted | sans-serif | normal | none | none |
+| `BodySmall` | 12sp | muted | sans-serif | normal | none | none |
+| `Body` | 13sp | muted | sans-serif | normal | none | 1.35 |
+| `Body.Mono` | 13sp | on-surface | monospace | normal | none | none |
+| `BodyLarge` | 14sp | muted | monospace | normal | none | none |
+| `BodyLarge.Bold` | 14sp | on-surface | sans-serif | bold | none | none |
+| `Title` | 15sp | on-surface | sans-serif-medium | normal | none | 1.3 |
+| `Title.Large` | 18sp | on-surface | sans-serif | bold | none | none |
+| `Display` | 22sp | primary | monospace | bold | none | none |
+| `Display.Large` | 24sp | primary | sans-serif | bold | 0.12 | none |
+| `Hero` | 64sp | primary | monospace | bold | 0.04 | none |
 
-Every style has `parent=""` so the attribute list is fully enumerated — no
+Every style has `parent=""` so the attribute list is fully enumerated: no
 surprise inheritance from Material/AppCompat text-appearance defaults.
 
 ---
@@ -244,7 +244,7 @@ surprise inheritance from Material/AppCompat text-appearance defaults.
 Parented at **Material 3 Expressive + FocusRings**
 (`Theme.Material3Expressive.DayNight.NoActionBar.FocusRings`). The
 DayNight base resolves `values/colors.xml` vs `values-night/colors.xml`
-per qualifier (no separate `values-night/themes.xml` — one theme,
+per qualifier (no separate `values-night/themes.xml`: one theme,
 two colour bindings). The Expressive parent enables future expressive
 component defaults; the FocusRings parent replaces M3's near-invisible
 focus state layer with a visible ring drawable, which is what makes
@@ -268,7 +268,7 @@ primary as elevation rises.
 device-wide day/night switch (System / Light / Dark). The choice is
 persisted to `user_preferences` SharedPreferences (cloud-backed) by
 [`ThemePreferenceStore`](../app/src/main/java/com/tinkernorth/dish/source/store/ThemePreferenceStore.kt),
-which also flips `AppCompatDelegate.setDefaultNightMode` — that triggers
+which also flips `AppCompatDelegate.setDefaultNightMode`. That triggers
 every live AppCompatActivity (including the GameActivity-derived
 `MainActivity`) to recreate with the new colour primitives.
 
@@ -294,10 +294,10 @@ wires `materialButtonStyle = Widget.Dish.Button` as the global default):
 | `Widget.Dish.Toolbar` | `Widget.Material3.Toolbar` | `colorBackground` bg, `colorOnSurface` title, `ic_chevron_left` nav icon, action-bar height | both Activity toolbars (Settings + Connections) |
 | `Widget.Dish.StatusDot.Small` | `""` | `icon_dot` size + `dot_circle` background | overlay status indicators |
 | `Widget.Dish.StatusDot.Large` | `""` | `icon_dot_lg` size + `dot_circle` background | slot-card / row status indicators |
-| `Widget.Dish.EmptyStateText` | `""` | base: `match_parent` width, `TextAppearance.Dish.BodySmall` | never used directly — pick a variant |
+| `Widget.Dish.EmptyStateText` | `""` | base: `match_parent` width, `TextAppearance.Dish.BodySmall` | never used directly; pick a variant |
 | `Widget.Dish.EmptyStateText.Picker` | `Widget.Dish.EmptyStateText` | + `spacing_xs` top margin | `picker_empty_label.xml` (slot-card empty picker) |
 | `Widget.Dish.EmptyStateText.Section` | `Widget.Dish.EmptyStateText` | + `spacing_xl` vertical padding | `tvSatelliteEmpty` + `tvBtEmpty` in `activity_connections.xml` (standalone empty-state row inside a section, no surrounding card) |
-| `Widget.Dish.Switch` | `Widget.Material3.CompoundButton.MaterialSwitch` | hides side labels (`textOn`/`textOff` empty, `showText=false`); thumb + track colors come from the Material theme | every `com.google.android.material.materialswitch.MaterialSwitch` in the app (M3 widget class — different from the M2 `SwitchMaterial` the codebase used pre-migration) |
+| `Widget.Dish.Switch` | `Widget.Material3.CompoundButton.MaterialSwitch` | hides side labels (`textOn`/`textOff` empty, `showText=false`); thumb + track colors come from the Material theme | every `com.google.android.material.materialswitch.MaterialSwitch` in the app (M3 widget class, different from the M2 `SwitchMaterial` the codebase used pre-migration) |
 | `Widget.Dish.EditText.Pin` | `Widget.AppCompat.EditText` | numeric input, center gravity, `text_display` size, `colorOnSurface`, monospace, 0.30 spacing, `bg_pair_pin_field` drawable, `card_padding` padding | pair-PIN entry field (API 26+ `autofillHints` + `importantForAutofill` stay inline at the callsite; style items can't carry `tools:targetApi`) |
 | `Widget.Dish.Icon.Section` | `""` | `icon_section_header` size, no tint | leading multi-tone icons on section headers (ic_satellite, ic_bluetooth) |
 | `Widget.Dish.Icon.Card` | `""` | `icon_card_glyph` size + `colorPrimary` tint | leading single-tone glyphs on Settings card rows (ic_bug, ic_shield) |
@@ -313,10 +313,10 @@ inner ids; include sites reach those ids through View Binding (e.g.
 
 | Composite | Callsites | What's inside | What's NOT inside |
 |---|---|---|---|
-| `section_header.xml` | dashboard CONNECTIONS + CONTROLLERS, Connections SATELLITES + BLUETOOTH, Settings DIAGNOSTICS + ABOUT (6) | horizontal row: `iconSection` (Icon.Section, `gone` by default) + `labelSection` (Label.Accent, `weight=1`) + `btnSectionAction` (Button.Outlined, `gone` by default) | per-callsite vertical spacing — applied via the `<include>` tag's `layout_marginTop/Bottom` |
-| `status_pill.xml` | gamepad-overlay connection pill, gamepad-overlay motion pill, touchpad-overlay connection pill (3) | `bg_pill` background, 85% alpha, padding 16dp h × 6dp v: `statusPillDot` (StatusDot.Small) + `statusPillLabel` (Label + `colorOnSurface` override for pill contrast) | nothing — pills are uniform across callsites |
+| `section_header.xml` | dashboard CONNECTIONS + CONTROLLERS, Connections SATELLITES + BLUETOOTH, Settings DIAGNOSTICS + ABOUT (6) | horizontal row: `iconSection` (Icon.Section, `gone` by default) + `labelSection` (Label.Accent, `weight=1`) + `btnSectionAction` (Button.Outlined, `gone` by default) | per-callsite vertical spacing, applied via the `<include>` tag's `layout_marginTop/Bottom` |
+| `status_pill.xml` | gamepad-overlay connection pill, gamepad-overlay motion pill, touchpad-overlay connection pill (3) | `bg_pill` background, 85% alpha, padding 16dp h × 6dp v: `statusPillDot` (StatusDot.Small) + `statusPillLabel` (Label + `colorOnSurface` override for pill contrast) | nothing: pills are uniform across callsites |
 | `card_row_icon_label_value.xml` | Settings Crash card, Settings Privacy card (2) | leading 36dp `bg_icon_container` FrameLayout hosting `cardRowIcon` (Icon.Card) + vertical title/subtitle column (`cardRowTitle` = Title, `cardRowSubtitle` = Body) | the `MaterialCardView` wrapper, the outer row's `gravity` (top vs center_vertical), the trailing affordance (Switch vs chevron) |
-| `picker_empty_label.xml` | `ControllerAdapter.addLabel` (no-connections empty state in the slot picker) | single TextView with `Widget.Dish.EmptyStateText` style | nothing — adapter only sets `.text` |
+| `picker_empty_label.xml` | `ControllerAdapter.addLabel` (no-connections empty state in the slot picker) | single TextView with `Widget.Dish.EmptyStateText` style | nothing: adapter only sets `.text` |
 
 `section_header.xml` is single-layout with code-driven content: `<include>`
 overrides only support root-level `android:id`/layout_*/`android:visibility`,
@@ -324,13 +324,13 @@ so child ids carry canonical names and Activity code sets icon/label/button
 content. Eyebrow callsites leave the icon + button at `gone` and only set
 the label text; full-section callsites flip visibility + assign content.
 
-`status_pill.xml`'s default text is `overlay_status_streaming` — the motion
+`status_pill.xml`'s default text is `overlay_status_streaming`: the motion
 pill's first frame would briefly read "STREAMING" instead of "MOTION: NO
 GYROSCOPE", but `repaintFrom(currentMotionPaint())` runs synchronously in
 `GamepadOverlayActivity.onCreate` before the first frame is presented.
 
 `card_row_icon_label_value.xml` does NOT cover `item_controller.xml`'s
-slot-card header — the slot card uses a bare 36dp tinted ImageView (no
+slot-card header: the slot card uses a bare 36dp tinted ImageView (no
 `bg_icon_container`), a `BodySmall` subtitle, and a 5-sibling trailing zone.
 Forcing it into the composite would bloat the composite with controller-
 specific visibility-gone defaults.
@@ -349,8 +349,8 @@ applied as Intent extras (argument names map 1:1 to extras).
 The graph is consumed via `DishNavigator`
 (`app/src/main/java/com/tinkernorth/dish/ui/common/DishNavigator.kt`), a
 thin typed wrapper that gives every navigation site Kotlin-level
-type-safety — a mistyped extra is a compile error rather than a silent
-runtime "extra missing" branch:
+type-safety (a mistyped extra is a compile error rather than a silent
+runtime "extra missing" branch):
 
 ```kotlin
 private val nav by lazy { DishNavigator(this) }
@@ -363,17 +363,17 @@ nav.toTouchpad(connectionId = cid, touchpadMode = mode, slotId = slotId)
 
 | Destination | Activity | Args |
 |---|---|---|
-| `mainActivity` (start) | `MainActivity` | — |
+| `mainActivity` (start) | `MainActivity` | none |
 | `connectionsActivity` | `ConnectionsActivity` | `extra_pair_prompt_for_id` (nullable string) |
-| `settingsActivity` | `SettingsActivity` | — |
+| `settingsActivity` | `SettingsActivity` | none |
 | `gamepadOverlayActivity` | `GamepadOverlayActivity` | `extra_connection_id`, `extra_use_ps_layout` |
 | `touchpadOverlayActivity` | `TouchpadOverlayActivity` | `extra_connection_id`, `extra_touchpad_mode`, `extra_slot_id` |
-| `nativeUnavailableActivity` | `NativeUnavailableActivity` | — |
+| `nativeUnavailableActivity` | `NativeUnavailableActivity` | none |
 
 **Deep links**: NOT declared in the graph. The navigation runtime's lint
 check (`DeepLinkInActivityDestination`) flags `<deepLink>` on `<activity>`
 destinations because the back-stack behaviour is wrong for cross-app
-implicit-intent flows — system back should return to the calling app, but
+implicit-intent flows: system back should return to the calling app, but
 Activity-destination deep links land the user inside this app's own task.
 External deep linking should land via a manual `<intent-filter>` on the
 receiving Activity in `AndroidManifest.xml`, or wait until a Fragment-
@@ -399,11 +399,11 @@ Three extension functions on `AppCompatActivity`, all in
 | `fun setupDishToolbar(toolbar: Toolbar)` | Installs `toolbar` as the support action bar and wires its navigation icon to `finish()`. Toolbar should already carry `style="@style/Widget.Dish.Toolbar"` from its layout. Call after `setContentView`. |
 | `fun attachGamepadHost(rootView, wakeState, gamepadRegistry, notifications): GamepadActivityHost` | Constructs + installs the gamepad host against `rootView`. Assign the returned host to a `lateinit var` on the activity so its lifecycle dispatches (`onStop`, `dispatchKeyEvent`, etc.) can reach it. Call after `setContentView`. |
 | `fun applyDishSystemBars(root: View)` | Switches the activity into edge-to-edge mode (`enableEdgeToEdge()`) and applies `WindowInsetsCompat.Type.systemBars()` as padding on `root` (typically the binding root). Replaces the deprecated `fitsSystemWindows="true"` layout flag and is required for `targetSdk` ≥ 35. Skipped by the immersive Gamepad / Touchpad overlays, which handle their own bars via `hideSystemBars()`. |
-| `fun applyDishActivityTransitions()` | Installs Dish's fade-through transition for both OPEN and CLOSE directions. On API 34+ uses `overrideActivityTransition`; on API 24-33 falls back to the deprecated `overridePendingTransition` (OPEN only — pre-34 CLOSE is platform default). Skipped by the input overlays (they prioritise zero-latency display). |
+| `fun applyDishActivityTransitions()` | Installs Dish's fade-through transition for both OPEN and CLOSE directions. On API 34+ uses `overrideActivityTransition`; on API 24-33 falls back to the deprecated `overridePendingTransition` (OPEN only; pre-34 CLOSE is platform default). Skipped by the input overlays (they prioritise zero-latency display). |
 
 The input overlays (`GamepadOverlayActivity` + `TouchpadOverlayActivity`)
 deliberately go through `BaseInputOverlayActivity`'s inherited scaffolding,
-not these extensions — the immersive full-screen wiring (`hideSystemBars()`,
+not these extensions: the immersive full-screen wiring (`hideSystemBars()`,
 the `lateinit gamepadHost` field, the dispatch overrides, the edge-burst
 resend loop) is a bigger interface than these three pieces centralise.
 
@@ -414,14 +414,14 @@ resend loop) is a bigger interface than these three pieces centralise.
 ### When to add a new token
 
 1. Is the value unique to one callsite? **Stay inline** and accept the
-   literal — adding a one-callsite token is more drift than it prevents.
+   literal: adding a one-callsite token is more drift than it prevents.
 2. Is it shared across 2+ callsites? Add a primitive + semantic ref.
 3. Is it a per-component aspect (`card_padding`, `chip_corner_radius`,
    `notification_rail_width`)? Add a component-scoped semantic name in the
-   appropriate `dimens.xml` section — changing it moves all callsites in
+   appropriate `dimens.xml` section. Changing it moves all callsites in
    lockstep without affecting unrelated rows.
 4. Always primitive **then** semantic. Never reference a primitive from a
-   callsite — the indirection is what lets a future redesign repoint without
+   callsite: the indirection is what lets a future redesign repoint without
    renaming.
 5. **Disabled-state selectors are added when first needed**, not pre-baked.
    A `text_disabled.xml` / `icon_interactive.xml` selector lives in
@@ -434,7 +434,7 @@ resend loop) is a bigger interface than these three pieces centralise.
 
 - **2+ identical attribute combinations on a TextView** → adopt or add a
   `TextAppearance.Dish.*` style. The 14 existing styles should cover almost
-  every case — fix the callsite to one of them before adding #15.
+  every case. Fix the callsite to one of them before adding #15.
 - **2+ identical attribute combinations on a Material widget** → add a
   `Widget.Dish.<Component>.<Variant>` style in `values/styles_widgets.xml`.
 - **A new component-attribute closure** (a brand-new Material widget with
@@ -449,7 +449,7 @@ resend loop) is a bigger interface than these three pieces centralise.
 - The composite owns the shared sub-structure only. Per-callsite divergence
   (gravity, trailing affordance, click behaviour) stays at the include site.
 - `<include>` overrides only support root-level `android:id`/layout_*/
-  `android:visibility` — child ids are canonical, and callsites bind to them
+  `android:visibility`. Child ids are canonical, and callsites bind to them
   via View Binding through the include's root id.
 
 ### When to add a new activity extension
@@ -475,15 +475,15 @@ A new button in the app:
 
 A new TextView in the app:
 
-1. **Pick the matching role** from the 14 `TextAppearance.Dish.*` styles —
+1. **Pick the matching role** from the 14 `TextAppearance.Dish.*` styles:
    eyebrow → Label / Label.Accent, body copy → Body / BodySmall, card title
    → Title, big numeral → Display. If nothing fits, the callsite is the
-   wrong shape — fix the layout, don't add a 15th style.
+   wrong shape. Fix the layout, don't add a 15th style.
 2. **Set `style="@style/TextAppearance.Dish.X"`** on the TextView, NOT
    `android:textAppearance="@style/…"`. The `style="…"` form applies every
    attribute including `lineSpacingMultiplier`.
 3. **Don't add inline `android:textSize`/`fontFamily`/`textColor`/
-   `letterSpacing`** — the style owns these. If the callsite genuinely needs
+   `letterSpacing`**: the style owns these. If the callsite genuinely needs
    an override (severity color, contrast on a tinted background), add an
    inline attribute next to a comment explaining why.
 
@@ -497,11 +497,11 @@ A new TextView in the app:
 - **Vector drawable embedded fills**. Multi-tone artwork (battery glyph,
   gamepad button icons, satellite, Bluetooth, dish logo) carries its own
   palette. Single-tone single-fill drawables that get tinted from the layout
-  are the exception — those use `colorPrimary` / `colorMuted` / `icon_*`
+  are the exception: those use `colorPrimary` / `colorMuted` / `icon_*`
   selectors at the callsite.
 - **Custom-view paint configuration**. `DishLoaders.kt` and
   `TouchpadSurfaceView.kt` set up their own `Paint` objects programmatically.
-  Hex literals there are intentional — they're internal to the view's drawing
+  Hex literals there are intentional: they're internal to the view's drawing
   contract, not part of the token system.
 - **`0dp` weight-distribution markers**. `dimens_primitives.xml` deliberately
   excludes `size_0`; `0dp` is the idiomatic Android sentinel for "let the
@@ -514,7 +514,7 @@ A new TextView in the app:
   `dialog_pair_pin.xml`.
 - **Pre-baked disabled-state selectors**. The `text_disabled.xml` /
   `icon_interactive.xml` opt-in selectors were dropped in the post-Phase-4
-  cleanup — nothing in the app currently toggles `isEnabled` on a text or
+  cleanup: nothing in the app currently toggles `isEnabled` on a text or
   icon view in a way the selectors would catch. Re-add them when the first
   real callsite needs the fade (one-line `<selector>` in `res/color/` plus
   the alpha primitive + `colorTextDisabled` alias if the selector reaches
@@ -523,9 +523,9 @@ A new TextView in the app:
   inline `colorMuted`.
 - **`scaffold_toolbar_scroll.xml`**. The Phase 4 spec offered this as a
   deferred composite shared between Settings and Connections. Their bodies
-  have diverged enough — Connections has an inter-section divider + a
+  have diverged enough (Connections has an inter-section divider + a
   low-power overlay include, Settings doesn't; their NestedScrollView
-  paddings differ — that the composite would either bloat with conditional
+  paddings differ) that the composite would either bloat with conditional
   flags or strip out the screen-specific geometry. The two toolbars already
   share `Widget.Dish.Toolbar`; that's the shared part. The rest is
   intentional per-screen geometry.
@@ -561,22 +561,22 @@ computed against the WCAG 2.1 relative-luminance formula. Targets:
 | `colorWarning` (amber_500) | `colorBackground` (navy_900) | **9.27 : 1** | AAA |
 
 **Notable history**: filled-button text previously used `colorOnSurface`
-(paper_50, white) on `colorPrimaryDark` (cyan_700) — that pair is **3.02:1**,
+(paper_50, white) on `colorPrimaryDark` (cyan_700). That pair is **3.02:1**,
 below the WCAG AA normal-text threshold. Migration to `colorOnPrimary`
 (navy_900) gives 5.57:1. The M3 convention of pairing `colorOnPrimary` text
 with primary-family fills exists exactly for this reason.
 
 ### Borderline UI element contrasts (intentional)
 
-Three tokens sit below the WCAG 3:1 UI-component minimum **on purpose** —
-they paint a visual texture rather than carry meaning that has to be read
+Three tokens sit below the WCAG 3:1 UI-component minimum **on purpose**.
+They paint a visual texture rather than carry meaning that has to be read
 in isolation:
 
 | Token | Approx ratio on `colorBackground` | Why it's intentional |
 |---|---|---|
-| `colorOutline` (cyan @ 18%) | **~1.43 : 1** | Outlined-button border. The button is identified by its label (16.85:1 contrast) — the border is a calm visual cue, not the affordance. |
+| `colorOutline` (cyan @ 18%) | **~1.43 : 1** | Outlined-button border. The button is identified by its label (16.85:1 contrast); the border is a calm visual cue, not the affordance. |
 | `colorCardStroke` (cyan @ 12%) | **~1.25 : 1** | Card stroke. The card is identified by its `colorSurface` background fill + the content inside; the stroke is a brand hairline. |
-| `colorSurfaceTint` (cyan @ 6%) | **~1.10 : 1** | Subtle surface tint behind the Settings-row icon container. Decorative — never used to convey state. |
+| `colorSurfaceTint` (cyan @ 6%) | **~1.10 : 1** | Subtle surface tint behind the Settings-row icon container. Decorative, never used to convey state. |
 
 If any of these tokens is ever used to carry meaning on its own (e.g. a
 border that *signals* a selected state without a paired colour or icon
@@ -584,7 +584,7 @@ change), it must be revisited.
 
 ### Severity colours on tinted surfaces
 
-`colorError` on `colorSurface` is 4.94:1 — comfortably above the AA
+`colorError` on `colorSurface` is 4.94:1, comfortably above the AA
 threshold, but with the smallest margin of any text pair in the system.
 If a future card adopts a darker surface variant (`colorSurfaceDim` or
 deeper), the error red can drop below AA. Compute before adopting.
@@ -593,11 +593,11 @@ deeper), the error red can drop below AA. Compute before adopting.
 
 - **Multi-tone vector drawables** (battery glyph, gamepad button icons,
   satellite/Bluetooth illustrations). Their embedded palettes are not in
-  the token system, and they're decorative — text labels accompany every
+  the token system, and they're decorative: text labels accompany every
   meaningful glyph. No contrast obligation.
 - **`DishLoaders` and other custom-paint views** that draw with hard-coded
   hex values internal to the view's drawing contract.
-- **Dynamic states** (focus rings, pressed-state ripples) — these inherit
+- **Dynamic states** (focus rings, pressed-state ripples): these inherit
   M3 defaults sized to the underlying widget colours, and the M3 defaults
   themselves are designed to meet AA against their host palette.
 

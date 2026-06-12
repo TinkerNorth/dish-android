@@ -45,7 +45,7 @@ class ResendPacerTest {
     fun `a change mid-burst restarts the burst from that tick`() {
         assertTrue(tick(changed = true))
         assertTrue(tick(changed = false)) // burst tick 2 of 3
-        assertTrue(tick(changed = true)) // new change — burst restarts
+        assertTrue(tick(changed = true)) // new change, burst restarts
         assertTrue(tick(changed = false))
         assertTrue(tick(changed = false))
         assertFalse(tick(changed = false))

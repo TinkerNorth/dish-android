@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Snackbar background for INFO + SUCCESS severities — rounded surface with
+    Snackbar background for INFO + SUCCESS severities: rounded surface with
     a colorPrimary leading rail. One of four severity-keyed variants used by
     `DishNotifications.applyDishTheme`; previously built imperatively as a
     `LayerDrawable(GradientDrawable(), GradientDrawable())` per notification.
 
     Layer 1 is the full-bleed surface (rounded rect + outline stroke). Layer 2
     is the leading rail, sized via `android:width` + `android:gravity="start"`
-    so the rail mirrors to the trailing edge automatically under RTL — same
+    so the rail mirrors to the trailing edge automatically under RTL, same
     behaviour the prior `Gravity.START or Gravity.FILL_VERTICAL` code path
     produced. The rail's corner radii are only on the leading edge (top-left
     + bottom-left in LTR) so it tucks into the surface's rounded shoulder.

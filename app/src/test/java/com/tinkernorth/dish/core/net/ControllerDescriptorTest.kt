@@ -9,7 +9,7 @@ import org.junit.Test
 
 class ControllerDescriptorTest {
     @Test
-    fun `toJson carries the WHOLE descriptor — idx, type, caps object, mode`() {
+    fun `toJson carries the WHOLE descriptor - idx, type, caps object, mode`() {
         val d =
             ControllerDescriptor(
                 ctrlIdx = 2,
@@ -28,7 +28,7 @@ class ControllerDescriptorTest {
     }
 
     @Test
-    fun `an unknown touchpad mode is sanitized to off — never sent raw`() {
+    fun `an unknown touchpad mode is sanitized to off, never sent raw`() {
         val d = ControllerDescriptor(ctrlIdx = 0, type = 0, caps = 0, touchpadMode = "warp-drive")
         assertTrue(d.toJson().contains("\"touchpadMode\":\"off\""))
     }

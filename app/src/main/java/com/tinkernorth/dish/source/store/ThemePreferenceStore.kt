@@ -43,7 +43,7 @@ enum class ThemeMode(
 }
 
 // Stored in user_preferences (cloud-backed) rather than connection_store (excluded from backup
-// because it holds shared keys). setMode is the controller — persisting and flipping
+// because it holds shared keys). setMode is the controller: persisting and flipping
 // AppCompatDelegate live cannot drift apart.
 @Singleton
 class ThemePreferenceStore

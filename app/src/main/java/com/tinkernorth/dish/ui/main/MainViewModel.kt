@@ -190,7 +190,7 @@ class MainViewModel
             hub.autoReconnectAll()
         }
 
-        // No-op for Bluetooth — BT type fixed by remembered host's HID profile.
+        // No-op for Bluetooth: BT type fixed by remembered host's HID profile.
         fun setSatelliteControllerType(
             connectionId: String,
             slotId: String,
@@ -206,7 +206,7 @@ class MainViewModel
             motionEnabledStore.setEnabled(slotId, enabled)
         }
 
-        // Use this in render code — absence and `false` differ in the store but mean the same to the user.
+        // Use this in render code: absence and `false` differ in the store but mean the same to the user.
         fun isMotionEnabled(slotId: String): Boolean = motionEnabledStore.isEnabled(slotId)
 
         // Local write is unconditional so a recovered server picks up the user's

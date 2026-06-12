@@ -1,8 +1,8 @@
-<!-- "contrast" — Lucide-style theme/appearance glyph. Outer circle outline
+<!-- "contrast": Lucide-style theme/appearance glyph. Outer circle outline
      plus the right half filled, signalling the day/night split the
      Appearance setting toggles. Tinted at the callsite via
      `Widget.Dish.Icon.Card` (which applies `tint=colorPrimary`), so the
-     baked #4FE3FF here is irrelevant in practice — it's only the alpha
+     baked #4FE3FF here is irrelevant in practice: it's only the alpha
      mask that gets carried through. Used as the row glyph on the Settings
      → Appearance section's "Theme" row. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"

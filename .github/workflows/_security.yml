@@ -135,7 +135,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ ! -f .security/allowlist.yaml ]; then
-            echo "::warning::.security/allowlist.yaml not found — skipping expiry check."
+            echo "::warning::.security/allowlist.yaml not found, skipping expiry check."
             exit 0
           fi
           python -m pip install --quiet 'pyyaml==6.0.2'
@@ -155,7 +155,7 @@ jobs:
               if isinstance(expires, str):
                   expires = datetime.date.fromisoformat(expires)
               if isinstance(expires, datetime.date) and expires < today:
-                  print(f"::error file=.security/allowlist.yaml::{cve}: expired on {expires} — re-evaluate or remove.")
+                  print(f"::error file=.security/allowlist.yaml::{cve}: expired on {expires}. Re-evaluate or remove.")
                   fail = True
           sys.exit(1 if fail else 0)
           PY
@@ -213,14 +213,14 @@ jobs:
           set -e
           printf '%s\n' "$out"
           # OSV-Scanner exit codes:
-          #   0   — no vulnerabilities found
-          #   1   — vulnerabilities found
-          #   128 — no package sources discovered (e.g. C/C++ vendored headers
+          #   0   - no vulnerabilities found
+          #   1   - vulnerabilities found
+          #   128 - no package sources discovered (e.g. C/C++ vendored headers
           #         without a manifest). Treat as a non-fatal warning so the
           #         scanner can be wired in incrementally per repo.
           if [ "$rc" -eq 128 ] || \
              { [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'No package sources found'; }; then
-            echo "::warning::OSV-Scanner found no package sources in the requested paths — treating as non-fatal."
+            echo "::warning::OSV-Scanner found no package sources in the requested paths, treating as non-fatal."
             exit 0
           fi
           exit "$rc"
@@ -234,8 +234,8 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       # Dependency review requires GitHub Advanced Security on private
-      # repositories. The HANDOFF tracks enabling GHAS as a follow-up;
-      # until then this step is best-effort and surfaces as a warning.
+      # repositories. Until GHAS is enabled this step is best-effort and
+      # surfaces as a warning.
       - name: Review changed dependencies
         continue-on-error: true
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0

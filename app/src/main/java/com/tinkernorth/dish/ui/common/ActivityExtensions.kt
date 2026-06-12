@@ -56,7 +56,7 @@ fun AppCompatActivity.applyDishSystemBars(root: View) {
 }
 
 // Pre-34 has no CLOSE override; the OPEN-only fallback is fine since the platform close cut is
-// fast. Input overlays opt out — every ms of latency matters there.
+// fast. Input overlays opt out: every ms of latency matters there.
 fun AppCompatActivity.applyDishActivityTransitions() {
     if (animationsDisabled()) return
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -77,7 +77,7 @@ fun AppCompatActivity.applyDishActivityTransitions() {
 }
 
 /**
- * True when the system-wide animator duration scale is 0 — the "remove
+ * True when the system-wide animator duration scale is 0: the "remove
  * animations" toggle in Settings → Accessibility (and Developer Options).
  * Material widgets check this internally; the activity-transition path
  * uses fixed-duration anim resources, so we have to gate it ourselves.

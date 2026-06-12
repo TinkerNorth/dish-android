@@ -41,7 +41,7 @@ class SatelliteCatalogRepositoryTest {
 
             val first = repo.catalogFor(server, "sat-1")
             assertEquals("xbox360", first?.controllerTypes?.single()?.slug)
-            assertNull(receivedEtags[0]) // nothing cached yet — unconditional GET
+            assertNull(receivedEtags[0]) // nothing cached yet, unconditional GET
 
             val second = repo.catalogFor(server, "sat-1")
             assertEquals("\"1.6.0\"", receivedEtags[1]) // If-None-Match from the cache
@@ -80,7 +80,7 @@ class SatelliteCatalogRepositoryTest {
         }
 
     @Test
-    fun `a never-reachable satellite yields null — no cache to serve`() =
+    fun `a never-reachable satellite yields null, no cache to serve`() =
         runTest {
             coEvery { gateway.catalog(any(), any(), any(), anyNullable(), any()) } throws
                 RuntimeException("ECONNREFUSED")

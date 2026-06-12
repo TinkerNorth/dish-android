@@ -60,7 +60,7 @@ class BluetoothGamepadRegistry
             _staleBtIds.update { current ->
                 val prior = current[id]
                 if (prior == reason) return@update current
-                // KEY_MISSING is more specific — don't downgrade to BOND_REMOVED.
+                // KEY_MISSING is more specific. Don't downgrade to BOND_REMOVED.
                 if (prior == BtStaleReason.KEY_MISSING && reason == BtStaleReason.BOND_REMOVED) {
                     return@update current
                 }

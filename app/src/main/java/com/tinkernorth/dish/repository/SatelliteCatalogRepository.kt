@@ -14,7 +14,7 @@ import javax.inject.Singleton
  * Per-satellite controller-type catalog (GET /api/catalog). Static per server
  * version + locale, so it is fetched once and revalidated via ETag; a 304
  * serves the cache. The "Emulate" picker renders from this instead of a
- * hardcoded enum — a controller type newer than the app still gets a name and
+ * hardcoded enum: a controller type newer than the app still gets a name and
  * description (server-provided strings; bundled overrides apply only to slugs
  * the app recognizes).
  */

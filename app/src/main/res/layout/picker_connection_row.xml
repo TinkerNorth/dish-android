@@ -5,7 +5,7 @@
      parent card's btnUnbind / btnOpenGamepad / btnOpenTouchpad cover those).
 
      Selected styling (border flips to colorPrimary) is driven by
-     android:selected via @drawable/picker_row_bg — the adapter sets
+     android:selected via @drawable/picker_row_bg. The adapter sets
      `view.isSelected = bound`. Alpha for ownedByOther / unreachable rows
      is set by the adapter at bind time because those states are
      mutually-exclusive scalar values not captured by Android's state-list

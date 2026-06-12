@@ -3,8 +3,8 @@
      3.0s, holds 0.6s, then loops (battery_fill interpolator over a 3.6s clock);
      the bolt's white overlay pulses on an independent 1.5s clock. This is the
      Android twin of battery-charging-animated.svg. Shown by ControllerAdapter
-     when the battery status is charging. The two-tone palette is self-coloured
-     — do NOT apply android:tint / app:tint, and the ImageView must not either.
+     when the battery status is charging. The two-tone palette is self-coloured:
+     do NOT apply android:tint / app:tint, and the ImageView must not either.
      ControllerAdapter calls start() on the drawable to run the loop. -->
 <animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt">

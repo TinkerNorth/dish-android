@@ -27,7 +27,7 @@
     <string name="action_scan">Scanner</string>
     <string name="action_scanning">Recherche…</string>
     <string name="action_add">Ajouter</string>
-    <string name="bt_hosts_empty">Aucun hôte mémorisé — touchez Ajouter pour en enregistrer un</string>
+    <string name="bt_hosts_empty">Aucun hôte mémorisé : touchez Ajouter pour en enregistrer un</string>
 
     <!-- row_connection.xml + libellés dynamiques des lignes dans ConnectionsActivity. -->
     <string name="action_connect">Connecter</string>
@@ -42,7 +42,7 @@
 
     <!-- Boîte de dialogue de confirmation d\'oubli d\'un hôte Bluetooth. -->
     <string name="dialog_forget_bt_title">Oublier %1$s ?</string>
-    <string name="dialog_forget_bt_message">Dish ne mémorisera plus cet hôte. Le téléphone conserve l\'appairage au niveau système — ouvrez les paramètres Bluetooth pour le supprimer complètement.</string>
+    <string name="dialog_forget_bt_message">Dish ne mémorisera plus cet hôte. Le téléphone conserve l\'appairage au niveau système. Ouvrez les paramètres Bluetooth pour le supprimer complètement.</string>
     <string name="dialog_forget_bt_positive">Ouvrir les paramètres</string>
     <string name="dialog_forget_bt_negative">Plus tard</string>
 
@@ -81,7 +81,7 @@
     <string name="slot_status_tap_to_bind">Touchez pour lier</string>
 
     <!-- Lignes du sélecteur par emplacement dans ControllerAdapter. -->
-    <string name="picker_empty_no_connections">Aucune connexion — touchez Gérer ci-dessus</string>
+    <string name="picker_empty_no_connections">Aucune connexion : touchez Gérer ci-dessus</string>
     <string name="picker_empty_no_available">Aucune connexion disponible pour l\'instant</string>
     <string name="picker_title_with_status">%1$s%2$s</string>
     <string name="picker_status_online"> • en ligne</string>
@@ -128,7 +128,7 @@
     <!-- Sous-titre des lignes Bluetooth et état transitoire d\'un emplacement
          pendant un appairage en cours. -->
     <string name="bt_row_detail">%1$s • %2$s</string>
-    <string name="bt_transient_ready_to_pair">Prête à appairer — repérez cet appareil sur votre hôte</string>
+    <string name="bt_transient_ready_to_pair">Prête à appairer : repérez cet appareil sur votre hôte</string>
     <string name="bt_transient_acquiring">Acquisition du profil HID…</string>
     <string name="bt_transient_idle">Inactive</string>
 
@@ -143,13 +143,13 @@
     <string name="motion_unavailable">Mouvement : pas de gyroscope</string>
     <string name="motion_unavailable_detail">Ce téléphone n\'a pas de gyroscope, le mouvement (visée gyro / inclinaison) n\'est pas transmis.</string>
     <string name="motion_not_forwarded_detail">Cette connexion Bluetooth n\'a pas de canal de mouvement. Utilisez une connexion satellite pour transmettre la visée gyro / inclinaison.</string>
-    <string name="motion_stalled_detail">Capteur de mouvement bloqué — essayez d\'appuyer sur le bouton retour, ou redémarrez Dish.</string>
+    <string name="motion_stalled_detail">Capteur de mouvement bloqué. Essayez d\'appuyer sur le bouton retour, ou redémarrez Dish.</string>
     <string name="motion_user_disabled">Mouvement : désactivé</string>
     <string name="motion_no_host_sink">Mouvement : l\'hôte ne peut pas recevoir</string>
     <string name="motion_backend_broken">Mouvement : le serveur ne peut pas livrer</string>
     <string name="motion_user_disabled_detail">Vous avez désactivé le mouvement pour cet emplacement. Activez le bouton Mouvement sur la ligne de la manette pour recommencer à envoyer le gyro.</string>
     <string name="motion_no_host_sink_detail">Une manette virtuelle de style Xbox n\'a pas de surface de mouvement sur l\'hôte. Passez la manette en PlayStation pour la visée gyro / inclinaison.</string>
-    <string name="motion_backend_broken_detail">Le satellite a accepté cette manette mais n\'a pas pu créer son périphérique de mouvement — probablement un problème de permission ou de noyau sur le serveur. Redémarrez le satellite ou vérifiez ses journaux.</string>
+    <string name="motion_backend_broken_detail">Le satellite a accepté cette manette mais n\'a pas pu créer son périphérique de mouvement : probablement un problème de permission ou de noyau sur le serveur. Redémarrez le satellite ou vérifiez ses journaux.</string>
     <string name="controller_motion_toggle_label">Mouvement (gyro)</string>
     <string name="controller_motion_toggle_subtitle_on">Envoie la visée gyro / inclinaison à l\'hôte.</string>
     <string name="controller_motion_toggle_subtitle_off">Aucun échantillon gyro n\'est envoyé pour cet emplacement.</string>
@@ -223,7 +223,7 @@
 
     <!-- État vide dynamique de la liste satellite. -->
     <string name="discovery_empty_never_scanned">Touchez Scanner pour trouver des satellites sur votre réseau</string>
-    <string name="discovery_empty_no_results">Aucun satellite trouvé à %1$s — vérifiez le Wi-Fi et que votre hôte est allumé.</string>
+    <string name="discovery_empty_no_results">Aucun satellite trouvé à %1$s. Vérifiez le Wi-Fi et que votre hôte est allumé.</string>
 
     <!-- Boîte de dialogue PIN personnalisée. -->
     <string name="pair_dialog_title">Appairer avec un satellite</string>
@@ -325,7 +325,7 @@
     <string name="binding_edge_action_reconnect">Reconnecter</string>
     <string name="binding_edge_action_dismiss">Ignorer</string>
     <string name="binding_blocker_input_lost_body">Reconnectez la manette pour continuer la configuration ou fermez cet écran.</string>
-    <string name="binding_apply_error_slot_gone">%1$s n\'est plus disponible — débranchez-le et reconnectez-le, puis réessayez.</string>
+    <string name="binding_apply_error_slot_gone">%1$s n\'est plus disponible. Débranchez-le et reconnectez-le, puis réessayez.</string>
     <string name="binding_apply_error_no_connect">Impossible de joindre %1$s. Vérifiez qu\'il est allumé et sur votre réseau, puis réessayez.</string>
     <string name="binding_apply_warn_title">Mode Direct indisponible</string>
     <string name="binding_apply_warn_detail">%1$s est lié à %2$s en mode Standard à la place.</string>

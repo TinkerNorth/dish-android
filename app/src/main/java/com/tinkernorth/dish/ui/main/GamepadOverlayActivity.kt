@@ -114,7 +114,7 @@ class GamepadOverlayActivity :
     /**
      * Resend-loop tick; pacing is [resendDue] (edge burst, then keepalive).
      * Fires only after the pad was touched once and only at a Connected
-     * satellite — Bluetooth is excluded (BT-HID has its own polling
+     * satellite. Bluetooth is excluded (BT-HID has its own polling
      * discipline and a bounded native dispatch queue).
      */
     override fun resendOneIfReady() {
@@ -122,7 +122,7 @@ class GamepadOverlayActivity :
         val summary = hub.summary(connectionId) ?: return
         if (summary.kind != ConnectionKind.SATELLITE) return
         if (summary.live != LinkState.Connected) return
-        // The live state object mutates on the UI thread — copy() is the
+        // The live state object mutates on the UI thread: copy() is the
         // stable comparison base (a torn read just costs one extra burst).
         val changed = state != lastResentSnapshot
         if (changed) lastResentSnapshot = state.copy()
@@ -132,14 +132,14 @@ class GamepadOverlayActivity :
 
     override fun onResume() {
         super.onResume()
-        // Battery is unconditional — it has its own gating on the connection
+        // Battery is unconditional: it has its own gating on the connection
         // kind inside the satellite send path, and the cost of a slow battery
         // poll is negligible.
         batterySource.start(lifecycleScope) { level, status ->
             satellite.get(connectionId)?.sendBattery(VIRTUAL_SLOT_ID, level, status)
         }
         // Motion gate + indicator repaint stay with the combine collector,
-        // which repeatOnLifecycle re-subscribes on STARTED — nothing to do here.
+        // which repeatOnLifecycle re-subscribes on STARTED. Nothing to do here.
     }
 
     override fun onPause() {
@@ -149,7 +149,7 @@ class GamepadOverlayActivity :
 
     /**
      * One coherent snapshot of the three inputs behind the toolbar indicators
-     * and the gyro gate — a single combine, so a paint never mixes emissions
+     * and the gyro gate: a single combine, so a paint never mixes emissions
      * (three racing collectors could paint inconsistently during reconnects).
      */
     private data class OverlayMotionPaint(
@@ -319,7 +319,7 @@ class GamepadOverlayActivity :
     }
 
     companion object {
-        // Companion members aren't inherited — re-export keeps existing
+        // Companion members aren't inherited. Re-export keeps existing
         // qualified call sites compiling.
         const val EXTRA_CONNECTION_ID = BaseInputOverlayActivity.EXTRA_CONNECTION_ID
         const val EXTRA_USE_PS_LAYOUT = "extra_use_ps_layout"

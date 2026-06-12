@@ -98,7 +98,7 @@ class SatelliteMotionBackendStatusStoreTest {
         val store = SatelliteMotionBackendStatusStore()
         val before = store.state.value
         store.clear("conn", "missing")
-        // Reference equality pins no flow emission — a no-op clear() that still emits re-triggers every collector.
+        // Reference equality pins no flow emission: a no-op clear() that still emits re-triggers every collector.
         assertTrue(before === store.state.value)
     }
 

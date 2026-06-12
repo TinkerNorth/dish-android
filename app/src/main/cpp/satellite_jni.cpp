@@ -347,7 +347,7 @@ static bool gamepadMotionFilter(const GameActivityMotionEvent* ev) {
     if (action != AMOTION_EVENT_ACTION_MOVE) return true;
     g_frameworkEventCounts[deviceId]++;
 
-    // Latest sample wins — historicals are intermediate states the next apply overwrites anyway.
+    // Latest sample wins: historicals are intermediate states the next apply overwrites anyway.
     float z = axisCur(ev, AMOTION_EVENT_AXIS_Z);
     float rz = axisCur(ev, AMOTION_EVENT_AXIS_RZ);
     float rx = axisCur(ev, AMOTION_EVENT_AXIS_RX);
@@ -417,7 +417,7 @@ static bool sendEncrypted(Session* s, uint16_t msgType, const uint8_t* payload,
     // transitions.
     ssize_t sent = sendto(s->udpSock, packet, totalLen, MSG_DONTWAIT, (struct sockaddr*)&s->dest,
                           sizeof(s->dest));
-    // Soft-drop on buffer-full — UDP semantics absorb it and the next tick refreshes state.
+    // Soft-drop on buffer-full: UDP semantics absorb it and the next tick refreshes state.
     if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) { return true; }
     return sent == (ssize_t)totalLen;
 }
@@ -429,7 +429,7 @@ static void heartbeatLoop(std::shared_ptr<Session> s) {
         s->missedAcks.fetch_add(1, std::memory_order_relaxed);
 
         if (s->missedAcks.load(std::memory_order_relaxed) >= HEARTBEAT_MISS_MAX) {
-            LOGE("Missed %d heartbeat ACKs — connection dead", HEARTBEAT_MISS_MAX);
+            LOGE("Missed %d heartbeat ACKs, connection dead", HEARTBEAT_MISS_MAX);
             s->connectionAlive.store(false, std::memory_order_relaxed);
         }
 
@@ -522,7 +522,7 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_openSo
     const int ptonOk = inet_pton(AF_INET, s, &session->dest.sin_addr);
     env->ReleaseStringUTFChars(ip, s);
     if (ptonOk != 1) {
-        LOGE("openSocket: not an IPv4 literal — refusing");
+        LOGE("openSocket: not an IPv4 literal, refusing");
         close(sock);
         return -1;
     }
@@ -565,7 +565,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setCon
     jbyte* keyBytes = env->GetByteArrayElements(keyArr, nullptr);
     memcpy(s->token, tokenBytes, 4);
     memcpy(s->key, keyBytes, 32);
-    // Counters restart with each (token, sessionKey) pair — contract §Crypto.
+    // Counters restart with each (token, sessionKey) pair (contract §Crypto).
     s->counter.store(1);
     s->lastRxCounter.store(0);
     s->missedAcks.store(0);
@@ -726,7 +726,7 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiv
     nonce[0] = CRYPTO_DIR_SERVER_TO_CLIENT;
     putBE32(nonce + 8, ctr);
 
-    // Must size with buf[128] not the message-set max — bound holds structurally, not by luck.
+    // Must size with buf[128] not the message-set max: bound holds structurally, not by luck.
     uint8_t decrypted[sizeof(buf)];
     unsigned long long decLen = 0;
     size_t cipherLen = (size_t)n - 8;

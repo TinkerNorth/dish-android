@@ -1,4 +1,4 @@
-<!-- Settings row icon container — 8dp rounded square with a ~6% primary-cyan
+<!-- Settings row icon container: 8dp rounded square with a ~6% primary-cyan
      fill and a 1dp cardStroke border. Drawn programmatically rather than
      pulling another MaterialCardView in to keep the inner row layout flat. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"

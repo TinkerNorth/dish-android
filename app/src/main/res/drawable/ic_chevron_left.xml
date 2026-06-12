@@ -1,7 +1,6 @@
-<!-- v6 brand "chevron-left" glyph — open V at 64u viewport, stroked at 4u
+<!-- v6 brand "chevron-left" glyph: open V at 64u viewport, stroked at 4u
      to match the navigation-set stroke ladder (chevrons stay thinner than
-     the 6u feature glyphs so they read as wayfinding chrome). Sourced from
-     the Claude Design "chevron-left" handoff.
+     the 6u feature glyphs so they read as wayfinding chrome).
 
      autoMirrored is true so the chevron flips to a right-pointing V in
      RTL layouts (the Toolbar's back affordance is direction-anchored to

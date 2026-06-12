@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    STATE-LIST SUPPORT TOKENS — the values referenced by state-list color
+    STATE-LIST SUPPORT TOKENS: the values referenced by state-list color
     selectors living in `res/color/`. Android's resource system mandates
     that `<selector>` resources sit in `res/color/`, so the selectors
     themselves are individual files there; this values file is the index
@@ -8,16 +8,16 @@
     naturally belong in `colors.xml` or `colors_primitives.xml`.
 
     Selectors in res/color/:
-      - chip_dish_background.xml — flips on state_checked (MaterialChip bg).
-      - chip_dish_text.xml       — flips on state_checked (chip label).
-      - icon_secondary.xml       — always muted, kept selector-shaped for
-                                   callsite consistency.
+      - chip_dish_background.xml: flips on state_checked (MaterialChip bg).
+      - chip_dish_text.xml:       flips on state_checked (chip label).
+      - icon_secondary.xml:       always muted, kept selector-shaped for
+                                  callsite consistency.
 
     When adding a new state-list color: create the selector in res/color/,
     add a one-line entry in the list above. Add a semantic alias here only
     if the same value is reused across multiple selectors. Disabled-state
     selectors (text_disabled / icon_interactive) are intentionally absent
-    until first needed — see docs/design-system.md "When to add a new token".
+    until first needed. See docs/design-system.md "When to add a new token".
 -->
 <resources>
 </resources>

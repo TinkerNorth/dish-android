@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    TOUCHPAD OVERLAY — two side-by-side trackpads (Click + Move) under a
+    TOUCHPAD OVERLAY: two side-by-side trackpads (Click + Move) under a
     shared MaterialToolbar header (back chevron + page title). Mirrors the
     gamepad overlay's chrome and the rest-of-app top bar (Connections,
     Settings) so all top-level destinations feel like one app.
@@ -29,7 +29,7 @@
         android:orientation="vertical">
 
         <!-- Toolbar: left-chevron back + page title. Style
-             Widget.Dish.Toolbar is the shared piece — same chevron,
+             Widget.Dish.Toolbar is the shared piece: same chevron,
              same background, same height as the Connections + Settings
              toolbars. Title is set at runtime in onCreate so a layout
              diff can't accidentally show "Touchpad" on the gamepad

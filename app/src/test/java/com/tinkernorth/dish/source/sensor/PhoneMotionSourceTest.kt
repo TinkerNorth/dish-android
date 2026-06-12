@@ -67,7 +67,7 @@ class PhoneMotionSourceTest {
         unmockkStatic(Log::class)
     }
 
-    // SystemClock.elapsedRealtime() throws "not mocked" under JVM — inject a controllable counter.
+    // SystemClock.elapsedRealtime() throws "not mocked" under JVM. Inject a controllable counter.
     private var fakeNowMs: Long = 1000L
 
     private fun source() =
@@ -208,7 +208,7 @@ class PhoneMotionSourceTest {
     }
 
     @Test
-    fun `pad with NO accelerometer still streams gyro — gate does not block`() {
+    fun `pad with NO accelerometer still streams gyro - gate does not block`() {
         every { sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) } returns null
         val emissions = mutableListOf<Pair<MotionRateLimiter.MotionSample, Int>>()
         val src = source()
@@ -218,7 +218,7 @@ class PhoneMotionSourceTest {
     }
 
     @Test
-    fun `deriveState — no gyro present means Disabled regardless of started`() {
+    fun `deriveState - no gyro present means Disabled regardless of started`() {
         assertEquals(
             MotionStreamState.Disabled,
             PhoneMotionSource.deriveState(
@@ -240,7 +240,7 @@ class PhoneMotionSourceTest {
     }
 
     @Test
-    fun `deriveState — gyro present but not started means Stopped`() {
+    fun `deriveState - gyro present but not started means Stopped`() {
         assertEquals(
             MotionStreamState.Stopped,
             PhoneMotionSource.deriveState(
@@ -253,7 +253,7 @@ class PhoneMotionSourceTest {
     }
 
     @Test
-    fun `deriveState — started with no gyro sample yet means Stalled`() {
+    fun `deriveState - started with no gyro sample yet means Stalled`() {
         assertEquals(
             MotionStreamState.Stalled,
             PhoneMotionSource.deriveState(
@@ -266,7 +266,7 @@ class PhoneMotionSourceTest {
     }
 
     @Test
-    fun `deriveState — last gyro within window means Streaming`() {
+    fun `deriveState - last gyro within window means Streaming`() {
         assertEquals(
             MotionStreamState.Streaming,
             PhoneMotionSource.deriveState(
@@ -279,7 +279,7 @@ class PhoneMotionSourceTest {
     }
 
     @Test
-    fun `deriveState — last gyro past stall window means Stalled`() {
+    fun `deriveState - last gyro past stall window means Stalled`() {
         assertEquals(
             MotionStreamState.Stalled,
             PhoneMotionSource.deriveState(
@@ -292,8 +292,8 @@ class PhoneMotionSourceTest {
     }
 
     @Test
-    fun `deriveState — exactly at window boundary is still Streaming`() {
-        // lastGyroMonoMs == 0L is a special-case Stalled regardless of window math — use non-zero anchor.
+    fun `deriveState - exactly at window boundary is still Streaming`() {
+        // lastGyroMonoMs == 0L is a special-case Stalled regardless of window math. Use non-zero anchor.
         assertEquals(
             MotionStreamState.Streaming,
             PhoneMotionSource

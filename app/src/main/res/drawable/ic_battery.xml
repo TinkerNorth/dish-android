@@ -1,6 +1,6 @@
 <!-- Generic battery glyph (~85% fill) in the v6 brand language: a teal hull,
      a white-overlay well, and a teal fill rect whose width is the charge. Used
-     when the level is unknown. The two-tone palette is self-coloured — do NOT
+     when the level is unknown. The two-tone palette is self-coloured: do NOT
      apply android:tint / app:tint, it would flatten the overlay. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"

@@ -91,7 +91,7 @@ class MotionCapabilityComposerTest {
     }
 
     @Test
-    fun `toCapBits ignores carriesOnConnection — link-down is not a capability change`() {
+    fun `toCapBits ignores carriesOnConnection - link-down is not a capability change`() {
         val cap = MotionCapability(hasGyro = true, carriesOnConnection = false, userEnabled = true)
         assertEquals(MotionCapability.CAP_MOTION_BIT, cap.toCapBits())
     }
@@ -103,7 +103,7 @@ class MotionCapabilityComposerTest {
     }
 
     @Test
-    fun `toCapBits is zero on hardware without a gyro — even if the user enabled it`() {
+    fun `toCapBits is zero on hardware without a gyro, even if the user enabled it`() {
         val cap = MotionCapability(hasGyro = false, carriesOnConnection = true, userEnabled = true)
         assertEquals(0, cap.toCapBits())
     }
@@ -184,7 +184,7 @@ class MotionCapabilityComposerTest {
         }
 
     @Test
-    fun `physical slot uses Device hasGyro verbatim — no re-probe`() =
+    fun `physical slot uses Device hasGyro verbatim, no re-probe`() =
         composerTest {
             val phoneAvail = MutableStateFlow(false)
             val devices =
@@ -257,7 +257,7 @@ class MotionCapabilityComposerTest {
         }
 
     @Test
-    fun `toCapBits is zero on a slot the user has disabled — even if hasGyro is true`() =
+    fun `toCapBits is zero on a slot the user has disabled, even if hasGyro is true`() =
         composerTest {
             val phoneAvail = MutableStateFlow(true)
             val devices = MutableStateFlow<Map<Int, PhysicalGamepadRegistry.Device>>(emptyMap())
@@ -346,7 +346,7 @@ class MotionCapabilityComposerTest {
         }
 
     @Test
-    fun `hostHasSinkForType is false for an Xbox-typed satellite slot — the headline B3 case`() =
+    fun `hostHasSinkForType is false for an Xbox-typed satellite slot, the headline B3 case`() =
         composerTest {
             val phoneAvail = MutableStateFlow(true)
             val devices = MutableStateFlow<Map<Int, PhysicalGamepadRegistry.Device>>(emptyMap())
@@ -398,7 +398,7 @@ class MotionCapabilityComposerTest {
         }
 
     @Test
-    fun `hostHasSinkForType is true for a slot with unknown type — no false warnings`() =
+    fun `hostHasSinkForType is true for a slot with unknown type, no false warnings`() =
         composerTest {
             val phoneAvail = MutableStateFlow(true)
             val devices = MutableStateFlow<Map<Int, PhysicalGamepadRegistry.Device>>(emptyMap())
@@ -411,7 +411,7 @@ class MotionCapabilityComposerTest {
         }
 
     @Test
-    fun `hostHasSinkForType is true for a Bluetooth-HID-bound slot — limit is connection kind`() =
+    fun `hostHasSinkForType is true for a Bluetooth-HID-bound slot - limit is connection kind`() =
         composerTest {
             val phoneAvail = MutableStateFlow(true)
             val devices = MutableStateFlow<Map<Int, PhysicalGamepadRegistry.Device>>(emptyMap())
@@ -472,7 +472,7 @@ class MotionCapabilityComposerTest {
         }
 
     @Test
-    fun `satelliteBackendStatus is keyed on the bound connection — wrong-connection entries are ignored`() =
+    fun `satelliteBackendStatus is keyed on the bound connection - wrong-connection entries are ignored`() =
         composerTest {
             val phoneAvail = MutableStateFlow(true)
             val devices = MutableStateFlow<Map<Int, PhysicalGamepadRegistry.Device>>(emptyMap())
@@ -528,7 +528,7 @@ class MotionCapabilityComposerTest {
         }
 
     @Test
-    fun `toCapBits is unaffected by satelliteBackendStatus — dish honesty is independent of receiver health`() {
+    fun `toCapBits is unaffected by satelliteBackendStatus - dish honesty is independent of receiver health`() {
         val cap =
             MotionCapability(
                 hasGyro = true,
@@ -541,7 +541,7 @@ class MotionCapabilityComposerTest {
     }
 
     @Test
-    fun `effective is unaffected by satelliteBackendStatus — local listener gating doesn't change`() {
+    fun `effective is unaffected by satelliteBackendStatus - local listener gating doesn't change`() {
         val cap =
             MotionCapability(
                 hasGyro = true,

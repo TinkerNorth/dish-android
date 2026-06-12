@@ -62,7 +62,7 @@ class BatteryStatusStoreTest {
         workers.forEach(Thread::join)
 
         assertEquals(
-            "a concurrent put was lost — read-modify-write is not atomic",
+            "a concurrent put was lost, read-modify-write is not atomic",
             threads * perThread,
             store.samples.value.size,
         )
@@ -87,7 +87,7 @@ class BatteryStatusStoreTest {
         workers.forEach(Thread::join)
 
         assertEquals(
-            "a concurrent clear was lost — read-modify-write is not atomic",
+            "a concurrent clear was lost, read-modify-write is not atomic",
             0,
             store.samples.value.size,
         )

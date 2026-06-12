@@ -26,7 +26,7 @@
     <string name="action_scan">Suchen</string>
     <string name="action_scanning">Suche läuft…</string>
     <string name="action_add">Hinzufügen</string>
-    <string name="bt_hosts_empty">Keine gemerkten Hosts — auf Hinzufügen tippen, um einen neuen zu registrieren</string>
+    <string name="bt_hosts_empty">Keine gemerkten Hosts. Auf Hinzufügen tippen, um einen neuen zu registrieren</string>
 
     <!-- row_connection.xml + dynamische Zeilenbeschriftungen in ConnectionsActivity. -->
     <string name="action_connect">Verbinden</string>
@@ -41,7 +41,7 @@
 
     <!-- Bestätigungsdialog für das Entfernen eines Bluetooth-Hosts. -->
     <string name="dialog_forget_bt_title">%1$s entfernen?</string>
-    <string name="dialog_forget_bt_message">Dish merkt sich diesen Host nicht mehr. Das Telefon behält die systemseitige Kopplung — öffne die Bluetooth-Einstellungen, um sie vollständig zu entfernen.</string>
+    <string name="dialog_forget_bt_message">Dish merkt sich diesen Host nicht mehr. Das Telefon behält die systemseitige Kopplung. Öffne die Bluetooth-Einstellungen, um sie vollständig zu entfernen.</string>
     <string name="dialog_forget_bt_positive">Einstellungen öffnen</string>
     <string name="dialog_forget_bt_negative">Jetzt nicht</string>
 
@@ -80,7 +80,7 @@
     <string name="slot_status_tap_to_bind">Tippen zum Verknüpfen</string>
 
     <!-- Slot-Picker-Zeilen im ControllerAdapter. -->
-    <string name="picker_empty_no_connections">Noch keine Verbindungen — oben auf Verwalten tippen</string>
+    <string name="picker_empty_no_connections">Noch keine Verbindungen. Oben auf Verwalten tippen</string>
     <string name="picker_empty_no_available">Aktuell keine Verbindungen verfügbar</string>
     <string name="picker_title_with_status">%1$s%2$s</string>
     <string name="picker_status_online"> • online</string>
@@ -127,7 +127,7 @@
     <!-- Bluetooth-Zeilenuntertitel und Slot-Übergangszustand während des
          Kopplungsvorgangs. -->
     <string name="bt_row_detail">%1$s • %2$s</string>
-    <string name="bt_transient_ready_to_pair">Bereit zum Koppeln — suche dieses Gerät auf deinem Host</string>
+    <string name="bt_transient_ready_to_pair">Bereit zum Koppeln. Suche dieses Gerät auf deinem Host</string>
     <string name="bt_transient_acquiring">HID-Profil wird abgerufen…</string>
     <string name="bt_transient_idle">Inaktiv</string>
 
@@ -142,13 +142,13 @@
     <string name="motion_unavailable">Bewegung: kein Gyroskop</string>
     <string name="motion_unavailable_detail">Dieses Telefon hat kein Gyroskop, daher wird die Bewegung (Gyro-Zielen / Neigung) nicht gesendet.</string>
     <string name="motion_not_forwarded_detail">Diese Bluetooth-Verbindung hat keinen Bewegungskanal. Nutze eine Satelliten-Verbindung, um Gyro-Zielen / Neigung zu senden.</string>
-    <string name="motion_stalled_detail">Bewegungssensor blockiert — versuche die Zurück-Taste zum Zurücksetzen oder starte Dish neu.</string>
+    <string name="motion_stalled_detail">Bewegungssensor blockiert. Versuche die Zurück-Taste zum Zurücksetzen oder starte Dish neu.</string>
     <string name="motion_user_disabled">Bewegung: ausgeschaltet</string>
     <string name="motion_no_host_sink">Bewegung: Host kann nicht empfangen</string>
     <string name="motion_backend_broken">Bewegung: Server kann nicht zustellen</string>
     <string name="motion_user_disabled_detail">Du hast die Bewegung für diesen Slot ausgeschaltet. Aktiviere den Bewegungs-Schalter in der Controllerzeile, um wieder Gyro zu senden.</string>
     <string name="motion_no_host_sink_detail">Ein virtuelles Xbox-Pad hat keine Bewegungsoberfläche auf dem Host. Wechsle den Controller auf PlayStation, damit Gyro-Zielen / Neigung ankommt.</string>
-    <string name="motion_backend_broken_detail">Der Satellit hat diesen Controller akzeptiert, konnte aber sein Bewegungsgerät nicht erstellen — vermutlich ein Berechtigungs- oder Kernelproblem auf dem Server. Starte den Satelliten neu oder prüfe die Logs.</string>
+    <string name="motion_backend_broken_detail">Der Satellit hat diesen Controller akzeptiert, konnte aber sein Bewegungsgerät nicht erstellen, vermutlich ein Berechtigungs- oder Kernelproblem auf dem Server. Starte den Satelliten neu oder prüfe die Logs.</string>
     <string name="controller_motion_toggle_label">Bewegung (Gyro)</string>
     <string name="controller_motion_toggle_subtitle_on">Sendet Gyro-Zielen / Neigung an den Host.</string>
     <string name="controller_motion_toggle_subtitle_off">Für diesen Slot werden keine Gyro-Samples gesendet.</string>
@@ -222,7 +222,7 @@
 
     <!-- Dynamischer Leer­zustand für die Satellitenliste. -->
     <string name="discovery_empty_never_scanned">Tippe auf Suchen, um Satelliten in deinem Netzwerk zu finden</string>
-    <string name="discovery_empty_no_results">Keine Satelliten bei %1$s gefunden — prüfe das WLAN und ob dein Host eingeschaltet ist.</string>
+    <string name="discovery_empty_no_results">Keine Satelliten bei %1$s gefunden. Prüfe das WLAN und ob dein Host eingeschaltet ist.</string>
 
     <!-- Eigener PIN-Dialog. -->
     <string name="pair_dialog_title">Mit Satellit koppeln</string>
@@ -322,7 +322,7 @@
     <string name="binding_edge_action_reconnect">Erneut verbinden</string>
     <string name="binding_edge_action_dismiss">Schließen</string>
     <string name="binding_blocker_input_lost_body">Verbinde den Controller erneut, um weiter zu konfigurieren, oder schließe diesen Bildschirm.</string>
-    <string name="binding_apply_error_slot_gone">%1$s ist nicht mehr verfügbar — trennen und neu verbinden, dann erneut versuchen.</string>
+    <string name="binding_apply_error_slot_gone">%1$s ist nicht mehr verfügbar. Trennen und neu verbinden, dann erneut versuchen.</string>
     <string name="binding_apply_error_no_connect">%1$s nicht erreichbar. Stelle sicher, dass es eingeschaltet und im Netzwerk ist, und versuche es erneut.</string>
     <string name="binding_apply_warn_title">Direktmodus nicht verfügbar</string>
     <string name="binding_apply_warn_detail">%1$s ist mit %2$s im Standardmodus verbunden.</string>

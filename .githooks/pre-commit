@@ -3,12 +3,12 @@
 #
 # Two fast checks, each gated on what's actually staged:
 #   1. clang-format (autofix) on staged JNI C/C++ files.
-#   2. Translation completeness when any values*/strings.xml is staged —
-#      mirrors the MissingTranslation lint check that CI runs via
+#   2. Translation completeness when any values*/strings.xml is staged.
+#      Mirrors the MissingTranslation lint check that CI runs via
 #      ./gradlew lint, but ~30× faster (Python, no Gradle warmup).
 #
 # Both tools gracefully skip if their binary is missing so devs who haven't
-# yet run setup-hooks.sh or installed the tool aren't blocked locally — CI
+# yet run setup-hooks.sh or installed the tool aren't blocked locally. CI
 # enforces the same checks definitively.
 set -euo pipefail
 
@@ -27,7 +27,7 @@ if [ -n "$staged_jni" ]; then
             git add "$file"
         done
     else
-        echo "⚠  clang-format not installed — skipping (install clang-format)"
+        echo "⚠  clang-format not installed, skipping (install clang-format)"
     fi
 fi
 
@@ -49,6 +49,6 @@ if [ -n "$staged_strings" ]; then
             exit 1
         fi
     else
-        echo "⚠  python3 not installed — skipping translation check"
+        echo "⚠  python3 not installed, skipping translation check"
     fi
 fi

@@ -67,7 +67,7 @@ class PhysicalReachabilityTest {
     }
 
     @Test
-    fun `connectionFor is null for a Bluetooth-bound pad — no motion or battery channel`() {
+    fun `connectionFor is null for a Bluetooth-bound pad, no motion or battery channel`() {
         val conn = connection(MutableStateFlow(mapOf("9" to slot(registered = true))))
         assertNull(
             PhysicalReachability.connectionFor(
