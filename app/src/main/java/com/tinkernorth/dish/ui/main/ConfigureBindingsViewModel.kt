@@ -368,7 +368,7 @@ class ConfigureBindingsViewModel
                 if (wantDirect) PathChoice.Direct else PathChoice.Standard,
             )
             if (!wantDirect) return true
-            val key = (device.vendorId shl 16) or device.productId
+            val key = vpKey(device)
             // Direct shows a system permission prompt; wait out the FSM (Routed while still wanting Direct = prompt open).
             val settled =
                 withTimeoutOrNull(DIRECT_TIMEOUT_MS) {
@@ -509,11 +509,16 @@ class ConfigureBindingsViewModel
             return BindingDraft(
                 hostId = hostId,
                 type = type,
-                directOn = device?.isUsbSynthetic ?: false,
+                directOn = seedDirectOn(device, desiredUsbPathFor(device)),
                 motionOn = motionEnabledStore.isEnabled(slotId),
                 touchpadMode = if (TouchpadModeValue.isValid(touchpad)) touchpad else TouchpadModeValue.OFF,
             )
         }
+
+        private fun desiredUsbPathFor(device: PhysicalGamepadRegistry.Device?): PathChoice? =
+            device?.let { usbGamepadManager.controllers.value[vpKey(it)]?.desired }
+
+        private fun vpKey(device: PhysicalGamepadRegistry.Device): Int = (device.vendorId shl 16) or device.productId
 
         private companion object {
             const val DIRECT_TIMEOUT_MS = 20_000L
@@ -524,4 +529,15 @@ class ConfigureBindingsViewModel
             const val SLUG_XBOX360 = "xbox360"
             const val SLUG_DS4 = "ds4"
         }
+    }
+
+internal fun seedDirectOn(
+    device: PhysicalGamepadRegistry.Device?,
+    desired: PathChoice?,
+): Boolean =
+    when {
+        device == null -> false
+        device.isUsbSynthetic -> true
+        device.transport == Transport.Bluetooth -> false
+        else -> desired == PathChoice.Direct
     }
