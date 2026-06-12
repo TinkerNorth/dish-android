@@ -5,6 +5,7 @@ package com.tinkernorth.dish.ui.main
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.MotionCapability
+import com.tinkernorth.dish.source.inputrate.SlotInputRates
 import com.tinkernorth.dish.source.sensor.BatteryValidator
 
 enum class SlotInputType { VIRTUAL, PHYSICAL }
@@ -56,6 +57,8 @@ data class MainUiState(
     val motionCapabilities: Map<String, MotionCapability> = emptyMap(),
     val touchpadModesBySatellite: Map<String, String> = emptyMap(),
     val pathCards: Map<String, PathCard> = emptyMap(),
+    val inputRates: Map<String, SlotInputRates> = emptyMap(),
+    val screenPeakHz: Int = 0,
 ) {
     val virtualSlot get() = slots.first { it.id == VIRTUAL_SLOT_ID }
     val physicalSlots get() = slots.filter { it.inputType == SlotInputType.PHYSICAL }

@@ -18,6 +18,7 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
+import com.tinkernorth.dish.source.lowpower.LowPowerSignal
 import com.tinkernorth.dish.source.notification.DishNotifications
 
 fun AppCompatActivity.setupDishToolbar(toolbar: Toolbar) {
@@ -35,8 +36,9 @@ fun AppCompatActivity.attachGamepadHost(
     wakeState: WakeStateController,
     gamepadRegistry: PhysicalGamepadRegistry,
     notifications: DishNotifications,
+    lowPowerSignal: LowPowerSignal,
 ): GamepadActivityHost =
-    GamepadActivityHost(this, rootView, wakeState, gamepadRegistry).also {
+    GamepadActivityHost(this, rootView, wakeState, gamepadRegistry, lowPowerSignal).also {
         it.install(notifications)
     }
 

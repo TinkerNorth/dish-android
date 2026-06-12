@@ -38,8 +38,9 @@ Kotlin UI
                     └── receiveAck → RumbleBridge / motion / battery
 ```
 
-The full wire format, opcode catalog, and HID descriptor live in
-[`docs/wire-format.md`](docs/wire-format.md). Internal patterns and
+The protocol contract (REST surface, UDP streams, crypto, liveness,
+identity) lives in `satellite/docs/contract.md`; the Android-side mapping
+is [`docs/contract.md`](docs/contract.md). Internal patterns and
 the hot-path rules are in [`docs/architecture.md`](docs/architecture.md).
 
 ## Requirements
@@ -84,7 +85,7 @@ app/
   src/androidTest/               Instrumented smoke tests
 docs/
   architecture.md                Module map, hot-path rules, patterns
-  wire-format.md                 Opcodes, byte layouts, ports
+  contract.md                    Protocol-contract pointer + Android mapping
   design-system.md               Tokens, styles, layout composites
 gradle/libs.versions.toml        Version catalog
 .github/workflows/               CI, security, release pipelines

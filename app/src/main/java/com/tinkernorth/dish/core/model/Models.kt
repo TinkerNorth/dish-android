@@ -48,11 +48,141 @@ data class PairResponse(
     val sharedKey: String? = null,
 )
 
+// Wire DTOs for the declarative session contract (satellite docs/contract.md).
+// `result` / `code` / feature slugs are protocol constants — never localized;
+// the client maps the ones it knows onto UI strings and shows the raw code
+// otherwise.
+
 @Serializable
-data class ConnectResponse(
+data class SessionMotionDto(
+    val sinkSupportedForType: Boolean = false,
+    val backendOk: Boolean = false,
+)
+
+@Serializable
+data class ControllerApplyDto(
+    val ctrlIdx: Int = 0,
+    val result: String = "",
+    val appliedType: Int = 0,
+    val motion: SessionMotionDto = SessionMotionDto(),
+) {
+    val ok: Boolean get() = result == APPLY_OK
+
+    // replugFailed leaves the PREVIOUS pad untouched and working
+    // (appliedType reports it) — the slot is still live, just not the
+    // requested type. Streams must keep flowing to it.
+    val slotIsLive: Boolean get() = ok || result == APPLY_REPLUG_FAILED
+
+    companion object {
+        const val APPLY_OK = "ok"
+        const val APPLY_REPLUG_FAILED = "replugFailed"
+    }
+}
+
+@Serializable
+data class HostFeatureGrantDto(
+    val granted: Boolean = false,
+    val reason: String? = null,
+)
+
+@Serializable
+data class HostFeaturesDto(
+    val mouseControl: HostFeatureGrantDto = HostFeatureGrantDto(),
+)
+
+/** PUT /api/connections response — also doubles as the error body (`error`/`code`). */
+@Serializable
+data class SessionResponse(
     val connectionId: String? = null,
     val token: String? = null,
+    val sessionSalt: String? = null,
+    val epoch: Int = 0,
+    val maxControllers: Int = 16,
+    val protocolVersion: Int = 1,
+    val controllers: List<ControllerApplyDto> = emptyList(),
+    val hostFeatures: HostFeaturesDto = HostFeaturesDto(),
     val error: String? = null,
+    // Machine-readable 401 cause: NOT_PAIRED | BAD_PROOF. Either is terminal —
+    // stop retrying and surface "re-pair needed".
+    val code: String? = null,
+) {
+    val unauthorized: Boolean get() = code == CODE_NOT_PAIRED || code == CODE_BAD_PROOF
+
+    companion object {
+        const val CODE_NOT_PAIRED = "NOT_PAIRED"
+        const val CODE_BAD_PROOF = "BAD_PROOF"
+    }
+}
+
+/** PUT /api/connections/{id}/controllers/{idx} response. */
+@Serializable
+data class ControllerPutResponse(
+    val epoch: Int = 0,
+    val controller: ControllerApplyDto? = null,
+    val error: String? = null,
+    val code: String? = null,
+)
+
+@Serializable
+data class SessionViewControllerDto(
+    val ctrlIdx: Int = 0,
+    val active: Boolean = false,
+    val appliedType: Int = 0,
+    val touchpadMode: String = "off",
+)
+
+/** GET /api/connections/{id} — the reconcile endpoint's applied state. */
+@Serializable
+data class SessionViewDto(
+    val connectionId: String? = null,
+    val epoch: Int = 0,
+    val controllers: List<SessionViewControllerDto> = emptyList(),
+    val hostFeatures: HostFeaturesDto = HostFeaturesDto(),
+    val error: String? = null,
+    val code: String? = null,
+)
+
+// GET /api/catalog — the satellite's localized controller-type catalog. Type
+// NAMES/descriptions render from here (server-owned emulation targets; new
+// types must work on old apps); feature slugs are capability data the client
+// only offers when it has code for them.
+
+@Serializable
+data class CatalogFeatureDto(
+    val supported: Boolean = false,
+    val requires: String? = null,
+)
+
+@Serializable
+data class CatalogImageDto(
+    val href: String = "",
+    val etag: String = "",
+)
+
+@Serializable
+data class CatalogTypeDto(
+    val id: Int = 0,
+    val slug: String = "",
+    val name: String = "",
+    val shortName: String = "",
+    val description: String = "",
+    val image: CatalogImageDto = CatalogImageDto(),
+    val features: Map<String, CatalogFeatureDto> = emptyMap(),
+)
+
+@Serializable
+data class CatalogHostFeatureDto(
+    val supported: Boolean = false,
+    val modes: List<String> = emptyList(),
+)
+
+@Serializable
+data class CatalogDto(
+    val locale: String = "en",
+    val protocolVersion: Int = 1,
+    val serverVersion: String = "",
+    val controllerTypes: List<CatalogTypeDto> = emptyList(),
+    val hostFeatures: Map<String, CatalogHostFeatureDto> = emptyMap(),
 )
 
 data class ControllerEntry(

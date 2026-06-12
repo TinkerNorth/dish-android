@@ -404,8 +404,8 @@ Three extension functions on `AppCompatActivity`, all in
 The input overlays (`GamepadOverlayActivity` + `TouchpadOverlayActivity`)
 deliberately go through `BaseInputOverlayActivity`'s inherited scaffolding,
 not these extensions — the immersive full-screen wiring (`hideSystemBars()`,
-the `lateinit gamepadHost` field, the dispatch overrides, the 250 Hz resend
-loop) is a bigger interface than these three pieces centralise.
+the `lateinit gamepadHost` field, the dispatch overrides, the edge-burst
+resend loop) is a bigger interface than these three pieces centralise.
 
 ---
 

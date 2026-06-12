@@ -5,6 +5,7 @@ package com.tinkernorth.dish.composer
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.util.Log
 import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.architecture.abstracts.AbstractController
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -41,16 +42,28 @@ class StreamingServiceController
 
         private fun startService() {
             val intent = Intent(context, StreamingService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
-            running = true
+            running =
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        context.startForegroundService(intent)
+                    } else {
+                        context.startService(intent)
+                    }
+                    true
+                } catch (e: IllegalStateException) {
+                    // Android 12+ can refuse a background FGS start (ForegroundServiceStartNotAllowedException);
+                    // stay not-running so the next foreground slot-count change retries instead of crashing.
+                    Log.w(TAG, "foreground service start refused: ${e.message}")
+                    false
+                }
         }
 
         private fun stopService() {
             context.stopService(Intent(context, StreamingService::class.java))
             running = false
+        }
+
+        private companion object {
+            const val TAG = "StreamingServiceController"
         }
     }

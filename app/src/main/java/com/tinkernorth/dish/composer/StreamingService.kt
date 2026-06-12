@@ -12,6 +12,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.tinkernorth.dish.DishApplication
 import com.tinkernorth.dish.R
@@ -41,7 +42,9 @@ class StreamingService : Service() {
     override fun onCreate() {
         super.onCreate()
         ensureChannel()
-        startForegroundInitial()
+        // Refused foreground start: the service is already stopping, so don't wire observers that would
+        // notify for a service that never entered the foreground.
+        if (!startForegroundInitial()) return
         observerJob =
             combine(wakeState.streamingSlotCount, hub.connections) { count, conns -> count to conns }
                 .onEach { (count, conns) -> refresh(count, conns) }
@@ -78,9 +81,9 @@ class StreamingService : Service() {
             .forEach { btRegistry.stop(it.id) }
     }
 
-    private fun startForegroundInitial() {
+    private fun startForegroundInitial(): Boolean {
         val notification = build(count = wakeState.streamingSlotCount.value, primaryLabel = null)
-        startInForeground(notification)
+        return startInForeground(notification)
     }
 
     private fun refresh(
@@ -143,13 +146,20 @@ class StreamingService : Service() {
             .build()
     }
 
-    private fun startInForeground(notification: Notification) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+    private fun startInForeground(notification: Notification): Boolean =
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+            true
+        } catch (e: IllegalStateException) {
+            // A background-initiated FGS start can be refused on Android 12+; stop instead of crashing.
+            Log.w(TAG, "foreground start refused: ${e.message}")
+            stopSelf()
+            false
         }
-    }
 
     private fun ensureChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -176,5 +186,6 @@ class StreamingService : Service() {
         const val ACTION_STOP_ALL = "com.tinkernorth.dish.action.STOP_ALL"
         private const val CHANNEL_ID = "dish.streaming"
         private const val NOTIFICATION_ID = 0x1D15
+        private const val TAG = "StreamingService"
     }
 }

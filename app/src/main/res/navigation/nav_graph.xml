@@ -3,14 +3,13 @@
     NAV GRAPH — single source of truth for in-app navigation between the
     six chrome / overlay activities. Used through DishNavigator
     (app/src/main/java/com/tinkernorth/dish/ui/common/DishNavigator.kt),
-    which exposes typed `navigateToX` methods over a NavController seeded
-    with this graph.
+    which exposes typed `navigateToX` methods over an ActivityNavigator
+    seeded with this graph.
 
     Activity-only graph: every destination is an <activity>, no <fragment>.
     Activity destinations are TERMINAL in the navigation library's model —
-    they cannot carry <action> children. NavController instead navigates
-    directly to a destination id (the navigate(R.id.xActivity) overload),
-    which the runtime resolves through ActivityNavigator into
+    they cannot carry <action> children. DishNavigator instead navigates
+    directly to a destination id, which ActivityNavigator resolves into
     `startActivity(Intent(xActivityClass))` with the supplied bundle as
     intent extras. Argument names declared on each destination map 1:1
     to the receiving Activity's `intent.getXxxExtra(name)` calls.

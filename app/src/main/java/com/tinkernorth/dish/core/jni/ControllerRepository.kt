@@ -40,45 +40,15 @@ class ControllerRepository
             SatelliteNative.sendReport(handle, index, buttons, lt, rt, lx, ly, rx, ry)
         }
 
-        fun addController(
-            handle: Int,
-            index: Int,
-            capabilities: Int,
-            controllerType: Int,
-        ) {
-            SatelliteNative.controllerAdd(handle, index, capabilities, controllerType)
-        }
-
-        fun removeController(
-            handle: Int,
-            index: Int,
-        ) {
-            SatelliteNative.controllerRemove(handle, index)
-        }
-
         fun getVigemAvailable(handle: Int): Int = SatelliteNative.getVigemAvailable(handle)
 
         fun getActiveControllerCount(handle: Int): Int = SatelliteNative.getActiveControllerCount(handle)
 
-        fun getLastControllerAck(handle: Int): Int = SatelliteNative.getLastControllerAck(handle)
+        fun getServerEpoch(handle: Int): Int = SatelliteNative.getServerEpoch(handle)
 
-        fun getLastControllerMotionFlags(handle: Int): Int = SatelliteNative.getLastControllerMotionFlags(handle)
+        fun getActiveBitmap(handle: Int): Int = SatelliteNative.getActiveBitmap(handle)
 
-        fun sendControllerType(
-            handle: Int,
-            index: Int,
-            type: Int,
-        ) {
-            SatelliteNative.sendControllerType(handle, index, type)
-        }
-
-        fun sendControllerCapsUpdate(
-            handle: Int,
-            index: Int,
-            capabilities: Int,
-        ) {
-            SatelliteNative.sendControllerCapsUpdate(handle, index, capabilities)
-        }
+        fun getSessionCloseReason(handle: Int): Int = SatelliteNative.getSessionCloseReason(handle)
 
         @Suppress("LongParameterList")
         fun sendMotion(
@@ -145,10 +115,6 @@ class ControllerRepository
             )
         }
 
-        fun resetControllerAck(handle: Int) {
-            SatelliteNative.resetControllerAck(handle)
-        }
-
         fun startHeartbeat(handle: Int) {
             SatelliteNative.startHeartbeat(handle)
         }
@@ -159,7 +125,5 @@ class ControllerRepository
 
         fun isConnectionAlive(handle: Int): Boolean = SatelliteNative.isConnectionAlive(handle)
 
-        fun receiveAck(handle: Int) {
-            SatelliteNative.receiveAck(handle)
-        }
+        fun receiveAck(handle: Int): Int = SatelliteNative.receiveAck(handle)
     }

@@ -36,6 +36,16 @@
                 android:layout_marginStart="@dimen/spacing_2xl"
                 android:ellipsize="end"
                 android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/tvBattery"
+                style="@style/TextAppearance.Dish.BodySmall"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/spacing_lg"
+                android:drawablePadding="@dimen/size_3"
+                android:gravity="center_vertical"
+                android:visibility="gone" />
         </LinearLayout>
 
         <View style="@style/Widget.Dish.Divider" />

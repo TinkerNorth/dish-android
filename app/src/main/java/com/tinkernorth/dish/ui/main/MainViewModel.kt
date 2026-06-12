@@ -6,6 +6,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
@@ -17,6 +18,8 @@ import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.inputrate.InputRateStore
+import com.tinkernorth.dish.source.inputrate.SlotInputRates
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.TouchpadModeStore
@@ -35,7 +38,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
@@ -54,6 +56,7 @@ class MainViewModel
         private val native: PhysicalInputNative,
         private val pathPrefs: UsbPathPreferenceStore,
         private val usbGamepadManager: UsbGamepadManager,
+        private val inputRateStore: InputRateStore,
     ) : ViewModel() {
         // Absence means "user has not toggled"; use isMotionEnabled() for default rather than reading directly.
         val motionEnabled: StateFlow<Map<String, Boolean>> = motionEnabledStore.state
@@ -113,13 +116,19 @@ class MainViewModel
             combine(
                 slotsBase,
                 pathPrefs.state,
-            ) { base, _ ->
+                inputRateStore.state,
+            ) { base, _, rates ->
                 val pathCards =
                     base.slots
                         .mapNotNull { slot ->
                             pathCardFor(slot, base.devices)?.let { slot.id to it }
                         }.toMap()
-                SlotsRender(base.slots, base.connections, base.motionCapabilities, pathCards)
+                val inputRates =
+                    base.slots
+                        .mapNotNull { slot ->
+                            rates.slots[slot.id]?.let { slot.id to it }
+                        }.toMap()
+                SlotsRender(base.slots, base.connections, base.motionCapabilities, pathCards, inputRates, rates.screenPeakHz)
             }.onEach { render ->
                 _uiState.update { prev ->
                     prev.copy(
@@ -127,6 +136,8 @@ class MainViewModel
                         connections = render.connections,
                         motionCapabilities = render.motionCapabilities,
                         pathCards = render.pathCards,
+                        inputRates = render.inputRates,
+                        screenPeakHz = render.screenPeakHz,
                     )
                 }
             }.launchIn(viewModelScope)
@@ -165,7 +176,10 @@ class MainViewModel
             slotId: String,
             connectionId: String,
         ) {
-            hub.bind(slotId, connectionId)
+            // Quick-bind keeps the slot's remembered type; Xbox only when the
+            // user never made a choice for this pairing.
+            val type = hub.satTypes.value[connectionId to slotId] ?: CONTROLLER_TYPE_XBOX
+            hub.bind(slotId, connectionId, type)
         }
 
         fun unbindSlot(slotId: String) {
@@ -195,36 +209,20 @@ class MainViewModel
         // Use this in render code — absence and `false` differ in the store but mean the same to the user.
         fun isMotionEnabled(slotId: String): Boolean = motionEnabledStore.isEnabled(slotId)
 
-        // Local write is unconditional so a recovered server picks up the user's pick on reconnect.
+        // Local write is unconditional so a recovered server picks up the user's
+        // pick on reconnect. Routing rides each bound slot's DESCRIPTOR (one
+        // declarative per-controller PUT each, no bespoke mode endpoint);
+        // failures surface through the connection-manager event stream.
         fun setSatelliteTouchpadMode(
             connectionId: String,
             mode: String,
         ) {
             if (!TouchpadModeValue.isValid(mode)) return
             touchpadModeStore.setMode(connectionId, mode)
-            viewModelScope.launch {
-                val reply = satellite.setTouchpadMode(connectionId, mode)
-                if (reply.contains("\"ok\":true")) return@launch
-                _events.emit(MainEvent.ShowToast(toastForTouchpadModeError(reply)))
-            }
-        }
-
-        private fun toastForTouchpadModeError(reply: String): String {
-            val err = extractJsonErrorField(reply)
-            return when {
-                reply.contains("\"supported\":false") ->
-                    context.getString(R.string.touchpad_mode_unsupported_here)
-                err == "device not paired" ->
-                    context.getString(R.string.touchpad_mode_error_not_paired)
-                err == "unauthorized" ->
-                    context.getString(R.string.touchpad_mode_error_unauthorized)
-                err?.startsWith("request failed:") == true ->
-                    context.getString(R.string.touchpad_mode_error_transport)
-                else ->
-                    context.getString(
-                        R.string.touchpad_mode_error_unknown,
-                        err ?: reply,
-                    )
+            for (slotId in hub.bindings.value
+                .filterValues { it == connectionId }
+                .keys) {
+                hub.setSatelliteTouchpadMode(connectionId, slotId, mode)
             }
         }
 
@@ -287,23 +285,11 @@ class MainViewModel
             val connections: List<ConnectionSummary>,
             val motionCapabilities: Map<String, MotionCapability>,
             val pathCards: Map<String, PathCard>,
+            val inputRates: Map<String, SlotInputRates>,
+            val screenPeakHz: Int,
         )
 
         private companion object {
             val ASSUMED_SUPPORTED_TOUCHPAD_MODES: Set<String> = TouchpadModeValue.ALL.toSet()
         }
     }
-
-// Avoids a JSON dep; server always emits `{"error":"…"}` as first key with no nesting/escapes.
-// Shared by MainViewModel and ConfigureBindingsViewModel so the two touchpad-error mappers parse identically.
-fun extractJsonErrorField(json: String): String? {
-    val keyIdx = json.indexOf("\"error\"")
-    if (keyIdx < 0) return null
-    val colon = json.indexOf(':', startIndex = keyIdx + "\"error\"".length)
-    if (colon < 0) return null
-    val openQuote = json.indexOf('"', startIndex = colon + 1)
-    if (openQuote < 0) return null
-    val closeQuote = json.indexOf('"', startIndex = openQuote + 1)
-    if (closeQuote < 0) return null
-    return json.substring(openQuote + 1, closeQuote)
-}

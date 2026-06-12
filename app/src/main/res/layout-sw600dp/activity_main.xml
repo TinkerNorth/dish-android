@@ -64,6 +64,7 @@
                     android:layout_height="0dp"
                     android:layout_weight="1"
                     android:clipToPadding="false"
+                    android:paddingBottom="@dimen/low_power_chip_scroll_clearance"
                     app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
             </LinearLayout>
 
@@ -142,6 +143,8 @@
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>
+
+    <include layout="@layout/overlay_low_power_chip" />
 
     <include layout="@layout/overlay_low_power" />
 

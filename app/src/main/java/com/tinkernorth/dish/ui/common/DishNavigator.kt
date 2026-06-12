@@ -5,56 +5,73 @@ package com.tinkernorth.dish.ui.common
 import android.app.Activity
 import android.os.Bundle
 import androidx.navigation.ActivityNavigator
-import androidx.navigation.NavController
+import androidx.navigation.NavGraph
+import androidx.navigation.NavGraphNavigator
+import androidx.navigation.NavInflater
+import androidx.navigation.NavigatorProvider
 import com.tinkernorth.dish.R
 
 // Activity destinations can't carry <action> children, so navigate by destination id, not action id.
+// Drives ActivityNavigator directly instead of NavController: setGraph() auto-navigates to the start
+// destination whenever its back queue is empty, which stacked a spurious dashboard instance under
+// every screen opened from a non-dashboard activity.
 class DishNavigator(
     private val activity: Activity,
 ) {
-    private val controller: NavController by lazy {
-        NavController(activity).apply {
-            navigatorProvider.addNavigator(ActivityNavigator(activity))
-            setGraph(R.navigation.nav_graph)
-        }
+    private val navigator by lazy { ActivityNavigator(activity) }
+
+    private val graph: NavGraph by lazy {
+        val provider =
+            NavigatorProvider().apply {
+                addNavigator(NavGraphNavigator(this))
+                addNavigator(navigator)
+            }
+        NavInflater(activity, provider).inflate(R.navigation.nav_graph)
+    }
+
+    private fun go(
+        destinationId: Int,
+        args: Bundle? = null,
+    ) {
+        navigator.navigate(graph.findNode(destinationId) as ActivityNavigator.Destination, args, null, null)
     }
 
     fun toConnections() {
-        controller.navigate(R.id.connectionsActivity)
+        go(R.id.connectionsActivity)
     }
 
     fun toConnectionsForPairing(connectionId: String) {
-        controller.navigate(
+        go(
             R.id.connectionsActivity,
             Bundle().apply { putString("extra_pair_prompt_for_id", connectionId) },
         )
     }
 
     fun toSettings() {
-        controller.navigate(R.id.settingsActivity)
+        go(R.id.settingsActivity)
     }
 
     fun toConfigureBindings(slotId: String) {
-        controller.navigate(
+        go(
             R.id.configureBindingsActivity,
             Bundle().apply { putString("extra_slot_id", slotId) },
         )
     }
 
     fun toWelcome() {
-        controller.navigate(R.id.welcomeActivity)
+        go(R.id.welcomeActivity)
     }
 
     fun toSetupWizard() {
-        controller.navigate(R.id.setupWizardActivity)
+        go(R.id.setupWizardActivity)
     }
 
     fun toHelp() {
-        controller.navigate(R.id.helpActivity)
+        go(R.id.helpActivity)
     }
 
     fun toDonate() {
-        controller.navigate(R.id.donateActivity)
+        go(R.id.donateActivity)
     }
 
     fun toTouchpad(
@@ -62,7 +79,7 @@ class DishNavigator(
         touchpadMode: String,
         slotId: String,
     ) {
-        controller.navigate(
+        go(
             R.id.touchpadOverlayActivity,
             Bundle().apply {
                 putString("extra_connection_id", connectionId)
@@ -76,7 +93,7 @@ class DishNavigator(
         connectionId: String,
         usePsLayout: Boolean,
     ) {
-        controller.navigate(
+        go(
             R.id.gamepadOverlayActivity,
             Bundle().apply {
                 putString("extra_connection_id", connectionId)
@@ -86,6 +103,6 @@ class DishNavigator(
     }
 
     fun toNativeUnavailable() {
-        controller.navigate(R.id.nativeUnavailableActivity)
+        go(R.id.nativeUnavailableActivity)
     }
 }

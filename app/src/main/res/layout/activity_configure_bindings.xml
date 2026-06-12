@@ -135,6 +135,97 @@
     </LinearLayout>
 
     <FrameLayout
+        android:id="@+id/blockerOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/colorOverlayScrim"
+        android:clickable="true"
+        android:focusable="true"
+        android:padding="@dimen/spacing_6xl"
+        android:visibility="gone">
+
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.Dish.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="@dimen/spacing_4xl">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:id="@+id/ivBlockerIcon"
+                        android:layout_width="@dimen/icon_battery"
+                        android:layout_height="@dimen/icon_battery"
+                        android:importantForAccessibility="no" />
+
+                    <TextView
+                        android:id="@+id/tvBlockerTitle"
+                        style="@style/TextAppearance.Dish.Title"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="@dimen/spacing_xl" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvBlockerBody"
+                    style="@style/TextAppearance.Dish.BodySmall"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_xs"
+                    android:textColor="@color/colorOnSurfaceVariant" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_2xl"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnBlockerCancel"
+                        style="@style/Widget.Dish.Button.Outlined"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/action_cancel" />
+
+                    <FrameLayout
+                        android:id="@+id/blockerPrimarySlot"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="@dimen/spacing_xl">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnBlockerPrimary"
+                            style="@style/Widget.Dish.Button"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content" />
+
+                        <ProgressBar
+                            android:id="@+id/pbBlockerBusy"
+                            android:layout_width="@dimen/binding_edge_spinner_size"
+                            android:layout_height="@dimen/binding_edge_spinner_size"
+                            android:layout_gravity="center"
+                            android:indeterminate="true"
+                            android:indeterminateTint="@color/colorPrimary"
+                            android:visibility="gone" />
+                    </FrameLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+    </FrameLayout>
+
+    <FrameLayout
         android:id="@+id/applyOverlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"

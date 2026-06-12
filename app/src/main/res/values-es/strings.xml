@@ -74,11 +74,6 @@
     <string name="touchpad_mode_off">Apagado</string>
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Ratón</string>
-    <string name="touchpad_mode_unsupported_here">Este receptor no admite este modo.</string>
-    <string name="touchpad_mode_error_not_paired">El satélite no reconoce este dispositivo — vuelve a emparejar para aplicar.</string>
-    <string name="touchpad_mode_error_unauthorized">El satélite rechazó la solicitud — vuelve a emparejar para aplicar.</string>
-    <string name="touchpad_mode_error_transport">No se pudo contactar al satélite — ¿está en ejecución?</string>
-    <string name="touchpad_mode_error_unknown">No se pudo establecer el modo del panel táctil: %1$s</string>
 
     <!-- Texto de estado del slot en ControllerAdapter (bajo el nombre). -->
     <string name="slot_status_disconnecting">Desconectando… %1$ds</string>
@@ -120,6 +115,8 @@
     <string name="overlay_connection_kind_bluetooth">Bluetooth</string>
     <string name="overlay_title_gamepad">Mando</string>
     <string name="overlay_title_touchpad">Panel táctil</string>
+    <string name="overlay_rate_touch">Táctil %1$s</string>
+    <string name="overlay_rate_motion">Movimiento %1$s</string>
     <string name="touchpad_pad_click_label">Clic + Mover</string>
     <string name="touchpad_pad_move_label">Mover</string>
     <string name="touchpad_pad_click_hint">Arrastra para hacer clic y mover</string>
@@ -328,6 +325,8 @@
     <string name="binding_edge_unsteady_detail">Sigue enrutando, pero se pierden paquetes. Acércate o cambia a USB.</string>
     <string name="binding_edge_action_reconnect">Reconectar</string>
     <string name="binding_edge_action_dismiss">Descartar</string>
+    <string name="binding_blocker_input_lost_body">Vuelve a conectar el mando para seguir configurando o cierra esta pantalla.</string>
+    <string name="binding_apply_error_slot_gone">%1$s ya no está disponible — desconéctalo y vuelve a conectarlo, luego inténtalo de nuevo.</string>
     <string name="binding_apply_error_no_connect">No se pudo conectar con %1$s. Comprueba que esté encendido y en tu red, y vuelve a intentarlo.</string>
     <string name="binding_apply_warn_title">Modo Directo no disponible</string>
     <string name="binding_apply_warn_detail">%1$s está vinculado a %2$s en modo Estándar.</string>
@@ -348,6 +347,10 @@
     <string name="binding_state_on">Encendido</string>
     <string name="binding_state_off">Apagado</string>
     <string name="binding_func_value">%1$s · %2$s</string>
+
+    <string name="binding_rate_hz">%1$d Hz</string>
+    <string name="binding_rate_hz_peak">~%1$d Hz</string>
+    <string name="binding_rate_pending">…</string>
     <string name="binding_card_not_bound">Sin vincular</string>
     <string name="binding_card_no_functions">Ninguna</string>
     <string name="binding_action_configure">Configurar vínculos</string>

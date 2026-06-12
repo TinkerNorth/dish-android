@@ -160,6 +160,68 @@ class PhysicalSlotBindingObserverTest {
     }
 
     @Test
+    fun `an unsteady satellite session keeps a registered slot bound`() {
+        val ops =
+            reconcile(
+                present = setOf(5),
+                lastBound = setOf(5),
+                bindings = mapOf("5" to "sat:a"),
+                summaries = listOf(satSummary("sat:a", live = LinkState.Unstable)),
+                slotInfo = mapOf("sat:a" to SatelliteSlotSnapshot(handle = 9, slots = mapOf("5" to slot(2)))),
+            )
+        assertEquals(listOf(BindOp.BindSatellite(deviceId = 5, handle = 9, controllerIndex = 2)), ops)
+    }
+
+    @Test
+    fun `an unsteady satellite session still unbinds an unregistered slot`() {
+        val ops =
+            reconcile(
+                present = setOf(5),
+                lastBound = setOf(5),
+                bindings = mapOf("5" to "sat:a"),
+                summaries = listOf(satSummary("sat:a", live = LinkState.Unstable)),
+                slotInfo = mapOf("sat:a" to SatelliteSlotSnapshot(handle = 9, slots = mapOf("5" to slot(0, registered = false)))),
+            )
+        assertEquals(listOf(BindOp.Unbind(5)), ops)
+    }
+
+    @Test
+    fun `an unsteady satellite session with a dead handle is unbound`() {
+        val ops =
+            reconcile(
+                present = setOf(5),
+                lastBound = setOf(5),
+                bindings = mapOf("5" to "sat:a"),
+                summaries = listOf(satSummary("sat:a", live = LinkState.Unstable)),
+                slotInfo = mapOf("sat:a" to SatelliteSlotSnapshot(handle = -1, slots = mapOf("5" to slot(0)))),
+            )
+        assertEquals(listOf(BindOp.Unbind(5)), ops)
+    }
+
+    @Test
+    fun `an unsteady bluetooth connection binds only while the registry is still connected`() {
+        val connected =
+            reconcile(
+                present = setOf(5),
+                lastBound = setOf(5),
+                bindings = mapOf("5" to "bt:aa"),
+                summaries = listOf(btSummary("bt:aa", live = LinkState.Unstable)),
+                btConnectedIds = setOf("bt:aa"),
+            )
+        assertEquals(listOf(BindOp.BindBluetooth(deviceId = 5, connectionId = "bt:aa")), connected)
+
+        val dropped =
+            reconcile(
+                present = setOf(5),
+                lastBound = setOf(5),
+                bindings = mapOf("5" to "bt:aa"),
+                summaries = listOf(btSummary("bt:aa", live = LinkState.Unstable)),
+                btConnectedIds = emptySet(),
+            )
+        assertEquals(listOf(BindOp.Unbind(5)), dropped)
+    }
+
+    @Test
     fun `a present device whose summary is not connected is unbound regardless of kind`() {
         val ops =
             reconcile(

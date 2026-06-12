@@ -33,10 +33,13 @@ class ConnectionCoordinatorTest {
     private lateinit var satellite: SatelliteConnectionManager
     private lateinit var bt: BluetoothGamepadRegistry
     private lateinit var store: ConnectionStore
+    private lateinit var gamepadRegistry: com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
     private lateinit var scope: TestScope
 
     private val satConnsFlow = MutableStateFlow<Map<String, SatelliteConnection>>(emptyMap())
     private val btStatesFlow = MutableStateFlow<Map<String, BluetoothGamepadRegistry.SlotState>>(emptyMap())
+    private val registryDevicesFlow =
+        MutableStateFlow<Map<Int, com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry.Device>>(emptyMap())
 
     private val discoveredFlow =
         MutableStateFlow<List<com.tinkernorth.dish.core.model.DiscoveredServer>>(emptyList())
@@ -52,6 +55,9 @@ class ConnectionCoordinatorTest {
         satellite = mockk(relaxed = true)
         bt = mockk(relaxed = true)
         store = mockk(relaxed = true)
+        gamepadRegistry = mockk(relaxed = true)
+        every { gamepadRegistry.devices } returns registryDevicesFlow
+        registryDevicesFlow.value = emptyMap()
         satEntriesFlow.value = emptyList()
         btEntriesFlow.value = emptyList()
         every { satellite.connections } returns satConnsFlow
@@ -117,7 +123,7 @@ class ConnectionCoordinatorTest {
                 bindingStore = bindingStore,
                 typeStore = typeStore,
                 composer = composer,
-                scope = scope,
+                gamepadRegistry = gamepadRegistry,
             )
         scope.testScheduler.runCurrent()
         return hub
@@ -134,7 +140,7 @@ class ConnectionCoordinatorTest {
     @Test
     fun `forgetConnection clears the binding and type then forgets the satellite`() {
         val hub = buildHub()
-        hub.bind("slot-A", "sat:1")
+        hub.bind("slot-A", "sat:1", CONTROLLER_TYPE_XBOX)
         hub.setSatelliteControllerType("sat:1", "slot-A", CONTROLLER_TYPE_PLAYSTATION)
         scope.testScheduler.runCurrent()
         assertEquals(CONTROLLER_TYPE_PLAYSTATION, hub.satTypes.value["sat:1" to "slot-A"])
@@ -330,7 +336,7 @@ class ConnectionCoordinatorTest {
             )
         val hub = buildHub()
 
-        hub.bind(slotId = "slot-A", connectionId = "s:1")
+        hub.bind(slotId = "slot-A", connectionId = "s:1", controllerType = CONTROLLER_TYPE_XBOX)
         scope.testScheduler.runCurrent()
 
         assertEquals(mapOf("slot-A" to "s:1"), hub.bindings.value)
@@ -352,8 +358,8 @@ class ConnectionCoordinatorTest {
             )
         val hub = buildHub()
 
-        hub.bind("slot-A", "s:1")
-        hub.bind("slot-B", "s:1")
+        hub.bind("slot-A", "s:1", CONTROLLER_TYPE_XBOX)
+        hub.bind("slot-B", "s:1", CONTROLLER_TYPE_XBOX)
         scope.testScheduler.runCurrent()
 
         assertEquals(
@@ -373,8 +379,8 @@ class ConnectionCoordinatorTest {
             )
         val hub = buildHub()
 
-        hub.bind("slot-A", "bt:X")
-        hub.bind("slot-B", "bt:X")
+        hub.bind("slot-A", "bt:X", CONTROLLER_TYPE_XBOX)
+        hub.bind("slot-B", "bt:X", CONTROLLER_TYPE_XBOX)
 
         // BT is single-host: bind evicts the prior slot.
         assertEquals(mapOf("slot-B" to "bt:X"), hub.bindings.value)
@@ -393,8 +399,8 @@ class ConnectionCoordinatorTest {
             )
         val hub = buildHub()
 
-        hub.bind("slot-A", "s:1")
-        hub.bind("slot-A", "s:2")
+        hub.bind("slot-A", "s:1", CONTROLLER_TYPE_XBOX)
+        hub.bind("slot-A", "s:2", CONTROLLER_TYPE_XBOX)
 
         assertEquals(mapOf("slot-A" to "s:2"), hub.bindings.value)
         verify { sat1.detachSlot("slot-A") }
@@ -410,7 +416,7 @@ class ConnectionCoordinatorTest {
             )
         val hub = buildHub()
 
-        hub.bind("slot-A", "s:1")
+        hub.bind("slot-A", "s:1", CONTROLLER_TYPE_XBOX)
         hub.unbind("slot-A")
 
         assertNull(hub.bindings.value["slot-A"])
@@ -418,18 +424,108 @@ class ConnectionCoordinatorTest {
     }
 
     @Test
-    fun `bind seeds a default Xbox controller type for new satellite slots`() {
+    fun `bind records the caller's type — the descriptor travels with the bind`() {
+        val satConn = mockk<SatelliteConnection>(relaxed = true)
+        every { satellite.get("s:1") } returns satConn
         satEntriesFlow.value =
             listOf(
                 RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
             )
         val hub = buildHub()
 
-        hub.bind("slot-A", "s:1")
+        hub.bind("slot-A", "s:1", CONTROLLER_TYPE_PLAYSTATION)
         scope.testScheduler.runCurrent()
 
         val summary = hub.connections.value.first { it.id == "s:1" }
-        assertEquals(CONTROLLER_TYPE_XBOX, summary.satelliteControllerTypes["slot-A"])
+        assertEquals(CONTROLLER_TYPE_PLAYSTATION, summary.satelliteControllerTypes["slot-A"])
+        verify { satConn.declareSlot("slot-A", CONTROLLER_TYPE_PLAYSTATION, any()) }
+    }
+
+    @Test
+    fun `bind refuses a numeric slot id the registry no longer knows (zombie guard)`() {
+        val satConn = mockk<SatelliteConnection>(relaxed = true)
+        every { satellite.get("s:1") } returns satConn
+        satEntriesFlow.value =
+            listOf(
+                RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
+            )
+        registryDevicesFlow.value = emptyMap() // device 42 is gone
+        val hub = buildHub()
+
+        val bound = hub.bind("42", "s:1", CONTROLLER_TYPE_XBOX)
+
+        assertEquals(false, bound)
+        assertNull(hub.bindings.value["42"])
+        verify(exactly = 0) { satConn.declareSlot(any(), any(), any()) }
+    }
+
+    @Test
+    fun `bind accepts a numeric slot id the registry knows`() {
+        val satConn = mockk<SatelliteConnection>(relaxed = true)
+        every { satellite.get("s:1") } returns satConn
+        satEntriesFlow.value =
+            listOf(
+                RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
+            )
+        registryDevicesFlow.value =
+            mapOf(
+                42 to
+                    com.tinkernorth.dish.hotpath.input
+                        .PhysicalGamepadRegistry
+                        .Device(id = 42, name = "Pad"),
+            )
+        val hub = buildHub()
+
+        assertTrue(hub.bind("42", "s:1", CONTROLLER_TYPE_XBOX))
+        assertEquals("s:1", hub.bindings.value["42"])
+    }
+
+    @Test
+    fun `bindClaimedSynthetic adopts the twin's remembered type for a fresh claim`() {
+        val satConn = mockk<SatelliteConnection>(relaxed = true)
+        every { satellite.get("satellite:mid:m1") } returns satConn
+        satEntriesFlow.value =
+            listOf(
+                RememberedSatellite(
+                    id = "satellite:mid:m1",
+                    name = "Pc",
+                    ip = "1.1.1.1",
+                    udpPort = 9876,
+                    pairPort = 9443,
+                    httpPort = 9443,
+                    machineId = "m1",
+                ),
+            )
+        val state = MutableStateFlow(SatelliteSessionState.Live)
+        val liveConn =
+            mockk<SatelliteConnection>(relaxed = true) {
+                every { id } returns "satellite:mid:m1"
+                every { this@mockk.state } returns state
+                every { server } returns
+                    MutableStateFlow(
+                        DiscoveredServer(name = "Pc", ip = "1.1.1.1", udpPort = 9876, machineId = "m1"),
+                    )
+                every { slots } returns MutableStateFlow(emptyMap())
+            }
+        satConnsFlow.value = mapOf("satellite:mid:m1" to liveConn)
+        val hub = buildHub()
+        scope.testScheduler.runCurrent()
+
+        // The user's choice for the framework twin (never bound) is remembered
+        // in the type store; the claim must adopt it, not default Xbox.
+        hub.setSatelliteControllerType("satellite:mid:m1", "7", CONTROLLER_TYPE_PLAYSTATION)
+        registryDevicesFlow.value =
+            mapOf(
+                99 to
+                    com.tinkernorth.dish.hotpath.input
+                        .PhysicalGamepadRegistry
+                        .Device(id = 99, name = "Pad", isUsbSynthetic = true),
+            )
+        hub.bindClaimedSynthetic(twinSlotId = "7", syntheticSlotId = "99")
+        scope.testScheduler.runCurrent()
+
+        assertEquals("satellite:mid:m1", hub.bindings.value["99"])
+        assertEquals(CONTROLLER_TYPE_PLAYSTATION, hub.satTypes.value["satellite:mid:m1" to "99"])
     }
 
     @Test
@@ -442,7 +538,7 @@ class ConnectionCoordinatorTest {
             )
         val hub = buildHub()
 
-        hub.bind("slot-A", "s:1")
+        hub.bind("slot-A", "s:1", CONTROLLER_TYPE_XBOX)
         hub.setSatelliteControllerType("s:1", "slot-A", CONTROLLER_TYPE_PLAYSTATION)
         scope.testScheduler.runCurrent()
 
@@ -690,7 +786,7 @@ class ConnectionCoordinatorTest {
             )
         val hub = buildHub()
 
-        hub.bind("slot-fw", "s:1")
+        hub.bind("slot-fw", "s:1", CONTROLLER_TYPE_XBOX)
         hub.setSatelliteControllerType("s:1", "slot-fw", CONTROLLER_TYPE_PLAYSTATION)
         scope.testScheduler.runCurrent()
 
@@ -729,7 +825,7 @@ class ConnectionCoordinatorTest {
             )
         val hub = buildHub()
 
-        hub.bind("slot-fw", "s:1")
+        hub.bind("slot-fw", "s:1", CONTROLLER_TYPE_XBOX)
         scope.testScheduler.runCurrent()
 
         hub.migrateSlotBinding("slot-fw", "slot-usb")
@@ -792,7 +888,7 @@ class ConnectionCoordinatorTest {
             )
         val hub = buildHub()
 
-        hub.bind("slot-fw", "s:1")
+        hub.bind("slot-fw", "s:1", CONTROLLER_TYPE_XBOX)
         scope.testScheduler.runCurrent()
 
         hub.bindClaimedSynthetic(twinSlotId = "slot-fw", syntheticSlotId = "-1000")
@@ -802,11 +898,24 @@ class ConnectionCoordinatorTest {
         verify { satConn.renameSlot("slot-fw", "-1000") }
     }
 
+    // The claim registers the synthetic in the gamepad registry BEFORE the
+    // bind (UsbGamepadManager.doClaim ordering); the seeding below mirrors that.
+    private fun seedSyntheticInRegistry(id: Int) {
+        registryDevicesFlow.value =
+            mapOf(
+                id to
+                    com.tinkernorth.dish.hotpath.input
+                        .PhysicalGamepadRegistry
+                        .Device(id = id, name = "Pad", isUsbSynthetic = true),
+            )
+    }
+
     @Test
     fun `bindClaimedSynthetic auto-binds to the sole live satellite when the twin was unbound`() {
         val conn = liveConn("s:1", "1.1.1.1")
         every { satellite.get("s:1") } returns conn
         satConnsFlow.value = mapOf("s:1" to conn)
+        seedSyntheticInRegistry(-1000)
         val hub = buildHub()
 
         hub.bindClaimedSynthetic(twinSlotId = null, syntheticSlotId = "-1000")
@@ -820,6 +929,7 @@ class ConnectionCoordinatorTest {
         val conn = liveConn("s:1", "1.1.1.1")
         every { satellite.get("s:1") } returns conn
         satConnsFlow.value = mapOf("s:1" to conn)
+        seedSyntheticInRegistry(-1000)
         val hub = buildHub()
 
         hub.bindClaimedSynthetic(twinSlotId = "ghost-twin", syntheticSlotId = "-1000")

@@ -1,8 +1,9 @@
 # Architecture
 
-A map of the codebase aimed at people working in it. The wire-format
-reference is in [`wire-format.md`](wire-format.md); the design-system
-tokens are in [`design-system.md`](design-system.md).
+A map of the codebase aimed at people working in it. The protocol contract
+lives in `satellite/docs/contract.md` (Android-side mapping:
+[`contract.md`](contract.md)); the design-system tokens are in
+[`design-system.md`](design-system.md).
 
 ## Pipeline
 
@@ -29,9 +30,11 @@ normalised on the JVM, and cross into the native layer via
 same thread the event arrived on. Discovery, motion, battery, and
 touchpad take the same JNI path with their own opcodes.
 
-Pairing is the only network operation that **doesn't** go through JNI:
-TLS lives on the JVM (`SatelliteHttpClient`) so the NDK build doesn't
-need OpenSSL.
+The REST control plane (pairing, the declarative session/controller
+routes, the catalog) **doesn't** go through JNI: TLS lives on the JVM
+(`SatelliteHttpClient`) so the NDK build doesn't need OpenSSL. The JNI
+layer carries only the encrypted UDP streams plus the enriched
+heartbeat ack and the close-notify.
 
 ## Top-level packages
 
@@ -377,8 +380,8 @@ can't reach are still unit-testable from a host build:
   builds against `app/src/test/cpp/` with googletest.
 - `wire_encoders.h` — pure byte-layout encoders for `MSG_MOTION`,
   `MSG_BATTERY`, `MSG_TOUCHPAD`, and `MSG_LIGHTBAR`. Same host-build
-  rule; the wire layout is type-checked against the satellite docs
-  in `docs/wire-format.md`.
+  rule; the wire layout is type-checked against the contract
+  (`satellite/docs/contract.md`).
 - `satellite_jni.cpp` — the Android-only glue. Owns sockets, libsodium,
   the session map, the rumble + Bluetooth callbacks, and the JNI
   registration. This file does **not** ship pure helpers — anything
@@ -410,3 +413,9 @@ The input overlays (`GamepadOverlayActivity`, `TouchpadOverlayActivity`)
 intentionally bypass the activity-transition scaffolding and the
 edge-to-edge inset wiring — they prioritise zero-latency display and
 own their own immersive-mode setup through `BaseInputOverlayActivity`.
+
+Overlay input is event-driven; the shared resend loop exists only to
+heal a lost edge frame (button-up, finger-up, stick-to-neutral) over
+plain UDP. Pacing is `ui/common/ResendPacer`: a changed state is
+re-sent 3 scheduler ticks in a row (50 ms apart), then the stream
+idles at a 1 Hz keepalive — there is no constant-rate re-send.

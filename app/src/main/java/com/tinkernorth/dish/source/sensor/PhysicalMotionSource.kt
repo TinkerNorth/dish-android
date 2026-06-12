@@ -19,6 +19,7 @@ import com.tinkernorth.dish.composer.PhysicalReachability
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.inputrate.InputRateStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.combine
@@ -36,6 +37,7 @@ class PhysicalMotionSource
         private val satellite: SatelliteConnectionManager,
         private val motionCapability: MotionCapabilityComposer,
         private val scope: CoroutineScope,
+        private val inputRateStore: InputRateStore,
     ) : DefaultLifecycleObserver {
         private inner class PadListener(
             val deviceId: Int,
@@ -115,6 +117,7 @@ class PhysicalMotionSource
                         accelZ = accelZ,
                     )
                 rateLimiter.publish(deviceId, sample) { s, deltaUs ->
+                    inputRateStore.recordMotionSample(slotId)
                     conn.sendMotion(
                         slotId,
                         s.gyroX,

@@ -27,27 +27,30 @@
                 android:layout_gravity="end" />
         </com.google.android.material.appbar.MaterialToolbar>
 
-        <FrameLayout
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvConnections"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1">
+            android:layout_weight="1"
+            android:clipToPadding="false"
+            android:paddingHorizontal="@dimen/spacing_5xl"
+            android:paddingTop="@dimen/spacing_3xl"
+            android:paddingBottom="@dimen/low_power_chip_scroll_clearance" />
+    </LinearLayout>
 
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvConnections"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:clipToPadding="false"
-                android:paddingHorizontal="@dimen/spacing_5xl"
-                android:paddingVertical="@dimen/spacing_3xl" />
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:orientation="vertical"
+        android:gravity="center_horizontal">
 
-            <include
-                layout="@layout/view_donate_pill"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="bottom|center_horizontal"
-                android:layout_marginBottom="@dimen/spacing_5xl"
-                android:visibility="gone" />
-        </FrameLayout>
+        <include
+            layout="@layout/view_donate_pill"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="@dimen/spacing_5xl"
+            android:visibility="gone" />
 
         <include layout="@layout/overlay_low_power_chip" />
     </LinearLayout>

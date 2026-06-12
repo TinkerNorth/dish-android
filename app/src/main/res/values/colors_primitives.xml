@@ -120,6 +120,8 @@
          opaquely — the same alpha-composition concern as
          signal_cyan_900 / colorPrimaryContainer above. -->
     <color name="green_500">#FF22C55E</color>
+    <color name="green_100">#0F22C55E</color>
+    <color name="green_300">#2E22C55E</color>
     <color name="red_500">#FFE74C3C</color>
     <color name="red_900">#FF491614</color>
     <color name="amber_500">#FFF59E0B</color>
