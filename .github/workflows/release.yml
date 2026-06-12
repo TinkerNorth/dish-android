@@ -41,7 +41,7 @@ on:
 #   github/codeql-action/upload-sarif @ v4.35.2 → 95e58e9a2cdfd71adc6e0353d5c52f41a045d225
 #   softprops/action-gh-release     @ v3.0.0  → b4309332981a82ec1c5618f44dd2e27cc8bfbfda
 #   slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml
-#                                   @ v2.0.0  → 5a775b367a56d5bd118a224a811bba288150a563
+#                                   @ v2.1.0  → f7dd8c54c2067bafc12ca7a55595d5ee9b75204a
 #
 # cosign is installed directly from upstream (see harden job).
 
@@ -57,6 +57,11 @@ concurrency:
 jobs:
   gates:
     name: PR-time gates against tag
+    # _security.yml declares these; granting less fails the run at startup.
+    permissions:
+      contents: read
+      pull-requests: read
+      security-events: write
     uses: ./.github/workflows/_security.yml
     with:
       osv_scan_paths: |
@@ -144,9 +149,11 @@ jobs:
 
       - name: Compute version from tag
         id: ver
+        env:
+          TAG_INPUT: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          tag="${GITHUB_REF_NAME:-${{ inputs.tag }}}"
+          tag="${TAG_INPUT:-${GITHUB_REF_NAME}}"
           name="${tag#v}"
           # vX.Y.Z → versionCode = X*10000 + Y*100 + Z. Re-derive locally with
           # `git describe --tags` if changing this scheme.
@@ -192,13 +199,15 @@ jobs:
 
       - name: Stage artifacts
         id: stage
+        env:
+          TAG_INPUT: ${{ inputs.tag }}
         run: |
           mkdir -p dist
           suffix=""
           if [ "${{ steps.keystore.outputs.present }}" != "true" ]; then
             suffix="-unsigned"
           fi
-          tag="${GITHUB_REF_NAME:-${{ inputs.tag }}}"
+          tag="${TAG_INPUT:-${GITHUB_REF_NAME}}"
 
           apk=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
           [ -n "$apk" ] && cp "$apk" "dist/dish-${tag}${suffix}.apk"
@@ -230,6 +239,10 @@ jobs:
     name: Harden artifacts (scan, SBOM, sign)
     needs: [release]
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      security-events: write
     outputs:
       hashes: ${{ steps.hashes.outputs.hashes }}
     steps:
@@ -251,7 +264,9 @@ jobs:
           output-format: sarif
 
       - name: Upload Grype SARIF to code scanning
+        # Soft-fail: the grype step above is the gate, this is observability.
         if: ${{ always() && steps.grype.outputs.sarif != '' }}
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@87557b9c84dde89fdd9b10e88954ac2f4248e463 # v4.36.1
         with:
           sarif_file: ${{ steps.grype.outputs.sarif }}
@@ -348,16 +363,20 @@ jobs:
       id-token: write
       contents: write
       actions: read
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0 # f7dd8c54c2067bafc12ca7a55595d5ee9b75204a
     with:
       base64-subjects: ${{ needs.harden.outputs.hashes }}
       provenance-name: dish-android.intoto.jsonl
       upload-assets: false
+      # Required while private: signing posts the repo name to the public Rekor log.
+      private-repository: true
 
   publish:
     name: Publish to GitHub Releases
     needs: [harden, provenance]
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
       - name: Download hardened bundle
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1

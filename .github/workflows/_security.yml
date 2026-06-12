@@ -97,6 +97,8 @@ jobs:
                 sub(/^[[:space:]]*-?[[:space:]]*uses:[[:space:]]+/, "", line)
                 if (line ~ /^\.\//) { next }
                 if (line ~ /^docker:\/\/[^@]+@sha256:[0-9a-f]{64}$/) { next }
+                # SLSA builders resolve their release binary by tag; OIDC identity covers integrity.
+                if (line ~ /^slsa-framework\/slsa-github-generator\/\.github\/workflows\/[^@]+@v[0-9]+\.[0-9]+\.[0-9]+$/) { next }
                 if (line !~ /@[0-9a-f]{40}([[:space:]]|$)/) {
                   printf "%s: %s\n", FILENAME, line
                   exit 2
