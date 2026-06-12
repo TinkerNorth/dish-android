@@ -221,13 +221,10 @@ jobs:
           [ -n "$mapping" ] && cp "$mapping" "dist/dish-${tag}${suffix}-mapping.txt"
           # Native debug symbols for the JNI .so: lets crash reporters
           # symbolize native stack frames from the encrypted-wire / rumble
-          # hot path.
-          native_symbols=$(find app/build/intermediates/merged_native_libs/release -name '*.so' 2>/dev/null | head -1)
-          if [ -n "$native_symbols" ]; then
-            mkdir -p dist/native-symbols
-            find app/build/intermediates/merged_native_libs/release -name '*.so' \
-              -exec cp --parents {} dist/native-symbols/ \; 2>/dev/null || true
-          fi
+          # hot path. Shipped as AGP's Play Console zip; dist/ must hold only
+          # flat files or the harden job's sign/hash loops break on it.
+          symbols=$(find app/build/outputs/native-debug-symbols/release -name 'native-debug-symbols.zip' 2>/dev/null | head -1)
+          [ -n "$symbols" ] && cp "$symbols" "dist/dish-${tag}${suffix}-native-debug-symbols.zip"
           ls -l dist/
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
