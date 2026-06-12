@@ -13,6 +13,8 @@ import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.inputrate.InputRateStore
+import com.tinkernorth.dish.source.lowpower.LowPowerSignal
 import com.tinkernorth.dish.source.sensor.BatteryValidator
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
 import com.tinkernorth.dish.source.store.BatteryStatusStore
@@ -24,8 +26,10 @@ import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -53,6 +57,7 @@ class MainViewModelTest {
     private lateinit var native: PhysicalInputNative
     private lateinit var pathPrefs: UsbPathPreferenceStore
     private lateinit var usbGamepadManager: UsbGamepadManager
+    private lateinit var inputRateStore: InputRateStore
     private lateinit var vm: MainViewModel
 
     private val connectionsFlow = MutableStateFlow<List<ConnectionSummary>>(emptyList())
@@ -91,6 +96,13 @@ class MainViewModelTest {
         every { gamepadRegistry.frameworkCapsFor(any(), any()) } returns null
         every { satellite.events } returns satelliteEvents
         every { pathPrefs.state } returns MutableStateFlow(emptyMap())
+        inputRateStore =
+            InputRateStore(
+                gamepadRegistry,
+                native,
+                LowPowerSignal(),
+                CoroutineScope(SupervisorJob()),
+            )
         val context = mockk<Context>(relaxed = true)
         vm =
             MainViewModel(
@@ -105,6 +117,7 @@ class MainViewModelTest {
                 native,
                 pathPrefs,
                 usbGamepadManager,
+                inputRateStore,
             )
     }
 
@@ -164,9 +177,52 @@ class MainViewModelTest {
         }
 
     @Test
-    fun `bindSlot delegates to hub`() {
+    fun `measured input rates and the screen peak reach ui state keyed by slot id`() =
+        runTest(dispatcher) {
+            devicesFlow.value = mapOf(7 to PhysicalGamepadRegistry.Device(7, "Pad"))
+            every { native.getDeviceInputEventCount(7) } returns 0L
+            inputRateStore.sampleAll(nowMs = 1000L)
+            every { native.getDeviceInputEventCount(7) } returns 60L
+            repeat(60) { inputRateStore.recordScreenSample() }
+            inputRateStore.sampleAll(nowMs = 1500L)
+            dispatcher.scheduler.runCurrent()
+
+            val st = vm.uiState.value
+            assertEquals(120, st.inputRates["7"]?.controllerHz)
+            assertEquals(120, st.inputRates["7"]?.controllerPeakHz)
+            assertEquals(120, st.screenPeakHz)
+        }
+
+    @Test
+    fun `rates for a slot that is no longer present are not surfaced`() =
+        runTest(dispatcher) {
+            devicesFlow.value = mapOf(7 to PhysicalGamepadRegistry.Device(7, "Pad"))
+            every { native.getDeviceInputEventCount(7) } returns 0L
+            inputRateStore.sampleAll(nowMs = 1000L)
+            every { native.getDeviceInputEventCount(7) } returns 60L
+            inputRateStore.sampleAll(nowMs = 1500L)
+            devicesFlow.value = emptyMap()
+            inputRateStore.sampleAll(nowMs = 2000L)
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(0, vm.uiState.value.inputRates.size)
+        }
+
+    @Test
+    fun `bindSlot delegates to hub with the slot's remembered type`() {
+        every { hub.satTypes } returns
+            kotlinx.coroutines.flow.MutableStateFlow(
+                mapOf(("s:1" to "slot-X") to com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION),
+            )
         vm.bindSlot(slotId = "slot-X", connectionId = "s:1")
-        verify { hub.bind("slot-X", "s:1") }
+        verify { hub.bind("slot-X", "s:1", com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION) }
+    }
+
+    @Test
+    fun `bindSlot falls back to Xbox only when no choice was ever made`() {
+        every { hub.satTypes } returns kotlinx.coroutines.flow.MutableStateFlow(emptyMap())
+        vm.bindSlot(slotId = "slot-X", connectionId = "s:1")
+        verify { hub.bind("slot-X", "s:1", com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX) }
     }
 
     @Test

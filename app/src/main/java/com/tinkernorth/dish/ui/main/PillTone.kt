@@ -20,6 +20,7 @@ internal enum class PillTone(
     WARN(R.drawable.bg_binding_pill_warn, R.color.colorTertiary),
     CAP(R.drawable.bg_binding_pill_cap, R.color.colorOnSurfaceVariant),
     OFF(R.drawable.bg_binding_pill_off, R.color.colorMuted),
+    SUCCESS(R.drawable.bg_binding_pill_success, R.color.colorSuccess),
 }
 
 internal data class PillSpec(

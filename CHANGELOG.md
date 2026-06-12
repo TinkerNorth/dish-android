@@ -15,6 +15,51 @@ four repos share a version number.
 
 ## [Unreleased]
 
+### Changed — control-plane rewrite (protocol 1) `[wire-coordinated]`
+
+Clean-break rewrite of the satellite control plane against
+`satellite/docs/contract.md` (Android mapping: `docs/contract.md`,
+replacing the former `docs/wire-format.md`).
+
+- Connecting is ONE declarative call: `PUT /api/connections` carries
+  identity, an `hmacProof` of the pairing key, and the full controller
+  topology; the response is the applied state. Re-PUT converges;
+  `connectionId` is stable, the token rotates. Single-slot changes (type,
+  motion caps, touchpad routing) ride per-controller PUT/DELETE routes —
+  no token rotation for a toggle.
+- UDP no longer mutates topology: the controller ADD/REMOVE/TYPE/CAPS
+  opcodes, the ACK-retry choreography, the registration mutex, and the
+  compat type re-send are gone from the JNI layer, which is now socket +
+  crypto + streams only. The enriched heartbeat ack (epoch + active
+  bitmap) drives a self-healing reconcile; the authenticated session-close
+  notify (0x000F) lands as an immediate, reasoned disconnect.
+- Per-session UDP keys: `HKDF-SHA256(pairingKey, sessionSalt, token)` with
+  a direction byte in the nonce (the pairing key never touches UDP).
+  Interop vectors are pinned on both ends.
+- A coded 401 (`NOT_PAIRED` / `BAD_PROOF`) is terminal: the key is
+  dropped, the row reads "needs pairing", and retries stop. Silent
+  reconnects use bounded exponential backoff (1 s → 60 s) instead of a
+  fixed 1.5 s loop.
+- Binding commits the user's chosen type WITH the bind — the
+  default-then-correct Xbox phase is gone end to end (USB-direct claims
+  adopt the remembered type too). `bind` refuses slot ids the registry no
+  longer knows (the zombie-slot guard) and the apply flow re-resolves the
+  slot id after a USB path switch.
+- The binding "Apply" overlay shows one spinner per real async action: the
+  USB-direct switch (which can wait on the system permission prompt) and
+  the single satellite round-trip.
+- The "Emulate" picker renders from the satellite's localized
+  `GET /api/catalog` (ETag-cached); unknown controller types render from
+  server-provided strings instead of being impossible to select.
+- Identity is machineId-only: legacy `satellite:<ip>:<udpPort>` keys, the
+  ghost-row reconciliation, and the single-slot legacy key migration are
+  deleted. Forgetting a satellite now also self-unpairs on it
+  (`DELETE /api/pair`), closing any live session server-side.
+- The per-connection touchpad-mode REST endpoint is gone; routing rides
+  each controller descriptor (client-owned, single writer).
+- JNI `openSocket` refuses non-IPv4 literals instead of silently streaming
+  to 0.0.0.0 when discovery resolves an IPv6 address.
+
 ### Added
 
 - Firebase Crashlytics integration for crash + ANR reporting.
@@ -54,6 +99,10 @@ four repos share a version number.
 
 ### Changed
 
+- Overlay resends are edge-burst + keepalive: real input stays event-driven;
+  a state change is re-sent 3 scheduler ticks in a row (50 ms apart) to heal
+  a lost edge frame, then the stream idles at a 1 Hz keepalive — replacing
+  the previous constant 250 Hz re-send of the last state.
 - `versionCode` and `versionName` are now derived from CI environment
   variables (`DISH_VERSION_CODE` / `DISH_VERSION_NAME`), with a
   `git describe` fallback for local dev. The hardcoded `1` / `"1.0"`

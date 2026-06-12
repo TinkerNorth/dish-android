@@ -18,6 +18,20 @@ import javax.net.ssl.SSLSession
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
+// One HTTP exchange's outcome. Public (unlike the client itself) because the
+// gateway surfaces it to callers that need status/ETag — the catalog's 304
+// revalidation can't ride a body-only return.
+data class HttpReply(
+    val status: Int,
+    val body: String,
+    val etag: String?,
+    val pinMismatch: Boolean = false,
+) {
+    val notModified: Boolean get() = status == 304
+
+    val unreachable: Boolean get() = status == 0 || body.isBlank()
+}
+
 // Satellite presents a self-signed cert on a LAN IP (no CA to validate against), so the
 // X509TrustManager stays permissive to let the handshake complete. MITM protection instead
 // comes from trust-on-first-use cert PINNING in the hostname verifier below.
@@ -27,6 +41,9 @@ internal object SatelliteHttpClient {
     private const val TAG = "SatelliteHttpClient"
     private const val CONNECT_TIMEOUT_MS = 5_000
     private const val READ_TIMEOUT_MS = 5_000
+
+    // docs/contract.md §Versioning — rides in every pairing/session request.
+    const val PROTOCOL_VERSION = 1
 
     @Suppress("CustomX509TrustManager")
     private val insecureSocketFactory by lazy {
@@ -63,6 +80,7 @@ internal object SatelliteHttpClient {
     internal fun tofuHostnameVerifier(
         satelliteId: String,
         pins: SatellitePinRepository,
+        onMismatch: () -> Unit = {},
     ): HostnameVerifier =
         HostnameVerifier { _: String?, session: SSLSession? ->
             val cert = session?.peerCertificates?.firstOrNull() ?: return@HostnameVerifier false
@@ -76,25 +94,110 @@ internal object SatelliteHttpClient {
                 TofuVerdict.MATCH -> true
                 TofuVerdict.MISMATCH -> {
                     Log.e(TAG, "cert pin MISMATCH for $satelliteId — aborting (possible MITM)")
+                    onMismatch()
                     false
                 }
             }
         }
 
-    fun connect(
+    // PUT /api/connections — the declarative session upsert. `descriptorsJson`
+    // is the prebuilt `[{...}, ...]` controllers array (ControllerDescriptor
+    // owns its shape so it stays unit-testable without a socket).
+    fun putSession(
         ip: String,
         port: Int,
         deviceId: String,
+        deviceName: String,
+        hmacProof: String,
+        descriptorsJson: String,
+        requestMouseControl: Boolean,
         satelliteId: String,
         pins: SatellitePinRepository,
-    ): String =
+    ): HttpReply =
         request(
-            method = "POST",
+            method = "PUT",
             ip = ip,
             port = port,
             path = "/api/connections",
             deviceId = deviceId,
-            body = """{"deviceId":"${jsonEscape(deviceId)}"}""",
+            hmacProof = hmacProof,
+            body =
+                """{"deviceId":"${jsonEscape(deviceId)}",""" +
+                    """"deviceName":"${jsonEscape(deviceName)}",""" +
+                    """"protocolVersion":$PROTOCOL_VERSION,""" +
+                    """"controllers":$descriptorsJson,""" +
+                    """"hostFeatures":{"mouseControl":$requestMouseControl}}""",
+            satelliteId = satelliteId,
+            pins = pins,
+        )
+
+    // GET /api/connections/{id} — the reconcile endpoint (applied state + epoch).
+    fun getSession(
+        ip: String,
+        port: Int,
+        connectionId: String,
+        deviceId: String,
+        hmacProof: String,
+        satelliteId: String,
+        pins: SatellitePinRepository,
+    ): HttpReply =
+        request(
+            method = "GET",
+            ip = ip,
+            port = port,
+            path = "/api/connections/$connectionId",
+            deviceId = deviceId,
+            hmacProof = hmacProof,
+            body = null,
+            satelliteId = satelliteId,
+            pins = pins,
+        )
+
+    // PUT /api/connections/{id}/controllers/{idx} — single-slot descriptor
+    // upsert. Converges type/caps/touchpadMode without touching the session
+    // (no token rotation), so toggles never churn the UDP channel.
+    fun putController(
+        ip: String,
+        port: Int,
+        connectionId: String,
+        ctrlIdx: Int,
+        deviceId: String,
+        hmacProof: String,
+        descriptorJson: String,
+        satelliteId: String,
+        pins: SatellitePinRepository,
+    ): HttpReply =
+        request(
+            method = "PUT",
+            ip = ip,
+            port = port,
+            path = "/api/connections/$connectionId/controllers/$ctrlIdx",
+            deviceId = deviceId,
+            hmacProof = hmacProof,
+            body = descriptorJson,
+            satelliteId = satelliteId,
+            pins = pins,
+        )
+
+    // DELETE .../controllers/{idx} — removes the SLOT only; the session lives on.
+    fun deleteController(
+        ip: String,
+        port: Int,
+        connectionId: String,
+        ctrlIdx: Int,
+        deviceId: String,
+        hmacProof: String,
+        satelliteId: String,
+        pins: SatellitePinRepository,
+    ): HttpReply =
+        request(
+            method = "DELETE",
+            ip = ip,
+            port = port,
+            path = "/api/connections/$connectionId/controllers/$ctrlIdx",
+            deviceId = deviceId,
+            hmacProof = hmacProof,
+            body = null,
             satelliteId = satelliteId,
             pins = pins,
         )
@@ -104,41 +207,71 @@ internal object SatelliteHttpClient {
         port: Int,
         connectionId: String,
         deviceId: String,
+        hmacProof: String,
         satelliteId: String,
         pins: SatellitePinRepository,
-    ): String =
+    ): HttpReply =
         request(
             method = "DELETE",
             ip = ip,
             port = port,
             path = "/api/connections/$connectionId",
             deviceId = deviceId,
+            hmacProof = hmacProof,
             body = """{"deviceId":"${jsonEscape(deviceId)}"}""",
             satelliteId = satelliteId,
             pins = pins,
         )
 
-    // Body field is "id" (matches handler route-param); device id for auth goes in X-Device-Id header.
-    fun setTouchpadMode(
+    // DELETE /api/pair — self-unpair (forget on the dish also forgets us on
+    // the satellite, closing any live session server-side).
+    fun unpair(
         ip: String,
         port: Int,
         deviceId: String,
-        mode: String,
+        hmacProof: String,
         satelliteId: String,
         pins: SatellitePinRepository,
-    ): String =
+    ): HttpReply =
         request(
-            method = "POST",
+            method = "DELETE",
             ip = ip,
             port = port,
-            path = "/api/devices/touchpad-mode",
+            path = "/api/pair",
             deviceId = deviceId,
-            body =
-                """{"id":"${jsonEscape(deviceId)}",""" +
-                    """"mode":"${jsonEscape(mode)}"}""",
+            hmacProof = hmacProof,
+            body = null,
             satelliteId = satelliteId,
             pins = pins,
         )
+
+    // GET /api/catalog — localized controller-type catalog. Unauthenticated by
+    // design (the picker renders before pairing). `acceptLanguage` is the
+    // device locale chain; ETag revalidation rides If-None-Match (304 → empty
+    // body, caller serves its cache).
+    fun getCatalog(
+        ip: String,
+        port: Int,
+        acceptLanguage: String,
+        etag: String?,
+        satelliteId: String,
+        pins: SatellitePinRepository,
+    ): HttpReply {
+        val headers = mutableMapOf("Accept-Language" to acceptLanguage)
+        if (!etag.isNullOrBlank()) headers["If-None-Match"] = etag
+        return requestWithMeta(
+            method = "GET",
+            ip = ip,
+            port = port,
+            path = "/api/catalog",
+            deviceId = null,
+            hmacProof = null,
+            body = null,
+            satelliteId = satelliteId,
+            pins = pins,
+            extraHeaders = headers,
+        )
+    }
 
     // No X-Device-Id — /api/pair is the only client route that bypasses clientAuthorized.
     // `pin` drives Path A (the dish entered the satellite's PIN); `clientPin` drives
@@ -153,16 +286,18 @@ internal object SatelliteHttpClient {
         satelliteId: String,
         pins: SatellitePinRepository,
         clientPin: String = "",
-    ): String =
+    ): HttpReply =
         request(
             method = "POST",
             ip = ip,
             port = port,
             path = "/api/pair",
             deviceId = null,
+            hmacProof = null,
             body =
                 """{"deviceId":"${jsonEscape(deviceId)}",""" +
                     """"deviceName":"${jsonEscape(deviceName)}",""" +
+                    """"protocolVersion":$PROTOCOL_VERSION,""" +
                     """"pin":"${jsonEscape(pin)}",""" +
                     """"clientPin":"${jsonEscape(clientPin)}"}""",
             satelliteId = satelliteId,
@@ -176,46 +311,68 @@ internal object SatelliteHttpClient {
         deviceId: String,
         satelliteId: String,
         pins: SatellitePinRepository,
-    ): String =
+    ): HttpReply =
         request(
             method = "GET",
             ip = ip,
             port = port,
             path = "/api/pair/status?deviceId=" + java.net.URLEncoder.encode(deviceId, "UTF-8"),
             deviceId = null,
+            hmacProof = null,
             body = null,
             satelliteId = satelliteId,
             pins = pins,
         )
 
-    // Never throws — transport failure surfaces as a JSON {error} body so callers' decode path stays unchanged.
-    @Suppress("NestedBlockDepth")
+    @Suppress("LongParameterList")
     private fun request(
         method: String,
         ip: String,
         port: Int,
         path: String,
         deviceId: String?,
+        hmacProof: String?,
         body: String?,
         satelliteId: String,
         pins: SatellitePinRepository,
-    ): String {
+    ): HttpReply = requestWithMeta(method, ip, port, path, deviceId, hmacProof, body, satelliteId, pins)
+
+    // Never throws — transport failure surfaces as a JSON {error} body (status 0)
+    // so callers' decode path stays uniform.
+    @Suppress("NestedBlockDepth", "LongParameterList")
+    private fun requestWithMeta(
+        method: String,
+        ip: String,
+        port: Int,
+        path: String,
+        deviceId: String?,
+        hmacProof: String?,
+        body: String?,
+        satelliteId: String,
+        pins: SatellitePinRepository,
+        extraHeaders: Map<String, String> = emptyMap(),
+    ): HttpReply {
         val url = URL("https", ip, port, path)
         Log.i(TAG, "$method https://$ip:$port$path")
         var conn: HttpsURLConnection? = null
+        var pooled = false
+        var pinMismatch = false
         return try {
             conn =
                 (url.openConnection() as HttpsURLConnection).apply {
                     sslSocketFactory = insecureSocketFactory
-                    hostnameVerifier = tofuHostnameVerifier(satelliteId, pins)
+                    hostnameVerifier = tofuHostnameVerifier(satelliteId, pins, onMismatch = { pinMismatch = true })
                     requestMethod = method
                     connectTimeout = CONNECT_TIMEOUT_MS
                     readTimeout = READ_TIMEOUT_MS
                     setRequestProperty("Content-Type", "application/json")
-                    setRequestProperty("Connection", "close")
                     if (deviceId != null) {
                         setRequestProperty("X-Device-Id", deviceId)
                     }
+                    if (hmacProof != null) {
+                        setRequestProperty("X-Hmac-Proof", hmacProof)
+                    }
+                    for ((k, v) in extraHeaders) setRequestProperty(k, v)
                     if (body != null) {
                         doOutput = true
                         outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
@@ -225,12 +382,14 @@ internal object SatelliteHttpClient {
             val stream = if (status in 200..299) conn.inputStream else conn.errorStream
             val text = stream?.use { it.readBytes().toString(Charsets.UTF_8) }.orEmpty()
             Log.i(TAG, "$method $path -> HTTP $status (${text.length} bytes)")
-            text
+            // Fully drained: leave the socket in the keep-alive pool so the approval poll reuses the TLS session.
+            pooled = true
+            HttpReply(status, text, conn.getHeaderField("ETag"))
         } catch (e: IOException) {
             Log.e(TAG, "$method $path failed: ${e.message}")
-            """{"error":"${jsonEscape("request failed: ${e.message}")}"}"""
+            HttpReply(0, """{"error":"${jsonEscape("request failed: ${e.message}")}"}""", null, pinMismatch)
         } finally {
-            conn?.disconnect()
+            if (!pooled) conn?.disconnect()
         }
     }
 

@@ -31,6 +31,7 @@
 
 #include "dispatch.h"
 #include "gamepad_input.h"
+#include "thread_priority.h"
 #include "usb_host.h"
 #include "usb_parsers.h"
 #include "wire_encoders.h"
@@ -41,20 +42,22 @@
 
 static constexpr int HEARTBEAT_INTERVAL_MS = 2000;
 static constexpr int HEARTBEAT_MISS_MAX = 5;
+// Topology mutation is REST-only (satellite docs/contract.md): the native
+// layer carries streams + the two authenticated notifications, nothing else.
 static constexpr uint16_t MSG_GAMEPAD_DATA = 0x0001;
 static constexpr uint16_t MSG_HEARTBEAT_PING = 0x0002;
 static constexpr uint16_t MSG_HEARTBEAT_ACK = 0x0003;
-static constexpr uint16_t MSG_CONTROLLER_ADD = 0x0004;
-static constexpr uint16_t MSG_CONTROLLER_REMOVE = 0x0005;
-static constexpr uint16_t MSG_CONTROLLER_ACK = 0x0006;
-static constexpr uint16_t MSG_SERVER_STATUS = 0x0007;
-static constexpr uint16_t MSG_CONTROLLER_TYPE = 0x0008;
-static constexpr uint16_t MSG_CONTROLLER_CAPS_UPDATE = 0x000E;
 static constexpr uint16_t MSG_RUMBLE = 0x0009;
 static constexpr uint16_t MSG_MOTION = 0x000A;
 static constexpr uint16_t MSG_BATTERY = 0x000B;
 static constexpr uint16_t MSG_TOUCHPAD = 0x000C;
 static constexpr uint16_t MSG_LIGHTBAR = 0x000D;
+static constexpr uint16_t MSG_SESSION_CLOSE = 0x000F;
+
+// Nonce direction byte: the two directions of one session key never share a
+// nonce (contract §Crypto).
+static constexpr uint8_t CRYPTO_DIR_CLIENT_TO_SERVER = 0x00;
+static constexpr uint8_t CRYPTO_DIR_SERVER_TO_CLIENT = 0x01;
 
 #pragma pack(push, 1)
 struct XUSB_REPORT {
@@ -73,8 +76,8 @@ struct Session {
     int udpSock = -1;
     struct sockaddr_in dest = {};
     uint8_t token[4] = {};
-    uint8_t key[32] = {};
-    std::atomic<uint32_t> counter{0};
+    uint8_t key[32] = {}; // per-session key (HKDF-derived in Kotlin), never the pairing key
+    std::atomic<uint32_t> counter{1};
     // Linux UDP sendto is thread-safe per-socket; userspace lock would only serialise stalls.
 
     std::thread heartbeatThread;
@@ -82,11 +85,17 @@ struct Session {
     std::atomic<int> missedAcks{0};
     std::atomic<bool> connectionAlive{true};
 
-    // (requestType << 16) | (ctrlIdx << 8) | result; -1 = no ACK yet.
-    std::atomic<int32_t> lastControllerAck{-1};
+    // Downstream replay guard (server → client direction).
+    std::atomic<uint32_t> lastRxCounter{0};
 
-    // -1 = unknown (no extended ACK observed or pre-extension satellite); do not collapse to false.
-    std::atomic<int32_t> lastControllerAckMotionFlags{-1};
+    // Latest enriched heartbeat-ack material (-1 = none seen this session). The
+    // Kotlin alive-poll compares epoch/bitmap against its applied state and
+    // reconciles via REST on mismatch.
+    std::atomic<int32_t> serverEpoch{-1};
+    std::atomic<int32_t> activeBitmap{-1};
+
+    // CLOSE_REASON_* from MSG_SESSION_CLOSE; -1 = none. Terminal for the session.
+    std::atomic<int32_t> closeReason{-1};
 
     std::atomic<int8_t> vigemAvailable{-1};
     std::atomic<int8_t> activeControllerCount{-1};
@@ -118,6 +127,7 @@ struct SlotBinding {
 
 static std::mutex g_devicesMtx;
 static std::unordered_map<int32_t, DeviceState> g_devices;
+static std::unordered_map<int32_t, uint64_t> g_frameworkEventCounts;
 
 static std::mutex g_slotsMtx;
 static std::unordered_map<int32_t, SlotBinding> g_slots;
@@ -159,6 +169,7 @@ static void btDispatchLoop() {
         LOGE("btDispatchLoop: AttachCurrentThread failed");
         return;
     }
+    dish::elevateCurrentThreadToInputPriority();
     LOGI("BT dispatch thread started");
     while (g_btDispatchRunning.load(std::memory_order_relaxed)) {
         BtReport r;
@@ -276,6 +287,7 @@ void resetAndPublish(int32_t deviceId) {
 void forgetDevice(int32_t deviceId) {
     std::lock_guard<std::mutex> lock(g_devicesMtx);
     g_devices.erase(deviceId);
+    g_frameworkEventCounts.erase(deviceId);
 }
 
 void applyUsbMotion(int32_t deviceId, int16_t gyroX, int16_t gyroY, int16_t gyroZ, int16_t accelX,
@@ -310,6 +322,7 @@ static bool gamepadKeyFilter(const GameActivityKeyEvent* ev) {
     if (action == AKEY_EVENT_ACTION_DOWN || action == AKEY_EVENT_ACTION_UP) {
         int32_t deviceId = ev->deviceId;
         std::lock_guard<std::mutex> lock(g_devicesMtx);
+        g_frameworkEventCounts[deviceId]++;
         auto& state = g_devices[deviceId];
         if (gamepad::applyKey(state, kc, action == AKEY_EVENT_ACTION_DOWN)) {
             publishIfChanged(deviceId, state);
@@ -332,6 +345,7 @@ static bool gamepadMotionFilter(const GameActivityMotionEvent* ev) {
         return true;
     }
     if (action != AMOTION_EVENT_ACTION_MOVE) return true;
+    g_frameworkEventCounts[deviceId]++;
 
     // Latest sample wins — historicals are intermediate states the next apply overwrites anyway.
     float z = axisCur(ev, AMOTION_EVENT_AXIS_Z);
@@ -382,8 +396,10 @@ static bool sendEncrypted(Session* s, uint16_t msgType, const uint8_t* payload,
 
     uint32_t ctr = s->counter.fetch_add(1, std::memory_order_relaxed);
 
-    // Nonce: counter zero-padded to 12B big-endian, left-padded.
+    // Nonce: dir(1) | 0×7 | counter(4 BE). The direction byte keeps this
+    // direction's nonces disjoint from the server's under the shared key.
     uint8_t nonce[12] = {};
+    nonce[0] = CRYPTO_DIR_CLIENT_TO_SERVER;
     putBE32(nonce + 8, ctr);
 
     uint8_t ciphertext[sizeof(inner) + crypto_aead_chacha20poly1305_ietf_ABYTES];
@@ -501,8 +517,15 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_openSo
     const char* s = env->GetStringUTFChars(ip, nullptr);
     session->dest.sin_family = AF_INET;
     session->dest.sin_port = htons((uint16_t)port);
-    inet_pton(AF_INET, s, &session->dest.sin_addr);
+    // An unparseable address (e.g. an IPv6 literal from mDNS) must fail the
+    // connect, not silently stream every packet to 0.0.0.0.
+    const int ptonOk = inet_pton(AF_INET, s, &session->dest.sin_addr);
     env->ReleaseStringUTFChars(ip, s);
+    if (ptonOk != 1) {
+        LOGE("openSocket: not an IPv4 literal — refusing");
+        close(sock);
+        return -1;
+    }
 
     int handle = g_nextHandle.fetch_add(1, std::memory_order_relaxed);
     {
@@ -542,9 +565,14 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setCon
     jbyte* keyBytes = env->GetByteArrayElements(keyArr, nullptr);
     memcpy(s->token, tokenBytes, 4);
     memcpy(s->key, keyBytes, 32);
-    s->counter.store(0);
+    // Counters restart with each (token, sessionKey) pair — contract §Crypto.
+    s->counter.store(1);
+    s->lastRxCounter.store(0);
     s->missedAcks.store(0);
     s->connectionAlive.store(true);
+    s->serverEpoch.store(-1);
+    s->activeBitmap.store(-1);
+    s->closeReason.store(-1);
     env->ReleaseByteArrayElements(tokenArr, tokenBytes, JNI_ABORT);
     env->ReleaseByteArrayElements(keyArr, keyBytes, JNI_ABORT);
     LOGI("Session %d params set (token=%02x%02x%02x%02x)", handle, s->token[0], s->token[1],
@@ -567,54 +595,6 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendRe
     r->sThumbRX = (int16_t)sRX;
     r->sThumbRY = (int16_t)sRY;
     sendEncrypted(s.get(), MSG_GAMEPAD_DATA, payload, 13);
-}
-
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_controllerAdd(
-    JNIEnv*, jobject, jint handle, jint controllerIndex, jint capabilities, jint controllerType) {
-    auto s = getSession(handle);
-    if (!s) return;
-    // 4-byte payload: idx(1) + caps(2 BE) + type(1). The trailing type byte lets
-    // the receiver plug the correct virtual device on the first add — no replug.
-    uint8_t payload[4];
-    payload[0] = (uint8_t)(controllerIndex & 0xFF);
-    putBE16(payload + 1, (uint16_t)(capabilities & 0xFFFF));
-    payload[3] = (uint8_t)(controllerType & 0xFF);
-    sendEncrypted(s.get(), MSG_CONTROLLER_ADD, payload, 4);
-    LOGI("Session %d: sent controller add idx=%d caps=0x%04X type=%d", handle, controllerIndex,
-         capabilities, controllerType);
-}
-
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_controllerRemove(
-    JNIEnv*, jobject, jint handle, jint controllerIndex) {
-    auto s = getSession(handle);
-    if (!s) return;
-    uint8_t payload[1] = {(uint8_t)(controllerIndex & 0xFF)};
-    sendEncrypted(s.get(), MSG_CONTROLLER_REMOVE, payload, 1);
-    LOGI("Session %d: sent controller remove idx=%d", handle, controllerIndex);
-}
-
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendControllerType(
-    JNIEnv*, jobject, jint handle, jint controllerIndex, jint controllerType) {
-    auto s = getSession(handle);
-    if (!s) return;
-    uint8_t payload[2];
-    payload[0] = (uint8_t)(controllerIndex & 0xFF);
-    payload[1] = (uint8_t)(controllerType & 0xFF);
-    sendEncrypted(s.get(), MSG_CONTROLLER_TYPE, payload, 2);
-    LOGI("Session %d: sent controller type idx=%d type=%d", handle, controllerIndex,
-         controllerType);
-}
-
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendControllerCapsUpdate(
-    JNIEnv*, jobject, jint handle, jint controllerIndex, jint capabilities) {
-    auto s = getSession(handle);
-    if (!s) return;
-    uint8_t payload[3];
-    payload[0] = (uint8_t)(controllerIndex & 0xFF);
-    putBE16(payload + 1, (uint16_t)(capabilities & 0xFFFF));
-    sendEncrypted(s.get(), MSG_CONTROLLER_CAPS_UPDATE, payload, 3);
-    LOGI("Session %d: sent controller caps update idx=%d caps=0x%04X", handle, controllerIndex,
-         capabilities);
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendMotion(
@@ -680,28 +660,25 @@ JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_is
     return s->connectionAlive.load() ? JNI_TRUE : JNI_FALSE;
 }
 
-JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getLastControllerAck(
-    JNIEnv*, jobject, jint handle) {
+JNIEXPORT jint JNICALL
+Java_com_tinkernorth_dish_core_jni_SatelliteNative_getServerEpoch(JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return -1;
-    return s->lastControllerAck.load(std::memory_order_acquire);
-}
-
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_resetControllerAck(
-    JNIEnv*, jobject, jint handle) {
-    auto s = getSession(handle);
-    if (!s) return;
-    s->lastControllerAck.store(-1, std::memory_order_release);
-    // Paired reset — divergence would let a fresh slot read its predecessor's flags.
-    s->lastControllerAckMotionFlags.store(-1, std::memory_order_release);
+    return s->serverEpoch.load(std::memory_order_acquire);
 }
 
 JNIEXPORT jint JNICALL
-Java_com_tinkernorth_dish_core_jni_SatelliteNative_getLastControllerMotionFlags(JNIEnv*, jobject,
-                                                                                jint handle) {
+Java_com_tinkernorth_dish_core_jni_SatelliteNative_getActiveBitmap(JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return -1;
-    return s->lastControllerAckMotionFlags.load(std::memory_order_acquire);
+    return s->activeBitmap.load(std::memory_order_acquire);
+}
+
+JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getSessionCloseReason(
+    JNIEnv*, jobject, jint handle) {
+    auto s = getSession(handle);
+    if (!s) return -1;
+    return s->closeReason.load(std::memory_order_acquire);
 }
 
 JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getVigemAvailable(
@@ -718,23 +695,35 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getAct
     return (jint)s->activeControllerCount.load(std::memory_order_acquire);
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiveAck(JNIEnv* env,
+JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiveAck(JNIEnv* env,
                                                                                      jobject,
                                                                                      jint handle) {
     auto s = getSession(handle);
-    if (!s || s->udpSock < 0) return;
+    if (!s || s->udpSock < 0) return -1;
     uint8_t buf[128];
     struct sockaddr_in from = {};
     socklen_t fl = sizeof(from);
     ssize_t n = recvfrom(s->udpSock, buf, sizeof(buf), 0, (struct sockaddr*)&from, &fl);
-    if (n < 8) return;
+    if (n < 0) {
+        // The SO_RCVTIMEO tick (or a signal) is routine pacing. Any other
+        // recv error returns instantly and would do so forever, so the Kotlin
+        // drain loop must treat it as terminal or it busy-spins a core.
+        return (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) ? 0 : -1;
+    }
+    if (n < 8) return 0;
 
-    if (memcmp(buf, s->token, 4) != 0) return;
+    if (memcmp(buf, s->token, 4) != 0) return 0;
 
     uint32_t ctr = ((uint32_t)buf[4] << 24) | ((uint32_t)buf[5] << 16) | ((uint32_t)buf[6] << 8) |
                    (uint32_t)buf[7];
 
+    // Downstream replay guard, mirroring the server's (first packet exempt
+    // while lastRxCounter == 0).
+    const uint32_t lastRx = s->lastRxCounter.load(std::memory_order_relaxed);
+    if (ctr <= lastRx && lastRx != 0) return 0;
+
     uint8_t nonce[12] = {};
+    nonce[0] = CRYPTO_DIR_SERVER_TO_CLIENT;
     putBE32(nonce + 8, ctr);
 
     // Must size with buf[128] not the message-set max — bound holds structurally, not by luck.
@@ -743,45 +732,39 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiv
     size_t cipherLen = (size_t)n - 8;
     if (crypto_aead_chacha20poly1305_ietf_decrypt(decrypted, &decLen, nullptr, buf + 8, cipherLen,
                                                   s->token, 4, nonce, s->key) != 0) {
-        return;
+        return 0;
     }
+    s->lastRxCounter.store(ctr, std::memory_order_relaxed);
 
-    if (decLen < 4) return;
+    if (decLen < 4) return 0;
     uint16_t msgType = ((uint16_t)decrypted[0] << 8) | decrypted[1];
     uint16_t msgLen = ((uint16_t)decrypted[2] << 8) | decrypted[3];
 
     if (msgType == MSG_HEARTBEAT_ACK) {
         s->missedAcks.store(0);
         s->connectionAlive.store(true);
-    } else if (msgType == MSG_CONTROLLER_ACK && msgLen >= 4 && decLen >= 8) {
-        uint16_t reqType = ((uint16_t)decrypted[4] << 8) | decrypted[5];
-        uint8_t ctrlIdx = decrypted[6];
-        uint8_t result = decrypted[7];
-        int32_t packed = ((int32_t)reqType << 16) | ((int32_t)ctrlIdx << 8) | (int32_t)result;
-        s->lastControllerAck.store(packed, std::memory_order_release);
-        // Pre-extension satellites send msgLen==4 and the byte is absent; leave -1 = unknown.
-        if (msgLen >= 5 && decLen >= 9) {
-            s->lastControllerAckMotionFlags.store((int32_t)decrypted[8], std::memory_order_release);
-            LOGI("Session %d controller ACK: reqType=0x%04X idx=%d result=0x%02X motion=0x%02X",
-                 handle, reqType, ctrlIdx, result, decrypted[8]);
-        } else {
-            LOGI("Session %d controller ACK: reqType=0x%04X idx=%d result=0x%02X (legacy)", handle,
-                 reqType, ctrlIdx, result);
+        // Enriched ack: backendAvailable(1) + totalActive(1) + epoch(u16 BE) +
+        // active-controller bitmap(u16 BE). The epoch/bitmap pair drives the
+        // Kotlin-side reconcile against involuntary server-side topology loss.
+        if (msgLen >= 6 && decLen >= 10) {
+            uint8_t backend = decrypted[4];
+            uint8_t count = decrypted[5];
+            int32_t epoch = ((int32_t)decrypted[6] << 8) | (int32_t)decrypted[7];
+            int32_t bitmap = ((int32_t)decrypted[8] << 8) | (int32_t)decrypted[9];
+            s->vigemAvailable.store((int8_t)(backend ? 1 : 0), std::memory_order_release);
+            s->activeControllerCount.store((int8_t)count, std::memory_order_release);
+            s->serverEpoch.store(epoch, std::memory_order_release);
+            s->activeBitmap.store(bitmap, std::memory_order_release);
         }
-    } else if (msgType == MSG_SERVER_STATUS && msgLen >= 2 && decLen >= 6) {
-        uint8_t vigem = decrypted[4];
-        uint8_t count = decrypted[5];
-        int8_t prevVigem =
-            s->vigemAvailable.exchange((int8_t)(vigem ? 1 : 0), std::memory_order_release);
-        int8_t prevCount =
-            s->activeControllerCount.exchange((int8_t)count, std::memory_order_release);
-        if (prevVigem != (int8_t)(vigem ? 1 : 0) || prevCount != (int8_t)count) {
-            LOGI("Session %d server status: vigemAvailable=%d activeControllers=%d", handle, vigem,
-                 count);
-        }
+    } else if (msgType == MSG_SESSION_CLOSE && msgLen >= 1 && decLen >= 5) {
+        // Authenticated best-effort close notify; terminal for this session.
+        const int32_t reason = (int32_t)decrypted[4];
+        s->closeReason.store(reason, std::memory_order_release);
+        s->connectionAlive.store(false, std::memory_order_release);
+        LOGI("Session %d close notify: reason=%d", handle, reason);
     } else if (msgType == MSG_RUMBLE && msgLen == 7 && decLen >= 11) {
         // 7B fixed payload: ctrlIdx, strong BE16, weak BE16, durMs BE16.
-        if (g_rumbleBridgeClass == nullptr || g_rumbleDispatchMethod == nullptr) return;
+        if (g_rumbleBridgeClass == nullptr || g_rumbleDispatchMethod == nullptr) return 1;
         const jint ctrlIdx = (jint)decrypted[4];
         const jint strong = ((jint)decrypted[5] << 8) | (jint)decrypted[6];
         const jint weakMag = ((jint)decrypted[7] << 8) | (jint)decrypted[8];
@@ -796,6 +779,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiv
         LOGI("Session %d lightbar (no LED API on Android, dropping): idx=%d rgb=%02X%02X%02X",
              handle, lb.ctrlIdx, lb.r, lb.g, lb.b);
     }
+    return 1;
 }
 
 JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_discoverServers(
@@ -914,6 +898,7 @@ Java_com_tinkernorth_dish_core_jni_SatelliteNative_processGamepadKeyEvent(
     if (!isMappedKey) return JNI_FALSE;
     if (action != AKEY_EVENT_ACTION_DOWN && action != AKEY_EVENT_ACTION_UP) return JNI_FALSE;
     std::lock_guard<std::mutex> lock(g_devicesMtx);
+    g_frameworkEventCounts[deviceId]++;
     auto& state = g_devices[deviceId];
     if (gamepad::applyKey(state, keyCode, action == AKEY_EVENT_ACTION_DOWN)) {
         publishIfChanged(deviceId, state);
@@ -936,6 +921,7 @@ Java_com_tinkernorth_dish_core_jni_SatelliteNative_processGamepadMotionEvent(
         return JNI_TRUE;
     }
     if (maskedAction != AMOTION_EVENT_ACTION_MOVE) return JNI_TRUE;
+    g_frameworkEventCounts[deviceId]++;
     // Right-stick layout varies (Z/RZ vs RX/RY); pick the larger-magnitude pair.
     float rightX = std::fabs(z) >= std::fabs(rx) ? z : rx;
     float rightY = std::fabs(rz) >= std::fabs(ry) ? rz : ry;
@@ -1045,6 +1031,18 @@ JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_mo
 JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDeviceUrbCount(
     JNIEnv*, jobject, jint deviceId) {
     return (jlong)usbhost::getUrbCount((int32_t)deviceId);
+}
+
+JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDeviceMotionCount(
+    JNIEnv*, jobject, jint deviceId) {
+    return (jlong)usbhost::getMotionCount((int32_t)deviceId);
+}
+
+JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDeviceInputEventCount(
+    JNIEnv*, jobject, jint deviceId) {
+    std::lock_guard<std::mutex> lock(g_devicesMtx);
+    auto it = g_frameworkEventCounts.find((int32_t)deviceId);
+    return it == g_frameworkEventCounts.end() ? 0 : (jlong)it->second;
 }
 }
 

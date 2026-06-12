@@ -94,24 +94,6 @@
     <string name="touchpad_mode_off">Off</string>
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Mouse</string>
-    <string name="touchpad_mode_unsupported_here">This receiver host doesn\'t support this mode.</string>
-    <!-- Shown when the satellite returns 404 from /api/devices/touchpad-mode —
-         the satellite no longer has this dish in its paired-devices list (e.g.
-         after the satellite was reinstalled or its config was wiped). Tells the
-         user the actionable remedy. -->
-    <string name="touchpad_mode_error_not_paired">Satellite doesn\'t recognize this device — re-pair to apply.</string>
-    <!-- Shown when the satellite returns 401 unauthorized from
-         /api/devices/touchpad-mode. Surfaces the same way 404 does (re-pair),
-         since the practical user remedy is identical. -->
-    <string name="touchpad_mode_error_unauthorized">Satellite rejected the request — re-pair to apply.</string>
-    <!-- Shown when the HTTPS POST itself failed (satellite unreachable, TLS
-         handshake error, connection refused). Distinct from a satellite-side
-         rejection so the user knows to check the satellite is running. -->
-    <string name="touchpad_mode_error_transport">Couldn\'t reach satellite — is it running?</string>
-    <!-- Fallback for any other error shape the dish doesn't recognize. The
-         %1$s is the satellite's raw error string so the user can report it. -->
-    <string name="touchpad_mode_error_unknown">Couldn\'t set touchpad mode: %1$s</string>
-
     <!-- ControllerAdapter slot-status text (renders below the slot name). -->
     <string name="slot_status_disconnecting">Disconnecting… %1$ds</string>
     <string name="slot_status_routing_to">→ %1$s</string>
@@ -159,6 +141,8 @@
          user always sees which input surface they're on. -->
     <string name="overlay_title_gamepad">Gamepad</string>
     <string name="overlay_title_touchpad">Touchpad</string>
+    <string name="overlay_rate_touch">Touch %1$s</string>
+    <string name="overlay_rate_motion">Motion %1$s</string>
 
     <!-- Labels for the two side-by-side trackpads in the touchpad overlay.
          The "click" pad routes touches as click+position (drag, text
@@ -423,6 +407,10 @@
     <string name="binding_state_off">Off</string>
     <string name="binding_func_value">%1$s · %2$s</string>
 
+    <string name="binding_rate_hz">%1$d Hz</string>
+    <string name="binding_rate_hz_peak">~%1$d Hz</string>
+    <string name="binding_rate_pending">…</string>
+
     <string name="binding_card_not_bound">Not bound</string>
     <string name="binding_card_no_functions">None</string>
 
@@ -450,6 +438,8 @@
     <string name="binding_edge_unsteady_detail">Still routing, but packets are dropping. Move closer or switch to USB.</string>
     <string name="binding_edge_action_reconnect">Reconnect</string>
     <string name="binding_edge_action_dismiss">Dismiss</string>
+    <string name="binding_blocker_input_lost_body">Reconnect the controller to keep configuring, or close this screen.</string>
+    <string name="binding_apply_error_slot_gone">%1$s is no longer available — unplug and reconnect it, then try again.</string>
     <string name="binding_apply_error_no_connect">Couldn\'t reach %1$s. Make sure it\'s on and on your network, then try again.</string>
     <string name="binding_apply_warn_title">Direct mode unavailable</string>
     <string name="binding_apply_warn_detail">%1$s is bound to %2$s on Standard mode instead.</string>

@@ -2,6 +2,7 @@
 
 package com.tinkernorth.dish.composer
 
+import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.connection.ConnectIntent
@@ -9,9 +10,7 @@ import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
 import com.tinkernorth.dish.source.store.ControllerTypeStore
 import com.tinkernorth.dish.source.store.SlotBindingStore
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -19,8 +18,13 @@ enum class ConnectionKind { SATELLITE, BLUETOOTH }
 
 enum class LinkState { Found, Stale, Saved, Ready, Connecting, Connected, Unstable }
 
+// Catalog ids (wire enum values) — the picker renders from GET /api/catalog,
+// these constants only name the two types this app has bundled art for.
 const val CONTROLLER_TYPE_XBOX = 0
 const val CONTROLLER_TYPE_PLAYSTATION = 1
+
+// Descriptor touchpadMode protocol constant (contract: off | ds4 | mouse).
+const val TOUCHPAD_MODE_OFF = "off"
 
 data class ConnectionSummary(
     val id: String,
@@ -43,7 +47,7 @@ class ConnectionCoordinator
         private val bindingStore: SlotBindingStore,
         private val typeStore: ControllerTypeStore,
         private val composer: ConnectionsComposer,
-        private val scope: CoroutineScope,
+        private val gamepadRegistry: PhysicalGamepadRegistry,
     ) {
         val bindings: StateFlow<Map<String, String>> = bindingStore.state
         val satTypes: StateFlow<Map<Pair<String, String>, Int>> = typeStore.state
@@ -52,10 +56,30 @@ class ConnectionCoordinator
 
         fun summary(id: String): ConnectionSummary? = connections.value.firstOrNull { it.id == id }
 
+        // A bindable slot is a logical slot (non-numeric ids like the on-screen
+        // controller) or a device the registry currently knows. Binding an id
+        // the registry already dropped (e.g. a framework id superseded by a
+        // USB-direct synthetic) would register a zombie pad that streams
+        // nothing yet occupies a satellite slot.
+        private fun slotExists(slotId: String): Boolean {
+            val deviceId = slotId.toIntOrNull() ?: return true
+            return gamepadRegistry.devices.value.containsKey(deviceId)
+        }
+
+        /**
+         * Bind [slotId] to [connectionId] with its FINAL descriptor — type and
+         * touchpad routing travel with the bind, so the satellite plugs the
+         * right virtual device on the first try (no default-then-correct phase
+         * anywhere). Returns false (refusing the bind) for a slot the registry
+         * no longer knows.
+         */
         fun bind(
             slotId: String,
             connectionId: String,
-        ) {
+            controllerType: Int,
+            touchpadMode: String = TOUCHPAD_MODE_OFF,
+        ): Boolean {
+            if (!slotExists(slotId)) return false
             val priorConnId = bindingStore.connectionFor(slotId)
             if (priorConnId != null && priorConnId != connectionId) {
                 satellite.get(priorConnId)?.detachSlot(slotId)
@@ -76,13 +100,10 @@ class ConnectionCoordinator
             bindingStore.bind(slotId, connectionId)
 
             if (!isBt) {
-                typeStore.setTypeIfAbsent(connectionId, slotId, CONTROLLER_TYPE_XBOX)
+                typeStore.setType(connectionId, slotId, controllerType)
+                satellite.get(connectionId)?.declareSlot(slotId, controllerType, touchpadMode)
             }
-
-            val type = typeStore.typeFor(connectionId, slotId) ?: CONTROLLER_TYPE_XBOX
-            satellite.get(connectionId)?.let { conn ->
-                scope.launch { conn.attachSlot(slotId, controllerType = type) }
-            }
+            return true
         }
 
         fun unbind(slotId: String) {
@@ -121,10 +142,16 @@ class ConnectionCoordinator
             }
             val conn = satellite.get(connId) ?: return
             if (!conn.renameSlot(fromSlotId, toSlotId)) {
-                scope.launch { conn.attachSlot(toSlotId, controllerType = type ?: CONTROLLER_TYPE_XBOX) }
+                conn.attachSlot(toSlotId, controllerType = type ?: CONTROLLER_TYPE_XBOX)
             }
         }
 
+        /**
+         * USB-direct claim replaced a framework device with [syntheticSlotId].
+         * The user's type choice travels with it: a bound twin migrates whole
+         * (binding + type), an unbound claim adopts the type remembered for the
+         * twin — Xbox only when there has never been a choice to preserve.
+         */
         fun bindClaimedSynthetic(
             twinSlotId: String?,
             syntheticSlotId: String,
@@ -137,7 +164,11 @@ class ConnectionCoordinator
                 connections.value.singleOrNull {
                     it.kind == ConnectionKind.SATELLITE && it.live == LinkState.Connected
                 }
-            if (target != null) bind(syntheticSlotId, target.id)
+            if (target != null) {
+                val rememberedType =
+                    twinSlotId?.let { typeStore.typeFor(target.id, it) } ?: CONTROLLER_TYPE_XBOX
+                bind(syntheticSlotId, target.id, rememberedType)
+            }
         }
 
         fun setSatelliteControllerType(
@@ -147,9 +178,16 @@ class ConnectionCoordinator
         ) {
             if (typeStore.typeFor(connectionId, slotId) == type) return
             typeStore.setType(connectionId, slotId, type)
-            satellite.get(connectionId)?.let { conn ->
-                scope.launch { conn.setControllerType(slotId, type) }
-            }
+            satellite.get(connectionId)?.setControllerType(slotId, type)
+        }
+
+        /** Per-slot touchpad routing — rides the descriptor (client-owned, single writer). */
+        fun setSatelliteTouchpadMode(
+            connectionId: String,
+            slotId: String,
+            mode: String,
+        ) {
+            satellite.get(connectionId)?.setTouchpadMode(slotId, mode)
         }
 
         fun boundConnection(slotId: String): ConnectionSummary? =

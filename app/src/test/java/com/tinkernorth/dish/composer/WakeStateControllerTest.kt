@@ -3,6 +3,8 @@
 package com.tinkernorth.dish.composer
 
 import android.content.Context
+import android.net.wifi.WifiManager
+import android.os.Build
 import android.os.PowerManager
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -31,6 +33,8 @@ class WakeStateControllerTest {
     private lateinit var context: Context
     private lateinit var powerManager: PowerManager
     private lateinit var wakeLock: PowerManager.WakeLock
+    private lateinit var wifiManager: WifiManager
+    private lateinit var wifiLock: WifiManager.WifiLock
     private lateinit var hub: ConnectionCoordinator
     private lateinit var scope: TestScope
 
@@ -49,9 +53,18 @@ class WakeStateControllerTest {
             mockk {
                 every { newWakeLock(any(), any()) } returns wakeLock
             }
+        wifiLock =
+            mockk(relaxed = true) {
+                every { isHeld } returns true
+            }
+        wifiManager =
+            mockk {
+                every { createWifiLock(any<Int>(), any<String>()) } returns wifiLock
+            }
         context =
             mockk {
                 every { getSystemService(Context.POWER_SERVICE) } returns powerManager
+                every { getSystemService(Context.WIFI_SERVICE) } returns wifiManager
             }
         hub =
             mockk(relaxed = true) {
@@ -261,4 +274,77 @@ class WakeStateControllerTest {
             scope.testScheduler.runCurrent()
             assertEquals(0, controller.streamingSlotCount.value)
         }
+
+    @Test
+    fun `bound slot on CONNECTED connection acquires the wifi lock`() =
+        runTest(scope.testScheduler) {
+            val (controller, _) = buildAndStart()
+
+            connectionsFlow.value = listOf(summary("s:1", LinkState.Connected))
+            bindingsFlow.value = mapOf("virtual" to "s:1")
+            scope.testScheduler.runCurrent()
+
+            assertTrue(controller.shouldKeepScreenOn.value)
+            verify(exactly = 1) { wifiManager.createWifiLock(any<Int>(), any<String>()) }
+            verify(exactly = 1) { wifiLock.acquire() }
+        }
+
+    @Test
+    fun `releasing the last bound connection releases the wifi lock`() =
+        runTest(scope.testScheduler) {
+            buildAndStart()
+
+            connectionsFlow.value = listOf(summary("s:1", LinkState.Connected))
+            bindingsFlow.value = mapOf("virtual" to "s:1")
+            scope.testScheduler.runCurrent()
+
+            connectionsFlow.value = listOf(summary("s:1", LinkState.Saved))
+            scope.testScheduler.runCurrent()
+
+            verify(exactly = 1) { wifiLock.release() }
+        }
+
+    @Test
+    fun `repeated CONNECTED state does not re-acquire the wifi lock`() =
+        runTest(scope.testScheduler) {
+            buildAndStart()
+
+            connectionsFlow.value = listOf(summary("s:1", LinkState.Connected))
+            bindingsFlow.value = mapOf("virtual" to "s:1")
+            scope.testScheduler.runCurrent()
+
+            bindingsFlow.value = mapOf("virtual" to "s:1", "5" to "s:1")
+            scope.testScheduler.runCurrent()
+
+            verify(exactly = 1) { wifiManager.createWifiLock(any<Int>(), any<String>()) }
+            verify(exactly = 1) { wifiLock.acquire() }
+        }
+
+    @Test
+    fun `ON_STOP releases the wifi lock`() =
+        runTest(scope.testScheduler) {
+            val (_, owner) = buildAndStart()
+            connectionsFlow.value = listOf(summary("s:1", LinkState.Connected))
+            bindingsFlow.value = mapOf("virtual" to "s:1")
+            scope.testScheduler.runCurrent()
+
+            owner.registry.currentState = Lifecycle.State.CREATED
+            scope.testScheduler.runCurrent()
+
+            verify(exactly = 1) { wifiLock.release() }
+        }
+
+    @Test
+    fun `wifiLockMode picks low-latency on Q and above`() {
+        assertEquals(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, wifiLockMode(Build.VERSION_CODES.Q))
+        assertEquals(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, wifiLockMode(34))
+    }
+
+    @Test
+    fun `wifiLockMode falls back to high-perf below Q`() {
+        @Suppress("DEPRECATION")
+        val highPerf = WifiManager.WIFI_MODE_FULL_HIGH_PERF
+        assertEquals(highPerf, wifiLockMode(Build.VERSION_CODES.P))
+        assertEquals(highPerf, wifiLockMode(24))
+    }
 }

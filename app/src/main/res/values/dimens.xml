@@ -190,6 +190,7 @@
     <dimen name="binding_pill_gap">@dimen/spacing_sm</dimen>
 
     <dimen name="binding_label_column_width">@dimen/size_80</dimen>
+    <dimen name="binding_label_gap">@dimen/spacing_md</dimen>
     <dimen name="binding_legend_label_column_width">@dimen/size_96</dimen>
 
     <dimen name="binding_zone_padding">@dimen/card_padding</dimen>
@@ -205,6 +206,7 @@
     <dimen name="binding_edge_actions_gap">@dimen/size_8</dimen>
     <dimen name="binding_edge_spinner_size">@dimen/size_28</dimen>
 
+    <dimen name="low_power_chip_scroll_clearance">@dimen/size_80</dimen>
     <dimen name="low_power_dim_body_max_width">@dimen/size_280</dimen>
 
     <dimen name="config_section_gap">@dimen/spacing_5xl</dimen>

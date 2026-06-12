@@ -6,7 +6,7 @@
     callsites:
       - Dashboard CONNECTIONS eyebrow      (label only)
       - Dashboard CONTROLLERS eyebrow      (label only)
-      - Connections SATELLITES with scan   (icon + label + button)
+      - Connections SATELLITES scan + add  (icon + label + buttons)
       - Connections BLUETOOTH with add     (icon + label + button)
       - Settings DIAGNOSTICS eyebrow       (label only)
       - Settings ABOUT eyebrow             (label only)
@@ -58,6 +58,16 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         tools:text="SECTION" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnSectionSecondary"
+        style="@style/Widget.Dish.Button.Outlined"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="@dimen/spacing_sm"
+        android:visibility="gone"
+        tools:text="Add"
+        tools:visibility="visible" />
 
     <!-- Trailing affordance. Defaults to `gone`; callsites that need a
          scan / add / etc. button flip visibility and set text + click

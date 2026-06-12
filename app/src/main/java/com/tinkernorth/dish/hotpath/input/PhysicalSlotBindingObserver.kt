@@ -84,7 +84,8 @@ fun reconcileSlots(
         val slotId = id.toString()
         val cid = bindings[slotId]
         val summary = cid?.let { lookup -> summaries.firstOrNull { it.id == lookup } }
-        if (cid == null || summary == null || summary.live != LinkState.Connected) {
+        val linkStreams = summary?.live == LinkState.Connected || summary?.live == LinkState.Unstable
+        if (cid == null || summary == null || !linkStreams) {
             ops += BindOp.Unbind(id)
             continue
         }

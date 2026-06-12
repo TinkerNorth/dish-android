@@ -10,6 +10,9 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.PopupMenu
 import androidx.activity.viewModels
+import androidx.annotation.ColorRes
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -26,6 +29,7 @@ import com.tinkernorth.dish.databinding.BindingValueNoneBinding
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
 import com.tinkernorth.dish.repository.TouchpadModeValue
+import com.tinkernorth.dish.source.lowpower.LowPowerSignal
 import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
@@ -44,6 +48,8 @@ class ConfigureBindingsActivity : AppCompatActivity() {
 
     @Inject lateinit var notifications: DishNotifications
 
+    @Inject lateinit var lowPowerSignal: LowPowerSignal
+
     private lateinit var binding: ActivityConfigureBindingsBinding
     private lateinit var gamepadHost: GamepadActivityHost
     private val viewModel: ConfigureBindingsViewModel by viewModels()
@@ -55,7 +61,7 @@ class ConfigureBindingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityConfigureBindingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications)
+        gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications, lowPowerSignal)
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()
         wireDonateButton()
@@ -89,6 +95,7 @@ class ConfigureBindingsActivity : AppCompatActivity() {
                 viewModel.ui.collect { state ->
                     current = state
                     if (state.loaded) renderContent(state)
+                    renderBlocker(state)
                 }
             }
         }
@@ -284,6 +291,70 @@ class ConfigureBindingsActivity : AppCompatActivity() {
         finish()
     }
 
+    private fun renderBlocker(state: ConfigUiState) {
+        val blocker = state.blocker
+        binding.blockerOverlay.visibility = if (blocker == null) View.GONE else View.VISIBLE
+        if (blocker == null) return
+        binding.btnBlockerCancel.setOnClickListener { finish() }
+        when (blocker) {
+            is BindingBlocker.InputLost -> {
+                val icon = if (state.snapshot?.link == BindingLink.BLUETOOTH) R.drawable.ic_bluetooth else R.drawable.ic_usb
+                bindBlockerMessage(
+                    icon,
+                    R.color.colorWarning,
+                    R.string.binding_edge_input_lost_title,
+                    getString(R.string.binding_blocker_input_lost_body),
+                )
+                bindBlockerPrimary(null, busy = false) {}
+            }
+            is BindingBlocker.HostLost -> {
+                val label = blocker.hostLabel.ifBlank { getString(R.string.satellite_fallback_name) }
+                bindBlockerMessage(
+                    R.drawable.ic_error,
+                    R.color.colorError,
+                    R.string.binding_edge_host_lost_title,
+                    getString(R.string.binding_edge_host_lost_detail, label),
+                )
+                bindBlockerPrimary(R.string.binding_edge_action_reconnect, blocker.reconnecting) { viewModel.reconnectHosts() }
+            }
+            is BindingBlocker.HostUnsteady -> {
+                bindBlockerMessage(
+                    R.drawable.ic_warning,
+                    R.color.colorWarning,
+                    R.string.binding_edge_unsteady_title,
+                    getString(R.string.binding_edge_unsteady_detail),
+                )
+                bindBlockerPrimary(R.string.binding_edge_action_dismiss, busy = false) { viewModel.dismissUnsteady() }
+            }
+        }
+    }
+
+    private fun bindBlockerMessage(
+        @DrawableRes icon: Int,
+        @ColorRes tint: Int,
+        @StringRes title: Int,
+        body: String,
+    ) {
+        binding.ivBlockerIcon.setImageResource(icon)
+        binding.ivBlockerIcon.imageTintList = ColorStateList.valueOf(getColor(tint))
+        binding.tvBlockerTitle.setText(title)
+        binding.tvBlockerBody.text = body
+    }
+
+    private fun bindBlockerPrimary(
+        @StringRes label: Int?,
+        busy: Boolean,
+        onClick: () -> Unit,
+    ) {
+        binding.blockerPrimarySlot.visibility = if (label == null) View.GONE else View.VISIBLE
+        binding.btnBlockerPrimary.visibility = if (busy) View.INVISIBLE else View.VISIBLE
+        binding.pbBlockerBusy.visibility = if (busy) View.VISIBLE else View.GONE
+        if (label != null) {
+            binding.btnBlockerPrimary.setText(label)
+            binding.btnBlockerPrimary.setOnClickListener { onClick() }
+        }
+    }
+
     private fun renderErrorToast(state: ApplyState.Finished) {
         binding.toast.visibility = View.VISIBLE
         binding.ivToastIcon.setImageResource(R.drawable.ic_error)
@@ -318,8 +389,9 @@ class ConfigureBindingsActivity : AppCompatActivity() {
 
     private fun showTypeMenu(anchor: View) {
         val pm = PopupMenu(this, anchor)
-        pm.menu.add(0, CONTROLLER_TYPE_PLAYSTATION, 0, getString(R.string.picker_type_playstation))
-        pm.menu.add(0, CONTROLLER_TYPE_XBOX, 1, getString(R.string.picker_type_xbox))
+        viewModel.ui.value.typeOptions.forEachIndexed { order, option ->
+            pm.menu.add(0, option.id, order, option.label)
+        }
         pm.setOnMenuItemClickListener { item ->
             viewModel.setType(item.itemId)
             true
@@ -328,7 +400,10 @@ class ConfigureBindingsActivity : AppCompatActivity() {
     }
 
     private fun typeLabel(type: Int): String =
-        getString(if (type == CONTROLLER_TYPE_PLAYSTATION) R.string.picker_type_playstation else R.string.picker_type_xbox)
+        viewModel.ui.value.typeOptions
+            .firstOrNull { it.id == type }
+            ?.label
+            ?: getString(if (type == CONTROLLER_TYPE_PLAYSTATION) R.string.picker_type_playstation else R.string.picker_type_xbox)
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean = gamepadHost.dispatchKeyEvent(event) || super.dispatchKeyEvent(event)
 

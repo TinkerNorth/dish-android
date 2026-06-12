@@ -2,12 +2,15 @@
 
 package com.tinkernorth.dish.ui.main
 
+import android.content.res.Configuration
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.widget.LinearLayout
 import androidx.activity.viewModels
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.isVisible
+import androidx.core.view.updateLayoutParams
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -21,6 +24,7 @@ import com.tinkernorth.dish.databinding.ActivityMainBinding
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.lowpower.LowPowerSignal
 import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.source.store.OnboardingState
@@ -55,6 +59,8 @@ class MainActivity :
     @Inject lateinit var usbGamepadManager: UsbGamepadManager
 
     @Inject lateinit var notifications: DishNotifications
+
+    @Inject lateinit var lowPowerSignal: LowPowerSignal
 
     @Inject lateinit var onboarding: OnboardingPreferenceStore
 
@@ -99,7 +105,8 @@ class MainActivity :
         }
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications)
+        applyPaneLayout(resources.configuration)
+        gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications, lowPowerSignal)
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()
         attachDonatePill()
@@ -120,6 +127,34 @@ class MainActivity :
         super.onResume()
         if (!com.tinkernorth.dish.DishApplication.nativeLoadFailed) {
             usbGamepadManager.reconcileForeground()
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (::binding.isInitialized) applyPaneLayout(newConfig)
+    }
+
+    private fun applyPaneLayout(config: Configuration) {
+        val panes = binding.llPanes ?: return
+        val infoPane = binding.llInfoPane ?: return
+        val controllersPane = binding.llControllersPane ?: return
+        val landscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE
+        panes.orientation = if (landscape) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+        val controllersIndex = if (landscape) 0 else 1
+        if (panes.indexOfChild(controllersPane) != controllersIndex) {
+            panes.removeView(controllersPane)
+            panes.addView(controllersPane, controllersIndex)
+        }
+        infoPane.updateLayoutParams<LinearLayout.LayoutParams> {
+            width = if (landscape) 0 else LinearLayout.LayoutParams.MATCH_PARENT
+            height = LinearLayout.LayoutParams.WRAP_CONTENT
+            weight = if (landscape) 2f else 0f
+        }
+        controllersPane.updateLayoutParams<LinearLayout.LayoutParams> {
+            width = if (landscape) 0 else LinearLayout.LayoutParams.MATCH_PARENT
+            height = if (landscape) LinearLayout.LayoutParams.MATCH_PARENT else 0
+            weight = if (landscape) 3f else 1f
         }
     }
 
@@ -193,6 +228,8 @@ class MainActivity :
             s.motionCapabilities,
             s.touchpadModesBySatellite,
             s.pathCards,
+            s.inputRates,
+            s.screenPeakHz,
         )
         refreshDashboardHint(onboarding.state.value, s)
     }

@@ -3,6 +3,9 @@
 package com.tinkernorth.dish.ui.main
 
 import android.os.Build
+import android.os.Handler
+import android.os.HandlerThread
+import android.os.Process
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.Surface
@@ -27,13 +30,19 @@ import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.inputrate.InputRateStore
+import com.tinkernorth.dish.source.lowpower.LowPowerSignal
 import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.ui.common.FoldAwareSession
 import com.tinkernorth.dish.ui.common.Posture
+import com.tinkernorth.dish.ui.common.ResendPacer
 import com.tinkernorth.dish.ui.common.hingeInsetsFor
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.android.asCoroutineDispatcher
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -51,15 +60,28 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
 
     @Inject lateinit var notifications: DishNotifications
 
+    @Inject lateinit var lowPowerSignal: LowPowerSignal
+
+    @Inject lateinit var inputRateStore: InputRateStore
+
     protected lateinit var gamepadHost: GamepadActivityHost
 
     protected var connectionId: String = ""
+
+    // Dedicated URGENT_AUDIO thread so edge-burst resends aren't jittered by the shared Default pool.
+    private val resendThread = HandlerThread("dish-resend", Process.THREAD_PRIORITY_URGENT_AUDIO).also { it.start() }
+    private val resendDispatcher = Handler(resendThread.looper).asCoroutineDispatcher()
+
+    // Resend-thread-only (single-threaded Handler dispatcher).
+    private val resendPacer = ResendPacer()
 
     protected abstract fun rootView(): View
 
     protected abstract val resendIntervalNs: Long
 
     protected abstract fun resendOneIfReady()
+
+    protected fun resendDue(changed: Boolean): Boolean = resendPacer.resendDue(changed)
 
     protected open fun onConnectionSummaryChanged(summary: ConnectionSummary?) = Unit
 
@@ -78,7 +100,7 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
         }
 
         gamepadHost =
-            GamepadActivityHost(this, rootView(), wakeState, gamepadRegistry)
+            GamepadActivityHost(this, rootView(), wakeState, gamepadRegistry, lowPowerSignal)
                 .also { it.install(notifications) }
         hideSystemBars()
 
@@ -111,8 +133,7 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
             }
         }
 
-        // Deadline-paced on Dispatchers.Default; main-thread JNI+vsync would inflate cycle time past 250 Hz.
-        lifecycleScope.launch(Dispatchers.Default) {
+        lifecycleScope.launch(resendDispatcher) {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 runResendLoop()
             }
@@ -162,6 +183,59 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
                         ) { finish() },
                 )
         }
+    }
+
+    // The store owns the trackers and the low-power freeze, so the readout survives activity
+    // recreation and re-entry shows the last measurements. motionOn gates the motion line:
+    // the source may stream while motion is user-facing off, and the readout must agree with
+    // the motion indicator, not the raw sample flow; null means the screen has no motion line.
+    protected fun installRateReadout(
+        slotId: String,
+        motionOn: Flow<Boolean>?,
+        apply: (String) -> Unit,
+    ) {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                combine(
+                    inputRateStore.state,
+                    motionOn ?: flowOf(false),
+                ) { rates, on ->
+                    formatRateReadout(
+                        screenPeakHz = rates.screenPeakHz,
+                        gyroHz = rates.slots[slotId]?.gyroHz ?: 0,
+                        hasMotion = motionOn != null,
+                        motionOn = on,
+                    )
+                }.distinctUntilChanged().collect { apply(it) }
+            }
+        }
+    }
+
+    private fun formatRateReadout(
+        screenPeakHz: Int,
+        gyroHz: Int,
+        hasMotion: Boolean,
+        motionOn: Boolean,
+    ): String {
+        val touchValue =
+            if (screenPeakHz > 0) {
+                getString(R.string.binding_rate_hz_peak, screenPeakHz)
+            } else {
+                getString(R.string.binding_rate_pending)
+            }
+        val touchPart = getString(R.string.overlay_rate_touch, touchValue)
+        if (!hasMotion) return touchPart
+        val motionValue =
+            when {
+                !motionOn -> getString(R.string.binding_state_off)
+                gyroHz > 0 -> getString(R.string.binding_rate_hz, gyroHz)
+                else -> getString(R.string.binding_rate_pending)
+            }
+        return getString(
+            R.string.binding_func_value,
+            touchPart,
+            getString(R.string.overlay_rate_motion, motionValue),
+        )
     }
 
     protected fun currentRotation(): Int =
@@ -232,11 +306,18 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
         gamepadHost.cancelDimOnStop()
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        resendThread.quitSafely()
+    }
+
     companion object {
         const val EXTRA_CONNECTION_ID = "extra_connection_id"
 
-        // 4 ms ≈ 250 Hz — matches wired Xbox/PS poll rate that ViGEm/uinput backends are tuned for.
-        const val RESEND_INTERVAL_MS_DEFAULT = 4L
+        // Tick = the resend SCHEDULER granularity (burst spacing + worst-case
+        // single-loss heal time), not a send rate — real input is event-driven
+        // at the full touch sampling rate and never waits on this clock.
+        const val RESEND_INTERVAL_MS_DEFAULT = 50L
         const val RESEND_INTERVAL_NS_DEFAULT = RESEND_INTERVAL_MS_DEFAULT * 1_000_000L
 
         const val MAX_BACKLOG_FACTOR = 5L

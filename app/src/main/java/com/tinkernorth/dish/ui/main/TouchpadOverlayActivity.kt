@@ -22,7 +22,7 @@ import dagger.hilt.android.AndroidEntryPoint
 class TouchpadOverlayActivity : BaseInputOverlayActivity() {
     private lateinit var binding: ActivityTouchpadOverlayBinding
 
-    // @Volatile for main-thread write / Dispatchers.Default resend read.
+    // @Volatile for main-thread write / resend-thread read.
     @Volatile private var lastReportedState: TouchpadSurfaceView.TouchpadState? = null
 
     private var slotId: String = VIRTUAL_SLOT_ID
@@ -36,6 +36,9 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
 
     override val resendIntervalNs: Long = BaseInputOverlayActivity.RESEND_INTERVAL_NS_DEFAULT
 
+    // Resend-thread-only (single-threaded Handler dispatcher).
+    private var lastResentSnapshot: TouchpadSurfaceView.TouchpadState? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityTouchpadOverlayBinding.inflate(layoutInflater)
@@ -45,6 +48,10 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
 
         setupDishToolbar(binding.overlayToolbar)
         binding.overlayToolbar.setTitle(R.string.overlay_title_touchpad)
+        installRateReadout(
+            slotId = slotId,
+            motionOn = null,
+        ) { binding.overlayToolbar.subtitle = it }
 
         bindPad(
             pad = binding.touchpadClickPad,
@@ -76,6 +83,7 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
             object : TouchpadSurfaceView.Listener {
                 override fun onTouchpadStateChanged(state: TouchpadSurfaceView.TouchpadState) {
                     if (!padCoordinator.mayWrite(pad)) return
+                    inputRateStore.recordScreenSample()
                     lastReportedState = state
                     val summary = hub.summary(connectionId) ?: return
                     if (summary.live != LinkState.Connected) return
@@ -102,6 +110,11 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
         val summary = hub.summary(connectionId) ?: return
         if (summary.kind != ConnectionKind.SATELLITE) return
         if (summary.live != LinkState.Connected) return
+        // The live state object mutates on the UI thread — copy() is the
+        // stable comparison base (a torn read just costs one extra burst).
+        val changed = state != lastResentSnapshot
+        if (changed) lastResentSnapshot = state.copy()
+        if (!resendDue(changed)) return
         sendSatelliteTouchpadReport(state)
     }
 

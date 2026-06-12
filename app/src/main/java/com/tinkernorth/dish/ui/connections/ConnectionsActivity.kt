@@ -11,8 +11,6 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.KeyEvent
-import android.view.Menu
-import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.widget.LinearLayout
@@ -90,6 +88,8 @@ class ConnectionsActivity : AppCompatActivity() {
     @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
 
     @Inject lateinit var notifications: DishNotifications
+
+    @Inject lateinit var lowPowerSignal: com.tinkernorth.dish.source.lowpower.LowPowerSignal
 
     @Inject lateinit var btAdapterState: com.tinkernorth.dish.source.system.BluetoothAdapterStateObserver
 
@@ -217,7 +217,7 @@ class ConnectionsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityConnectionsBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications)
+        gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications, lowPowerSignal)
         setupDishToolbar(binding.toolbar)
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()
@@ -230,20 +230,6 @@ class ConnectionsActivity : AppCompatActivity() {
 
         handlePairPromptIntent(intent)
     }
-
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.menu_connections, menu)
-        return true
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean =
-        when (item.itemId) {
-            R.id.action_add_satellite -> {
-                showAddSatelliteDialog()
-                true
-            }
-            else -> super.onOptionsItemSelected(item)
-        }
 
     private fun observeSatelliteHub() {
         lifecycleScope.launch {
@@ -355,6 +341,8 @@ class ConnectionsActivity : AppCompatActivity() {
                 R.drawable.ic_satellite,
                 R.string.section_satellites,
                 R.string.action_scan,
+                secondaryActionLabel = R.string.action_add,
+                onSecondaryAction = ::showAddSatelliteDialog,
             ) { satellite.startDiscovery() }
         bluetoothHeader =
             SectionHeaderAdapter(

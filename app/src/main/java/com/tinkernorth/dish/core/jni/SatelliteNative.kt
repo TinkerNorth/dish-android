@@ -33,30 +33,6 @@ object SatelliteNative {
         sThumbRY: Int,
     )
 
-    external fun controllerAdd(
-        handle: Int,
-        controllerIndex: Int,
-        capabilities: Int,
-        controllerType: Int,
-    )
-
-    external fun controllerRemove(
-        handle: Int,
-        controllerIndex: Int,
-    )
-
-    external fun sendControllerType(
-        handle: Int,
-        controllerIndex: Int,
-        controllerType: Int,
-    )
-
-    external fun sendControllerCapsUpdate(
-        handle: Int,
-        controllerIndex: Int,
-        capabilities: Int,
-    )
-
     // Cemuhook DSU axes; gyro LSB = 2000/32767 deg/s, accel LSB = 4/32767 g.
     @Suppress("LongParameterList")
     external fun sendMotion(
@@ -102,21 +78,26 @@ object SatelliteNative {
 
     external fun isConnectionAlive(handle: Int): Boolean
 
-    // Packed int32: [31:16]=requestType, [15:8]=ctrlIdx, [7:0]=resultCode; -1 = no ACK.
-    external fun getLastControllerAck(handle: Int): Int
+    // Session epoch from the latest enriched heartbeat ack; -1 until one lands.
+    // Compared against the applied epoch from the last PUT/GET — mismatch means
+    // the server's topology moved involuntarily and a REST reconcile is due.
+    external fun getServerEpoch(handle: Int): Int
 
-    external fun resetControllerAck(handle: Int)
+    // Active-controller bitmap (bit i = ctrlIdx i live) from the latest ack; -1 until one lands.
+    external fun getActiveBitmap(handle: Int): Int
 
-    // Bits mirror satellite ACK_MOTION_FLAG_*: 0x01 = type supports IMU, 0x02 = sink created.
-    // -1 sentinel: no ACK seen, or pre-extension satellite (collapses to "unknown").
-    external fun getLastControllerMotionFlags(handle: Int): Int
+    // CLOSE_REASON_* from an authenticated session-close notify (0x000F); -1 = none.
+    // Terminal: the session is gone server-side the moment this is non-negative.
+    external fun getSessionCloseReason(handle: Int): Int
 
     external fun getVigemAvailable(handle: Int): Int
 
     external fun getActiveControllerCount(handle: Int): Int
 
-    // Non-blocking, 500ms timeout; call from background.
-    external fun receiveAck(handle: Int)
+    // Blocks ≤500ms (socket recv timeout); call from background. Returns
+    // 1 = datagram consumed, 0 = timeout/rejected datagram, -1 = session or
+    // socket dead (terminal — the caller's drain loop must stop).
+    external fun receiveAck(handle: Int): Int
 
     // BLOCKING — call on Dispatchers.IO. Returns JSON array of beacon objects.
     external fun discoverServers(
@@ -199,6 +180,12 @@ object SatelliteNative {
     ): String
 
     external fun getDeviceUrbCount(deviceId: Int): Long
+
+    // Direct-mode MSG_MOTION sends for a synthetic device (post 125 Hz throttle).
+    external fun getDeviceMotionCount(deviceId: Int): Long
+
+    // Framework KeyEvent/MotionEvent updates applied for a routed device (USB Standard or Bluetooth).
+    external fun getDeviceInputEventCount(deviceId: Int): Long
 
     // Flat parameter list (not packed) so each axis stays primitive Float — no per-event allocation.
     @Suppress("LongParameterList")

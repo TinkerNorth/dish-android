@@ -19,6 +19,8 @@ void detachDevice(int32_t syntheticDeviceId);
 
 uint64_t getUrbCount(int32_t deviceId);
 
+uint64_t getMotionCount(int32_t deviceId);
+
 void sendRumble(int32_t syntheticDeviceId, uint16_t strong, uint16_t weak);
 
 } // namespace usbhost

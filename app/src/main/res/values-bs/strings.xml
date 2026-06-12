@@ -73,11 +73,6 @@
     <string name="touchpad_mode_off">Isključeno</string>
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Miš</string>
-    <string name="touchpad_mode_unsupported_here">Ovaj prijemnik ne podržava ovaj režim.</string>
-    <string name="touchpad_mode_error_not_paired">Satelit ne prepoznaje ovaj uređaj — ponovo upari za primjenu.</string>
-    <string name="touchpad_mode_error_unauthorized">Satelit je odbio zahtjev — ponovo upari za primjenu.</string>
-    <string name="touchpad_mode_error_transport">Nije moguće doseći satelit — da li je pokrenut?</string>
-    <string name="touchpad_mode_error_unknown">Nije moguće postaviti režim dodirne ploče: %1$s</string>
 
     <!-- Tekst statusa slota u ControllerAdapter (ispod imena). -->
     <string name="slot_status_disconnecting">Prekidanje veze… %1$ds</string>
@@ -119,6 +114,8 @@
     <string name="overlay_connection_kind_bluetooth">Bluetooth</string>
     <string name="overlay_title_gamepad">Gamepad</string>
     <string name="overlay_title_touchpad">Dodirna ploča</string>
+    <string name="overlay_rate_touch">Dodir %1$s</string>
+    <string name="overlay_rate_motion">Pokret %1$s</string>
     <string name="touchpad_pad_click_label">Klik + Pomak</string>
     <string name="touchpad_pad_move_label">Pomak</string>
     <string name="touchpad_pad_click_hint">Povucite za klik i pomak</string>
@@ -327,6 +324,8 @@
     <string name="binding_edge_unsteady_detail">I dalje prosljeđuje, ali paketi se gube. Približite se ili pređite na USB.</string>
     <string name="binding_edge_action_reconnect">Ponovo poveži</string>
     <string name="binding_edge_action_dismiss">Odbaci</string>
+    <string name="binding_blocker_input_lost_body">Ponovo povežite kontroler da nastavite podešavanje ili zatvorite ovaj ekran.</string>
+    <string name="binding_apply_error_slot_gone">%1$s više nije dostupan — isključite ga i ponovo povežite, zatim pokušajte ponovo.</string>
     <string name="binding_apply_error_no_connect">Nije moguće dosegnuti %1$s. Provjerite je li uključen i na vašoj mreži, pa pokušajte ponovo.</string>
     <string name="binding_apply_warn_title">Brzi način nije dostupan</string>
     <string name="binding_apply_warn_detail">%1$s je povezan s %2$s u Standardnom načinu.</string>
@@ -347,6 +346,10 @@
     <string name="binding_state_on">Uključeno</string>
     <string name="binding_state_off">Isključeno</string>
     <string name="binding_func_value">%1$s · %2$s</string>
+
+    <string name="binding_rate_hz">%1$d Hz</string>
+    <string name="binding_rate_hz_peak">~%1$d Hz</string>
+    <string name="binding_rate_pending">…</string>
     <string name="binding_card_not_bound">Nije povezano</string>
     <string name="binding_card_no_functions">Nijedna</string>
     <string name="binding_action_configure">Podesi povezivanje</string>

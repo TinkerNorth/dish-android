@@ -10,11 +10,13 @@ import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
+import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
+import com.tinkernorth.dish.repository.SatelliteCatalogRepository
 import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.store.MotionEnabledStore
@@ -24,7 +26,6 @@ import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.source.usb.UsbPhase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -55,6 +56,17 @@ data class BindingSnapshot(
     val hasTouchpad: Boolean,
     val bound: Boolean,
     val directPollHz: Int,
+    // Used to re-resolve the slot after a USB path switch replaces the
+    // framework device with a synthetic twin (or vice versa).
+    val vendorId: Int = 0,
+    val productId: Int = 0,
+)
+
+// One "Emulate as" choice. Rendered from the satellite's catalog; `id` is the
+// wire enum value the descriptor carries.
+data class TypeOption(
+    val id: Int,
+    val label: String,
 )
 
 data class BindingDraft(
@@ -65,15 +77,48 @@ data class BindingDraft(
     val touchpadMode: String,
 )
 
+sealed interface BindingBlocker {
+    data object InputLost : BindingBlocker
+
+    data class HostLost(
+        val hostLabel: String,
+        val reconnecting: Boolean,
+    ) : BindingBlocker
+
+    data object HostUnsteady : BindingBlocker
+}
+
 data class ConfigUiState(
     val loaded: Boolean = false,
     val snapshot: BindingSnapshot? = null,
     val hosts: List<BindingHost> = emptyList(),
     val draft: BindingDraft? = null,
+    val typeOptions: List<TypeOption> = emptyList(),
+    val connections: List<ConnectionSummary> = emptyList(),
+    val knownHostLabels: Map<String, String> = emptyMap(),
+    val controllerPresent: Boolean = true,
+    val dismissedUnsteadyHostIds: Set<String> = emptySet(),
 ) {
     val selectedHost: BindingHost? get() = hosts.firstOrNull { it.id == draft?.hostId }
     val noHosts: Boolean get() = hosts.isEmpty()
     val hostChosen: Boolean get() = selectedHost != null
+
+    val blocker: BindingBlocker?
+        get() {
+            if (!loaded) return null
+            if (!controllerPresent) return BindingBlocker.InputLost
+            val hostId = draft?.hostId ?: return null
+            val summary = connections.firstOrNull { it.id == hostId }
+            return when {
+                summary == null || !summary.live.isLiveLink() ->
+                    BindingBlocker.HostLost(
+                        hostLabel = summary?.label ?: knownHostLabels[hostId].orEmpty(),
+                        reconnecting = summary?.live == LinkState.Connecting,
+                    )
+                summary.live == LinkState.Unstable && hostId !in dismissedUnsteadyHostIds -> BindingBlocker.HostUnsteady
+                else -> null
+            }
+        }
 
     // Motion only carries on a Satellite host emulating PlayStation (Xbox has no gyro sink,
     // Bluetooth no motion channel); touchpad only on Satellite; DS4 "Pad" is PlayStation-only.
@@ -116,6 +161,7 @@ sealed interface ApplyState {
 @HiltViewModel
 class ConfigureBindingsViewModel
     @Inject
+    @Suppress("LongParameterList")
     constructor(
         @ApplicationContext private val context: Context,
         private val hub: ConnectionCoordinator,
@@ -125,6 +171,7 @@ class ConfigureBindingsViewModel
         private val touchpadModeStore: TouchpadModeStore,
         private val satellite: SatelliteConnectionManager,
         private val usbGamepadManager: UsbGamepadManager,
+        private val catalogRepo: SatelliteCatalogRepository,
         private val native: PhysicalInputNative,
     ) : ViewModel() {
         private val _ui = MutableStateFlow(ConfigUiState())
@@ -140,14 +187,40 @@ class ConfigureBindingsViewModel
             loadedSlotId = slotId
             val snapshot = buildSnapshot(slotId)
             val hosts = buildHosts()
-            _ui.value = ConfigUiState(loaded = true, snapshot = snapshot, hosts = hosts, draft = buildSeedDraft(slotId))
+            val draft = buildSeedDraft(slotId)
+            val conns = hub.connections.value
+            _ui.value =
+                ConfigUiState(
+                    loaded = true,
+                    snapshot = snapshot,
+                    hosts = hosts,
+                    draft = draft,
+                    typeOptions = bundledTypeOptions(),
+                    connections = conns,
+                    knownHostLabels = conns.associate { it.id to it.label },
+                    controllerPresent = controllerPresent(snapshot),
+                )
+            draft.hostId?.let { refreshTypeOptions(it) }
             // Refresh the host list as connections come and go, without disturbing the in-progress draft.
             hub.connections
-                .onEach { _ui.update { state -> state.copy(hosts = buildHosts()) } }
+                .onEach { latest ->
+                    _ui.update { state ->
+                        state.copy(
+                            hosts = buildHosts(),
+                            connections = latest,
+                            knownHostLabels = state.knownHostLabels + latest.associate { it.id to it.label },
+                        )
+                    }
+                }.launchIn(viewModelScope)
+            gamepadRegistry.devices
+                .onEach { _ui.update { state -> state.copy(controllerPresent = controllerPresent(state.snapshot)) } }
                 .launchIn(viewModelScope)
         }
 
-        fun setHost(hostId: String) = _ui.update { it.copy(draft = it.draft?.copy(hostId = hostId)) }
+        fun setHost(hostId: String) {
+            _ui.update { it.copy(draft = it.draft?.copy(hostId = hostId)) }
+            refreshTypeOptions(hostId)
+        }
 
         fun setType(type: Int) =
             _ui.update { state ->
@@ -175,8 +248,34 @@ class ConfigureBindingsViewModel
             loadedSlotId?.let { hub.unbind(it) }
         }
 
-        // Nothing the user edits commits until here; Apply pushes each setting in turn so the overlay can
-        // show the sequence, and awaits the touchpad round-trip so a real satellite rejection surfaces.
+        fun reconnectHosts() {
+            hub.autoReconnectAll()
+        }
+
+        fun dismissUnsteady() =
+            _ui.update { state ->
+                val hostId = state.draft?.hostId ?: return@update state
+                state.copy(dismissedUnsteadyHostIds = state.dismissedUnsteadyHostIds + hostId)
+            }
+
+        private fun controllerPresent(snapshot: BindingSnapshot?): Boolean {
+            if (snapshot == null || snapshot.link == BindingLink.ONSCREEN) return true
+            val id = snapshot.slotId.toIntOrNull() ?: return true
+            val twins =
+                gamepadRegistry.devices.value.values.filter { device ->
+                    device.id == id ||
+                        (snapshot.vendorId != 0 && device.vendorId == snapshot.vendorId && device.productId == snapshot.productId)
+                }
+            return twins.any { !it.isDisconnecting }
+        }
+
+        /**
+         * Nothing the user edits commits until here. The whole binding is ONE
+         * declarative call to the satellite — the descriptor (type, caps,
+         * touchpad routing) travels with the bind, so the overlay shows one
+         * spinner per real async action: the USB-direct switch (which can wait
+         * on a system permission prompt) and the single REST round-trip.
+         */
         fun apply() {
             val state = _ui.value
             val snapshot = state.snapshot ?: return
@@ -194,11 +293,33 @@ class ConfigureBindingsViewModel
                 if (snapshot.link == BindingLink.USB && snapshot.directCapable) {
                     val achieved = applyUsbPath(snapshot.slotId, draft.directOn)
                     directFellBack = draft.directOn && !achieved
+                    done++
+                    _applyState.value = ApplyState.Running(steps, done)
                 }
-                done = advance(steps, done)
 
-                hub.bind(snapshot.slotId, hostId)
-                if (!awaitHostConnected(hostId)) {
+                val slotId = resolveCurrentSlotId(snapshot)
+
+                if (state.motionAvailable) {
+                    // Local gate; its capability bit rides the same descriptor.
+                    motionEnabledStore.setEnabled(slotId, draft.motionOn)
+                }
+                val mode = if (TouchpadModeValue.isValid(draft.touchpadMode)) draft.touchpadMode else TouchpadModeValue.OFF
+                if (state.touchpadAvailable) touchpadModeStore.setMode(hostId, mode)
+                val bound = hub.bind(slotId, hostId, draft.type, mode)
+                if (!bound) {
+                    _applyState.value =
+                        ApplyState.Finished(
+                            errorMessage = context.getString(R.string.binding_apply_error_slot_gone, snapshot.name),
+                            warningMessage = null,
+                            hostName = host.label,
+                            controllerName = snapshot.name,
+                        )
+                    return@launch
+                }
+                val applied = awaitApplied(host, slotId)
+                done++
+                _applyState.value = ApplyState.Running(steps, done)
+                if (!applied) {
                     _applyState.value =
                         ApplyState.Finished(
                             errorMessage = context.getString(R.string.binding_apply_error_no_connect, host.label),
@@ -207,32 +328,6 @@ class ConfigureBindingsViewModel
                             controllerName = snapshot.name,
                         )
                     return@launch
-                }
-                done = advance(steps, done)
-
-                if (host.kind == ConnectionKind.SATELLITE) {
-                    hub.setSatelliteControllerType(hostId, snapshot.slotId, draft.type)
-                }
-                done = advance(steps, done)
-
-                if (state.motionAvailable) {
-                    motionEnabledStore.setEnabled(snapshot.slotId, draft.motionOn)
-                    done = advance(steps, done)
-                }
-
-                if (state.touchpadAvailable) {
-                    val error = commitTouchpad(hostId, draft.touchpadMode)
-                    advance(steps, done, delayAfter = false)
-                    if (error != null) {
-                        _applyState.value =
-                            ApplyState.Finished(
-                                errorMessage = error,
-                                warningMessage = null,
-                                hostName = host.label,
-                                controllerName = snapshot.name,
-                            )
-                        return@launch
-                    }
                 }
 
                 val warningMessage =
@@ -251,26 +346,13 @@ class ConfigureBindingsViewModel
             }
         }
 
-        private suspend fun advance(
-            steps: List<ApplyStep>,
-            done: Int,
-            delayAfter: Boolean = true,
-        ): Int {
-            val next = done + 1
-            _applyState.value = ApplyState.Running(steps, next)
-            if (delayAfter) delay(STEP_DELAY_MS)
-            return next
-        }
-
         private fun buildSteps(state: ConfigUiState): List<ApplyStep> {
-            val out =
-                mutableListOf(
-                    ApplyStep(STEP_CONNECTION, context.getString(R.string.binding_label_connection)),
-                    ApplyStep(STEP_DESTINATION, context.getString(R.string.binding_label_destination)),
-                    ApplyStep(STEP_TYPE, context.getString(R.string.binding_label_emulate)),
-                )
-            if (state.motionAvailable) out += ApplyStep(STEP_MOTION, context.getString(R.string.binding_func_motion))
-            if (state.touchpadAvailable) out += ApplyStep(STEP_TOUCHPAD, context.getString(R.string.binding_func_touchpad))
+            val out = mutableListOf<ApplyStep>()
+            val snapshot = state.snapshot
+            if (snapshot?.link == BindingLink.USB && snapshot.directCapable) {
+                out += ApplyStep(STEP_DIRECT, context.getString(R.string.binding_label_connection))
+            }
+            out += ApplyStep(STEP_APPLY, context.getString(R.string.binding_label_destination))
             return out
         }
 
@@ -302,40 +384,80 @@ class ConfigureBindingsViewModel
             return settled?.get(key)?.phase == UsbPhase.Direct
         }
 
-        // Apply only records routing intent, so confirm the host reaches a live link before calling it a success.
-        private suspend fun awaitHostConnected(hostId: String): Boolean =
-            withTimeoutOrNull(CONNECT_TIMEOUT_MS) {
-                hub.connections.first { conns ->
-                    val live = conns.firstOrNull { it.id == hostId }?.live
-                    live == LinkState.Connected || live == LinkState.Unstable
+        // A USB path switch can retire the slot id the screen was opened with:
+        // Direct replaces the framework id with a synthetic twin; Standard
+        // re-enumerates the framework id. Prefer whichever exists right now.
+        private fun resolveCurrentSlotId(snapshot: BindingSnapshot): String {
+            val original = snapshot.slotId.toIntOrNull() ?: return snapshot.slotId
+            if (gamepadRegistry.devices.value.containsKey(original)) return snapshot.slotId
+            if (snapshot.vendorId == 0 && snapshot.productId == 0) return snapshot.slotId
+            val twin =
+                gamepadRegistry.devices.value.values.firstOrNull {
+                    it.vendorId == snapshot.vendorId && it.productId == snapshot.productId
                 }
-                true
-            } ?: false
-
-        private suspend fun commitTouchpad(
-            connectionId: String,
-            mode: String,
-        ): String? {
-            if (!TouchpadModeValue.isValid(mode)) return null
-            touchpadModeStore.setMode(connectionId, mode)
-            val reply = satellite.setTouchpadMode(connectionId, mode)
-            if (reply.contains("\"ok\":true")) return null
-            return touchpadErrorMessage(reply)
+            return twin?.id?.toString() ?: snapshot.slotId
         }
 
-        private fun touchpadErrorMessage(reply: String): String {
-            val err = extractJsonErrorField(reply)
-            return when {
-                reply.contains("\"supported\":false") ->
-                    context.getString(R.string.touchpad_mode_unsupported_here)
-                err == "device not paired" ->
-                    context.getString(R.string.touchpad_mode_error_not_paired)
-                err == "unauthorized" ->
-                    context.getString(R.string.touchpad_mode_error_unauthorized)
-                err?.startsWith("request failed:") == true ->
-                    context.getString(R.string.touchpad_mode_error_transport)
-                else ->
-                    context.getString(R.string.touchpad_mode_error_unknown, err ?: reply)
+        /**
+         * The bind's REST round-trip, observed: a satellite host is applied
+         * once the slot's descriptor is confirmed (`registered`); a Bluetooth
+         * host once the link is live. Times out into the error overlay rather
+         * than spinning forever.
+         */
+        private suspend fun awaitApplied(
+            host: BindingHost,
+            slotId: String,
+        ): Boolean {
+            val hostUp =
+                withTimeoutOrNull(CONNECT_TIMEOUT_MS) {
+                    hub.connections.first { conns ->
+                        val live = conns.firstOrNull { it.id == host.id }?.live
+                        live == LinkState.Connected || live == LinkState.Unstable
+                    }
+                    true
+                } ?: false
+            if (!hostUp) return false
+            if (host.kind != ConnectionKind.SATELLITE) return true
+            val conn = satellite.get(host.id) ?: return false
+            return withTimeoutOrNull(APPLY_TIMEOUT_MS) {
+                conn.slots.first { it[slotId]?.registered == true }
+                true
+            } ?: false
+        }
+
+        // Bundled fallback when no catalog has ever been fetched (offline
+        // first-run): the two types this app ships art for.
+        private fun bundledTypeOptions(): List<TypeOption> =
+            listOf(
+                TypeOption(CONTROLLER_TYPE_PLAYSTATION, context.getString(R.string.picker_type_playstation)),
+                TypeOption(CONTROLLER_TYPE_XBOX, context.getString(R.string.picker_type_xbox)),
+            )
+
+        private fun refreshTypeOptions(hostId: String) {
+            val conn = satellite.get(hostId)
+            if (conn == null) {
+                _ui.update { it.copy(typeOptions = bundledTypeOptions()) }
+                return
+            }
+            catalogRepo.cached(hostId)?.let { cached ->
+                _ui.update { state -> state.copy(typeOptions = typeOptionsFrom(cached.controllerTypes)) }
+            }
+            viewModelScope.launch {
+                val catalog = catalogRepo.catalogFor(conn.server.value, hostId) ?: return@launch
+                _ui.update { state -> state.copy(typeOptions = typeOptionsFrom(catalog.controllerTypes)) }
+            }
+        }
+
+        private fun typeOptionsFrom(types: List<com.tinkernorth.dish.core.model.CatalogTypeDto>): List<TypeOption> {
+            if (types.isEmpty()) return bundledTypeOptions()
+            return types.map { t ->
+                val bundled =
+                    when (t.slug) {
+                        SLUG_XBOX360 -> context.getString(R.string.picker_type_xbox)
+                        SLUG_DS4 -> context.getString(R.string.picker_type_playstation)
+                        else -> null
+                    }
+                TypeOption(t.id, bundled ?: t.name.ifBlank { t.slug })
             }
         }
 
@@ -370,6 +492,8 @@ class ConfigureBindingsViewModel
                 hasTouchpad = false,
                 bound = bound,
                 directPollHz = device?.pollRateHz ?: 0,
+                vendorId = vid,
+                productId = pid,
             )
         }
 
@@ -392,13 +516,12 @@ class ConfigureBindingsViewModel
         }
 
         private companion object {
-            const val STEP_DELAY_MS = 360L
             const val DIRECT_TIMEOUT_MS = 20_000L
             const val CONNECT_TIMEOUT_MS = 8_000L
-            const val STEP_CONNECTION = "connection"
-            const val STEP_DESTINATION = "destination"
-            const val STEP_TYPE = "type"
-            const val STEP_MOTION = "motion"
-            const val STEP_TOUCHPAD = "touchpad"
+            const val APPLY_TIMEOUT_MS = 8_000L
+            const val STEP_DIRECT = "direct"
+            const val STEP_APPLY = "apply"
+            const val SLUG_XBOX360 = "xbox360"
+            const val SLUG_DS4 = "ds4"
         }
     }

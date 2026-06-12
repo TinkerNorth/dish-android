@@ -17,6 +17,7 @@ import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
@@ -391,9 +392,8 @@ class UsbGamepadManager
             type: Int?,
         ) {
             connId ?: return
-            val hub = connectionHubProvider.get()
-            hub.bind(deviceId.toString(), connId)
-            type?.let { hub.setSatelliteControllerType(connId, deviceId.toString(), it) }
+            // A restored binding re-registers as its remembered type; Xbox only when there was never a choice.
+            connectionHubProvider.get().bind(deviceId.toString(), connId, type ?: CONTROLLER_TYPE_XBOX)
         }
 
         private fun notify(
