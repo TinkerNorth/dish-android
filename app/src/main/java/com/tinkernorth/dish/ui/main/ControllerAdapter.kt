@@ -4,12 +4,17 @@ package com.tinkernorth.dish.ui.main
 
 import android.content.Context
 import android.content.res.ColorStateList
+import android.graphics.drawable.Animatable
+import android.graphics.drawable.Drawable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.annotation.DimenRes
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -171,6 +176,7 @@ class ControllerAdapter(
                 if (isVirtual) R.drawable.ic_gamepad_virtual else R.drawable.ic_gamepad,
             )
             b.tvControllerName.text = slot.name
+            bindBattery(slot.battery)
 
             val edge = edgeOf(slot)
             if (edge != EdgeState.UNSTEADY) dismissedUnsteady.remove(slot.id)
@@ -333,6 +339,60 @@ class ControllerAdapter(
             nameRes: Int,
             valueRes: Int,
         ): String = ctx.getString(R.string.binding_func_value, ctx.getString(nameRes), ctx.getString(valueRes))
+
+        private fun bindBattery(battery: BatteryUi?) {
+            if (battery == null) {
+                b.tvBattery.visibility = View.GONE
+                return
+            }
+            b.tvBattery.visibility = View.VISIBLE
+            val glyph = setStartCompoundDrawable(b.tvBattery, batteryIcon(battery), R.dimen.icon_battery)
+            (glyph as? Animatable)?.start()
+            b.tvBattery.text =
+                battery.level?.let { ctx.getString(R.string.battery_percent, it) }
+                    ?: ctx.getString(R.string.battery_unknown_level)
+            val colorRes = if (battery.isLow) R.color.colorError else R.color.colorMuted
+            b.tvBattery.setTextColor(ctx.getColor(colorRes))
+            b.tvBattery.contentDescription = batteryDescription(battery)
+        }
+
+        private fun batteryIcon(battery: BatteryUi): Int {
+            if (battery.charging) return R.drawable.ic_battery_charging
+            val level = battery.level ?: return R.drawable.ic_battery
+            return when {
+                level <= 0 -> R.drawable.ic_battery_empty
+                level >= BATTERY_FULL_FLOOR -> R.drawable.ic_battery_full
+                level >= BATTERY_HIGH_FLOOR -> R.drawable.ic_battery_high
+                level >= BATTERY_MID_FLOOR -> R.drawable.ic_battery_mid
+                level >= BatteryUi.LOW_THRESHOLD -> R.drawable.ic_battery_low
+                else -> R.drawable.ic_battery_critical
+            }
+        }
+
+        private fun batteryDescription(battery: BatteryUi): String {
+            val levelText =
+                battery.level?.let { ctx.getString(R.string.battery_percent, it) }
+                    ?: ctx.getString(R.string.battery_desc_level_unknown)
+            val stateRes =
+                when {
+                    battery.isLow -> R.string.battery_state_low
+                    battery.charging -> R.string.battery_state_charging
+                    else -> R.string.battery_state_discharging
+                }
+            return ctx.getString(R.string.battery_desc, levelText, ctx.getString(stateRes))
+        }
+
+        private fun setStartCompoundDrawable(
+            tv: TextView,
+            @DrawableRes resId: Int,
+            @DimenRes sizeDimen: Int,
+        ): Drawable? {
+            val drawable = AppCompatResources.getDrawable(tv.context, resId) ?: return null
+            val size = tv.resources.getDimensionPixelSize(sizeDimen)
+            drawable.setBounds(0, 0, size, size)
+            tv.setCompoundDrawablesRelative(drawable, null, null, null)
+            return drawable
+        }
 
         // The measurement line exists exactly on bound cards and always renders every pill the
         // slot can have (value, pending, or Off), so a bound card's height never changes as
@@ -629,6 +689,10 @@ class ControllerAdapter(
 }
 
 private const val MAX_FILLED_ACTIONS = 2
+
+private const val BATTERY_FULL_FLOOR = 90
+private const val BATTERY_HIGH_FLOOR = 60
+private const val BATTERY_MID_FLOOR = 35
 
 private class PillPool(
     private val container: LinearLayout,

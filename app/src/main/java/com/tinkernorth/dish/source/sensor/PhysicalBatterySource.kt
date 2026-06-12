@@ -12,18 +12,19 @@ import android.view.InputDevice
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
-import com.tinkernorth.dish.composer.ConnectionCoordinator
-import com.tinkernorth.dish.composer.PhysicalReachability
+import com.tinkernorth.dish.composer.PhysicalReachabilityComposer
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
+import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.connection.SatelliteConnection
-import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -36,8 +37,7 @@ class PhysicalBatterySource
     constructor(
         @ApplicationContext private val context: Context,
         private val registry: PhysicalGamepadRegistry,
-        private val hub: ConnectionCoordinator,
-        private val satellite: SatelliteConnectionManager,
+        private val reachability: PhysicalReachabilityComposer,
         private val statusStore: BatteryStatusStore,
         private val scope: CoroutineScope,
     ) : DefaultLifecycleObserver {
@@ -47,25 +47,29 @@ class PhysicalBatterySource
 
         private val validator = BatteryValidator()
 
-        private var bindingsJob: Job? = null
+        private var reachableJob: Job? = null
+        private var devicesJob: Job? = null
         private var pollJob: Job? = null
 
         private var chargingReceiver: BroadcastReceiver? = null
 
         @Volatile private var reachable: Map<String, SatelliteConnection> = emptyMap()
 
+        @Volatile private var deviceKeys: Set<String> = emptySet()
+
         @Volatile private var lastChargingStatus: Int? = null
 
         override fun onStart(owner: LifecycleOwner) {
-            if (bindingsJob != null) return
-            bindingsJob =
-                PhysicalReachability
-                    .reachableSlots(
-                        registry.devices,
-                        hub.bindings,
-                        hub.connections,
-                        satellite.connections,
-                    ).onEach(::onReachableChanged)
+            if (reachableJob != null) return
+            reachableJob =
+                reachability.state
+                    .onEach(::onReachableChanged)
+                    .launchIn(scope)
+            devicesJob =
+                registry.devices
+                    .map { devs -> devs.mapValues { (_, d) -> d.transport } }
+                    .distinctUntilChanged()
+                    .onEach(::onDevicesChanged)
                     .launchIn(scope)
             pollJob =
                 scope.launch {
@@ -78,14 +82,17 @@ class PhysicalBatterySource
         }
 
         override fun onStop(owner: LifecycleOwner) {
-            bindingsJob?.cancel()
-            bindingsJob = null
+            reachableJob?.cancel()
+            reachableJob = null
+            devicesJob?.cancel()
+            devicesJob = null
             pollJob?.cancel()
             pollJob = null
             chargingReceiver?.let { runCatching { context.unregisterReceiver(it) } }
             chargingReceiver = null
             lastChargingStatus = null
-            reachable.keys.forEach(statusStore::clear)
+            deviceKeys.forEach(statusStore::clear)
+            deviceKeys = emptySet()
             reachable = emptyMap()
         }
 
@@ -113,27 +120,40 @@ class PhysicalBatterySource
         }
 
         private fun onReachableChanged(next: Map<String, SatelliteConnection>) {
-            (reachable.keys - next.keys).forEach(statusStore::clear)
             reachable = next
             // Hop off the flow-collector thread; pollOnce is synchronous.
             scope.launch { pollOnce() }
         }
 
+        private fun onDevicesChanged(next: Map<Int, Transport>) {
+            val keys = next.keys.mapTo(mutableSetOf(), Int::toString)
+            (deviceKeys - keys).forEach(statusStore::clear)
+            deviceKeys = keys
+            scope.launch { pollOnce() }
+        }
+
         private fun pollOnce() {
-            for ((slotId, conn) in reachable) {
-                val deviceId = slotId.toIntOrNull() ?: continue
-                val sample = sampleForDevice(deviceId)
-                validator.publish(sample) { s ->
-                    statusStore.put(slotId, s)
+            val phone = phoneBattery.readBattery()
+            for ((deviceId, device) in registry.devices.value) {
+                val slotId = deviceId.toString()
+                val routed = BatteryRouting.route(device.transport, controllerSample(deviceId), phone)
+                publishDisplay(slotId, routed.display)
+                val conn = reachable[slotId] ?: continue
+                validator.publish(routed.wire) { s ->
                     conn.sendBattery(slotId, s.level, s.status)
                 }
             }
         }
 
-        private fun sampleForDevice(deviceId: Int): BatterySample {
-            controllerSample(deviceId)?.let { return it }
-            return phoneBattery.readBattery()
-                ?: BatterySample(BatteryValidator.LEVEL_UNKNOWN, BatteryValidator.STATUS_UNKNOWN)
+        private fun publishDisplay(
+            slotId: String,
+            sample: BatterySample?,
+        ) {
+            if (sample == null) {
+                statusStore.clear(slotId)
+                return
+            }
+            validator.publish(sample) { s -> statusStore.put(slotId, s) }
         }
 
         private fun controllerSample(deviceId: Int): BatterySample? {
