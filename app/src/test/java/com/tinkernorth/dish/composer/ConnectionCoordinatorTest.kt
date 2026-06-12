@@ -438,8 +438,6 @@ class ConnectionCoordinatorTest {
 
         val summary = hub.connections.value.first { it.id == "s:1" }
         assertEquals(CONTROLLER_TYPE_PLAYSTATION, summary.satelliteControllerTypes["slot-A"])
-        // The connection sees the FINAL type at declare time — no Xbox-default
-        // phase a follow-up message has to correct.
         verify { satConn.declareSlot("slot-A", CONTROLLER_TYPE_PLAYSTATION, any()) }
     }
 

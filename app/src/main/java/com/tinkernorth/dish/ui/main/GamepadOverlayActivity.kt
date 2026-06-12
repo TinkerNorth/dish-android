@@ -82,10 +82,8 @@ class GamepadOverlayActivity :
         // Supplier re-reads live rotation on each start(); landscape may resolve to ROTATION_90 or ROTATION_270.
         motionSource = PhoneMotionSource(sensorManager, rotationSupplier = ::currentRotation)
         batterySource = PhoneBatterySource(applicationContext)
-        // Surface initial indicator state before the lifecycle collector starts (only runs while STARTED).
         repaintFrom(currentMotionPaint())
 
-        // Single combine so gate + indicator paint read from one snapshot per emission.
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 try {
@@ -170,8 +168,7 @@ class GamepadOverlayActivity :
         )
 
     // Start/stop the IMU listener so the sensor never runs while the slot is
-    // ineligible for motion; lives in the combine collector so the gate and
-    // the indicator paint share one snapshot.
+    // ineligible for motion.
     private fun applyMotionGate(capability: MotionCapability) {
         val effective = capability.effective
         if (effective && !motionSource.isStreaming) {

@@ -325,7 +325,6 @@ class SatelliteConnection(
         return _slots.value.containsKey(toSlotId)
     }
 
-    /** Full desired descriptor for [slotId]; null when the slot is unknown. */
     internal fun descriptorFor(slotId: String): ControllerDescriptor? {
         val binding = _slots.value[slotId] ?: return null
         return ControllerDescriptor(
@@ -336,7 +335,6 @@ class SatelliteConnection(
         )
     }
 
-    /** The complete desired set, in slot order — the session PUT body. */
     internal fun desiredDescriptors(): List<ControllerDescriptor> = _slots.value.keys.mapNotNull { descriptorFor(it) }
 
     internal fun slotIdForIndex(ctrlIdx: Int): String? =
@@ -347,10 +345,8 @@ class SatelliteConnection(
     internal fun wantsMouseControl(): Boolean = _slots.value.values.any { it.touchpadMode == ControllerDescriptor.TOUCHPAD_MODE_MOUSE }
 
     /**
-     * Fold per-controller apply results back into the slots: `registered`
-     * becomes the satellite's confirmation, and the motion flags feed the
-     * status store. Failures are surfaced through [onApplyFailures], never
-     * swallowed — input would silently drop otherwise.
+     * Failures surface through [onApplyFailures], never swallowed: input
+     * would silently drop otherwise.
      */
     internal fun applyResults(
         results: List<ControllerApplyDto>,
@@ -387,7 +383,6 @@ class SatelliteConnection(
         if (failures.isNotEmpty()) onApplyFailures(failures)
     }
 
-    /** Applied-vs-desired comparison for the reconcile GET. */
     internal fun matchesAppliedView(view: SessionViewDto): Boolean {
         val desired =
             _slots.value.values.associate { it.controllerIndex to it.controllerType }

@@ -289,9 +289,6 @@ class ConfigureBindingsViewModel
                 var done = 0
                 _applyState.value = ApplyState.Running(steps, done)
 
-                // Step 1 (USB only): switch the input path. Direct shows a
-                // system permission prompt, so this single step can take as
-                // long as the user takes to answer it.
                 var directFellBack = false
                 if (snapshot.link == BindingLink.USB && snapshot.directCapable) {
                     val achieved = applyUsbPath(snapshot.slotId, draft.directOn)
@@ -300,13 +297,8 @@ class ConfigureBindingsViewModel
                     _applyState.value = ApplyState.Running(steps, done)
                 }
 
-                // The path switch may have swapped the framework device for a
-                // synthetic twin (or back); bind whatever id is live NOW.
                 val slotId = resolveCurrentSlotId(snapshot)
 
-                // Step 2: the binding itself — bind with the FULL descriptor,
-                // then await the satellite's applied confirmation (the session
-                // or controller PUT round-trip). One user action, one call.
                 if (state.motionAvailable) {
                     // Local gate; its capability bit rides the same descriptor.
                     motionEnabledStore.setEnabled(slotId, draft.motionOn)
@@ -354,8 +346,6 @@ class ConfigureBindingsViewModel
             }
         }
 
-        // One spinner per async action: the USB path switch (waits on the
-        // permission prompt), then the single satellite round-trip.
         private fun buildSteps(state: ConfigUiState): List<ApplyStep> {
             val out = mutableListOf<ApplyStep>()
             val snapshot = state.snapshot
@@ -443,10 +433,6 @@ class ConfigureBindingsViewModel
                 TypeOption(CONTROLLER_TYPE_XBOX, context.getString(R.string.picker_type_xbox)),
             )
 
-        // The "Emulate" picker renders from the satellite's catalog. Known
-        // slugs keep the bundled labels (native feel); an UNKNOWN slug still
-        // renders from the server-provided name — a type newer than this app
-        // is offered, never blank, never an error.
         private fun refreshTypeOptions(hostId: String) {
             val conn = satellite.get(hostId)
             if (conn == null) {

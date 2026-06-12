@@ -387,9 +387,6 @@ class ConfigureBindingsActivity : AppCompatActivity() {
         pm.show()
     }
 
-    // Rendered from the satellite's catalog: bundled labels override the slugs
-    // this app recognizes; a controller type newer than the app still shows,
-    // server-named — never a blank row, never an error.
     private fun showTypeMenu(anchor: View) {
         val pm = PopupMenu(this, anchor)
         viewModel.ui.value.typeOptions.forEachIndexed { order, option ->

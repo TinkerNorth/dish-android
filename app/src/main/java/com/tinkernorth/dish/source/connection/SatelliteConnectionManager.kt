@@ -273,7 +273,6 @@ class SatelliteConnectionManager
                 }
                 return
             }
-            // Success path: any prior Stale marker no longer applies.
             clearStale(id)
             store.setSatelliteSharedKey(id, pair.sharedKey)
             openSession(conn, server, intent)
@@ -411,7 +410,6 @@ class SatelliteConnectionManager
             job.invokeOnCompletion { approvalPollJobs.remove(id, job) }
         }
 
-        // Cancels and deregisters an in-flight Path-B approval poll for [id], if any.
         private fun cancelApprovalPoll(id: String) {
             approvalPollJobs.remove(id)?.cancel()
         }
@@ -519,8 +517,6 @@ class SatelliteConnectionManager
             }
             controllerRepo.setConnectionParams(handle, token, sessionKey)
             store.rememberSatellite(server)
-            // Successful session: any Stale marker we set on the way here no
-            // longer applies, and the chip flips Live → Online.
             clearStale(id)
             retryAttempts.remove(id)
             conn.markConnected(
@@ -530,8 +526,6 @@ class SatelliteConnectionManager
                 resp.controllers,
                 mouseControlGranted = resp.hostFeatures.mouseControl.granted,
                 onDead = {
-                    // Silent auto-retry with exponential backoff — the row chip
-                    // handles the user-visible narrative.
                     disconnect(conn.id)
                     scheduleRetry(conn, server, ConnectIntent.RETRY_AFTER_DEATH)
                 },
@@ -760,8 +754,6 @@ class SatelliteConnectionManager
             if (retry) scheduleRetry(conn, server, intent)
         }
 
-        // Errors surface only for "I asked for this"; on the silent intents the
-        // row chip carries the feedback and a banner would be unsolicited noise.
         private suspend fun emitErrorIfUserInitiated(
             intent: ConnectIntent,
             message: String,

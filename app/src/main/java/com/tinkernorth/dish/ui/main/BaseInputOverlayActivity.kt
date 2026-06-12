@@ -81,7 +81,6 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
 
     protected abstract fun resendOneIfReady()
 
-    /** Pacing gate for [resendOneIfReady] implementations — see [ResendPacer]. */
     protected fun resendDue(changed: Boolean): Boolean = resendPacer.resendDue(changed)
 
     protected open fun onConnectionSummaryChanged(summary: ConnectionSummary?) = Unit
@@ -134,7 +133,6 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
             }
         }
 
-        // Deadline-paced on the dedicated URGENT_AUDIO thread; main-thread vsync+touch dispatch would jitter the burst ticks.
         lifecycleScope.launch(resendDispatcher) {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 runResendLoop()
@@ -187,14 +185,10 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
         }
     }
 
-    // Renders the slot's measured rates from InputRateStore as an unobtrusive readout (toolbar
-    // subtitle). The store is the single source of truth: it owns the trackers and the
-    // low-power freeze, so the readout survives activity recreation and re-entry shows the
-    // last measurements instead of starting over. The readout is always populated: a metric
-    // shows a pending glyph until its first measurement and Off while it cannot compute.
-    // motionOn gates the motion line: the source may stream while motion is user-facing off
-    // (no host sink for the emulated type), and the readout must agree with the motion
-    // indicator, not with the raw sample flow; null means the screen has no motion line.
+    // The store owns the trackers and the low-power freeze, so the readout survives activity
+    // recreation and re-entry shows the last measurements. motionOn gates the motion line:
+    // the source may stream while motion is user-facing off, and the readout must agree with
+    // the motion indicator, not the raw sample flow; null means the screen has no motion line.
     protected fun installRateReadout(
         slotId: String,
         motionOn: Flow<Boolean>?,

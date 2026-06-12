@@ -189,8 +189,6 @@ class SatelliteConnectionTest {
         assertEquals(false, conn.slots.value["slot-1"]?.registered)
     }
 
-    // ── Descriptor model: the type travels WHOLE with the declaration ────────
-
     @Test
     fun `attachSlot records the full descriptor without any default-type phase`() {
         conn.attachSlot("slot-1", controllerType = 1, touchpadMode = "ds4")
@@ -213,7 +211,6 @@ class SatelliteConnectionTest {
         val descriptors = perSlot.desiredDescriptors().associateBy { it.ctrlIdx }
         assertTrue((descriptors[0]!!.caps and ControllerDescriptor.CAP_MOTION) != 0)
         assertTrue((descriptors[1]!!.caps and ControllerDescriptor.CAP_MOTION) == 0)
-        // Base caps always present.
         assertTrue((descriptors[1]!!.caps and ControllerDescriptor.CAP_RUMBLE) != 0)
         assertTrue((descriptors[1]!!.caps and ControllerDescriptor.CAP_ANALOG_TRIGGERS) != 0)
         // Lightbar never advertised (no controller-LED API on Android).
@@ -286,7 +283,6 @@ class SatelliteConnectionTest {
         conn.declareSlot("slot-1", controllerType = 1, touchpadMode = "ds4")
         assertEquals(1, conn.slots.value["slot-1"]?.controllerType)
         assertEquals("ds4", conn.slots.value["slot-1"]?.touchpadMode)
-        // Still one slot, same index.
         assertEquals(1, conn.slots.value.size)
         assertEquals(0, conn.slots.value["slot-1"]?.controllerIndex)
     }
@@ -308,8 +304,6 @@ class SatelliteConnectionTest {
         conn.detachSlot("ghost")
         assertTrue(slotRemovals.isEmpty())
     }
-
-    // ── Applied results ──────────────────────────────────────────────────────
 
     @Test
     fun `applyResults flips registered and feeds the motion backend store`() {
@@ -354,10 +348,7 @@ class SatelliteConnectionTest {
             onApplyFailures = { surfaced = it },
         )
 
-        // The slot stays live — killing a working pad over a type the driver
-        // couldn't switch would be worse than the wrong shell.
         assertEquals(true, conn.slots.value["slot-1"]?.registered)
-        // The failure still surfaces so the user knows the switch didn't land.
         assertEquals(ControllerApplyDto.APPLY_REPLUG_FAILED, surfaced?.single()?.result)
     }
 
@@ -397,8 +388,6 @@ class SatelliteConnectionTest {
 
         verify(exactly = 0) { repo.sendReport(any(), eq(99), any(), any(), any(), any(), any(), any(), any()) }
     }
-
-    // ── Slot index allocation / rename (unchanged semantics) ────────────────
 
     @Test
     fun `attaching a second slot allocates a fresh controller index`() {
@@ -453,8 +442,6 @@ class SatelliteConnectionTest {
         assertFalse(conn.slots.value.containsKey("new"))
     }
 
-    // ── refreshCapsIfChanged: descriptor re-sync, not a bespoke message ──────
-
     @Test
     fun `refreshCapsIfChanged requests a sync when the capability lambda moved`() {
         every { repo.isConnectionAlive(any()) } returns true
@@ -496,8 +483,6 @@ class SatelliteConnectionTest {
         pending.refreshCapsIfChanged() // idle → no sync
         assertTrue(slotSyncs.isEmpty())
     }
-
-    // ── Reconcile + close-notify (the heartbeat-ack loop) ────────────────────
 
     @Test
     fun `epoch mismatch in the heartbeat ack triggers a reconcile`() =
@@ -587,8 +572,6 @@ class SatelliteConnectionTest {
             assertTrue(died)
         }
 
-    // ── matchesAppliedView (the reconcile comparison) ────────────────────────
-
     @Test
     fun `matchesAppliedView is true when applied set equals desired set`() {
         conn.attachSlot("slot-A", controllerType = 1)
@@ -650,8 +633,6 @@ class SatelliteConnectionTest {
         conn.markDisconnected()
         assertFalse(conn.mouseControlGranted)
     }
-
-    // ── Misc state machine guards (unchanged semantics) ──────────────────────
 
     @Test
     fun `markConnected from IDLE is rejected and leaves state IDLE`() {

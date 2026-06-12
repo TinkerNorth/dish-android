@@ -392,9 +392,7 @@ class UsbGamepadManager
             type: Int?,
         ) {
             connId ?: return
-            // The type travels WITH the bind: a restored binding re-registers as
-            // its remembered type on the first try, never as a default that a
-            // follow-up corrects.
+            // A restored binding re-registers as its remembered type; Xbox only when there was never a choice.
             connectionHubProvider.get().bind(deviceId.toString(), connId, type ?: CONTROLLER_TYPE_XBOX)
         }
 

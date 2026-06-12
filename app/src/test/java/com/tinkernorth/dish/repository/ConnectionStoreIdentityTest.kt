@@ -8,10 +8,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-// Identity is machineId-only (satellite docs/contract.md §Identity): remember
-// is an upsert keyed on the stable id, and the upsert itself collapses any
-// legacy ip:port row (key carried forward) — there is no separate
-// reconciliation pass, and one physical box can never become two rows.
 class ConnectionStoreIdentityTest {
     private val json = Json { ignoreUnknownKeys = true }
 

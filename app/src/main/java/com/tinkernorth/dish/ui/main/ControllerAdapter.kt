@@ -411,9 +411,7 @@ class ControllerAdapter(
         // Direct streams reports continuously, so the live window is the measurement; routed
         // paths (USB Standard, Bluetooth) and touch only deliver events while the user is
         // pressing, so their peak window approximates the delivery rate and is shown with "~".
-        // The icons carry the metric distinction; Direct's measured rates render in the success
-        // tone to set them apart from the routed approximations. A pending glyph shows until a
-        // metric's first measurement and Off while it cannot compute.
+        // Direct's measured rates render in the success tone to set them apart.
         private fun rateSpecs(row: Row): List<PillSpec> {
             val direct = row.pathCard?.currentMode == InputPathMode.Direct
             val measuredTone = if (direct) PillTone.SUCCESS else PillTone.FACT
@@ -424,8 +422,6 @@ class ControllerAdapter(
             return specs
         }
 
-        // The value is the device-wide touch measurement: there is one screen, so every slot
-        // that can use it shows the same speed.
         private fun screenRatePill(row: Row): PillSpec {
             val computes =
                 screenRateUserFacingOn(
