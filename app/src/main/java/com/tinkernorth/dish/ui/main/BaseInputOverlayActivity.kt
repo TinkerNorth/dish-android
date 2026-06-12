@@ -315,7 +315,7 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
         const val EXTRA_CONNECTION_ID = "extra_connection_id"
 
         // Tick = the resend SCHEDULER granularity (burst spacing + worst-case
-        // single-loss heal time), not a send rate — real input is event-driven
+        // single-loss heal time), not a send rate. Real input is event-driven
         // at the full touch sampling rate and never waits on this clock.
         const val RESEND_INTERVAL_MS_DEFAULT = 50L
         const val RESEND_INTERVAL_NS_DEFAULT = RESEND_INTERVAL_MS_DEFAULT * 1_000_000L

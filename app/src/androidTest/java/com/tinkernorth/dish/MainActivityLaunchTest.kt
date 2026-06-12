@@ -17,7 +17,7 @@ class MainActivityLaunchTest {
             scenario.moveToState(Lifecycle.State.RESUMED)
             scenario.onActivity { activity ->
                 check(!activity.isFinishing) {
-                    "MainActivity finished itself during launch — likely native fallback or crash."
+                    "MainActivity finished itself during launch: likely native fallback or crash."
                 }
             }
         }

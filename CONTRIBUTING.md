@@ -33,7 +33,7 @@ Every source file (`*.kt`, `*.cpp`, `*.h`) starts with:
 ```
 
 New files must include both lines. Don't introduce code under a different
-license — the project is LGPL-3.0-or-later end-to-end (`LICENSE`,
+license: the project is LGPL-3.0-or-later end-to-end (`LICENSE`,
 `COPYING.GPL3`, source headers).
 
 ## Style
@@ -41,17 +41,17 @@ license — the project is LGPL-3.0-or-later end-to-end (`LICENSE`,
 ### Kotlin
 
 - 4-space indent, ~120-column soft limit. `ktlint` and `detekt` are
-  authoritative — run `./gradlew ktlintFormat` to autofix and
+  authoritative: run `./gradlew ktlintFormat` to autofix and
   `./gradlew detekt` to lint.
 - `MainViewModel` exposes a single immutable `MainUiState` via a
-  `StateFlow`. Don't introduce competing sources of truth — every UI-bound
+  `StateFlow`. Don't introduce competing sources of truth: every UI-bound
   field belongs in `MainUiState`.
 - Coroutines for async, `kotlinx.serialization` for JSON, Hilt for DI.
 
 ### JNI / C++
 
 - C++17, four-space indent, 100-column soft limit. The same `.clang-format`
-  ships with `satellite`, `dish-linux`, and this repo — run
+  ships with `satellite`, `dish-linux`, and this repo. Run
   `clang-format -i app/src/main/cpp/*.{cpp,h}` if you're unsure.
 - The JNI is the **hot path**. No allocations per packet, no JNI calls
   from the input thread other than `sendReport`, no logging on the
@@ -59,7 +59,7 @@ license — the project is LGPL-3.0-or-later end-to-end (`LICENSE`,
 
 ## Branching & PRs
 
-- All changes land on `main` via pull request — no direct pushes.
+- All changes land on `main` via pull request: no direct pushes.
 - Use the PR template (`.github/pull_request_template.md`) to describe
   the change, the manual test matrix you ran (real device + emulator),
   and call out anything that touches the wire protocol.
@@ -79,7 +79,7 @@ Security gates (also blocking):
 - `security.yml`: action-pin lint, vulnerability allowlist expiry,
   OSV-Scanner, gitleaks secret scan, GitHub `dependency-review-action`
   (consumes the Gradle dependency graph), and the OWASP Dependency-Check
-  Gradle plugin (`./gradlew dependencyCheckAnalyze` — fails on
+  Gradle plugin (`./gradlew dependencyCheckAnalyze`: fails on
   CVSS >= 7.0).
 - `codeql.yml`: CodeQL `java-kotlin` and `cpp` analysis
   (security-extended + security-and-quality query packs).
@@ -105,7 +105,7 @@ using the [official suppression schema](https://jeremylong.github.io/DependencyC
 # OWASP Dependency-Check (the same task CI runs)
 ./gradlew dependencyCheckAnalyze
 
-# Gradle dependency verification — recompute checksums into
+# Gradle dependency verification: recompute checksums into
 # gradle/verification-metadata.xml after a deliberate dep bump
 ./gradlew --write-verification-metadata sha256 help
 
@@ -183,7 +183,7 @@ must never block. If you're modifying `MainActivity.dispatchGenericMotionEvent`,
 `GamepadInputProcessor`, `SatelliteNative`, or `satellite_jni.cpp::sendReport`:
 
 - No `withContext`, no `runBlocking`, no `Dispatchers.IO` on the send path.
-- No allocations per event — use the preallocated `XUSB_REPORT`.
+- No allocations per event: use the preallocated `XUSB_REPORT`.
 - The session map's lookup is the only lock allowed; hold it briefly.
 - Preserve `IP_TOS = 0xB8` (DSCP EF) and `MSG_NOSIGNAL` on every send.
 

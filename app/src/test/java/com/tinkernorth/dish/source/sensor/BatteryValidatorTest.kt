@@ -22,7 +22,7 @@ class BatteryValidatorTest {
 
     @Test
     fun `every sample is forwarded, including unchanged ones`() {
-        // 30 s heartbeat — coalescing identical samples would prevent self-heal after a dropped UDP packet.
+        // 30 s heartbeat: coalescing identical samples would prevent self-heal after a dropped UDP packet.
         val v = BatteryValidator()
         val s = BatterySample(100, BatteryValidator.STATUS_WIRED)
         assertTrue(v.publish(s, emit))
@@ -86,7 +86,7 @@ class BatteryValidatorTest {
 
     @Test
     fun `wire constants match the protocol spec`() {
-        // Contract with satellite/src/core/types.h — drift breaks every paired receiver.
+        // Contract with satellite/src/core/types.h: drift breaks every paired receiver.
         assertEquals(0xFF, BatteryValidator.LEVEL_UNKNOWN)
         assertEquals(0, BatteryValidator.STATUS_UNKNOWN)
         assertEquals(1, BatteryValidator.STATUS_DISCHARGING)

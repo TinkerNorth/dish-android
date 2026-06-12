@@ -4,7 +4,7 @@ package com.tinkernorth.dish.core.net
 
 /**
  * Builds the `controllers` array of the session PUT (and the single-descriptor
- * body of the controller PUT). A descriptor is always sent WHOLE — a toggle is
+ * body of the controller PUT). A descriptor is always sent WHOLE: a toggle is
  * a re-send with one field changed; the satellite converges
  * (docs/contract.md §Controller).
  */
@@ -36,7 +36,7 @@ data class ControllerDescriptor(
         }
 
     companion object {
-        // Mirror of satellite core/types.h CAP_* — wire constants.
+        // Mirror of satellite core/types.h CAP_*: wire constants.
         const val CAP_ANALOG_TRIGGERS = 0x0001
         const val CAP_RUMBLE = 0x0002
         const val CAP_MOTION = 0x0004

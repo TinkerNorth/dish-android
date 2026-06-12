@@ -79,7 +79,7 @@ class ConnectionCoordinatorTest {
         every { ctx.getString(com.tinkernorth.dish.R.string.bt_transient_acquiring) } returns
             "Acquiring HID profile…"
         every { ctx.getString(com.tinkernorth.dish.R.string.bt_transient_ready_to_pair) } returns
-            "Ready to pair — find this device on your host"
+            "Ready to pair. Find this device on your host"
         every { ctx.getString(com.tinkernorth.dish.R.string.bt_transient_idle) } returns "Idle"
         every { ctx.getString(com.tinkernorth.dish.R.string.default_bluetooth_gamepad_label) } returns
             "Bluetooth gamepad"
@@ -424,7 +424,7 @@ class ConnectionCoordinatorTest {
     }
 
     @Test
-    fun `bind records the caller's type — the descriptor travels with the bind`() {
+    fun `bind records the caller's type - the descriptor travels with the bind`() {
         val satConn = mockk<SatelliteConnection>(relaxed = true)
         every { satellite.get("s:1") } returns satConn
         satEntriesFlow.value =

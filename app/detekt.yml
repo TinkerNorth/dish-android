@@ -1,4 +1,4 @@
-# Dish — detekt configuration
+# Dish: detekt configuration
 # Tuned for a single-activity Android gamepad controller app.
 
 complexity:

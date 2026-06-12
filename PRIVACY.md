@@ -1,4 +1,4 @@
-# Dish for Android — Privacy Policy
+# Dish for Android: Privacy Policy
 
 **Effective date:** 2026-05-21.
 **Hosted copy:** [`https://dish.tinkernorth.com/privacy/dish-android/`](https://dish.tinkernorth.com/privacy/dish-android/).
@@ -24,7 +24,7 @@ local network.
   profile you for marketing.
 - We collect **crash reports** via Google Firebase Crashlytics so we can
   diagnose bugs. Crash reports contain stack traces, device model,
-  Android version, and an auto-generated install ID — they do not contain
+  Android version, and an auto-generated install ID. They do not contain
   the names of the satellites you pair with, your IP address, or your
   controller input.
 - You can opt out of crash reporting at any time from the gear icon on

@@ -4,7 +4,7 @@ package com.tinkernorth.dish.ui.common
 
 /**
  * Pacing gate for the overlay resend loops. Real input is event-driven and
- * never passes through here; resends exist solely to heal a LOST edge — the
+ * never passes through here; resends exist solely to heal a LOST edge: the
  * final frame of a gesture (button-up, finger-up, stick-to-neutral) that no
  * later frame would correct. A changed state is re-sent [EDGE_BURST_RESENDS]
  * ticks in a row, then falls back to a slow keepalive against pathological

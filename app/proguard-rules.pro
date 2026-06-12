@@ -1,4 +1,4 @@
-# Dish Android — R8/ProGuard rules.
+# Dish Android: R8/ProGuard rules.
 #
 # R8 is enabled on release (isMinifyEnabled = true). Without these keeps the
 # JNI bridges silently get renamed and the first rumble or BT report on a

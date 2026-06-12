@@ -1,4 +1,4 @@
-<!-- "bluetooth-connected" — Berkana rune flanked by two connection dots. -->
+<!-- "bluetooth-connected": Berkana rune flanked by two connection dots. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"

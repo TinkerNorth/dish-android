@@ -9,7 +9,7 @@ import org.junit.Test
 
 /**
  * Pinned against the SAME interop vectors the satellite's
- * tests/test_windows_platform.cpp asserts — any drift on either end is a
+ * tests/test_windows_platform.cpp asserts. Any drift on either end is a
  * cross-end protocol break, not a refactor.
  */
 class SessionCryptoTest {

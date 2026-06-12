@@ -1,4 +1,4 @@
-# TinkerNorth — canonical clang-format configuration.
+# TinkerNorth: canonical clang-format configuration.
 # This exact file is shared by satellite, dish-android (JNI), dish-linux,
 # and dish-mac (any C/C++ source). Pinned to clang-format 22.1.4 in CI;
 # older versions may produce small diffs on braced-init lists.
@@ -39,7 +39,7 @@ SpacesInSquareBrackets: false
 SpaceBeforeSquareBrackets: false
 
 # Includes
-SortIncludes: false                   # don't reorder — Windows headers are order-sensitive
+SortIncludes: false                   # don't reorder: Windows headers are order-sensitive
 IncludeBlocks: Preserve
 
 # Pointer/reference alignment

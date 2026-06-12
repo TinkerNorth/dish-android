@@ -19,7 +19,7 @@ data class BatteryUi(
     companion object {
         const val LOW_THRESHOLD = 15
 
-        // Returns null only when both level and status are UNKNOWN — nothing to render.
+        // Returns null only when both level and status are UNKNOWN: nothing to render.
         fun fromWire(
             level: Int,
             status: Int,

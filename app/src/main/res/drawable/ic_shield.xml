@@ -1,4 +1,4 @@
-<!-- "shield" — Lucide-style protective shield outline. Used as the row glyph
+<!-- "shield": Lucide-style protective shield outline. Used as the row glyph
      on the About section's "Privacy policy" row. Stroke = colorPrimary at 2u. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"

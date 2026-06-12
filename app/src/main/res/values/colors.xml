@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    LIGHT-MODE SEMANTIC COLOR TOKENS — names by role, mapped to primitives
+    LIGHT-MODE SEMANTIC COLOR TOKENS: names by role, mapped to primitives
     in `colors_primitives.xml`. This is the file every layout XML,
     drawable, style, and Kotlin source consults at resource-resolution
     time when the device is in DAY mode (or the user has opted into
-    the light theme via the in-app Appearance setting — AppCompatDelegate's
+    the light theme via the in-app Appearance setting: AppCompatDelegate's
     night-mode flag drives Android's resource resolution the same way a
     system uiMode change does).
 
@@ -18,13 +18,13 @@
       - Material slots (`colorPrimary`, `colorOnSurface`, `colorSurfaceVariant`,
         the M3 container hierarchy `colorSurfaceContainer*`, the inverse
         family `colorInverseSurface` / `colorInverseOnSurface` /
-        `colorInversePrimary`, the tertiary role `colorTertiary*`, etc.) —
+        `colorInversePrimary`, the tertiary role `colorTertiary*`, etc.):
         consumed by the Theme.Dish theme + every Material widget. The full
         M3 surface + container + tertiary + inverse family is pinned in
         both day and night files so M3 defaults never compute off-brand
         tones from the platform tonal palette.
       - Dish-specific roles (`colorMuted`, `colorCardStroke`,
-        `colorOverlayScrim`, `colorIconContainerFill`) — named for the
+        `colorOverlayScrim`, `colorIconContainerFill`): named for the
         visual intent at the callsite.
 
     Light-mode design rationale:
@@ -32,10 +32,10 @@
         rather than a pure neutral, so the brand's deep-space accent
         carries through both themes instead of feeling tacked-on in light.
       - Body text uses `navy_900` (the same primitive that backs the
-        DARK theme's background) — the brand's darkest navy becomes the
+        DARK theme's background): the brand's darkest navy becomes the
         text colour in light mode, completing the inversion.
       - `colorPrimary` (signal_cyan_500) stays unchanged across both
-        modes — the brand cyan is bright enough to read on white surfaces
+        modes: the brand cyan is bright enough to read on white surfaces
         and saturated enough to read on the navy chrome. `colorPrimaryDark`
         (signal_cyan_700, the mid-saturation teal) backs filled buttons
         in both modes for the same reason.
@@ -46,7 +46,7 @@
         base. Stroke / outline / icon-container fill resolve correctly
         in both directions without needing dedicated light primitives.
       - Tonal containers (Primary / Error / Tertiary) DO need dedicated
-        light primitives because they must be OPAQUE — the M3 on/container
+        light primitives because they must be OPAQUE: the M3 on/container
         contrast guarantee assumes a fully-resolved container colour.
         `signal_cyan_50` / `red_100` / `amber_100` back the light versions;
         their *_900 counterparts back the dark versions.
@@ -67,7 +67,7 @@
 
     <!-- ===== M3 surface + outline variants =====
          `colorOutlineVariant` uses a quiet cloud lift (cloud_400) rather
-         than a cyan-alpha tint — that slot drives MaterialDivider, the
+         than a cyan-alpha tint: that slot drives MaterialDivider, the
          unselected MaterialSwitch track, dropdown menu separators, and
          other structural dividers. Cyan on `colorOutline` (card strokes,
          focus rings) is load-bearing; cyan on every quiet structural
@@ -85,7 +85,7 @@
          is the lightest tone (sits at white).
 
          The legacy `colorSurfaceDim` token immediately below this block
-         is the Dish-specific "slightly lifted from surface" role — it
+         is the Dish-specific "slightly lifted from surface" role: it
          aliases `cloud_400` (the same tone as `colorSurfaceVariant`) so
          empty-state surfaces and the touchpad-stick recessed background
          still read as a single recessed tier in light mode. -->
@@ -102,7 +102,7 @@
          transient message" surface reads as a different elevation tier
          than the light cards behind it. The same primitives that back
          the *default* surface in dark mode (navy_900 / paper_50) back
-         the *inverse* surface here — the inversion is symmetric. -->
+         the *inverse* surface here: the inversion is symmetric. -->
     <color name="colorSurfaceInverse">@color/navy_900</color>
     <color name="colorOnSurfaceInverse">@color/paper_50</color>
     <color name="colorPrimaryInverse">@color/signal_cyan_500</color>
@@ -117,7 +117,7 @@
     <color name="colorPrimaryMid">@color/signal_cyan_700</color>
 
     <!-- ===== M3 tonal containers =====
-         OPAQUE light tones (signal_cyan_50 / red_100 / amber_100) — the
+         OPAQUE light tones (signal_cyan_50 / red_100 / amber_100): the
          M3 on/container contrast guarantee assumes a fully-resolved
          container colour. The `*OnContainer` companions resolve to
          `navy_900` for WCAG-AA-compliant dark text on the light fill. -->
@@ -144,12 +144,12 @@
          light cloud surfaces, this is the subtle cyan-tinted card stroke
          that anchors every Widget.Dish.Card. -->
     <color name="colorCardStroke">@color/signal_cyan_200</color>
-    <!-- signal_cyan_100 = signal cyan @ ~6% alpha. Faintest cyan tint —
+    <!-- signal_cyan_100 = signal cyan @ ~6% alpha. Faintest cyan tint:
          the fill behind the Settings-row icon container. -->
     <color name="colorIconContainerFill">@color/signal_cyan_100</color>
     <!-- Brand-specific "slightly lifted from surface" role used by empty
          states + the touchpad-stick recessed background. Not wired to
-         M3's `colorSurfaceDim` attr — that slot reads `colorM3SurfaceDim`
+         M3's `colorSurfaceDim` attr: that slot reads `colorM3SurfaceDim`
          above. cloud_400 keeps the recessed tier distinct from the
          page surface (cloud_200) without going as dark as the variant
          containers. -->
@@ -160,10 +160,10 @@
     <color name="colorPulseFill">@color/pulse_pink_200</color>
 
     <!-- ===== Severity =====
-         Status tones are shared across both modes — green / red / amber
+         Status tones are shared across both modes: green / red / amber
          500 read on light and dark backgrounds. -->
     <color name="colorSuccess">@color/green_500</color>
-    <!-- green_100 / green_300 = success green @ ~6% / ~18% alpha — the
+    <!-- green_100 / green_300 = success green @ ~6% / ~18% alpha: the
          fill + stroke pair for green-tinted chips (e.g. the Direct-mode
          measured-rate pill), mirroring the signal_cyan_100/300 pattern. -->
     <color name="colorSuccessFill">@color/green_100</color>
@@ -172,7 +172,7 @@
     <color name="colorWarning">@color/amber_500</color>
 
     <!-- ===== Scrim =====
-         Full-screen dim overlay (e.g. low-power mode) — black @ ~80% alpha
+         Full-screen dim overlay (e.g. low-power mode): black @ ~80% alpha
          in BOTH modes. The scrim's job is to communicate "the screen
          is intentionally dimmed", which reads identically on light and
          dark page surfaces. Distinct from M3's `colorScrim` (which is

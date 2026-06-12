@@ -32,32 +32,32 @@ class ConnectionsVisibleInPickerTest {
     }
 
     @Test
-    fun `Unstable counts as available — link is faltering but still usable`() {
+    fun `Unstable counts as available (link is faltering but still usable)`() {
         assertTrue(LinkState.Unstable.isAvailableForPicker())
     }
 
     @Test
-    fun `Connecting does not count as available — no live session yet`() {
+    fun `Connecting does not count as available (no live session yet)`() {
         assertFalse(LinkState.Connecting.isAvailableForPicker())
     }
 
     @Test
-    fun `Ready does not count as available — paired and seen, but not connected`() {
+    fun `Ready does not count as available (paired and seen, but not connected)`() {
         assertFalse(LinkState.Ready.isAvailableForPicker())
     }
 
     @Test
-    fun `Found does not count as available — visible target, but not connected`() {
+    fun `Found does not count as available (visible target, but not connected)`() {
         assertFalse(LinkState.Found.isAvailableForPicker())
     }
 
     @Test
-    fun `Saved does not count as available — offline`() {
+    fun `Saved does not count as available (offline)`() {
         assertFalse(LinkState.Saved.isAvailableForPicker())
     }
 
     @Test
-    fun `Stale does not count as available — needs re-pairing`() {
+    fun `Stale does not count as available (needs re-pairing)`() {
         assertFalse(LinkState.Stale.isAvailableForPicker())
     }
 
@@ -86,26 +86,26 @@ class ConnectionsVisibleInPickerTest {
     }
 
     @Test
-    fun `spec — unavailable unbound connection is hidden`() {
+    fun `spec, unavailable unbound connection is hidden`() {
         val offline = summary("s:1", LinkState.Saved)
         assertEquals(emptyList<ConnectionSummary>(), connectionsVisibleInPicker(listOf(offline), null))
     }
 
     @Test
-    fun `spec — unavailable bound connection stays visible as the holdover`() {
+    fun `spec, unavailable bound connection stays visible as the holdover`() {
         val bound = summary("s:1", LinkState.Saved)
         assertEquals(listOf(bound), connectionsVisibleInPicker(listOf(bound), "s:1"))
     }
 
     @Test
-    fun `spec — unbinding an offline connection makes it disappear`() {
+    fun `spec, unbinding an offline connection makes it disappear`() {
         val offline = summary("s:1", LinkState.Saved)
         assertEquals(listOf(offline), connectionsVisibleInPicker(listOf(offline), "s:1"))
         assertEquals(emptyList<ConnectionSummary>(), connectionsVisibleInPicker(listOf(offline), null))
     }
 
     @Test
-    fun `spec — auto-recovery brings the row back to a normal available render`() {
+    fun `spec, auto-recovery brings the row back to a normal available render`() {
         val offlineBound = summary("s:1", LinkState.Saved)
         val recoveredBound = summary("s:1", LinkState.Connected)
 
@@ -117,7 +117,7 @@ class ConnectionsVisibleInPickerTest {
     }
 
     @Test
-    fun `spec — Stale bound holdover is preserved until user re-pairs or unbinds`() {
+    fun `spec, Stale bound holdover is preserved until user re-pairs or unbinds`() {
         val stale = summary("s:1", LinkState.Stale)
         assertEquals(listOf(stale), connectionsVisibleInPicker(listOf(stale), "s:1"))
         assertEquals(emptyList<ConnectionSummary>(), connectionsVisibleInPicker(listOf(stale), null))
@@ -183,7 +183,7 @@ class ConnectionsVisibleInPickerTest {
     }
 
     @Test
-    fun `picker is kind-agnostic — both BT and Satellite obey the same rule`() {
+    fun `picker is kind-agnostic, both BT and Satellite obey the same rule`() {
         val satOnline = summary("s:sat", LinkState.Connected, ConnectionKind.SATELLITE)
         val satOffline = summary("s:sat-off", LinkState.Saved, ConnectionKind.SATELLITE)
         val btOnline = summary("bt:on", LinkState.Connected, ConnectionKind.BLUETOOTH)
@@ -243,7 +243,7 @@ class ConnectionsVisibleInPickerTest {
     }
 
     @Test
-    fun `filter is idempotent — running it twice on its own output is stable`() {
+    fun `filter is idempotent, running it twice on its own output is stable`() {
         val input =
             listOf(
                 summary("s:1", LinkState.Connected),

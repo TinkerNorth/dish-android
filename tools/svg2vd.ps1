@@ -1,6 +1,6 @@
 param(
     [string]$SrcDir = "$env:TEMP\kenney-prompts\svg",
-    [string]$DstDir = "c:\Users\emir\TinkerNorth\Dish\app\src\main\res\drawable"
+    [string]$DstDir = "$PSScriptRoot\..\app\src\main\res\drawable"
 )
 
 $files = @{

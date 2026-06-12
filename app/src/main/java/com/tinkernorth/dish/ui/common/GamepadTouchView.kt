@@ -150,7 +150,7 @@ class GamepadTouchView
                 color = ContextCompat.getColor(context, R.color.colorPrimary)
             }
 
-        // Per-channel min compositor for diagonal d-pad rendering — see [drawDpad].
+        // Per-channel min compositor for diagonal d-pad rendering (see [drawDpad]).
         private val dpadDarkenPaint =
             Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.DARKEN) }
 
@@ -368,7 +368,7 @@ class GamepadTouchView
             if (second == null) return
 
             // Composite the second arrow with DARKEN (per-channel min) so both accent arms of
-            // a diagonal survive — otherwise the second icon's white overwrites the first's.
+            // a diagonal survive. Otherwise the second icon's white overwrites the first's.
             val saveCount =
                 c.saveLayer(
                     l.dpadRect.left,

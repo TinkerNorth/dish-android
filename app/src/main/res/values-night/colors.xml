@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    DARK-MODE SEMANTIC COLOR TOKENS — overrides `values/colors.xml` (the
+    DARK-MODE SEMANTIC COLOR TOKENS: overrides `values/colors.xml` (the
     light-mode mapping) when the device is in night mode OR the user has
     opted into the dark theme via the in-app Appearance setting (the
     AppCompatDelegate night-mode flag flips Android's resource resolution
     to this directory just like a system uiMode change).
 
     Same semantic names as `values/colors.xml`; only the primitive bindings
-    differ. Anything not overridden here falls back to the light mapping —
+    differ. Anything not overridden here falls back to the light mapping,
     which means if a token's value is genuinely day/night-neutral (e.g.
     `colorOverlayScrim`, the severity 500-tones, the alpha-derived cyan
     300/200/100 outline / stroke / icon-container fill family) it can stay
     out of this file. We DO re-state those few cases (e.g. `colorPrimary`,
     `colorPrimaryDark`) when the dark-mode value matches the light-mode
-    value, purely as a readability anchor — when the next contributor
+    value, purely as a readability anchor: when the next contributor
     looks for "what does this slot resolve to in dark mode?" the answer
     should be in one place.
 -->
@@ -26,7 +26,7 @@
 
     <!-- ===== M3 surface + outline variants =====
          `colorOutlineVariant` uses a desaturated navy lift (navy_650)
-         rather than a cyan-alpha tint — that slot drives MaterialDivider,
+         rather than a cyan-alpha tint: that slot drives MaterialDivider,
          the unselected MaterialSwitch track, dropdown menu separators,
          and other structural dividers. Cyan on the brand-accent slot
          (`colorOutline`) is load-bearing; cyan on every quiet structural
@@ -40,7 +40,7 @@
          M3 dark-mode spec keeps `surface` and `surfaceDim` at roughly the
          same tone (the dim distinction is a light-mode affordance), so
          `colorM3SurfaceDim` aliases navy_800 here. `colorSurfaceContainerHighest`
-         deliberately equals `colorSurfaceVariant` — both M3 attrs read
+         deliberately equals `colorSurfaceVariant`: both M3 attrs read
          the same tone in dark mode per spec. -->
     <color name="colorSurfaceContainerLowest">@color/navy_900</color>
     <color name="colorSurfaceContainerLow">@color/navy_850</color>
@@ -66,7 +66,7 @@
 
     <!-- ===== M3 tonal containers =====
          OPAQUE deep tones (the *_900 family) rather than alpha-composited
-         tints — M3's on/container contrast guarantee assumes a
+         tints: M3's on/container contrast guarantee assumes a
          fully-resolved container colour. -->
     <color name="colorPrimaryContainer">@color/signal_cyan_900</color>
     <color name="colorOnPrimaryContainer">@color/paper_50</color>

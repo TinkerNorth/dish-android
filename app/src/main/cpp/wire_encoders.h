@@ -18,7 +18,7 @@ inline void putLE32(uint8_t* dst, uint32_t v) {
     dst[3] = static_cast<uint8_t>(v >> 24);
 }
 
-// MSG_MOTION 0x000A inner — 17B: ctrlIdx, gyro xyz i16 LE, accel xyz i16 LE, tsΔus u32 LE.
+// MSG_MOTION 0x000A inner, 17B: ctrlIdx, gyro xyz i16 LE, accel xyz i16 LE, tsΔus u32 LE.
 inline void encodeMotionPayload(uint8_t out[17], uint8_t ctrlIdx, int16_t gx, int16_t gy,
                                 int16_t gz, int16_t ax, int16_t ay, int16_t az,
                                 uint32_t timestampDeltaUs) {
@@ -32,14 +32,14 @@ inline void encodeMotionPayload(uint8_t out[17], uint8_t ctrlIdx, int16_t gx, in
     putLE32(out + 13, timestampDeltaUs);
 }
 
-// MSG_BATTERY 0x000B inner — 3B: ctrlIdx, level u8 (0..100 or 0xFF unknown), status u8.
+// MSG_BATTERY 0x000B inner, 3B: ctrlIdx, level u8 (0..100 or 0xFF unknown), status u8.
 inline void encodeBatteryPayload(uint8_t out[3], uint8_t ctrlIdx, uint8_t level, uint8_t status) {
     out[0] = ctrlIdx;
     out[1] = level;
     out[2] = status;
 }
 
-// MSG_TOUCHPAD 0x000C inner — 16B: ctrlIdx, flags(f0|f1|btn), f0Id, f0xy i16 LE, f1Id, f1xy i16 LE,
+// MSG_TOUCHPAD 0x000C inner, 16B: ctrlIdx, flags(f0|f1|btn), f0Id, f0xy i16 LE, f1Id, f1xy i16 LE,
 // eventTimeMs u32 LE.
 inline void encodeTouchpadPayload(uint8_t out[16], uint8_t ctrlIdx, bool f0Active, bool f1Active,
                                   bool buttonPressed, uint8_t f0Id, int16_t f0x, int16_t f0y,
@@ -59,7 +59,7 @@ inline void encodeTouchpadPayload(uint8_t out[16], uint8_t ctrlIdx, bool f0Activ
     putLE32(out + 12, eventTimeMs);
 }
 
-// MSG_LIGHTBAR 0x000D inner — 4B: ctrlIdx, R, G, B. Decode-only on dish-android (no LED API).
+// MSG_LIGHTBAR 0x000D inner, 4B: ctrlIdx, R, G, B. Decode-only on dish-android (no LED API).
 struct LightbarPayload {
     uint8_t ctrlIdx;
     uint8_t r;

@@ -1,5 +1,5 @@
 <!-- Battery at ~10% with an exclamation overlay (v6 brand). Shown below 15%
-     and not charging. The "!" glyph — not just a red tint — is what makes the
+     and not charging. The "!" glyph, not just a red tint, is what makes the
      critical state perceivable without relying on colour (WCAG 1.4.1). The
      two-tone palette is self-coloured: do NOT apply android:tint / app:tint. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"

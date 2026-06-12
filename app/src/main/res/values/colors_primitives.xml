@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    PRIMITIVE COLOR TOKENS — the raw palette. Every unique hex value used by
+    PRIMITIVE COLOR TOKENS: the raw palette. Every unique hex value used by
     the app appears here exactly once. Consumers must NOT reference these
     directly from layouts or Kotlin; they consume the semantic names in
     `colors.xml` (and, where needed, the alpha-derived state-list colors).
@@ -19,12 +19,12 @@
         own embedded palette and are intentionally out of the design system.
 -->
 <resources>
-    <!-- ===== Signal cyan — brand accent. =====
+    <!-- ===== Signal cyan: brand accent. =====
          500 is colorPrimary / full saturation. 700 is the darker tonal
          used for filled-button backgrounds and primary-dim states.
          100/200/300 are alpha-derived from 500 for surface tints
          (6%), card strokes (12%), and outlines (18%) respectively.
-         900 is an opaque deep teal — used by colorPrimaryContainer so the
+         900 is an opaque deep teal, used by colorPrimaryContainer so the
          M3 container slot is opaque (alpha-composited container colors
          break the on/container contrast guarantee under any non-default
          surface). -->
@@ -38,7 +38,7 @@
     <color name="pulse_pink_500">#FFFF6FB5</color>
     <color name="pulse_pink_200">#1FFF6FB5</color>
 
-    <!-- ===== Navy — deep-space surface scale. =====
+    <!-- ===== Navy: deep-space surface scale. =====
          900 is the app background (darkest); 800 is the elevated surface
          (cards, dialogs); 700 is a slightly lifted variant for empty-state
          surfaces and the touchpad stick-recess background.
@@ -57,18 +57,18 @@
     <color name="navy_700">#FF131A3A</color>
     <color name="navy_650">#FF1B244B</color>
 
-    <!-- ===== Slate — muted text + secondary chrome. ===== -->
+    <!-- ===== Slate: muted text + secondary chrome. ===== -->
     <color name="slate_300">#FF93A0C8</color>
 
-    <!-- ===== Paper — high-contrast on-surface text. =====
+    <!-- ===== Paper: high-contrast on-surface text. =====
          paper_50 backs `colorOnSurface` in DARK mode (the high-contrast
          body text on a navy surface). In LIGHT mode it backs the *inverse*
          on-surface (snackbar / inverted-elevation text on a dark inverse
-         surface) — the same pale blue-white role, just on the inverse
+         surface): the same pale blue-white role, just on the inverse
          side of the palette. -->
     <color name="paper_50">#FFE6ECFF</color>
 
-    <!-- ===== Cloud — light-theme surface ramp. =====
+    <!-- ===== Cloud: light-theme surface ramp. =====
          New family added with the light-theme rollout. Anchors the
          light-mode page background + the M3 surface container hierarchy
          (Lowest → Highest + Dim/Bright) when `values-night/` is NOT
@@ -78,7 +78,7 @@
          `colorSurfaceVariant` companion).
 
          The scale is intentionally cool-tinted (the hex hovers around
-         #F2F4F8 / #ECEFF5) rather than truly neutral grey — pairs the
+         #F2F4F8 / #ECEFF5) rather than truly neutral grey: pairs the
          navy chrome of dark mode with a faintly-cool light mode so the
          brand voice carries across both. A pure-neutral light palette
          would read disconnected from the deep-space cyan accent.
@@ -92,7 +92,7 @@
     <color name="cloud_400">#FFE5E9F1</color>
     <color name="cloud_500">#FFDADFEB</color>
 
-    <!-- ===== Slate — extended muted-text scale. =====
+    <!-- ===== Slate: extended muted-text scale. =====
          slate_300 (existing) is the muted text tone on dark surfaces.
          slate_500 / slate_700 are added for light mode: slate_500 is
          the secondary body text on cloud surfaces (medium tone with
@@ -113,11 +113,11 @@
     <color name="red_100">#FFFCE2DE</color>
     <color name="amber_100">#FFFCEDD0</color>
 
-    <!-- ===== Severity palette — used for status indicators. =====
+    <!-- ===== Severity palette: used for status indicators. =====
          500s are the saturated severity colors used for foreground tints
          (status dots, error text, warning text). The 900 tonals back the
          M3 container slots (colorErrorContainer / colorTertiaryContainer)
-         opaquely — the same alpha-composition concern as
+         opaquely: the same alpha-composition concern as
          signal_cyan_900 / colorPrimaryContainer above. -->
     <color name="green_500">#FF22C55E</color>
     <color name="green_100">#0F22C55E</color>

@@ -271,7 +271,7 @@ class ConfigureBindingsViewModel
 
         /**
          * Nothing the user edits commits until here. The whole binding is ONE
-         * declarative call to the satellite — the descriptor (type, caps,
+         * declarative call to the satellite: the descriptor (type, caps,
          * touchpad routing) travels with the bind, so the overlay shows one
          * spinner per real async action: the USB-direct switch (which can wait
          * on a system permission prompt) and the single REST round-trip.

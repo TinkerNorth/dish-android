@@ -11,11 +11,11 @@ attached.
 
 ## Features
 
-- LAN discovery — mDNS plus a UDP broadcast fallback
+- LAN discovery: mDNS plus a UDP broadcast fallback
 - HTTPS pairing with a four-digit PIN displayed by the satellite
 - ChaCha20-Poly1305 over UDP, sent from the input thread via native
   `sendto()` with no buffering
-- Bluetooth HID alternative — present as an Xbox-compatible gamepad
+- Bluetooth HID alternative: present as an Xbox-compatible gamepad
   to a paired host
 - Motion (gyroscope + accelerometer), battery, and touchpad return
   paths
@@ -96,7 +96,7 @@ gradle/libs.versions.toml        Version catalog
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) and the
 [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md). CI runs build + style
 (`android-ci.yml`) and security gates (`security.yml`, `codeql.yml`)
-on every PR — OWASP Dependency-Check (fails on CVSS ≥ 7.0),
+on every PR: OWASP Dependency-Check (fails on CVSS ≥ 7.0),
 OSV-Scanner, gitleaks, action-pin lint, and CodeQL for `java-kotlin`
 and `cpp`.
 

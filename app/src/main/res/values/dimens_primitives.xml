@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    PRIMITIVE TOKENS — the raw scale. Every unique dp/sp value used as a
+    PRIMITIVE TOKENS: the raw scale. Every unique dp/sp value used as a
     layout dimension lives here exactly once. Consumers must NOT reference
     these directly from XML or Kotlin; they consume the semantic names in
     `dimens.xml` instead.
@@ -14,7 +14,7 @@
     What's NOT here:
       - `0dp` (special: idiomatic Android for weight-distributed children).
       - Vector drawable intrinsic `width`/`height` (those are canvas sizes
-        on the source artwork, not layout dimensions — they get scaled at
+        on the source artwork, not layout dimensions: they get scaled at
         every callsite to whatever the ImageView width is).
 -->
 <resources>

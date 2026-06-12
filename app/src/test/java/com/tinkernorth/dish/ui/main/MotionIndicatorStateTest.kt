@@ -384,7 +384,7 @@ class MotionIndicatorStateTest {
     }
 
     @Test
-    fun `NO_HOST_SINK outranks BACKEND_BROKEN — the type-level reason is higher-order`() {
+    fun `NO_HOST_SINK outranks BACKEND_BROKEN - the type-level reason is higher-order`() {
         assertEquals(
             MotionIndicatorState.NO_HOST_SINK,
             MotionIndicatorState.of(
@@ -400,7 +400,7 @@ class MotionIndicatorStateTest {
     }
 
     @Test
-    fun `USER_DISABLED outranks BACKEND_BROKEN — user's choice is the actionable reason`() {
+    fun `USER_DISABLED outranks BACKEND_BROKEN - user's choice is the actionable reason`() {
         assertEquals(
             MotionIndicatorState.USER_DISABLED,
             MotionIndicatorState.of(
@@ -416,7 +416,7 @@ class MotionIndicatorStateTest {
     }
 
     @Test
-    fun `NOT_FORWARDED outranks BACKEND_BROKEN — BT-HID never carried motion in the first place`() {
+    fun `NOT_FORWARDED outranks BACKEND_BROKEN - BT-HID never carried motion in the first place`() {
         assertEquals(
             MotionIndicatorState.NOT_FORWARDED,
             MotionIndicatorState.of(
@@ -432,7 +432,7 @@ class MotionIndicatorStateTest {
     }
 
     @Test
-    fun `BACKEND_BROKEN outranks STALLED — the receiver's reason beats the source's reason`() {
+    fun `BACKEND_BROKEN outranks STALLED - the receiver's reason beats the source's reason`() {
         assertEquals(
             MotionIndicatorState.BACKEND_BROKEN,
             MotionIndicatorState.of(

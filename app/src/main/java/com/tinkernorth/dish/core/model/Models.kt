@@ -7,7 +7,7 @@ import com.tinkernorth.dish.R
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 
-// Not a wire field — assigned client-side by the discovery merge.
+// Not a wire field, assigned client-side by the discovery merge.
 enum class DiscoverySource(
     @param:StringRes val labelRes: Int,
 ) {
@@ -49,7 +49,7 @@ data class PairResponse(
 )
 
 // Wire DTOs for the declarative session contract (satellite docs/contract.md).
-// `result` / `code` / feature slugs are protocol constants — never localized;
+// `result` / `code` / feature slugs are protocol constants, never localized;
 // the client maps the ones it knows onto UI strings and shows the raw code
 // otherwise.
 
@@ -69,7 +69,7 @@ data class ControllerApplyDto(
     val ok: Boolean get() = result == APPLY_OK
 
     // replugFailed leaves the PREVIOUS pad untouched and working
-    // (appliedType reports it) — the slot is still live, just not the
+    // (appliedType reports it): the slot is still live, just not the
     // requested type. Streams must keep flowing to it.
     val slotIsLive: Boolean get() = ok || result == APPLY_REPLUG_FAILED
 
@@ -90,7 +90,7 @@ data class HostFeaturesDto(
     val mouseControl: HostFeatureGrantDto = HostFeatureGrantDto(),
 )
 
-/** PUT /api/connections response — also doubles as the error body (`error`/`code`). */
+/** PUT /api/connections response. Also doubles as the error body (`error`/`code`). */
 @Serializable
 data class SessionResponse(
     val connectionId: String? = null,
@@ -102,7 +102,7 @@ data class SessionResponse(
     val controllers: List<ControllerApplyDto> = emptyList(),
     val hostFeatures: HostFeaturesDto = HostFeaturesDto(),
     val error: String? = null,
-    // Machine-readable 401 cause: NOT_PAIRED | BAD_PROOF. Either is terminal —
+    // Machine-readable 401 cause: NOT_PAIRED | BAD_PROOF. Either is terminal:
     // stop retrying and surface "re-pair needed".
     val code: String? = null,
 ) {
@@ -131,7 +131,7 @@ data class SessionViewControllerDto(
     val touchpadMode: String = "off",
 )
 
-/** GET /api/connections/{id} — the reconcile endpoint's applied state. */
+/** GET /api/connections/{id}: the reconcile endpoint's applied state. */
 @Serializable
 data class SessionViewDto(
     val connectionId: String? = null,
@@ -142,7 +142,7 @@ data class SessionViewDto(
     val code: String? = null,
 )
 
-// GET /api/catalog — the satellite's localized controller-type catalog. Type
+// GET /api/catalog: the satellite's localized controller-type catalog. Type
 // NAMES/descriptions render from here (server-owned emulation targets; new
 // types must work on old apps); feature slugs are capability data the client
 // only offers when it has code for them.

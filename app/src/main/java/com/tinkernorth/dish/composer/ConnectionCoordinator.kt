@@ -18,7 +18,7 @@ enum class ConnectionKind { SATELLITE, BLUETOOTH }
 
 enum class LinkState { Found, Stale, Saved, Ready, Connecting, Connected, Unstable }
 
-// Catalog ids (wire enum values) — the picker renders from GET /api/catalog,
+// Catalog ids (wire enum values): the picker renders from GET /api/catalog,
 // these constants only name the two types this app has bundled art for.
 const val CONTROLLER_TYPE_XBOX = 0
 const val CONTROLLER_TYPE_PLAYSTATION = 1
@@ -67,7 +67,7 @@ class ConnectionCoordinator
         }
 
         /**
-         * Bind [slotId] to [connectionId] with its FINAL descriptor — type and
+         * Bind [slotId] to [connectionId] with its FINAL descriptor: type and
          * touchpad routing travel with the bind, so the satellite plugs the
          * right virtual device on the first try (no default-then-correct phase
          * anywhere). Returns false (refusing the bind) for a slot the registry
@@ -150,7 +150,7 @@ class ConnectionCoordinator
          * USB-direct claim replaced a framework device with [syntheticSlotId].
          * The user's type choice travels with it: a bound twin migrates whole
          * (binding + type), an unbound claim adopts the type remembered for the
-         * twin — Xbox only when there has never been a choice to preserve.
+         * twin, Xbox only when there has never been a choice to preserve.
          */
         fun bindClaimedSynthetic(
             twinSlotId: String?,
@@ -181,7 +181,7 @@ class ConnectionCoordinator
             satellite.get(connectionId)?.setControllerType(slotId, type)
         }
 
-        /** Per-slot touchpad routing — rides the descriptor (client-owned, single writer). */
+        /** Per-slot touchpad routing. Rides the descriptor (client-owned, single writer). */
         fun setSatelliteTouchpadMode(
             connectionId: String,
             slotId: String,

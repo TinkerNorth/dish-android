@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Single pickable chip — reused by every inline picker (Type: Xbox/PS,
+<!-- Single pickable chip, reused by every inline picker (Type: Xbox/PS,
      Touchpad mode: Off/Pad/Mouse). MaterialChip in FilterChip mode; the
      adapter sets `isChecked` + a click handler at bind time. Selected /
      unselected styling, state layer (hover / focus / press), ripple, and
-     a11y role announcement all flow through Widget.Dish.Chip — the prior
+     a11y role announcement all flow through Widget.Dish.Chip. The prior
      hand-rolled drawable + state-list text colour are replaced by the
      spec-correct M3 chip behaviour. -->
 <com.google.android.material.chip.Chip xmlns:android="http://schemas.android.com/apk/res/android"

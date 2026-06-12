@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    GAMEPAD OVERLAY — full-screen landscape host for the on-screen touch
+    GAMEPAD OVERLAY: full-screen landscape host for the on-screen touch
     gamepad. Mirrors the touchpad overlay's chrome (shared overlay_header
     + same content-frame padding) so the two input surfaces feel like
     siblings of the same app and match the rest-of-app toolbar shape
@@ -23,7 +23,7 @@
         android:orientation="vertical">
 
         <!-- Toolbar: left-chevron back + page title. Style
-             Widget.Dish.Toolbar is the shared piece — same chevron,
+             Widget.Dish.Toolbar is the shared piece: same chevron,
              same background, same height as the Connections + Settings
              toolbars. Title is set at runtime in onCreate so a layout
              diff can't accidentally show "Gamepad" on the touchpad
