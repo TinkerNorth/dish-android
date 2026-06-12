@@ -42,9 +42,6 @@ on:
 #   softprops/action-gh-release     @ v3.0.0  → b4309332981a82ec1c5618f44dd2e27cc8bfbfda
 #   slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml
 #                                   @ v2.1.0  → f7dd8c54c2067bafc12ca7a55595d5ee9b75204a
-#                                   (referenced by tag, not SHA: the generator downloads
-#                                   its builder binary from the release matching the
-#                                   detected ref, which must be a vX.Y.Z tag)
 #
 # cosign is installed directly from upstream (see harden job).
 
@@ -60,9 +57,7 @@ concurrency:
 jobs:
   gates:
     name: PR-time gates against tag
-    # Must grant at least what _security.yml declares at workflow level;
-    # a called workflow requesting more than the caller grants fails the
-    # whole run at startup before any job is created.
+    # _security.yml declares these; granting less fails the run at startup.
     permissions:
       contents: read
       pull-requests: read
@@ -269,8 +264,7 @@ jobs:
           output-format: sarif
 
       - name: Upload Grype SARIF to code scanning
-        # Observability only; the grype step above is the gate. Soft-fail like
-        # the other non-CodeQL SARIF uploads until GHAS is confirmed enabled.
+        # Soft-fail: the grype step above is the gate, this is observability.
         if: ${{ always() && steps.grype.outputs.sarif != '' }}
         continue-on-error: true
         uses: github/codeql-action/upload-sarif@87557b9c84dde89fdd9b10e88954ac2f4248e463 # v4.36.1
@@ -374,8 +368,7 @@ jobs:
       base64-subjects: ${{ needs.harden.outputs.hashes }}
       provenance-name: dish-android.intoto.jsonl
       upload-assets: false
-      # Keyless signing posts the repo identity to the public Rekor log;
-      # required acknowledgement while the repo is still private.
+      # Required while private: signing posts the repo name to the public Rekor log.
       private-repository: true
 
   publish:
