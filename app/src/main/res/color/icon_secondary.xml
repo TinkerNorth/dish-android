@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Tint color for secondary chrome icons — always the muted slate. Kept
+<!-- Tint color for secondary chrome icons: always the muted slate. Kept
      as a state-list (rather than a plain @color/colorMuted reference) so
      callsites can use the same `app:tint="@color/icon_*"` idiom across
      primary, secondary, and interactive icons, and so the semantic

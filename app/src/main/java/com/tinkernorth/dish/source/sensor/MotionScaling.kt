@@ -91,7 +91,7 @@ object MotionScaling {
         return out
     }
 
-    // Mirror of android.view.Surface.ROTATION_* — duplicated to keep this pure-JVM testable.
+    // Mirror of android.view.Surface.ROTATION_*, duplicated to keep this pure-JVM testable.
     private const val ROTATION_0 = 0
     private const val ROTATION_90 = 1
     private const val ROTATION_180 = 2

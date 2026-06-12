@@ -27,7 +27,7 @@
     <string name="action_scan">Skeniraj</string>
     <string name="action_scanning">Skeniranje…</string>
     <string name="action_add">Dodaj</string>
-    <string name="bt_hosts_empty">Nema zapamćenih hostova — dodirnite Dodaj da registrujete novi</string>
+    <string name="bt_hosts_empty">Nema zapamćenih hostova. Dodirnite Dodaj da registrujete novi</string>
 
     <!-- row_connection.xml + dinamičke oznake redova u ConnectionsActivity. -->
     <string name="action_connect">Poveži</string>
@@ -42,7 +42,7 @@
 
     <!-- Dijalog potvrde za zaboravljanje Bluetooth hosta. -->
     <string name="dialog_forget_bt_title">Zaboraviti %1$s?</string>
-    <string name="dialog_forget_bt_message">Dish više neće pamtiti ovaj host. Telefon zadržava sistemsko uparivanje — otvorite Bluetooth podešavanja da ga u potpunosti uklonite.</string>
+    <string name="dialog_forget_bt_message">Dish više neće pamtiti ovaj host. Telefon zadržava sistemsko uparivanje. Otvorite Bluetooth podešavanja da ga u potpunosti uklonite.</string>
     <string name="dialog_forget_bt_positive">Otvori podešavanja</string>
     <string name="dialog_forget_bt_negative">Ne sada</string>
 
@@ -81,7 +81,7 @@
     <string name="slot_status_tap_to_bind">Dodirnite za povezivanje</string>
 
     <!-- Redovi izbora po slotu u ControllerAdapter. -->
-    <string name="picker_empty_no_connections">Još nema veza — dodirnite Upravljanje iznad</string>
+    <string name="picker_empty_no_connections">Još nema veza. Dodirnite Upravljanje iznad</string>
     <string name="picker_empty_no_available">Trenutno nema dostupnih veza</string>
     <string name="picker_title_with_status">%1$s%2$s</string>
     <string name="picker_status_online"> • na vezi</string>
@@ -127,7 +127,7 @@
 
     <!-- Podnaslov Bluetooth reda i prelazno stanje slota tokom uparivanja. -->
     <string name="bt_row_detail">%1$s • %2$s</string>
-    <string name="bt_transient_ready_to_pair">Spreman za uparivanje — pronađite ovaj uređaj na svom hostu</string>
+    <string name="bt_transient_ready_to_pair">Spreman za uparivanje. Pronađite ovaj uređaj na svom hostu</string>
     <string name="bt_transient_acquiring">Preuzimanje HID profila…</string>
     <string name="bt_transient_idle">Neaktivan</string>
 
@@ -141,13 +141,13 @@
     <string name="motion_unavailable">Pokret: nema žiroskopa</string>
     <string name="motion_unavailable_detail">Ovaj telefon nema žiroskop, pa se pokret (žiro nišanjenje / nagib) ne šalje.</string>
     <string name="motion_not_forwarded_detail">Ova Bluetooth veza nema kanal za pokret. Koristite satelitsku vezu za slanje žiro nišanjenja / nagiba.</string>
-    <string name="motion_stalled_detail">Senzor pokreta je zaglavljen — pokušajte pritisnuti dugme Nazad za resetovanje, ili restartujte Dish.</string>
+    <string name="motion_stalled_detail">Senzor pokreta je zaglavljen. Pokušajte pritisnuti dugme Nazad za resetovanje, ili restartujte Dish.</string>
     <string name="motion_user_disabled">Pokret: isključen</string>
     <string name="motion_no_host_sink">Pokret: host ne može primiti</string>
     <string name="motion_backend_broken">Pokret: server ne može isporučiti</string>
     <string name="motion_user_disabled_detail">Isključili ste pokret za ovaj slot. Uključite prekidač Pokret u redu kontrolera da biste ponovo počeli slati žiro.</string>
     <string name="motion_no_host_sink_detail">Virtuelni kontroler u Xbox stilu nema površinu za pokret na hostu. Prebacite kontroler na PlayStation za žiro nišanjenje / nagib.</string>
-    <string name="motion_backend_broken_detail">Satelit je prihvatio ovaj kontroler ali nije mogao kreirati uređaj za pokret — vjerovatno problem s dozvolama ili kernelom na serveru. Restartajte satelit ili provjerite njegove zapisnike.</string>
+    <string name="motion_backend_broken_detail">Satelit je prihvatio ovaj kontroler ali nije mogao kreirati uređaj za pokret, vjerovatno problem s dozvolama ili kernelom na serveru. Restartajte satelit ili provjerite njegove zapisnike.</string>
     <string name="controller_motion_toggle_label">Pokret (žiro)</string>
     <string name="controller_motion_toggle_subtitle_on">Šalje žiro nišanjenje / nagib hostu.</string>
     <string name="controller_motion_toggle_subtitle_off">Žiro uzorci se ne šalju za ovaj slot.</string>
@@ -221,7 +221,7 @@
 
     <!-- Dinamičko prazno stanje liste satelita. -->
     <string name="discovery_empty_never_scanned">Dodirnite Skeniraj da pronađete satelite na vašoj mreži</string>
-    <string name="discovery_empty_no_results">Nije pronađen nijedan satelit u %1$s — provjerite Wi-Fi i da li je host uključen.</string>
+    <string name="discovery_empty_no_results">Nije pronađen nijedan satelit u %1$s. Provjerite Wi-Fi i da li je host uključen.</string>
 
     <!-- Prilagođeni PIN dijalog. -->
     <string name="pair_dialog_title">Upari sa satelitom</string>
@@ -325,7 +325,7 @@
     <string name="binding_edge_action_reconnect">Ponovo poveži</string>
     <string name="binding_edge_action_dismiss">Odbaci</string>
     <string name="binding_blocker_input_lost_body">Ponovo povežite kontroler da nastavite podešavanje ili zatvorite ovaj ekran.</string>
-    <string name="binding_apply_error_slot_gone">%1$s više nije dostupan — isključite ga i ponovo povežite, zatim pokušajte ponovo.</string>
+    <string name="binding_apply_error_slot_gone">%1$s više nije dostupan. Isključite ga i ponovo povežite, zatim pokušajte ponovo.</string>
     <string name="binding_apply_error_no_connect">Nije moguće dosegnuti %1$s. Provjerite je li uključen i na vašoj mreži, pa pokušajte ponovo.</string>
     <string name="binding_apply_warn_title">Brzi način nije dostupan</string>
     <string name="binding_apply_warn_detail">%1$s je povezan s %2$s u Standardnom načinu.</string>

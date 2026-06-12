@@ -169,7 +169,7 @@ class PhysicalBatterySource
                 if (sample != null) Log.d(TAG, "pad $deviceId own battery $sample")
                 return sample
             }
-            // API 24–30: no getBatteryState(), use BT reflection fallback.
+            // API 24-30: no getBatteryState(), use BT reflection fallback.
             val name = InputDevice.getDevice(deviceId)?.name ?: return null
             val level = bluetoothBattery.readLevel(name) ?: return null
             Log.d(TAG, "pad $deviceId BT battery level=$level (API<31 reflection)")

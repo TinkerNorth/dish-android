@@ -1,4 +1,4 @@
-# Dish ↔ Satellite contract — client notes
+# Dish ↔ Satellite contract: client notes
 
 The protocol contract (REST surface, UDP streams, crypto, liveness, identity)
 lives in ONE place: **`satellite/docs/contract.md`** in the
@@ -44,7 +44,7 @@ Android-side mapping. The former `wire-format.md` is replaced by the contract.
   full session re-PUT carries the request. The grant is part of the
   applied view the reconcile GET compares against.
 - **Identity.** Satellites are keyed on `machineId` only. The pairing key is
-  never used on the UDP path — each session derives
+  never used on the UDP path: each session derives
   `HKDF(pairingKey, sessionSalt, token)`.
 - **Catalog.** The "Emulate" picker renders from `GET /api/catalog`
   (Accept-Language, ETag-cached). Known slugs (`xbox360`, `ds4`) keep bundled

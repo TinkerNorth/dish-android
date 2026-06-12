@@ -18,7 +18,7 @@ class TouchpadModeStore
             setState(repo.all().associate { it.satelliteId to it.mode })
         }
 
-        // Null means never picked — resolver collapses to pair-time default (distinct from "off").
+        // Null means never picked: resolver collapses to pair-time default (distinct from "off").
         fun modeFor(satelliteId: String): String? = state.value[satelliteId]
 
         fun setMode(

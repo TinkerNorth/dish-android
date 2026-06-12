@@ -79,7 +79,7 @@ object SatelliteNative {
     external fun isConnectionAlive(handle: Int): Boolean
 
     // Session epoch from the latest enriched heartbeat ack; -1 until one lands.
-    // Compared against the applied epoch from the last PUT/GET — mismatch means
+    // Compared against the applied epoch from the last PUT/GET: mismatch means
     // the server's topology moved involuntarily and a REST reconcile is due.
     external fun getServerEpoch(handle: Int): Int
 
@@ -96,10 +96,10 @@ object SatelliteNative {
 
     // Blocks ≤500ms (socket recv timeout); call from background. Returns
     // 1 = datagram consumed, 0 = timeout/rejected datagram, -1 = session or
-    // socket dead (terminal — the caller's drain loop must stop).
+    // socket dead (terminal: the caller's drain loop must stop).
     external fun receiveAck(handle: Int): Int
 
-    // BLOCKING — call on Dispatchers.IO. Returns JSON array of beacon objects.
+    // BLOCKING. Call on Dispatchers.IO. Returns JSON array of beacon objects.
     external fun discoverServers(
         discPort: Int,
         timeoutMs: Int,
@@ -187,7 +187,7 @@ object SatelliteNative {
     // Framework KeyEvent/MotionEvent updates applied for a routed device (USB Standard or Bluetooth).
     external fun getDeviceInputEventCount(deviceId: Int): Long
 
-    // Flat parameter list (not packed) so each axis stays primitive Float — no per-event allocation.
+    // Flat parameter list (not packed) so each axis stays primitive Float: no per-event allocation.
     @Suppress("LongParameterList")
     external fun processGamepadMotionEvent(
         deviceId: Int,

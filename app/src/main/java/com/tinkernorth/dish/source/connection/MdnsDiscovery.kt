@@ -135,8 +135,8 @@ class MdnsDiscovery
                 }
             }
 
-        // NsdServiceInfo.host deprecated on API 34+; single-address host still correct on API 24–33.
-        // API 34+ exposes the full address list — prefer an IPv4 from it: the UDP
+        // NsdServiceInfo.host deprecated on API 34+; single-address host still correct on API 24-33.
+        // API 34+ exposes the full address list. Prefer an IPv4 from it: the UDP
         // data path is IPv4-only, so an IPv6-resolved host can't carry a session
         // (openSocket refuses non-IPv4 literals rather than streaming to 0.0.0.0).
         @Suppress("DEPRECATION")

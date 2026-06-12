@@ -1,5 +1,5 @@
 <!-- Battery at 0% fill (v6 brand): hull + empty well, no fill rect. Shown at a
-     reported level of 0. The two-tone palette is self-coloured — do NOT apply
+     reported level of 0. The two-tone palette is self-coloured: do NOT apply
      android:tint / app:tint. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"

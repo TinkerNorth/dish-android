@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
  * One satellite session. Slots are DECLARATIVE: this class holds the desired
  * descriptor per slot plus the applied state the satellite last confirmed;
  * every mutation funnels into the manager's REST sync (session PUT on connect,
- * per-controller PUT/DELETE while live). UDP carries streams only — it can
+ * per-controller PUT/DELETE while live). UDP carries streams only. It can
  * never mutate topology (satellite docs/contract.md).
  */
 class SatelliteConnection(
@@ -58,7 +58,7 @@ class SatelliteConnection(
 
     val handle: Int get() = live?.handle ?: -1
 
-    // The epoch the satellite stamped on our last PUT/GET — the reference the
+    // The epoch the satellite stamped on our last PUT/GET: the reference the
     // heartbeat-ack epoch is compared against.
     @Volatile var lastAppliedEpoch: Int = -1
         private set
@@ -123,7 +123,7 @@ class SatelliteConnection(
         _state.value = SatelliteSessionState.Live
         // Drain the downstream socket (acks, rumble, close-notify); receiveAck
         // blocks ≤500 ms. Negative status = socket gone and every further call
-        // returns instantly — exit, don't busy-spin; aliveJob owns death detection.
+        // returns instantly: exit, don't busy-spin; aliveJob owns death detection.
         ackJob =
             scope.launch(ioDispatcher) {
                 var status = 0
@@ -137,7 +137,7 @@ class SatelliteConnection(
                 var consecutiveMisses = 0
                 while (isActive) {
                     delay(ALIVE_POLL_MS)
-                    // An authenticated close-notify is terminal NOW — the
+                    // An authenticated close-notify is terminal NOW: the
                     // session is already gone server-side, so waiting out the
                     // heartbeat death window would just be dead air.
                     val closeReason = controllerRepo.getSessionCloseReason(handle)
@@ -169,7 +169,7 @@ class SatelliteConnection(
 
     // Heartbeat acks carry the server's (epoch, active-bitmap). A mismatch with
     // our applied view means the server lost or mutated topology involuntarily
-    // (failed replug, reap, sibling close) — self-heal via the reconcile
+    // (failed replug, reap, sibling close). Self-heal via the reconcile
     // endpoint instead of streaming into a dead slot.
     private fun checkReconcile(onReconcileNeeded: () -> Unit) {
         val snap = live ?: return
@@ -218,7 +218,7 @@ class SatelliteConnection(
     }
 
     /**
-     * Declare a slot with its FINAL descriptor — the type travels with the
+     * Declare a slot with its FINAL descriptor: the type travels with the
      * attach, so there is never a default-then-correct phase anywhere in the
      * pipeline. While live, the manager converges it via a controller PUT;
      * while idle, it rides the next session PUT.
@@ -359,7 +359,7 @@ class SatelliteConnection(
                 val result = byIdx[binding.controllerIndex] ?: return@mapValues binding
                 if (result.slotIsLive) {
                     // A failed replug keeps the PREVIOUS pad alive (appliedType
-                    // reports it) — streams keep flowing rather than killing a
+                    // reports it). Streams keep flowing rather than killing a
                     // working pad over a type the driver couldn't switch.
                     motionBackendStatusStore?.setStatus(
                         id,

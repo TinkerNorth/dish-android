@@ -35,7 +35,7 @@ class BluetoothBondMonitorTest {
 
     @Before
     fun setUp() {
-        // android.util.Log is unmocked by default in JVM unit tests — stub to no-ops so logging plumbing isn't under test.
+        // android.util.Log is unmocked by default in JVM unit tests. Stub to no-ops so logging plumbing isn't under test.
         mockkStatic(Log::class)
         every { Log.w(any(), any<String>()) } returns 0
         every { Log.d(any(), any<String>()) } returns 0

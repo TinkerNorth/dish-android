@@ -32,7 +32,7 @@ class PhysicalMotionProbeTest {
     }
 
     @Test
-    fun `returns false on API below 31 — per-device sensor API does not exist`() {
+    fun `returns false on API below 31 - per-device sensor API does not exist`() {
         assertFalse(PhysicalMotionProbe.evaluate(sdkInt = 30, device = deviceWithGyro()))
     }
 
@@ -62,7 +62,7 @@ class PhysicalMotionProbeTest {
     }
 
     @Test
-    fun `is stable across higher SDK levels — does not regress past API 31`() {
+    fun `is stable across higher SDK levels, does not regress past API 31`() {
         assertTrue(
             PhysicalMotionProbe.evaluate(
                 sdkInt = Build.VERSION_CODES.S + 5,

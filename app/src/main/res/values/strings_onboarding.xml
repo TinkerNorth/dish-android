@@ -11,7 +11,7 @@
 
     <string name="welcome_step2_eyebrow">HOW IT WORKS</string>
     <string name="welcome_step2_title">A short hop over Wi-Fi</string>
-    <string name="welcome_step2_body">Your phone sends button presses, sticks, and motion to a small free helper called Satellite running on your PC. Satellite shows up to your games as a regular gamepad — no extra setup per game.</string>
+    <string name="welcome_step2_body">Your phone sends button presses, sticks, and motion to a small free helper called Satellite running on your PC. Satellite shows up to your games as a regular gamepad. No extra setup per game.</string>
 
     <string name="welcome_step3_eyebrow">ONE MORE THING</string>
     <string name="welcome_step3_title">Install Satellite on your PC</string>
@@ -20,7 +20,7 @@
 
     <string name="welcome_step4_eyebrow">YOU\'RE SET</string>
     <string name="welcome_step4_title">Ready when you are</string>
-    <string name="welcome_step4_body">Tap Get started to begin. Open Setup guide any time from Settings if you want a walkthrough — or jump straight in and pair with a Satellite on your network.</string>
+    <string name="welcome_step4_body">Tap Get started to begin. Open Setup guide any time from Settings if you want a walkthrough, or jump straight in and pair with a Satellite on your network.</string>
     <string name="welcome_step4_launch_wizard">Open setup guide</string>
 
     <string name="welcome_step1_hero_desc">Dish app logo</string>
@@ -39,7 +39,7 @@
 
     <string name="wizard_step1_eyebrow">STEP 1 · CONNECTION</string>
     <string name="wizard_step1_title">How will you reach your PC?</string>
-    <string name="wizard_step1_body">Two ways to send your input to a PC. Wi-Fi is the lowest-latency path and unlocks motion and the touchpad. Bluetooth treats this phone as a regular wireless gamepad — works without Satellite, but with a small latency cost.</string>
+    <string name="wizard_step1_body">Two ways to send your input to a PC. Wi-Fi is the lowest-latency path and unlocks motion and the touchpad. Bluetooth treats this phone as a regular wireless gamepad. Works without Satellite, but with a small latency cost.</string>
 
     <string name="wizard_option_lan_title">Wi-Fi to Satellite</string>
     <string name="wizard_option_lan_body">Phone and PC on the same Wi-Fi. Lowest latency, full feature set (motion, touchpad, rumble).</string>
@@ -50,10 +50,10 @@
 
     <string name="wizard_step2_eyebrow">STEP 2 · CONTROLLER</string>
     <string name="wizard_step2_title">What will you play with?</string>
-    <string name="wizard_step2_body">You can play with the on-screen pad, or plug in a real controller for proper sticks and triggers. A USB controller into your phone has the lowest input latency — no Bluetooth in the chain.</string>
+    <string name="wizard_step2_body">You can play with the on-screen pad, or plug in a real controller for proper sticks and triggers. A USB controller into your phone has the lowest input latency: no Bluetooth in the chain.</string>
 
     <string name="wizard_option_virtual_title">On-screen gamepad</string>
-    <string name="wizard_option_virtual_body">Touch the buttons on the phone screen. Great for couch games and trying things out — your phone\'s gyroscope is available for aim assist.</string>
+    <string name="wizard_option_virtual_body">Touch the buttons on the phone screen. Great for couch games and trying things out. Your phone\'s gyroscope is available for aim assist.</string>
 
     <string name="wizard_option_usb_title">USB controller into phone</string>
     <string name="wizard_option_usb_body">Plug a wired Xbox / PlayStation / generic gamepad into your phone\'s USB-C port. The phone forwards every press to your PC.</string>
@@ -69,11 +69,11 @@
     <string name="wizard_summary_controller_label">Controller</string>
 
     <string name="wizard_next_lan_virtual">Tap Finish to open Connections. Scan for your Satellite, pair it with the 4-digit PIN, then open the on-screen gamepad.</string>
-    <string name="wizard_next_lan_usb">Tap Finish to open Connections. Pair your Satellite with the 4-digit PIN, then plug your USB controller into the phone — it\'ll appear as a new slot ready to bind.</string>
+    <string name="wizard_next_lan_usb">Tap Finish to open Connections. Pair your Satellite with the 4-digit PIN, then plug your USB controller into the phone. It\'ll appear as a new slot ready to bind.</string>
     <string name="wizard_next_lan_phys_bt">Tap Finish to open Connections. Pair your Satellite with the 4-digit PIN. Your already-paired Bluetooth controller will appear as a slot you can bind to the Satellite.</string>
     <string name="wizard_next_bt_virtual">Tap Finish to open Connections. Add a Bluetooth host, accept the pairing on your PC, then open the on-screen gamepad.</string>
-    <string name="wizard_next_bt_usb">Heads up — Bluetooth-host mode sends the phone\'s controller state, not a separate USB pad. Use the on-screen gamepad on this path, or switch to the Wi-Fi connection in the previous step.</string>
-    <string name="wizard_next_bt_phys_bt">Heads up — Bluetooth-host mode sends the phone\'s controller state, not your already-paired Bluetooth gamepad. Use the on-screen gamepad on this path, or switch to the Wi-Fi connection in the previous step.</string>
+    <string name="wizard_next_bt_usb">Heads up: Bluetooth-host mode sends the phone\'s controller state, not a separate USB pad. Use the on-screen gamepad on this path, or switch to the Wi-Fi connection in the previous step.</string>
+    <string name="wizard_next_bt_phys_bt">Heads up: Bluetooth-host mode sends the phone\'s controller state, not your already-paired Bluetooth gamepad. Use the on-screen gamepad on this path, or switch to the Wi-Fi connection in the previous step.</string>
 
     <string name="wizard_finish_review">Go back</string>
 
@@ -91,52 +91,52 @@
     <string name="help_a_what_is_dish">Dish turns your phone into a wireless gamepad. It can send input to a PC over Wi-Fi (via the free Satellite helper) or pair to a PC / console as a regular Bluetooth gamepad.</string>
 
     <string name="help_q_what_is_satellite">What is Satellite?</string>
-    <string name="help_a_what_is_satellite">Satellite is a small, free, open-source program that runs on your PC. It receives input from Dish over Wi-Fi and presents itself to your games as a regular controller. Without Satellite, games can\'t see your phone — install it from tinkernorth.com/satellite.</string>
+    <string name="help_a_what_is_satellite">Satellite is a small, free, open-source program that runs on your PC. It receives input from Dish over Wi-Fi and presents itself to your games as a regular controller. Without Satellite, games can\'t see your phone. Install it from tinkernorth.com/satellite.</string>
 
-    <string name="help_q_lan_vs_bluetooth">Wi-Fi or Bluetooth — which should I pick?</string>
+    <string name="help_q_lan_vs_bluetooth">Wi-Fi or Bluetooth: which should I pick?</string>
     <string name="help_a_lan_vs_bluetooth">Wi-Fi with Satellite is the better path for almost everyone. It\'s lower latency, supports motion (gyro aim), and unlocks the touchpad. Bluetooth-host mode is the right choice when you don\'t want to install anything on the PC, or when you\'re using a console / set-top box that doesn\'t run Satellite.</string>
 
     <string name="help_q_controller_modes">Can I use a real controller with Dish?</string>
     <string name="help_a_controller_modes">Yes. Plug a USB controller into your phone\'s USB-C port, or pair a Bluetooth controller (Xbox Wireless, DualSense, 8BitDo, etc.) directly to your phone. The controller shows up as a new slot you can bind to your Satellite.</string>
 
     <string name="help_q_motion_touchpad">What\'s motion and what\'s the touchpad?</string>
-    <string name="help_a_motion_touchpad">Motion is your phone\'s gyroscope used as aim assist — it appears to games as the gyro inside a PlayStation pad. The touchpad turns the phone screen into a clickable trackpad you can use for menus or as a mouse. Both need a Wi-Fi (Satellite) connection — Bluetooth-host mode can\'t carry them.</string>
+    <string name="help_a_motion_touchpad">Motion is your phone\'s gyroscope used as aim assist. It appears to games as the gyro inside a PlayStation pad. The touchpad turns the phone screen into a clickable trackpad you can use for menus or as a mouse. Both need a Wi-Fi (Satellite) connection. Bluetooth-host mode can\'t carry them.</string>
 
     <string name="help_q_best_setup">What\'s the best setup for low latency?</string>
-    <string name="help_a_best_setup">USB controller into the phone, phone on 5 GHz Wi-Fi, PC on the same router (preferably wired Ethernet). USB-to-phone is zero added latency; Wi-Fi adds one short hop. Avoid 2.4 GHz Wi-Fi and avoid mobile data — Dish needs the phone and PC on the same local network.</string>
+    <string name="help_a_best_setup">USB controller into the phone, phone on 5 GHz Wi-Fi, PC on the same router (preferably wired Ethernet). USB-to-phone is zero added latency; Wi-Fi adds one short hop. Avoid 2.4 GHz Wi-Fi and avoid mobile data: Dish needs the phone and PC on the same local network.</string>
 
     <string name="help_q_why_lan_lower">Why is Wi-Fi lower latency than Bluetooth?</string>
-    <string name="help_a_why_lan_lower">Wi-Fi sends input as small UDP packets at the pace your phone polls — usually faster than Bluetooth can. Bluetooth HID has a fixed polling interval and a longer pipeline, so it sits between you and the game with a small but real delay.</string>
+    <string name="help_a_why_lan_lower">Wi-Fi sends input as small UDP packets at the pace your phone polls, usually faster than Bluetooth can. Bluetooth HID has a fixed polling interval and a longer pipeline, so it sits between you and the game with a small but real delay.</string>
 
     <string name="help_q_wired_better">Is wired better than wireless?</string>
-    <string name="help_a_wired_better">For the controller-to-phone leg: yes, USB beats Bluetooth-paired-to-phone. For the phone-to-PC leg: Wi-Fi is the only option — you can\'t plug your phone\'s USB into your PC for input forwarding. Connect your PC to the router with Ethernet if you can; phone-side stays on Wi-Fi.</string>
+    <string name="help_a_wired_better">For the controller-to-phone leg: yes, USB beats Bluetooth-paired-to-phone. For the phone-to-PC leg: Wi-Fi is the only option. You can\'t plug your phone\'s USB into your PC for input forwarding. Connect your PC to the router with Ethernet if you can; phone-side stays on Wi-Fi.</string>
 
-    <string name="help_q_no_satellites">Dish can\'t find any Satellites — what now?</string>
-    <string name="help_a_no_satellites">Check that Satellite is running on the PC (its tray icon should be visible). Confirm the phone and PC are on the same Wi-Fi network — guest networks and 2.4 GHz vs 5 GHz on the same router count as different. Tap Scan in Connections to retry.</string>
+    <string name="help_q_no_satellites">Dish can\'t find any Satellites. What now?</string>
+    <string name="help_a_no_satellites">Check that Satellite is running on the PC (its tray icon should be visible). Confirm the phone and PC are on the same Wi-Fi network. Guest networks and 2.4 GHz vs 5 GHz on the same router count as different. Tap Scan in Connections to retry.</string>
 
     <string name="help_q_pin_rejected">My PIN keeps getting rejected.</string>
-    <string name="help_a_pin_rejected">The PIN is shown by Satellite on your PC and changes if you restart it. Check the digits on the PC right before you type — and make sure you\'re typing into the right Satellite if more than one is showing in the list.</string>
+    <string name="help_a_pin_rejected">The PIN is shown by Satellite on your PC and changes if you restart it. Check the digits on the PC right before you type, and make sure you\'re typing into the right Satellite if more than one is showing in the list.</string>
 
     <string name="help_q_disconnects">My controller keeps disconnecting mid-game.</string>
-    <string name="help_a_disconnects">Most disconnects come from your phone going to sleep or Wi-Fi switching bands. Plug the phone in to charge while you play, and pin your phone\'s Wi-Fi to 5 GHz if the router lets you. Dish keeps a foreground notification while streaming — leave it dismissed in place, that\'s how Android keeps the link alive.</string>
+    <string name="help_a_disconnects">Most disconnects come from your phone going to sleep or Wi-Fi switching bands. Plug the phone in to charge while you play, and pin your phone\'s Wi-Fi to 5 GHz if the router lets you. Dish keeps a foreground notification while streaming. Leave it dismissed in place, that\'s how Android keeps the link alive.</string>
 
     <string name="help_q_no_motion">Motion (gyro aim) isn\'t working.</string>
     <string name="help_a_no_motion">Motion needs three things: a Wi-Fi (Satellite) connection (Bluetooth-host can\'t carry motion), a phone with a gyroscope (most phones since 2018), and a PlayStation-style controller on the host side. Switch the controller type to PlayStation on the slot to enable the motion channel.</string>
 
     <string name="help_q_battery_drain">Battery drains fast while streaming.</string>
-    <string name="help_a_battery_drain">Streaming uses your phone\'s radio constantly — that\'s the cost of being a live controller. Plug in to charge while playing. Dish also has a low-power mode (the dim screen during gameplay) that drops the display to its minimum brightness while still streaming — leave the app open and don\'t lock the screen.</string>
+    <string name="help_a_battery_drain">Streaming uses your phone\'s radio constantly. That\'s the cost of being a live controller. Plug in to charge while playing. Dish also has a low-power mode (the dim screen during gameplay) that drops the display to its minimum brightness while still streaming. Leave the app open and don\'t lock the screen.</string>
 
     <string name="help_q_open_source">Is Dish open source?</string>
     <string name="help_a_open_source">Yes. Dish (Android, Linux, Mac) and Satellite are all released under LGPL-3.0, source on GitHub at github.com/TinkerNorth. Pull requests welcome.</string>
 
     <string name="help_q_privacy">What does Dish collect?</string>
-    <string name="help_a_privacy">Almost nothing. Dish doesn\'t send gameplay or controller input anywhere — that traffic stays on your local network between phone and PC. Anonymous crash reports are opt-in (Settings → Diagnostics). See the privacy policy for the full list.</string>
+    <string name="help_a_privacy">Almost nothing. Dish doesn\'t send gameplay or controller input anywhere. That traffic stays on your local network between phone and PC. Anonymous crash reports are opt-in (Settings → Diagnostics). See the privacy policy for the full list.</string>
 
     <string name="help_view_privacy_policy">Privacy policy</string>
     <string name="help_view_github">View source on GitHub</string>
 
     <string name="dashboard_hint_title">Need a hand?</string>
-    <string name="dashboard_hint_body">Open the setup guide to pick your connection and controller — we\'ll take you to the right screen.</string>
+    <string name="dashboard_hint_body">Open the setup guide to pick your connection and controller. We\'ll take you to the right screen.</string>
     <string name="dashboard_hint_action_open">Open guide</string>
     <string name="dashboard_hint_action_dismiss">Not now</string>
 

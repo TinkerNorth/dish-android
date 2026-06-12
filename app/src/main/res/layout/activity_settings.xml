@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Settings screen, recreated from the Claude Design "Settings.html"
-    handoff. Toolbar (chevron + "Settings") kept from the previous version
-    per Laura's request; body is the two-section layout below.
+    Settings screen. Toolbar (chevron + "Settings") kept from the previous
+    version; body is the two-section layout below.
 
       ── DIAGNOSTICS ──
         Toggle card: bug glyph in a tinted square container, title + body
@@ -313,9 +312,7 @@
                              SettingsActivity.onCreate. The subtitle's
                              TextAppearance is swapped from the composite
                              default `Body` to `Body.Mono` so the URL renders
-                             in the on-surface mono tone the version row uses
-                             (preserves the Phase 2 drift resolution; see
-                             PHASE_2_HANDOFF.md). -->
+                             in the on-surface mono tone the version row uses. -->
                         <include
                             android:id="@+id/cardRowPrivacy"
                             layout="@layout/card_row_icon_label_value"
@@ -377,7 +374,7 @@
                         android:paddingVertical="@dimen/size_11">
 
                         <!-- Version label adopts Label and keeps textAllCaps
-                             inline — capitalisation is callsite intent, not a
+                             inline: capitalisation is callsite intent, not a
                              style-wide concern. -->
                         <TextView
                             style="@style/TextAppearance.Dish.Label"
@@ -399,7 +396,7 @@
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
-                <!-- Brand footer — stylistic constant, not localised. Adopts
+                <!-- Brand footer: stylistic constant, not localised. Adopts
                      Caption and keeps textAllCaps + alpha + gravity inline
                      (those are callsite intent, not style-wide concerns). -->
                 <TextView

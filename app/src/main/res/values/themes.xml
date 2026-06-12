@@ -1,7 +1,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Material 3 (Expressive + FocusRings) base. The theme is fully
          DayNight-aware: this file is the SINGLE theme definition (the
-         redundant `values-night/themes.xml` is intentionally absent —
+         redundant `values-night/themes.xml` is intentionally absent:
          when day and night themes share the same attribute structure,
          maintaining one file and letting the colour resources resolve
          per night-qualifier eliminates the drift hazard of keeping two
@@ -11,19 +11,19 @@
          Material 1.14 ships a four-axis grid of M3 parent themes; we
          sit at the corner that enables:
 
-           - **Material3Expressive** over plain Material3 — pulls in the
+           - **Material3Expressive** over plain Material3: pulls in the
              expressive slider style (we don't render a slider today, so
              this is a strict no-op at the moment, but it future-proofs
              new affordances by reading from the expressive component
              defaults instead of the original M3 baseline).
-           - **FocusRings** — swaps every `?attr/selectableItemBackground`
+           - **FocusRings**: swaps every `?attr/selectableItemBackground`
              / `controlBackground` / `toolbarNavigationButtonBackground`
              drawable for an M3 focus-ring layer-list, and re-styles the
              platform `buttonStyle` / `imageButtonStyle` / `checkboxStyle`
              / `radioButtonStyle` to their `.FocusRing` variants. The
-             practical effect: every focusable affordance — privacy-policy
+             practical effect: every focusable affordance (privacy-policy
              card (uses `?attr/selectableItemBackground`), the toolbar
-             nav-icon, and any future platform button — draws a visible
+             nav-icon, and any future platform button) draws a visible
              focus ring when the user navigates with a hardware keyboard,
              D-pad, or, critically for this app, a gamepad. The prior
              M3 baseline rendered focus state as a near-invisible state
@@ -31,7 +31,7 @@
              focused.
 
          The M2 `colorPrimaryVariant` / `colorSecondaryVariant` attributes
-         intentionally dropped — they don't exist in the M3 token system
+         intentionally dropped: they don't exist in the M3 token system
          (replaced by `colorPrimaryContainer` / `colorSecondaryContainer`
          which we now pin alongside the rest of the M3 container/variant
          family so widgets don't compute off-brand pastels from M3's default
@@ -42,10 +42,10 @@
            2. M3 surface + outline variants and tonal containers
            3. M3 surface container hierarchy (Lowest → Highest + Dim/Bright)
            4. M3 inverse + tertiary + scrim families
-           5. Typography ramp (?attr/textAppearance*) — see the block-level
+           5. Typography ramp (?attr/textAppearance*): see the block-level
               comment for why labelLarge/display*/headlineLarge* stay
               unmapped.
-           6. Shape ramp (?attr/shapeAppearanceCorner*) — backed by the
+           6. Shape ramp (?attr/shapeAppearanceCorner*): backed by the
               ShapeAppearance.Dish.Corner.* styles defined at the bottom
               of this file.
            7. Window chrome + default widget styles (button + alert dialog
@@ -56,7 +56,7 @@
         <item name="colorOnPrimary">@color/colorOnPrimary</item>
         <item name="colorSecondary">@color/colorPrimaryMid</item>
         <!-- colorOnSecondary mirrors colorOnPrimary because colorSecondary
-             (cyan_700) has the same luminance as colorPrimaryDark — any
+             (cyan_700) has the same luminance as colorPrimaryDark. Any
              future widget reading the Material on/bg pair gets 5.6:1
              contrast, well above WCAG AA's 4.5:1. -->
         <item name="colorOnSecondary">@color/colorOnPrimary</item>
@@ -94,7 +94,7 @@
              mechanism here keeps a future contributor from accidentally
              surfacing the overlay by bumping elevation > 0.
              (Material 1.14 doesn't expose colorSurfaceTint as a theme
-             attr — the mechanism is gated by elevationOverlayEnabled
+             attr. The mechanism is gated by elevationOverlayEnabled
              instead. Our semantic "icon container fill" token was
              renamed from colorSurfaceTint to colorIconContainerFill
              during the M3 audit so the names don't suggest a wiring
@@ -114,7 +114,7 @@
              (the dim distinction matters for light themes where the page
              is bright). Our semantic `colorSurfaceDim` token in colors.xml
              still maps to navy_700 for legacy consumers (GamepadTouchView
-             stick recess, empty-state surface) — the two coexist
+             stick recess, empty-state surface). The two coexist
              intentionally; see colors.xml. -->
         <item name="colorSurfaceContainerLowest">@color/colorSurfaceContainerLowest</item>
         <item name="colorSurfaceContainerLow">@color/colorSurfaceContainerLow</item>
@@ -128,7 +128,7 @@
              Inverse: used by Material Snackbar's default surface. Our
              DishNotifications renderer skins the Snackbar background per
              severity, but any plain `Snackbar.make()` from a code path
-             that hasn't been migrated reads these — pinning them means
+             that hasn't been migrated reads these. Pinning them means
              the fallback is brand-correct (light surface, navy text).
 
              Tertiary: the "complementary accent" slot. Amber pairs warm
@@ -137,7 +137,7 @@
              share a single source of truth instead of running parallel
              families.
 
-             colorScrim is NOT pinned — Material 1.14 doesn't expose it as
+             colorScrim is NOT pinned: Material 1.14 doesn't expose it as
              a theme attr (the M3 spec adds it, the library hasn't shipped
              it yet). The existing `colorOverlayScrim` resource backs the
              only scrim consumer today (low-power HUD); revisit when the
@@ -159,7 +159,7 @@
              Intentionally unmapped:
                - labelLarge: the button-text slot. MaterialButton text style
                  is set directly via Widget.Dish.Button, and our Dish.Label
-                 is the 11sp mono eyebrow — mapping it would force eyebrow
+                 is the 11sp mono eyebrow. Mapping it would force eyebrow
                  type onto Chip / NavigationBar / Menu widgets we'd want
                  readable. The dialog button bar inherits Widget.Dish.Button*
                  (which sets its own textAppearance) so this leaves no slot
@@ -172,7 +172,7 @@
 
              headlineSmall and titleLarge both map to Dish.Title.Large
              because MaterialAlertDialog reads one or the other depending
-             on whether it's a centered/icon variant — unifying them
+             on whether it's a centered/icon variant. Unifying them
              means both render the same. -->
         <item name="textAppearanceBodyLarge">@style/TextAppearance.Dish.BodyLarge</item>
         <item name="textAppearanceBodyMedium">@style/TextAppearance.Dish.Body</item>
@@ -186,7 +186,7 @@
 
         <!-- ── 6. Shape ramp ──
              Material 3 widgets read `?attr/shapeAppearanceCornerSmall` etc.
-             when picking corner radii — alert dialog corners, exposed
+             when picking corner radii: alert dialog corners, exposed
              dropdown menus, bottom sheets, the Snackbar surface, and FAB
              variants all flow through this ramp. Pinning the five slots
              to Dish corner dimens means a new M3 surface adopted later
@@ -205,7 +205,7 @@
 
         <!-- ── 7. Window chrome + default widget styles ──
              windowBackground stays pinned to `@color/colorBackground` so
-             the pre-content frame matches the active theme — the light
+             the pre-content frame matches the active theme: the light
              paper surface in day mode, the navy chrome in night mode
              (the colour primitives are split across `values/colors.xml`
              and `values-night/colors.xml`; the theme's reference here
@@ -225,7 +225,7 @@
         <item name="android:windowBackground">@color/colorBackground</item>
         <!-- Default MaterialButton style for the entire app -->
         <item name="materialButtonStyle">@style/Widget.Dish.Button</item>
-        <!-- Default MaterialChip style — drives every chip the Controller
+        <!-- Default MaterialChip style: drives every chip the Controller
              card's inline pickers inflate (Type, Touchpad mode). Selected /
              unselected fill, stroke, text colour, ripple, state layer, and
              shape all flow through this style; the adapter only sets
@@ -240,7 +240,7 @@
     </style>
 
     <!-- Filled button: cyan-dark background, dark navy text (colorOnPrimary).
-         Sentence-case + no letter-tracking — M3 dropped the all-caps button
+         Sentence-case + no letter-tracking: M3 dropped the all-caps button
          convention universally. Strings supply their own capitalisation. -->
     <style name="Widget.Dish.Button" parent="Widget.Material3.Button">
         <item name="backgroundTint">@color/colorPrimaryDark</item>
@@ -294,7 +294,7 @@
          pick up M3 ripple/state-layer treatments consistent with the rest
          of the app. The full M3 attr family from Theme.Dish is re-pinned
          here (the parent is Theme.Material3.DayNight.Dialog, not Theme.Dish,
-         so attrs don't propagate through inheritance — without the
+         so attrs don't propagate through inheritance: without the
          re-pin, MaterialButton / Chip / Snackbar / divider widgets inside
          the dialog would read M3-default tonal-palette values for
          surfaceContainer*, tertiary, and the inverse family). -->
@@ -346,7 +346,7 @@
     </style>
 
     <!-- ============================================================
-         SHAPE RAMP — backs the ?attr/shapeAppearanceCorner* attrs above.
+         SHAPE RAMP: backs the ?attr/shapeAppearanceCorner* attrs above.
 
          Mapping rationale (size → semantic role):
            ExtraSmall (4dp)  → chip surfaces (assist/filter)
@@ -380,23 +380,23 @@
     </style>
 
     <!-- ============================================================
-         MATERIAL ALERT DIALOG OVERLAY — registered on Theme.Dish above
+         MATERIAL ALERT DIALOG OVERLAY: registered on Theme.Dish above
          via materialAlertDialogTheme. Applied to every
          MaterialAlertDialogBuilder(this) constructed inside an Activity
          that uses Theme.Dish.
 
          Title / body styles are TextAppearances (matching what
          `materialAlertDialogTitleTextStyle` / `materialAlertDialogBodyTextStyle`
-         expect — those attrs consume TextAppearance refs, not full
+         expect: those attrs consume TextAppearance refs, not full
          Styles). The attrs are flattened directly (textSize / textColor /
          fontFamily / textStyle / letterSpacing) rather than nesting an
-         `android:textAppearance` item — that nesting is meaningless inside
+         `android:textAppearance` item: that nesting is meaningless inside
          a TextAppearance style and was a documented foot-gun before this
          pass (see text_appearance.xml block header for the `style="…"` vs
          `android:textAppearance` rule).
 
          Note: lineSpacingMultiplier is structurally lost in the dialog
-         body — Material's MaterialAlertDialog applies the body style via
+         body. Material's MaterialAlertDialog applies the body style via
          setTextAppearance(), which doesn't carry lineSpacing through. If
          a future design requires dialog-body line spacing, override
          materialAlertDialogBodyTextStyle to a custom layout instead of
@@ -432,7 +432,7 @@
     </style>
 
     <!-- ============================================================
-         SPLASH SCREEN — Theme.App.Starting
+         SPLASH SCREEN: Theme.App.Starting
 
          Backed by `androidx.core:core-splashscreen`, which provides:
            - On Android 12+ (API 31+): a thin wrapper around the platform
@@ -447,22 +447,22 @@
          every other activity stays on Theme.Dish and never triggers a
          splash. `postSplashScreenTheme` flips the activity to Theme.Dish
          the moment installSplashScreen() runs in MainActivity.onCreate,
-         so the rest of the screen renders with Dish chrome — not the
+         so the rest of the screen renders with Dish chrome, not the
          stripped-down Theme.SplashScreen parent.
 
-         Day/night behaviour — KNOWN LIMITATION:
+         Day/night behaviour. KNOWN LIMITATION:
            `windowSplashScreenBackground` resolves to `@color/colorBackground`,
            which the values/ vs values-night/ colour split flips between
            the light cloud and dark navy primitives. As a result the
            splash backdrop tracks the OS uiMode (light scrim in day,
-           dark in night) — what the user expects when they have no
+           dark in night), what the user expects when they have no
            in-app override.
 
            It does NOT track the user's in-app Appearance choice
            (Settings → Appearance: Light / Dark). The system splash
            window is rendered by Android BEFORE DishApplication.onCreate
-           runs — that's where ThemePreferenceStore.applyPersistedMode()
-           flips AppCompatDelegate's default night mode — so the splash
+           runs (that's where ThemePreferenceStore.applyPersistedMode()
+           flips AppCompatDelegate's default night mode), so the splash
            uses the OS night-mode state, not the persisted in-app
            preference. The user's choice does take effect the moment
            `installSplashScreen()` flips to `postSplashScreenTheme` (=
@@ -475,7 +475,7 @@
 
            Resolving this properly would require pre-launching
            AppCompatDelegate's night mode in a Content Provider's
-           onCreate (which runs before Application.onCreate) — out of
+           onCreate (which runs before Application.onCreate): out of
            scope for the initial light-theme rollout; track as future
            work if cold-start splash polish becomes a priority.
 
@@ -483,11 +483,11 @@
          SplashScreen API extracts the foreground layer and masks it to
          a circle (240dp viewport, 160dp inner content area). The current
          ic_launcher_foreground.png is a cyan dish-on-gear designed for
-         a dark navy backdrop — on the light cloud splash it remains
+         a dark navy backdrop. On the light cloud splash it remains
          visible but lower-contrast (light cyan over light cloud reads
          as a pale-cyan silhouette rather than a punched-in glyph). A
          dedicated ic_splash drawable optimised for both modes, plus
-         the splash mask, is the right long-term answer — see the
+         the splash mask, is the right long-term answer. See the
          comment in MainActivity.onCreate.
          ============================================================ -->
     <style name="Theme.App.Starting" parent="Theme.SplashScreen">

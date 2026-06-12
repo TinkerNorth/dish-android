@@ -37,7 +37,7 @@ class MotionPreferenceRepositoryTest {
     }
 
     @Test
-    fun `get on a slot that was never written returns null — not a default boolean`() {
+    fun `get on a slot that was never written returns null, not a default boolean`() {
         // Repo stays honest so store can distinguish "undecided" from "explicitly enabled".
         val (ctx, _) = fakePrefs()
         val repo = MotionPreferenceRepository(ctx, json)
@@ -56,7 +56,7 @@ class MotionPreferenceRepositoryTest {
     }
 
     @Test
-    fun `corrupt JSON in prefs falls back to empty — does not crash app startup`() {
+    fun `corrupt JSON in prefs falls back to empty, does not crash app startup`() {
         val (ctx, store) = fakePrefs()
         store["preferences"] = "{not valid json"
         val repo = MotionPreferenceRepository(ctx, json)
@@ -92,7 +92,7 @@ class MotionPreferenceRepositoryTest {
     }
 
     @Test
-    fun `put with same slot replaces in place — list never grows`() {
+    fun `put with same slot replaces in place, list never grows`() {
         val (ctx, _) = fakePrefs()
         val repo = MotionPreferenceRepository(ctx, json)
         repo.put(MotionPreference("virtual", enabled = true))

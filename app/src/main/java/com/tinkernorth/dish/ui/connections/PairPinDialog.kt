@@ -13,7 +13,7 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.DialogPairPinBinding
 import com.tinkernorth.dish.ui.common.setLoading
 
-// No auto-dismiss on submit — caller drives setBusy / showError around the in-flight pair call
+// No auto-dismiss on submit: caller drives setBusy / showError around the in-flight pair call
 // so a failure keeps the typed PIN and routes the message through TextInputLayout's setError
 // (the M3 live-region announces it for TalkBack).
 class PairPinDialog(

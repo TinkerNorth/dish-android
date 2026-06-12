@@ -114,7 +114,7 @@ class MainActivity :
         controllerAdapter = ControllerAdapter(this)
         setupUI()
         observeViewModel()
-        // Fallback splash release — happy path is updateUI()'s first emission.
+        // Fallback splash release: happy path is updateUI()'s first emission.
         binding.root.postDelayed({ splashHoldUntilFirstRender = false }, SPLASH_HOLD_MAX_MS)
     }
 
@@ -319,7 +319,7 @@ class MainActivity :
     private companion object {
         // Upper bound on how long the system splash is held past the
         // installSplashScreen() call, even if the first MainUiState never
-        // arrives. Chosen for "feels like an intro, not a hang" — long
+        // arrives. Chosen for "feels like an intro, not a hang": long
         // enough that the splash is perceived on a healthy device, short
         // enough that a stalled cold boot doesn't trap the user.
         const val SPLASH_HOLD_MAX_MS = 1500L

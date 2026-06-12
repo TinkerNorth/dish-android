@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    CARD ROW — leading 36dp icon container + title/subtitle column.
+    CARD ROW: leading 36dp icon container + title/subtitle column.
 
     The shared sub-structure of every Settings-style card row: a tinted
     rounded-square holding the leading glyph, then a vertical text column
@@ -24,19 +24,18 @@
     the Settings ABOUT "Privacy policy" card.
 
     `item_controller.xml`'s slot-card header deliberately does NOT adopt
-    this composite — its leading icon is a bare 36dp tinted ImageView (no
+    this composite: its leading icon is a bare 36dp tinted ImageView (no
     `bg_icon_container` square), its subtitle uses `Dish.BodySmall`, and
     its trailing zone is five siblings (battery group, bound-kind glyph,
     status dot, quick-launch chevron, expansion chevron) rather than a
     single affordance. Forcing it into this composite would either bloat
     the composite with controller-specific visibility-gone defaults or
-    strip out affordances the adapter then re-adds. Documented in
-    PHASE_3_HANDOFF.md.
+    strip out affordances the adapter then re-adds.
 
     Include sites set per-callsite content from code (icon src, title +
     subtitle text). The Privacy card additionally swaps its subtitle's
-    TextAppearance to `Body.Mono` in onCreate to preserve the on-surface
-    URL tone the Phase 2 handoff established.
+    TextAppearance to `Body.Mono` in onCreate to keep the on-surface
+    URL tone the version row uses.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"

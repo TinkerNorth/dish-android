@@ -13,7 +13,7 @@ project(satellite_host_tests CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Pull in googletest. Pinned to a specific tag — bump deliberately, the
+# Pull in googletest. Pinned to a specific tag. Bump deliberately, the
 # action-pin lint in CI doesn't gate FetchContent but supply-chain hygiene
 # still applies.
 include(FetchContent)
@@ -38,7 +38,7 @@ target_include_directories(gamepad_input_test PRIVATE "${SATELLITE_CPP}")
 target_compile_options(gamepad_input_test PRIVATE -Wall -Wextra -Wpedantic)
 target_link_libraries(gamepad_input_test PRIVATE GTest::gtest_main)
 
-# Pure wire-encoder unit tests — no Android / JNI dependency, just the LE
+# Pure wire-encoder unit tests: no Android / JNI dependency, just the LE
 # byte-layout pins for MSG_MOTION (0x000A) and MSG_BATTERY (0x000B).
 add_executable(wire_encoders_test
     wire_encoders_test.cpp

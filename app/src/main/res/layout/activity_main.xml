@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- CoordinatorLayout root so Material Snackbar's swipe-to-dismiss gesture
      works (Snackbar.make walks up to find a CoordinatorLayout to host its
-     dismiss behaviour). Drop-in for the previous FrameLayout — every child
+     dismiss behaviour). Drop-in for the previous FrameLayout: every child
      uses match_parent / wrap_content + optional layout_gravity which both
      containers honour identically. -->
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -173,7 +173,7 @@
     </LinearLayout>
 
     <!-- Low-power overlays. The Snackbar-based feedback layer doesn't need
-         a layout include — it's instantiated at runtime by
+         a layout include: it's instantiated at runtime by
          DishNotifications via Snackbar.make() against this root view. -->
     <include layout="@layout/overlay_low_power" />
 

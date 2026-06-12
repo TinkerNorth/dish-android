@@ -28,7 +28,7 @@
     <string name="action_scan">Buscar</string>
     <string name="action_scanning">Buscando…</string>
     <string name="action_add">Añadir</string>
-    <string name="bt_hosts_empty">No hay hosts recordados — toca Añadir para registrar uno nuevo</string>
+    <string name="bt_hosts_empty">No hay hosts recordados. Toca Añadir para registrar uno nuevo</string>
 
     <!-- row_connection.xml + etiquetas dinámicas de fila en ConnectionsActivity. -->
     <string name="action_connect">Conectar</string>
@@ -43,7 +43,7 @@
 
     <!-- Diálogo de confirmación de olvidar host Bluetooth. -->
     <string name="dialog_forget_bt_title">¿Olvidar %1$s?</string>
-    <string name="dialog_forget_bt_message">Dish dejará de recordar este host. El teléfono conserva el emparejamiento a nivel del sistema — abre los ajustes de Bluetooth para eliminarlo del todo.</string>
+    <string name="dialog_forget_bt_message">Dish dejará de recordar este host. El teléfono conserva el emparejamiento a nivel del sistema. Abre los ajustes de Bluetooth para eliminarlo del todo.</string>
     <string name="dialog_forget_bt_positive">Abrir ajustes</string>
     <string name="dialog_forget_bt_negative">Ahora no</string>
 
@@ -82,7 +82,7 @@
     <string name="slot_status_tap_to_bind">Toca para enlazar</string>
 
     <!-- Filas del selector por slot en ControllerAdapter. -->
-    <string name="picker_empty_no_connections">No hay conexiones aún — toca Gestionar arriba</string>
+    <string name="picker_empty_no_connections">No hay conexiones aún. Toca Gestionar arriba</string>
     <string name="picker_empty_no_available">No hay conexiones disponibles ahora mismo</string>
     <string name="picker_title_with_status">%1$s%2$s</string>
     <string name="picker_status_online"> • en línea</string>
@@ -129,7 +129,7 @@
     <!-- Subtítulo de fila Bluetooth y estado transitorio del slot durante el
          emparejamiento. -->
     <string name="bt_row_detail">%1$s • %2$s</string>
-    <string name="bt_transient_ready_to_pair">Listo para emparejar — busca este dispositivo en tu host</string>
+    <string name="bt_transient_ready_to_pair">Listo para emparejar. Busca este dispositivo en tu host</string>
     <string name="bt_transient_acquiring">Adquiriendo perfil HID…</string>
     <string name="bt_transient_idle">Inactivo</string>
 
@@ -144,13 +144,13 @@
     <string name="motion_unavailable">Movimiento: sin giroscopio</string>
     <string name="motion_unavailable_detail">Este teléfono no tiene giroscopio, por lo que el movimiento (puntería con giroscopio / inclinación) no se envía.</string>
     <string name="motion_not_forwarded_detail">Esta conexión Bluetooth no tiene canal de movimiento. Usa una conexión por satélite para enviar puntería con giroscopio / inclinación.</string>
-    <string name="motion_stalled_detail">Sensor de movimiento bloqueado — prueba a pulsar el botón Atrás para reiniciarlo, o reinicia Dish.</string>
+    <string name="motion_stalled_detail">Sensor de movimiento bloqueado. Prueba a pulsar el botón Atrás para reiniciarlo, o reinicia Dish.</string>
     <string name="motion_user_disabled">Movimiento: desactivado</string>
     <string name="motion_no_host_sink">Movimiento: el host no puede recibir</string>
     <string name="motion_backend_broken">Movimiento: el servidor no puede entregar</string>
     <string name="motion_user_disabled_detail">Has desactivado el movimiento para esta ranura. Activa el interruptor Movimiento en la fila del mando para volver a enviar gyro.</string>
     <string name="motion_no_host_sink_detail">Un mando virtual estilo Xbox no tiene superficie de movimiento en el host. Cambia el mando a PlayStation para la puntería gyro / inclinación.</string>
-    <string name="motion_backend_broken_detail">El satélite aceptó este mando pero no pudo crear su dispositivo de movimiento — probablemente un problema de permisos o de kernel en el servidor. Reinicia el satélite o consulta sus registros.</string>
+    <string name="motion_backend_broken_detail">El satélite aceptó este mando pero no pudo crear su dispositivo de movimiento, probablemente un problema de permisos o de kernel en el servidor. Reinicia el satélite o consulta sus registros.</string>
     <string name="controller_motion_toggle_label">Movimiento (gyro)</string>
     <string name="controller_motion_toggle_subtitle_on">Enviando puntería gyro / inclinación al host.</string>
     <string name="controller_motion_toggle_subtitle_off">No se envían muestras gyro para esta ranura.</string>
@@ -224,7 +224,7 @@
 
     <!-- Estado vacío dinámico para la lista de satélites. -->
     <string name="discovery_empty_never_scanned">Toca Buscar para encontrar satélites en tu red</string>
-    <string name="discovery_empty_no_results">No se encontraron satélites a las %1$s — comprueba la Wi-Fi y que tu host esté encendido.</string>
+    <string name="discovery_empty_no_results">No se encontraron satélites a las %1$s. Comprueba la Wi-Fi y que tu host esté encendido.</string>
 
     <!-- Diálogo personalizado de PIN. -->
     <string name="pair_dialog_title">Emparejar con satélite</string>
@@ -326,7 +326,7 @@
     <string name="binding_edge_action_reconnect">Reconectar</string>
     <string name="binding_edge_action_dismiss">Descartar</string>
     <string name="binding_blocker_input_lost_body">Vuelve a conectar el mando para seguir configurando o cierra esta pantalla.</string>
-    <string name="binding_apply_error_slot_gone">%1$s ya no está disponible — desconéctalo y vuelve a conectarlo, luego inténtalo de nuevo.</string>
+    <string name="binding_apply_error_slot_gone">%1$s ya no está disponible. Desconéctalo y vuelve a conectarlo, luego inténtalo de nuevo.</string>
     <string name="binding_apply_error_no_connect">No se pudo conectar con %1$s. Comprueba que esté encendido y en tu red, y vuelve a intentarlo.</string>
     <string name="binding_apply_warn_title">Modo Directo no disponible</string>
     <string name="binding_apply_warn_detail">%1$s está vinculado a %2$s en modo Estándar.</string>

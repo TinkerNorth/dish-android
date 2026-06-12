@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    NAV GRAPH — single source of truth for in-app navigation between the
+    NAV GRAPH: single source of truth for in-app navigation between the
     six chrome / overlay activities. Used through DishNavigator
     (app/src/main/java/com/tinkernorth/dish/ui/common/DishNavigator.kt),
     which exposes typed `navigateToX` methods over an ActivityNavigator
     seeded with this graph.
 
     Activity-only graph: every destination is an <activity>, no <fragment>.
-    Activity destinations are TERMINAL in the navigation library's model —
+    Activity destinations are TERMINAL in the navigation library's model:
     they cannot carry <action> children. DishNavigator instead navigates
     directly to a destination id, which ActivityNavigator resolves into
     `startActivity(Intent(xActivityClass))` with the supplied bundle as
@@ -17,7 +17,7 @@
     Deep links: NOT declared in this graph. The navigation runtime's lint
     check (DeepLinkInActivityDestination) flags <deepLink> on <activity>
     destinations because the back-stack behaviour is wrong for cross-app
-    implicit-intent flows — system back should return to the calling app,
+    implicit-intent flows: system back should return to the calling app,
     but Activity-destination deep links land the user inside this app's
     own task. Real external deep linking requires either Fragment
     destinations or a manual <intent-filter> on the receiving Activity.

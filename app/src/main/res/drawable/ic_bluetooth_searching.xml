@@ -1,4 +1,4 @@
-<!-- "bluetooth-searching" — Berkana rune + static signal arc on the right.
+<!-- "bluetooth-searching": Berkana rune + static signal arc on the right.
      Static (no animation); the AnimatedVectorDrawable variant lives in
      ic_bluetooth_pairing_animated.xml. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"

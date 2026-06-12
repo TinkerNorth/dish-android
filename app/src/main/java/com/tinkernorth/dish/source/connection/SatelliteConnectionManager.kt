@@ -120,7 +120,7 @@ class SatelliteConnectionManager
         // (and a re-issued request) can cancel the in-flight poll.
         private val approvalPollJobs = java.util.concurrent.ConcurrentHashMap<String, Job>()
 
-        // Consecutive silent-retry count per satellite id — drives the
+        // Consecutive silent-retry count per satellite id: drives the
         // exponential backoff. Reset on a successful session or any user action.
         private val retryAttempts = java.util.concurrent.ConcurrentHashMap<String, Int>()
 
@@ -222,7 +222,7 @@ class SatelliteConnectionManager
             conn.updateServer(server)
             conn.markConnecting()
             scope.launch {
-                // Skip pair handshake if we have a pairing key — failure surfaces as unreachable, not bogus PIN dialog.
+                // Skip pair handshake if we have a pairing key. Failure surfaces as unreachable, not bogus PIN dialog.
                 if (store.satelliteSharedKey(id) != null) {
                     openSession(conn, server, intent)
                 } else {
@@ -326,7 +326,7 @@ class SatelliteConnectionManager
         /**
          * Path B: the dish shows [clientPin]; the operator accepts it on the
          * satellite. Submit, then poll /api/pair/status until accept (→ open
-         * the session), decline, or timeout — the pairing key only arrives via
+         * the session), decline, or timeout: the pairing key only arrives via
          * the poll. An already-paired device never lands here: connect()
          * routes a keyed satellite straight to the session PUT.
          */
@@ -366,7 +366,7 @@ class SatelliteConnectionManager
                         return@launch
                     }
                     // Poll until accept / deny / timeout. pairWithPin shares this
-                    // connection: once it reaches Live, bail — the poll's terminal
+                    // connection: once it reaches Live, bail. The poll's terminal
                     // paths must not tear down a session the PIN just established.
                     var waited = 0L
                     while (waited < APPROVAL_TIMEOUT_MS) {
@@ -487,7 +487,7 @@ class SatelliteConnectionManager
             }
             if (resp.unauthorized) {
                 // Terminal by contract: the server no longer trusts our key (or
-                // never did). Stop retrying — only a re-pair can fix this.
+                // never did). Stop retrying: only a re-pair can fix this.
                 conn.markDisconnected()
                 store.forgetSatelliteSharedKey(id)
                 markStale(id)
@@ -535,7 +535,7 @@ class SatelliteConnectionManager
                     scope.launch {
                         _events.emit(
                             ConnectionEvent.Error(
-                                "Couldn't apply controller on ${server.name} — " +
+                                "Couldn't apply controller on ${server.name}: " +
                                     failures.joinToString { "#${it.ctrlIdx}: ${it.result}" },
                             ),
                         )
@@ -560,7 +560,7 @@ class SatelliteConnectionManager
 
         /**
          * Authenticated close-notify (0x000F): the session is gone server-side
-         * RIGHT NOW — no death-timeout wait. The reason picks the follow-up:
+         * RIGHT NOW: no death-timeout wait. The reason picks the follow-up:
          * unpaired is terminal (re-pair needed); a rotation-superseded session
          * stays down (its replacement is already live); shutdown/kick retry on
          * the backoff curve (the kick is transient by design).
@@ -583,7 +583,7 @@ class SatelliteConnectionManager
         }
 
         // Bounded exponential backoff for the silent retry paths; a user tap
-        // resets the curve. Never schedules for USER_INITIATED — the user gets
+        // resets the curve. Never schedules for USER_INITIATED: the user gets
         // immediate feedback instead of a background loop they didn't ask for.
         private fun scheduleRetry(
             conn: SatelliteConnection,
@@ -611,8 +611,8 @@ class SatelliteConnectionManager
          * Heartbeat acks said the server's topology no longer matches ours
          * (epoch/bitmap drift). GET the applied state; if it actually matches
          * the desired set, just adopt the epoch (a benign drift, e.g. our own
-         * standalone PUT raced an ack). Otherwise re-PUT the full desired state
-         * — the declarative converge makes the retry free.
+         * standalone PUT raced an ack). Otherwise re-PUT the full desired state.
+         * The declarative converge makes the retry free.
          */
         @Suppress("ReturnCount") // converge guard-chain: every early return is a distinct no-op case
         private suspend fun reconcile(
@@ -642,7 +642,7 @@ class SatelliteConnectionManager
                     return
                 }
                 // Applied ≠ desired (or the session is gone): converge with a
-                // fresh session PUT. Tear the UDP tuple down first — the PUT
+                // fresh session PUT. Tear the UDP tuple down first: the PUT
                 // rotates token/key.
                 conn.markDisconnected()
                 conn.markConnecting()
@@ -653,7 +653,7 @@ class SatelliteConnectionManager
         }
 
         // Single-slot converge while the session is live (PUT .../controllers/{idx}).
-        // The session — and its UDP keys — never churn for a toggle.
+        // The session (and its UDP keys) never churn for a toggle.
         @Suppress("ReturnCount") // converge guard-chain: every early return is a distinct no-op case
         private suspend fun syncSlot(
             id: String,
@@ -697,7 +697,7 @@ class SatelliteConnectionManager
                 scope.launch {
                     _events.emit(
                         ConnectionEvent.Error(
-                            "Couldn't apply controller on ${server.name} — " +
+                            "Couldn't apply controller on ${server.name}: " +
                                 failures.joinToString { "#${it.ctrlIdx}: ${it.result}" },
                         ),
                     )
@@ -705,13 +705,13 @@ class SatelliteConnectionManager
             })
             if (conn.wantsMouseControl() != conn.mouseControlGranted) {
                 // The toggle changed the session-level desire, but the grant is
-                // only computed at session PUT (contract §hostFeatures) —
-                // converge the full session so the request rides along.
+                // only computed at session PUT (contract §hostFeatures).
+                // Converge the full session so the request rides along.
                 reconcile(conn, server)
             }
         }
 
-        // Slot delete while live (DELETE .../controllers/{idx}) — removes the
+        // Slot delete while live (DELETE .../controllers/{idx}): removes the
         // SLOT only; the session lives on (zero-controller sessions are valid).
         private suspend fun deleteSlot(
             id: String,
@@ -831,10 +831,10 @@ class SatelliteConnectionManager
             private const val RETRY_MAX_SHIFT = 6
 
             internal const val SERVER_UNREACHABLE_MSG =
-                "Server unreachable — check it's powered on and on the same Wi-Fi."
+                "Server unreachable. Check it's powered on and on the same Wi-Fi."
 
             internal const val REPAIR_NEEDED_MSG =
-                "This satellite no longer recognizes this device — re-pair needed."
+                "This satellite no longer recognizes this device. Re-pair needed."
 
             internal const val IDENTITY_CHANGED_MSG =
                 "This satellite's security identity changed. If it was reinstalled, forget it here and pair again."

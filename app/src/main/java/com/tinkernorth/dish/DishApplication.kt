@@ -90,7 +90,7 @@ class DishApplication : Application() {
             nativeLoadFailed = true
             android.util.Log.e(
                 "DishApplication",
-                "Satellite native library failed to load — falling back to NativeUnavailableActivity",
+                "Satellite native library failed to load, falling back to NativeUnavailableActivity",
                 t,
             )
         }

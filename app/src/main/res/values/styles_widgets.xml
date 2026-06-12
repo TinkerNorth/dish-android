@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    WIDGET STYLES — component-level closure for repeated Material widget
+    WIDGET STYLES: component-level closure for repeated Material widget
     configurations. Every MaterialCardView, MaterialToolbar, status dot,
     section/card icon, switch, and PIN field in the project adopts one
     of these via `style="@style/Widget.Dish.X"`.
@@ -26,7 +26,7 @@
          CARDS
          All MaterialCardView callsites share five attributes.
 
-         Variant choice — DELIBERATE M3 DEVIATION:
+         Variant choice. DELIBERATE M3 DEVIATION:
            M3 spec recommends `Widget.Material3.CardView.Filled` with
            `colorSurfaceContainerLow` for *ungrouped data cards* (the
            slot cards on the dashboard, the Settings cards) and reserves
@@ -34,14 +34,14 @@
            single surface* that need a lighter-weight separator.
 
            Dish picks Outlined for everything because the brand language
-           is "deep-space flat" — every card stays at elevation 0, the
+           is "deep-space flat": every card stays at elevation 0, the
            elevation overlay is disabled theme-wide (see Theme.Dish), and
            the load-bearing visual signal is the 12%-alpha cyan stroke
            (colorCardStroke). Switching to Filled would introduce a
            tonal surface lift that conflicts with the brand intent.
 
            Re-evaluate if a future surface needs to read as "elevated"
-           against the background — at that point M3 Filled +
+           against the background. At that point M3 Filled +
            colorSurfaceContainerLow is the right tool, and the surface
            container hierarchy is now pinned in Theme.Dish for it.
          ============================================================ -->
@@ -64,7 +64,7 @@
          title baseline (Crash); `center_vertical` for single-line rows
          where the trailing chevron sits beside the centred text (Privacy).
 
-         Not adopted by the Settings version row — its padding is asymmetric
+         Not adopted by the Settings version row: its padding is asymmetric
          (`card_padding_horizontal` + `size_11` vertical) because the row is
          a single-line label/value pair, not an icon-plus-text composite. -->
     <style name="Widget.Dish.Card.RowContainer" parent="">
@@ -88,7 +88,7 @@
     </style>
 
     <!-- ============================================================
-         STATUS DOT — bare View with the dot_circle drawable, sized to
+         STATUS DOT: bare View with the dot_circle drawable, sized to
          the icon_dot_lg semantic dimen. The drawable's fill is set
          programmatically (live/connecting/idle/error) by the hosting
          Activity/Adapter; the style owns geometry + background.
@@ -100,15 +100,15 @@
     </style>
 
     <!-- ============================================================
-         EMPTY STATE TEXT — three-style ramp: base (geometry + text
+         EMPTY STATE TEXT. Three-style ramp: base (geometry + text
          appearance) plus two context variants. The base is never used
          on its own; callsites pick either Picker or Section so the
          empty-state row carries the right breathing room for its
          surroundings.
-           - Picker: nested inside a slot card body — small top margin
+           - Picker: nested inside a slot card body. Small top margin
              so it sits just under the prior picker row.
            - Section: standalone empty-state row inside a section (no
-             surrounding card) — vertical padding so the section
+             surrounding card). Vertical padding so the section
              divider above/below doesn't crowd it.
          ============================================================ -->
     <style name="Widget.Dish.EmptyStateText" parent="">
@@ -130,7 +130,7 @@
          section, not from the text bounds.
          paddingTop + paddingBottom (not paddingVertical) because
          android:paddingVertical is API 26+ and style items can't carry
-         a tools:targetApi annotation — same rule that pinned autofill
+         a tools:targetApi annotation: same rule that pinned autofill
          attributes inline on `Widget.Dish.EditText.Pin`. -->
     <style name="Widget.Dish.EmptyStateText.Section">
         <item name="android:paddingTop">@dimen/spacing_xl</item>
@@ -138,13 +138,13 @@
     </style>
 
     <!-- ============================================================
-         SWITCH — Material 3 MaterialSwitch with the empty-label /
+         SWITCH: Material 3 MaterialSwitch with the empty-label /
          no-side-text configuration the design uses everywhere a
          switch shows up. Thumb + track colors are picked up from
          the Material theme's colorPrimary / colorOnSurface so no
          explicit thumbTint / trackTint here.
          Callsites use `com.google.android.material.materialswitch.MaterialSwitch`
-         (the M3 switch widget) — different class from the older
+         (the M3 switch widget). Different class from the older
          `SwitchMaterial` (M2) the codebase used pre-migration.
          ============================================================ -->
     <style name="Widget.Dish.Switch" parent="Widget.Material3.CompoundButton.MaterialSwitch">
@@ -154,9 +154,9 @@
     </style>
 
     <!-- ============================================================
-         TEXT INPUT — pair-dialog PIN field. M3 TextInputLayout (Outlined
+         TEXT INPUT: pair-dialog PIN field. M3 TextInputLayout (Outlined
          box variant) wrapping a TextInputEditText. The brand intent is a
-         field that "looks interactive even when not focused" — Material's
+         field that "looks interactive even when not focused". Material's
          default OutlinedBox renders a faint stroke when unfocused that
          doesn't match. Widget.Dish.TextInputLayout.Pin pins
          `boxStrokeColor` to colorPrimary at full saturation in BOTH
@@ -170,9 +170,9 @@
          M3-native error affordance, which also announces the error
          via a11y live-region semantics (the prior TextView did not).
 
-         Hint is disabled on the layout — the dialog renders its own
+         Hint is disabled on the layout: the dialog renders its own
          title above the field, so the floating-label affordance would
-         duplicate it. Counter is disabled — the PIN is a 4–8 digit
+         duplicate it. Counter is disabled: the PIN is a 4 to 8 digit
          numeric secret; a visible "x / 8" counter would just leak the
          max-length to the user.
          ============================================================ -->
@@ -196,7 +196,7 @@
     <!-- The TextInputEditText nested inside Widget.Dish.TextInputLayout.Pin.
          autofillHints + importantForAutofill stay inline at the callsite
          (API 26+; style items can't carry a tools:targetApi annotation).
-         No background drawable here — TextInputLayout draws the outlined
+         No background drawable here: TextInputLayout draws the outlined
          box around the EditText. -->
     <style name="Widget.Dish.EditText.Pin" parent="Widget.Material3.TextInputEditText.OutlinedBox">
         <item name="android:inputType">number</item>
@@ -231,7 +231,7 @@
     </style>
 
     <!-- ============================================================
-         CHIP — the pickable chip used by the controller card's inline
+         CHIP: the pickable chip used by the controller card's inline
          pickers (Type: Xbox/PS, Touchpad mode: Off/Pad/Mouse). MaterialChip
          in FilterChip mode (checkable=true, single-choice driven by the
          adapter rebinding `isChecked` from the new state). Adopted as the
@@ -240,7 +240,7 @@
          Visual: filled when checked (colorPrimary background, navy text);
          flat with a subtle cyan stroke when unchecked (colorBackground
          background, paper text). State layer (hover / focus / press) is
-         spec-correct M3 — driven by colorPrimary at the M3 ripple opacities.
+         spec-correct M3, driven by colorPrimary at the M3 ripple opacities.
 
          Checked-icon + chip-icon + close-icon all suppressed: this chip is
          a binary toggle indicator; the colour fill alone signals the
@@ -250,18 +250,18 @@
          we don't show).
 
          Shape inherits the M3 shapeAppearanceCornerExtraSmall slot via the
-         parent style — see Theme.Dish for the wiring. Min height is
+         parent style. See Theme.Dish for the wiring. Min height is
          tightened from M3's default 32dp to 24dp to match the prior
          hand-rolled drawable chip's footprint inside the controller card
          picker row.
 
-         a11y trade-off — DELIBERATE WCAG DEVIATION:
+         a11y trade-off. DELIBERATE WCAG DEVIATION:
            ensureMinTouchTargetSize=false flips off M3's automatic 48dp
            tap-target inflation. The chip renders at its 24dp visual size
            with a 24dp effective tap target, below WCAG 2.5.5 Level AAA's
            44x44 minimum. This matches the prior hand-rolled chip's
            density (it had no min touch target either) so this isn't a
-           regression — but it's now documented because the M3 chip flag
+           regression, but it's now documented because the M3 chip flag
            makes the trade-off explicit instead of implicit. Re-evaluate
            by flipping the flag to true (gives 24dp visual + 48dp tap
            area) if the picker becomes thumb-driven enough to warrant
@@ -286,7 +286,7 @@
     </style>
 
     <!-- ============================================================
-         ICONS — geometry-only styles for the section-header icons
+         ICONS: geometry-only styles for the section-header icons
          and leading card glyphs.
            - Icon.Section stays untinted so multi-tone artwork
              (ic_satellite, ic_bluetooth) keeps its embedded palette.
@@ -295,7 +295,7 @@
              matching the design.
          The trailing chevron on the privacy-policy card
          (ic_open_in_new) is intentionally muted and so does NOT
-         adopt Icon.Card — it stays inline with no tint.
+         adopt Icon.Card. It stays inline with no tint.
          ============================================================ -->
     <style name="Widget.Dish.Icon.Section" parent="">
         <item name="android:layout_width">@dimen/icon_section_header</item>
@@ -311,8 +311,8 @@
     <!-- Widget.Dish.Button.Outlined.Overlay (and its supporting
          `touch_target_min` / `button_min_width` / `size_64` /
          `overlay_action_back` resources) was retired when the overlay
-         activities adopted the shared `overlay_header.xml` composite —
-         the back affordance is now the toolbar chevron, not an
+         activities adopted the shared `overlay_header.xml` composite.
+         The back affordance is now the toolbar chevron, not an
          explicit BACK button. Re-introduce the style when an overlay
          button comes back. -->
 

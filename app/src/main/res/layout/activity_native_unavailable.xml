@@ -5,7 +5,7 @@
      forward to support. Routed to by DishApplication when the loader throws,
      before MainActivity gets a chance to bind.
 
-     Pure resources, no injected dependencies — Hilt may not have initialised
+     Pure resources, no injected dependencies: Hilt may not have initialised
      by the time this activity runs (the native load failure happens during
      ContentProvider init, before the Application.onCreate that triggers the
      Hilt graph). `setContentView(R.layout.…)` works regardless because it

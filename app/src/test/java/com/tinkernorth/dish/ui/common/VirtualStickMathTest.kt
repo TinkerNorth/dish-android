@@ -51,7 +51,7 @@ class VirtualStickMathTest {
     }
 
     @Test
-    fun `virtual up matches physical up — both yield positive axisY`() {
+    fun `virtual up matches physical up - both yield positive axisY`() {
         val virtualLY = computeStickAxes(0f, -1f).axisY.toInt()
         assertTrue("virtual=$virtualLY must be positive for stick-up", virtualLY > 0)
     }
