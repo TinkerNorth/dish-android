@@ -105,7 +105,7 @@ replacing the former `docs/wire-format.md`).
   the previous constant 250 Hz re-send of the last state.
 - `versionCode` and `versionName` are now derived from CI environment
   variables (`DISH_VERSION_CODE` / `DISH_VERSION_NAME`), with a
-  `git describe` fallback for local dev. The hardcoded `0` / `"0.0.0"`
+  `git describe` fallback for local dev. The hardcoded `1` / `"0.0.0"`
   defaults remain only when neither signal is present.
 - `release.yml` stages `mapping.txt` into `dist/` alongside the AAB and
   APK so it gets the same SHA256SUMS + cosign signature treatment.

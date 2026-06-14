@@ -54,10 +54,10 @@ fun resolveVersion(): ResolvedVersion {
 
     val describe = providers.of(GitDescribeValueSource::class.java) {}.get()
     val match =
-        Regex("^(\\d+)\\.(\\d+)\\.(\\d+)").find(describe) ?: return ResolvedVersion(0, "0.0.0")
+        Regex("^(\\d+)\\.(\\d+)\\.(\\d+)").find(describe) ?: return ResolvedVersion(1, "0.0.0")
     val (major, minor, patch) = match.destructured
     return ResolvedVersion(
-        code = major.toInt() * 10000 + minor.toInt() * 100 + patch.toInt(),
+        code = (major.toInt() * 10000 + minor.toInt() * 100 + patch.toInt()).coerceAtLeast(1),
         name = describe,
     )
 }
