@@ -152,7 +152,7 @@ unrelated jars suggests something is off.
 
 ### Verifying a release artifact
 
-Each GitHub Release ships the signed `dish-vX.Y.Z.apk` + `.aab`,
+Each GitHub Release ships the signed `dish-X.Y.Z.apk` + `.aab`,
 `*.sig`/`*.crt` (cosign keyless), `SHA256SUMS` + `SHA256SUMS.sig`/`*.crt`,
 the SPDX + CycloneDX SBOMs, and `dish-android.intoto.jsonl` (SLSA L3).
 
@@ -162,15 +162,15 @@ sha256sum -c SHA256SUMS
 cosign verify-blob \
   --certificate SHA256SUMS.crt \
   --signature   SHA256SUMS.sig \
-  --certificate-identity-regexp '^https://github\.com/TinkerNorth/dish-android/\.github/workflows/release\.yml@refs/tags/v.*$' \
+  --certificate-identity-regexp '^https://github\.com/TinkerNorth/dish-android/\.github/workflows/release\.yml@refs/tags/v?[0-9].*$' \
   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
   SHA256SUMS
 
 slsa-verifier verify-artifact \
   --provenance-path dish-android.intoto.jsonl \
   --source-uri      github.com/TinkerNorth/dish-android \
-  --source-tag      vX.Y.Z \
-  dish-vX.Y.Z.apk
+  --source-tag      X.Y.Z \
+  dish-X.Y.Z.apk
 ```
 
 The full cross-repo verification recipe lives in

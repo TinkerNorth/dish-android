@@ -4,7 +4,7 @@ All notable changes to the Dish Android client are documented in this
 file. The format is loosely based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
-once it reaches `v1.0.0`.
+once it reaches `1.0.0`.
 
 Cross-repo coordination: changes to the wire protocol or pairing flow
 that require matching updates in `satellite`, `dish-linux`, or `dish-mac`
@@ -105,7 +105,7 @@ replacing the former `docs/wire-format.md`).
   the previous constant 250 Hz re-send of the last state.
 - `versionCode` and `versionName` are now derived from CI environment
   variables (`DISH_VERSION_CODE` / `DISH_VERSION_NAME`), with a
-  `git describe` fallback for local dev. The hardcoded `1` / `"1.0"`
+  `git describe` fallback for local dev. The hardcoded `1` / `"0.0.0"`
   defaults remain only when neither signal is present.
 - `release.yml` stages `mapping.txt` into `dist/` alongside the AAB and
   APK so it gets the same SHA256SUMS + cosign signature treatment.
@@ -124,5 +124,5 @@ binary cares about.
 Initial public release. Tag will be created when the Play Store internal
 testing track is opened.
 
-[Unreleased]: https://github.com/TinkerNorth/dish-android/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/TinkerNorth/dish-android/releases/tag/v1.0.0
+[Unreleased]: https://github.com/TinkerNorth/dish-android/compare/1.0.0...HEAD
+[1.0.0]: https://github.com/TinkerNorth/dish-android/releases/tag/1.0.0

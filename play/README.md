@@ -32,7 +32,7 @@ play/
 The directory layout follows the [Fastlane Supply](https://docs.fastlane.tools/actions/supply/) convention so it can be uploaded with one command once a Play Console API key is configured:
 
 ```bash
-fastlane supply --aab path/to/dish-v1.0.0.aab --metadata_path play/metadata
+fastlane supply --aab path/to/dish-1.0.0.aab --metadata_path play/metadata
 ```
 
 Without Fastlane, the same files can be copy-pasted into the Play Console store-listing pages by hand.
