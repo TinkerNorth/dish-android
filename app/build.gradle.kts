@@ -32,7 +32,7 @@ abstract class GitDescribeValueSource : ValueSource<String, ValueSourceParameter
         val ran =
             runCatching {
                 execOps.exec {
-                    commandLine("git", "describe", "--tags", "--match", "v*", "--abbrev=0")
+                    commandLine("git", "describe", "--tags", "--match", "[0-9]*.[0-9]*.[0-9]*", "--abbrev=0")
                     standardOutput = stdout
                     errorOutput = ByteArrayOutputStream()
                     isIgnoreExitValue = true
@@ -54,11 +54,11 @@ fun resolveVersion(): ResolvedVersion {
 
     val describe = providers.of(GitDescribeValueSource::class.java) {}.get()
     val match =
-        Regex("^v(\\d+)\\.(\\d+)\\.(\\d+)").find(describe) ?: return ResolvedVersion(1, "1.0")
+        Regex("^(\\d+)\\.(\\d+)\\.(\\d+)").find(describe) ?: return ResolvedVersion(1, "0.0.0")
     val (major, minor, patch) = match.destructured
     return ResolvedVersion(
-        code = major.toInt() * 10000 + minor.toInt() * 100 + patch.toInt(),
-        name = describe.removePrefix("v"),
+        code = (major.toInt() * 10000 + minor.toInt() * 100 + patch.toInt()).coerceAtLeast(1),
+        name = describe,
     )
 }
 
