@@ -51,6 +51,10 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e # v6.1.0
 
+      - name: Pre-install CMake 3.22.1
+        # Parallel per-ABI configureCMake* tasks otherwise race the SDK auto-install and read a half-written archive.
+        run: ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "cmake;3.22.1"
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@87557b9c84dde89fdd9b10e88954ac2f4248e463 # v4.36.1
         with:
