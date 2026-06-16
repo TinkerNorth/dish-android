@@ -147,7 +147,7 @@ internal fun buildHidDescriptor(): ByteArray =
 internal const val REPORT_ID = 1
 internal const val REPORT_SIZE = 14
 
-// Axis convention: Xbox/XInput, stick-up = positive Y. Caller does no sign inversion.
+// Caller passes XInput axes (stick-up = +Y); HID Generic Desktop Y is the opposite sign, so Y is negated here.
 @Suppress("MagicNumber")
 internal fun buildHidReport(
     buttons: Int,
@@ -159,6 +159,8 @@ internal fun buildHidReport(
     leftTrigger: Int,
     rightTrigger: Int,
 ): ByteArray {
+    val hidLeftY = (-leftY.toInt()).coerceAtMost(0x7FFF)
+    val hidRightY = (-rightY.toInt()).coerceAtMost(0x7FFF)
     val report = ByteArray(REPORT_SIZE)
     report[0] = REPORT_ID.toByte()
     report[1] = (buttons and 0xFF).toByte()
@@ -166,12 +168,12 @@ internal fun buildHidReport(
     report[3] = (hatSwitch and 0xFF).toByte()
     report[4] = (leftX.toInt() and 0xFF).toByte()
     report[5] = ((leftX.toInt() shr 8) and 0xFF).toByte()
-    report[6] = (leftY.toInt() and 0xFF).toByte()
-    report[7] = ((leftY.toInt() shr 8) and 0xFF).toByte()
+    report[6] = (hidLeftY and 0xFF).toByte()
+    report[7] = ((hidLeftY shr 8) and 0xFF).toByte()
     report[8] = (rightX.toInt() and 0xFF).toByte()
     report[9] = ((rightX.toInt() shr 8) and 0xFF).toByte()
-    report[10] = (rightY.toInt() and 0xFF).toByte()
-    report[11] = ((rightY.toInt() shr 8) and 0xFF).toByte()
+    report[10] = (hidRightY and 0xFF).toByte()
+    report[11] = ((hidRightY shr 8) and 0xFF).toByte()
     report[12] = (leftTrigger and 0xFF).toByte()
     report[13] = (rightTrigger and 0xFF).toByte()
     return report

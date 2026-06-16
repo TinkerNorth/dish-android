@@ -44,10 +44,10 @@ class BluetoothGamepadReportTest {
     }
 
     @Test
-    fun `left stick Y occupies bytes 6-7 little-endian`() {
+    fun `left stick Y occupies bytes 6-7 little-endian (negated to HID convention)`() {
         val r = buildHidReport(0, 0, 0, 0x1234.toShort(), 0, 0, 0, 0)
-        assertEquals(0x34.toByte(), r[6])
-        assertEquals(0x12.toByte(), r[7])
+        assertEquals(0xCC.toByte(), r[6])
+        assertEquals(0xED.toByte(), r[7])
     }
 
     @Test
@@ -58,10 +58,10 @@ class BluetoothGamepadReportTest {
     }
 
     @Test
-    fun `right stick Y occupies bytes 10-11 little-endian`() {
+    fun `right stick Y occupies bytes 10-11 little-endian (negated to HID convention)`() {
         val r = buildHidReport(0, 0, 0, 0, 0, 0x1234.toShort(), 0, 0)
-        assertEquals(0x34.toByte(), r[10])
-        assertEquals(0x12.toByte(), r[11])
+        assertEquals(0xCC.toByte(), r[10])
+        assertEquals(0xED.toByte(), r[11])
     }
 
     @Test
@@ -72,17 +72,24 @@ class BluetoothGamepadReportTest {
     }
 
     @Test
-    fun `stick-up on left stick is Y = plus 32767 per Xbox convention`() {
+    fun `XInput stick-up (plus 32767) is negated to HID Y = minus 32767`() {
         val r = buildHidReport(0, 0, 0, Short.MAX_VALUE, 0, 0, 0, 0)
+        assertEquals(0x01.toByte(), r[6])
+        assertEquals(0x80.toByte(), r[7])
+    }
+
+    @Test
+    fun `XInput stick-down (minus 32767) is negated to HID Y = plus 32767`() {
+        val r = buildHidReport(0, 0, 0, (-32767).toShort(), 0, 0, 0, 0)
         assertEquals(0xFF.toByte(), r[6])
         assertEquals(0x7F.toByte(), r[7])
     }
 
     @Test
-    fun `stick-down on left stick is Y = minus 32767`() {
-        val r = buildHidReport(0, 0, 0, (-32767).toShort(), 0, 0, 0, 0)
-        assertEquals(0x01.toByte(), r[6])
-        assertEquals(0x80.toByte(), r[7])
+    fun `XInput Y = min short clamps to HID plus 32767 (no negate overflow)`() {
+        val r = buildHidReport(0, 0, 0, Short.MIN_VALUE, 0, 0, 0, 0)
+        assertEquals(0xFF.toByte(), r[6])
+        assertEquals(0x7F.toByte(), r[7])
     }
 
     @Test
