@@ -57,6 +57,8 @@ struct ParserState {
 
 const KnownDevice* lookupKnown(uint16_t vid, uint16_t pid);
 
+bool isVerifiedFastLane(uint16_t vid, uint16_t pid);
+
 const char* parserName(Parser p);
 
 bool parserHasImu(Parser p);

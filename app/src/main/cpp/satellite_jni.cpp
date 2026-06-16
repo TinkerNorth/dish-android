@@ -1006,10 +1006,9 @@ JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_loo
 
 JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_isKnownFastLaneModel(
     JNIEnv*, jobject, jint vid, jint pid) {
-    const usbparsers::KnownDevice* k =
-        usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
-    if (!k) return JNI_FALSE;
-    return k->parser != usbparsers::Parser::NONE ? JNI_TRUE : JNI_FALSE;
+    return usbparsers::isVerifiedFastLane((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF))
+               ? JNI_TRUE
+               : JNI_FALSE;
 }
 
 JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_modelHasImu(

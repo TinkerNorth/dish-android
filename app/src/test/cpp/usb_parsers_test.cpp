@@ -212,3 +212,31 @@ TEST(Decode, DualShock4StillDecodesAfterRefactor) {
     EXPECT_EQ(0, s.sLX);
     EXPECT_EQ(0, s.sLY);
 }
+
+TEST(KnownDevices, VerifiedModelIsRecognizedAndFastLane) {
+    const usbparsers::KnownDevice* k = usbparsers::lookupKnown(0x045E, 0x028E);
+    ASSERT_NE(nullptr, k);
+    EXPECT_EQ(Parser::XINPUT_360, k->parser);
+    EXPECT_TRUE(usbparsers::isVerifiedFastLane(0x045E, 0x028E));
+}
+
+TEST(KnownDevices, ImportedModelIsRecognizedButNotFastLane) {
+    // PowerA Xbox Series X EnWired: imported from SDL, routed to the GIP parser, but not
+    // hardware-verified, so it must not auto-claim Direct.
+    const usbparsers::KnownDevice* k = usbparsers::lookupKnown(0x20D6, 0x2001);
+    ASSERT_NE(nullptr, k);
+    EXPECT_EQ(Parser::XBOX_ONE_GIP, k->parser);
+    EXPECT_FALSE(usbparsers::isVerifiedFastLane(0x20D6, 0x2001));
+}
+
+TEST(KnownDevices, ImportedPs4StickRoutesToDualShock4) {
+    const usbparsers::KnownDevice* k = usbparsers::lookupKnown(0x2C22, 0x2000);
+    ASSERT_NE(nullptr, k);
+    EXPECT_EQ(Parser::DUALSHOCK4, k->parser);
+    EXPECT_FALSE(usbparsers::isVerifiedFastLane(0x2C22, 0x2000));
+}
+
+TEST(KnownDevices, UnknownModelIsNeitherRecognizedNorFastLane) {
+    EXPECT_EQ(nullptr, usbparsers::lookupKnown(0x0000, 0x0000));
+    EXPECT_FALSE(usbparsers::isVerifiedFastLane(0x0000, 0x0000));
+}
