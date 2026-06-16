@@ -120,6 +120,9 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e # v6.1.0
 
+      - name: Pre-install CMake 3.22.1
+        run: ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "cmake;3.22.1"
+
       - name: Decode keystore (if present)
         id: keystore
         env:
