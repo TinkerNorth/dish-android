@@ -78,6 +78,18 @@ uint16_t keycodeToXusb(int32_t kc) {
     }
 }
 
+uint16_t applyButtonQuirk(uint16_t bit, uint8_t quirk) {
+    if (quirk & QUIRK_SWAP_AB) {
+        if (bit == XUSB_A) return XUSB_B;
+        if (bit == XUSB_B) return XUSB_A;
+    }
+    if (quirk & QUIRK_SWAP_XY) {
+        if (bit == XUSB_X) return XUSB_Y;
+        if (bit == XUSB_Y) return XUSB_X;
+    }
+    return bit;
+}
+
 bool applyKey(DeviceState& s, int32_t kc, bool down) {
     if (kc == KC_BUTTON_L2 || kc == KC_BUTTON_7) {
         s.ltFromKey = down;
@@ -89,7 +101,7 @@ bool applyKey(DeviceState& s, int32_t kc, bool down) {
         s.bRT = down ? 255 : 0;
         return true;
     }
-    uint16_t bit = keycodeToXusb(kc);
+    uint16_t bit = applyButtonQuirk(keycodeToXusb(kc), s.quirk);
     if (bit == 0) return false;
     if (down) {
         s.wButtons = static_cast<uint16_t>(s.wButtons | bit);

@@ -131,6 +131,11 @@ object SatelliteNative {
         flatRZ: Float,
     )
 
+    external fun setDeviceQuirk(
+        deviceId: Int,
+        quirk: Int,
+    )
+
     external fun releaseAllPhysicalReports()
 
     external fun processGamepadKeyEvent(

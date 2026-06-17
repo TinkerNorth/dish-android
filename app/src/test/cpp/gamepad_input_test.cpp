@@ -235,6 +235,46 @@ TEST(ApplyKey, UnknownKeycodeReturnsFalseAndNoStateChange) {
     EXPECT_EQ(XUSB_A, s.wButtons);
 }
 
+TEST(ApplyButtonQuirk, NoneIsIdentity) {
+    EXPECT_EQ(XUSB_A, applyButtonQuirk(XUSB_A, 0));
+    EXPECT_EQ(XUSB_X, applyButtonQuirk(XUSB_X, 0));
+}
+
+TEST(ApplyButtonQuirk, SwapAbOnlyTouchesAB) {
+    EXPECT_EQ(XUSB_B, applyButtonQuirk(XUSB_A, QUIRK_SWAP_AB));
+    EXPECT_EQ(XUSB_A, applyButtonQuirk(XUSB_B, QUIRK_SWAP_AB));
+    EXPECT_EQ(XUSB_X, applyButtonQuirk(XUSB_X, QUIRK_SWAP_AB));
+    EXPECT_EQ(XUSB_LB, applyButtonQuirk(XUSB_LB, QUIRK_SWAP_AB));
+}
+
+TEST(ApplyButtonQuirk, NintendoSwapsBothFacePairs) {
+    uint8_t q = (uint8_t)(QUIRK_SWAP_AB | QUIRK_SWAP_XY);
+    EXPECT_EQ(XUSB_B, applyButtonQuirk(XUSB_A, q));
+    EXPECT_EQ(XUSB_A, applyButtonQuirk(XUSB_B, q));
+    EXPECT_EQ(XUSB_Y, applyButtonQuirk(XUSB_X, q));
+    EXPECT_EQ(XUSB_X, applyButtonQuirk(XUSB_Y, q));
+    EXPECT_EQ(XUSB_START, applyButtonQuirk(XUSB_START, q));
+}
+
+TEST(ApplyKey, QuirkSwapsThroughApplyKey) {
+    DeviceState s;
+    s.quirk = (uint8_t)(QUIRK_SWAP_AB | QUIRK_SWAP_XY);
+    applyKey(s, KC_BUTTON_A, true);
+    EXPECT_EQ(XUSB_B, s.wButtons);
+    applyKey(s, KC_BUTTON_A, false);
+    applyKey(s, KC_BUTTON_X, true);
+    EXPECT_EQ(XUSB_Y, s.wButtons);
+}
+
+TEST(ApplyKey, QuirkDoesNotDisturbDpadOrShoulders) {
+    DeviceState s;
+    s.quirk = (uint8_t)(QUIRK_SWAP_AB | QUIRK_SWAP_XY);
+    applyKey(s, KC_DPAD_UP, true);
+    applyKey(s, KC_BUTTON_L1, true);
+    EXPECT_TRUE(s.wButtons & XUSB_DPAD_UP);
+    EXPECT_TRUE(s.wButtons & XUSB_LB);
+}
+
 TEST(ApplyAxes, NeutralStaysZero) {
     DeviceState s;
     applyAxes(s, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f);

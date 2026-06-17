@@ -886,6 +886,12 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setDev
     s.flatRZ = flatRZ;
 }
 
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setDeviceQuirk(
+    JNIEnv*, jobject, jint deviceId, jint quirk) {
+    std::lock_guard<std::mutex> lock(g_devicesMtx);
+    g_devices[deviceId].quirk = (uint8_t)(quirk & 0xFF);
+}
+
 // Activity-level dispatch is needed because GameActivity's SurfaceView sits below the
 // input layer that synthesizes DPAD keys from stick motion on some controllers.
 JNIEXPORT jboolean JNICALL

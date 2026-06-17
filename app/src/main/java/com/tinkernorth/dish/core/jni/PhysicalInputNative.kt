@@ -39,6 +39,13 @@ class PhysicalInputNative
             SatelliteNative.setDeviceDeadzones(deviceId, flatX, flatY, flatZ, flatRZ)
         }
 
+        fun setDeviceQuirk(
+            deviceId: Int,
+            quirk: Int,
+        ) {
+            SatelliteNative.setDeviceQuirk(deviceId, quirk)
+        }
+
         @Suppress("LongParameterList")
         fun attachUsbDevice(
             fd: Int,
