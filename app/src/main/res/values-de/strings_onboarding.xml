@@ -15,7 +15,7 @@
 
     <string name="welcome_step3_eyebrow">NOCH EINE SACHE</string>
     <string name="welcome_step3_title">Satellite auf dem PC installieren</string>
-    <string name="welcome_step3_body">Satellite ist kostenlos und Open Source. Hol es dir von tinkernorth.com/satellite, führe das Installationsprogramm aus, und Dish findet es automatisch. Du kannst diese Einführung jetzt beenden und Satellite später installieren.</string>
+    <string name="welcome_step3_body">Satellite ist kostenlos und Open Source. Hol es dir von dish.tinkernorth.com/downloads/satellite, führe das Installationsprogramm aus, und Dish findet es automatisch. Du kannst diese Einführung jetzt beenden und Satellite später installieren.</string>
     <string name="welcome_step3_satellite_link_label">Download-Seite öffnen</string>
 
     <string name="welcome_step4_eyebrow">FERTIG</string>
@@ -91,7 +91,7 @@
     <string name="help_a_what_is_dish">Dish macht dein Handy zum kabellosen Gamepad. Es kann Eingaben über WLAN an einen PC senden (mit dem kostenlosen Satellite-Helfer) oder sich an einen PC / eine Konsole als regulärer Bluetooth-Gamepad koppeln.</string>
 
     <string name="help_q_what_is_satellite">Was ist Satellite?</string>
-    <string name="help_a_what_is_satellite">Satellite ist ein kleines, kostenloses, quelloffenes Programm, das auf deinem PC läuft. Es empfängt Eingaben von Dish über WLAN und erscheint deinen Spielen als regulärer Controller. Ohne Satellite können Spiele dein Handy nicht sehen. Installiere es von tinkernorth.com/satellite.</string>
+    <string name="help_a_what_is_satellite">Satellite ist ein kleines, kostenloses, quelloffenes Programm, das auf deinem PC läuft. Es empfängt Eingaben von Dish über WLAN und erscheint deinen Spielen als regulärer Controller. Ohne Satellite können Spiele dein Handy nicht sehen. Installiere es von dish.tinkernorth.com/downloads/satellite.</string>
 
     <string name="help_q_lan_vs_bluetooth">WLAN oder Bluetooth: Was soll ich wählen?</string>
     <string name="help_a_lan_vs_bluetooth">WLAN mit Satellite ist für fast jeden der bessere Weg. Niedrigere Latenz, unterstützt Bewegung (Gyro-Zielen) und schaltet das Touchpad frei. Der Bluetooth-Host-Modus ist die richtige Wahl, wenn du nichts auf dem PC installieren willst oder eine Konsole / Set-Top-Box nutzt, die Satellite nicht ausführt.</string>
