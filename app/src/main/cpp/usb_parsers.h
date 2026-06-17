@@ -6,6 +6,7 @@
 #include <string>
 
 #include "gamepad_input.h"
+#include "usb_hid_descriptor.h"
 
 namespace usbparsers {
 
@@ -18,6 +19,8 @@ enum class Parser : uint8_t {
     SWITCH_PRO_USB = 5,
     STADIA = 6,
     GENERIC_HID_GAMEPAD = 7,
+    // Same input report as XINPUT_360, but rumble needs the wrapped wireless-receiver frame.
+    XINPUT_360_WIRELESS = 8,
 };
 
 enum class InitKind : uint8_t {
@@ -53,6 +56,8 @@ struct ParserState {
     // Xbox One guide button (GIP report 0x07) is sticky state merged into the main 0x20 reports.
     bool xboxGuideHeld = false;
     gamepad::DeviceState xboxLastMain;
+    // Filled at attach for GENERIC_HID_GAMEPAD when the report descriptor parses; empty otherwise.
+    usbhid::HidLayout hidLayout;
 };
 
 const KnownDevice* lookupKnown(uint16_t vid, uint16_t pid);

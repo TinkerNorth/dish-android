@@ -39,6 +39,17 @@ bool decodeXbox(const std::vector<uint8_t>& buf, DeviceState& s, ParserState& st
     return decodeReport(Parser::XBOX_ONE_GIP, buf.data(), buf.size(), s, &st);
 }
 
+void setLe16(std::vector<uint8_t>& b, size_t off, int16_t v) {
+    b[off] = (uint8_t)(v & 0xFF);
+    b[off + 1] = (uint8_t)((v >> 8) & 0xFF);
+}
+
+std::vector<uint8_t> switchReport(size_t len) {
+    std::vector<uint8_t> r(len, 0);
+    r[0] = 0x30;
+    return r;
+}
+
 } // namespace
 
 TEST(XboxGip, MainReportDecodesButtonsAndStick) {
@@ -172,7 +183,8 @@ TEST(Rumble, SwitchProMaxStrongEncodesTopAmplitude) {
 TEST(Rumble, UnsupportedParsersReturnZero) {
     uint8_t out[64];
     EXPECT_EQ(0u, buildRumbleReport(Parser::STADIA, 0xFFFF, 0xFFFF, 0, out, sizeof(out)));
-    EXPECT_EQ(0u, buildRumbleReport(Parser::GENERIC_HID_GAMEPAD, 0xFFFF, 0xFFFF, 0, out, sizeof(out)));
+    EXPECT_EQ(0u,
+              buildRumbleReport(Parser::GENERIC_HID_GAMEPAD, 0xFFFF, 0xFFFF, 0, out, sizeof(out)));
     EXPECT_EQ(0u, buildRumbleReport(Parser::NONE, 0xFFFF, 0xFFFF, 0, out, sizeof(out)));
 }
 
@@ -239,4 +251,67 @@ TEST(KnownDevices, ImportedPs4StickRoutesToDualShock4) {
 TEST(KnownDevices, UnknownModelIsNeitherRecognizedNorFastLane) {
     EXPECT_EQ(nullptr, usbparsers::lookupKnown(0x0000, 0x0000));
     EXPECT_FALSE(usbparsers::isVerifiedFastLane(0x0000, 0x0000));
+}
+
+TEST(Decode, SwitchProAveragesImuSubframes) {
+    // accelX 300/600/900 across the three subframes averages to 600: a single-subframe report of
+    // 600 must match, and the first subframe alone (300) must not.
+    auto three = switchReport(49);
+    setLe16(three, 13, 300);
+    setLe16(three, 25, 600);
+    setLe16(three, 37, 900);
+    auto avg = switchReport(25);
+    setLe16(avg, 13, 600);
+    auto first = switchReport(25);
+    setLe16(first, 13, 300);
+
+    DeviceState sThree, sAvg, sFirst;
+    ParserState p1, p2, p3;
+    ASSERT_TRUE(decodeReport(Parser::SWITCH_PRO_USB, three.data(), three.size(), sThree, &p1));
+    ASSERT_TRUE(decodeReport(Parser::SWITCH_PRO_USB, avg.data(), avg.size(), sAvg, &p2));
+    ASSERT_TRUE(decodeReport(Parser::SWITCH_PRO_USB, first.data(), first.size(), sFirst, &p3));
+    EXPECT_TRUE(sThree.motionValid);
+    EXPECT_EQ(sAvg.accelX, sThree.accelX);
+    EXPECT_NE(sFirst.accelX, sThree.accelX);
+}
+
+TEST(Decode, SwitchProShortReportHasNoImu) {
+    auto r = switchReport(12);
+    DeviceState s;
+    ParserState p;
+    ASSERT_TRUE(decodeReport(Parser::SWITCH_PRO_USB, r.data(), r.size(), s, &p));
+    EXPECT_FALSE(s.motionValid);
+}
+
+TEST(Decode, Xbox360WirelessDecodesLikeWired) {
+    std::vector<uint8_t> r(14, 0);
+    r[0] = 0x00;
+    r[3] = 0x10;          // A
+    setLe16(r, 6, 10000); // sLX
+    DeviceState wired, wireless;
+    ParserState p1, p2;
+    ASSERT_TRUE(decodeReport(Parser::XINPUT_360, r.data(), r.size(), wired, &p1));
+    ASSERT_TRUE(decodeReport(Parser::XINPUT_360_WIRELESS, r.data(), r.size(), wireless, &p2));
+    EXPECT_TRUE(wireless.wButtons & XUSB_A);
+    EXPECT_EQ(wired.wButtons, wireless.wButtons);
+    EXPECT_EQ(wired.sLX, wireless.sLX);
+}
+
+TEST(Rumble, Xbox360WirelessWrapsFrame) {
+    uint8_t out[64];
+    size_t n = buildRumbleReport(Parser::XINPUT_360_WIRELESS, 0xFF00, 0x8000, 7, out, sizeof(out));
+    ASSERT_EQ(12u, n);
+    const uint8_t want[12] = {0x00, 0x01, 0x0F, 0xC0, 0x00, 0xFF,
+                              0x80, 0x00, 0x00, 0x00, 0x00, 0x00};
+    for (size_t i = 0; i < n; i++) EXPECT_EQ(want[i], out[i]) << "byte " << i;
+}
+
+TEST(Rumble, Xbox360WirelessTooSmallBufferReturnsZero) {
+    uint8_t out[11];
+    EXPECT_EQ(0u,
+              buildRumbleReport(Parser::XINPUT_360_WIRELESS, 0xFFFF, 0xFFFF, 0, out, sizeof(out)));
+}
+
+TEST(RumbleCapability, WirelessXbox360ReportsTrue) {
+    EXPECT_TRUE(parserHasRumble(Parser::XINPUT_360_WIRELESS));
 }

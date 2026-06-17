@@ -41,9 +41,12 @@ using gamepad::XUSB_Y;
 static const KnownDevice kKnown[] = {
     {0x045E, 0x028E, "Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
     {0x045E, 0x028F, "Xbox 360 Wireless Receiver (wired)", Parser::XINPUT_360, InitKind::NONE},
-    {0x045E, 0x02A1, "Xbox 360 Wireless Controller (PC)", Parser::XINPUT_360, InitKind::NONE},
-    {0x045E, 0x0291, "Xbox 360 Wireless Receiver (rev 1)", Parser::XINPUT_360, InitKind::NONE},
-    {0x045E, 0x0719, "Xbox 360 Wireless Receiver (rev 2)", Parser::XINPUT_360, InitKind::NONE},
+    {0x045E, 0x02A1, "Xbox 360 Wireless Controller (PC)", Parser::XINPUT_360_WIRELESS,
+     InitKind::NONE},
+    {0x045E, 0x0291, "Xbox 360 Wireless Receiver (rev 1)", Parser::XINPUT_360_WIRELESS,
+     InitKind::NONE},
+    {0x045E, 0x0719, "Xbox 360 Wireless Receiver (rev 2)", Parser::XINPUT_360_WIRELESS,
+     InitKind::NONE},
 
     {0x045E, 0x02D1, "Xbox One Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
     {0x045E, 0x02DD, "Xbox One Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
@@ -265,17 +268,20 @@ static const KnownDevice kImported[] = {
     {0x0E6F, 0x013A, "PDP Xbox One Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
     {0x0E6F, 0x0145, "PDP Mortal Kombat X FightPad (Xbox One)", Parser::XBOX_ONE_GIP,
      InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x015C, "PDP @Play Wired Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
+    {0x0E6F, 0x015C, "PDP @Play Wired Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
     {0x0E6F, 0x015D, "PDP Mirror's Edge Controller", Parser::XBOX_ONE_GIP,
      InitKind::XBOX_ONE_POWERON},
     {0x0E6F, 0x015F, "PDP Metallic Wired Controller", Parser::XBOX_ONE_GIP,
      InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x0160, "PDP NFL Face-Off Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
+    {0x0E6F, 0x0160, "PDP NFL Face-Off Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
     {0x0E6F, 0x0166, "PDP Mass Effect Andromeda Controller", Parser::XBOX_ONE_GIP,
      InitKind::XBOX_ONE_POWERON},
     {0x0E6F, 0x0167, "PDP Halo Wars 2 Face-Off Controller", Parser::XBOX_ONE_GIP,
      InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x0205, "PDP Victrix Pro Fight Stick", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
+    {0x0E6F, 0x0205, "PDP Victrix Pro Fight Stick", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
     {0x0E6F, 0x0246, "PDP Rock Candy Controller (Xbox One)", Parser::XBOX_ONE_GIP,
      InitKind::XBOX_ONE_POWERON},
     {0x0E6F, 0x0262, "PDP Wired Controller (Xbox One)", Parser::XBOX_ONE_GIP,
@@ -286,7 +292,8 @@ static const KnownDevice kImported[] = {
      InitKind::XBOX_ONE_POWERON},
     {0x0E6F, 0x02D6, "Victrix Gambit Tournament Controller", Parser::XBOX_ONE_GIP,
      InitKind::XBOX_ONE_POWERON},
-    {0x0E6F, 0x02DA, "PDP Xbox Series X Afterglow", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
+    {0x0E6F, 0x02DA, "PDP Xbox Series X Afterglow", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
     {0x0F0D, 0x00C5, "Hori Fighting Commander (Xbox One)", Parser::XBOX_ONE_GIP,
      InitKind::XBOX_ONE_POWERON},
     {0x0F0D, 0x0150, "Hori Fighting Commander OCTA (Xbox)", Parser::XBOX_ONE_GIP,
@@ -317,7 +324,8 @@ static const KnownDevice kImported[] = {
      InitKind::XBOX_ONE_POWERON},
     {0x20D6, 0x4002, "PowerA Spectra Infinity Wired (Xbox)", Parser::XBOX_ONE_GIP,
      InitKind::XBOX_ONE_POWERON},
-    {0x24C6, 0x581A, "BDA XB1 Classic Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
+    {0x24C6, 0x581A, "BDA XB1 Classic Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
     {0x24C6, 0x591A, "PowerA FUSION Pro Controller", Parser::XBOX_ONE_GIP,
      InitKind::XBOX_ONE_POWERON},
     {0x24C6, 0x592A, "BDA XB1 Spectra Pro", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
@@ -389,6 +397,8 @@ const char* parserName(Parser p) {
     switch (p) {
     case Parser::XINPUT_360:
         return "Xbox 360 protocol";
+    case Parser::XINPUT_360_WIRELESS:
+        return "Xbox 360 wireless protocol";
     case Parser::XBOX_ONE_GIP:
         return "Xbox One protocol";
     case Parser::DUALSHOCK4:
@@ -412,6 +422,7 @@ bool parserHasImu(Parser p) { return p == Parser::SWITCH_PRO_USB; }
 bool parserHasRumble(Parser p) {
     switch (p) {
     case Parser::XINPUT_360:
+    case Parser::XINPUT_360_WIRELESS:
     case Parser::XBOX_ONE_GIP:
     case Parser::DUALSHOCK4:
     case Parser::DUALSENSE:
@@ -725,16 +736,29 @@ bool decodeSwitchProUsb(const uint8_t* buf, size_t len, DeviceState& s, ParserSt
     s.sRX = scaleSwitchStickAuto(rx, sticks.rx);
     s.sRY = scaleSwitchStickAuto(ry, sticks.ry);
 
-    // IMU: three 12-byte frames start at byte 13 (accel int16 LE at +0/+2/+4, gyro at +6/+8/+10).
-    // Use the first frame. Straight axis mapping; signs may need an on-device flip to match the
-    // wire convention.
-    if (len >= 25) {
-        s.accelX = switchAccelToWire(rdLe16(buf, 13));
-        s.accelY = switchAccelToWire(rdLe16(buf, 15));
-        s.accelZ = switchAccelToWire(rdLe16(buf, 17));
-        s.gyroX = switchGyroToWire(rdLe16(buf, 19));
-        s.gyroY = switchGyroToWire(rdLe16(buf, 21));
-        s.gyroZ = switchGyroToWire(rdLe16(buf, 23));
+    // Average the bundled IMU subframes (the pad packs up to three ~5ms samples per report; one
+    // 12-byte frame = accel int16 LE x3 then gyro x3, first at byte 13). Signs are an unflipped
+    // straight map, still unverified on hardware.
+    size_t imuFrames = len >= 13 ? (len - 13) / 12 : 0;
+    if (imuFrames > 3) imuFrames = 3;
+    if (imuFrames > 0) {
+        int32_t ax = 0, ay = 0, az = 0, gx = 0, gy = 0, gz = 0;
+        for (size_t f = 0; f < imuFrames; f++) {
+            int off = 13 + 12 * (int)f;
+            ax += rdLe16(buf, off);
+            ay += rdLe16(buf, off + 2);
+            az += rdLe16(buf, off + 4);
+            gx += rdLe16(buf, off + 6);
+            gy += rdLe16(buf, off + 8);
+            gz += rdLe16(buf, off + 10);
+        }
+        int32_t n = (int32_t)imuFrames;
+        s.accelX = switchAccelToWire((int16_t)(ax / n));
+        s.accelY = switchAccelToWire((int16_t)(ay / n));
+        s.accelZ = switchAccelToWire((int16_t)(az / n));
+        s.gyroX = switchGyroToWire((int16_t)(gx / n));
+        s.gyroY = switchGyroToWire((int16_t)(gy / n));
+        s.gyroZ = switchGyroToWire((int16_t)(gz / n));
         s.motionValid = true;
     }
     return true;
@@ -799,6 +823,7 @@ void switchEncodeMotor(uint8_t* out, uint16_t magnitude) {
 bool decodeReport(Parser p, const uint8_t* buf, size_t len, DeviceState& s, ParserState* sticks) {
     switch (p) {
     case Parser::XINPUT_360:
+    case Parser::XINPUT_360_WIRELESS:
         return decodeXInput360(buf, len, s);
     case Parser::XBOX_ONE_GIP:
         return sticks != nullptr && decodeXboxOneGip(buf, len, s, *sticks);
@@ -811,7 +836,9 @@ bool decodeReport(Parser p, const uint8_t* buf, size_t len, DeviceState& s, Pars
     case Parser::STADIA:
         return decodeStadia(buf, len, s);
     case Parser::GENERIC_HID_GAMEPAD:
-        return decodeGenericHidGamepad(buf, len, s);
+        return sticks != nullptr && sticks->hidLayout.valid
+                   ? usbhid::decodeFromLayout(buf, len, s, sticks->hidLayout)
+                   : decodeGenericHidGamepad(buf, len, s);
     case Parser::NONE:
         return false;
     }
@@ -865,6 +892,22 @@ size_t buildRumbleReport(Parser p, uint16_t strong, uint16_t weak, uint8_t seq, 
         out[6] = 0x00;
         out[7] = 0x00;
         return 8;
+    case Parser::XINPUT_360_WIRELESS:
+        // Wireless receivers wrap the motor levels in a 12-byte frame (Linux xpad xpad360w).
+        if (outCap < 12) return 0;
+        out[0] = 0x00;
+        out[1] = 0x01;
+        out[2] = 0x0F;
+        out[3] = 0xC0;
+        out[4] = 0x00;
+        out[5] = (uint8_t)(strong >> 8);
+        out[6] = (uint8_t)(weak >> 8);
+        out[7] = 0x00;
+        out[8] = 0x00;
+        out[9] = 0x00;
+        out[10] = 0x00;
+        out[11] = 0x00;
+        return 12;
     case Parser::XBOX_ONE_GIP:
         if (outCap < 13) return 0;
         out[0] = 0x09;

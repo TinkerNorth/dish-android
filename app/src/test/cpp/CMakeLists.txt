@@ -52,12 +52,23 @@ target_link_libraries(wire_encoders_test PRIVATE GTest::gtest_main)
 add_executable(usb_parsers_test
     usb_parsers_test.cpp
     "${SATELLITE_CPP}/usb_parsers.cpp"
+    "${SATELLITE_CPP}/usb_hid_descriptor.cpp"
 )
 target_include_directories(usb_parsers_test PRIVATE "${SATELLITE_CPP}")
 target_compile_options(usb_parsers_test PRIVATE -Wall -Wextra -Wpedantic)
 target_link_libraries(usb_parsers_test PRIVATE GTest::gtest_main)
 
+# Pure HID report-descriptor parser + layout-driven decode (no Android/USB I/O).
+add_executable(usb_hid_descriptor_test
+    usb_hid_descriptor_test.cpp
+    "${SATELLITE_CPP}/usb_hid_descriptor.cpp"
+)
+target_include_directories(usb_hid_descriptor_test PRIVATE "${SATELLITE_CPP}")
+target_compile_options(usb_hid_descriptor_test PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(usb_hid_descriptor_test PRIVATE GTest::gtest_main)
+
 include(GoogleTest)
 gtest_discover_tests(gamepad_input_test)
 gtest_discover_tests(wire_encoders_test)
 gtest_discover_tests(usb_parsers_test)
+gtest_discover_tests(usb_hid_descriptor_test)
