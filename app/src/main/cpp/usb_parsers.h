@@ -27,6 +27,8 @@ enum class InitKind : uint8_t {
     NONE = 0,
     XBOX_ONE_POWERON = 1,
     SWITCH_PRO_HANDSHAKE = 2,
+    // Xbox One S / Elite Series 2 want the GIP set-mode packet on top of the universal sequence.
+    XBOX_ONE_S = 3,
 };
 
 struct KnownDevice {
@@ -84,6 +86,10 @@ const char* parserName(Parser p);
 bool parserHasImu(Parser p);
 
 bool parserHasRumble(Parser p);
+
+// Pure: writes the index-th GIP init packet for an Xbox One InitKind into out (with the sequence
+// number at byte 2), returns its length or 0 when there are no more. runInit sends them in order.
+size_t buildGipInitPacket(InitKind init, int index, uint8_t seq, uint8_t* out, size_t outCap);
 
 bool runInit(int fd, uint8_t epOut, Parser p, InitKind init);
 

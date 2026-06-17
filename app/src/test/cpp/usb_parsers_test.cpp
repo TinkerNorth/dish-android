@@ -11,8 +11,10 @@ using gamepad::DeviceState;
 using gamepad::XUSB_A;
 using gamepad::XUSB_B;
 using gamepad::XUSB_GUIDE;
+using usbparsers::buildGipInitPacket;
 using usbparsers::buildRumbleReport;
 using usbparsers::decodeReport;
+using usbparsers::InitKind;
 using usbparsers::parsePsCalibration;
 using usbparsers::Parser;
 using usbparsers::parserHasImu;
@@ -369,6 +371,39 @@ TEST(ImuCapability, PlayStationParsersHaveImu) {
     EXPECT_TRUE(parserHasImu(Parser::DUALSENSE));
     EXPECT_TRUE(parserHasImu(Parser::SWITCH_PRO_USB));
     EXPECT_FALSE(parserHasImu(Parser::XINPUT_360));
+}
+
+TEST(GipInit, PowerOnSequenceIsThreePackets) {
+    uint8_t out[16];
+    EXPECT_EQ(5u, buildGipInitPacket(InitKind::XBOX_ONE_POWERON, 0, 0, out, sizeof(out)));
+    EXPECT_EQ(0x05, out[0]);
+    EXPECT_EQ(0x01, out[3]); // power-on
+    EXPECT_EQ(7u, buildGipInitPacket(InitKind::XBOX_ONE_POWERON, 1, 1, out, sizeof(out)));
+    EXPECT_EQ(0x0A, out[0]); // led-on
+    EXPECT_EQ(6u, buildGipInitPacket(InitKind::XBOX_ONE_POWERON, 2, 2, out, sizeof(out)));
+    EXPECT_EQ(0x06, out[0]); // auth-done
+    EXPECT_EQ(0u, buildGipInitPacket(InitKind::XBOX_ONE_POWERON, 3, 3, out, sizeof(out)));
+}
+
+TEST(GipInit, SSequenceInsertsSetModeWithSequenceByte) {
+    uint8_t out[16];
+    EXPECT_EQ(5u, buildGipInitPacket(InitKind::XBOX_ONE_S, 0, 0, out, sizeof(out))); // power-on
+    EXPECT_EQ(5u, buildGipInitPacket(InitKind::XBOX_ONE_S, 1, 1, out, sizeof(out))); // S set-mode
+    const uint8_t sInit[5] = {0x05, 0x20, 0x01, 0x0F, 0x06}; // byte 2 = seq 1
+    for (int i = 0; i < 5; i++) EXPECT_EQ(sInit[i], out[i]) << "byte " << i;
+    EXPECT_EQ(6u, buildGipInitPacket(InitKind::XBOX_ONE_S, 3, 3, out, sizeof(out))); // auth-done
+    EXPECT_EQ(0u, buildGipInitPacket(InitKind::XBOX_ONE_S, 4, 4, out, sizeof(out)));
+}
+
+TEST(GipInit, NonXboxInitReturnsZero) {
+    uint8_t out[16];
+    EXPECT_EQ(0u, buildGipInitPacket(InitKind::NONE, 0, 0, out, sizeof(out)));
+    EXPECT_EQ(0u, buildGipInitPacket(InitKind::SWITCH_PRO_HANDSHAKE, 0, 0, out, sizeof(out)));
+}
+
+TEST(GipInit, TooSmallBufferReturnsZero) {
+    uint8_t out[4];
+    EXPECT_EQ(0u, buildGipInitPacket(InitKind::XBOX_ONE_POWERON, 0, 0, out, sizeof(out)));
 }
 
 TEST(Decode, DualShock4DecodesCalibratedImu) {

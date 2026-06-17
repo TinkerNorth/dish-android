@@ -55,10 +55,9 @@ static const KnownDevice kKnown[] = {
     {0x045E, 0x02D1, "Xbox One Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
     {0x045E, 0x02DD, "Xbox One Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
     {0x045E, 0x02E3, "Xbox One Elite Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x045E, 0x02EA, "Xbox One S Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
+    {0x045E, 0x02EA, "Xbox One S Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_S},
     {0x045E, 0x02FD, "Xbox One S Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x045E, 0x0B00, "Xbox Elite Series 2 Controller", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
+    {0x045E, 0x0B00, "Xbox Elite Series 2 Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_S},
     {0x045E, 0x0B05, "Xbox Elite Series 2 Controller", Parser::XBOX_ONE_GIP,
      InitKind::XBOX_ONE_POWERON},
     {0x045E, 0x0B0A, "Xbox Adaptive Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
@@ -951,6 +950,44 @@ bool decodeGenericHidGamepad(const uint8_t* buf, size_t len, DeviceState& s) {
     return true;
 }
 
+size_t buildGipInitPacket(InitKind init, int index, uint8_t seq, uint8_t* out, size_t outCap) {
+    // GIP init packets from Linux xpad. power-on/LED/auth-done are universal; the S-init is the
+    // extra set-mode packet the Xbox One S / Elite Series 2 need. Byte 2 carries the sequence.
+    static const uint8_t kPowerOn[] = {0x05, 0x20, 0x00, 0x01, 0x00};
+    static const uint8_t kSInit[] = {0x05, 0x20, 0x00, 0x0F, 0x06};
+    static const uint8_t kLedOn[] = {0x0A, 0x20, 0x00, 0x03, 0x00, 0x01, 0x14};
+    static const uint8_t kAuthDone[] = {0x06, 0x20, 0x00, 0x02, 0x01, 0x00};
+
+    struct Pkt {
+        const uint8_t* data;
+        size_t len;
+    };
+    static const Pkt kPowerOnSeq[] = {
+        {kPowerOn, sizeof(kPowerOn)}, {kLedOn, sizeof(kLedOn)}, {kAuthDone, sizeof(kAuthDone)}};
+    static const Pkt kSSeq[] = {{kPowerOn, sizeof(kPowerOn)},
+                                {kSInit, sizeof(kSInit)},
+                                {kLedOn, sizeof(kLedOn)},
+                                {kAuthDone, sizeof(kAuthDone)}};
+
+    const Pkt* seqArr = nullptr;
+    int count = 0;
+    if (init == InitKind::XBOX_ONE_POWERON) {
+        seqArr = kPowerOnSeq;
+        count = 3;
+    } else if (init == InitKind::XBOX_ONE_S) {
+        seqArr = kSSeq;
+        count = 4;
+    } else {
+        return 0;
+    }
+    if (index < 0 || index >= count) return 0;
+    size_t len = seqArr[index].len;
+    if (len > outCap) return 0;
+    memcpy(out, seqArr[index].data, len);
+    out[2] = seq;
+    return len;
+}
+
 // Per-device rumble output reports. Motor convention: strong = large/low-frequency (left), weak =
 // small/high-frequency (right), both wire-scale 0..65535. Report layouts and sources (Linux xpad,
 // hid-playstation, hid-nintendo) are documented in docs/rumble.md.
@@ -1037,13 +1074,22 @@ bool runInit(int fd, uint8_t epOut, Parser p, InitKind init) {
     switch (init) {
     case InitKind::NONE:
         return true;
-    case InitKind::XBOX_ONE_POWERON: {
-        // GIP "power on" sequence: tells the controller to start sending input reports. Without
-        // this, modern Xbox One/Series pads stay silent on the IN endpoint.
-        static const uint8_t kPowerOn[] = {0x05, 0x20, 0x00, 0x01, 0x00};
-        bool ok = bulkWrite(fd, epOut, kPowerOn, sizeof(kPowerOn), 200);
-        if (!ok) LOGE("Xbox One power-on write failed");
-        return ok;
+    case InitKind::XBOX_ONE_POWERON:
+    case InitKind::XBOX_ONE_S: {
+        // GIP init: power-on tells the pad to start sending input reports; the rest of the sequence
+        // (LED, auth-done, and the S set-mode) starts the models the lone power-on left silent.
+        uint8_t buf[16];
+        for (int i = 0;; i++) {
+            size_t n = buildGipInitPacket(init, i, (uint8_t)i, buf, sizeof(buf));
+            if (n == 0) break;
+            bool ok = bulkWrite(fd, epOut, buf, n, 200);
+            if (i == 0 && !ok) {
+                LOGE("Xbox One power-on write failed");
+                return false;
+            }
+            usleep(10000);
+        }
+        return true;
     }
     case InitKind::SWITCH_PRO_HANDSHAKE: {
         (void)p;
