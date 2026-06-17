@@ -72,6 +72,34 @@ const uint8_t kReportIdDescriptor[] = {
     0xC0,             // End Collection
 };
 
+// A single 32-bit X axis with a 31-bit logical max, to exercise wide-axis scaling.
+const uint8_t kWideAxisDescriptor[] = {
+    0x05, 0x01,                   // Usage Page (Generic Desktop)
+    0x09, 0x05,                   // Usage (Game Pad)
+    0xA1, 0x01,                   // Collection (Application)
+    0x09, 0x30,                   //   Usage (X)
+    0x15, 0x00,                   //   Logical Minimum (0)
+    0x27, 0xFF, 0xFF, 0xFF, 0x7F, //   Logical Maximum (0x7FFFFFFF)
+    0x75, 0x20,                   //   Report Size (32)
+    0x95, 0x01,                   //   Report Count (1)
+    0x81, 0x02,                   //   Input (Data,Var,Abs)
+    0xC0,                         // End Collection
+};
+
+// A 4-direction hat (logical 0..3); raw 4 is the out-of-range null value.
+const uint8_t kNarrowHatDescriptor[] = {
+    0x05, 0x01, // Usage Page (Generic Desktop)
+    0x09, 0x05, // Usage (Game Pad)
+    0xA1, 0x01, // Collection (Application)
+    0x09, 0x39, //   Usage (Hat switch)
+    0x15, 0x00, //   Logical Minimum (0)
+    0x25, 0x03, //   Logical Maximum (3)
+    0x75, 0x08, //   Report Size (8)
+    0x95, 0x01, //   Report Count (1)
+    0x81, 0x02, //   Input (Data,Var,Abs)
+    0xC0,       // End Collection
+};
+
 } // namespace
 
 TEST(HidDescriptor, ParsesStandardGamepad) {
@@ -159,4 +187,33 @@ TEST(HidDescriptor, TruncatedDescriptorDoesNotOverrun) {
     const uint8_t truncated[] = {0x26};
     HidLayout L;
     EXPECT_FALSE(parseReportDescriptor(truncated, sizeof(truncated), L));
+}
+
+TEST(HidDescriptor, WideAxisScalesWithoutOverflow) {
+    HidLayout L;
+    ASSERT_TRUE(parseReportDescriptor(kWideAxisDescriptor, sizeof(kWideAxisDescriptor), L));
+    ASSERT_TRUE(L.lx.present);
+    EXPECT_EQ(32, L.lx.bitSize);
+
+    std::vector<uint8_t> full = {0xFF, 0xFF, 0xFF, 0x7F}; // raw 0x7FFFFFFF, full deflection
+    DeviceState s;
+    ASSERT_TRUE(decodeFromLayout(full.data(), full.size(), s, L));
+    EXPECT_GT(s.sLX, 30000); // clamps near +max instead of wrapping to garbage
+}
+
+TEST(HidDescriptor, NarrowHatRejectsOutOfRangeNull) {
+    HidLayout L;
+    ASSERT_TRUE(parseReportDescriptor(kNarrowHatDescriptor, sizeof(kNarrowHatDescriptor), L));
+    ASSERT_TRUE(L.hasHat);
+    EXPECT_EQ(3, L.hatLogicalMax);
+
+    std::vector<uint8_t> east = {0x02}; // a real direction (East)
+    DeviceState s1;
+    ASSERT_TRUE(decodeFromLayout(east.data(), east.size(), s1, L));
+    EXPECT_TRUE(s1.wButtons & gamepad::XUSB_DPAD_RIGHT);
+
+    std::vector<uint8_t> nullDir = {0x04}; // out of 0..3 range: no direction
+    DeviceState s2;
+    ASSERT_TRUE(decodeFromLayout(nullDir.data(), nullDir.size(), s2, L));
+    EXPECT_EQ(0, s2.wButtons & gamepad::XUSB_DPAD_MASK);
 }

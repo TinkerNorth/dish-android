@@ -42,7 +42,7 @@ int16_t scaleAxis16(uint32_t raw, const HidAxis& a, bool invert) {
     int32_t center = (a.logicalMin + a.logicalMax) / 2;
     int32_t half = (a.logicalMax - a.logicalMin) / 2;
     if (half <= 0) return 0;
-    int32_t scaled = (v - center) * 32767 / half;
+    int32_t scaled = (int32_t)((int64_t)(v - center) * 32767 / half);
     if (invert) scaled = -scaled;
     if (scaled > 32767) scaled = 32767;
     if (scaled < -32768) scaled = -32768;
@@ -53,7 +53,7 @@ uint8_t scaleTrig8(uint32_t raw, const HidAxis& a) {
     int32_t v = toSigned(raw, a.bitSize, a.logicalMin);
     int32_t span = a.logicalMax - a.logicalMin;
     if (span <= 0) return 0;
-    int32_t scaled = (v - a.logicalMin) * 255 / span;
+    int32_t scaled = (int32_t)((int64_t)(v - a.logicalMin) * 255 / span);
     if (scaled < 0) scaled = 0;
     if (scaled > 255) scaled = 255;
     return (uint8_t)scaled;
@@ -311,7 +311,8 @@ bool decodeFromLayout(const uint8_t* buf, size_t len, DeviceState& s, const HidL
     if (L.hasHat) {
         uint32_t raw = extractBits(d, dlen, L.hatBitOffset, L.hatBitSize);
         int dir = (int)raw - (int)L.hatLogicalMin;
-        if (dir >= 0 && dir <= 7) b = (uint16_t)(b | dpadBitsForDir(dir));
+        int range = (int)L.hatLogicalMax - (int)L.hatLogicalMin;
+        if (dir >= 0 && dir <= range && dir <= 7) b = (uint16_t)(b | dpadBitsForDir(dir));
     }
     for (uint8_t i = 0; i < L.buttonCount; i++) {
         if (extractBits(d, dlen, (uint32_t)L.buttonBitOffset + i, 1)) {
