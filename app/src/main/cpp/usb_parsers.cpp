@@ -38,6 +38,10 @@ using gamepad::XUSB_THUMB_R;
 using gamepad::XUSB_X;
 using gamepad::XUSB_Y;
 
+// DualShock 4 / DualSense calibrated-IMU resolution (Linux hid-playstation).
+static constexpr int32_t kPsGyroResPerDegS = 1024;
+static constexpr int32_t kPsAccelResPerG = 8192;
+
 static const KnownDevice kKnown[] = {
     {0x045E, 0x028E, "Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
     {0x045E, 0x028F, "Xbox 360 Wireless Receiver (wired)", Parser::XINPUT_360, InitKind::NONE},
@@ -417,7 +421,9 @@ const char* parserName(Parser p) {
     return "Unknown";
 }
 
-bool parserHasImu(Parser p) { return p == Parser::SWITCH_PRO_USB; }
+bool parserHasImu(Parser p) {
+    return p == Parser::SWITCH_PRO_USB || p == Parser::DUALSHOCK4 || p == Parser::DUALSENSE;
+}
 
 bool parserHasRumble(Parser p) {
     switch (p) {
@@ -507,6 +513,25 @@ int16_t switchGyroToWire(int16_t raw) {
 
 int16_t switchAccelToWire(int16_t raw) {
     int64_t wire = (int64_t)raw * 32767 / 16384;
+    if (wire > 32767) wire = 32767;
+    if (wire < -32768) wire = -32768;
+    return (int16_t)wire;
+}
+
+// DS4/DualSense raw -> calibrated (1024/deg-s) -> wire (deg-s / 2000 * 32767).
+int16_t ds4GyroAxisToWire(int32_t raw, const PsImuCalib& c, int axis) {
+    int64_t calibrated = (int64_t)c.gyroNumer[axis] * raw / c.gyroDenom[axis];
+    int64_t wire = calibrated * 32767 / (kPsGyroResPerDegS * 2000);
+    if (wire > 32767) wire = 32767;
+    if (wire < -32768) wire = -32768;
+    return (int16_t)wire;
+}
+
+// DS4/DualSense raw -> calibrated (8192/g) -> wire (g / 4 * 32767).
+int16_t ds4AccelAxisToWire(int32_t raw, const PsImuCalib& c, int axis) {
+    int64_t calibrated =
+        (int64_t)c.accelNumer[axis] * (raw - c.accelBias[axis]) / c.accelDenom[axis];
+    int64_t wire = calibrated * 32767 / (kPsAccelResPerG * 4);
     if (wire > 32767) wire = 32767;
     if (wire < -32768) wire = -32768;
     return (int16_t)wire;
@@ -634,7 +659,7 @@ bool decodeXboxOneGip(const uint8_t* buf, size_t len, DeviceState& s, ParserStat
 // DualShock 4 USB report 0x01. Sticks are uint8 with 128 = center. Y axes are down-positive so
 // they're inverted to match XUSB's up-positive convention. Face buttons are remapped to the
 // XInput "muscle memory" positions: Cross is A, Circle is B, Square is X, Triangle is Y.
-bool decodeDualShock4(const uint8_t* buf, size_t len, DeviceState& s) {
+bool decodeDualShock4(const uint8_t* buf, size_t len, DeviceState& s, const PsImuCalib* calib) {
     if (len < 10) return false;
     if (buf[0] != 0x01) return false;
 
@@ -659,12 +684,24 @@ bool decodeDualShock4(const uint8_t* buf, size_t len, DeviceState& s) {
 
     s.bLT = buf[8];
     s.bRT = buf[9];
+
+    // gyro pitch/yaw/roll at 13/15/17, accel x/y/z at 19/21/23 (int16 LE). Axis signs are an
+    // unflipped straight map, still unverified on hardware like the Switch IMU.
+    if (calib != nullptr && calib->valid && len >= 25) {
+        s.gyroX = ds4GyroAxisToWire(rdLe16(buf, 13), *calib, 0);
+        s.gyroY = ds4GyroAxisToWire(rdLe16(buf, 15), *calib, 1);
+        s.gyroZ = ds4GyroAxisToWire(rdLe16(buf, 17), *calib, 2);
+        s.accelX = ds4AccelAxisToWire(rdLe16(buf, 19), *calib, 0);
+        s.accelY = ds4AccelAxisToWire(rdLe16(buf, 21), *calib, 1);
+        s.accelZ = ds4AccelAxisToWire(rdLe16(buf, 23), *calib, 2);
+        s.motionValid = true;
+    }
     return true;
 }
 
 // DualSense USB report 0x01. Same axis conventions as DS4 but the byte layout shifts: triggers
 // move to bytes 5/6 and the button bytes are at 8/9/10.
-bool decodeDualSense(const uint8_t* buf, size_t len, DeviceState& s) {
+bool decodeDualSense(const uint8_t* buf, size_t len, DeviceState& s, const PsImuCalib* calib) {
     if (len < 11) return false;
     if (buf[0] != 0x01) return false;
 
@@ -689,6 +726,17 @@ bool decodeDualSense(const uint8_t* buf, size_t len, DeviceState& s) {
     if (buf[9] & 0x80) b |= XUSB_THUMB_R;
     b = setDpadFromHat(b, buf[8] & 0x0F);
     s.wButtons = b;
+
+    // gyro at 16/18/20, accel at 22/24/26 (int16 LE); same calibration as DS4, signs unverified.
+    if (calib != nullptr && calib->valid && len >= 28) {
+        s.gyroX = ds4GyroAxisToWire(rdLe16(buf, 16), *calib, 0);
+        s.gyroY = ds4GyroAxisToWire(rdLe16(buf, 18), *calib, 1);
+        s.gyroZ = ds4GyroAxisToWire(rdLe16(buf, 20), *calib, 2);
+        s.accelX = ds4AccelAxisToWire(rdLe16(buf, 22), *calib, 0);
+        s.accelY = ds4AccelAxisToWire(rdLe16(buf, 24), *calib, 1);
+        s.accelZ = ds4AccelAxisToWire(rdLe16(buf, 26), *calib, 2);
+        s.motionValid = true;
+    }
     return true;
 }
 
@@ -820,6 +868,34 @@ void switchEncodeMotor(uint8_t* out, uint16_t magnitude) {
 
 } // namespace
 
+bool parsePsCalibration(const uint8_t* buf, size_t len, PsImuCalib& out) {
+    out = PsImuCalib{};
+    if (len < 35) return false; // gyro/accel calibration occupies bytes 1..34
+    int32_t gyroBias[3] = {rdLe16(buf, 1), rdLe16(buf, 3), rdLe16(buf, 5)};
+    int32_t gyroPlus[3] = {rdLe16(buf, 7), rdLe16(buf, 11), rdLe16(buf, 15)};
+    int32_t gyroMinus[3] = {rdLe16(buf, 9), rdLe16(buf, 13), rdLe16(buf, 17)};
+    int32_t speed2x = rdLe16(buf, 19) + rdLe16(buf, 21);
+    for (int i = 0; i < 3; i++) {
+        int32_t a = gyroPlus[i] - gyroBias[i];
+        int32_t b = gyroMinus[i] - gyroBias[i];
+        int32_t denom = (a < 0 ? -a : a) + (b < 0 ? -b : b);
+        if (denom == 0) return false;
+        out.gyroNumer[i] = speed2x * kPsGyroResPerDegS;
+        out.gyroDenom[i] = denom;
+    }
+    int32_t accPlus[3] = {rdLe16(buf, 23), rdLe16(buf, 27), rdLe16(buf, 31)};
+    int32_t accMinus[3] = {rdLe16(buf, 25), rdLe16(buf, 29), rdLe16(buf, 33)};
+    for (int i = 0; i < 3; i++) {
+        int32_t range2g = accPlus[i] - accMinus[i];
+        if (range2g == 0) return false;
+        out.accelBias[i] = accPlus[i] - range2g / 2;
+        out.accelNumer[i] = 2 * kPsAccelResPerG;
+        out.accelDenom[i] = range2g;
+    }
+    out.valid = true;
+    return true;
+}
+
 bool decodeReport(Parser p, const uint8_t* buf, size_t len, DeviceState& s, ParserState* sticks) {
     switch (p) {
     case Parser::XINPUT_360:
@@ -828,9 +904,9 @@ bool decodeReport(Parser p, const uint8_t* buf, size_t len, DeviceState& s, Pars
     case Parser::XBOX_ONE_GIP:
         return sticks != nullptr && decodeXboxOneGip(buf, len, s, *sticks);
     case Parser::DUALSHOCK4:
-        return decodeDualShock4(buf, len, s);
+        return decodeDualShock4(buf, len, s, sticks ? &sticks->psImu : nullptr);
     case Parser::DUALSENSE:
-        return decodeDualSense(buf, len, s);
+        return decodeDualSense(buf, len, s, sticks ? &sticks->psImu : nullptr);
     case Parser::SWITCH_PRO_USB:
         return sticks != nullptr && decodeSwitchProUsb(buf, len, s, *sticks);
     case Parser::STADIA:

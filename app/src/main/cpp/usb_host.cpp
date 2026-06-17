@@ -292,6 +292,25 @@ void fetchHidLayout(int fd, int interfaceNumber, usbhid::HidLayout& out) {
     usbhid::parseReportDescriptor(desc, (size_t)n, out);
 }
 
+// Reads the DS4/DualSense calibration feature report so the IMU can be scaled; best-effort, a
+// failed read leaves the calibration invalid and motion stays off.
+void fetchPsCalibration(int fd, int interfaceNumber, uint8_t reportId,
+                        usbparsers::PsImuCalib& out) {
+    if (interfaceNumber < 0) return;
+    uint8_t buf[64];
+    struct usbdevfs_ctrltransfer ct = {};
+    ct.bRequestType = 0xA1;                         // IN | Class | Interface
+    ct.bRequest = 0x01;                             // GET_REPORT
+    ct.wValue = (uint16_t)((0x03 << 8) | reportId); // Feature report
+    ct.wIndex = (uint16_t)interfaceNumber;
+    ct.wLength = sizeof(buf);
+    ct.timeout = 250;
+    ct.data = buf;
+    int n = ioctl(fd, USBDEVFS_CONTROL, &ct);
+    if (n < 35) return;
+    usbparsers::parsePsCalibration(buf, (size_t)n, out);
+}
+
 } // namespace
 
 AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumber, uint8_t epIn,
@@ -355,6 +374,10 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
     ctx->parserName = usbparsers::parserName(parser);
     if (parser == usbparsers::Parser::GENERIC_HID_GAMEPAD) {
         fetchHidLayout(fd, interfaceNumber, ctx->stickRange.hidLayout);
+    } else if (parser == usbparsers::Parser::DUALSHOCK4) {
+        fetchPsCalibration(fd, interfaceNumber, 0x02, ctx->stickRange.psImu);
+    } else if (parser == usbparsers::Parser::DUALSENSE) {
+        fetchPsCalibration(fd, interfaceNumber, 0x05, ctx->stickRange.psImu);
     }
 
     {

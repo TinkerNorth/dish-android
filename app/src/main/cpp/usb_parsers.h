@@ -48,6 +48,18 @@ struct AxisAutoRange {
     int32_t negReach = 1000;
 };
 
+// DualShock 4 / DualSense per-device IMU calibration (read from the calibration feature report).
+// raw -> calibrated math from Linux hid-playstation; calibrated gyro is 1024 units/deg-s, accel
+// 8192 units/g. Without it the raw sensor scale and bias are unknown, so motion stays off.
+struct PsImuCalib {
+    bool valid = false;
+    int32_t gyroNumer[3] = {0, 0, 0};
+    int32_t gyroDenom[3] = {1, 1, 1};
+    int32_t accelBias[3] = {0, 0, 0};
+    int32_t accelNumer[3] = {0, 0, 0};
+    int32_t accelDenom[3] = {1, 1, 1};
+};
+
 struct ParserState {
     AxisAutoRange lx;
     AxisAutoRange ly;
@@ -58,6 +70,9 @@ struct ParserState {
     gamepad::DeviceState xboxLastMain;
     // Filled at attach for GENERIC_HID_GAMEPAD when the report descriptor parses; empty otherwise.
     usbhid::HidLayout hidLayout;
+    // Filled at attach for DUALSHOCK4 / DUALSENSE when the calibration report reads; invalid
+    // otherwise.
+    PsImuCalib psImu;
 };
 
 const KnownDevice* lookupKnown(uint16_t vid, uint16_t pid);
@@ -83,5 +98,8 @@ bool decodeReport(Parser p, const uint8_t* buf, size_t len, gamepad::DeviceState
                   ParserState* sticks);
 
 bool decodeGenericHidGamepad(const uint8_t* buf, size_t len, gamepad::DeviceState& s);
+
+// Parses a DualShock 4 / DualSense calibration feature report into per-axis gyro/accel factors.
+bool parsePsCalibration(const uint8_t* buf, size_t len, PsImuCalib& out);
 
 } // namespace usbparsers

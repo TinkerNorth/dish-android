@@ -13,9 +13,12 @@ using gamepad::XUSB_B;
 using gamepad::XUSB_GUIDE;
 using usbparsers::buildRumbleReport;
 using usbparsers::decodeReport;
+using usbparsers::parsePsCalibration;
 using usbparsers::Parser;
+using usbparsers::parserHasImu;
 using usbparsers::parserHasRumble;
 using usbparsers::ParserState;
+using usbparsers::PsImuCalib;
 
 namespace {
 
@@ -47,6 +50,26 @@ void setLe16(std::vector<uint8_t>& b, size_t off, int16_t v) {
 std::vector<uint8_t> switchReport(size_t len) {
     std::vector<uint8_t> r(len, 0);
     r[0] = 0x30;
+    return r;
+}
+
+// Symmetric calibration: gyro maps raw -> raw*1024 calibrated, accel maps raw -> raw (8192/g).
+std::vector<uint8_t> psCalibReport() {
+    std::vector<uint8_t> r(35, 0);
+    setLe16(r, 7, 1000);
+    setLe16(r, 9, -1000);
+    setLe16(r, 11, 1000);
+    setLe16(r, 13, -1000);
+    setLe16(r, 15, 1000);
+    setLe16(r, 17, -1000);
+    setLe16(r, 19, 1000);
+    setLe16(r, 21, 1000);
+    setLe16(r, 23, 8192);
+    setLe16(r, 25, -8192);
+    setLe16(r, 27, 8192);
+    setLe16(r, 29, -8192);
+    setLe16(r, 31, 8192);
+    setLe16(r, 33, -8192);
     return r;
 }
 
@@ -314,4 +337,84 @@ TEST(Rumble, Xbox360WirelessTooSmallBufferReturnsZero) {
 
 TEST(RumbleCapability, WirelessXbox360ReportsTrue) {
     EXPECT_TRUE(parserHasRumble(Parser::XINPUT_360_WIRELESS));
+}
+
+TEST(PsCalibration, ParsesGyroAndAccelFactors) {
+    auto r = psCalibReport();
+    PsImuCalib c;
+    ASSERT_TRUE(parsePsCalibration(r.data(), r.size(), c));
+    EXPECT_TRUE(c.valid);
+    EXPECT_EQ(2048000, c.gyroNumer[0]); // speed2x(2000) * 1024
+    EXPECT_EQ(2000, c.gyroDenom[0]);    // |plus| + |minus|
+    EXPECT_EQ(0, c.accelBias[0]);       // plus - range/2
+    EXPECT_EQ(16384, c.accelNumer[0]);  // 2 * 8192
+    EXPECT_EQ(16384, c.accelDenom[0]);  // plus - minus
+}
+
+TEST(PsCalibration, RejectsShortReport) {
+    std::vector<uint8_t> r(20, 0);
+    PsImuCalib c;
+    EXPECT_FALSE(parsePsCalibration(r.data(), r.size(), c));
+    EXPECT_FALSE(c.valid);
+}
+
+TEST(PsCalibration, RejectsZeroDenominator) {
+    std::vector<uint8_t> r(35, 0); // all-zero plus/minus -> gyro denom 0
+    PsImuCalib c;
+    EXPECT_FALSE(parsePsCalibration(r.data(), r.size(), c));
+}
+
+TEST(ImuCapability, PlayStationParsersHaveImu) {
+    EXPECT_TRUE(parserHasImu(Parser::DUALSHOCK4));
+    EXPECT_TRUE(parserHasImu(Parser::DUALSENSE));
+    EXPECT_TRUE(parserHasImu(Parser::SWITCH_PRO_USB));
+    EXPECT_FALSE(parserHasImu(Parser::XINPUT_360));
+}
+
+TEST(Decode, DualShock4DecodesCalibratedImu) {
+    auto calib = psCalibReport();
+    ParserState st;
+    ASSERT_TRUE(parsePsCalibration(calib.data(), calib.size(), st.psImu));
+
+    std::vector<uint8_t> r(25, 0);
+    r[0] = 0x01;
+    r[1] = r[2] = r[3] = r[4] = 128; // sticks centered
+    setLe16(r, 13, 2000);            // gyro X raw -> full positive
+    setLe16(r, 19, 8192);            // accel X raw -> ~+1g
+
+    DeviceState s;
+    ASSERT_TRUE(decodeReport(Parser::DUALSHOCK4, r.data(), r.size(), s, &st));
+    EXPECT_TRUE(s.motionValid);
+    EXPECT_GT(s.gyroX, 30000);
+    EXPECT_GT(s.accelX, 7000);
+    EXPECT_EQ(0, s.gyroY);
+    EXPECT_EQ(0, s.accelY);
+}
+
+TEST(Decode, DualShock4NoImuWithoutCalibration) {
+    std::vector<uint8_t> r(25, 0);
+    r[0] = 0x01;
+    setLe16(r, 13, 2000);
+    DeviceState s;
+    ParserState st; // psImu invalid by default
+    ASSERT_TRUE(decodeReport(Parser::DUALSHOCK4, r.data(), r.size(), s, &st));
+    EXPECT_FALSE(s.motionValid);
+}
+
+TEST(Decode, DualSenseDecodesCalibratedImu) {
+    auto calib = psCalibReport();
+    ParserState st;
+    ASSERT_TRUE(parsePsCalibration(calib.data(), calib.size(), st.psImu));
+
+    std::vector<uint8_t> r(28, 0);
+    r[0] = 0x01;
+    r[1] = r[2] = r[3] = r[4] = 128;
+    setLe16(r, 16, 2000); // gyro X
+    setLe16(r, 22, 8192); // accel X
+
+    DeviceState s;
+    ASSERT_TRUE(decodeReport(Parser::DUALSENSE, r.data(), r.size(), s, &st));
+    EXPECT_TRUE(s.motionValid);
+    EXPECT_GT(s.gyroX, 30000);
+    EXPECT_GT(s.accelX, 7000);
 }
