@@ -346,6 +346,11 @@ class ConnectionsActivity : AppCompatActivity() {
         intent.removeExtra(EXTRA_PAIR_PROMPT_FOR_ID)
     }
 
+    override fun onStart() {
+        super.onStart()
+        satellite.startDiscovery()
+    }
+
     override fun onStop() {
         super.onStop()
         gamepadHost.cancelDimOnStop()
