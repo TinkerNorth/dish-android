@@ -104,4 +104,7 @@ void resetState(DeviceState& s);
 
 bool consumePublishIfChanged(DeviceState& s);
 
+// A (re)bound target pad is neutral; without re-arming, the on-change latch would never resend.
+void resetPublishLatch(DeviceState& s);
+
 } // namespace gamepad

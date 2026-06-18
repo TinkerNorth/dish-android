@@ -457,3 +457,71 @@ TEST(Integration, KeyDownAxisMoveCancelSequence) {
     EXPECT_EQ(0, s.sLX);
     EXPECT_EQ(0, s.sLY);
 }
+
+TEST(ResetPublishLatch, RepublishesUnchangedState) {
+    DeviceState s;
+    applyKey(s, KC_BUTTON_A, true);
+    EXPECT_TRUE(consumePublishIfChanged(s));
+    EXPECT_FALSE(consumePublishIfChanged(s));
+
+    resetPublishLatch(s);
+
+    EXPECT_FALSE(s.everPublished);
+    EXPECT_TRUE(consumePublishIfChanged(s));
+    EXPECT_FALSE(consumePublishIfChanged(s));
+}
+
+TEST(ResetPublishLatch, PreservesLiveStateAndDeadzones) {
+    DeviceState s;
+    s.flatX = 0.1f;
+    applyKey(s, KC_BUTTON_A, true);
+    applyAxes(s, 0.5f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f);
+    consumePublishIfChanged(s);
+    int16_t liveSLX = s.sLX;
+
+    resetPublishLatch(s);
+
+    EXPECT_EQ(XUSB_A, s.wButtons);
+    EXPECT_EQ(liveSLX, s.sLX);
+    EXPECT_FLOAT_EQ(0.1f, s.flatX);
+}
+
+TEST(ResetPublishLatch, ForcesBaselineEvenWhenLiveMatchesLastPublished) {
+    DeviceState s;
+    EXPECT_TRUE(consumePublishIfChanged(s));
+    EXPECT_FALSE(consumePublishIfChanged(s));
+
+    resetPublishLatch(s);
+
+    EXPECT_TRUE(consumePublishIfChanged(s));
+}
+
+TEST(BindBaselineSync, ResetPlusRearmClearsStalePhantomAndPublishesNeutral) {
+    DeviceState s;
+    applyAxes(s, 0.f, 0.f, 0.f, 0.f, 0.6f, 0.f, -1.f, 0.f);
+    EXPECT_TRUE(consumePublishIfChanged(s));
+    EXPECT_GT(s.bLT, 0);
+    EXPECT_TRUE(s.wButtons & XUSB_DPAD_LEFT);
+
+    resetState(s);
+    resetPublishLatch(s);
+
+    EXPECT_TRUE(consumePublishIfChanged(s));
+    EXPECT_EQ(0, s.bLT);
+    EXPECT_EQ(0, s.wButtons & XUSB_DPAD_MASK);
+    EXPECT_EQ(0, s.lastBLT);
+    EXPECT_EQ(0, s.lastWButtons);
+}
+
+TEST(BindBaselineSync, StaleHeldStateDoesNotSurviveRebind) {
+    DeviceState s;
+    applyKey(s, KC_BUTTON_B, true);
+    consumePublishIfChanged(s);
+
+    resetState(s);
+    resetPublishLatch(s);
+    consumePublishIfChanged(s);
+
+    EXPECT_EQ(0, s.wButtons);
+    EXPECT_FALSE(consumePublishIfChanged(s));
+}
