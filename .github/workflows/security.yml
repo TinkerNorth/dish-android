@@ -74,7 +74,9 @@ jobs:
       - name: Run dependencyCheckAnalyze
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
-        run: ./gradlew dependencyCheckAnalyze --info
+        # The OWASP plugin reads Task.project at execution time, which the configuration cache
+        # (enabled in gradle.properties) rejects; disable it for this task only.
+        run: ./gradlew dependencyCheckAnalyze --info --no-configuration-cache
 
       - name: Upload Dependency-Check report (always)
         if: ${{ always() }}

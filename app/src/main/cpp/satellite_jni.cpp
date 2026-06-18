@@ -207,11 +207,12 @@ static inline float axisCur(const GameActivityMotionEvent* ev, int axis) {
 
 // Lock order: devices < slots < (sessions | btQueue).
 static void publishIfChanged(int32_t deviceId, DeviceState& s) {
-    if (!gamepad::consumePublishIfChanged(s)) return;
-
     std::lock_guard<std::mutex> lock(g_slotsMtx);
     auto it = g_slots.find(deviceId);
     if (it == g_slots.end()) return;
+    // Bind-check before consume: a sample dropped for lack of a slot must not burn the latch, or
+    // the slot it later binds to never sees that state.
+    if (!gamepad::consumePublishIfChanged(s)) return;
     const SlotBinding& binding = it->second;
 
     if (binding.kind == SLOT_SATELLITE) {
@@ -241,6 +242,17 @@ static void publishIfChanged(int32_t deviceId, DeviceState& s) {
             s.sRY,
         });
     }
+}
+
+// deviceId is reused across reconnects, so the new pad would inherit stale held inputs; reset and
+// re-arm so it syncs to neutral. Call without g_slotsMtx held: publishIfChanged retakes it.
+static void syncSlotBaseline(int32_t deviceId) {
+    std::lock_guard<std::mutex> lock(g_devicesMtx);
+    auto it = g_devices.find(deviceId);
+    if (it == g_devices.end()) return;
+    gamepad::resetState(it->second);
+    gamepad::resetPublishLatch(it->second);
+    publishIfChanged(deviceId, it->second);
 }
 
 // USB-direct reports skip gamepad::applyAxes, so the per-device flat (deadzone) is never applied; a
@@ -838,12 +850,15 @@ JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_dis
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_bindPhysicalSlotSatellite(
     JNIEnv*, jobject, jint deviceId, jint sessionHandle, jint controllerIndex) {
-    std::lock_guard<std::mutex> lock(g_slotsMtx);
-    auto& b = g_slots[deviceId];
-    b.kind = SLOT_SATELLITE;
-    b.sessionHandle = sessionHandle;
-    b.controllerIndex = controllerIndex;
-    b.btConnectionId.clear();
+    {
+        std::lock_guard<std::mutex> lock(g_slotsMtx);
+        auto& b = g_slots[deviceId];
+        b.kind = SLOT_SATELLITE;
+        b.sessionHandle = sessionHandle;
+        b.controllerIndex = controllerIndex;
+        b.btConnectionId.clear();
+    }
+    syncSlotBaseline(deviceId);
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_bindPhysicalSlotBluetooth(
@@ -851,12 +866,15 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_bindPh
     const char* cstr = env->GetStringUTFChars(connectionId, nullptr);
     std::string copy = cstr ? std::string(cstr) : std::string();
     if (cstr) env->ReleaseStringUTFChars(connectionId, cstr);
-    std::lock_guard<std::mutex> lock(g_slotsMtx);
-    auto& b = g_slots[deviceId];
-    b.kind = SLOT_BLUETOOTH;
-    b.sessionHandle = -1;
-    b.controllerIndex = -1;
-    b.btConnectionId = std::move(copy);
+    {
+        std::lock_guard<std::mutex> lock(g_slotsMtx);
+        auto& b = g_slots[deviceId];
+        b.kind = SLOT_BLUETOOTH;
+        b.sessionHandle = -1;
+        b.controllerIndex = -1;
+        b.btConnectionId = std::move(copy);
+    }
+    syncSlotBaseline(deviceId);
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_unbindPhysicalSlot(

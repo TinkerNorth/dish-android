@@ -25,5 +25,10 @@ configure<org.owasp.dependencycheck.gradle.extension.DependencyCheckExtension> {
     }
     nvd.run {
         apiKey = System.getenv("NVD_API_KEY") ?: ""
+        // NVD's API is chronically slow/503-prone; reuse the cached feed for a week so a healthy
+        // build never blocks on an upstream outage, and ride out transient 503s when it must sync.
+        validForHours = 168
+        maxRetryCount = 20
+        delay = 4000
     }
 }
