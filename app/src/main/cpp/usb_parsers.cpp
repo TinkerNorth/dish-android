@@ -38,20 +38,26 @@ using gamepad::XUSB_THUMB_R;
 using gamepad::XUSB_X;
 using gamepad::XUSB_Y;
 
+// DualShock 4 / DualSense calibrated-IMU resolution (Linux hid-playstation).
+static constexpr int32_t kPsGyroResPerDegS = 1024;
+static constexpr int32_t kPsAccelResPerG = 8192;
+
 static const KnownDevice kKnown[] = {
     {0x045E, 0x028E, "Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
     {0x045E, 0x028F, "Xbox 360 Wireless Receiver (wired)", Parser::XINPUT_360, InitKind::NONE},
-    {0x045E, 0x02A1, "Xbox 360 Wireless Controller (PC)", Parser::XINPUT_360, InitKind::NONE},
-    {0x045E, 0x0291, "Xbox 360 Wireless Receiver (rev 1)", Parser::XINPUT_360, InitKind::NONE},
-    {0x045E, 0x0719, "Xbox 360 Wireless Receiver (rev 2)", Parser::XINPUT_360, InitKind::NONE},
+    {0x045E, 0x02A1, "Xbox 360 Wireless Controller (PC)", Parser::XINPUT_360_WIRELESS,
+     InitKind::NONE},
+    {0x045E, 0x0291, "Xbox 360 Wireless Receiver (rev 1)", Parser::XINPUT_360_WIRELESS,
+     InitKind::NONE},
+    {0x045E, 0x0719, "Xbox 360 Wireless Receiver (rev 2)", Parser::XINPUT_360_WIRELESS,
+     InitKind::NONE},
 
     {0x045E, 0x02D1, "Xbox One Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
     {0x045E, 0x02DD, "Xbox One Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
     {0x045E, 0x02E3, "Xbox One Elite Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x045E, 0x02EA, "Xbox One S Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
+    {0x045E, 0x02EA, "Xbox One S Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_S},
     {0x045E, 0x02FD, "Xbox One S Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
-    {0x045E, 0x0B00, "Xbox Elite Series 2 Controller", Parser::XBOX_ONE_GIP,
-     InitKind::XBOX_ONE_POWERON},
+    {0x045E, 0x0B00, "Xbox Elite Series 2 Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_S},
     {0x045E, 0x0B05, "Xbox Elite Series 2 Controller", Parser::XBOX_ONE_GIP,
      InitKind::XBOX_ONE_POWERON},
     {0x045E, 0x0B0A, "Xbox Adaptive Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
@@ -168,17 +174,234 @@ static const KnownDevice kKnown[] = {
     {0x18D1, 0x9400, "Google Stadia Controller", Parser::STADIA, InitKind::NONE},
 };
 
-const KnownDevice* lookupKnown(uint16_t vid, uint16_t pid) {
-    for (const auto& d : kKnown) {
+// Device IDs below are a curated subset of SDL's src/joystick/controller_list.h (zlib license,
+// Copyright (C) Valve Corporation; see THIRD_PARTY.md). They are NOT hardware-verified here:
+// lookupKnown recognises them (name + the family parser) and the user can opt into Direct, where
+// probeDecodable still guards the byte layout, but isVerifiedFastLane returns false for them so
+// auto-claim never silently moves an untested model onto Direct. Bluetooth-only PIDs, USB-differs
+// entries, dongles that re-enumerate, and non-gamepads (wheels/guitars) from SDL are omitted.
+static const KnownDevice kImported[] = {
+    {0x0079, 0x18D4, "GPD Win 2 Controller", Parser::XINPUT_360, InitKind::NONE},
+    {0x044F, 0xB326, "Thrustmaster Gamepad GP XID", Parser::XINPUT_360, InitKind::NONE},
+    {0x046D, 0xC242, "Logitech ChillStream", Parser::XINPUT_360, InitKind::NONE},
+    {0x056E, 0x2004, "Elecom JC-U3613M", Parser::XINPUT_360, InitKind::NONE},
+    {0x0738, 0x4718, "Mad Catz SFIV FightStick SE", Parser::XINPUT_360, InitKind::NONE},
+    {0x0738, 0xB726, "Mad Catz Xbox 360 Controller (MW2)", Parser::XINPUT_360, InitKind::NONE},
+    {0x0738, 0xBEEF, "Mad Catz JOYTECH NEO SE", Parser::XINPUT_360, InitKind::NONE},
+    {0x0738, 0xCB03, "Saitek P3200 Rumble Pad", Parser::XINPUT_360, InitKind::NONE},
+    {0x0738, 0xF738, "Mad Catz Super SFIV FightStick TE S", Parser::XINPUT_360, InitKind::NONE},
+    {0x0E6F, 0x0125, "PDP Injustice FightStick (360)", Parser::XINPUT_360, InitKind::NONE},
+    {0x0E6F, 0x0127, "PDP Injustice FightPad (360)", Parser::XINPUT_360, InitKind::NONE},
+    {0x0E6F, 0x0131, "PDP EA Soccer Gamepad", Parser::XINPUT_360, InitKind::NONE},
+    {0x0E6F, 0x0133, "PDP Battlefield 4 Gamepad", Parser::XINPUT_360, InitKind::NONE},
+    {0x0E6F, 0x0143, "PDP Mortal Kombat X FightStick (360)", Parser::XINPUT_360, InitKind::NONE},
+    {0x0E6F, 0x0147, "PDP Marvel Controller (360)", Parser::XINPUT_360, InitKind::NONE},
+    {0x0E6F, 0x0201, "PDP Gamepad for Xbox 360", Parser::XINPUT_360, InitKind::NONE},
+    {0x0E6F, 0x0213, "PDP Afterglow Gamepad (360)", Parser::XINPUT_360, InitKind::NONE},
+    {0x0E6F, 0x021F, "PDP Rock Candy Gamepad (360)", Parser::XINPUT_360, InitKind::NONE},
+    {0x0E6F, 0x0313, "PDP Afterglow Gamepad (360)", Parser::XINPUT_360, InitKind::NONE},
+    {0x0E6F, 0x0314, "PDP Afterglow Gamepad (360)", Parser::XINPUT_360, InitKind::NONE},
+    {0x0E6F, 0xF900, "PDP Afterglow AX.1 (360)", Parser::XINPUT_360, InitKind::NONE},
+    {0x0F0D, 0x000C, "Hori Pad EX Turbo", Parser::XINPUT_360, InitKind::NONE},
+    {0x0F0D, 0x00DB, "Hori Dragon Quest Slime Controller", Parser::XINPUT_360, InitKind::NONE},
+    {0x0F0D, 0x011E, "Hori Fighting Stick Alpha (360)", Parser::XINPUT_360, InitKind::NONE},
+    {0x11C9, 0x55F0, "Nacon GC-100XF", Parser::XINPUT_360, InitKind::NONE},
+    {0x12AB, 0x0303, "Mortal Kombat Klassic FightStick", Parser::XINPUT_360, InitKind::NONE},
+    {0x146B, 0x0601, "BigBen Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
+    {0x15E4, 0x3F00, "PowerA Mini Pro Elite", Parser::XINPUT_360, InitKind::NONE},
+    {0x15E4, 0x3F0A, "Xbox Airflo Wired Controller", Parser::XINPUT_360, InitKind::NONE},
+    {0x15E4, 0x3F10, "Batarang Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
+    {0x162E, 0xBEEF, "Joytech Neo-Se Take2", Parser::XINPUT_360, InitKind::NONE},
+    {0x1689, 0xFD00, "Razer Onza Tournament Edition", Parser::XINPUT_360, InitKind::NONE},
+    {0x1689, 0xFD01, "Razer Onza Classic Edition", Parser::XINPUT_360, InitKind::NONE},
+    {0x1689, 0xFE00, "Razer Sabertooth", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF016, "Mad Catz Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF018, "Mad Catz SFIV SE FightStick", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF019, "Mad Catz Brawlstick (360)", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF021, "Mad Catz Ghost Recon FS Gamepad", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF023, "MLG Pro Circuit Controller (Xbox)", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF025, "Mad Catz Call of Duty FightPad", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF027, "Mad Catz FPS Pro", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF028, "Street Fighter IV FightPad", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF02E, "Mad Catz FightPad", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF036, "Mad Catz MicroCon Gamepad Pro", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF038, "Street Fighter IV FightStick TE", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF039, "Mad Catz MvC2 TE", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF03A, "Mad Catz SFxT FightStick Pro", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF03D, "SFIV Arcade Stick TE (Chun Li)", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF03E, "Mad Catz MLG FightStick TE", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF03F, "Mad Catz FightStick SoulCalibur", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF042, "Mad Catz FightStick TES+", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF080, "Mad Catz FightStick TE2", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF501, "HoriPad EX2 Turbo", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF502, "Hori Real Arcade Pro VX SA", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF503, "Hori Fighting Stick VX", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF504, "Hori Real Arcade Pro EX", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF505, "Hori Fighting Stick EX2B", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF506, "Hori Real Arcade Pro EX Premium VLX", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF900, "Harmonix Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF901, "GameStop Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF902, "Mad Catz Gamepad 2", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF903, "Tron Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF904, "PDP Versus Fighting Pad", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xF906, "Mortal Kombat FightStick", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xFA01, "Mad Catz Gamepad", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xFD00, "Razer Onza TE", Parser::XINPUT_360, InitKind::NONE},
+    {0x1BAD, 0xFD01, "Razer Onza", Parser::XINPUT_360, InitKind::NONE},
+    {0x24C6, 0x530A, "Xbox 360 Pro EX Controller", Parser::XINPUT_360, InitKind::NONE},
+    {0x24C6, 0x531A, "PowerA Pro Ex", Parser::XINPUT_360, InitKind::NONE},
+    {0x24C6, 0x5397, "FUS1ON Tournament Controller", Parser::XINPUT_360, InitKind::NONE},
+    {0x24C6, 0x5502, "Hori Fighting Stick VX Alt", Parser::XINPUT_360, InitKind::NONE},
+    {0x24C6, 0x5503, "Hori Fighting Edge", Parser::XINPUT_360, InitKind::NONE},
+    {0x24C6, 0x5508, "Hori Pad A", Parser::XINPUT_360, InitKind::NONE},
+    {0x24C6, 0x5510, "Hori Fighting Commander ONE", Parser::XINPUT_360, InitKind::NONE},
+    {0x24C6, 0x5B02, "Thrustmaster GPX Controller", Parser::XINPUT_360, InitKind::NONE},
+    {0x24C6, 0x5D04, "Razer Sabertooth", Parser::XINPUT_360, InitKind::NONE},
+    {0x24C6, 0xFAFA, "Aplay Controller", Parser::XINPUT_360, InitKind::NONE},
+    {0x24C6, 0xFAFC, "Afterglow Gamepad 1", Parser::XINPUT_360, InitKind::NONE},
+    {0x24C6, 0xFAFD, "Afterglow Gamepad 3", Parser::XINPUT_360, InitKind::NONE},
+    {0x24C6, 0xFAFE, "Rock Candy Gamepad (360)", Parser::XINPUT_360, InitKind::NONE},
+
+    {0x03F0, 0x0495, "HP HyperX Clutch Gladiate", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
+    {0x044F, 0xD012, "Thrustmaster eSwap Pro (Xbox)", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x045E, 0x02FF, "Xbox One Controller (GIP)", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
+    {0x0738, 0x4A01, "Mad Catz FightStick TE 2 (Xbox One)", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x0E6F, 0x013A, "PDP Xbox One Controller", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
+    {0x0E6F, 0x0145, "PDP Mortal Kombat X FightPad (Xbox One)", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x0E6F, 0x015C, "PDP @Play Wired Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x0E6F, 0x015D, "PDP Mirror's Edge Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x0E6F, 0x015F, "PDP Metallic Wired Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x0E6F, 0x0160, "PDP NFL Face-Off Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x0E6F, 0x0166, "PDP Mass Effect Andromeda Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x0E6F, 0x0167, "PDP Halo Wars 2 Face-Off Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x0E6F, 0x0205, "PDP Victrix Pro Fight Stick", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x0E6F, 0x0246, "PDP Rock Candy Controller (Xbox One)", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x0E6F, 0x0262, "PDP Wired Controller (Xbox One)", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x0E6F, 0x02B3, "PDP Afterglow Prismatic Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x0E6F, 0x02C8, "PDP Kingdom Hearts Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x0E6F, 0x02D6, "Victrix Gambit Tournament Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x0E6F, 0x02DA, "PDP Xbox Series X Afterglow", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x0F0D, 0x00C5, "Hori Fighting Commander (Xbox One)", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x0F0D, 0x0150, "Hori Fighting Commander OCTA (Xbox)", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x10F5, 0x7009, "Turtle Beach Recon Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x10F5, 0x7013, "Turtle Beach REACT-R", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
+    {0x1532, 0x0A14, "Razer Wolverine Ultimate", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
+    {0x1532, 0x0A15, "Razer Wolverine Tournament Edition", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x20D6, 0x2001, "PowerA Xbox Series X EnWired Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x20D6, 0x2002, "PowerA Xbox Series X EnWired Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x20D6, 0x2003, "PowerA Xbox Series X EnWired Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x20D6, 0x2004, "PowerA Xbox Series X EnWired Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x20D6, 0x2005, "PowerA Xbox Series X Wired Controller Core", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x20D6, 0x2006, "PowerA Xbox Series X Wired Controller Core", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x20D6, 0x2009, "PowerA Xbox Series X EnWired Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x20D6, 0x200A, "PowerA Xbox Series X EnWired Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x20D6, 0x4001, "PowerA Fusion Pro 2 Wired (Xbox)", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x20D6, 0x4002, "PowerA Spectra Infinity Wired (Xbox)", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x24C6, 0x581A, "BDA XB1 Classic Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x24C6, 0x591A, "PowerA FUSION Pro Controller", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x24C6, 0x592A, "BDA XB1 Spectra Pro", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
+    {0x2DC8, 0x2002, "8BitDo Ultimate Wired Controller for Xbox", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+    {0x2E24, 0x0652, "Hyperkin Duke", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
+    {0x2E24, 0x1618, "Hyperkin Duke", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
+    {0x2E24, 0x1688, "Hyperkin X91", Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON},
+    {0x146B, 0x0611, "Nacon Revolution 3 (Xbox mode)", Parser::XBOX_ONE_GIP,
+     InitKind::XBOX_ONE_POWERON},
+
+    {0x054C, 0x05C5, "STRIKEPAD PS4 Grip Add-on", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x0738, 0x8250, "Mad Catz FightPad Pro PS4", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x0738, 0x8384, "Mad Catz FightStick TE S+ PS4", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x0738, 0x8480, "Mad Catz FightStick TE 2 PS4", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x0738, 0x8481, "Mad Catz FightStick TE 2+ PS4", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x0C12, 0x0E10, "Armor 3 Pad PS4", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x0C12, 0x0E15, "Game:Pad 4", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x0C12, 0x0EF6, "Hitbox Arcade Stick", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x0C12, 0x1CF6, "EMIO PS4 Elite Controller", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x0E6F, 0x0207, "Victrix Pro FS V2 (PS4)", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x0E6F, 0x020A, "Victrix Pro FS PS4/PS5 (PS4 mode)", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x0F0D, 0x0055, "Hori HORIPAD 4 FPS", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x0F0D, 0x0066, "Hori HORIPAD 4 FPS Plus", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x0F0D, 0x0084, "Hori Fighting Commander PS4", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x0F0D, 0x0087, "Hori Fighting Stick mini 4", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x0F0D, 0x008A, "Hori Real Arcade Pro 4", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x0F0D, 0x0162, "Hori Fighting Commander OCTA (PS4)", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x11C0, 0x4001, "PS4 Fun Controller", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x146B, 0x0D09, "Nacon Daija Fight Stick", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x146B, 0x0D13, "Nacon Revolution Pro Controller 3", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x1532, 0x1004, "Razer Raiju 2 Ultimate", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x1532, 0x1007, "Razer Raiju 2 Tournament Edition", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x1532, 0x1008, "Razer Panthera Evo Fightstick", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x20D6, 0x792A, "PowerA Fusion Fight Pad (PS4)", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x2C22, 0x2000, "Qanba Drone", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x2C22, 0x2300, "Qanba Obsidian", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x2C22, 0x2500, "Qanba Dragon", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x3285, 0x0D16, "Nacon Revolution 5 Pro (PS4 dongle)", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x3285, 0x0D17, "Nacon Revolution 5 Pro (PS4 wired)", Parser::DUALSHOCK4, InitKind::NONE},
+    {0x9886, 0x0025, "Astro C40", Parser::DUALSHOCK4, InitKind::NONE},
+
+    {0x0E6F, 0x0209, "Victrix Pro FS PS4/PS5 (PS5 mode)", Parser::DUALSENSE, InitKind::NONE},
+    {0x1532, 0x100B, "Razer Wolverine V2 Pro (Wired)", Parser::DUALSENSE, InitKind::NONE},
+    {0x1532, 0x1012, "Razer Kitsune", Parser::DUALSENSE, InitKind::NONE},
+    {0x3285, 0x0D18, "Nacon Revolution 5 Pro (PS5 dongle)", Parser::DUALSENSE, InitKind::NONE},
+    {0x3285, 0x0D19, "Nacon Revolution 5 Pro (PS5 wired)", Parser::DUALSENSE, InitKind::NONE},
+};
+
+template <size_t N>
+static const KnownDevice* findIn(const KnownDevice (&arr)[N], uint16_t vid, uint16_t pid) {
+    for (const auto& d : arr) {
         if (d.vid == vid && d.pid == pid) return &d;
     }
     return nullptr;
+}
+
+const KnownDevice* lookupKnown(uint16_t vid, uint16_t pid) {
+    if (const KnownDevice* k = findIn(kKnown, vid, pid)) return k;
+    return findIn(kImported, vid, pid);
+}
+
+bool isVerifiedFastLane(uint16_t vid, uint16_t pid) {
+    const KnownDevice* k = findIn(kKnown, vid, pid);
+    return k != nullptr && k->parser != Parser::NONE;
 }
 
 const char* parserName(Parser p) {
     switch (p) {
     case Parser::XINPUT_360:
         return "Xbox 360 protocol";
+    case Parser::XINPUT_360_WIRELESS:
+        return "Xbox 360 wireless protocol";
     case Parser::XBOX_ONE_GIP:
         return "Xbox One protocol";
     case Parser::DUALSHOCK4:
@@ -197,11 +420,14 @@ const char* parserName(Parser p) {
     return "Unknown";
 }
 
-bool parserHasImu(Parser p) { return p == Parser::SWITCH_PRO_USB; }
+bool parserHasImu(Parser p) {
+    return p == Parser::SWITCH_PRO_USB || p == Parser::DUALSHOCK4 || p == Parser::DUALSENSE;
+}
 
 bool parserHasRumble(Parser p) {
     switch (p) {
     case Parser::XINPUT_360:
+    case Parser::XINPUT_360_WIRELESS:
     case Parser::XBOX_ONE_GIP:
     case Parser::DUALSHOCK4:
     case Parser::DUALSENSE:
@@ -286,6 +512,25 @@ int16_t switchGyroToWire(int16_t raw) {
 
 int16_t switchAccelToWire(int16_t raw) {
     int64_t wire = (int64_t)raw * 32767 / 16384;
+    if (wire > 32767) wire = 32767;
+    if (wire < -32768) wire = -32768;
+    return (int16_t)wire;
+}
+
+// DS4/DualSense raw -> calibrated (1024/deg-s) -> wire (deg-s / 2000 * 32767).
+int16_t ds4GyroAxisToWire(int32_t raw, const PsImuCalib& c, int axis) {
+    int64_t calibrated = (int64_t)c.gyroNumer[axis] * raw / c.gyroDenom[axis];
+    int64_t wire = calibrated * 32767 / (kPsGyroResPerDegS * 2000);
+    if (wire > 32767) wire = 32767;
+    if (wire < -32768) wire = -32768;
+    return (int16_t)wire;
+}
+
+// DS4/DualSense raw -> calibrated (8192/g) -> wire (g / 4 * 32767).
+int16_t ds4AccelAxisToWire(int32_t raw, const PsImuCalib& c, int axis) {
+    int64_t calibrated =
+        (int64_t)c.accelNumer[axis] * (raw - c.accelBias[axis]) / c.accelDenom[axis];
+    int64_t wire = calibrated * 32767 / (kPsAccelResPerG * 4);
     if (wire > 32767) wire = 32767;
     if (wire < -32768) wire = -32768;
     return (int16_t)wire;
@@ -413,7 +658,7 @@ bool decodeXboxOneGip(const uint8_t* buf, size_t len, DeviceState& s, ParserStat
 // DualShock 4 USB report 0x01. Sticks are uint8 with 128 = center. Y axes are down-positive so
 // they're inverted to match XUSB's up-positive convention. Face buttons are remapped to the
 // XInput "muscle memory" positions: Cross is A, Circle is B, Square is X, Triangle is Y.
-bool decodeDualShock4(const uint8_t* buf, size_t len, DeviceState& s) {
+bool decodeDualShock4(const uint8_t* buf, size_t len, DeviceState& s, const PsImuCalib* calib) {
     if (len < 10) return false;
     if (buf[0] != 0x01) return false;
 
@@ -438,12 +683,24 @@ bool decodeDualShock4(const uint8_t* buf, size_t len, DeviceState& s) {
 
     s.bLT = buf[8];
     s.bRT = buf[9];
+
+    // gyro pitch/yaw/roll at 13/15/17, accel x/y/z at 19/21/23 (int16 LE). Axis signs are an
+    // unflipped straight map, still unverified on hardware like the Switch IMU.
+    if (calib != nullptr && calib->valid && len >= 25) {
+        s.gyroX = ds4GyroAxisToWire(rdLe16(buf, 13), *calib, 0);
+        s.gyroY = ds4GyroAxisToWire(rdLe16(buf, 15), *calib, 1);
+        s.gyroZ = ds4GyroAxisToWire(rdLe16(buf, 17), *calib, 2);
+        s.accelX = ds4AccelAxisToWire(rdLe16(buf, 19), *calib, 0);
+        s.accelY = ds4AccelAxisToWire(rdLe16(buf, 21), *calib, 1);
+        s.accelZ = ds4AccelAxisToWire(rdLe16(buf, 23), *calib, 2);
+        s.motionValid = true;
+    }
     return true;
 }
 
 // DualSense USB report 0x01. Same axis conventions as DS4 but the byte layout shifts: triggers
 // move to bytes 5/6 and the button bytes are at 8/9/10.
-bool decodeDualSense(const uint8_t* buf, size_t len, DeviceState& s) {
+bool decodeDualSense(const uint8_t* buf, size_t len, DeviceState& s, const PsImuCalib* calib) {
     if (len < 11) return false;
     if (buf[0] != 0x01) return false;
 
@@ -468,6 +725,17 @@ bool decodeDualSense(const uint8_t* buf, size_t len, DeviceState& s) {
     if (buf[9] & 0x80) b |= XUSB_THUMB_R;
     b = setDpadFromHat(b, buf[8] & 0x0F);
     s.wButtons = b;
+
+    // gyro at 16/18/20, accel at 22/24/26 (int16 LE); same calibration as DS4, signs unverified.
+    if (calib != nullptr && calib->valid && len >= 28) {
+        s.gyroX = ds4GyroAxisToWire(rdLe16(buf, 16), *calib, 0);
+        s.gyroY = ds4GyroAxisToWire(rdLe16(buf, 18), *calib, 1);
+        s.gyroZ = ds4GyroAxisToWire(rdLe16(buf, 20), *calib, 2);
+        s.accelX = ds4AccelAxisToWire(rdLe16(buf, 22), *calib, 0);
+        s.accelY = ds4AccelAxisToWire(rdLe16(buf, 24), *calib, 1);
+        s.accelZ = ds4AccelAxisToWire(rdLe16(buf, 26), *calib, 2);
+        s.motionValid = true;
+    }
     return true;
 }
 
@@ -515,16 +783,29 @@ bool decodeSwitchProUsb(const uint8_t* buf, size_t len, DeviceState& s, ParserSt
     s.sRX = scaleSwitchStickAuto(rx, sticks.rx);
     s.sRY = scaleSwitchStickAuto(ry, sticks.ry);
 
-    // IMU: three 12-byte frames start at byte 13 (accel int16 LE at +0/+2/+4, gyro at +6/+8/+10).
-    // Use the first frame. Straight axis mapping; signs may need an on-device flip to match the
-    // wire convention.
-    if (len >= 25) {
-        s.accelX = switchAccelToWire(rdLe16(buf, 13));
-        s.accelY = switchAccelToWire(rdLe16(buf, 15));
-        s.accelZ = switchAccelToWire(rdLe16(buf, 17));
-        s.gyroX = switchGyroToWire(rdLe16(buf, 19));
-        s.gyroY = switchGyroToWire(rdLe16(buf, 21));
-        s.gyroZ = switchGyroToWire(rdLe16(buf, 23));
+    // Average the bundled IMU subframes (the pad packs up to three ~5ms samples per report; one
+    // 12-byte frame = accel int16 LE x3 then gyro x3, first at byte 13). Signs are an unflipped
+    // straight map, still unverified on hardware.
+    size_t imuFrames = len >= 13 ? (len - 13) / 12 : 0;
+    if (imuFrames > 3) imuFrames = 3;
+    if (imuFrames > 0) {
+        int32_t ax = 0, ay = 0, az = 0, gx = 0, gy = 0, gz = 0;
+        for (size_t f = 0; f < imuFrames; f++) {
+            int off = 13 + 12 * (int)f;
+            ax += rdLe16(buf, off);
+            ay += rdLe16(buf, off + 2);
+            az += rdLe16(buf, off + 4);
+            gx += rdLe16(buf, off + 6);
+            gy += rdLe16(buf, off + 8);
+            gz += rdLe16(buf, off + 10);
+        }
+        int32_t n = (int32_t)imuFrames;
+        s.accelX = switchAccelToWire((int16_t)(ax / n));
+        s.accelY = switchAccelToWire((int16_t)(ay / n));
+        s.accelZ = switchAccelToWire((int16_t)(az / n));
+        s.gyroX = switchGyroToWire((int16_t)(gx / n));
+        s.gyroY = switchGyroToWire((int16_t)(gy / n));
+        s.gyroZ = switchGyroToWire((int16_t)(gz / n));
         s.motionValid = true;
     }
     return true;
@@ -586,22 +867,53 @@ void switchEncodeMotor(uint8_t* out, uint16_t magnitude) {
 
 } // namespace
 
+bool parsePsCalibration(const uint8_t* buf, size_t len, PsImuCalib& out) {
+    out = PsImuCalib{};
+    if (len < 35) return false; // gyro/accel calibration occupies bytes 1..34
+    int32_t gyroBias[3] = {rdLe16(buf, 1), rdLe16(buf, 3), rdLe16(buf, 5)};
+    int32_t gyroPlus[3] = {rdLe16(buf, 7), rdLe16(buf, 11), rdLe16(buf, 15)};
+    int32_t gyroMinus[3] = {rdLe16(buf, 9), rdLe16(buf, 13), rdLe16(buf, 17)};
+    int32_t speed2x = rdLe16(buf, 19) + rdLe16(buf, 21);
+    for (int i = 0; i < 3; i++) {
+        int32_t a = gyroPlus[i] - gyroBias[i];
+        int32_t b = gyroMinus[i] - gyroBias[i];
+        int32_t denom = (a < 0 ? -a : a) + (b < 0 ? -b : b);
+        if (denom == 0) return false;
+        out.gyroNumer[i] = speed2x * kPsGyroResPerDegS;
+        out.gyroDenom[i] = denom;
+    }
+    int32_t accPlus[3] = {rdLe16(buf, 23), rdLe16(buf, 27), rdLe16(buf, 31)};
+    int32_t accMinus[3] = {rdLe16(buf, 25), rdLe16(buf, 29), rdLe16(buf, 33)};
+    for (int i = 0; i < 3; i++) {
+        int32_t range2g = accPlus[i] - accMinus[i];
+        if (range2g == 0) return false;
+        out.accelBias[i] = accPlus[i] - range2g / 2;
+        out.accelNumer[i] = 2 * kPsAccelResPerG;
+        out.accelDenom[i] = range2g;
+    }
+    out.valid = true;
+    return true;
+}
+
 bool decodeReport(Parser p, const uint8_t* buf, size_t len, DeviceState& s, ParserState* sticks) {
     switch (p) {
     case Parser::XINPUT_360:
+    case Parser::XINPUT_360_WIRELESS:
         return decodeXInput360(buf, len, s);
     case Parser::XBOX_ONE_GIP:
         return sticks != nullptr && decodeXboxOneGip(buf, len, s, *sticks);
     case Parser::DUALSHOCK4:
-        return decodeDualShock4(buf, len, s);
+        return decodeDualShock4(buf, len, s, sticks ? &sticks->psImu : nullptr);
     case Parser::DUALSENSE:
-        return decodeDualSense(buf, len, s);
+        return decodeDualSense(buf, len, s, sticks ? &sticks->psImu : nullptr);
     case Parser::SWITCH_PRO_USB:
         return sticks != nullptr && decodeSwitchProUsb(buf, len, s, *sticks);
     case Parser::STADIA:
         return decodeStadia(buf, len, s);
     case Parser::GENERIC_HID_GAMEPAD:
-        return decodeGenericHidGamepad(buf, len, s);
+        return sticks != nullptr && sticks->hidLayout.valid
+                   ? usbhid::decodeFromLayout(buf, len, s, sticks->hidLayout)
+                   : decodeGenericHidGamepad(buf, len, s);
     case Parser::NONE:
         return false;
     }
@@ -638,6 +950,44 @@ bool decodeGenericHidGamepad(const uint8_t* buf, size_t len, DeviceState& s) {
     return true;
 }
 
+size_t buildGipInitPacket(InitKind init, int index, uint8_t seq, uint8_t* out, size_t outCap) {
+    // GIP init packets from Linux xpad. power-on/LED/auth-done are universal; the S-init is the
+    // extra set-mode packet the Xbox One S / Elite Series 2 need. Byte 2 carries the sequence.
+    static const uint8_t kPowerOn[] = {0x05, 0x20, 0x00, 0x01, 0x00};
+    static const uint8_t kSInit[] = {0x05, 0x20, 0x00, 0x0F, 0x06};
+    static const uint8_t kLedOn[] = {0x0A, 0x20, 0x00, 0x03, 0x00, 0x01, 0x14};
+    static const uint8_t kAuthDone[] = {0x06, 0x20, 0x00, 0x02, 0x01, 0x00};
+
+    struct Pkt {
+        const uint8_t* data;
+        size_t len;
+    };
+    static const Pkt kPowerOnSeq[] = {
+        {kPowerOn, sizeof(kPowerOn)}, {kLedOn, sizeof(kLedOn)}, {kAuthDone, sizeof(kAuthDone)}};
+    static const Pkt kSSeq[] = {{kPowerOn, sizeof(kPowerOn)},
+                                {kSInit, sizeof(kSInit)},
+                                {kLedOn, sizeof(kLedOn)},
+                                {kAuthDone, sizeof(kAuthDone)}};
+
+    const Pkt* seqArr = nullptr;
+    int count = 0;
+    if (init == InitKind::XBOX_ONE_POWERON) {
+        seqArr = kPowerOnSeq;
+        count = 3;
+    } else if (init == InitKind::XBOX_ONE_S) {
+        seqArr = kSSeq;
+        count = 4;
+    } else {
+        return 0;
+    }
+    if (index < 0 || index >= count) return 0;
+    size_t len = seqArr[index].len;
+    if (len > outCap) return 0;
+    memcpy(out, seqArr[index].data, len);
+    out[2] = seq;
+    return len;
+}
+
 // Per-device rumble output reports. Motor convention: strong = large/low-frequency (left), weak =
 // small/high-frequency (right), both wire-scale 0..65535. Report layouts and sources (Linux xpad,
 // hid-playstation, hid-nintendo) are documented in docs/rumble.md.
@@ -655,6 +1005,22 @@ size_t buildRumbleReport(Parser p, uint16_t strong, uint16_t weak, uint8_t seq, 
         out[6] = 0x00;
         out[7] = 0x00;
         return 8;
+    case Parser::XINPUT_360_WIRELESS:
+        // Wireless receivers wrap the motor levels in a 12-byte frame (Linux xpad xpad360w).
+        if (outCap < 12) return 0;
+        out[0] = 0x00;
+        out[1] = 0x01;
+        out[2] = 0x0F;
+        out[3] = 0xC0;
+        out[4] = 0x00;
+        out[5] = (uint8_t)(strong >> 8);
+        out[6] = (uint8_t)(weak >> 8);
+        out[7] = 0x00;
+        out[8] = 0x00;
+        out[9] = 0x00;
+        out[10] = 0x00;
+        out[11] = 0x00;
+        return 12;
     case Parser::XBOX_ONE_GIP:
         if (outCap < 13) return 0;
         out[0] = 0x09;
@@ -708,13 +1074,22 @@ bool runInit(int fd, uint8_t epOut, Parser p, InitKind init) {
     switch (init) {
     case InitKind::NONE:
         return true;
-    case InitKind::XBOX_ONE_POWERON: {
-        // GIP "power on" sequence: tells the controller to start sending input reports. Without
-        // this, modern Xbox One/Series pads stay silent on the IN endpoint.
-        static const uint8_t kPowerOn[] = {0x05, 0x20, 0x00, 0x01, 0x00};
-        bool ok = bulkWrite(fd, epOut, kPowerOn, sizeof(kPowerOn), 200);
-        if (!ok) LOGE("Xbox One power-on write failed");
-        return ok;
+    case InitKind::XBOX_ONE_POWERON:
+    case InitKind::XBOX_ONE_S: {
+        // GIP init: power-on tells the pad to start sending input reports; the rest of the sequence
+        // (LED, auth-done, and the S set-mode) starts the models the lone power-on left silent.
+        uint8_t buf[16];
+        for (int i = 0;; i++) {
+            size_t n = buildGipInitPacket(init, i, (uint8_t)i, buf, sizeof(buf));
+            if (n == 0) break;
+            bool ok = bulkWrite(fd, epOut, buf, n, 200);
+            if (i == 0 && !ok) {
+                LOGE("Xbox One power-on write failed");
+                return false;
+            }
+            usleep(10000);
+        }
+        return true;
     }
     case InitKind::SWITCH_PRO_HANDSHAKE: {
         (void)p;

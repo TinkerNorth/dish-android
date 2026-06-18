@@ -15,7 +15,7 @@
 
     <string name="welcome_step3_eyebrow">UNE CHOSE DE PLUS</string>
     <string name="welcome_step3_title">Installez Satellite sur votre PC</string>
-    <string name="welcome_step3_body">Satellite est gratuit et open source. Téléchargez-le depuis tinkernorth.com/satellite, lancez l\'installateur, et Dish le trouvera automatiquement. Vous pouvez terminer cette introduction maintenant et installer Satellite plus tard.</string>
+    <string name="welcome_step3_body">Satellite est gratuit et open source. Téléchargez-le depuis dish.tinkernorth.com/downloads/satellite, lancez l\'installateur, et Dish le trouvera automatiquement. Vous pouvez terminer cette introduction maintenant et installer Satellite plus tard.</string>
     <string name="welcome_step3_satellite_link_label">Ouvrir la page de téléchargement</string>
 
     <string name="welcome_step4_eyebrow">C\'EST PRÊT</string>
@@ -91,7 +91,7 @@
     <string name="help_a_what_is_dish">Dish transforme votre téléphone en manette sans fil. Il peut envoyer l\'entrée à un PC par Wi-Fi (via l\'assistant gratuit Satellite) ou s\'appairer à un PC / une console comme une manette Bluetooth normale.</string>
 
     <string name="help_q_what_is_satellite">Qu\'est-ce que Satellite ?</string>
-    <string name="help_a_what_is_satellite">Satellite est un petit programme gratuit et open source qui s\'exécute sur votre PC. Il reçoit l\'entrée de Dish par Wi-Fi et se présente à vos jeux comme une manette normale. Sans Satellite, les jeux ne peuvent pas voir votre téléphone. Installez-le depuis tinkernorth.com/satellite.</string>
+    <string name="help_a_what_is_satellite">Satellite est un petit programme gratuit et open source qui s\'exécute sur votre PC. Il reçoit l\'entrée de Dish par Wi-Fi et se présente à vos jeux comme une manette normale. Sans Satellite, les jeux ne peuvent pas voir votre téléphone. Installez-le depuis dish.tinkernorth.com/downloads/satellite.</string>
 
     <string name="help_q_lan_vs_bluetooth">Wi-Fi ou Bluetooth : lequel choisir ?</string>
     <string name="help_a_lan_vs_bluetooth">Wi-Fi avec Satellite est le meilleur choix pour presque tout le monde. Latence plus faible, prend en charge le mouvement (visée gyro) et débloque le pavé tactile. Le mode hôte Bluetooth est le bon choix lorsque vous ne voulez rien installer sur le PC, ou lorsque vous utilisez une console / un boîtier qui n\'exécute pas Satellite.</string>

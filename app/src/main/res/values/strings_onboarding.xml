@@ -15,7 +15,7 @@
 
     <string name="welcome_step3_eyebrow">ONE MORE THING</string>
     <string name="welcome_step3_title">Install Satellite on your PC</string>
-    <string name="welcome_step3_body">Satellite is free and open source. Grab it from tinkernorth.com/satellite, run the installer, and Dish will find it automatically. You can finish this intro now and install Satellite later.</string>
+    <string name="welcome_step3_body">Satellite is free and open source. Grab it from dish.tinkernorth.com/downloads/satellite, run the installer, and Dish will find it automatically. You can finish this intro now and install Satellite later.</string>
     <string name="welcome_step3_satellite_link_label">Open download page</string>
 
     <string name="welcome_step4_eyebrow">YOU\'RE SET</string>
@@ -91,7 +91,7 @@
     <string name="help_a_what_is_dish">Dish turns your phone into a wireless gamepad. It can send input to a PC over Wi-Fi (via the free Satellite helper) or pair to a PC / console as a regular Bluetooth gamepad.</string>
 
     <string name="help_q_what_is_satellite">What is Satellite?</string>
-    <string name="help_a_what_is_satellite">Satellite is a small, free, open-source program that runs on your PC. It receives input from Dish over Wi-Fi and presents itself to your games as a regular controller. Without Satellite, games can\'t see your phone. Install it from tinkernorth.com/satellite.</string>
+    <string name="help_a_what_is_satellite">Satellite is a small, free, open-source program that runs on your PC. It receives input from Dish over Wi-Fi and presents itself to your games as a regular controller. Without Satellite, games can\'t see your phone. Install it from dish.tinkernorth.com/downloads/satellite.</string>
 
     <string name="help_q_lan_vs_bluetooth">Wi-Fi or Bluetooth: which should I pick?</string>
     <string name="help_a_lan_vs_bluetooth">Wi-Fi with Satellite is the better path for almost everyone. It\'s lower latency, supports motion (gyro aim), and unlocks the touchpad. Bluetooth-host mode is the right choice when you don\'t want to install anything on the PC, or when you\'re using a console / set-top box that doesn\'t run Satellite.</string>
@@ -146,6 +146,6 @@
     <string name="settings_help_title">Help &amp; FAQ</string>
     <string name="settings_help_body">Concepts, performance tips, and troubleshooting.</string>
 
-    <string name="url_satellite" translatable="false">https://tinkernorth.com/satellite</string>
+    <string name="url_satellite" translatable="false">https://dish.tinkernorth.com/downloads/satellite</string>
     <string name="url_github" translatable="false">https://github.com/TinkerNorth</string>
 </resources>

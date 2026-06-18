@@ -58,6 +58,10 @@ constexpr int32_t KC_BUTTON_14 = 201;
 constexpr int32_t KC_BUTTON_15 = 202;
 constexpr int32_t KC_BUTTON_16 = 203;
 
+// Per-device framework-path button quirks (Nintendo and friends sit A/B and X/Y opposite to Xbox).
+constexpr uint8_t QUIRK_SWAP_AB = 0x01;
+constexpr uint8_t QUIRK_SWAP_XY = 0x02;
+
 struct DeviceState {
     uint16_t wButtons = 0;
     uint8_t bLT = 0, bRT = 0;
@@ -73,6 +77,8 @@ struct DeviceState {
 
     float flatX = 0.f, flatY = 0.f, flatZ = 0.f, flatRZ = 0.f;
 
+    uint8_t quirk = 0;
+
     bool motionValid = false;
     int16_t gyroX = 0, gyroY = 0, gyroZ = 0;
     int16_t accelX = 0, accelY = 0, accelZ = 0;
@@ -85,6 +91,8 @@ uint8_t scaleTrigger(float v, float max);
 float deadzone(float v, float flat);
 
 uint16_t keycodeToXusb(int32_t androidKeycode);
+
+uint16_t applyButtonQuirk(uint16_t xusbBit, uint8_t quirk);
 
 bool applyKey(DeviceState& s, int32_t androidKeycode, bool down);
 

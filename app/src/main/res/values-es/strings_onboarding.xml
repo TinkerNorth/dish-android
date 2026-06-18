@@ -15,7 +15,7 @@
 
     <string name="welcome_step3_eyebrow">UNA COSA MÁS</string>
     <string name="welcome_step3_title">Instala Satellite en tu PC</string>
-    <string name="welcome_step3_body">Satellite es gratuito y de código abierto. Descárgalo desde tinkernorth.com/satellite, ejecuta el instalador y Dish lo encontrará automáticamente. Puedes terminar esta introducción ahora e instalar Satellite más tarde.</string>
+    <string name="welcome_step3_body">Satellite es gratuito y de código abierto. Descárgalo desde dish.tinkernorth.com/downloads/satellite, ejecuta el instalador y Dish lo encontrará automáticamente. Puedes terminar esta introducción ahora e instalar Satellite más tarde.</string>
     <string name="welcome_step3_satellite_link_label">Abrir página de descarga</string>
 
     <string name="welcome_step4_eyebrow">LISTO</string>
@@ -91,7 +91,7 @@
     <string name="help_a_what_is_dish">Dish convierte tu teléfono en un gamepad inalámbrico. Puede enviar entrada a un PC por Wi-Fi (con el ayudante gratuito Satellite) o emparejarse con un PC / consola como un mando Bluetooth normal.</string>
 
     <string name="help_q_what_is_satellite">¿Qué es Satellite?</string>
-    <string name="help_a_what_is_satellite">Satellite es un programa pequeño, gratuito y de código abierto que se ejecuta en tu PC. Recibe entrada de Dish por Wi-Fi y se presenta a tus juegos como un mando normal. Sin Satellite, los juegos no pueden ver tu teléfono. Instálalo desde tinkernorth.com/satellite.</string>
+    <string name="help_a_what_is_satellite">Satellite es un programa pequeño, gratuito y de código abierto que se ejecuta en tu PC. Recibe entrada de Dish por Wi-Fi y se presenta a tus juegos como un mando normal. Sin Satellite, los juegos no pueden ver tu teléfono. Instálalo desde dish.tinkernorth.com/downloads/satellite.</string>
 
     <string name="help_q_lan_vs_bluetooth">Wi-Fi o Bluetooth: ¿cuál elegir?</string>
     <string name="help_a_lan_vs_bluetooth">Wi-Fi con Satellite es la mejor opción para casi todos. Menor latencia, soporta movimiento (giro para apuntar) y desbloquea el touchpad. El modo host Bluetooth es la opción adecuada cuando no quieres instalar nada en el PC, o cuando usas una consola / decodificador que no ejecuta Satellite.</string>

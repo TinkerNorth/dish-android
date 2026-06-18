@@ -265,6 +265,17 @@ class DishNotifications
         }
     }
 
+internal fun dishSnackbar(
+    rootView: View,
+    severity: DishNotification.Severity,
+    title: String,
+    body: String?,
+    durationMs: Long,
+): Snackbar =
+    Snackbar
+        .make(rootView, buildStyledText(rootView.context, title, body), durationForMs(durationMs))
+        .applyDishTheme(severity)
+
 internal class MaterialSnackbarRenderer(
     private val rootView: View,
 ) : DishNotifications.Renderer {
@@ -272,11 +283,14 @@ internal class MaterialSnackbarRenderer(
         notification: DishNotification,
         anchor: View?,
     ): DishNotifications.Renderer.Handle {
-        val ctx = rootView.context
         val snackbar =
-            Snackbar
-                .make(rootView, buildStyledText(ctx, notification), durationFor(notification))
-                .applyDishTheme(notification.severity)
+            dishSnackbar(
+                rootView,
+                notification.severity,
+                notification.title,
+                notification.body,
+                notification.durationMs,
+            )
         anchor?.let { snackbar.anchorView = it }
         notification.action?.let { action ->
             snackbar.setAction(action.label) { action.handler() }
@@ -284,15 +298,6 @@ internal class MaterialSnackbarRenderer(
         snackbar.show()
         return SnackbarHandle(snackbar)
     }
-
-    private fun durationFor(notification: DishNotification): Int =
-        when {
-            notification.durationMs == DishNotification.DURATION_PERSISTENT ->
-                Snackbar.LENGTH_INDEFINITE
-            notification.durationMs >= DishNotification.DURATION_LONG ->
-                Snackbar.LENGTH_LONG
-            else -> Snackbar.LENGTH_SHORT
-        }
 
     private class SnackbarHandle(
         private val snackbar: Snackbar,
@@ -303,20 +308,27 @@ internal class MaterialSnackbarRenderer(
     }
 }
 
+private fun durationForMs(durationMs: Long): Int =
+    when {
+        durationMs == DishNotification.DURATION_PERSISTENT -> Snackbar.LENGTH_INDEFINITE
+        durationMs >= DishNotification.DURATION_LONG -> Snackbar.LENGTH_LONG
+        else -> Snackbar.LENGTH_SHORT
+    }
+
 private fun buildStyledText(
     ctx: Context,
-    notification: DishNotification,
+    title: String,
+    body: String?,
 ): CharSequence {
     val builder = SpannableStringBuilder()
     val titleStart = builder.length
-    builder.append(notification.title)
+    builder.append(title)
     builder.setSpan(
         StyleSpan(Typeface.BOLD),
         titleStart,
         builder.length,
         Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
     )
-    val body = notification.body
     if (!body.isNullOrBlank()) {
         builder.append("\n")
         val bodyStart = builder.length

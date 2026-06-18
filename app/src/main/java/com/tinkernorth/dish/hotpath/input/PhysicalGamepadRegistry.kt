@@ -9,6 +9,7 @@ import android.os.Build
 import android.util.Log
 import android.view.InputDevice
 import android.view.MotionEvent
+import com.tinkernorth.dish.core.input.resolveGamepadQuirk
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.bluetooth.BluetoothConnections
 import com.tinkernorth.dish.source.sensor.PhysicalMotionProbe
@@ -481,6 +482,8 @@ class PhysicalGamepadRegistry
                 dev.getMotionRange(MotionEvent.AXIS_Z, src)?.flat ?: 0f,
                 dev.getMotionRange(MotionEvent.AXIS_RZ, src)?.flat ?: 0f,
             )
+            val vid = runCatching { dev.vendorId }.getOrDefault(0)
+            native.setDeviceQuirk(dev.id, resolveGamepadQuirk(vid))
             logDeviceCapabilities(dev)
         }
 
