@@ -6,6 +6,7 @@
 #include <string>
 
 #include "gamepad_input.h"
+#include "usb_hid_descriptor.h"
 
 namespace usbparsers {
 
@@ -18,12 +19,16 @@ enum class Parser : uint8_t {
     SWITCH_PRO_USB = 5,
     STADIA = 6,
     GENERIC_HID_GAMEPAD = 7,
+    // Same input report as XINPUT_360, but rumble needs the wrapped wireless-receiver frame.
+    XINPUT_360_WIRELESS = 8,
 };
 
 enum class InitKind : uint8_t {
     NONE = 0,
     XBOX_ONE_POWERON = 1,
     SWITCH_PRO_HANDSHAKE = 2,
+    // Xbox One S / Elite Series 2 want the GIP set-mode packet on top of the universal sequence.
+    XBOX_ONE_S = 3,
 };
 
 struct KnownDevice {
@@ -45,6 +50,18 @@ struct AxisAutoRange {
     int32_t negReach = 1000;
 };
 
+// DualShock 4 / DualSense per-device IMU calibration (read from the calibration feature report).
+// raw -> calibrated math from Linux hid-playstation; calibrated gyro is 1024 units/deg-s, accel
+// 8192 units/g. Without it the raw sensor scale and bias are unknown, so motion stays off.
+struct PsImuCalib {
+    bool valid = false;
+    int32_t gyroNumer[3] = {0, 0, 0};
+    int32_t gyroDenom[3] = {1, 1, 1};
+    int32_t accelBias[3] = {0, 0, 0};
+    int32_t accelNumer[3] = {0, 0, 0};
+    int32_t accelDenom[3] = {1, 1, 1};
+};
+
 struct ParserState {
     AxisAutoRange lx;
     AxisAutoRange ly;
@@ -53,15 +70,26 @@ struct ParserState {
     // Xbox One guide button (GIP report 0x07) is sticky state merged into the main 0x20 reports.
     bool xboxGuideHeld = false;
     gamepad::DeviceState xboxLastMain;
+    // Filled at attach for GENERIC_HID_GAMEPAD when the report descriptor parses; empty otherwise.
+    usbhid::HidLayout hidLayout;
+    // Filled at attach for DUALSHOCK4 / DUALSENSE when the calibration report reads; invalid
+    // otherwise.
+    PsImuCalib psImu;
 };
 
 const KnownDevice* lookupKnown(uint16_t vid, uint16_t pid);
+
+bool isVerifiedFastLane(uint16_t vid, uint16_t pid);
 
 const char* parserName(Parser p);
 
 bool parserHasImu(Parser p);
 
 bool parserHasRumble(Parser p);
+
+// Pure: writes the index-th GIP init packet for an Xbox One InitKind into out (with the sequence
+// number at byte 2), returns its length or 0 when there are no more. runInit sends them in order.
+size_t buildGipInitPacket(InitKind init, int index, uint8_t seq, uint8_t* out, size_t outCap);
 
 bool runInit(int fd, uint8_t epOut, Parser p, InitKind init);
 
@@ -76,5 +104,8 @@ bool decodeReport(Parser p, const uint8_t* buf, size_t len, gamepad::DeviceState
                   ParserState* sticks);
 
 bool decodeGenericHidGamepad(const uint8_t* buf, size_t len, gamepad::DeviceState& s);
+
+// Parses a DualShock 4 / DualSense calibration feature report into per-axis gyro/accel factors.
+bool parsePsCalibration(const uint8_t* buf, size_t len, PsImuCalib& out);
 
 } // namespace usbparsers

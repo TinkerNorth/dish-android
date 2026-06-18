@@ -274,6 +274,43 @@ bool probeDecodable(int fd, uint8_t epIn, uint16_t epInMaxPacket, usbparsers::Pa
     return false;
 }
 
+// Best-effort: a failed transfer or unparseable descriptor leaves the layout invalid, so the
+// generic decoder falls back to its fixed-offset guess.
+void fetchHidLayout(int fd, int interfaceNumber, usbhid::HidLayout& out) {
+    if (interfaceNumber < 0) return;
+    uint8_t desc[512];
+    struct usbdevfs_ctrltransfer ct = {};
+    ct.bRequestType = 0x81;            // IN | Standard | Interface
+    ct.bRequest = 0x06;                // GET_DESCRIPTOR
+    ct.wValue = (uint16_t)(0x22 << 8); // HID report descriptor type, index 0
+    ct.wIndex = (uint16_t)interfaceNumber;
+    ct.wLength = sizeof(desc);
+    ct.timeout = 250;
+    ct.data = desc;
+    int n = ioctl(fd, USBDEVFS_CONTROL, &ct);
+    if (n <= 0) return;
+    usbhid::parseReportDescriptor(desc, (size_t)n, out);
+}
+
+// Reads the DS4/DualSense calibration feature report so the IMU can be scaled; best-effort, a
+// failed read leaves the calibration invalid and motion stays off.
+void fetchPsCalibration(int fd, int interfaceNumber, uint8_t reportId,
+                        usbparsers::PsImuCalib& out) {
+    if (interfaceNumber < 0) return;
+    uint8_t buf[64];
+    struct usbdevfs_ctrltransfer ct = {};
+    ct.bRequestType = 0xA1;                         // IN | Class | Interface
+    ct.bRequest = 0x01;                             // GET_REPORT
+    ct.wValue = (uint16_t)((0x03 << 8) | reportId); // Feature report
+    ct.wIndex = (uint16_t)interfaceNumber;
+    ct.wLength = sizeof(buf);
+    ct.timeout = 250;
+    ct.data = buf;
+    int n = ioctl(fd, USBDEVFS_CONTROL, &ct);
+    if (n < 35) return;
+    usbparsers::parsePsCalibration(buf, (size_t)n, out);
+}
+
 } // namespace
 
 AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumber, uint8_t epIn,
@@ -335,6 +372,13 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
     ctx->parser = parser;
     ctx->modelName = modelName;
     ctx->parserName = usbparsers::parserName(parser);
+    if (parser == usbparsers::Parser::GENERIC_HID_GAMEPAD) {
+        fetchHidLayout(fd, interfaceNumber, ctx->stickRange.hidLayout);
+    } else if (parser == usbparsers::Parser::DUALSHOCK4) {
+        fetchPsCalibration(fd, interfaceNumber, 0x02, ctx->stickRange.psImu);
+    } else if (parser == usbparsers::Parser::DUALSENSE) {
+        fetchPsCalibration(fd, interfaceNumber, 0x05, ctx->stickRange.psImu);
+    }
 
     {
         std::lock_guard<std::mutex> lock(g_mtx);

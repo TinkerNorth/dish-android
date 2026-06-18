@@ -15,7 +15,7 @@
 
     <string name="welcome_step3_eyebrow">JOŠ JEDNA STVAR</string>
     <string name="welcome_step3_title">Instalirajte Satellite na vaš PC</string>
-    <string name="welcome_step3_body">Satellite je besplatan i otvorenog koda. Preuzmite ga sa tinkernorth.com/satellite, pokrenite instalaciju, i Dish će ga automatski pronaći. Možete završiti ovaj uvod sada i instalirati Satellite kasnije.</string>
+    <string name="welcome_step3_body">Satellite je besplatan i otvorenog koda. Preuzmite ga sa dish.tinkernorth.com/downloads/satellite, pokrenite instalaciju, i Dish će ga automatski pronaći. Možete završiti ovaj uvod sada i instalirati Satellite kasnije.</string>
     <string name="welcome_step3_satellite_link_label">Otvori stranicu za preuzimanje</string>
 
     <string name="welcome_step4_eyebrow">SPREMNO</string>
@@ -91,7 +91,7 @@
     <string name="help_a_what_is_dish">Dish pretvara vaš telefon u bežični gamepad. Može slati unos na PC preko Wi-Fi-ja (preko besplatnog Satellite pomagača) ili upariti sa PC-om / konzolom kao običan Bluetooth gamepad.</string>
 
     <string name="help_q_what_is_satellite">Šta je Satellite?</string>
-    <string name="help_a_what_is_satellite">Satellite je mali, besplatan program otvorenog koda koji se izvršava na vašem PC-u. Prima unos od Dish-a preko Wi-Fi-ja i prikazuje se vašim igrama kao običan kontroler. Bez Satellite-a, igre ne mogu vidjeti vaš telefon. Instalirajte ga sa tinkernorth.com/satellite.</string>
+    <string name="help_a_what_is_satellite">Satellite je mali, besplatan program otvorenog koda koji se izvršava na vašem PC-u. Prima unos od Dish-a preko Wi-Fi-ja i prikazuje se vašim igrama kao običan kontroler. Bez Satellite-a, igre ne mogu vidjeti vaš telefon. Instalirajte ga sa dish.tinkernorth.com/downloads/satellite.</string>
 
     <string name="help_q_lan_vs_bluetooth">Wi-Fi ili Bluetooth: šta odabrati?</string>
     <string name="help_a_lan_vs_bluetooth">Wi-Fi sa Satellite-om je bolji izbor za skoro sve. Manja latencija, podržava pokret (ciljanje žiroskopom) i otključava touchpad. Bluetooth host režim je pravi izbor kada ne želite instalirati ništa na PC, ili kada koristite konzolu / set-top box koji ne pokreće Satellite.</string>

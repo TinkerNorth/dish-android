@@ -28,6 +28,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SimpleItemAnimator
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import com.tinkernorth.dish.R
@@ -53,9 +54,12 @@ import com.tinkernorth.dish.source.connection.PairingApproval
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.notification.DishNotifications
+import com.tinkernorth.dish.source.notification.dishSnackbar
+import com.tinkernorth.dish.source.store.BluetoothPermissionBannerStore
 import com.tinkernorth.dish.source.system.BluetoothAdapterState
 import com.tinkernorth.dish.source.system.BluetoothAdapterStateObserver
-import com.tinkernorth.dish.source.system.BluetoothPermissionState
+import com.tinkernorth.dish.source.system.BluetoothPermissionBannerDecision
+import com.tinkernorth.dish.source.system.BluetoothPermissionBannerVariant
 import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
 import com.tinkernorth.dish.source.system.NetworkState
 import com.tinkernorth.dish.source.system.NetworkStateObserver
@@ -67,6 +71,7 @@ import com.tinkernorth.dish.ui.common.attachGamepadHost
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -94,6 +99,8 @@ class ConnectionsActivity : AppCompatActivity() {
     @Inject lateinit var btAdapterState: com.tinkernorth.dish.source.system.BluetoothAdapterStateObserver
 
     @Inject lateinit var btPermissionState: com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
+
+    @Inject lateinit var btPermissionBannerStore: BluetoothPermissionBannerStore
 
     @Inject lateinit var networkState: com.tinkernorth.dish.source.system.NetworkStateObserver
 
@@ -159,8 +166,10 @@ class ConnectionsActivity : AppCompatActivity() {
         }
 
     private var btAdapterBannerId: Long? = null
-    private var btPermissionBannerId: Long? = null
     private var networkBannerId: Long? = null
+
+    private var btPermissionSnackbar: Snackbar? = null
+    private var btPermissionShownVariant: BluetoothPermissionBannerVariant? = null
 
     private val btStaleBannerIds = HashMap<String, Long>()
 
@@ -285,7 +294,14 @@ class ConnectionsActivity : AppCompatActivity() {
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                btPermissionState.state.collect { state -> applyBtPermissionBanner(state) }
+                val bannerFlow =
+                    combine(
+                        btPermissionState.state,
+                        btPermissionBannerStore.state,
+                    ) { permission, dismissed ->
+                        BluetoothPermissionBannerDecision.evaluate(permission, dismissed)
+                    }
+                bannerFlow.collect { variant -> applyBtPermissionBanner(variant) }
             }
         }
         lifecycleScope.launch {
@@ -877,36 +893,56 @@ class ConnectionsActivity : AppCompatActivity() {
             }
     }
 
-    private fun applyBtPermissionBanner(state: BluetoothPermissionState) {
-        btPermissionBannerId?.let { notifications.dismiss(it) }
-        btPermissionBannerId =
-            when {
-                state.connectMissing ->
-                    notifications.warn(
-                        glyph = R.drawable.ic_bluetooth_off,
-                        title = getString(R.string.notif_bt_permission_title),
-                        body = getString(R.string.notif_bt_permission_body),
-                        action =
-                            DishNotification.Action(
-                                label = getString(R.string.action_grant),
-                            ) { requestBtPermissions(continueToAdd = false) },
-                        key = "bt-permission-denied",
-                        durationMs = DishNotification.DURATION_PERSISTENT,
+    private fun applyBtPermissionBanner(variant: BluetoothPermissionBannerVariant?) {
+        if (variant == null) {
+            btPermissionShownVariant = null
+            btPermissionSnackbar?.dismiss()
+            btPermissionSnackbar = null
+            return
+        }
+        if (variant == btPermissionShownVariant && btPermissionSnackbar?.isShownOrQueued == true) return
+        btPermissionSnackbar?.dismiss()
+        val (severity, titleRes, bodyRes) =
+            when (variant) {
+                BluetoothPermissionBannerVariant.CONNECT ->
+                    Triple(
+                        DishNotification.Severity.WARN,
+                        R.string.notif_bt_permission_title,
+                        R.string.notif_bt_permission_body,
                     )
-                state.scanMissing ->
-                    notifications.info(
-                        glyph = R.drawable.ic_bluetooth_off,
-                        title = getString(R.string.notif_bt_scan_permission_title),
-                        body = getString(R.string.notif_bt_scan_permission_body),
-                        action =
-                            DishNotification.Action(
-                                label = getString(R.string.action_grant),
-                            ) { requestBtPermissions(continueToAdd = false) },
-                        key = "bt-scan-permission-denied",
-                        durationMs = DishNotification.DURATION_PERSISTENT,
+                BluetoothPermissionBannerVariant.SCAN ->
+                    Triple(
+                        DishNotification.Severity.INFO,
+                        R.string.notif_bt_scan_permission_title,
+                        R.string.notif_bt_scan_permission_body,
                     )
-                else -> null
             }
+        val snackbar =
+            dishSnackbar(
+                binding.root,
+                severity,
+                getString(titleRes),
+                getString(bodyRes),
+                DishNotification.DURATION_PERSISTENT,
+            )
+        snackbar.setAction(getString(R.string.action_grant)) { requestBtPermissions(continueToAdd = false) }
+        snackbar.addCallback(
+            object : Snackbar.Callback() {
+                override fun onDismissed(
+                    transientBottomBar: Snackbar?,
+                    event: Int,
+                ) {
+                    if (btPermissionSnackbar === transientBottomBar) {
+                        btPermissionSnackbar = null
+                        btPermissionShownVariant = null
+                    }
+                    if (event == Snackbar.Callback.DISMISS_EVENT_SWIPE) btPermissionBannerStore.markDismissed()
+                }
+            },
+        )
+        btPermissionShownVariant = variant
+        btPermissionSnackbar = snackbar
+        snackbar.show()
     }
 
     private fun applyBtStaleBanners(stale: Map<String, com.tinkernorth.dish.source.bluetooth.BtStaleReason>) {

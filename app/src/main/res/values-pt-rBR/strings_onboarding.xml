@@ -15,7 +15,7 @@
 
     <string name="welcome_step3_eyebrow">MAIS UMA COISA</string>
     <string name="welcome_step3_title">Instale o Satellite no seu PC</string>
-    <string name="welcome_step3_body">O Satellite é gratuito e de código aberto. Baixe em tinkernorth.com/satellite, execute o instalador, e o Dish vai encontrá-lo automaticamente. Você pode terminar essa introdução agora e instalar o Satellite depois.</string>
+    <string name="welcome_step3_body">O Satellite é gratuito e de código aberto. Baixe em dish.tinkernorth.com/downloads/satellite, execute o instalador, e o Dish vai encontrá-lo automaticamente. Você pode terminar essa introdução agora e instalar o Satellite depois.</string>
     <string name="welcome_step3_satellite_link_label">Abrir página de download</string>
 
     <string name="welcome_step4_eyebrow">PRONTO</string>
@@ -91,7 +91,7 @@
     <string name="help_a_what_is_dish">O Dish transforma seu celular em um gamepad sem fio. Pode enviar entrada para um PC por Wi-Fi (com o auxiliar gratuito Satellite) ou parear com um PC / console como um controle Bluetooth comum.</string>
 
     <string name="help_q_what_is_satellite">O que é o Satellite?</string>
-    <string name="help_a_what_is_satellite">O Satellite é um programa pequeno, gratuito e de código aberto que roda no seu PC. Ele recebe entrada do Dish por Wi-Fi e se apresenta aos jogos como um controle comum. Sem o Satellite, os jogos não enxergam seu celular. Instale em tinkernorth.com/satellite.</string>
+    <string name="help_a_what_is_satellite">O Satellite é um programa pequeno, gratuito e de código aberto que roda no seu PC. Ele recebe entrada do Dish por Wi-Fi e se apresenta aos jogos como um controle comum. Sem o Satellite, os jogos não enxergam seu celular. Instale em dish.tinkernorth.com/downloads/satellite.</string>
 
     <string name="help_q_lan_vs_bluetooth">Wi-Fi ou Bluetooth: qual escolher?</string>
     <string name="help_a_lan_vs_bluetooth">Wi-Fi com Satellite é a melhor escolha para quase todo mundo. Latência menor, suporta movimento (mira por giroscópio) e libera o touchpad. O modo host Bluetooth é a escolha certa quando você não quer instalar nada no PC, ou quando está usando um console / set-top box que não roda o Satellite.</string>
