@@ -142,4 +142,15 @@ bool consumePublishIfChanged(DeviceState& s) {
     return true;
 }
 
+void resetPublishLatch(DeviceState& s) {
+    s.everPublished = false;
+    s.lastWButtons = 0;
+    s.lastBLT = 0;
+    s.lastBRT = 0;
+    s.lastSLX = 0;
+    s.lastSLY = 0;
+    s.lastSRX = 0;
+    s.lastSRY = 0;
+}
+
 } // namespace gamepad
