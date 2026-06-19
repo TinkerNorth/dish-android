@@ -6,8 +6,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
+import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionCoordinator
+import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.core.input.BluetoothGamepad
+import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedBt
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
@@ -45,6 +48,7 @@ class SetupBluetoothHostViewModel
         private val permission: BluetoothPermissionStateObserver,
         private val store: ConnectionStore,
         private val hub: ConnectionCoordinator,
+        private val capabilityComposer: CapabilityComposer,
         motion: PhoneMotionAvailability,
     ) : ViewModel() {
         // PICK_PC lists known hosts + a "pair new" row; PERMISSION gates on the
@@ -116,6 +120,16 @@ class SetupBluetoothHostViewModel
         fun bindArgs(slotId: String) {
             this.slotId = slotId
         }
+
+        // Capability table for a candidate type over THIS Bluetooth host. The BT transport
+        // carries only the gamepad, so motion/touchpad/rumble resolve off regardless of type.
+        fun capabilityForType(candidateType: Int): SlotCapabilities =
+            capabilityComposer.capabilityForCandidate(
+                slotId = slotId,
+                candidateType = candidateType,
+                candidateHostKind = ConnectionKind.BLUETOOTH,
+                candidateHostId = null,
+            )
 
         // Refresh the grant snapshot on every foreground; the OS never broadcasts
         // a revoke, and a grant landed in the Activity launcher needs reflecting.

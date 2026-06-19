@@ -18,6 +18,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.core.input.BluetoothGamepad
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.databinding.ActivitySetupBluetoothHostBinding
@@ -123,7 +125,7 @@ class SetupBluetoothHostActivity : AppCompatActivity() {
                 binding.tvTitle.setText(R.string.setup_bth_permission_title)
             SetupBluetoothHostViewModel.Stage.PICK_TYPE -> {
                 binding.tvTitle.setText(R.string.setup_bth_pick_type_title)
-                renderTypeTables(state.hasGyro)
+                renderTypeTables()
             }
             SetupBluetoothHostViewModel.Stage.ADVERTISING -> {
                 binding.tvTitle.setText(R.string.setup_bth_advertising_heading)
@@ -163,22 +165,14 @@ class SetupBluetoothHostActivity : AppCompatActivity() {
         card.typeCard.setOnClickListener { viewModel.onTypeChosen(profile) }
     }
 
-    // A Bluetooth host is never a Satellite, so motion/touchpad stay off; only
-    // gyro presence varies the table, and that's fixed per device.
-    private fun renderTypeTables(hasGyro: Boolean) {
+    // A Bluetooth host is never a Satellite, so its transport carries only the gamepad:
+    // motion/touchpad/rumble resolve off for both types via the capability layers.
+    private fun renderTypeTables() {
         binding.cardXbox.capabilityContainer.bindCapabilityRows(
-            SetupCapability.rows(
-                isPlayStation = false,
-                destinationIsSatellite = false,
-                hasGyro = hasGyro,
-            ),
+            capabilityRows(viewModel.capabilityForType(CONTROLLER_TYPE_XBOX)),
         )
         binding.cardPlaystation.capabilityContainer.bindCapabilityRows(
-            SetupCapability.rows(
-                isPlayStation = true,
-                destinationIsSatellite = false,
-                hasGyro = hasGyro,
-            ),
+            capabilityRows(viewModel.capabilityForType(CONTROLLER_TYPE_PLAYSTATION)),
         )
     }
 

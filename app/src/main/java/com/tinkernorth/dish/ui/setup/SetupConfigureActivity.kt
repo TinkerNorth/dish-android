@@ -20,6 +20,7 @@ import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.core.model.DishNotification
+import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.databinding.ActivitySetupConfigureBinding
 import com.tinkernorth.dish.databinding.BindingPillBinding
 import com.tinkernorth.dish.databinding.SetupReviewCardBinding
@@ -61,6 +62,10 @@ class SetupConfigureActivity : AppCompatActivity() {
     private var step = Step.TYPE
     private var current = ConfigUiState()
 
+    // The slot the screen actually loaded (a USB Direct claim can retire the id from the prior
+    // step); the type cards resolve their candidate capabilities against this same id.
+    private var resolvedSlotId = VIRTUAL_SLOT_ID
+
     private enum class Step { TYPE, FEEL, REVIEW }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -79,7 +84,8 @@ class SetupConfigureActivity : AppCompatActivity() {
             return
         }
 
-        viewModel.load(resolveSlotId(slotId))
+        resolvedSlotId = resolveSlotId(slotId)
+        viewModel.load(resolvedSlotId)
         viewModel.setHost(connectionId)
         wire()
         observe()
@@ -121,7 +127,7 @@ class SetupConfigureActivity : AppCompatActivity() {
         binding.groupFeel.visibility = visibleIf(step == Step.FEEL)
         binding.groupReview.visibility = visibleIf(step == Step.REVIEW)
         when (step) {
-            Step.TYPE -> renderType(state, snapshot)
+            Step.TYPE -> renderType(state)
             Step.FEEL -> renderFeel(state)
             Step.REVIEW -> renderReview(state, snapshot)
         }
@@ -131,10 +137,7 @@ class SetupConfigureActivity : AppCompatActivity() {
     // so the trade-off (PlayStation unlocks motion/touchpad) is visible before the
     // pick. A Bluetooth host has its type fixed upstream, so only the chosen one
     // shows and the cards stop being tappable.
-    private fun renderType(
-        state: ConfigUiState,
-        snapshot: BindingSnapshot,
-    ) {
+    private fun renderType(state: ConfigUiState) {
         binding.tvTitle.setText(R.string.setup_cfg_type_title)
         binding.tvSubtitle.setText(
             if (state.isBluetoothHost) R.string.setup_cfg_type_locked_subtitle else R.string.setup_cfg_type_subtitle,
@@ -146,8 +149,8 @@ class SetupConfigureActivity : AppCompatActivity() {
 
         val selectedType = state.draft?.type ?: CONTROLLER_TYPE_XBOX
         val locked = state.isBluetoothHost
-        bindTypeCard(binding.cardTypeXbox, state, snapshot, CONTROLLER_TYPE_XBOX, locked)
-        bindTypeCard(binding.cardTypePlaystation, state, snapshot, CONTROLLER_TYPE_PLAYSTATION, locked)
+        bindTypeCard(binding.cardTypeXbox, state, CONTROLLER_TYPE_XBOX, locked)
+        bindTypeCard(binding.cardTypePlaystation, state, CONTROLLER_TYPE_PLAYSTATION, locked)
         binding.cardTypeXbox.typeCard.visibility = visibleIf(!locked || selectedType == CONTROLLER_TYPE_XBOX)
         binding.cardTypePlaystation.typeCard.visibility = visibleIf(!locked || selectedType == CONTROLLER_TYPE_PLAYSTATION)
     }
@@ -155,7 +158,6 @@ class SetupConfigureActivity : AppCompatActivity() {
     private fun bindTypeCard(
         card: SetupTypeCardBinding,
         state: ConfigUiState,
-        snapshot: BindingSnapshot,
         candidateType: Int,
         locked: Boolean,
     ) {
@@ -163,10 +165,13 @@ class SetupConfigureActivity : AppCompatActivity() {
         card.typeChevron.visibility = visibleIf(!locked)
         card.typeCard.isClickable = !locked
         card.capabilityContainer.bindCapabilityRows(
-            SetupCapability.rows(
-                isPlayStation = candidateType == CONTROLLER_TYPE_PLAYSTATION,
-                destinationIsSatellite = state.selectedHost?.kind == ConnectionKind.SATELLITE,
-                hasGyro = snapshot.hasGyro,
+            capabilityRows(
+                viewModel.capabilityForCandidate(
+                    slotId = resolvedSlotId,
+                    candidateType = candidateType,
+                    candidateHostKind = state.selectedHost?.kind ?: ConnectionKind.SATELLITE,
+                    candidateHostId = state.draft?.hostId,
+                ),
             ),
         )
     }
@@ -200,9 +205,9 @@ class SetupConfigureActivity : AppCompatActivity() {
             binding.swMotion.setOnCheckedChangeListener { _, isChecked -> viewModel.setMotion(isChecked) }
         }
 
-        // Rumble rides a Satellite host only (a Bluetooth host has no return path);
-        // the phone vibrates as a fallback even with no controller motor.
-        val rumbleVisible = state.hostChosen && !state.isBluetoothHost
+        // Rumble shows when the path can carry it: a Satellite host returns it, the phone
+        // vibrates as a fallback for the on-screen pad, and a physical pad needs its own motor.
+        val rumbleVisible = state.capabilities.isAvailable(Feature.RUMBLE)
         binding.rumbleDivider.visibility = visibleIf(rumbleVisible && (motionVisible || touchpadVisible))
         binding.rumbleRow.visibility = visibleIf(rumbleVisible)
         if (rumbleVisible) {
@@ -243,17 +248,21 @@ class SetupConfigureActivity : AppCompatActivity() {
         state: ConfigUiState,
         snapshot: BindingSnapshot,
     ): List<ReviewNode> {
+        val caps = state.capabilities
         val touchpadMode = state.draft?.touchpadMode ?: TouchpadModeValue.OFF
-        val touchpadOn = state.touchpadAvailable && touchpadMode != TouchpadModeValue.OFF
+        // Each mode rides its own capability: the DS4 pad needs a touchpad-bearing type,
+        // the mouse needs a host that accepts mouse control. The user's chosen mode picks which.
+        val padMode = touchpadMode == TouchpadModeValue.DS4 && caps.isAvailable(Feature.TOUCHPAD)
+        val mouseMode = touchpadMode == TouchpadModeValue.MOUSE && caps.isAvailable(Feature.MOUSE)
         val model =
             ReviewModel(
-                motionOn = state.motionAvailable && state.draft?.motionOn == true,
-                touchpadOn = touchpadOn,
-                mouseMode = touchpadOn && touchpadMode == TouchpadModeValue.MOUSE,
-                padMode = touchpadOn && touchpadMode == TouchpadModeValue.DS4,
-                // Rumble flows back only from a Satellite host (a Bluetooth host has
-                // no return path); the phone vibrates as a fallback with no motor.
-                rumbleOn = state.hostChosen && !state.isBluetoothHost && state.draft?.rumbleOn == true,
+                motionOn = caps.isAvailable(Feature.MOTION) && state.draft?.motionOn == true,
+                touchpadOn = padMode || mouseMode,
+                mouseMode = mouseMode,
+                padMode = padMode,
+                // Rumble flows back only where the path carries it (no Bluetooth return channel,
+                // no phone fallback for a motorless physical pad); the user's toggle gates it.
+                rumbleOn = caps.isAvailable(Feature.RUMBLE) && state.draft?.rumbleOn == true,
             )
         return inputNodes(state, snapshot, model) + destinationNodes(state, model)
     }

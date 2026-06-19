@@ -22,6 +22,7 @@ import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.model.DishNotification
+import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.databinding.ActivityConfigureBindingsBinding
 import com.tinkernorth.dish.databinding.BindingApplyStepBinding
 import com.tinkernorth.dish.databinding.BindingValueNoneBinding
@@ -229,9 +230,9 @@ class ConfigureBindingsActivity : AppCompatActivity() {
             bz.segMouse.setOnClickListener { viewModel.setTouchpad(TouchpadModeValue.MOUSE) }
         }
 
-        // Rumble rides any chosen destination (the phone vibrates as a fallback),
-        // so it shows whenever the binding section does.
-        val rumbleVisible = state.hostChosen
+        // Rumble shows when the path can carry it: the phone vibrates as a fallback for the
+        // on-screen pad, a physical pad needs its own motor, and a Bluetooth host has no return path.
+        val rumbleVisible = state.capabilities.isAvailable(Feature.RUMBLE)
         bz.rumbleDivider.visibility = if (rumbleVisible) View.VISIBLE else View.GONE
         bz.rumbleRow.visibility = if (rumbleVisible) View.VISIBLE else View.GONE
         if (rumbleVisible) {

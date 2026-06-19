@@ -122,6 +122,7 @@ class ConnectionCoordinatorTest {
                 store = store,
                 bindingStore = bindingStore,
                 typeStore = typeStore,
+                hostFeaturesStore = mockk(relaxed = true),
                 composer = composer,
                 gamepadRegistry = gamepadRegistry,
             )

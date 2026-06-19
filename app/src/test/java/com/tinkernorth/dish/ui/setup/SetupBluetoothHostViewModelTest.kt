@@ -3,8 +3,10 @@
 package com.tinkernorth.dish.ui.setup
 
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
+import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.core.input.BluetoothGamepad
+import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedBt
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
@@ -36,6 +38,7 @@ class SetupBluetoothHostViewModelTest {
     private lateinit var permission: BluetoothPermissionStateObserver
     private lateinit var store: ConnectionStore
     private lateinit var hub: ConnectionCoordinator
+    private lateinit var capabilityComposer: CapabilityComposer
     private lateinit var motion: PhoneMotionAvailability
     private lateinit var vm: SetupBluetoothHostViewModel
 
@@ -50,13 +53,15 @@ class SetupBluetoothHostViewModelTest {
         permission = mockk(relaxed = true)
         store = mockk(relaxed = true)
         hub = mockk(relaxed = true)
+        capabilityComposer = mockk(relaxed = true)
         motion = mockk(relaxed = true)
         every { registry.states } returns states
         every { permission.state } returns perm
         every { store.rememberedBtFlow } returns remembered
         every { motion.hasGyro } returns true
         every { hub.bind(any(), any(), any()) } returns true
-        vm = SetupBluetoothHostViewModel(registry, permission, store, hub, motion)
+        every { capabilityComposer.capabilityForCandidate(any(), any(), any(), any()) } returns SlotCapabilities.NONE
+        vm = SetupBluetoothHostViewModel(registry, permission, store, hub, capabilityComposer, motion)
     }
 
     @After

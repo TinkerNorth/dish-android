@@ -8,12 +8,15 @@ import androidx.lifecycle.viewModelScope
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
+import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
+import com.tinkernorth.dish.core.model.Feature
+import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.repository.SatelliteCatalogRepository
@@ -109,6 +112,7 @@ data class ConfigUiState(
     val knownHostLabels: Map<String, String> = emptyMap(),
     val controllerPresent: Boolean = true,
     val dismissedUnsteadyHostIds: Set<String> = emptySet(),
+    val capabilities: SlotCapabilities = SlotCapabilities.NONE,
 ) {
     val selectedHost: BindingHost? get() = hosts.firstOrNull { it.id == draft?.hostId }
     val noHosts: Boolean get() = hosts.isEmpty()
@@ -131,19 +135,17 @@ data class ConfigUiState(
             }
         }
 
-    // Motion only carries on a Satellite host emulating PlayStation (Xbox has no gyro sink,
-    // Bluetooth no motion channel); touchpad only on Satellite; DS4 "Pad" is PlayStation-only.
+    // The capability layers decide what carries: motion needs an input gyro, a motion-bearing
+    // type (PlayStation), and a satellite destination; the touchpad SECTION shows if either the
+    // DS4 pad or the mouse mode is possible; the DS4 "Pad" mode needs a touchpad-bearing type.
     val motionAvailable: Boolean
-        get() =
-            snapshot?.hasGyro == true &&
-                selectedHost?.kind == ConnectionKind.SATELLITE &&
-                draft?.type == CONTROLLER_TYPE_PLAYSTATION
+        get() = capabilities.isAvailable(Feature.MOTION)
 
     val touchpadAvailable: Boolean
-        get() = selectedHost?.kind == ConnectionKind.SATELLITE
+        get() = capabilities.isAvailable(Feature.MOUSE) || capabilities.isAvailable(Feature.TOUCHPAD)
 
     val padModeAvailable: Boolean
-        get() = touchpadAvailable && draft?.type == CONTROLLER_TYPE_PLAYSTATION
+        get() = capabilities.isAvailable(Feature.TOUCHPAD)
 
     val isBluetoothHost: Boolean get() = selectedHost?.kind == ConnectionKind.BLUETOOTH
 }
@@ -180,6 +182,7 @@ class ConfigureBindingsViewModel
         private val motionEnabledStore: MotionEnabledStore,
         private val rumbleEnabledStore: RumbleEnabledStore,
         private val motionCapability: MotionCapabilityComposer,
+        private val capabilityComposer: CapabilityComposer,
         private val touchpadModeStore: TouchpadModeStore,
         private val satellite: SatelliteConnectionManager,
         private val usbGamepadManager: UsbGamepadManager,
@@ -211,26 +214,27 @@ class ConfigureBindingsViewModel
                     connections = conns,
                     knownHostLabels = conns.associate { it.id to it.label },
                     controllerPresent = controllerPresent(snapshot),
-                )
+                ).withCapabilities()
             draft.hostId?.let { refreshTypeOptions(it) }
             // Refresh the host list as connections come and go, without disturbing the in-progress draft.
             hub.connections
                 .onEach { latest ->
                     _ui.update { state ->
-                        state.copy(
-                            hosts = buildHosts(),
-                            connections = latest,
-                            knownHostLabels = state.knownHostLabels + latest.associate { it.id to it.label },
-                        )
+                        state
+                            .copy(
+                                hosts = buildHosts(),
+                                connections = latest,
+                                knownHostLabels = state.knownHostLabels + latest.associate { it.id to it.label },
+                            ).withCapabilities()
                     }
                 }.launchIn(viewModelScope)
             gamepadRegistry.devices
-                .onEach { _ui.update { state -> state.copy(controllerPresent = controllerPresent(state.snapshot)) } }
+                .onEach { _ui.update { state -> state.copy(controllerPresent = controllerPresent(state.snapshot)).withCapabilities() } }
                 .launchIn(viewModelScope)
         }
 
         fun setHost(hostId: String) {
-            _ui.update { it.copy(draft = it.draft?.copy(hostId = hostId)) }
+            _ui.update { it.copy(draft = it.draft?.copy(hostId = hostId)).withCapabilities() }
             refreshTypeOptions(hostId)
         }
 
@@ -243,16 +247,41 @@ class ConfigureBindingsViewModel
                     } else {
                         d.touchpadMode
                     }
-                state.copy(draft = d.copy(type = type, touchpadMode = nextTouchpad))
+                state.copy(draft = d.copy(type = type, touchpadMode = nextTouchpad)).withCapabilities()
             }
 
-        fun setDirect(on: Boolean) = _ui.update { it.copy(draft = it.draft?.copy(directOn = on)) }
+        fun setDirect(on: Boolean) = _ui.update { it.copy(draft = it.draft?.copy(directOn = on)).withCapabilities() }
 
-        fun setMotion(on: Boolean) = _ui.update { it.copy(draft = it.draft?.copy(motionOn = on)) }
+        fun setMotion(on: Boolean) = _ui.update { it.copy(draft = it.draft?.copy(motionOn = on)).withCapabilities() }
 
-        fun setRumble(on: Boolean) = _ui.update { it.copy(draft = it.draft?.copy(rumbleOn = on)) }
+        fun setRumble(on: Boolean) = _ui.update { it.copy(draft = it.draft?.copy(rumbleOn = on)).withCapabilities() }
 
-        fun setTouchpad(mode: String) = _ui.update { it.copy(draft = it.draft?.copy(touchpadMode = mode)) }
+        fun setTouchpad(mode: String) = _ui.update { it.copy(draft = it.draft?.copy(touchpadMode = mode)).withCapabilities() }
+
+        // Inherent path capability for the current draft, used by the screen's gates and the
+        // setup type cards. Keyed by the loaded slot so a USB path switch is reflected on reload.
+        fun capabilityForCandidate(
+            slotId: String,
+            candidateType: Int,
+            candidateHostKind: ConnectionKind,
+            candidateHostId: String?,
+        ): SlotCapabilities = capabilityComposer.capabilityForCandidate(slotId, candidateType, candidateHostKind, candidateHostId)
+
+        // Re-resolves the path capabilities from the current draft/host so the gates stay in sync.
+        // userEnabled is forced full inside the composer, so these are the inherent "available" layers.
+        private fun ConfigUiState.withCapabilities(): ConfigUiState {
+            val slotId = loadedSlotId ?: return copy(capabilities = SlotCapabilities.NONE)
+            val d = draft ?: return copy(capabilities = SlotCapabilities.NONE)
+            return copy(
+                capabilities =
+                    capabilityComposer.capabilityForCandidate(
+                        slotId = slotId,
+                        candidateType = d.type,
+                        candidateHostKind = selectedHost?.kind ?: ConnectionKind.SATELLITE,
+                        candidateHostId = d.hostId,
+                    ),
+            )
+        }
 
         // The label for a controller type from the live catalog, falling back to the
         // bundled names; shared by the dashboard configure screen and the setup flow.

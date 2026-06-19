@@ -5,6 +5,7 @@ package com.tinkernorth.dish.repository
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.net.DiscoveryGateway
 import com.tinkernorth.dish.core.net.HttpReply
+import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -15,7 +16,8 @@ import org.junit.Test
 
 class SatelliteCatalogRepositoryTest {
     private val gateway = mockk<DiscoveryGateway>()
-    private val repo = SatelliteCatalogRepository(gateway, Json { ignoreUnknownKeys = true })
+    private val hostFeaturesStore = SatelliteHostFeaturesStore()
+    private val repo = SatelliteCatalogRepository(gateway, Json { ignoreUnknownKeys = true }, hostFeaturesStore)
     private val server = DiscoveredServer(name = "Pc", ip = "10.0.0.5", udpPort = 9876, machineId = "m1")
 
     private val catalogBody =

@@ -273,6 +273,44 @@ Rule: if a class both derives a value and effects something, split it
 (derive in a composer, effect in a controller) rather than collapsing
 the two.
 
+## Capabilities
+
+"What is and isn't available" (motion, rumble, touchpad, mouse, analog
+triggers) is resolved in ONE place so the dashboard, the setup flow, and the
+review screen never re-derive it. A capability is a `Feature` with a fixed
+`Direction` from the phone's perspective: SEND (gamepad, motion, touchpad,
+mouse) rides out, RECEIVE (rumble) rides in. The model is
+`core/model/Capability.kt`.
+
+A feature is **available** only when every layer in the path permits it, and
+each layer reads its own source of truth:
+
+- **controller** (the input): a live device probe unioned with a static
+  known-model DB (`device.hasGyro || native.modelHasImu(...)`). The on-screen
+  pad is the phone, so it always sources touchpad/mouse and drives the phone
+  vibrator for rumble; a physical pad rumbles only with its own motor (routing
+  never falls back to the phone for a physical controller, see "Rumble path").
+- **transport** (`composer/TransportProfiles.kt`, static): a Bluetooth host
+  carries only the gamepad axes; a Satellite carries everything.
+- **type** (the emulated controller): the satellite's own per-type features from
+  `CatalogTypeDto.features`, with `composer/BundledCatalog.kt` as the fallback
+  for the slugs the app ships or a catalog not yet fetched.
+- **host** (the satellite itself): `CatalogDto.hostFeatures` as a `HostFeatureSet`
+  (mouse control today; the rest are in `capability-followups.md`).
+- **user**: the per-slot toggle stores.
+
+`composer/CapabilityResolver.kt` is the pure Reducer:
+`available = controller ∩ transport ∩ type ∩ host`,
+`enabled = available ∩ userEnabled`, `live = enabled - runtimeDown` (runtime
+health from the apply response). `composer/CapabilityComposer.kt` is the
+`AbstractComposer` that feeds the live inputs per slot; its live map is the
+reactive surface for bound-slot consumers, while `capabilityForCandidate(...)`
+answers "what if the type/host were X" for the draft-editing setup and configure
+screens. The setup type-card table renders through the `CapabilityRows` mapper.
+
+The wire caps the satellite is told (`ControllerDescriptor` via
+`MotionCapabilityComposer.toCapBits`) are a separate concern, NOT derived here.
+
 ## Multi-session model
 
 A session is a `(socket, token, key, counter, heartbeat)` tuple,
