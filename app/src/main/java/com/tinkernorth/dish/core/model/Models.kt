@@ -151,6 +151,10 @@ data class SessionViewDto(
 data class CatalogFeatureDto(
     val supported: Boolean = false,
     val requires: String? = null,
+    // Explicit mode slugs a type-feature offers (e.g. touchpad → ["ds4"]). The client
+    // reads these instead of inferring from the type id; empty means a pre-modes
+    // catalog, so callers fall back to their legacy assumption for back-compat.
+    val modes: List<String> = emptyList(),
 )
 
 @Serializable
@@ -183,6 +187,52 @@ data class CatalogDto(
     val serverVersion: String = "",
     val controllerTypes: List<CatalogTypeDto> = emptyList(),
     val hostFeatures: Map<String, CatalogHostFeatureDto> = emptyMap(),
+)
+
+// GET /api/server/capabilities: the satellite's CURRENT dynamic state (contract.md
+// layer 2). Read BEFORE pairing or any catalog round-trip, so the host layer reflects
+// the real receiver instead of an optimistic default. `host` enumerates the receiver's
+// own capabilities (presence) and their runtime availability.
+
+@Serializable
+data class ServerBackendDto(
+    val id: String = "",
+    val supported: Boolean = false,
+    val available: Boolean = false,
+    val errorCode: String? = null,
+)
+
+@Serializable
+data class ServerMotionDto(
+    val available: Boolean = false,
+)
+
+@Serializable
+data class ServerHostFeatureDto(
+    val supported: Boolean = false,
+    // Runtime read: present (`supported`) but currently down (e.g. backend driver
+    // missing). Absent on features with no runtime distinction (catalog, keyboard).
+    val available: Boolean = false,
+)
+
+@Serializable
+data class ServerHostDto(
+    val catalog: ServerHostFeatureDto = ServerHostFeatureDto(),
+    val mouseControl: ServerHostFeatureDto = ServerHostFeatureDto(),
+    val keyboardControl: ServerHostFeatureDto = ServerHostFeatureDto(),
+    val rumble: ServerHostFeatureDto = ServerHostFeatureDto(),
+)
+
+@Serializable
+data class ServerCapabilitiesDto(
+    val protocolVersion: Int = 1,
+    val serverVersion: String = "",
+    val maxControllers: Int = 16,
+    val backend: ServerBackendDto = ServerBackendDto(),
+    val motion: ServerMotionDto = ServerMotionDto(),
+    // Absent (older satellite that predates the host block) → catalog.supported stays
+    // false, the signal callers use to know the host block is real before trusting it.
+    val host: ServerHostDto = ServerHostDto(),
 )
 
 data class ControllerEntry(

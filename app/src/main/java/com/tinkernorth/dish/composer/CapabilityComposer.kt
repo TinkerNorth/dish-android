@@ -15,6 +15,7 @@ import com.tinkernorth.dish.source.sensor.PhoneMotionAvailability
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
+import com.tinkernorth.dish.source.store.SatelliteHostRuntimeStore
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatus
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
 import com.tinkernorth.dish.source.store.TouchpadModeStore
@@ -65,6 +66,7 @@ class CapabilityComposer
         private val touchpadMode: TouchpadModeStore,
         private val hostFeatures: SatelliteHostFeaturesStore,
         private val motionBackend: SatelliteMotionBackendStatusStore,
+        private val hostRuntime: SatelliteHostRuntimeStore,
         private val catalogRepo: SatelliteCatalogRepository,
         scope: CoroutineScope,
     ) : AbstractComposer<Map<String, SlotCapabilities>>(scope, emptyMap()) {
@@ -139,7 +141,9 @@ class CapabilityComposer
                 type = typeCapabilitiesFor(candidateType, candidateHostId),
                 host = candidateHostLayer(candidateHostKind, candidateHostId),
                 userEnabled = ALL,
-                runtimeDown = CapabilitySet.EMPTY,
+                // Pre-bind runtime probe: lets the report show a feature present-but-down
+                // (e.g. motion backend missing) before the user commits.
+                runtimeDown = candidateRuntimeDownLayer(candidateHostKind, candidateHostId),
             )
 
         @Suppress("LongParameterList")
@@ -259,6 +263,18 @@ class CapabilityComposer
             connId ?: return CapabilitySet.EMPTY
             val status = backendMap[connId to slotId] ?: return CapabilitySet.EMPTY
             return if (!status.backendOk) CapabilitySet.of(Feature.MOTION) else CapabilitySet.EMPTY
+        }
+
+        // Pre-bind sibling of runtimeDownLayer: the post-bind per-controller backend status
+        // does not exist yet, so the candidate report reads the host runtime probe instead.
+        // Same MOTION-down semantics so pre-bind and post-bind agree.
+        private fun candidateRuntimeDownLayer(
+            kind: ConnectionKind,
+            hostId: String?,
+        ): CapabilitySet {
+            if (kind != ConnectionKind.SATELLITE) return CapabilitySet.EMPTY
+            val runtime = hostId?.let { hostRuntime.runtimeFor(it) } ?: return CapabilitySet.EMPTY
+            return if (!runtime.motionBackendOk) CapabilitySet.of(Feature.MOTION) else CapabilitySet.EMPTY
         }
 
         private companion object {

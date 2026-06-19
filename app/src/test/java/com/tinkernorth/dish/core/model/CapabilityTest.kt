@@ -118,4 +118,57 @@ class CapabilityTest {
         assertFalse(features.mouseControl)
         assertFalse(Feature.MOUSE in features.toCapabilitySet())
     }
+
+    @Test
+    fun `fromCatalog keeps rumble optimistic when the slug is absent (back-compat)`() {
+        // A satellite predating the rumble host feature still returns rumble.
+        val features = HostFeatureSet.fromCatalog(CatalogDto())
+        assertTrue(features.rumbleReturn)
+        assertTrue(Feature.RUMBLE in features.toCapabilitySet())
+    }
+
+    @Test
+    fun `fromCatalog honors an explicit rumble unsupported`() {
+        val catalog =
+            CatalogDto(hostFeatures = mapOf("rumble" to CatalogHostFeatureDto(supported = false)))
+        val features = HostFeatureSet.fromCatalog(catalog)
+        assertFalse(features.rumbleReturn)
+        assertFalse(Feature.RUMBLE in features.toCapabilitySet())
+    }
+
+    @Test
+    fun `fromCatalog reads keyboardControl opt-in (absent stays unsupported)`() {
+        assertFalse(HostFeatureSet.fromCatalog(CatalogDto()).keyboardControl)
+        val withKeyboard =
+            HostFeatureSet.fromCatalog(
+                CatalogDto(hostFeatures = mapOf("keyboardControl" to CatalogHostFeatureDto(supported = true))),
+            )
+        assertTrue(withKeyboard.keyboardControl)
+        assertTrue(Feature.KEYBOARD in withKeyboard.toCapabilitySet())
+    }
+
+    @Test
+    fun `fromServerCapabilities reads the host block`() {
+        val caps =
+            ServerCapabilitiesDto(
+                motion = ServerMotionDto(available = true),
+                host =
+                    ServerHostDto(
+                        catalog = ServerHostFeatureDto(supported = true),
+                        mouseControl = ServerHostFeatureDto(supported = true, available = true),
+                        keyboardControl = ServerHostFeatureDto(supported = false),
+                        rumble = ServerHostFeatureDto(supported = false),
+                    ),
+            )
+        val features = HostFeatureSet.fromServerCapabilities(caps)
+        assertTrue(features.hasCatalog)
+        assertTrue(features.mouseControl)
+        assertFalse(features.keyboardControl)
+        // The host explicitly reports no rumble return; honored, not assumed.
+        assertFalse(features.rumbleReturn)
+        // Touchpad modes are a per-type catalog concern, never carried by the host probe.
+        assertTrue(features.touchpadModes.isEmpty())
+        assertTrue(Feature.MOUSE in features.toCapabilitySet())
+        assertFalse(Feature.RUMBLE in features.toCapabilitySet())
+    }
 }

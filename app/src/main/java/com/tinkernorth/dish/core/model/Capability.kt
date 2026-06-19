@@ -15,10 +15,12 @@ enum class Feature(
     TOUCHPAD(Direction.SEND, "touchpad"),
 
     // MOUSE and KEYBOARD are host-injected, not emulated-pad features, so they carry
-    // no per-type catalog slug: the host layer (mouseControl) is their only gate.
+    // no per-type catalog slug: the host layer (mouseControl / keyboardControl) is their
+    // only gate.
     MOUSE(Direction.SEND, null),
 
-    // TODO(capability-contract): keyboard emulation is not in the satellite contract yet.
+    // Host-gated via hostFeatures.keyboardControl (no longer hardwired false). Stays
+    // unoffered until both a host injection backend and a phone-side source exist.
     KEYBOARD(Direction.SEND, null),
     RUMBLE(Direction.RECEIVE, "rumble"),
 
@@ -124,12 +126,28 @@ data class HostFeatureSet(
             return HostFeatureSet(
                 hasCatalog = true,
                 mouseControl = mouse?.supported == true,
-                // TODO(capability-contract): no keyboardControl host-feature slug yet; assume unsupported.
-                keyboardControl = false,
-                // TODO(capability-contract): no rumble host-feature slug yet; the baseline advertises rumble.
-                rumbleReturn = true,
+                // Keyboard is opt-IN: offered only when the host advertises it. A catalog
+                // without the slug (older satellite) leaves it unsupported, so keyboard
+                // stays unoffered exactly as before.
+                keyboardControl = catalog.hostFeatures["keyboardControl"]?.supported == true,
+                // Rumble is opt-OUT for back-compat: a satellite predating the slug still
+                // returns rumble, so an ABSENT field keeps the optimistic assumption;
+                // a PRESENT field is honored (a host that can't return rumble hides it).
+                rumbleReturn = catalog.hostFeatures["rumble"]?.supported ?: true,
                 touchpadModes = mouse?.modes?.toSet() ?: emptySet(),
             )
         }
+
+        // Pre-bind, pre-catalog host read (GET /api/server/capabilities). Caller must
+        // gate on host.catalog.supported first: an older satellite omits the block, and
+        // mapping its all-false default would wrongly report everything unsupported.
+        fun fromServerCapabilities(caps: ServerCapabilitiesDto): HostFeatureSet =
+            HostFeatureSet(
+                hasCatalog = caps.host.catalog.supported,
+                mouseControl = caps.host.mouseControl.supported,
+                keyboardControl = caps.host.keyboardControl.supported,
+                rumbleReturn = caps.host.rumble.supported,
+                touchpadModes = emptySet(), // modes are a per-type catalog concern
+            )
     }
 }

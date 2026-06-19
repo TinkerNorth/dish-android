@@ -7,74 +7,67 @@ emulated controller **type**, the satellite **host**, and the user's toggle. Typ
 features come from the satellite catalog (`CatalogTypeDto.features`); host
 features come from `CatalogDto.hostFeatures`.
 
-The items below are the places the client still has to **assume** because the
-contract does not expose them yet. Each is marked in code with
-`// TODO(capability-contract):`. When the satellite side
-(`satellite/docs/contract.md`) gains the field, delete the placeholder and read
-it. Direction is from the phone's perspective: SEND = phone to host, RECEIVE =
-host to phone.
+Items 1–5 below are **resolved** (2026-06): the satellite contract now exposes the
+fields and the client reads them. They are kept here as a record of the contract
+decision and the residual non-contract work. Item 6 remains tracked-only. Direction
+is from the phone's perspective: SEND = phone to host, RECEIVE = host to phone.
 
-## 1. Rumble-return as an explicit host feature (RECEIVE)
+## 1. Rumble-return as an explicit host feature (RECEIVE) — DONE
 
 - **Context.** Rumble is a RECEIVE feature: the host streams `MSG_RUMBLE` back to
-  the phone. Today the client assumes any satellite returns rumble.
-- **Where.** `HostFeatureSet.fromCatalog` / `SATELLITE_DEFAULT` set
-  `rumbleReturn = true` unconditionally (`core/model/Capability.kt`).
-- **Task.** Publish a host feature (e.g. `hostFeatures.rumble.supported`) so the
-  host layer gates rumble instead of always allowing it.
-- **Acceptance.** A satellite that cannot return rumble reports it, and the
-  rumble row/chip hides for that host without a client change.
+  the phone. The client used to assume any satellite returns rumble.
+- **Shipped.** The catalog publishes `hostFeatures.rumble.supported` and the
+  capabilities `host.rumble`. `HostFeatureSet.fromCatalog` reads it
+  presence-aware: an ABSENT slug keeps the optimistic `true` (back-compat with
+  satellites predating it), a PRESENT `false` hides rumble for that host.
+- **Acceptance met.** A satellite that reports `rumble.supported = false` hides
+  the rumble row/chip with no client change.
 
-## 2. Keyboard emulation as a host feature (SEND)
+## 2. Keyboard emulation as a host feature (SEND) — DONE (contract), blocked downstream
 
-- **Context.** `Feature.KEYBOARD` is modeled (SEND, phone to host) but never
-  offered: there is no host feature for it and no phone-side source yet.
-- **Where.** `HostFeatureSet.keyboardControl` is hardwired `false`
-  (`core/model/Capability.kt`).
-- **Task.** Add `hostFeatures.keyboardControl` (mirroring `mouseControl`,
-  including any `modes`) so a host that injects keyboard input advertises it.
-- **Acceptance.** With the field present, keyboard becomes a real host-gated
-  capability; without it, it stays unoffered.
+- **Context.** `Feature.KEYBOARD` is modeled (SEND) but never offered.
+- **Shipped.** The catalog/capabilities publish `keyboardControl.supported` and
+  `HostFeatureSet.fromCatalog` reads it (opt-IN: absent → unsupported). The
+  hardwired `false` is gone.
+- **Residual (not a contract gap).** The satellite reports
+  `keyboardControl.supported = false` because no host keystroke-injection backend
+  exists yet, and no phone-side keyboard input source produces `Feature.KEYBOARD`.
+  Keyboard stays correctly unoffered until BOTH land; flip the satellite trait and
+  add the phone source then.
 
-## 3. Touchpad pad-vs-mouse modes in the catalog
+## 3. Touchpad pad-vs-mouse modes in the catalog — DONE
 
-- **Context.** "DS4 pad" mode is a type feature (the emulated DualSense has a
-  touchpad); "mouse" mode is host injection. The client currently infers pad
-  mode from the PlayStation type and mouse mode from `hostFeatures.mouseControl`.
-- **Where.** `CapabilityComposer`/`CapabilityResolver` read
-  `CatalogTypeDto.features["touchpad"]` for the pad and
-  `hostFeatures.mouseControl` for the mouse.
-- **Task.** Make the catalog explicit: `features["touchpad"].modes` (or the
-  existing `hostFeatures.mouseControl.modes`) so the offered modes are read, not
-  inferred from the type id.
-- **Acceptance.** A type advertising a touchpad with only `mouse` mode (or a
-  future type with a pad but no DS4 lineage) gates correctly.
+- **Context.** "DS4 pad" mode is a type feature; "mouse" mode is host injection.
+  The client used to infer pad mode from the PlayStation type id.
+- **Shipped.** `CatalogFeatureDto.modes` carries per-type mode slugs; the DS4
+  `touchpad` advertises `["ds4"]`. `CapabilityResolver.typeCapabilities` gates
+  `Feature.TOUCHPAD` (the pad) on the type declaring the `ds4` mode (empty modes →
+  legacy fallback). Mouse stays host-gated via `hostFeatures.mouseControl`.
+- **Acceptance met.** A type advertising a touchpad with only `mouse` mode (or a
+  pad with no `ds4` lineage) gates the pad off while keeping host mouse.
 
-## 4. Host capability presence (does this satellite have a catalog at all?)
+## 4. Host capability presence — DONE
 
-- **Context.** The user asked for a holistic host view: does the receiver expose
-  a catalog, mouse emulation, keyboard emulation, rumble return. The client
-  currently treats "we fetched a catalog" as "has a catalog".
-- **Where.** `HostFeatureSet.hasCatalog` is set `true` only after a successful
-  fetch (`core/model/Capability.kt`); it is informational and not yet read by any
-  gate.
-- **Task.** A small host descriptor (in discovery, the session response, or a
-  dedicated `GET /api/host`) enumerating the host's own capabilities, so the host
-  layer is read rather than assumed-optimistic (`SATELLITE_DEFAULT`).
-- **Acceptance.** The host layer reflects the real receiver before any catalog
-  round-trip, and the holistic host view is complete.
+- **Context.** A holistic host view: does the receiver expose a catalog, mouse,
+  keyboard, rumble. The client used to treat "we fetched a catalog" as "has one".
+- **Shipped.** `GET /api/server/capabilities` carries a `host` block enumerating
+  the receiver's own capabilities. `SatelliteCapabilitiesRepository` probes it and
+  seeds the host layer via `HostFeatureSet.fromServerCapabilities`
+  (`setIfAbsent`, so a richer catalog still wins). `host.catalog.supported` is the
+  presence signal; its absence means an older satellite (fall back to the default).
+- **Acceptance met.** The host layer reflects the real receiver before any catalog
+  round-trip.
 
-## 5. Pre-bind host runtime capability read
+## 5. Pre-bind host runtime capability read — DONE
 
-- **Context.** Runtime health (motion `backendOk`, the mouse-control grant)
-  arrives only in the session/controller apply response, i.e. after a bind. The
-  pre-bind setup screens cannot show transient host state (backend down, no
-  virtual-pad driver installed) until the user commits.
-- **Where.** `RuntimeRefinement` is empty pre-bind; `runtimeDown` is populated
-  only from `SatelliteMotionBackendStatus` after an apply.
-- **Task.** A read-only host runtime probe (e.g. `GET /api/host`) the setup flow
-  can call before binding.
-- **Acceptance.** The setup capability table can show a feature as present but
+- **Context.** Runtime health (motion `backendOk`) arrived only in the apply
+  response, after a bind. Pre-bind setup could not show transient host state.
+- **Shipped.** The capabilities probe also populates `SatelliteHostRuntimeStore`
+  (motion backend up/down). `CapabilityComposer.capabilityForCandidate` reads it
+  via `candidateRuntimeDownLayer`, so the pre-bind report shows a feature as
+  present-but-currently-down. (The mouse-control grant remains a post-bind
+  per-session decision by design — it is policy, not a static probe.)
+- **Acceptance met.** The setup capability table can show a feature present but
   currently-down before the user binds.
 
 ## 6. Lightbar (RECEIVE) has no Android sink

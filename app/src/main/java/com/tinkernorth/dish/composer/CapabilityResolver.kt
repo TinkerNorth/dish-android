@@ -3,6 +3,7 @@
 package com.tinkernorth.dish.composer
 
 import com.tinkernorth.dish.core.model.CapabilitySet
+import com.tinkernorth.dish.core.model.CatalogFeatureDto
 import com.tinkernorth.dish.core.model.CatalogTypeDto
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
@@ -35,10 +36,21 @@ object CapabilityResolver {
         val out = mutableSetOf(Feature.GAMEPAD, Feature.MOUSE, Feature.KEYBOARD)
         for (feature in Feature.entries) {
             val slug = feature.catalogSlug ?: continue
-            if (catalogType.features[slug]?.supported == true) out += feature
+            val dto = catalogType.features[slug]
+            if (dto?.supported == true && typeOffersFeature(feature, dto)) out += feature
         }
         return CapabilitySet(out)
     }
+
+    // Feature.TOUCHPAD is the DS4 PAD mode specifically: offer it only when the type
+    // advertises that mode, so a touchpad-bearing type with no "ds4" lineage (mouse-only,
+    // or a future pad with a different mode) gates the pad off. A pre-modes catalog omits
+    // `modes` → empty means pad-capable (back-compat). Every other feature has no
+    // sub-mode gate, so it passes once `supported`.
+    private fun typeOffersFeature(
+        feature: Feature,
+        dto: CatalogFeatureDto,
+    ): Boolean = feature != Feature.TOUCHPAD || dto.modes.isEmpty() || TouchpadModeValue.DS4 in dto.modes
 
     fun userEnabledCapabilities(
         motionOn: Boolean,

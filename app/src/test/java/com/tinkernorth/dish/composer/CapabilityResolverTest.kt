@@ -40,6 +40,33 @@ class CapabilityResolverTest {
     }
 
     @Test
+    fun `typeCapabilities offers the pad when touchpad advertises the ds4 mode`() {
+        val type =
+            CatalogTypeDto(
+                features = mapOf("touchpad" to CatalogFeatureDto(supported = true, modes = listOf("ds4"))),
+            )
+        assertTrue(Feature.TOUCHPAD in CapabilityResolver.typeCapabilities(type))
+    }
+
+    @Test
+    fun `typeCapabilities gates the pad off when touchpad has modes but no ds4`() {
+        // A touchpad-bearing type with only a mouse mode (or a non-DS4 pad) must not
+        // offer the DS4 pad — read from modes, not inferred from the type id.
+        val type =
+            CatalogTypeDto(
+                features = mapOf("touchpad" to CatalogFeatureDto(supported = true, modes = listOf("mouse"))),
+            )
+        assertFalse(Feature.TOUCHPAD in CapabilityResolver.typeCapabilities(type))
+    }
+
+    @Test
+    fun `typeCapabilities treats a supported touchpad with no modes as pad-capable (back-compat)`() {
+        // A pre-modes catalog omits the array; fall back to the legacy assumption.
+        val type = CatalogTypeDto(features = mapOf("touchpad" to CatalogFeatureDto(supported = true)))
+        assertTrue(Feature.TOUCHPAD in CapabilityResolver.typeCapabilities(type))
+    }
+
+    @Test
     fun `userEnabledCapabilities always carries GAMEPAD and ANALOG_TRIGGERS`() {
         val caps = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = false, touchpadMode = TouchpadModeValue.OFF)
         assertTrue(Feature.GAMEPAD in caps)

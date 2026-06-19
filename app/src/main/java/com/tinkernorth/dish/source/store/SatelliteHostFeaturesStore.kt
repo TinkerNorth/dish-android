@@ -20,6 +20,16 @@ class SatelliteHostFeaturesStore
             setState { it + (connectionId to features) }
         }
 
+        // Pre-bind/pre-catalog publish: fills the host layer from a capabilities probe
+        // only if a richer catalog read has not already populated it, so the catalog
+        // (with touchpad modes) always wins when present.
+        fun setIfAbsent(
+            connectionId: String,
+            features: HostFeatureSet,
+        ) {
+            setState { if (connectionId in it) it else it + (connectionId to features) }
+        }
+
         fun clearConnection(connectionId: String) {
             setState { if (connectionId in it) it - connectionId else it }
         }

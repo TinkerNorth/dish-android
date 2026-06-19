@@ -200,6 +200,15 @@ class DiscoveryGateway
                 SatelliteHttpClient.getCatalog(ip, port, acceptLanguage, etag, pinId(satelliteId, ip), pins)
             }
 
+        suspend fun serverCapabilities(
+            ip: String,
+            port: Int,
+            satelliteId: String = "",
+        ): HttpReply =
+            withContext(ioDispatcher) {
+                SatelliteHttpClient.getServerCapabilities(ip, port, pinId(satelliteId, ip), pins)
+            }
+
         companion object {
             private const val TAG = "DiscoveryGateway"
 

@@ -19,6 +19,7 @@ import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
+import com.tinkernorth.dish.repository.SatelliteCapabilitiesRepository
 import com.tinkernorth.dish.repository.SatelliteCatalogRepository
 import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
@@ -187,6 +188,7 @@ class ConfigureBindingsViewModel
         private val satellite: SatelliteConnectionManager,
         private val usbGamepadManager: UsbGamepadManager,
         private val catalogRepo: SatelliteCatalogRepository,
+        private val capabilitiesRepo: SatelliteCapabilitiesRepository,
         private val native: PhysicalInputNative,
     ) : ViewModel() {
         private val _ui = MutableStateFlow(ConfigUiState())
@@ -499,6 +501,11 @@ class ConfigureBindingsViewModel
                 _ui.update { state -> state.copy(typeOptions = typeOptionsFrom(cached.controllerTypes)) }
             }
             viewModelScope.launch {
+                // Probe live host state first: it seeds the host layer + pre-bind runtime
+                // (motion backend up/down) before the catalog round-trip, so the candidate
+                // report reflects the real receiver even if the catalog is slow/unreachable.
+                capabilitiesRepo.refresh(conn.server.value, hostId)
+                _ui.update { state -> state.withCapabilities() }
                 val catalog = catalogRepo.catalogFor(conn.server.value, hostId) ?: return@launch
                 _ui.update { state -> state.copy(typeOptions = typeOptionsFrom(catalog.controllerTypes)) }
             }

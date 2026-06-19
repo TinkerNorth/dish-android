@@ -5,6 +5,9 @@ package com.tinkernorth.dish.composer
 import com.tinkernorth.dish.architecture.testing.composerTest
 import com.tinkernorth.dish.architecture.testing.probe
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
+import com.tinkernorth.dish.core.model.CatalogDto
+import com.tinkernorth.dish.core.model.CatalogFeatureDto
+import com.tinkernorth.dish.core.model.CatalogTypeDto
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.HostFeatureSet
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
@@ -13,6 +16,8 @@ import com.tinkernorth.dish.source.sensor.PhoneMotionAvailability
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
+import com.tinkernorth.dish.source.store.SatelliteHostRuntime
+import com.tinkernorth.dish.source.store.SatelliteHostRuntimeStore
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatus
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
 import com.tinkernorth.dish.source.store.TouchpadModeStore
@@ -69,6 +74,8 @@ class CapabilityComposerTest {
         hostFeaturesState: MutableStateFlow<Map<String, HostFeatureSet>> = MutableStateFlow(emptyMap()),
         backendStatus: MutableStateFlow<Map<Pair<String, String>, SatelliteMotionBackendStatus>> =
             MutableStateFlow(emptyMap()),
+        hostRuntime: MutableStateFlow<Map<String, SatelliteHostRuntime>> = MutableStateFlow(emptyMap()),
+        cachedCatalog: CatalogDto? = null,
         modelHasImu: Boolean = false,
         modelHasRumble: Boolean = false,
     ): CapabilityComposer {
@@ -93,8 +100,11 @@ class CapabilityComposerTest {
                 every { featuresFor(any()) } answers { hostFeaturesState.value[firstArg()] }
             }
         val backendStore: SatelliteMotionBackendStatusStore = mockk { every { state } returns backendStatus }
-        // No cached catalog: the type layer falls back to BundledCatalog, matching these tests' expectations.
-        val catalogRepo: SatelliteCatalogRepository = mockk { every { cached(any()) } returns null }
+        val hostRuntimeStore: SatelliteHostRuntimeStore =
+            mockk { every { runtimeFor(any()) } answers { hostRuntime.value[firstArg()] } }
+        // Default no cached catalog: the type layer falls back to BundledCatalog. Tests that
+        // exercise the catalog-driven path pass a cachedCatalog explicitly.
+        val catalogRepo: SatelliteCatalogRepository = mockk { every { cached(any()) } returns cachedCatalog }
         return CapabilityComposer(
             availability,
             registry,
@@ -105,6 +115,7 @@ class CapabilityComposerTest {
             touchpadStore,
             hostStore,
             backendStore,
+            hostRuntimeStore,
             catalogRepo,
             scope,
         )
@@ -498,4 +509,140 @@ class CapabilityComposerTest {
             testScheduler.runCurrent()
             assertFalse(composer.capabilityFor("ghost").isAvailable(Feature.GAMEPAD))
         }
+
+    @Test
+    fun `a candidate drops MOTION from live when the pre-bind host runtime reports the backend down`() =
+        composerTest {
+            val composer =
+                composerFor(
+                    phoneAvailable = true,
+                    devices = MutableStateFlow(emptyMap()),
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                    hostRuntime = MutableStateFlow(mapOf("sat-A" to SatelliteHostRuntime(motionBackendOk = false))),
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+            val caps =
+                composer.capabilityForCandidate(
+                    slotId = VIRTUAL_SLOT_ID,
+                    candidateType = CONTROLLER_TYPE_PLAYSTATION,
+                    candidateHostKind = ConnectionKind.SATELLITE,
+                    candidateHostId = "sat-A",
+                )
+            // Present and inherently available, but the probe says the backend is down right now.
+            assertTrue(caps.isAvailable(Feature.MOTION))
+            assertTrue(caps.isEnabled(Feature.MOTION))
+            assertFalse(Feature.MOTION in caps.live)
+        }
+
+    @Test
+    fun `a candidate keeps MOTION live when the pre-bind host runtime reports the backend ok`() =
+        composerTest {
+            val composer =
+                composerFor(
+                    phoneAvailable = true,
+                    devices = MutableStateFlow(emptyMap()),
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                    hostRuntime = MutableStateFlow(mapOf("sat-A" to SatelliteHostRuntime(motionBackendOk = true))),
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+            val caps =
+                composer.capabilityForCandidate(
+                    slotId = VIRTUAL_SLOT_ID,
+                    candidateType = CONTROLLER_TYPE_PLAYSTATION,
+                    candidateHostKind = ConnectionKind.SATELLITE,
+                    candidateHostId = "sat-A",
+                )
+            assertTrue(Feature.MOTION in caps.live)
+        }
+
+    @Test
+    fun `a candidate ignores host runtime for a non-satellite host`() =
+        composerTest {
+            // A BLUETOOTH candidate must not pick up a satellite's runtime-down state.
+            val composer =
+                composerFor(
+                    phoneAvailable = true,
+                    devices = MutableStateFlow(mapOf(9 to device(9, hasGyro = true))),
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                    hostRuntime = MutableStateFlow(mapOf("sat-A" to SatelliteHostRuntime(motionBackendOk = false))),
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+            val caps =
+                composer.capabilityForCandidate(
+                    slotId = "9",
+                    candidateType = CONTROLLER_TYPE_PLAYSTATION,
+                    candidateHostKind = ConnectionKind.BLUETOOTH,
+                    candidateHostId = "sat-A",
+                )
+            assertTrue(caps.runtimeDown.features.isEmpty())
+        }
+
+    @Test
+    fun `a candidate gates the DS4 pad off when the cached catalog touchpad lacks the ds4 mode`() =
+        composerTest {
+            val composer =
+                composerFor(
+                    phoneAvailable = true,
+                    devices = MutableStateFlow(emptyMap()),
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                    cachedCatalog = catalogWithDs4Touchpad(modes = listOf("mouse")),
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+            val caps =
+                composer.capabilityForCandidate(
+                    slotId = VIRTUAL_SLOT_ID,
+                    candidateType = CONTROLLER_TYPE_PLAYSTATION,
+                    candidateHostKind = ConnectionKind.SATELLITE,
+                    candidateHostId = "sat-A",
+                )
+            assertFalse(caps.isAvailable(Feature.TOUCHPAD))
+        }
+
+    @Test
+    fun `a candidate keeps the DS4 pad when the cached catalog touchpad advertises the ds4 mode`() =
+        composerTest {
+            val composer =
+                composerFor(
+                    phoneAvailable = true,
+                    devices = MutableStateFlow(emptyMap()),
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                    cachedCatalog = catalogWithDs4Touchpad(modes = listOf("ds4")),
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+            val caps =
+                composer.capabilityForCandidate(
+                    slotId = VIRTUAL_SLOT_ID,
+                    candidateType = CONTROLLER_TYPE_PLAYSTATION,
+                    candidateHostKind = ConnectionKind.SATELLITE,
+                    candidateHostId = "sat-A",
+                )
+            assertTrue(caps.isAvailable(Feature.TOUCHPAD))
+        }
+
+    private fun catalogWithDs4Touchpad(modes: List<String>): CatalogDto =
+        CatalogDto(
+            controllerTypes =
+                listOf(
+                    CatalogTypeDto(
+                        id = CONTROLLER_TYPE_PLAYSTATION,
+                        slug = "ds4",
+                        features = mapOf("touchpad" to CatalogFeatureDto(supported = true, modes = modes)),
+                    ),
+                ),
+        )
 }
