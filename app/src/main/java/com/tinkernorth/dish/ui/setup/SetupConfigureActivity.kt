@@ -146,26 +146,24 @@ class SetupConfigureActivity : AppCompatActivity() {
 
         val selectedType = state.draft?.type ?: CONTROLLER_TYPE_XBOX
         val locked = state.isBluetoothHost
-        bindTypeCard(binding.cardTypeXbox, state, snapshot, CONTROLLER_TYPE_XBOX, selectedType, locked)
-        bindTypeCard(binding.cardTypePlaystation, state, snapshot, CONTROLLER_TYPE_PLAYSTATION, selectedType, locked)
+        bindTypeCard(binding.cardTypeXbox, state, snapshot, CONTROLLER_TYPE_XBOX, locked)
+        bindTypeCard(binding.cardTypePlaystation, state, snapshot, CONTROLLER_TYPE_PLAYSTATION, locked)
         binding.cardTypeXbox.typeCard.visibility = visibleIf(!locked || selectedType == CONTROLLER_TYPE_XBOX)
         binding.cardTypePlaystation.typeCard.visibility = visibleIf(!locked || selectedType == CONTROLLER_TYPE_PLAYSTATION)
     }
 
+    // Both type cards are plain buttons that commit and advance on tap; there is
+    // no pre-selected/highlighted state.
     private fun bindTypeCard(
         card: SetupTypeCardBinding,
         state: ConfigUiState,
         snapshot: BindingSnapshot,
         candidateType: Int,
-        selectedType: Int,
         locked: Boolean,
     ) {
         card.typeTitle.text = viewModel.typeLabel(candidateType)
         card.typeChevron.visibility = visibleIf(!locked)
         card.typeCard.isClickable = !locked
-        val selected = candidateType == selectedType
-        card.typeCard.strokeWidth = if (selected) resources.getDimensionPixelSize(R.dimen.wizard_option_stroke_selected) else 0
-        card.typeCard.strokeColor = getColor(if (selected) R.color.colorPrimary else android.R.color.transparent)
         card.capabilityContainer.bindCapabilityRows(
             SetupCapability.rows(
                 isPlayStation = candidateType == CONTROLLER_TYPE_PLAYSTATION,
@@ -210,6 +208,11 @@ class SetupConfigureActivity : AppCompatActivity() {
         val rumbleVisible = state.hostChosen
         binding.rumbleDivider.visibility = visibleIf(rumbleVisible && (motionVisible || touchpadVisible))
         binding.rumbleRow.visibility = visibleIf(rumbleVisible)
+        if (rumbleVisible) {
+            binding.swRumble.setOnCheckedChangeListener(null)
+            binding.swRumble.isChecked = state.draft?.rumbleOn == true
+            binding.swRumble.setOnCheckedChangeListener { _, isChecked -> viewModel.setRumble(isChecked) }
+        }
 
         binding.tvFeelEmpty.visibility = visibleIf(!touchpadVisible && !motionVisible && !rumbleVisible)
     }
@@ -248,20 +251,20 @@ class SetupConfigureActivity : AppCompatActivity() {
         val motionOn = state.motionAvailable && state.draft?.motionOn == true
         val touchpadMode = state.draft?.touchpadMode ?: TouchpadModeValue.OFF
         val touchpadOn = state.touchpadAvailable && touchpadMode != TouchpadModeValue.OFF
-        // A chosen host always sends rumble back; the phone vibrates as a fallback
-        // even when the input has no motor (e.g. the on-screen pad).
-        val rumbleOn = state.hostChosen
+        val mouseMode = touchpadOn && touchpadMode == TouchpadModeValue.MOUSE
+        val padMode = touchpadOn && touchpadMode == TouchpadModeValue.DS4
+        // Rumble flows back from a chosen host while the toggle is on; the phone
+        // vibrates as a fallback even with no controller motor.
+        val rumbleOn = state.hostChosen && state.draft?.rumbleOn == true
+
         val gamepad = ReviewFlow(R.drawable.ic_gamepad, R.string.setup_cfg_flow_controller)
         val motion = ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro)
         val rumble = ReviewFlow(R.drawable.ic_rumble, R.string.binding_func_rumble)
-        val pointer =
-            if (touchpadMode == TouchpadModeValue.MOUSE) {
-                ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse)
-            } else {
-                ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad)
-            }
+        val mouse = ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse)
+        val touchpad = ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad)
 
         val nodes = mutableListOf<ReviewNode>()
+        // Source: the controller (a physical pad or the on-screen gamepad).
         nodes +=
             ReviewNode(
                 kind = R.string.binding_label_input,
@@ -275,6 +278,7 @@ class SetupConfigureActivity : AppCompatActivity() {
                     },
                 gets = if (rumbleOn) listOf(rumble) else emptyList(),
             )
+        // Source: the phone's screen, only when the touchpad is on.
         if (touchpadOn) {
             nodes +=
                 ReviewNode(
@@ -282,25 +286,48 @@ class SetupConfigureActivity : AppCompatActivity() {
                     icon = R.drawable.ic_gamepad_virtual,
                     name = getString(R.string.setup_cfg_screen_name),
                     sublabel = getString(R.string.setup_cfg_screen_sublabel),
-                    sends = listOf(pointer),
+                    sends = listOf(if (mouseMode) mouse else touchpad),
                     gets = emptyList(),
                 )
         }
-        val bt = state.isBluetoothHost
-        nodes +=
-            ReviewNode(
-                kind = R.string.binding_label_destination,
-                icon = if (bt) R.drawable.ic_bluetooth else R.drawable.ic_satellite,
-                name = state.selectedHost?.label.orEmpty(),
-                sublabel = getString(if (bt) R.string.setup_cfg_dest_bluetooth else R.string.setup_cfg_dest_satellite),
-                sends = if (rumbleOn) listOf(rumble) else emptyList(),
-                gets =
-                    buildList {
-                        add(gamepad)
-                        if (motionOn) add(motion)
-                        if (touchpadOn) add(pointer)
-                    },
-            )
+        if (state.isBluetoothHost) {
+            // Bluetooth host: the phone is the pad, so there is one destination.
+            nodes +=
+                ReviewNode(
+                    kind = R.string.binding_label_destination,
+                    icon = R.drawable.ic_bluetooth,
+                    name = state.selectedHost?.label.orEmpty(),
+                    sublabel = getString(R.string.setup_cfg_dest_bluetooth),
+                    sends = if (rumbleOn) listOf(rumble) else emptyList(),
+                    gets = listOf(gamepad),
+                )
+        } else {
+            // Satellite injects the mouse itself; the virtual pad it creates carries
+            // the gamepad, motion, DS4 touchpad, and the rumble it sends back.
+            nodes +=
+                ReviewNode(
+                    kind = R.string.binding_label_destination,
+                    icon = R.drawable.ic_satellite,
+                    name = state.selectedHost?.label.orEmpty(),
+                    sublabel = getString(R.string.setup_cfg_dest_satellite),
+                    sends = emptyList(),
+                    gets = if (mouseMode) listOf(mouse) else emptyList(),
+                )
+            nodes +=
+                ReviewNode(
+                    kind = R.string.binding_label_destination,
+                    icon = R.drawable.ic_gamepad,
+                    name = viewModel.typeLabel(state.draft?.type ?: CONTROLLER_TYPE_XBOX),
+                    sublabel = getString(R.string.setup_cfg_virtual_sublabel),
+                    sends = if (rumbleOn) listOf(rumble) else emptyList(),
+                    gets =
+                        buildList {
+                            add(gamepad)
+                            if (motionOn) add(motion)
+                            if (padMode) add(touchpad)
+                        },
+                )
+        }
         return nodes
     }
 

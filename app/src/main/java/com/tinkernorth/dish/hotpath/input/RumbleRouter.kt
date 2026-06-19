@@ -14,6 +14,7 @@ import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.store.RumbleEnabledStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -46,6 +47,7 @@ class RumbleRouter
         private val satellite: SatelliteConnectionManager,
         private val native: PhysicalInputNative,
         private val scope: CoroutineScope,
+        private val rumbleEnabled: RumbleEnabledStore,
     ) {
         // A claimed USB pad has no oneshot duration, so a dropped session could leave it buzzing;
         // each rumble schedules a stop at the clamped duration, cancelled by the next rumble.
@@ -75,6 +77,8 @@ class RumbleRouter
         ) {
             val target = resolveTarget(sessionHandle, controllerIndex)
             if (target is RumbleTarget.None) return
+            // The user can switch rumble off per slot; suppress delivery when so.
+            if (!rumbleEnabled.isEnabled(slotIdOf(target))) return
             if (isRumbleStop(strongMagnitude, weakMagnitude, durationMs)) {
                 cancel(target)
                 return
@@ -99,6 +103,14 @@ class RumbleRouter
                 }
             return resolveRumble(snapshot, sessionHandle, controllerIndex)
         }
+
+        private fun slotIdOf(target: RumbleTarget): String =
+            when (target) {
+                RumbleTarget.Phone -> VIRTUAL_SLOT_ID
+                is RumbleTarget.Framework -> target.deviceId.toString()
+                is RumbleTarget.DirectUsb -> target.deviceId.toString()
+                RumbleTarget.None -> ""
+            }
 
         private fun actuate(
             target: RumbleTarget,

@@ -20,6 +20,7 @@ import com.tinkernorth.dish.repository.SatelliteCatalogRepository
 import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.store.MotionEnabledStore
+import com.tinkernorth.dish.source.store.RumbleEnabledStore
 import com.tinkernorth.dish.source.store.TouchpadModeStore
 import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
@@ -84,6 +85,7 @@ data class BindingDraft(
     val directOn: Boolean,
     val motionOn: Boolean,
     val touchpadMode: String,
+    val rumbleOn: Boolean = true,
 )
 
 sealed interface BindingBlocker {
@@ -176,6 +178,7 @@ class ConfigureBindingsViewModel
         private val hub: ConnectionCoordinator,
         private val gamepadRegistry: PhysicalGamepadRegistry,
         private val motionEnabledStore: MotionEnabledStore,
+        private val rumbleEnabledStore: RumbleEnabledStore,
         private val motionCapability: MotionCapabilityComposer,
         private val touchpadModeStore: TouchpadModeStore,
         private val satellite: SatelliteConnectionManager,
@@ -246,6 +249,8 @@ class ConfigureBindingsViewModel
         fun setDirect(on: Boolean) = _ui.update { it.copy(draft = it.draft?.copy(directOn = on)) }
 
         fun setMotion(on: Boolean) = _ui.update { it.copy(draft = it.draft?.copy(motionOn = on)) }
+
+        fun setRumble(on: Boolean) = _ui.update { it.copy(draft = it.draft?.copy(rumbleOn = on)) }
 
         fun setTouchpad(mode: String) = _ui.update { it.copy(draft = it.draft?.copy(touchpadMode = mode)) }
 
@@ -322,6 +327,9 @@ class ConfigureBindingsViewModel
                     // Local gate; its capability bit rides the same descriptor.
                     motionEnabledStore.setEnabled(slotId, draft.motionOn)
                 }
+                // Rumble is a local delivery gate (the phone vibrates as a fallback),
+                // so it applies regardless of the controller's own motor.
+                rumbleEnabledStore.setEnabled(slotId, draft.rumbleOn)
                 val mode = if (TouchpadModeValue.isValid(draft.touchpadMode)) draft.touchpadMode else TouchpadModeValue.OFF
                 if (state.touchpadAvailable) touchpadModeStore.setMode(hostId, mode)
                 val bound = hub.bind(slotId, hostId, draft.type, mode)
@@ -530,6 +538,7 @@ class ConfigureBindingsViewModel
                 type = type,
                 directOn = seedDirectOn(device, desiredUsbPathFor(device)),
                 motionOn = motionEnabledStore.isEnabled(slotId),
+                rumbleOn = rumbleEnabledStore.isEnabled(slotId),
                 touchpadMode = if (TouchpadModeValue.isValid(touchpad)) touchpad else TouchpadModeValue.OFF,
             )
         }
