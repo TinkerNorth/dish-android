@@ -22,7 +22,9 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:fontFamily="monospace"
             android:textColor="@color/colorOnSurface"
+            android:textStyle="bold"
             tools:text="Motion / gyro" />
 
         <TextView
@@ -30,6 +32,7 @@
             style="@style/TextAppearance.Dish.Label"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:letterSpacing="0.06"
             android:textAllCaps="true"
             tools:text="Available" />
     </LinearLayout>
@@ -45,10 +48,10 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:orientation="horizontal"
-            android:gravity="center_vertical">
+            android:gravity="center">
 
             <TextView
-                style="@style/TextAppearance.Dish.Caption"
+                style="@style/TextAppearance.Dish.Label.Plain"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/setup_cap_input" />
@@ -67,10 +70,10 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:orientation="horizontal"
-            android:gravity="center_vertical">
+            android:gravity="center">
 
             <TextView
-                style="@style/TextAppearance.Dish.Caption"
+                style="@style/TextAppearance.Dish.Label.Plain"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/setup_cap_destination" />
@@ -89,10 +92,10 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:orientation="horizontal"
-            android:gravity="center_vertical">
+            android:gravity="center">
 
             <TextView
-                style="@style/TextAppearance.Dish.Caption"
+                style="@style/TextAppearance.Dish.Label.Plain"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/setup_cap_type" />
