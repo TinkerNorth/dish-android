@@ -102,7 +102,6 @@
     <string name="setup_bth_type_lock_note">Locked in for this PC. To change it later you re-pair.</string>
     <string name="setup_bth_advertising_heading">Add it on your PC</string>
     <string name="setup_bth_advertising_type">Set to %1$s controller</string>
-    <string name="setup_bth_advertising_title">Add it on your PC</string>
     <string name="setup_bth_advertising_steps">On the PC open Bluetooth, choose Add a device, and pick \"%1$s\".</string>
     <string name="setup_bth_discoverable_waiting">Waiting for your PC</string>
     <string name="setup_bth_discoverable_on">Discoverable. Pick Dish on your PC.</string>
@@ -130,7 +129,6 @@
     <string name="setup_cfg_review_title">Review and bind</string>
     <string name="setup_cfg_review_subtitle">Check the link, then bind it to your destination.</string>
     <string name="setup_cfg_review_gets">Gets</string>
-    <string name="setup_cfg_review_none">No extras</string>
     <string name="setup_cfg_link_usb_direct">USB / Direct</string>
     <string name="setup_cfg_link_usb_standard">USB / Standard</string>
     <string name="setup_cfg_dest_satellite">Satellite</string>
@@ -149,4 +147,5 @@
     <string name="setup_cfg_flow_controller">Controller</string>
     <string name="setup_cfg_virtual_sublabel">Virtual pad on your PC</string>
     <string name="setup_bth_discoverable_retry">Try again</string>
+    <string name="setup_bth_bind_warn">Paired with %1$s, but the controller wasn\'t connected. Bind it from the dashboard.</string>
 </resources>

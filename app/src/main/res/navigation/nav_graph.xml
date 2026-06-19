@@ -69,7 +69,6 @@
             app:argType="string" />
     </activity>
 
-    <!-- ═══ GUIDED SETUP FLOW ═════════════════════════════════════════ -->
     <activity
         android:id="@+id/setupInputActivity"
         android:name="com.tinkernorth.dish.ui.setup.SetupInputActivity"

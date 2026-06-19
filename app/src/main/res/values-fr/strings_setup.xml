@@ -101,7 +101,6 @@
     <string name="setup_bth_type_lock_note">Verrouillé pour ce PC. Pour le changer plus tard, vous réappairez.</string>
     <string name="setup_bth_advertising_heading">Ajoutez-le sur votre PC</string>
     <string name="setup_bth_advertising_type">Réglé sur manette %1$s</string>
-    <string name="setup_bth_advertising_title">Ajoutez-le sur votre PC</string>
     <string name="setup_bth_advertising_steps">Sur le PC, ouvrez le Bluetooth, choisissez Ajouter un appareil, et sélectionnez « %1$s ».</string>
     <string name="setup_bth_discoverable_waiting">En attente de votre PC</string>
     <string name="setup_bth_discoverable_on">Visible. Choisissez Dish sur votre PC.</string>
@@ -129,7 +128,6 @@
     <string name="setup_cfg_review_title">Vérifier et lier</string>
     <string name="setup_cfg_review_subtitle">Vérifiez la liaison, puis liez-la à votre destination.</string>
     <string name="setup_cfg_review_gets">Obtient</string>
-    <string name="setup_cfg_review_none">Aucun extra</string>
     <string name="setup_cfg_link_usb_direct">USB / Direct</string>
     <string name="setup_cfg_link_usb_standard">USB / Standard</string>
     <string name="setup_cfg_dest_satellite">Satellite</string>
@@ -148,4 +146,5 @@
     <string name="setup_cfg_flow_controller">Manette</string>
     <string name="setup_cfg_virtual_sublabel">Manette virtuelle sur votre PC</string>
     <string name="setup_bth_discoverable_retry">Réessayer</string>
+    <string name="setup_bth_bind_warn">Associé à %1$s, mais la manette n\'était pas connectée. Liez-la depuis le tableau de bord.</string>
 </resources>

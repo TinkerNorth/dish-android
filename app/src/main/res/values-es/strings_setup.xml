@@ -95,7 +95,6 @@
     <string name="setup_bth_type_lock_note">Fijado para este PC. Para cambiarlo más tarde, vuelve a emparejar.</string>
     <string name="setup_bth_advertising_heading">Añádelo en tu PC</string>
     <string name="setup_bth_advertising_type">Configurado como mando %1$s</string>
-    <string name="setup_bth_advertising_title">Añádelo en tu PC</string>
     <string name="setup_bth_advertising_steps">En el PC abre Bluetooth, elige Añadir un dispositivo, y elige \"%1$s\".</string>
     <string name="setup_bth_discoverable_waiting">Esperando a tu PC</string>
     <string name="setup_bth_discoverable_on">Visible. Elige Dish en tu PC.</string>
@@ -121,7 +120,6 @@
     <string name="setup_cfg_review_title">Revisar y vincular</string>
     <string name="setup_cfg_review_subtitle">Comprueba el vínculo, luego vincúlalo a tu destino.</string>
     <string name="setup_cfg_review_gets">Obtiene</string>
-    <string name="setup_cfg_review_none">Sin extras</string>
     <string name="setup_cfg_link_usb_direct">USB / Directo</string>
     <string name="setup_cfg_link_usb_standard">USB / Estándar</string>
     <string name="setup_cfg_dest_satellite">Satellite</string>
@@ -139,4 +137,5 @@
     <string name="setup_cfg_flow_controller">Mando</string>
     <string name="setup_cfg_virtual_sublabel">Mando virtual en tu PC</string>
     <string name="setup_bth_discoverable_retry">Intentar de nuevo</string>
+    <string name="setup_bth_bind_warn">Emparejado con %1$s, pero el mando no estaba conectado. Vincúlalo desde el panel.</string>
 </resources>

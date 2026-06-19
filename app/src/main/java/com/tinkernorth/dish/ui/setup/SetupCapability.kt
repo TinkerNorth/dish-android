@@ -18,22 +18,21 @@ data class SetupCapabilityRow(
 }
 
 object SetupCapability {
-    // Motion and the touchpad only ride a Satellite link (Bluetooth-host has no
-    // channel for them) and both need a PlayStation type on the host. Rumble
-    // rides any connected host and is always deliverable: the phone vibrates as a
-    // universal fallback, so even an input with no motor (the on-screen pad) can
-    // carry it.
+    // All three ride a Satellite link only: a Bluetooth host has no channel back to
+    // the phone (the PC can't drive rumble, motion, or touchpad over the HID role).
+    // Rumble works on any type and any input because the phone vibrates as a
+    // universal fallback; motion and touchpad additionally need a PlayStation type,
+    // and motion needs a gyro.
     fun rows(
         isPlayStation: Boolean,
         destinationIsSatellite: Boolean,
-        hasDestination: Boolean,
         hasGyro: Boolean,
     ): List<SetupCapabilityRow> =
         listOf(
             SetupCapabilityRow(
                 SetupCapabilityKind.RUMBLE,
                 inputOk = true,
-                destinationOk = hasDestination,
+                destinationOk = destinationIsSatellite,
                 typeOk = true,
             ),
             SetupCapabilityRow(

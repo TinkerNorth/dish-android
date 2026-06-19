@@ -83,8 +83,6 @@ class SetupUsbActivity : AppCompatActivity() {
         }
     }
 
-    // Each connected controller is a tappable row; tapping it commits the pick and
-    // advances to the mode step. No Continue button.
     private fun renderControllers(controllers: List<SetupUsbViewModel.Controller>) {
         binding.tvStatus.setText(
             if (controllers.isEmpty()) R.string.setup_usb_status_scanning else R.string.setup_usb_status_detected,

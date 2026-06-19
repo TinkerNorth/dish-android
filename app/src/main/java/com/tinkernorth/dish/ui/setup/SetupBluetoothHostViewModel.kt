@@ -79,6 +79,7 @@ class SetupBluetoothHostViewModel
             data class Done(
                 val hostName: String,
                 val profile: BluetoothGamepad.GamepadProfile,
+                val bound: Boolean,
             ) : Event
         }
 
@@ -202,9 +203,10 @@ class SetupBluetoothHostViewModel
             proceeded = true
             activeConnId = entry.key
             // Bind the chosen input to this host so its state drives the advertised
-            // pad; a Bluetooth host needs no further configuration.
-            hub.bind(slotId, entry.key, typeFor(profile))
-            emitDone(entry.value.connectedName ?: entry.key, profile)
+            // pad; a Bluetooth host needs no further configuration. Binding fails
+            // only if the chosen controller vanished during the bond wait.
+            val bound = hub.bind(slotId, entry.key, typeFor(profile))
+            emitDone(entry.value.connectedName ?: entry.key, profile, bound)
         }
 
         // True for "back was handled in-flow"; the Activity finishes only when
@@ -245,8 +247,9 @@ class SetupBluetoothHostViewModel
         private fun emitDone(
             hostName: String,
             profile: BluetoothGamepad.GamepadProfile,
+            bound: Boolean,
         ) {
-            viewModelScope.launch { _events.emit(Event.Done(hostName, profile)) }
+            viewModelScope.launch { _events.emit(Event.Done(hostName, profile, bound)) }
         }
 
         private fun typeFor(profile: BluetoothGamepad.GamepadProfile): Int =

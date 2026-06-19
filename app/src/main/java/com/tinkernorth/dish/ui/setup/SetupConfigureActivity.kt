@@ -152,8 +152,6 @@ class SetupConfigureActivity : AppCompatActivity() {
         binding.cardTypePlaystation.typeCard.visibility = visibleIf(!locked || selectedType == CONTROLLER_TYPE_PLAYSTATION)
     }
 
-    // Both type cards are plain buttons that commit and advance on tap; there is
-    // no pre-selected/highlighted state.
     private fun bindTypeCard(
         card: SetupTypeCardBinding,
         state: ConfigUiState,
@@ -168,7 +166,6 @@ class SetupConfigureActivity : AppCompatActivity() {
             SetupCapability.rows(
                 isPlayStation = candidateType == CONTROLLER_TYPE_PLAYSTATION,
                 destinationIsSatellite = state.selectedHost?.kind == ConnectionKind.SATELLITE,
-                hasDestination = state.hostChosen,
                 hasGyro = snapshot.hasGyro,
             ),
         )
@@ -203,9 +200,9 @@ class SetupConfigureActivity : AppCompatActivity() {
             binding.swMotion.setOnCheckedChangeListener { _, isChecked -> viewModel.setMotion(isChecked) }
         }
 
-        // Rumble always rides a chosen host (the phone vibrates as a fallback even
-        // with no controller motor), so it isn't gated on the input device.
-        val rumbleVisible = state.hostChosen
+        // Rumble rides a Satellite host only (a Bluetooth host has no return path);
+        // the phone vibrates as a fallback even with no controller motor.
+        val rumbleVisible = state.hostChosen && !state.isBluetoothHost
         binding.rumbleDivider.visibility = visibleIf(rumbleVisible && (motionVisible || touchpadVisible))
         binding.rumbleRow.visibility = visibleIf(rumbleVisible)
         if (rumbleVisible) {
@@ -242,8 +239,6 @@ class SetupConfigureActivity : AppCompatActivity() {
         }
     }
 
-    // Each input and destination is one node showing what it sends (up) and gets
-    // (down) so every signal traces end to end.
     private fun reviewNodes(
         state: ConfigUiState,
         snapshot: BindingSnapshot,
@@ -256,9 +251,9 @@ class SetupConfigureActivity : AppCompatActivity() {
                 touchpadOn = touchpadOn,
                 mouseMode = touchpadOn && touchpadMode == TouchpadModeValue.MOUSE,
                 padMode = touchpadOn && touchpadMode == TouchpadModeValue.DS4,
-                // Rumble flows back from a chosen host while the toggle is on; the
-                // phone vibrates as a fallback even with no controller motor.
-                rumbleOn = state.hostChosen && state.draft?.rumbleOn == true,
+                // Rumble flows back only from a Satellite host (a Bluetooth host has
+                // no return path); the phone vibrates as a fallback with no motor.
+                rumbleOn = state.hostChosen && !state.isBluetoothHost && state.draft?.rumbleOn == true,
             )
         return inputNodes(state, snapshot, model) + destinationNodes(state, model)
     }
@@ -330,7 +325,6 @@ class SetupConfigureActivity : AppCompatActivity() {
         val rumble = ReviewFlow(R.drawable.ic_rumble, R.string.binding_func_rumble)
         val rumbleBack = if (model.rumbleOn) listOf(rumble) else emptyList()
         if (state.isBluetoothHost) {
-            // The phone is the pad, so there is one destination.
             return listOf(
                 ReviewNode(
                     kind = R.string.binding_label_destination,

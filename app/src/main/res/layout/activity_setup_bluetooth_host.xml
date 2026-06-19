@@ -53,7 +53,6 @@
                     android:layout_marginTop="@dimen/spacing_5xl"
                     tools:text="Which PC?" />
 
-                <!-- 5H · pick PC -->
                 <LinearLayout
                     android:id="@+id/groupPickPc"
                     android:layout_width="match_parent"
@@ -79,7 +78,6 @@
                         layout="@layout/setup_choice_row" />
                 </LinearLayout>
 
-                <!-- 5H · Bluetooth permission -->
                 <LinearLayout
                     android:id="@+id/groupPermission"
                     android:layout_width="match_parent"
@@ -167,7 +165,6 @@
                     </LinearLayout>
                 </LinearLayout>
 
-                <!-- 5H · pick controller type (locked for this PC) -->
                 <LinearLayout
                     android:id="@+id/groupPickType"
                     android:layout_width="match_parent"
@@ -216,7 +213,6 @@
                     </LinearLayout>
                 </LinearLayout>
 
-                <!-- 5H · advertising -->
                 <LinearLayout
                     android:id="@+id/groupAdvertising"
                     android:layout_width="match_parent"
@@ -252,18 +248,11 @@
                     </LinearLayout>
 
                     <TextView
-                        style="@style/TextAppearance.Dish.Title"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/spacing_2xl"
-                        android:text="@string/setup_bth_advertising_title" />
-
-                    <TextView
                         android:id="@+id/tvAdvertisingBody"
                         style="@style/TextAppearance.Dish.Body"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/spacing_sm"
+                        android:layout_marginTop="@dimen/spacing_2xl"
                         tools:text="On the PC open Bluetooth, choose Add a device, and pick &quot;Dish Xbox Controller&quot;." />
 
                     <LinearLayout

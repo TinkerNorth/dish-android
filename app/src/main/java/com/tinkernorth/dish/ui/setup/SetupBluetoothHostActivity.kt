@@ -101,7 +101,7 @@ class SetupBluetoothHostActivity : AppCompatActivity() {
                     when (event) {
                         is SetupBluetoothHostViewModel.Event.RequestDiscoverable -> requestDiscoverable()
                         is SetupBluetoothHostViewModel.Event.Done ->
-                            finishToDashboard(event.hostName, getString(typeTitleRes(event.profile)))
+                            finishToDashboard(event.hostName, getString(typeTitleRes(event.profile)), event.bound)
                     }
                 }
             }
@@ -170,7 +170,6 @@ class SetupBluetoothHostActivity : AppCompatActivity() {
             SetupCapability.rows(
                 isPlayStation = false,
                 destinationIsSatellite = false,
-                hasDestination = true,
                 hasGyro = hasGyro,
             ),
         )
@@ -178,7 +177,6 @@ class SetupBluetoothHostActivity : AppCompatActivity() {
             SetupCapability.rows(
                 isPlayStation = true,
                 destinationIsSatellite = false,
-                hasDestination = true,
                 hasGyro = hasGyro,
             ),
         )
@@ -227,16 +225,26 @@ class SetupBluetoothHostActivity : AppCompatActivity() {
     }
 
     // A Bluetooth host needs no Stage 4: the bind already happened on connect, so
-    // post the success toast for the dashboard and finish, like SetupConfigureActivity.
+    // post a toast for the dashboard and finish, like SetupConfigureActivity. If the
+    // controller vanished before the bond, the host paired but nothing is bound yet.
     private fun finishToDashboard(
         hostName: String,
         controllerName: String,
+        bound: Boolean,
     ) {
-        notifications.postDeferred(
-            severity = DishNotification.Severity.SUCCESS,
-            title = getString(R.string.setup_cfg_done_title),
-            body = getString(R.string.setup_cfg_done_body, controllerName, hostName),
-        )
+        if (bound) {
+            notifications.postDeferred(
+                severity = DishNotification.Severity.SUCCESS,
+                title = getString(R.string.setup_cfg_done_title),
+                body = getString(R.string.setup_cfg_done_body, controllerName, hostName),
+            )
+        } else {
+            notifications.postDeferred(
+                severity = DishNotification.Severity.WARN,
+                title = getString(R.string.binding_apply_warn_title),
+                body = getString(R.string.setup_bth_bind_warn, hostName),
+            )
+        }
         onboarding.markWelcomeCompleted()
         startActivity(
             Intent(this, MainActivity::class.java)

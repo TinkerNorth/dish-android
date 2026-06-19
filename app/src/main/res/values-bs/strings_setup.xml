@@ -95,7 +95,6 @@
     <string name="setup_bth_type_lock_note">Fiksirano za ovaj PC. Da to kasnije promijenite, ponovo uparujete.</string>
     <string name="setup_bth_advertising_heading">Dodajte ga na svom PC-u</string>
     <string name="setup_bth_advertising_type">Postavljeno na %1$s kontroler</string>
-    <string name="setup_bth_advertising_title">Dodajte ga na svom PC-u</string>
     <string name="setup_bth_advertising_steps">Na PC-u otvorite Bluetooth, odaberite Dodaj uređaj, i izaberite \"%1$s\".</string>
     <string name="setup_bth_discoverable_waiting">Čekanje vašeg PC-a</string>
     <string name="setup_bth_discoverable_on">Vidljiv. Odaberite Dish na svom PC-u.</string>
@@ -121,7 +120,6 @@
     <string name="setup_cfg_review_title">Pregledaj i poveži</string>
     <string name="setup_cfg_review_subtitle">Provjerite vezu, pa je povežite s odredištem.</string>
     <string name="setup_cfg_review_gets">Dobija</string>
-    <string name="setup_cfg_review_none">Bez dodataka</string>
     <string name="setup_cfg_link_usb_direct">USB / Direct</string>
     <string name="setup_cfg_link_usb_standard">USB / Standard</string>
     <string name="setup_cfg_dest_satellite">Satellite</string>
@@ -139,4 +137,5 @@
     <string name="setup_cfg_flow_controller">Kontroler</string>
     <string name="setup_cfg_virtual_sublabel">Virtuelni pad na vašem PC-u</string>
     <string name="setup_bth_discoverable_retry">Pokušaj ponovo</string>
+    <string name="setup_bth_bind_warn">Uparen s %1$s, ali kontroler nije bio povezan. Poveži ga s nadzorne ploče.</string>
 </resources>

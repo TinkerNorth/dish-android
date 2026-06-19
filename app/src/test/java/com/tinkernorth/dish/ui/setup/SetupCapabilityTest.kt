@@ -11,15 +11,14 @@ class SetupCapabilityTest {
     private fun rows(
         isPlayStation: Boolean,
         destinationIsSatellite: Boolean,
-        hasDestination: Boolean = true,
         hasGyro: Boolean = true,
     ) = SetupCapability
-        .rows(isPlayStation, destinationIsSatellite, hasDestination, hasGyro)
+        .rows(isPlayStation, destinationIsSatellite, hasGyro)
         .associateBy { it.kind }
 
     @Test
     fun `rows are returned in rumble, motion, touchpad order`() {
-        val kinds = SetupCapability.rows(true, true, true, true).map { it.kind }
+        val kinds = SetupCapability.rows(true, true, true).map { it.kind }
         assertEquals(
             listOf(SetupCapabilityKind.RUMBLE, SetupCapabilityKind.MOTION, SetupCapabilityKind.TOUCHPAD),
             kinds,
@@ -53,10 +52,11 @@ class SetupCapabilityTest {
     }
 
     @Test
-    fun `playStation over bluetooth host loses motion and touchpad on the destination axis`() {
-        // Bluetooth-host can't carry motion or the touchpad, even as a PlayStation type.
-        val r = rows(isPlayStation = true, destinationIsSatellite = false, hasDestination = true)
-        assertTrue(r.getValue(SetupCapabilityKind.RUMBLE).available)
+    fun `playStation over bluetooth host loses everything on the destination axis`() {
+        // A Bluetooth host has no channel back to the phone, so it carries neither
+        // rumble nor motion nor the touchpad, even as a PlayStation type.
+        val r = rows(isPlayStation = true, destinationIsSatellite = false)
+        assertFalse(r.getValue(SetupCapabilityKind.RUMBLE).available)
 
         val motion = r.getValue(SetupCapabilityKind.MOTION)
         assertFalse(motion.available)
@@ -77,9 +77,10 @@ class SetupCapabilityTest {
     }
 
     @Test
-    fun `rumble rides any host even when the input has no motor`() {
+    fun `rumble rides a satellite regardless of input motor, but not a bluetooth host`() {
         // The phone vibrates as a universal fallback, so rumble is input-available
-        // regardless of the controller's own motor; it only needs a destination.
+        // regardless of the controller's own motor; it just needs a Satellite link,
+        // since a Bluetooth host has no path back to the phone.
         val onSatellite =
             rows(isPlayStation = false, destinationIsSatellite = true)
                 .getValue(SetupCapabilityKind.RUMBLE)
@@ -87,14 +88,15 @@ class SetupCapabilityTest {
         assertTrue(onSatellite.available)
 
         val onBtHost =
-            rows(isPlayStation = false, destinationIsSatellite = false, hasDestination = true)
+            rows(isPlayStation = false, destinationIsSatellite = false)
                 .getValue(SetupCapabilityKind.RUMBLE)
-        assertTrue(onBtHost.available)
+        assertFalse(onBtHost.available)
+        assertFalse(onBtHost.destinationOk)
     }
 
     @Test
-    fun `with no destination chosen nothing carries`() {
-        val r = rows(isPlayStation = true, destinationIsSatellite = false, hasDestination = false)
+    fun `without a satellite destination nothing carries`() {
+        val r = rows(isPlayStation = true, destinationIsSatellite = false)
         assertFalse(r.getValue(SetupCapabilityKind.RUMBLE).available)
         assertFalse(r.getValue(SetupCapabilityKind.MOTION).available)
         assertFalse(r.getValue(SetupCapabilityKind.TOUCHPAD).available)

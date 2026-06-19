@@ -53,7 +53,6 @@
                     android:layout_marginTop="@dimen/spacing_5xl"
                     tools:text="Plug your controller in" />
 
-                <!-- 2A · connect & select -->
                 <LinearLayout
                     android:id="@+id/groupDetect"
                     android:layout_width="match_parent"
@@ -99,7 +98,6 @@
                         android:orientation="vertical" />
                 </LinearLayout>
 
-                <!-- 2B · mode -->
                 <LinearLayout
                     android:id="@+id/groupMode"
                     android:layout_width="match_parent"
@@ -328,7 +326,6 @@
                     </com.google.android.material.card.MaterialCardView>
                 </LinearLayout>
 
-                <!-- 2D · grant access -->
                 <LinearLayout
                     android:id="@+id/groupGrant"
                     android:layout_width="match_parent"

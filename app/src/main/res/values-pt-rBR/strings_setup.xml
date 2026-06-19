@@ -95,7 +95,6 @@
     <string name="setup_bth_type_lock_note">Fixado para este PC. Para mudar depois, você pareia de novo.</string>
     <string name="setup_bth_advertising_heading">Adicione-o no seu PC</string>
     <string name="setup_bth_advertising_type">Definido como controle %1$s</string>
-    <string name="setup_bth_advertising_title">Adicione-o no seu PC</string>
     <string name="setup_bth_advertising_steps">No PC, abra o Bluetooth, escolha Adicionar um dispositivo e selecione \"%1$s\".</string>
     <string name="setup_bth_discoverable_waiting">Aguardando seu PC</string>
     <string name="setup_bth_discoverable_on">Visível. Escolha o Dish no seu PC.</string>
@@ -121,7 +120,6 @@
     <string name="setup_cfg_review_title">Revisar e vincular</string>
     <string name="setup_cfg_review_subtitle">Confira o vínculo, depois vincule-o ao seu destino.</string>
     <string name="setup_cfg_review_gets">Recebe</string>
-    <string name="setup_cfg_review_none">Sem extras</string>
     <string name="setup_cfg_link_usb_direct">USB / Direct</string>
     <string name="setup_cfg_link_usb_standard">USB / Standard</string>
     <string name="setup_cfg_dest_satellite">Satellite</string>
@@ -139,4 +137,5 @@
     <string name="setup_cfg_flow_controller">Controle</string>
     <string name="setup_cfg_virtual_sublabel">Controle virtual no seu PC</string>
     <string name="setup_bth_discoverable_retry">Tentar novamente</string>
+    <string name="setup_bth_bind_warn">Pareado com %1$s, mas o controle não estava conectado. Vincule-o pelo painel.</string>
 </resources>

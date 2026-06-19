@@ -55,6 +55,7 @@ class SetupBluetoothHostViewModelTest {
         every { permission.state } returns perm
         every { store.rememberedBtFlow } returns remembered
         every { motion.hasGyro } returns true
+        every { hub.bind(any(), any(), any()) } returns true
         vm = SetupBluetoothHostViewModel(registry, permission, store, hub, motion)
     }
 

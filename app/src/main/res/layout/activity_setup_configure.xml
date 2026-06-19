@@ -62,7 +62,6 @@
                     android:layout_marginTop="@dimen/spacing_xs"
                     tools:text="Pick the controller the PC should report." />
 
-                <!-- 4A type + capability table -->
                 <LinearLayout
                     android:id="@+id/groupType"
                     android:layout_width="match_parent"
@@ -79,7 +78,6 @@
                         layout="@layout/setup_type_card" />
                 </LinearLayout>
 
-                <!-- 4B feel -->
                 <LinearLayout
                     android:id="@+id/groupFeel"
                     android:layout_width="match_parent"
@@ -256,7 +254,6 @@
                         tools:visibility="visible" />
                 </LinearLayout>
 
-                <!-- 4C review and bind: one card per source and destination -->
                 <LinearLayout
                     android:id="@+id/groupReview"
                     android:layout_width="match_parent"

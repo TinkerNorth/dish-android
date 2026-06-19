@@ -11,6 +11,7 @@ import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.satelliteLinkState
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.source.connection.ConnectIntent
+import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -182,12 +183,10 @@ class SetupConnectionViewModel
             }
         }
 
-        private fun onConnectionEvent(event: com.tinkernorth.dish.source.connection.ConnectionEvent) {
+        private fun onConnectionEvent(event: ConnectionEvent) {
             when (event) {
-                is com.tinkernorth.dish.source.connection.ConnectionEvent.PairingRequired ->
-                    emit(Event.ShowPairing(event.server))
-                is com.tinkernorth.dish.source.connection.ConnectionEvent.Error ->
-                    emit(Event.Error(event.message))
+                is ConnectionEvent.PairingRequired -> emit(Event.ShowPairing(event.server))
+                is ConnectionEvent.Error -> emit(Event.Error(event.message))
             }
         }
 

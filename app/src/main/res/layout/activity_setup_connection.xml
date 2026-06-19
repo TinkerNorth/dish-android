@@ -53,7 +53,6 @@
                     android:layout_marginTop="@dimen/spacing_5xl"
                     tools:text="How does input reach your PC?" />
 
-                <!-- 3A · path choice -->
                 <LinearLayout
                     android:id="@+id/groupPath"
                     android:layout_width="match_parent"
@@ -76,7 +75,6 @@
                         layout="@layout/setup_choice_row" />
                 </LinearLayout>
 
-                <!-- 3B · find / scan / reconnect -->
                 <LinearLayout
                     android:id="@+id/groupSatellite"
                     android:layout_width="match_parent"

@@ -91,7 +91,6 @@ class SetupBluetoothControllerActivity : AppCompatActivity() {
         if (!state.permissionMissing) renderControllers(state.controllers)
     }
 
-    // Only connected controllers are listed; tapping one commits it and advances.
     private fun renderControllers(controllers: List<SetupBluetoothControllerViewModel.Controller>) {
         binding.tvPairedEmpty.visibility = visibleIf(controllers.isEmpty())
         val container = binding.pairedList

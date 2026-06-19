@@ -102,7 +102,6 @@
     <string name="setup_bth_type_lock_note">Für diesen PC festgelegt. Um es später zu ändern, koppelst du neu.</string>
     <string name="setup_bth_advertising_heading">Füge es auf deinem PC hinzu</string>
     <string name="setup_bth_advertising_type">Als %1$s-Controller eingestellt</string>
-    <string name="setup_bth_advertising_title">Füge es auf deinem PC hinzu</string>
     <string name="setup_bth_advertising_steps">Öffne auf dem PC Bluetooth, wähle Gerät hinzufügen und wähle \"%1$s\".</string>
     <string name="setup_bth_discoverable_waiting">Warte auf deinen PC</string>
     <string name="setup_bth_discoverable_on">Sichtbar. Wähle Dish auf deinem PC.</string>
@@ -130,7 +129,6 @@
     <string name="setup_cfg_review_title">Prüfen und zuordnen</string>
     <string name="setup_cfg_review_subtitle">Prüfe die Verbindung und ordne sie dann deinem Ziel zu.</string>
     <string name="setup_cfg_review_gets">Bekommt</string>
-    <string name="setup_cfg_review_none">Keine Extras</string>
     <string name="setup_cfg_link_usb_direct">USB / Direct</string>
     <string name="setup_cfg_link_usb_standard">USB / Standard</string>
     <string name="setup_cfg_dest_satellite">Satellite</string>
@@ -149,4 +147,5 @@
     <string name="setup_cfg_flow_controller">Controller</string>
     <string name="setup_cfg_virtual_sublabel">Virtuelles Pad auf deinem PC</string>
     <string name="setup_bth_discoverable_retry">Erneut versuchen</string>
+    <string name="setup_bth_bind_warn">Mit %1$s gekoppelt, aber der Controller war nicht verbunden. Verbinde ihn im Dashboard.</string>
 </resources>

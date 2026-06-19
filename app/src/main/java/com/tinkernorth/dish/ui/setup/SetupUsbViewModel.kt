@@ -83,8 +83,6 @@ class SetupUsbViewModel
             _state.update { it.copy(controllers = rows) }
         }
 
-        // Tapping a controller is the commit: it selects that pad and advances to
-        // the mode step (there is no separate Continue).
         fun selectController(key: Int) {
             val c = usb.controllers.value[key] ?: return
             activeKey = key
