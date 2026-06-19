@@ -16,12 +16,13 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
-import com.tinkernorth.dish.composer.MotionCapability
-import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.core.input.hidToXusb
+import com.tinkernorth.dish.core.model.Feature
+import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.databinding.ActivityGamepadOverlayBinding
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.sensor.MotionStreamState
@@ -45,7 +46,7 @@ class GamepadOverlayActivity :
     GamepadTouchView.Listener {
     @Inject lateinit var btRegistry: BluetoothGamepadRegistry
 
-    @Inject lateinit var motionCapability: MotionCapabilityComposer
+    @Inject lateinit var capabilityComposer: CapabilityComposer
 
     private lateinit var binding: ActivityGamepadOverlayBinding
 
@@ -89,14 +90,14 @@ class GamepadOverlayActivity :
                 try {
                     combine(
                         hub.connections.map { conns -> conns.firstOrNull { it.id == connectionId } },
-                        motionCapability.state.map {
-                            it[VIRTUAL_SLOT_ID] ?: MotionCapability.Off
+                        capabilityComposer.state.map {
+                            it[VIRTUAL_SLOT_ID] ?: SlotCapabilities.NONE
                         },
                         motionSource.state,
                     ) { summary, capability, sourceState ->
                         OverlayMotionPaint(summary, capability, sourceState)
                     }.distinctUntilChanged().collect { paint ->
-                        applyMotionGate(paint.capability)
+                        applyMotionGate(paint.capability, paint.summary)
                         repaintFrom(paint)
                     }
                 } finally {
@@ -154,7 +155,7 @@ class GamepadOverlayActivity :
      */
     private data class OverlayMotionPaint(
         val summary: ConnectionSummary?,
-        val capability: MotionCapability,
+        val capability: SlotCapabilities,
         val sourceState: MotionStreamState,
     )
 
@@ -163,14 +164,23 @@ class GamepadOverlayActivity :
     private fun currentMotionPaint(): OverlayMotionPaint =
         OverlayMotionPaint(
             summary = hub.summary(connectionId),
-            capability = motionCapability.capabilityFor(VIRTUAL_SLOT_ID),
+            capability = capabilityComposer.capabilityFor(VIRTUAL_SLOT_ID),
             sourceState = motionSource.state.value,
         )
 
     // Start/stop the IMU listener so the sensor never runs while the slot is
-    // ineligible for motion.
-    private fun applyMotionGate(capability: MotionCapability) {
-        val effective = capability.effective
+    // ineligible for motion. Link-liveness is read from the summary, not the
+    // capability model, so a reconnect re-arms the gate.
+    private fun applyMotionGate(
+        capability: SlotCapabilities,
+        summary: ConnectionSummary?,
+    ) {
+        // Motion only carries to a Satellite; a Bluetooth-bound slot must not spin the phone IMU.
+        val effective =
+            capability.inputOk(Feature.MOTION) &&
+                capability.userWants(Feature.MOTION) &&
+                summary?.kind == ConnectionKind.SATELLITE &&
+                summary?.live == LinkState.Connected
         if (effective && !motionSource.isStreaming) {
             motionSource.start { sample, deltaUs ->
                 inputRateStore.recordMotionSample(VIRTUAL_SLOT_ID)

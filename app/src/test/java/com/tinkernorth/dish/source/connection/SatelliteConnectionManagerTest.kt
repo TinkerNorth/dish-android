@@ -4,8 +4,7 @@ package com.tinkernorth.dish.source.connection
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.tinkernorth.dish.composer.MotionCapability
-import com.tinkernorth.dish.composer.MotionCapabilityComposer
+import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.core.jni.ControllerRepository
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.net.DiscoveryGateway
@@ -90,10 +89,14 @@ class SatelliteConnectionManagerTest {
         every { controllerRepo.isConnectionAlive(any()) } returns true
     }
 
-    private val motionCapabilityProvider =
-        javax.inject.Provider<MotionCapabilityComposer> {
+    private val capabilityProvider =
+        javax.inject.Provider<CapabilityComposer> {
             mockk(relaxed = true) {
-                every { capabilityFor(any()) } returns MotionCapability.Off
+                every { state } returns
+                    kotlinx.coroutines.flow.MutableStateFlow(
+                        emptyMap<String, com.tinkernorth.dish.core.model.SlotCapabilities>(),
+                    )
+                every { motionWireBit(any()) } returns 0
             }
         }
 
@@ -108,7 +111,7 @@ class SatelliteConnectionManagerTest {
             store = store,
             json = json,
             ioDispatcher = ioDispatcher,
-            motionCapabilityProvider = motionCapabilityProvider,
+            capabilityProvider = capabilityProvider,
             motionBackendStatusStore = motionBackendStatusStore,
         )
 

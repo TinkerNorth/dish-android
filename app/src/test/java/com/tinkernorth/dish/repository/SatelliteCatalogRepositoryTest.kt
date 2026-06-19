@@ -90,4 +90,60 @@ class SatelliteCatalogRepositoryTest {
             assertNull(repo.catalogFor(server, "sat-1"))
             assertNull(repo.cached("sat-1"))
         }
+
+    private val catalogWithMouseHost =
+        """{"locale":"en","protocolVersion":1,"serverVersion":"1.6.0","controllerTypes":""" +
+            """[{"id":0,"slug":"xbox360","name":"Xbox 360 Controller"}],""" +
+            """"hostFeatures":{"mouseControl":{"supported":true}}}"""
+
+    @Test
+    fun `a 200 publishes parsed host features`() =
+        runTest {
+            stubGateway()
+            replies += HttpReply(200, catalogWithMouseHost, null)
+
+            repo.catalogFor(server, "sat-1")
+
+            assertEquals(true, hostFeaturesStore.featuresFor("sat-1")?.mouseControl)
+            assertEquals(true, hostFeaturesStore.featuresFor("sat-1")?.hasCatalog)
+        }
+
+    @Test
+    fun `a 304 re-publishes from cache`() =
+        runTest {
+            stubGateway()
+            replies += HttpReply(200, catalogWithMouseHost, "\"v\"")
+            replies += HttpReply(304, "", null)
+
+            repo.catalogFor(server, "sat-1")
+            // Drop the published features so the 304 path has to re-publish from the cached catalog.
+            hostFeaturesStore.clearConnection("sat-1")
+
+            repo.catalogFor(server, "sat-1")
+
+            assertEquals(true, hostFeaturesStore.featuresFor("sat-1")?.mouseControl)
+            assertEquals("\"v\"", receivedEtags[1]) // conditional GET carried the cached ETag
+        }
+
+    @Test
+    fun `a transport failure does not publish`() =
+        runTest {
+            coEvery { gateway.catalog(any(), any(), any(), anyNullable(), any()) } throws
+                RuntimeException("ECONNREFUSED")
+
+            repo.catalogFor(server, "sat-1")
+
+            assertNull(hostFeaturesStore.featuresFor("sat-1"))
+        }
+
+    @Test
+    fun `a malformed 200 body does not publish`() =
+        runTest {
+            stubGateway()
+            replies += HttpReply(200, "not json", null)
+
+            repo.catalogFor(server, "sat-1")
+
+            assertNull(hostFeaturesStore.featuresFor("sat-1"))
+        }
 }

@@ -13,7 +13,6 @@ import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
-import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
@@ -182,7 +181,6 @@ class ConfigureBindingsViewModel
         private val gamepadRegistry: PhysicalGamepadRegistry,
         private val motionEnabledStore: MotionEnabledStore,
         private val rumbleEnabledStore: RumbleEnabledStore,
-        private val motionCapability: MotionCapabilityComposer,
         private val capabilityComposer: CapabilityComposer,
         private val touchpadModeStore: TouchpadModeStore,
         private val satellite: SatelliteConnectionManager,
@@ -536,7 +534,7 @@ class ConfigureBindingsViewModel
                     directCapable = false,
                     directVerified = false,
                     hasRumble = false,
-                    hasGyro = motionCapability.capabilityFor(slotId).hasGyro,
+                    hasGyro = capabilityComposer.capabilityFor(slotId).inputOk(Feature.MOTION),
                     hasTouchpad = true,
                     bound = bound,
                     directPollHz = 0,

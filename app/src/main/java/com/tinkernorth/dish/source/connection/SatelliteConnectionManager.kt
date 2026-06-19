@@ -4,7 +4,8 @@ package com.tinkernorth.dish.source.connection
 
 import android.content.Context
 import androidx.core.content.edit
-import com.tinkernorth.dish.composer.MotionCapabilityComposer
+import com.tinkernorth.dish.composer.CapabilityComposer
+import com.tinkernorth.dish.composer.CapabilityResolver
 import com.tinkernorth.dish.core.jni.ControllerRepository
 import com.tinkernorth.dish.core.model.ControllerPutResponse
 import com.tinkernorth.dish.core.model.DiscoveredServer
@@ -85,7 +86,7 @@ class SatelliteConnectionManager
         private val json: Json,
         @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
         // Provider (not direct injection) breaks the Hilt cycle: composer → hub → this manager.
-        private val motionCapabilityProvider: Provider<MotionCapabilityComposer>,
+        private val capabilityProvider: Provider<CapabilityComposer>,
         private val motionBackendStatusStore: SatelliteMotionBackendStatusStore,
     ) {
         private val _connections = MutableStateFlow<Map<String, SatelliteConnection>>(emptyMap())
@@ -129,12 +130,13 @@ class SatelliteConnectionManager
         private val reconcileInFlight = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
 
         init {
-            // Project to cap-bits-by-slot so unrelated composer emissions don't fire no-op wire updates.
+            // Project to wire-caps-by-slot so unrelated composer emissions (host/type/runtime
+            // changes that don't move the descriptor) don't fire no-op wire updates.
             scope.launch {
-                motionCapabilityProvider
+                capabilityProvider
                     .get()
                     .state
-                    .map { caps -> caps.mapValues { (_, mc) -> mc.toCapBits() } }
+                    .map { caps -> caps.mapValues { (_, slot) -> CapabilityResolver.wireCaps(slot) } }
                     .distinctUntilChanged()
                     .collect {
                         _connections.value.values.forEach { conn ->
@@ -176,7 +178,7 @@ class SatelliteConnectionManager
                 controllerRepo,
                 ioDispatcher = ioDispatcher,
                 motionCapsBitsFor = { slotId ->
-                    motionCapabilityProvider.get().capabilityFor(slotId).toCapBits()
+                    capabilityProvider.get().motionWireBit(slotId)
                 },
                 motionBackendStatusStore = motionBackendStatusStore,
                 onSlotChanged = { slotId -> scope.launch(ioDispatcher) { syncSlot(id, slotId) } },

@@ -7,6 +7,7 @@ import com.tinkernorth.dish.core.model.CatalogFeatureDto
 import com.tinkernorth.dish.core.model.CatalogTypeDto
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.net.ControllerDescriptor
 import com.tinkernorth.dish.repository.TouchpadModeValue
 
 // Reducer: pure layer math. The composer reads live state once and hands the four layers in here.
@@ -51,6 +52,19 @@ object CapabilityResolver {
         feature: Feature,
         dto: CatalogFeatureDto,
     ): Boolean = feature != Feature.TOUCHPAD || dto.modes.isEmpty() || TouchpadModeValue.DS4 in dto.modes
+
+    // The wire describes the EMULATED pad the satellite must plug: a type-driven base
+    // (analog triggers + rumble, always) plus motion gated on the phone/controller gyro
+    // and the user toggle. This is a DIFFERENT projection from `available`: the descriptor
+    // must keep advertising motion across a link drop (recovery without re-handshake) and
+    // never carries CAP_LIGHTBAR (Android has no controller-LED sink).
+    fun wireCaps(slot: SlotCapabilities): Int {
+        var caps = ControllerDescriptor.CAP_ANALOG_TRIGGERS or ControllerDescriptor.CAP_RUMBLE
+        if (Feature.MOTION in slot.controller && Feature.MOTION in slot.userEnabled) {
+            caps = caps or ControllerDescriptor.CAP_MOTION
+        }
+        return caps
+    }
 
     fun userEnabledCapabilities(
         motionOn: Boolean,

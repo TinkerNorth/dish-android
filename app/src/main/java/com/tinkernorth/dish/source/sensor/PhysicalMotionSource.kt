@@ -12,10 +12,11 @@ import android.util.Log
 import android.view.InputDevice
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
+import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionCoordinator
-import com.tinkernorth.dish.composer.MotionCapability
-import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.composer.PhysicalReachability
+import com.tinkernorth.dish.core.model.Feature
+import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
@@ -35,7 +36,7 @@ class PhysicalMotionSource
         private val registry: PhysicalGamepadRegistry,
         private val hub: ConnectionCoordinator,
         private val satellite: SatelliteConnectionManager,
-        private val motionCapability: MotionCapabilityComposer,
+        private val capabilityComposer: CapabilityComposer,
         private val scope: CoroutineScope,
         private val inputRateStore: InputRateStore,
     ) : DefaultLifecycleObserver {
@@ -154,7 +155,7 @@ class PhysicalMotionSource
                         hub.bindings,
                         hub.connections,
                         satellite.connections,
-                    ).combine(motionCapability.state, ::filterByCapability)
+                    ).combine(capabilityComposer.state, ::filterByCapability)
                     .onEach(::onReachableChanged)
                     .launchIn(scope)
         }
@@ -216,11 +217,11 @@ class PhysicalMotionSource
 
             internal fun filterByCapability(
                 reachable: Map<String, com.tinkernorth.dish.source.connection.SatelliteConnection>,
-                caps: Map<String, MotionCapability>,
+                caps: Map<String, SlotCapabilities>,
             ): Map<String, com.tinkernorth.dish.source.connection.SatelliteConnection> =
                 reachable.filterKeys { slotId ->
                     val cap = caps[slotId] ?: return@filterKeys false
-                    cap.hasGyro && cap.userEnabled
+                    cap.inputOk(Feature.MOTION) && cap.userWants(Feature.MOTION)
                 }
 
             // Identity axis remap: controller IMU body frame already matches wire convention.

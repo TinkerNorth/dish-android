@@ -8,7 +8,8 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
-import com.tinkernorth.dish.composer.MotionCapability
+import com.tinkernorth.dish.core.model.Feature
+import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.source.sensor.MotionStreamState
 
 enum class MotionIndicatorState(
@@ -67,7 +68,7 @@ enum class MotionIndicatorState(
  */
 fun motionIndicatorFor(
     summary: ConnectionSummary?,
-    capability: MotionCapability,
+    capability: SlotCapabilities,
     source: MotionStreamState,
 ): MotionIndicatorState {
     // A null summary (connection not resolved yet) is treated as motion-capable but
@@ -80,14 +81,17 @@ fun motionIndicatorFor(
         source == MotionStreamState.Streaming ||
             source == MotionStreamState.Stalled
     val isStalled = source == MotionStreamState.Stalled
+    // runtimeDown carries MOTION only when the satellite reported its backend down; map that
+    // back to the false/null the indicator's backend branch expects (null = no observation).
+    val satelliteBackendOk = if (Feature.MOTION in capability.runtimeDown) false else null
     return MotionIndicatorState.of(
         isAvailable = isAvailable,
         isStreaming = isStreaming,
         connectionCarriesMotion = carriesMotion,
         connectionConnected = connected,
-        userEnabled = capability.userEnabled,
-        hostHasSinkForType = capability.hostHasSinkForType,
-        satelliteBackendOk = capability.satelliteBackendStatus?.backendOk,
+        userEnabled = capability.userWants(Feature.MOTION),
+        hostHasSinkForType = capability.typeOk(Feature.MOTION),
+        satelliteBackendOk = satelliteBackendOk,
         isStalled = isStalled,
     )
 }

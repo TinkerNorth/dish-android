@@ -67,6 +67,9 @@ data class SlotCapabilities(
 
     fun isEnabled(feature: Feature): Boolean = feature in enabled
 
+    // The motion indicator needs the raw user toggle, independent of availability.
+    fun userWants(feature: Feature): Boolean = feature in userEnabled
+
     // Column helpers: the report table breaks "available" into its limiting layers per feature.
     fun inputOk(feature: Feature): Boolean = feature in controller
 

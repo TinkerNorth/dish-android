@@ -8,6 +8,7 @@ import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.HostFeatureSet
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.net.ControllerDescriptor
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.repository.SatelliteCatalogRepository
 import com.tinkernorth.dish.repository.TouchpadModeValue
@@ -123,6 +124,19 @@ class CapabilityComposer
         // incrementally. Draft-editing screens that preview an unsaved type/host use
         // capabilityForCandidate, since the bound state does not reflect the draft.
         fun capabilityFor(slotId: String): SlotCapabilities = state.value[slotId] ?: SlotCapabilities.NONE
+
+        /**
+         * The CAP_MOTION bit the satellite descriptor carries for [slotId]: motion gated on the
+         * input gyro and the user toggle, NOT on link-liveness (a reconnect must recover motion
+         * without a re-handshake). This is the per-connection lambda value SatelliteConnection ORs
+         * onto BASE_CAPABILITIES; it is a different projection from the `available`/`live` views.
+         */
+        fun motionWireBit(slotId: String): Int =
+            if (capabilityFor(slotId).let { Feature.MOTION in it.controller && Feature.MOTION in it.userEnabled }) {
+                ControllerDescriptor.CAP_MOTION
+            } else {
+                0
+            }
 
         /**
          * Inherent availability for [slotId] against a hypothetical host, ignoring the current binding.

@@ -310,7 +310,9 @@ answers "what if the type/host were X" for the draft-editing setup and configure
 screens. The setup type-card table renders through the `CapabilityRows` mapper.
 
 The wire caps the satellite is told (`ControllerDescriptor` via
-`MotionCapabilityComposer.toCapBits`) are a separate concern, NOT derived here.
+`CapabilityResolver.wireCaps` / `CapabilityComposer.motionWireBit`) are a
+separate projection of the same model: a type-driven base plus motion gated on
+the input gyro and the user toggle, NOT on link-liveness or the host sink.
 
 ## Multi-session model
 

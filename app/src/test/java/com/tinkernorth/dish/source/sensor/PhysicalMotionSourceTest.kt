@@ -2,7 +2,9 @@
 
 package com.tinkernorth.dish.source.sensor
 
-import com.tinkernorth.dish.composer.MotionCapability
+import com.tinkernorth.dish.core.model.CapabilitySet
+import com.tinkernorth.dish.core.model.Feature
+import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
@@ -11,6 +13,24 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PhysicalMotionSourceTest {
+    // filterByCapability reads only the controller layer (the input gyro, live OR static-DB) and
+    // userEnabled. gyro -> controller MOTION, userMotion -> userEnabled MOTION; the rest are irrelevant.
+    private fun caps(
+        gyro: Boolean,
+        userMotion: Boolean,
+    ): SlotCapabilities {
+        fun motionSet(present: Boolean) = if (present) CapabilitySet.of(Feature.MOTION) else CapabilitySet.EMPTY
+        val all = CapabilitySet(Feature.entries.toSet())
+        return SlotCapabilities(
+            controller = motionSet(gyro),
+            transport = all,
+            type = all,
+            host = all,
+            userEnabled = motionSet(userMotion),
+            runtimeDown = CapabilitySet.EMPTY,
+        )
+    }
+
     @Test
     fun `zero gyro maps to zero`() {
         val s =
@@ -86,21 +106,21 @@ class PhysicalMotionSourceTest {
     fun `filterByCapability keeps a reachable slot that has gyro AND is user-enabled`() {
         val conn = fakeConn()
         val reachable = mapOf("9" to conn)
-        val caps = mapOf("9" to MotionCapability(hasGyro = true, carriesOnConnection = true, userEnabled = true))
+        val caps = mapOf("9" to caps(gyro = true, userMotion = true))
         assertEquals(reachable, PhysicalMotionSource.filterByCapability(reachable, caps))
     }
 
     @Test
     fun `filterByCapability drops a reachable slot whose pad has NO gyro`() {
         val reachable = mapOf("9" to fakeConn())
-        val caps = mapOf("9" to MotionCapability(hasGyro = false, carriesOnConnection = true, userEnabled = true))
+        val caps = mapOf("9" to caps(gyro = false, userMotion = true))
         assertTrue(PhysicalMotionSource.filterByCapability(reachable, caps).isEmpty())
     }
 
     @Test
     fun `filterByCapability drops a slot the user has toggled motion off for`() {
         val reachable = mapOf("9" to fakeConn())
-        val caps = mapOf("9" to MotionCapability(hasGyro = true, carriesOnConnection = true, userEnabled = false))
+        val caps = mapOf("9" to caps(gyro = true, userMotion = false))
         assertTrue(PhysicalMotionSource.filterByCapability(reachable, caps).isEmpty())
     }
 
@@ -108,8 +128,18 @@ class PhysicalMotionSourceTest {
     fun `filterByCapability drops a reachable slot that is missing from caps`() {
         // Startup race: reachability emits before the capability composer. Treat unknown as no-motion (safe).
         val reachable = mapOf("9" to fakeConn())
-        val caps = emptyMap<String, MotionCapability>()
+        val caps = emptyMap<String, SlotCapabilities>()
         assertTrue(PhysicalMotionSource.filterByCapability(reachable, caps).isEmpty())
+    }
+
+    @Test
+    fun `filterByCapability keeps a static-IMU-DB pad even with no live gyro probe (R3)`() {
+        // device.hasGyro=false but native.modelHasImu=true lands MOTION in the controller layer the
+        // same way a live probe would, so the IMU starts for a known pad once motion is enabled.
+        val conn = fakeConn()
+        val reachable = mapOf("9" to conn)
+        val caps = mapOf("9" to caps(gyro = true, userMotion = true))
+        assertEquals(reachable, PhysicalMotionSource.filterByCapability(reachable, caps))
     }
 
     @Test
@@ -140,8 +170,8 @@ class PhysicalMotionSourceTest {
         val reachable = mapOf("A" to connA, "B" to connB)
         val caps =
             mapOf(
-                "A" to MotionCapability(hasGyro = true, carriesOnConnection = true, userEnabled = true),
-                "B" to MotionCapability(hasGyro = true, carriesOnConnection = true, userEnabled = false),
+                "A" to caps(gyro = true, userMotion = true),
+                "B" to caps(gyro = true, userMotion = false),
             )
         val result = PhysicalMotionSource.filterByCapability(reachable, caps)
         assertEquals(mapOf("A" to connA), result)

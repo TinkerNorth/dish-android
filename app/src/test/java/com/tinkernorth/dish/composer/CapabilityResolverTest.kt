@@ -7,7 +7,10 @@ import com.tinkernorth.dish.core.model.CatalogFeatureDto
 import com.tinkernorth.dish.core.model.CatalogTypeDto
 import com.tinkernorth.dish.core.model.Direction
 import com.tinkernorth.dish.core.model.Feature
+import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.net.ControllerDescriptor
 import com.tinkernorth.dish.repository.TouchpadModeValue
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -185,5 +188,80 @@ class CapabilityResolverTest {
         assertTrue(set.receives().all { it.direction == Direction.RECEIVE })
         assertTrue(Feature.RUMBLE in set.receives())
         assertTrue(Feature.GAMEPAD in set.sends())
+    }
+
+    // ---- wireCaps: the descriptor projection (analog+rumble base, motion gated on input+toggle) ----
+
+    private val analogRumble = ControllerDescriptor.CAP_ANALOG_TRIGGERS or ControllerDescriptor.CAP_RUMBLE
+
+    // wireCaps reads ONLY controller (the input gyro) and userEnabled; type and runtimeDown are set
+    // to the opposite of the motion bit to prove the wire projection ignores them.
+    private fun slot(
+        gyro: Boolean,
+        userMotion: Boolean,
+        typeMotion: Boolean = !gyro,
+        runtimeMotionDown: Boolean = gyro,
+    ): SlotCapabilities {
+        fun motionSet(present: Boolean) = if (present) CapabilitySet.of(Feature.MOTION) else CapabilitySet.EMPTY
+        return SlotCapabilities(
+            controller = motionSet(gyro),
+            transport = CapabilitySet(Feature.entries.toSet()),
+            type = motionSet(typeMotion),
+            host = CapabilitySet(Feature.entries.toSet()),
+            userEnabled = motionSet(userMotion),
+            runtimeDown = motionSet(runtimeMotionDown),
+        )
+    }
+
+    @Test
+    fun `wireCaps is analog+rumble base plus motion only when gyro and userEnabled, independent of type and runtime`() {
+        for (gyro in listOf(true, false)) {
+            for (userMotion in listOf(true, false)) {
+                val expected = if (gyro && userMotion) analogRumble or ControllerDescriptor.CAP_MOTION else analogRumble
+                assertEquals(
+                    "gyro=$gyro userMotion=$userMotion",
+                    expected,
+                    CapabilityResolver.wireCaps(slot(gyro = gyro, userMotion = userMotion)),
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `wireCaps decisive cases - gyro pad with motion on is 0x0007, no-gyro pad is 0x0003`() {
+        // An xbox360-typed (no motion sink) pad with a gyro and motion enabled still advertises CAP_MOTION:
+        // the wire describes the emulated pad's input, not the host's sink.
+        assertEquals(0x0007, CapabilityResolver.wireCaps(slot(gyro = true, userMotion = true, typeMotion = false)))
+        // A ds4-typed (motion sink present) pad with NO gyro carries only analog+rumble.
+        assertEquals(0x0003, CapabilityResolver.wireCaps(slot(gyro = false, userMotion = true, typeMotion = true)))
+    }
+
+    @Test
+    fun `wireCaps never carries CAP_LIGHTBAR`() {
+        for (gyro in listOf(true, false)) {
+            for (userMotion in listOf(true, false)) {
+                val caps = CapabilityResolver.wireCaps(slot(gyro = gyro, userMotion = userMotion))
+                assertEquals(0, caps and ControllerDescriptor.CAP_LIGHTBAR)
+            }
+        }
+    }
+
+    @Test
+    fun `wireCaps carries CAP_MOTION when controller motion comes via the static-DB path`() {
+        // R2 delta: a physical pad whose MOTION rode in through native.modelHasImu (not a live gyro
+        // probe) lands in the controller layer the same way, so the wire advertises CAP_MOTION.
+        val staticDbPad =
+            SlotCapabilities(
+                controller = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION),
+                transport = CapabilitySet(Feature.entries.toSet()),
+                type = CapabilitySet.of(Feature.GAMEPAD),
+                host = CapabilitySet(Feature.entries.toSet()),
+                userEnabled = CapabilitySet.of(Feature.GAMEPAD, Feature.MOTION),
+                runtimeDown = CapabilitySet.EMPTY,
+            )
+        assertEquals(
+            analogRumble or ControllerDescriptor.CAP_MOTION,
+            CapabilityResolver.wireCaps(staticDbPad),
+        )
     }
 }
