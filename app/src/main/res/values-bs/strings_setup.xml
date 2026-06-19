@@ -23,7 +23,6 @@
     <string name="setup_usb_detect_subtitle">U USB port vašeg telefona.</string>
     <string name="setup_usb_status_scanning">Skeniranje</string>
     <string name="setup_usb_status_detected">Pronađen</string>
-    <string name="setup_usb_continue">Nastavi</string>
     <string name="setup_usb_mode_title">Kako Dish treba da ga čita?</string>
     <string name="setup_usb_supported">Vaš kontroler podržava Direct</string>
     <string name="setup_usb_unverified_title">Neprovjeren kontroler</string>
@@ -45,7 +44,6 @@
     <string name="setup_btc_toolbar">Postavi Dish</string>
     <string name="setup_btc_title">Uparite ili odaberite kontroler</string>
     <string name="setup_btc_subtitle">Uparite novi, ili dodirnite kontroler već uparen s ovim telefonom.</string>
-    <string name="setup_btc_continue">Nastavi</string>
     <string name="setup_btc_permission_title">Dozvolite Bluetooth za nastavak</string>
     <string name="setup_btc_permission_body">Dish-u treba pristup Bluetooth-u da pronađe kontrolere. Jedan brz upit od Androida.</string>
     <string name="setup_btc_permission_action">Prikaži mi upit</string>
@@ -55,7 +53,6 @@
     <string name="setup_btc_paired_eyebrow">Na ovom telefonu</string>
     <string name="setup_btc_paired_empty">Još nema uparenih kontrolera. Uparite jedan iznad da nastavite.</string>
     <string name="setup_btc_status_connected">Povezan</string>
-    <string name="setup_btc_status_paired">Uparen, nije povezan</string>
 
     <string name="setup_conn_toolbar">Veza</string>
     <string name="setup_conn_path_title">Kako unos stiže do vašeg PC-a?</string>

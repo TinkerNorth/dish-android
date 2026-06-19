@@ -91,49 +91,12 @@
                             tools:text="Scanning" />
                     </LinearLayout>
 
-                    <com.google.android.material.card.MaterialCardView
-                        android:id="@+id/cardUsbDevice"
-                        style="@style/Widget.Dish.Card"
+                    <LinearLayout
+                        android:id="@+id/usbList"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/spacing_md"
-                        android:visibility="gone"
-                        tools:visibility="visible">
-
-                        <LinearLayout
-                            style="@style/Widget.Dish.Card.RowContainer"
-                            android:gravity="center_vertical">
-
-                            <ImageView
-                                android:layout_width="@dimen/icon_picker_glyph"
-                                android:layout_height="@dimen/icon_picker_glyph"
-                                android:importantForAccessibility="no"
-                                android:src="@drawable/ic_gamepad"
-                                app:tint="@color/colorPrimary" />
-
-                            <LinearLayout
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginStart="@dimen/spacing_2xl"
-                                android:orientation="vertical">
-
-                                <TextView
-                                    android:id="@+id/tvDeviceName"
-                                    style="@style/TextAppearance.Dish.BodyLarge.Bold"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="wrap_content"
-                                    tools:text="Your controller" />
-
-                                <TextView
-                                    android:id="@+id/tvDeviceCode"
-                                    style="@style/TextAppearance.Dish.Caption"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="wrap_content"
-                                    tools:text="045E:0B12" />
-                            </LinearLayout>
-                        </LinearLayout>
-                    </com.google.android.material.card.MaterialCardView>
+                        android:orientation="vertical" />
                 </LinearLayout>
 
                 <!-- 2B · mode -->
@@ -442,18 +405,6 @@
                 android:layout_height="wrap_content"
                 app:icon="@drawable/ic_chevron_left"
                 android:text="@string/setup_action_back" />
-
-            <Space
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnContinue"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:enabled="false"
-                android:text="@string/setup_usb_continue" />
         </LinearLayout>
     </LinearLayout>
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

@@ -27,7 +27,6 @@
     <string name="setup_usb_detect_subtitle">An den USB-Anschluss deines Handys.</string>
     <string name="setup_usb_status_scanning">Suche läuft</string>
     <string name="setup_usb_status_detected">Erkannt</string>
-    <string name="setup_usb_continue">Weiter</string>
     <string name="setup_usb_mode_title">Wie soll Dish ihn lesen?</string>
     <string name="setup_usb_supported">Dein Controller unterstützt Direct</string>
     <string name="setup_usb_unverified_title">Nicht verifizierter Controller</string>
@@ -50,7 +49,6 @@
     <string name="setup_btc_toolbar">Dish einrichten</string>
     <string name="setup_btc_title">Koppele oder wähle einen Controller</string>
     <string name="setup_btc_subtitle">Koppele einen neuen oder tippe auf einen Controller, der bereits mit diesem Handy gekoppelt ist.</string>
-    <string name="setup_btc_continue">Weiter</string>
     <string name="setup_btc_permission_title">Bluetooth erlauben, um fortzufahren</string>
     <string name="setup_btc_permission_body">Dish braucht Bluetooth-Zugriff, um Controller zu finden. Eine kurze Abfrage von Android.</string>
     <string name="setup_btc_permission_action">Zeig mir die Abfrage</string>
@@ -60,7 +58,6 @@
     <string name="setup_btc_paired_eyebrow">Auf diesem Handy</string>
     <string name="setup_btc_paired_empty">Noch keine gekoppelten Controller. Koppele oben einen, um fortzufahren.</string>
     <string name="setup_btc_status_connected">Verbunden</string>
-    <string name="setup_btc_status_paired">Gekoppelt, nicht verbunden</string>
 
     <!-- Schritt 3 - Verbindung (Pfadwahl + Satellite finden/suchen/neu verbinden/koppeln) -->
     <string name="setup_conn_toolbar">Verbindung</string>

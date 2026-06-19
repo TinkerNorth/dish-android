@@ -27,7 +27,6 @@
     <string name="setup_usb_detect_subtitle">Into your phone\'s USB port.</string>
     <string name="setup_usb_status_scanning">Scanning</string>
     <string name="setup_usb_status_detected">Detected</string>
-    <string name="setup_usb_continue">Continue</string>
     <string name="setup_usb_mode_title">How should Dish read it?</string>
     <string name="setup_usb_supported">Your controller supports Direct</string>
     <string name="setup_usb_unverified_title">Unverified controller</string>
@@ -50,7 +49,6 @@
     <string name="setup_btc_toolbar">Set up Dish</string>
     <string name="setup_btc_title">Pair or pick a controller</string>
     <string name="setup_btc_subtitle">Pair a new one, or tap a controller already paired to this phone.</string>
-    <string name="setup_btc_continue">Continue</string>
     <string name="setup_btc_permission_title">Allow Bluetooth to continue</string>
     <string name="setup_btc_permission_body">Dish needs Bluetooth access to find controllers. One quick prompt from Android.</string>
     <string name="setup_btc_permission_action">Show me the prompt</string>
@@ -60,7 +58,6 @@
     <string name="setup_btc_paired_eyebrow">On this phone</string>
     <string name="setup_btc_paired_empty">No paired controllers yet. Pair one above to continue.</string>
     <string name="setup_btc_status_connected">Connected</string>
-    <string name="setup_btc_status_paired">Paired, not connected</string>
 
     <!-- Stage 3 - connection (path choice + Satellite find/scan/reconnect/pair) -->
     <string name="setup_conn_toolbar">Connection</string>

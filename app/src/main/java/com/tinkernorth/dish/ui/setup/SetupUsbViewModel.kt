@@ -24,12 +24,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
-// Stage 2 USB. Drives the existing UsbGamepadManager (the two-FSM path engine):
-// the wizard only records the user's mode pick and waits out the Direct claim /
-// system permission prompt; the manager owns the actual claim. The slot id the
-// later stages bind is the live device id (synthetic on Direct, framework on
-// Standard), resolved after the switch settles so the framework -> synthetic
-// id swap can't strand the binding.
+// Stage 2 USB. Lists the connected USB gamepads (UsbGamepadManager only ever
+// tracks plugged-in, gamepad-shaped devices, so the list is "connected
+// controllers" by construction); tapping one commits it and moves to the mode
+// step. The wizard records the mode pick and waits out the Direct claim / system
+// permission; the manager owns the actual claim. The slot id handed forward is
+// the live device id (synthetic on Direct, framework on Standard), resolved
+// after the switch settles so the framework -> synthetic id swap can't strand it.
 @HiltViewModel
 class SetupUsbViewModel
     @Inject
@@ -39,11 +40,15 @@ class SetupUsbViewModel
     ) : ViewModel() {
         enum class Stage { DETECTING, MODE, GRANTING }
 
+        data class Controller(
+            val key: Int,
+            val name: String,
+            val code: String,
+        )
+
         data class State(
             val stage: Stage = Stage.DETECTING,
-            val present: Boolean = false,
-            val deviceName: String = "",
-            val deviceCode: String = "",
+            val controllers: List<Controller> = emptyList(),
             val verified: Boolean = false,
             val working: Boolean = false,
         )
@@ -68,26 +73,24 @@ class SetupUsbViewModel
         }
 
         private fun onControllers(map: Map<Int, UsbController>) {
-            val c = map.values.firstOrNull()
-            if (c == null) {
+            val rows = map.values.map { Controller(vpk(it), it.name, "%04X:%04X".format(it.vendorId, it.productId)) }
+            // The controller we were configuring was unplugged: drop back to the list.
+            if (activeKey != null && map[activeKey] == null) {
                 activeKey = null
-                // A device pulled mid-flow drops us back to "plug it in".
-                _state.update { State() }
+                _state.value = State(controllers = rows)
                 return
             }
-            activeKey = vpk(c)
-            _state.update {
-                it.copy(
-                    present = true,
-                    deviceName = c.name,
-                    deviceCode = "%04X:%04X".format(c.vendorId, c.productId),
-                    verified = native.isKnownFastLaneModel(c.vendorId, c.productId),
-                )
-            }
+            _state.update { it.copy(controllers = rows) }
         }
 
-        fun continueToMode() {
-            if (_state.value.present) _state.update { it.copy(stage = Stage.MODE) }
+        // Tapping a controller is the commit: it selects that pad and advances to
+        // the mode step (there is no separate Continue).
+        fun selectController(key: Int) {
+            val c = usb.controllers.value[key] ?: return
+            activeKey = key
+            _state.update {
+                it.copy(stage = Stage.MODE, verified = native.isKnownFastLaneModel(c.vendorId, c.productId))
+            }
         }
 
         fun chooseDirect() = _state.update { it.copy(stage = Stage.GRANTING) }
@@ -99,9 +102,9 @@ class SetupUsbViewModel
             emitProceed(slot)
         }
 
-        // Direct shows the Android permission prompt and then claims; wait the
-        // FSM out (same settle predicate the configure screen uses) and proceed
-        // on whatever it lands on, falling back to Standard if Direct is refused.
+        // Direct shows the Android permission prompt and then claims; wait the FSM
+        // out (same settle predicate the configure screen uses) and proceed on
+        // whatever it lands on, falling back to Standard if Direct is refused.
         fun showPrompt() {
             val c = current() ?: return
             val key = vpk(c)
@@ -126,6 +129,7 @@ class SetupUsbViewModel
         fun back(): Boolean =
             when (_state.value.stage) {
                 Stage.MODE -> {
+                    activeKey = null
                     _state.update { it.copy(stage = Stage.DETECTING) }
                     true
                 }

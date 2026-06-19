@@ -2,6 +2,8 @@
 
 package com.tinkernorth.dish.ui.setup
 
+import com.tinkernorth.dish.composer.ConnectionCoordinator
+import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnection
@@ -29,10 +31,12 @@ import org.junit.Test
 class SetupConnectionViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private lateinit var satellite: SatelliteConnectionManager
+    private lateinit var hub: ConnectionCoordinator
     private lateinit var vm: SetupConnectionViewModel
 
     private val discovered = MutableStateFlow<List<DiscoveredServer>>(emptyList())
     private val connections = MutableStateFlow<Map<String, SatelliteConnection>>(emptyMap())
+    private val summaries = MutableStateFlow<List<ConnectionSummary>>(emptyList())
     private val stale = MutableStateFlow<Set<String>>(emptySet())
     private val scanning = MutableStateFlow(false)
     private val events = MutableSharedFlow<ConnectionEvent>(extraBufferCapacity = 8)
@@ -41,12 +45,14 @@ class SetupConnectionViewModelTest {
     fun setUp() {
         Dispatchers.setMain(dispatcher)
         satellite = mockk(relaxed = true)
+        hub = mockk(relaxed = true)
         every { satellite.discoveredServers } returns discovered
         every { satellite.connections } returns connections
         every { satellite.staleSatelliteIds } returns stale
         every { satellite.isScanning } returns scanning
         every { satellite.events } returns events
-        vm = SetupConnectionViewModel(satellite)
+        every { hub.connections } returns summaries
+        vm = SetupConnectionViewModel(satellite, hub)
     }
 
     @After

@@ -6,9 +6,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
-import com.tinkernorth.dish.source.bluetooth.BluetoothConnections
-import com.tinkernorth.dish.source.bluetooth.BluetoothDeviceScanner
-import com.tinkernorth.dish.source.system.BluetoothPermissionState
 import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -23,32 +20,27 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-// Stage 2 Bluetooth controller (design 2C). Unlike the USB branch this wizard
-// owns no claim: pairing happens in the system Bluetooth settings, so the screen
-// only reflects three live signals and proceeds when a BT gamepad actually
-// connects. The signals are the runtime permission gate (BLUETOOTH_CONNECT/SCAN),
-// the bonded-device list from the scanner (the "on this phone" rows), and the
-// PhysicalGamepadRegistry (which BT pad is connected right now). readySlotId is
-// the live framework id of a connected, non-disconnecting BT pad; the later
-// stages bind that id.
+// Stage 2 Bluetooth controller (design 2C). Pairing happens in the system
+// Bluetooth settings, so this screen only gates on the runtime permission and
+// lists the controllers actually CONNECTED right now (read from the gamepad
+// registry, which only carries live input devices). Tapping a controller commits
+// it and advances; not-yet-connected bonded devices are intentionally not shown,
+// since the next stages need a live input slot to bind.
 @HiltViewModel
 class SetupBluetoothControllerViewModel
     @Inject
     constructor(
         private val permission: BluetoothPermissionStateObserver,
-        private val scanner: BluetoothDeviceScanner,
         private val registry: PhysicalGamepadRegistry,
-        private val btConnections: BluetoothConnections,
     ) : ViewModel() {
-        data class PairedRow(
+        data class Controller(
+            val slotId: String,
             val name: String,
-            val connected: Boolean,
         )
 
         data class State(
             val permissionMissing: Boolean = false,
-            val paired: List<PairedRow> = emptyList(),
-            val readySlotId: String? = null,
+            val controllers: List<Controller> = emptyList(),
         )
 
         sealed interface Event {
@@ -65,69 +57,24 @@ class SetupBluetoothControllerViewModel
 
         init {
             permission.refresh()
-            // The bonded list (and the live "Connected" flag on each row) and the connected-pad
-            // signal are derived together so a row's status and the Continue gate never disagree.
-            combine(
-                permission.state,
-                scanner.state,
-                registry.devices,
-            ) { perm, scan, devices ->
-                project(perm, scan, devices.values)
+            combine(permission.state, registry.devices) { perm, devices ->
+                State(
+                    permissionMissing = perm.anyMissing,
+                    controllers =
+                        devices.values
+                            .filter { it.transport == Transport.Bluetooth && !it.isDisconnecting }
+                            .map { Controller(slotId = it.id.toString(), name = it.name) },
+                )
             }.onEach { next -> _state.value = next }.launchIn(viewModelScope)
-
-            startScanForBonded()
         }
 
-        // Re-seed the bonded list whenever the screen returns to foreground or a permission grant
-        // lands; the scanner re-reads adapter.bondedDevices on each start(). canScan stays false:
-        // 2C only needs the already-paired list, not active discovery.
-        fun refresh() {
-            permission.refresh()
-            startScanForBonded()
-        }
+        // The grant happens in the Activity's permission launcher; reflect it on return.
+        fun refresh() = permission.refresh()
 
-        private fun startScanForBonded() {
-            scanner.start(canScan = false)
-        }
+        fun onPermissionResult() = permission.refresh()
 
-        private fun project(
-            perm: BluetoothPermissionState,
-            scan: BluetoothDeviceScanner.State,
-            devices: Collection<PhysicalGamepadRegistry.Device>,
-        ): State {
-            val connectedPad =
-                devices.firstOrNull { it.transport == Transport.Bluetooth && !it.isDisconnecting }
-            val paired =
-                scan.devices
-                    .filter { it.bonded }
-                    .map { device ->
-                        val name = device.name?.takeIf { it.isNotBlank() } ?: device.mac
-                        PairedRow(name = name, connected = btConnections.isConnected(name))
-                    }
-            return State(
-                permissionMissing = perm.anyMissing,
-                paired = paired,
-                readySlotId = connectedPad?.id?.toString(),
-            )
-        }
-
-        // The runtime grant happened in the Activity's permission launcher; reflect it immediately
-        // and re-seed the bonded list rather than waiting for the next foreground.
-        fun onPermissionResult() = refresh()
-
-        fun continueToConnection() {
-            _state.value.readySlotId?.let { emitProceed(it) }
-        }
-
-        // Tapping the connected row is the same commit as Continue.
-        fun onPairedRowTapped(row: PairedRow) {
-            if (row.connected) _state.value.readySlotId?.let { emitProceed(it) }
-        }
-
-        override fun onCleared() {
-            scanner.stop()
-            super.onCleared()
-        }
+        // Tapping a connected controller is the commit: hand its live slot id forward.
+        fun onControllerTapped(controller: Controller) = emitProceed(controller.slotId)
 
         private fun emitProceed(slotId: String) {
             viewModelScope.launch { _events.emit(Event.Proceed(slotId)) }

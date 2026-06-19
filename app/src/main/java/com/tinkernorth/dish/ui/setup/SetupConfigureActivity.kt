@@ -89,8 +89,8 @@ class SetupConfigureActivity : AppCompatActivity() {
         binding.btnBack.setOnClickListener { handleBack() }
         binding.btnContinue.setOnClickListener { advance() }
 
-        binding.cardTypeXbox.typeCard.setOnClickListener { viewModel.setType(CONTROLLER_TYPE_XBOX) }
-        binding.cardTypePlaystation.typeCard.setOnClickListener { viewModel.setType(CONTROLLER_TYPE_PLAYSTATION) }
+        binding.cardTypeXbox.typeCard.setOnClickListener { pickType(CONTROLLER_TYPE_XBOX) }
+        binding.cardTypePlaystation.typeCard.setOnClickListener { pickType(CONTROLLER_TYPE_PLAYSTATION) }
 
         binding.segOff.setOnClickListener { viewModel.setTouchpad(TouchpadModeValue.OFF) }
         binding.segPad.setOnClickListener { viewModel.setTouchpad(TouchpadModeValue.DS4) }
@@ -138,6 +138,9 @@ class SetupConfigureActivity : AppCompatActivity() {
             if (state.isBluetoothHost) R.string.setup_cfg_type_locked_subtitle else R.string.setup_cfg_type_subtitle,
         )
         binding.btnContinue.setText(R.string.setup_cfg_continue)
+        // Tapping a type commits and advances; only the locked Bluetooth-host case,
+        // where the cards aren't tappable, needs the Next button.
+        binding.btnContinue.visibility = visibleIf(state.isBluetoothHost)
 
         val selectedType = state.draft?.type ?: CONTROLLER_TYPE_XBOX
         val locked = state.isBluetoothHost
@@ -182,6 +185,7 @@ class SetupConfigureActivity : AppCompatActivity() {
         binding.tvTitle.setText(R.string.setup_cfg_feel_title)
         binding.tvSubtitle.setText(R.string.setup_cfg_feel_subtitle)
         binding.btnContinue.setText(R.string.setup_cfg_continue)
+        binding.btnContinue.visibility = View.VISIBLE
 
         val touchpadVisible = state.touchpadAvailable
         binding.touchpadRow.visibility = visibleIf(touchpadVisible)
@@ -217,6 +221,7 @@ class SetupConfigureActivity : AppCompatActivity() {
         binding.tvTitle.setText(R.string.setup_cfg_review_title)
         binding.tvSubtitle.setText(R.string.setup_cfg_review_subtitle)
         binding.btnContinue.setText(R.string.setup_cfg_bind)
+        binding.btnContinue.visibility = View.VISIBLE
 
         binding.ivReviewInputIcon.setImageResource(snapshot.link.iconRes())
         binding.tvReviewInputName.text = snapshot.name
@@ -316,6 +321,13 @@ class SetupConfigureActivity : AppCompatActivity() {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
         )
         finish()
+    }
+
+    // Tapping a type commits it and advances; the Bluetooth host's type is fixed
+    // (its cards aren't tappable), so it advances via the Next button instead.
+    private fun pickType(type: Int) {
+        viewModel.setType(type)
+        if (!current.isBluetoothHost) goTo(Step.FEEL)
     }
 
     private fun advance() {

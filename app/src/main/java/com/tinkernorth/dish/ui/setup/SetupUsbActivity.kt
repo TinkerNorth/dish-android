@@ -12,6 +12,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivitySetupUsbBinding
+import com.tinkernorth.dish.databinding.SetupChoiceRowBinding
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
@@ -36,7 +37,6 @@ class SetupUsbActivity : AppCompatActivity() {
         binding.breadcrumb.applyStep(SETUP_STEP_INPUT)
 
         binding.btnBack.setOnClickListener { handleBack() }
-        binding.btnContinue.setOnClickListener { viewModel.continueToMode() }
         binding.cardDirect.setOnClickListener { viewModel.chooseDirect() }
         binding.cardStandard.setOnClickListener { viewModel.chooseStandard() }
         binding.btnGrant.setOnClickListener { viewModel.showPrompt() }
@@ -69,22 +69,36 @@ class SetupUsbActivity : AppCompatActivity() {
         binding.groupDetect.visibility = visibleIf(state.stage == SetupUsbViewModel.Stage.DETECTING)
         binding.groupMode.visibility = visibleIf(state.stage == SetupUsbViewModel.Stage.MODE)
         binding.groupGrant.visibility = visibleIf(state.stage == SetupUsbViewModel.Stage.GRANTING)
-        binding.btnContinue.visibility = visibleIf(state.stage == SetupUsbViewModel.Stage.DETECTING)
 
         when (state.stage) {
             SetupUsbViewModel.Stage.DETECTING -> {
                 binding.tvTitle.setText(R.string.setup_usb_detect_title)
-                binding.cardUsbDevice.visibility = visibleIf(state.present)
-                binding.tvDeviceName.text = state.deviceName
-                binding.tvDeviceCode.text = state.deviceCode
-                binding.tvStatus.setText(if (state.present) R.string.setup_usb_status_detected else R.string.setup_usb_status_scanning)
-                binding.btnContinue.isEnabled = state.present
+                renderControllers(state.controllers)
             }
             SetupUsbViewModel.Stage.MODE -> {
                 binding.tvTitle.setText(R.string.setup_usb_mode_title)
                 renderMode(state.verified)
             }
             SetupUsbViewModel.Stage.GRANTING -> binding.tvTitle.setText(R.string.setup_usb_grant_title)
+        }
+    }
+
+    // Each connected controller is a tappable row; tapping it commits the pick and
+    // advances to the mode step. No Continue button.
+    private fun renderControllers(controllers: List<SetupUsbViewModel.Controller>) {
+        binding.tvStatus.setText(
+            if (controllers.isEmpty()) R.string.setup_usb_status_scanning else R.string.setup_usb_status_detected,
+        )
+        val list = binding.usbList
+        list.removeAllViews()
+        controllers.forEach { controller ->
+            val row = SetupChoiceRowBinding.inflate(layoutInflater, list, false)
+            row.choiceIcon.setImageResource(R.drawable.ic_gamepad)
+            row.choiceTitle.text = controller.name
+            row.choiceBody.text = controller.code
+            row.choiceBadge.visibility = View.GONE
+            row.choiceCard.setOnClickListener { viewModel.selectController(controller.key) }
+            list.addView(row.root)
         }
     }
 

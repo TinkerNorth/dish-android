@@ -26,7 +26,6 @@
     <string name="setup_usb_detect_subtitle">Sur le port USB de votre téléphone.</string>
     <string name="setup_usb_status_scanning">Recherche…</string>
     <string name="setup_usb_status_detected">Détectée</string>
-    <string name="setup_usb_continue">Continuer</string>
     <string name="setup_usb_mode_title">Comment Dish doit-il la lire ?</string>
     <string name="setup_usb_supported">Votre manette prend en charge le mode Direct</string>
     <string name="setup_usb_unverified_title">Manette non vérifiée</string>
@@ -49,7 +48,6 @@
     <string name="setup_btc_toolbar">Configurer Dish</string>
     <string name="setup_btc_title">Appairez ou choisissez une manette</string>
     <string name="setup_btc_subtitle">Appairez-en une nouvelle, ou touchez une manette déjà appairée à ce téléphone.</string>
-    <string name="setup_btc_continue">Continuer</string>
     <string name="setup_btc_permission_title">Autorisez le Bluetooth pour continuer</string>
     <string name="setup_btc_permission_body">Dish a besoin de l\'accès Bluetooth pour trouver des manettes. Une petite invite d\'Android.</string>
     <string name="setup_btc_permission_action">Afficher l\'invite</string>
@@ -59,7 +57,6 @@
     <string name="setup_btc_paired_eyebrow">Sur ce téléphone</string>
     <string name="setup_btc_paired_empty">Aucune manette appairée pour l\'instant. Appairez-en une ci-dessus pour continuer.</string>
     <string name="setup_btc_status_connected">Connectée</string>
-    <string name="setup_btc_status_paired">Appairée, non connectée</string>
 
     <!-- Étape 3 - connexion (choix du chemin + recherche/scan/reconnexion/appairage du Satellite) -->
     <string name="setup_conn_toolbar">Connexion</string>

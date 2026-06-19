@@ -23,7 +23,6 @@
     <string name="setup_usb_detect_subtitle">Al puerto USB de tu teléfono.</string>
     <string name="setup_usb_status_scanning">Buscando</string>
     <string name="setup_usb_status_detected">Detectado</string>
-    <string name="setup_usb_continue">Continuar</string>
     <string name="setup_usb_mode_title">¿Cómo debe leerlo Dish?</string>
     <string name="setup_usb_supported">Tu mando admite el modo Directo</string>
     <string name="setup_usb_unverified_title">Mando no verificado</string>
@@ -45,7 +44,6 @@
     <string name="setup_btc_toolbar">Configurar Dish</string>
     <string name="setup_btc_title">Empareja o elige un mando</string>
     <string name="setup_btc_subtitle">Empareja uno nuevo, o toca un mando ya emparejado con este teléfono.</string>
-    <string name="setup_btc_continue">Continuar</string>
     <string name="setup_btc_permission_title">Permite el Bluetooth para continuar</string>
     <string name="setup_btc_permission_body">Dish necesita acceso a Bluetooth para encontrar mandos. Un aviso rápido de Android.</string>
     <string name="setup_btc_permission_action">Muéstrame el aviso</string>
@@ -55,7 +53,6 @@
     <string name="setup_btc_paired_eyebrow">En este teléfono</string>
     <string name="setup_btc_paired_empty">Aún no hay mandos emparejados. Empareja uno arriba para continuar.</string>
     <string name="setup_btc_status_connected">Conectado</string>
-    <string name="setup_btc_status_paired">Emparejado, sin conectar</string>
 
     <string name="setup_conn_toolbar">Conexión</string>
     <string name="setup_conn_path_title">¿Cómo llega la entrada a tu PC?</string>

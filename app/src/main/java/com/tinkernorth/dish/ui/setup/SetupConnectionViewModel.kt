@@ -4,6 +4,9 @@ package com.tinkernorth.dish.ui.setup
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tinkernorth.dish.composer.ConnectionCoordinator
+import com.tinkernorth.dish.composer.ConnectionKind
+import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.satelliteLinkState
 import com.tinkernorth.dish.core.model.DiscoveredServer
@@ -37,6 +40,7 @@ class SetupConnectionViewModel
     @Inject
     constructor(
         private val satellite: SatelliteConnectionManager,
+        private val hub: ConnectionCoordinator,
     ) : ViewModel() {
         enum class Step { PATH, SATELLITE }
 
@@ -85,12 +89,17 @@ class SetupConnectionViewModel
         private var pendingHostId: String? = null
 
         init {
+            // Live link state must come from the coordinator: it flattens each
+            // session's nested state flow, whereas satellite.connections is a map
+            // whose identity doesn't change when a session goes Connecting -> Live,
+            // so combining on it alone never observes a pairing actually complete.
             combine(
                 satellite.discoveredServers,
+                hub.connections,
                 satellite.connections,
                 satellite.staleSatelliteIds,
-            ) { discovered, conns, stale ->
-                buildHosts(discovered, conns, stale)
+            ) { discovered, summaries, conns, stale ->
+                buildHosts(discovered, summaries, conns, stale)
             }.onEach { hosts -> onHosts(hosts) }.launchIn(viewModelScope)
 
             satellite.isScanning
@@ -184,22 +193,24 @@ class SetupConnectionViewModel
 
         private fun buildHosts(
             discovered: List<DiscoveredServer>,
+            summaries: List<ConnectionSummary>,
             conns: Map<String, SatelliteConnection>,
             stale: Set<String>,
         ): List<Host> {
             val discoveredById = discovered.associateBy { SatelliteConnection.idFor(it) }
-            // Union of on-wire discoveries and live connections so a host the
-            // scan dropped but that's still connecting/connected keeps its row.
-            val ids = discoveredById.keys + conns.keys
+            // The coordinator's summary carries the reactive LinkState; prefer it,
+            // and fall back to a computed state for a freshly discovered host the
+            // coordinator hasn't surfaced yet.
+            val liveById = summaries.filter { it.kind == ConnectionKind.SATELLITE }.associate { it.id to it.live }
+            val ids = discoveredById.keys + liveById.keys + conns.keys
             return ids.mapNotNull { id ->
-                val conn = conns[id]
-                val server = conn?.server?.value ?: discoveredById[id] ?: return@mapNotNull null
+                val server = conns[id]?.server?.value ?: discoveredById[id] ?: return@mapNotNull null
                 Host(
                     id = id,
                     name = server.name,
                     link =
-                        satelliteLinkState(
-                            state = conn?.state?.value,
+                        liveById[id] ?: satelliteLinkState(
+                            state = conns[id]?.state?.value,
                             isStale = id in stale,
                             isDiscovered = id in discoveredById,
                         ),

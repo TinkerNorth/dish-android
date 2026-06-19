@@ -25,12 +25,10 @@ import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
-// Stage 2 Bluetooth controller (design 2C). Pairing lives in the system
-// Bluetooth settings; this screen only gates on the runtime permission, lists
-// the controllers already bonded to the phone, and proceeds once one is actually
-// connected. The ViewModel owns the live signals (see its header); the Activity
-// owns the permission prompt and the jump to settings, mirroring
-// ConnectionsActivity's Bluetooth handling.
+// Stage 2 Bluetooth controller (design 2C). Pairing lives in the system Bluetooth
+// settings; this screen gates on the runtime permission, lists the controllers
+// currently connected, and advances the moment one is tapped. The Activity owns
+// the permission prompt and the jump to settings, mirroring ConnectionsActivity.
 @AndroidEntryPoint
 class SetupBluetoothControllerActivity : AppCompatActivity() {
     private lateinit var binding: ActivitySetupBluetoothControllerBinding
@@ -55,7 +53,6 @@ class SetupBluetoothControllerActivity : AppCompatActivity() {
         binding.breadcrumb.applyStep(SETUP_STEP_INPUT)
 
         binding.btnBack.setOnClickListener { handleBack() }
-        binding.btnContinue.setOnClickListener { viewModel.continueToConnection() }
         binding.btnGrant.setOnClickListener { requestBluetoothPermissions() }
         binding.cardPairNew.setOnClickListener { openBluetoothSettings() }
 
@@ -91,29 +88,20 @@ class SetupBluetoothControllerActivity : AppCompatActivity() {
     private fun render(state: SetupBluetoothControllerViewModel.State) {
         binding.groupPermission.visibility = visibleIf(state.permissionMissing)
         binding.groupPaired.visibility = visibleIf(!state.permissionMissing)
-        binding.btnContinue.isEnabled = state.readySlotId != null
-
-        if (!state.permissionMissing) renderPaired(state.paired)
+        if (!state.permissionMissing) renderControllers(state.controllers)
     }
 
-    private fun renderPaired(paired: List<SetupBluetoothControllerViewModel.PairedRow>) {
-        binding.tvPairedEmpty.visibility = visibleIf(paired.isEmpty())
+    // Only connected controllers are listed; tapping one commits it and advances.
+    private fun renderControllers(controllers: List<SetupBluetoothControllerViewModel.Controller>) {
+        binding.tvPairedEmpty.visibility = visibleIf(controllers.isEmpty())
         val container = binding.pairedList
         container.removeAllViews()
-        for (row in paired) {
+        for (controller in controllers) {
             val rowBinding = SetupBtcPairedRowBinding.inflate(layoutInflater, container, false)
-            rowBinding.pairedName.text = row.name
-            rowBinding.pairedStatus.setText(
-                if (row.connected) {
-                    R.string.setup_btc_status_connected
-                } else {
-                    R.string.setup_btc_status_paired
-                },
-            )
-            rowBinding.pairedStatus.setTextColor(
-                getColor(if (row.connected) R.color.colorSuccess else R.color.colorMuted),
-            )
-            rowBinding.pairedCard.setOnClickListener { viewModel.onPairedRowTapped(row) }
+            rowBinding.pairedName.text = controller.name
+            rowBinding.pairedStatus.setText(R.string.setup_btc_status_connected)
+            rowBinding.pairedStatus.setTextColor(getColor(R.color.colorSuccess))
+            rowBinding.pairedCard.setOnClickListener { viewModel.onControllerTapped(controller) }
             container.addView(rowBinding.root)
         }
     }

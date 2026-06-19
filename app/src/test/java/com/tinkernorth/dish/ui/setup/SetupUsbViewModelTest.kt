@@ -80,46 +80,46 @@ class SetupUsbViewModelTest {
     }
 
     @Test
-    fun `starts in detecting with nothing plugged in`() =
+    fun `starts in detecting with an empty controller list`() =
         runTest(dispatcher) {
             dispatcher.scheduler.runCurrent()
             val s = vm.state.value
             assertEquals(SetupUsbViewModel.Stage.DETECTING, s.stage)
-            assertFalse(s.present)
+            assertTrue(s.controllers.isEmpty())
         }
 
     @Test
-    fun `a detected controller surfaces its name, code, and verified flag`() =
+    fun `a connected controller appears in the list with its name and code`() =
         runTest(dispatcher) {
             present()
             dispatcher.scheduler.runCurrent()
+            val row =
+                vm.state.value.controllers
+                    .single()
+            assertEquals("Your controller", row.name)
+            assertEquals("045E:028E", row.code)
+            assertEquals(key(), row.key)
+        }
+
+    @Test
+    fun `selecting a controller advances to mode and records the verified flag`() =
+        runTest(dispatcher) {
+            present()
+            dispatcher.scheduler.runCurrent()
+            vm.selectController(key())
             val s = vm.state.value
-            assertTrue(s.present)
-            assertEquals("Your controller", s.deviceName)
-            assertEquals("045E:028E", s.deviceCode)
+            assertEquals(SetupUsbViewModel.Stage.MODE, s.stage)
             assertTrue(s.verified)
         }
 
     @Test
-    fun `an unverified controller reports verified false`() =
+    fun `an unverified controller selects as not verified`() =
         runTest(dispatcher) {
             every { native.isKnownFastLaneModel(any(), any()) } returns false
             present()
             dispatcher.scheduler.runCurrent()
+            vm.selectController(key())
             assertFalse(vm.state.value.verified)
-        }
-
-    @Test
-    fun `continue only advances to mode once a controller is present`() =
-        runTest(dispatcher) {
-            vm.continueToMode()
-            dispatcher.scheduler.runCurrent()
-            assertEquals(SetupUsbViewModel.Stage.DETECTING, vm.state.value.stage)
-
-            present()
-            dispatcher.scheduler.runCurrent()
-            vm.continueToMode()
-            assertEquals(SetupUsbViewModel.Stage.MODE, vm.state.value.stage)
         }
 
     @Test
@@ -127,6 +127,7 @@ class SetupUsbViewModelTest {
         runTest(dispatcher) {
             present(frameworkId = 50)
             dispatcher.scheduler.runCurrent()
+            vm.selectController(key())
             val events = collectEvents()
 
             vm.chooseStandard()
@@ -141,6 +142,7 @@ class SetupUsbViewModelTest {
         runTest(dispatcher) {
             present()
             dispatcher.scheduler.runCurrent()
+            vm.selectController(key())
             vm.chooseDirect()
             assertEquals(SetupUsbViewModel.Stage.GRANTING, vm.state.value.stage)
             verify(exactly = 0) { usb.setPathChoice(any(), any(), PathChoice.Direct) }
@@ -151,6 +153,7 @@ class SetupUsbViewModelTest {
         runTest(dispatcher) {
             present(frameworkId = 50)
             dispatcher.scheduler.runCurrent()
+            vm.selectController(key())
             // Simulate the FSM: the Direct pick moves the controller into Claiming.
             every { usb.setPathChoice(VID, PID, PathChoice.Direct) } answers {
                 controllers.value = mapOf(key() to controller(UsbPhase.Claiming, desired = PathChoice.Direct))
@@ -161,7 +164,6 @@ class SetupUsbViewModelTest {
             dispatcher.scheduler.runCurrent()
             assertTrue("still working while claiming", vm.state.value.working)
 
-            // Claim succeeds: a synthetic device replaces the framework one.
             controllers.value =
                 mapOf(key() to controller(UsbPhase.Direct, syntheticId = -1000, desired = PathChoice.Direct))
             dispatcher.scheduler.runCurrent()
@@ -176,7 +178,7 @@ class SetupUsbViewModelTest {
         runTest(dispatcher) {
             present(frameworkId = 50)
             dispatcher.scheduler.runCurrent()
-            // Permission denied: the FSM reverts desired to Standard while staying routed.
+            vm.selectController(key())
             every { usb.setPathChoice(VID, PID, PathChoice.Direct) } answers {
                 controllers.value =
                     mapOf(key() to controller(UsbPhase.Routed, frameworkId = 50, desired = PathChoice.Standard))
@@ -194,7 +196,7 @@ class SetupUsbViewModelTest {
         runTest(dispatcher) {
             present()
             dispatcher.scheduler.runCurrent()
-            vm.continueToMode()
+            vm.selectController(key())
             vm.chooseDirect()
             assertEquals(SetupUsbViewModel.Stage.GRANTING, vm.state.value.stage)
 
@@ -206,11 +208,11 @@ class SetupUsbViewModelTest {
         }
 
     @Test
-    fun `unplugging the controller resets back to detecting`() =
+    fun `unplugging the selected controller resets back to detecting`() =
         runTest(dispatcher) {
             present()
             dispatcher.scheduler.runCurrent()
-            vm.continueToMode()
+            vm.selectController(key())
             assertEquals(SetupUsbViewModel.Stage.MODE, vm.state.value.stage)
 
             controllers.value = emptyMap()
@@ -218,7 +220,7 @@ class SetupUsbViewModelTest {
 
             val s = vm.state.value
             assertEquals(SetupUsbViewModel.Stage.DETECTING, s.stage)
-            assertFalse(s.present)
+            assertTrue(s.controllers.isEmpty())
         }
 
     private fun kotlinx.coroutines.test.TestScope.collectEvents(): List<SetupUsbViewModel.Event> {

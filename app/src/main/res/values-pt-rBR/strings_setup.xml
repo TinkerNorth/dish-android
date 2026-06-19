@@ -23,7 +23,6 @@
     <string name="setup_usb_detect_subtitle">Na porta USB do seu celular.</string>
     <string name="setup_usb_status_scanning">Buscando</string>
     <string name="setup_usb_status_detected">Detectado</string>
-    <string name="setup_usb_continue">Continuar</string>
     <string name="setup_usb_mode_title">Como o Dish deve lê-lo?</string>
     <string name="setup_usb_supported">Seu controle suporta Direct</string>
     <string name="setup_usb_unverified_title">Controle não verificado</string>
@@ -45,7 +44,6 @@
     <string name="setup_btc_toolbar">Configurar o Dish</string>
     <string name="setup_btc_title">Pareie ou escolha um controle</string>
     <string name="setup_btc_subtitle">Pareie um novo, ou toque em um controle já pareado a este celular.</string>
-    <string name="setup_btc_continue">Continuar</string>
     <string name="setup_btc_permission_title">Permita o Bluetooth para continuar</string>
     <string name="setup_btc_permission_body">O Dish precisa de acesso ao Bluetooth para encontrar controles. Um prompt rápido do Android.</string>
     <string name="setup_btc_permission_action">Mostre-me o prompt</string>
@@ -55,7 +53,6 @@
     <string name="setup_btc_paired_eyebrow">Neste celular</string>
     <string name="setup_btc_paired_empty">Nenhum controle pareado ainda. Pareie um acima para continuar.</string>
     <string name="setup_btc_status_connected">Conectado</string>
-    <string name="setup_btc_status_paired">Pareado, não conectado</string>
 
     <string name="setup_conn_toolbar">Conexão</string>
     <string name="setup_conn_path_title">Como a entrada chega ao seu PC?</string>
