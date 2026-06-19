@@ -362,8 +362,6 @@
     <string name="binding_dest_no_channel">Aucun canal</string>
     <string name="binding_dest_host">Hôte</string>
     <string name="binding_dest_bt_note">Le téléphone s\'appaire comme manette Bluetooth. Le gyro, le pavé tactile et la souris nécessitent un hôte Satellite.</string>
-    <string name="binding_host_hint_satellite">Satellite</string>
-    <string name="binding_host_hint_bt">BT</string>
     <string name="binding_manage_destinations">Gérer les destinations</string>
     <string name="binding_no_hosts_title">Aucun hôte trouvé</string>
     <string name="binding_no_hosts_body">Recherchez un hôte Satellite sur votre réseau, ou appairez-en un via Bluetooth. Dès qu\'un hôte apparaît, revenez pour lier %1$s.</string>

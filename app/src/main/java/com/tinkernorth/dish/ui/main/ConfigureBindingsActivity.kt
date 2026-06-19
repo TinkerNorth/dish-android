@@ -25,9 +25,11 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.core.model.Feature
+import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.databinding.ActivityConfigureBindingsBinding
 import com.tinkernorth.dish.databinding.BindingApplyStepBinding
 import com.tinkernorth.dish.databinding.BindingValueNoneBinding
+import com.tinkernorth.dish.databinding.SetupReviewCardBinding
 import com.tinkernorth.dish.databinding.SetupTypeCardBinding
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
@@ -39,7 +41,9 @@ import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachGamepadHost
 import com.tinkernorth.dish.ui.common.wireDonateButton
+import com.tinkernorth.dish.ui.setup.ReviewFlow
 import com.tinkernorth.dish.ui.setup.bindCapabilityRows
+import com.tinkernorth.dish.ui.setup.bindReviewFlows
 import com.tinkernorth.dish.ui.setup.capabilityRows
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -372,9 +376,9 @@ class ConfigureBindingsActivity : AppCompatActivity() {
         binding.btnToastAction.setOnClickListener { viewModel.apply() }
     }
 
-    // The destination picker shows each host with the setup flow's capability table
-    // (what that destination carries per feature, and whether it is available) so the
-    // user can see what Bluetooth vs a Satellite supports before choosing.
+    // The destination picker shows each host as the setup flow's destination card: the
+    // host, its transport, and the features it gets and sends. (A destination is not the
+    // controller/type card, which the emulate picker uses.)
     private fun showHostMenu() {
         val state = viewModel.ui.value
         val snapshot = state.snapshot ?: return
@@ -392,19 +396,19 @@ class ConfigureBindingsActivity : AppCompatActivity() {
                 .setNegativeButton(android.R.string.cancel, null)
                 .create()
         state.hosts.forEach { host ->
-            val hint =
-                if (host.kind == ConnectionKind.BLUETOOTH) {
-                    getString(R.string.binding_host_hint_bt)
-                } else {
-                    getString(R.string.binding_host_hint_satellite)
-                }
-            val card = SetupTypeCardBinding.inflate(layoutInflater, container, false)
-            card.typeTitle.text = "${host.label} · $hint"
-            card.typeChevron.visibility = View.GONE
-            card.capabilityContainer.bindCapabilityRows(
-                capabilityRows(viewModel.capabilityForCandidate(snapshot.slotId, type, host.kind, host.id)),
+            val caps = viewModel.capabilityForCandidate(snapshot.slotId, type, host.kind, host.id)
+            val bt = host.kind == ConnectionKind.BLUETOOTH
+            val card = SetupReviewCardBinding.inflate(layoutInflater, container, false)
+            card.reviewIcon.setImageResource(if (bt) R.drawable.ic_bluetooth else R.drawable.ic_satellite)
+            card.reviewKind.setText(R.string.binding_label_destination)
+            card.reviewName.text = host.label
+            card.reviewSublabel.setText(
+                if (bt) R.string.setup_cfg_dest_bluetooth else R.string.setup_cfg_dest_satellite,
             )
-            card.typeCard.setOnClickListener {
+            bindReviewFlows(card.reviewSendsRow, card.reviewSendsChips, destinationSends(caps))
+            bindReviewFlows(card.reviewGetsRow, card.reviewGetsChips, destinationGets(caps))
+            card.reviewCard.isClickable = true
+            card.reviewCard.setOnClickListener {
                 viewModel.setHost(host.id)
                 dialog.dismiss()
             }
@@ -412,6 +416,24 @@ class ConfigureBindingsActivity : AppCompatActivity() {
         }
         dialog.show()
     }
+
+    // A destination gets the inputs the path can carry; what is shown is gated by what
+    // is actually deliverable end to end for the current type.
+    private fun destinationGets(caps: SlotCapabilities): List<ReviewFlow> =
+        buildList {
+            add(ReviewFlow(R.drawable.ic_gamepad, R.string.setup_cfg_flow_controller))
+            if (caps.isAvailable(Feature.MOTION)) add(ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro))
+            if (caps.isAvailable(Feature.TOUCHPAD)) add(ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad))
+            if (caps.isAvailable(Feature.MOUSE)) add(ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse))
+        }
+
+    // Rumble flows back only where the path carries a return channel.
+    private fun destinationSends(caps: SlotCapabilities): List<ReviewFlow> =
+        if (caps.isAvailable(Feature.RUMBLE)) {
+            listOf(ReviewFlow(R.drawable.ic_rumble, R.string.binding_func_rumble))
+        } else {
+            emptyList()
+        }
 
     // The type picker shows each emulated type with the setup flow's capability table
     // (what each carries per feature, and whether it is available) so the choice is

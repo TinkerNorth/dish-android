@@ -3,10 +3,8 @@
 package com.tinkernorth.dish.ui.setup
 
 import android.content.Intent
-import android.content.res.ColorStateList
 import android.os.Bundle
 import android.view.View
-import android.widget.LinearLayout
 import androidx.activity.addCallback
 import androidx.activity.viewModels
 import androidx.annotation.DrawableRes
@@ -22,7 +20,6 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.databinding.ActivitySetupConfigureBinding
-import com.tinkernorth.dish.databinding.BindingPillBinding
 import com.tinkernorth.dish.databinding.SetupReviewCardBinding
 import com.tinkernorth.dish.databinding.SetupTypeCardBinding
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
@@ -239,8 +236,8 @@ class SetupConfigureActivity : AppCompatActivity() {
             card.reviewKind.setText(node.kind)
             card.reviewName.text = node.name
             card.reviewSublabel.text = node.sublabel
-            bindFlows(card.reviewSendsRow, card.reviewSendsChips, node.sends)
-            bindFlows(card.reviewGetsRow, card.reviewGetsChips, node.gets)
+            bindReviewFlows(card.reviewSendsRow, card.reviewSendsChips, node.sends)
+            bindReviewFlows(card.reviewGetsRow, card.reviewGetsChips, node.gets)
             container.addView(card.root)
         }
     }
@@ -383,30 +380,6 @@ class SetupConfigureActivity : AppCompatActivity() {
         val rumbleOn: Boolean,
     )
 
-    private fun bindFlows(
-        row: View,
-        chips: LinearLayout,
-        flows: List<ReviewFlow>,
-    ) {
-        row.visibility = visibleIf(flows.isNotEmpty())
-        chips.removeAllViews()
-        flows.forEach { chips.addView(flowPill(chips, it.icon, it.label)) }
-    }
-
-    private fun flowPill(
-        parent: LinearLayout,
-        @DrawableRes icon: Int,
-        @StringRes label: Int,
-    ): View {
-        val pill = BindingPillBinding.inflate(layoutInflater, parent, false)
-        pill.root.setBackgroundResource(R.drawable.bg_binding_pill_cap)
-        pill.ivPillIcon.setImageResource(icon)
-        pill.ivPillIcon.imageTintList = ColorStateList.valueOf(getColor(R.color.colorOnSurfaceVariant))
-        pill.tvPillText.setText(label)
-        pill.tvPillText.setTextColor(getColor(R.color.colorOnSurfaceVariant))
-        return pill.root
-    }
-
     private data class ReviewNode(
         @StringRes val kind: Int,
         @DrawableRes val icon: Int,
@@ -414,11 +387,6 @@ class SetupConfigureActivity : AppCompatActivity() {
         val sublabel: String,
         val sends: List<ReviewFlow>,
         val gets: List<ReviewFlow>,
-    )
-
-    private data class ReviewFlow(
-        @DrawableRes val icon: Int,
-        @StringRes val label: Int,
     )
 
     private fun renderApplyState(state: ApplyState) {
