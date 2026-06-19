@@ -4,6 +4,9 @@ package com.tinkernorth.dish.ui.setup
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
+import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.core.input.BluetoothGamepad
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedBt
@@ -41,6 +44,7 @@ class SetupBluetoothHostViewModel
         private val registry: BluetoothGamepadRegistry,
         private val permission: BluetoothPermissionStateObserver,
         private val store: ConnectionStore,
+        private val hub: ConnectionCoordinator,
         motion: PhoneMotionAvailability,
     ) : ViewModel() {
         // PICK_PC lists known hosts + a "pair new" row; PERMISSION gates on the
@@ -70,9 +74,11 @@ class SetupBluetoothHostViewModel
             // routes back through onDiscoverableResult.
             data object RequestDiscoverable : Event
 
-            data class Proceed(
-                val slotId: String,
-                val connectionId: String,
+            // The host bonded; the input is already bound, so the wizard finishes to
+            // the dashboard. Carries what the success toast needs.
+            data class Done(
+                val hostName: String,
+                val profile: BluetoothGamepad.GamepadProfile,
             ) : Event
         }
 
@@ -101,8 +107,8 @@ class SetupBluetoothHostViewModel
                 project(remembered, perm)
             }.onEach { next -> _state.value = next }.launchIn(viewModelScope)
 
-            // A registry slot reaching connected/registered for our active session
-            // means the PC finished the bond; proceed to configure.
+            // A registry slot reaching connected for our active session means the PC
+            // finished the bond; bind the input and finish.
             registry.states.onEach { onRegistryStates(it) }.launchIn(viewModelScope)
         }
 
@@ -185,17 +191,21 @@ class SetupBluetoothHostViewModel
             val active = activeConnId ?: return
             // A freshly-paired session starts under a transient id; the registry
             // rewrites it to "bt:<mac>" on bond. Match our active key, else the
-            // newly-live key that wasn't already bonded when we started.
+            // newly-connected key that wasn't already bonded when we started. Gate on
+            // CONNECTED only: the HID app registers the instant we start (long before
+            // the PC bonds), and proceeding on that flashes past the advertising step.
             val entry =
-                states.entries.firstOrNull { it.key == active && it.value.live() }
-                    ?: states.entries.firstOrNull { it.value.live() && it.key !in baselineLiveKeys }
+                states.entries.firstOrNull { it.key == active && it.value.connected }
+                    ?: states.entries.firstOrNull { it.value.connected && it.key !in baselineLiveKeys }
                     ?: return
+            val profile = _state.value.advertisingProfile ?: return
             proceeded = true
             activeConnId = entry.key
-            emitProceed(slotId = slotId, connectionId = entry.key)
+            // Bind the chosen input to this host so its state drives the advertised
+            // pad; a Bluetooth host needs no further configuration.
+            hub.bind(slotId, entry.key, typeFor(profile))
+            emitDone(entry.value.connectedName ?: entry.key, profile)
         }
-
-        private fun BluetoothGamepadRegistry.SlotState.live(): Boolean = connected || registered
 
         // True for "back was handled in-flow"; the Activity finishes only when
         // false. Leaving ADVERTISING tears the session down so it doesn't keep
@@ -227,17 +237,20 @@ class SetupBluetoothHostViewModel
 
         override fun onCleared() {
             // Don't keep advertising once the wizard goes away unless we already
-            // handed off to configure (which owns the live session from here).
+            // bonded and finished (the dashboard owns the live session from here).
             if (!proceeded) stopActive()
             super.onCleared()
         }
 
-        private fun emitProceed(
-            slotId: String,
-            connectionId: String,
+        private fun emitDone(
+            hostName: String,
+            profile: BluetoothGamepad.GamepadProfile,
         ) {
-            viewModelScope.launch { _events.emit(Event.Proceed(slotId, connectionId)) }
+            viewModelScope.launch { _events.emit(Event.Done(hostName, profile)) }
         }
+
+        private fun typeFor(profile: BluetoothGamepad.GamepadProfile): Int =
+            if (profile == BluetoothGamepad.GamepadProfile.PLAYSTATION) CONTROLLER_TYPE_PLAYSTATION else CONTROLLER_TYPE_XBOX
 
         private fun RememberedBt.toRow(): HostRow =
             HostRow(

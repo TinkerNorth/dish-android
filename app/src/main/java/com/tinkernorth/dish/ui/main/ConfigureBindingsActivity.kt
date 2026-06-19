@@ -228,6 +228,17 @@ class ConfigureBindingsActivity : AppCompatActivity() {
             bz.segPad.setOnClickListener { viewModel.setTouchpad(TouchpadModeValue.DS4) }
             bz.segMouse.setOnClickListener { viewModel.setTouchpad(TouchpadModeValue.MOUSE) }
         }
+
+        // Rumble rides any chosen destination (the phone vibrates as a fallback),
+        // so it shows whenever the binding section does.
+        val rumbleVisible = state.hostChosen
+        bz.rumbleDivider.visibility = if (rumbleVisible) View.VISIBLE else View.GONE
+        bz.rumbleRow.visibility = if (rumbleVisible) View.VISIBLE else View.GONE
+        if (rumbleVisible) {
+            bz.swRumble.setOnCheckedChangeListener(null)
+            bz.swRumble.isChecked = state.draft?.rumbleOn == true
+            bz.swRumble.setOnCheckedChangeListener { _, isChecked -> viewModel.setRumble(isChecked) }
+        }
     }
 
     private fun noneValue(parent: ViewGroup): View = BindingValueNoneBinding.inflate(layoutInflater, parent, false).root

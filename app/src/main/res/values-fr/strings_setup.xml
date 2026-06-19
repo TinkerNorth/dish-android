@@ -149,4 +149,5 @@
     <string name="setup_cfg_screen_name">L\'écran de ce téléphone</string>
     <string name="setup_cfg_screen_sublabel">Surface à l\'écran</string>
     <string name="setup_cfg_virtual_sublabel">Manette virtuelle sur votre PC</string>
+    <string name="setup_bth_discoverable_retry">Réessayer</string>
 </resources>

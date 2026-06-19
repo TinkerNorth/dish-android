@@ -76,9 +76,7 @@
 
                     <include
                         android:id="@+id/rowPairNew"
-                        layout="@layout/setup_choice_row"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content" />
+                        layout="@layout/setup_choice_row" />
                 </LinearLayout>
 
                 <!-- 5H · Bluetooth permission -->
@@ -293,6 +291,17 @@
                             android:textAllCaps="true"
                             tools:text="Waiting for your PC" />
                     </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnTryAgain"
+                        style="@style/Widget.Dish.Button.Outlined"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_xl"
+                        app:icon="@drawable/ic_refresh"
+                        android:text="@string/setup_bth_discoverable_retry"
+                        android:visibility="gone"
+                        tools:visibility="visible" />
                 </LinearLayout>
             </LinearLayout>
         </androidx.core.widget.NestedScrollView>

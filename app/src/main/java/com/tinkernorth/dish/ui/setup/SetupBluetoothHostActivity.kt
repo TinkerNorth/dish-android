@@ -19,15 +19,19 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.core.input.BluetoothGamepad
+import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.databinding.ActivitySetupBluetoothHostBinding
 import com.tinkernorth.dish.databinding.SetupChoiceRowBinding
 import com.tinkernorth.dish.databinding.SetupTypeCardBinding
-import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.source.notification.DishNotifications
+import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.setupDishToolbar
+import com.tinkernorth.dish.ui.main.MainActivity
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 // Stage 3 Bluetooth host (design 5H). Owns the two Android-only pieces the
 // ViewModel can't: the runtime BLUETOOTH grant prompt and the system
@@ -36,9 +40,12 @@ import kotlinx.coroutines.launch
 // lives in the ViewModel.
 @AndroidEntryPoint
 class SetupBluetoothHostActivity : AppCompatActivity() {
+    @Inject lateinit var onboarding: OnboardingPreferenceStore
+
+    @Inject lateinit var notifications: DishNotifications
+
     private lateinit var binding: ActivitySetupBluetoothHostBinding
     private val viewModel: SetupBluetoothHostViewModel by viewModels()
-    private val nav by lazy { DishNavigator(this) }
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { _ ->
@@ -64,6 +71,7 @@ class SetupBluetoothHostActivity : AppCompatActivity() {
 
         binding.btnBack.setOnClickListener { handleBack() }
         binding.btnGrant.setOnClickListener { requestBluetoothPermission() }
+        binding.btnTryAgain.setOnClickListener { requestDiscoverable() }
         binding.rowPairNew.choiceCard.setOnClickListener { viewModel.onPairNewDevice() }
 
         bindPairNewRow()
@@ -92,8 +100,8 @@ class SetupBluetoothHostActivity : AppCompatActivity() {
                 viewModel.events.collect { event ->
                     when (event) {
                         is SetupBluetoothHostViewModel.Event.RequestDiscoverable -> requestDiscoverable()
-                        is SetupBluetoothHostViewModel.Event.Proceed ->
-                            nav.toSetupConfigure(event.slotId, event.connectionId)
+                        is SetupBluetoothHostViewModel.Event.Done ->
+                            finishToDashboard(event.hostName, getString(typeTitleRes(event.profile)))
                     }
                 }
             }
@@ -189,6 +197,9 @@ class SetupBluetoothHostActivity : AppCompatActivity() {
         binding.icDiscoverable.setColorFilter(
             getColor(if (state.discoverable) R.color.colorPrimary else R.color.colorMuted),
         )
+        // The system discoverable prompt can be denied or dismissed with no result
+        // we can act on; offer a retry so the user is never stranded here.
+        binding.btnTryAgain.visibility = visibleIf(!state.discoverable)
     }
 
     private fun requestBluetoothPermission() {
@@ -213,6 +224,25 @@ class SetupBluetoothHostActivity : AppCompatActivity() {
 
     private fun handleBack() {
         if (!viewModel.back()) finish()
+    }
+
+    // A Bluetooth host needs no Stage 4: the bind already happened on connect, so
+    // post the success toast for the dashboard and finish, like SetupConfigureActivity.
+    private fun finishToDashboard(
+        hostName: String,
+        controllerName: String,
+    ) {
+        notifications.postDeferred(
+            severity = DishNotification.Severity.SUCCESS,
+            title = getString(R.string.setup_cfg_done_title),
+            body = getString(R.string.setup_cfg_done_body, controllerName, hostName),
+        )
+        onboarding.markWelcomeCompleted()
+        startActivity(
+            Intent(this, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
+        )
+        finish()
     }
 
     private fun typeTitleRes(profile: BluetoothGamepad.GamepadProfile): Int =

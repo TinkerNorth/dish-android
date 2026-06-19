@@ -69,15 +69,11 @@
 
                     <include
                         android:id="@+id/cardSatellite"
-                        layout="@layout/setup_choice_row"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content" />
+                        layout="@layout/setup_choice_row" />
 
                     <include
                         android:id="@+id/cardBluetoothHost"
-                        layout="@layout/setup_choice_row"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content" />
+                        layout="@layout/setup_choice_row" />
                 </LinearLayout>
 
                 <!-- 3B · find / scan / reconnect -->

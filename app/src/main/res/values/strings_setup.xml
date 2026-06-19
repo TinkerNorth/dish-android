@@ -150,4 +150,5 @@
     <string name="setup_cfg_screen_name">This phone\'s screen</string>
     <string name="setup_cfg_screen_sublabel">On-screen surface</string>
     <string name="setup_cfg_virtual_sublabel">Virtual pad on your PC</string>
+    <string name="setup_bth_discoverable_retry">Try again</string>
 </resources>

@@ -140,4 +140,5 @@
     <string name="setup_cfg_screen_name">La pantalla de este teléfono</string>
     <string name="setup_cfg_screen_sublabel">Superficie en pantalla</string>
     <string name="setup_cfg_virtual_sublabel">Mando virtual en tu PC</string>
+    <string name="setup_bth_discoverable_retry">Intentar de nuevo</string>
 </resources>

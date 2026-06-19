@@ -61,22 +61,15 @@
 
                 <include
                     android:id="@+id/cardWired"
-                    layout="@layout/setup_choice_row"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/spacing_md" />
+                    layout="@layout/setup_choice_row" />
 
                 <include
                     android:id="@+id/cardBluetooth"
-                    layout="@layout/setup_choice_row"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content" />
+                    layout="@layout/setup_choice_row" />
 
                 <include
                     android:id="@+id/cardOnscreen"
-                    layout="@layout/setup_choice_row"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content" />
+                    layout="@layout/setup_choice_row" />
             </LinearLayout>
         </androidx.core.widget.NestedScrollView>
     </LinearLayout>

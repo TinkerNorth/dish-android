@@ -150,4 +150,5 @@
     <string name="setup_cfg_screen_name">Bildschirm dieses Telefons</string>
     <string name="setup_cfg_screen_sublabel">Bildschirmoberfläche</string>
     <string name="setup_cfg_virtual_sublabel">Virtuelles Pad auf deinem PC</string>
+    <string name="setup_bth_discoverable_retry">Erneut versuchen</string>
 </resources>

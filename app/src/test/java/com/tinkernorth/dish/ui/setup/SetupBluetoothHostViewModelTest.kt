@@ -2,6 +2,8 @@
 
 package com.tinkernorth.dish.ui.setup
 
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
+import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.core.input.BluetoothGamepad
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedBt
@@ -33,6 +35,7 @@ class SetupBluetoothHostViewModelTest {
     private lateinit var registry: BluetoothGamepadRegistry
     private lateinit var permission: BluetoothPermissionStateObserver
     private lateinit var store: ConnectionStore
+    private lateinit var hub: ConnectionCoordinator
     private lateinit var motion: PhoneMotionAvailability
     private lateinit var vm: SetupBluetoothHostViewModel
 
@@ -46,12 +49,13 @@ class SetupBluetoothHostViewModelTest {
         registry = mockk(relaxed = true)
         permission = mockk(relaxed = true)
         store = mockk(relaxed = true)
+        hub = mockk(relaxed = true)
         motion = mockk(relaxed = true)
         every { registry.states } returns states
         every { permission.state } returns perm
         every { store.rememberedBtFlow } returns remembered
         every { motion.hasGyro } returns true
-        vm = SetupBluetoothHostViewModel(registry, permission, store, motion)
+        vm = SetupBluetoothHostViewModel(registry, permission, store, hub, motion)
     }
 
     @After
@@ -65,6 +69,7 @@ class SetupBluetoothHostViewModelTest {
     ) = mockk<BluetoothGamepadRegistry.SlotState> {
         every { connected } returns isConnected
         every { registered } returns isRegistered
+        every { connectedName } returns null
     }
 
     @Test
@@ -124,16 +129,16 @@ class SetupBluetoothHostViewModelTest {
 
             vm.onTypeChosen(BluetoothGamepad.GamepadProfile.XBOX)
             dispatcher.scheduler.runCurrent()
-            assertFalse(events.any { it is SetupBluetoothHostViewModel.Event.Proceed })
+            assertFalse(events.any { it is SetupBluetoothHostViewModel.Event.Done })
 
-            // Our new host bonds under its own key; now we proceed with that key.
+            // Our new host bonds under its own key; now we bind the input to it and
+            // finish, carrying that key forward.
             states.value =
                 mapOf("bt:OLD" to slot(isConnected = true), "bt:NEW" to slot(isConnected = true))
             dispatcher.scheduler.runCurrent()
 
-            val proceed = events.filterIsInstance<SetupBluetoothHostViewModel.Event.Proceed>().single()
-            assertEquals("bt:NEW", proceed.connectionId)
-            assertEquals("42", proceed.slotId)
+            verify { hub.bind("42", "bt:NEW", CONTROLLER_TYPE_XBOX) }
+            assertTrue(events.any { it is SetupBluetoothHostViewModel.Event.Done })
         }
 
     @Test

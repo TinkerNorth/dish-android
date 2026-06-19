@@ -140,4 +140,5 @@
     <string name="setup_cfg_screen_name">Ekran ovog telefona</string>
     <string name="setup_cfg_screen_sublabel">Površina na ekranu</string>
     <string name="setup_cfg_virtual_sublabel">Virtuelni pad na vašem PC-u</string>
+    <string name="setup_bth_discoverable_retry">Pokušaj ponovo</string>
 </resources>
