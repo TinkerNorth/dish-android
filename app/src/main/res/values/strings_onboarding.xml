@@ -58,10 +58,6 @@
     <string name="help_view_privacy_policy">Privacy policy</string>
     <string name="help_view_github">View source on GitHub</string>
 
-    <string name="dashboard_hint_title">Need a hand?</string>
-    <string name="dashboard_hint_body">Open the setup guide to pick your connection and controller. We\'ll take you to the right screen.</string>
-    <string name="dashboard_hint_action_open">Open guide</string>
-    <string name="dashboard_hint_action_dismiss">Not now</string>
 
     <string name="settings_section_setup">SETUP &amp; HELP</string>
     <string name="settings_setup_wizard_title">Setup guide</string>
@@ -71,4 +67,6 @@
 
     <string name="url_satellite" translatable="false">https://dish.tinkernorth.com/downloads/satellite</string>
     <string name="url_github" translatable="false">https://github.com/TinkerNorth</string>
+    <string name="dashboard_add_controller_title">Add a controller</string>
+    <string name="dashboard_add_controller_body">Wired, Bluetooth, or on-screen.</string>
 </resources>

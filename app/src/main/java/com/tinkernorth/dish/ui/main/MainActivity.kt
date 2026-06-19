@@ -14,6 +14,7 @@ import androidx.core.view.updateLayoutParams
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.recyclerview.widget.ConcatAdapter
 import com.google.androidgamesdk.GameActivity
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
@@ -27,7 +28,6 @@ import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.lowpower.LowPowerSignal
 import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
-import com.tinkernorth.dish.source.store.OnboardingState
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.DishSpinnerDrawable
@@ -162,18 +162,15 @@ class MainActivity :
         binding.sectionConnections.labelSection.setText(R.string.section_connections)
         binding.sectionControllers.labelSection.setText(R.string.section_controllers)
         binding.ivConnectionsLoading.setImageDrawable(connectionsSpinner)
-        binding.rvControllers.adapter = controllerAdapter
+        // The "Add a controller" invite rides after the controller list as a permanent
+        // last row, so the route into setup never disappears.
+        binding.rvControllers.adapter =
+            ConcatAdapter(controllerAdapter, AddControllerAdapter { nav.toSetupInput() })
         binding.rvControllers.setHasFixedSize(true)
         (binding.rvControllers.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
             ?.supportsChangeAnimations = false
         binding.btnManageConnections.setOnClickListener { nav.toConnections() }
         binding.btnSettings.setOnClickListener { nav.toSettings() }
-        binding.cardDashboardHintInclude.btnDashboardHintOpen.setOnClickListener {
-            nav.toSetupInput()
-        }
-        binding.cardDashboardHintInclude.btnDashboardHintDismiss.setOnClickListener {
-            onboarding.dismissDashboardHint()
-        }
     }
 
     private fun observeViewModel() {
@@ -185,22 +182,6 @@ class MainActivity :
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) { viewModel.events.collect { handleEvent(it) } }
         }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                onboarding.state.collect { refreshDashboardHint(it, viewModel.uiState.value) }
-            }
-        }
-    }
-
-    private fun refreshDashboardHint(
-        onboardingState: OnboardingState,
-        ui: MainUiState,
-    ) {
-        val shouldShow =
-            onboardingState.welcomeCompleted &&
-                !onboardingState.dashboardHintDismissed &&
-                ui.connections.isEmpty()
-        binding.cardDashboardHintInclude.cardDashboardHint.isVisible = shouldShow
     }
 
     private fun updateUI(s: MainUiState) {
@@ -231,7 +212,6 @@ class MainActivity :
             s.inputRates,
             s.screenPeakHz,
         )
-        refreshDashboardHint(onboarding.state.value, s)
     }
 
     private fun handleEvent(event: MainEvent) {

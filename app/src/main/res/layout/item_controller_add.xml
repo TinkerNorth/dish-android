@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The permanent invite that ends the controllers list (and is the only row on
+     first run). The whole row is the tap target into setup Stage 1. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="@dimen/card_margin_bottom"
+    android:background="@drawable/bg_add_controller_card"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground"
+    android:gravity="center_vertical"
+    android:layerType="software"
+    android:orientation="horizontal"
+    android:padding="@dimen/card_padding">
+
+    <ImageView
+        android:layout_width="@dimen/icon_controller"
+        android:layout_height="@dimen/icon_controller"
+        android:importantForAccessibility="no"
+        android:src="@drawable/ic_add"
+        app:tint="@color/colorPrimary" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="@dimen/spacing_2xl"
+        android:orientation="vertical">
+
+        <TextView
+            style="@style/TextAppearance.Dish.BodyLarge.Bold"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/dashboard_add_controller_title" />
+
+        <TextView
+            style="@style/TextAppearance.Dish.BodySmall"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_xs"
+            android:text="@string/dashboard_add_controller_body"
+            android:textColor="@color/colorMuted" />
+    </LinearLayout>
+</LinearLayout>

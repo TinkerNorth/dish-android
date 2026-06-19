@@ -58,14 +58,12 @@
     <string name="help_view_privacy_policy">Política de privacidad</string>
     <string name="help_view_github">Ver código fuente en GitHub</string>
 
-    <string name="dashboard_hint_title">¿Necesitas ayuda?</string>
-    <string name="dashboard_hint_body">Abre la guía de configuración para elegir tu conexión y mando. Te llevamos a la pantalla adecuada.</string>
-    <string name="dashboard_hint_action_open">Abrir guía</string>
-    <string name="dashboard_hint_action_dismiss">Ahora no</string>
 
     <string name="settings_section_setup">CONFIGURACIÓN Y AYUDA</string>
     <string name="settings_setup_wizard_title">Guía de configuración</string>
     <string name="settings_setup_wizard_body">Recorre las opciones de conexión y mando. Repítela cuando quieras.</string>
     <string name="settings_help_title">Ayuda y preguntas frecuentes</string>
     <string name="settings_help_body">Conceptos, consejos de rendimiento y solución de problemas.</string>
+    <string name="dashboard_add_controller_title">Añadir un mando</string>
+    <string name="dashboard_add_controller_body">Por cable, Bluetooth o en pantalla.</string>
 </resources>

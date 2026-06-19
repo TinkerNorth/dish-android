@@ -58,14 +58,12 @@
     <string name="help_view_privacy_policy">Datenschutzrichtlinie</string>
     <string name="help_view_github">Quellcode auf GitHub ansehen</string>
 
-    <string name="dashboard_hint_title">Brauchst du Hilfe?</string>
-    <string name="dashboard_hint_body">Öffne den Einrichtungsassistenten, um deine Verbindung und deinen Controller zu wählen. Wir bringen dich zur richtigen Stelle.</string>
-    <string name="dashboard_hint_action_open">Assistent öffnen</string>
-    <string name="dashboard_hint_action_dismiss">Nicht jetzt</string>
 
     <string name="settings_section_setup">EINRICHTUNG &amp; HILFE</string>
     <string name="settings_setup_wizard_title">Einrichtungsassistent</string>
     <string name="settings_setup_wizard_body">Verbindung und Controller-Optionen durchgehen. Jederzeit erneut ausführbar.</string>
     <string name="settings_help_title">Hilfe &amp; FAQ</string>
     <string name="settings_help_body">Konzepte, Leistungstipps und Fehlerbehebung.</string>
+    <string name="dashboard_add_controller_title">Controller hinzufügen</string>
+    <string name="dashboard_add_controller_body">Kabelgebunden, Bluetooth oder auf dem Bildschirm.</string>
 </resources>

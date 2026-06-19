@@ -8,7 +8,9 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.LinearLayout
 import android.widget.PopupMenu
+import android.widget.ScrollView
 import androidx.activity.viewModels
 import androidx.annotation.ColorRes
 import androidx.annotation.DrawableRes
@@ -17,6 +19,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionKind
@@ -26,6 +29,7 @@ import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.databinding.ActivityConfigureBindingsBinding
 import com.tinkernorth.dish.databinding.BindingApplyStepBinding
 import com.tinkernorth.dish.databinding.BindingValueNoneBinding
+import com.tinkernorth.dish.databinding.SetupTypeCardBinding
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
 import com.tinkernorth.dish.repository.TouchpadModeValue
@@ -36,6 +40,8 @@ import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachGamepadHost
 import com.tinkernorth.dish.ui.common.wireDonateButton
+import com.tinkernorth.dish.ui.setup.bindCapabilityRows
+import com.tinkernorth.dish.ui.setup.capabilityRows
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -204,7 +210,7 @@ class ConfigureBindingsActivity : AppCompatActivity() {
         bz.emulateDropdown.text = typeLabel
         bz.emulatePill.visibility = if (state.isBluetoothHost) View.VISIBLE else View.GONE
         bz.emulateDropdown.visibility = if (state.isBluetoothHost) View.GONE else View.VISIBLE
-        bz.emulateDropdown.setOnClickListener { showTypeMenu(bz.emulateDropdown) }
+        bz.emulateDropdown.setOnClickListener { showTypeMenu() }
 
         val motionVisible = state.motionAvailable
         bz.motionDivider.visibility = if (motionVisible) View.VISIBLE else View.GONE
@@ -391,16 +397,39 @@ class ConfigureBindingsActivity : AppCompatActivity() {
         pm.show()
     }
 
-    private fun showTypeMenu(anchor: View) {
-        val pm = PopupMenu(this, anchor)
-        viewModel.ui.value.typeOptions.forEachIndexed { order, option ->
-            pm.menu.add(0, option.id, order, option.label)
+    // The type picker shows each emulated type with the setup flow's capability table
+    // (what each carries per feature, and whether it is available) so the choice is
+    // informed rather than a bare label.
+    private fun showTypeMenu() {
+        val state = viewModel.ui.value
+        val snapshot = state.snapshot ?: return
+        val host = state.selectedHost ?: return
+        val container =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                val side = resources.getDimensionPixelSize(R.dimen.spacing_5xl)
+                setPadding(side, 0, side, 0)
+            }
+        val dialog =
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.binding_label_emulate)
+                .setView(ScrollView(this).apply { addView(container) })
+                .setNegativeButton(android.R.string.cancel, null)
+                .create()
+        state.typeOptions.forEach { option ->
+            val card = SetupTypeCardBinding.inflate(layoutInflater, container, false)
+            card.typeTitle.text = option.label
+            card.typeChevron.visibility = View.GONE
+            card.capabilityContainer.bindCapabilityRows(
+                capabilityRows(viewModel.capabilityForCandidate(snapshot.slotId, option.id, host.kind, host.id)),
+            )
+            card.typeCard.setOnClickListener {
+                viewModel.setType(option.id)
+                dialog.dismiss()
+            }
+            container.addView(card.root)
         }
-        pm.setOnMenuItemClickListener { item ->
-            viewModel.setType(item.itemId)
-            true
-        }
-        pm.show()
+        dialog.show()
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean = gamepadHost.dispatchKeyEvent(event) || super.dispatchKeyEvent(event)

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dashed outline for the permanent "Add a controller" invite so it reads as an
+     affordance, not a populated controller card. Dashed strokes only render on a
+     software layer, so the consuming view sets android:layerType="software". -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="@dimen/corner_card" />
+    <stroke
+        android:width="@dimen/size_2"
+        android:color="@color/colorOutline"
+        android:dashGap="@dimen/size_4"
+        android:dashWidth="@dimen/size_6" />
+</shape>

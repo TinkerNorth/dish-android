@@ -58,14 +58,12 @@
     <string name="help_view_privacy_policy">Politika privatnosti</string>
     <string name="help_view_github">Pogledaj izvorni kod na GitHub-u</string>
 
-    <string name="dashboard_hint_title">Trebate pomoć?</string>
-    <string name="dashboard_hint_body">Otvorite vodič za postavljanje da odaberete vašu vezu i kontroler. Odvešćemo vas na odgovarajući ekran.</string>
-    <string name="dashboard_hint_action_open">Otvori vodič</string>
-    <string name="dashboard_hint_action_dismiss">Ne sada</string>
 
     <string name="settings_section_setup">POSTAVLJANJE I POMOĆ</string>
     <string name="settings_setup_wizard_title">Vodič za postavljanje</string>
     <string name="settings_setup_wizard_body">Prođite kroz opcije veze i kontrolera. Možete ponoviti u bilo kom trenutku.</string>
     <string name="settings_help_title">Pomoć i FAQ</string>
     <string name="settings_help_body">Koncepti, savjeti za performanse i rješavanje problema.</string>
+    <string name="dashboard_add_controller_title">Dodaj kontroler</string>
+    <string name="dashboard_add_controller_body">Žičano, Bluetooth ili na ekranu.</string>
 </resources>

@@ -58,14 +58,12 @@
     <string name="help_view_privacy_policy">Politique de confidentialité</string>
     <string name="help_view_github">Voir le code source sur GitHub</string>
 
-    <string name="dashboard_hint_title">Besoin d\'aide ?</string>
-    <string name="dashboard_hint_body">Ouvrez le guide de configuration pour choisir votre connexion et votre manette. Nous vous emmenons à l\'écran approprié.</string>
-    <string name="dashboard_hint_action_open">Ouvrir le guide</string>
-    <string name="dashboard_hint_action_dismiss">Pas maintenant</string>
 
     <string name="settings_section_setup">CONFIGURATION ET AIDE</string>
     <string name="settings_setup_wizard_title">Guide de configuration</string>
     <string name="settings_setup_wizard_body">Parcourez les options de connexion et de manette. Relançable à tout moment.</string>
     <string name="settings_help_title">Aide et FAQ</string>
     <string name="settings_help_body">Concepts, conseils de performance et dépannage.</string>
+    <string name="dashboard_add_controller_title">Ajouter une manette</string>
+    <string name="dashboard_add_controller_body">Filaire, Bluetooth ou à l\'écran.</string>
 </resources>
