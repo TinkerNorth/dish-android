@@ -3,8 +3,11 @@
 package com.tinkernorth.dish.ui.setup
 
 import com.tinkernorth.dish.composer.ConnectionCoordinator
+import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
+import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.DiscoveredServer
+import com.tinkernorth.dish.source.connection.ConnectIntent
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
@@ -40,6 +43,9 @@ class SetupConnectionViewModelTest {
     private val stale = MutableStateFlow<Set<String>>(emptySet())
     private val scanning = MutableStateFlow(false)
     private val events = MutableSharedFlow<ConnectionEvent>(extraBufferCapacity = 8)
+
+    private val server = DiscoveredServer(name = "Living Room", ip = "10.0.0.5", machineId = "abc123")
+    private val id = SatelliteConnection.idFor(server)
 
     @Before
     fun setUp() {
@@ -125,6 +131,101 @@ class SetupConnectionViewModelTest {
             assertTrue(event is SetupConnectionViewModel.Event.ShowPairing)
             assertEquals(server, (event as SetupConnectionViewModel.Event.ShowPairing).server)
         }
+
+    @Test
+    fun `tapping a connected host hands off without re-connecting`() =
+        runTest(dispatcher) {
+            presentHost(LinkState.Connected)
+            val seen = collectEvents()
+            vm.onHostTapped(id)
+            dispatcher.scheduler.runCurrent()
+            assertEquals(listOf<SetupConnectionViewModel.Event>(SetupConnectionViewModel.Event.Connected(id)), seen)
+            verify(exactly = 0) { satellite.connect(any(), any()) }
+        }
+
+    @Test
+    fun `tapping an unstable host hands off without re-connecting`() =
+        runTest(dispatcher) {
+            presentHost(LinkState.Unstable)
+            val seen = collectEvents()
+            vm.onHostTapped(id)
+            dispatcher.scheduler.runCurrent()
+            assertEquals(listOf<SetupConnectionViewModel.Event>(SetupConnectionViewModel.Event.Connected(id)), seen)
+            verify(exactly = 0) { satellite.connect(any(), any()) }
+        }
+
+    @Test
+    fun `tapping a stale host opens the pairing dialog`() =
+        runTest(dispatcher) {
+            presentHost(LinkState.Stale)
+            val seen = collectEvents()
+            vm.onHostTapped(id)
+            dispatcher.scheduler.runCurrent()
+            val event = seen.single()
+            assertTrue(event is SetupConnectionViewModel.Event.ShowPairing)
+            assertEquals(server, (event as SetupConnectionViewModel.Event.ShowPairing).server)
+            verify(exactly = 0) { satellite.connect(any(), any()) }
+        }
+
+    @Test
+    fun `tapping a saved host connects with the user-initiated intent`() =
+        runTest(dispatcher) {
+            // Saved auto-reconnects on its own, so reset to isolate the tap's connect.
+            presentHost(LinkState.Saved)
+            io.mockk.clearMocks(satellite, answers = false, recordedCalls = true, childMocks = false)
+            vm.onHostTapped(id)
+            dispatcher.scheduler.runCurrent()
+            verify(exactly = 1) { satellite.connect(server, ConnectIntent.USER_INITIATED) }
+        }
+
+    @Test
+    fun `a saved host auto-reconnects exactly once across emissions`() =
+        runTest(dispatcher) {
+            presentHost(LinkState.Saved)
+            // A second identical emission must not fire another auto-reconnect.
+            summaries.value = listOf(summary(LinkState.Saved).copy(detail = "again"))
+            dispatcher.scheduler.runCurrent()
+            verify(exactly = 1) { satellite.connect(server, ConnectIntent.AUTO_RECONNECT) }
+        }
+
+    @Test
+    fun `a background host going live does not hand off`() =
+        runTest(dispatcher) {
+            val seen = collectEvents()
+            presentHost(LinkState.Connected)
+            dispatcher.scheduler.runCurrent()
+            assertTrue(seen.isEmpty())
+        }
+
+    @Test
+    fun `the user-tapped host going live hands off once it is live`() =
+        runTest(dispatcher) {
+            presentHost(LinkState.Connecting)
+            val seen = collectEvents()
+            vm.onHostTapped(id)
+            dispatcher.scheduler.runCurrent()
+            assertTrue("connecting tap does not hand off yet", seen.isEmpty())
+
+            summaries.value = listOf(summary(LinkState.Connected))
+            dispatcher.scheduler.runCurrent()
+            assertEquals(listOf<SetupConnectionViewModel.Event>(SetupConnectionViewModel.Event.Connected(id)), seen)
+        }
+
+    private fun summary(link: LinkState) =
+        ConnectionSummary(
+            id = id,
+            kind = ConnectionKind.SATELLITE,
+            label = "Living Room",
+            detail = "",
+            live = link,
+            boundSlotIds = emptyList(),
+        )
+
+    private fun presentHost(link: LinkState) {
+        discovered.value = listOf(server)
+        summaries.value = listOf(summary(link))
+        dispatcher.scheduler.runCurrent()
+    }
 
     private fun kotlinx.coroutines.test.TestScope.collectEvents(): List<SetupConnectionViewModel.Event> {
         val out = mutableListOf<SetupConnectionViewModel.Event>()

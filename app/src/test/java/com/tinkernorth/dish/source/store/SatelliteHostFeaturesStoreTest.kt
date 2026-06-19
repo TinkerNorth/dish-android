@@ -32,6 +32,19 @@ class SatelliteHostFeaturesStoreTest {
     }
 
     @Test
+    fun `setIfAbsent inserts into an empty store`() {
+        store.setIfAbsent("sat-A", features)
+        assertEquals(features, store.featuresFor("sat-A"))
+    }
+
+    @Test
+    fun `setIfAbsent leaves an already-present connection untouched`() {
+        store.setFeatures("sat-A", features)
+        store.setIfAbsent("sat-A", HostFeatureSet.SATELLITE_DEFAULT)
+        assertEquals(features, store.featuresFor("sat-A"))
+    }
+
+    @Test
     fun `clearConnection drops only the targeted connection`() {
         store.setFeatures("sat-A", features)
         store.setFeatures("sat-B", HostFeatureSet.SATELLITE_DEFAULT)

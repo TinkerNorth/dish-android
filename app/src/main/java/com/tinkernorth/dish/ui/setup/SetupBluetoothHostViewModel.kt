@@ -15,7 +15,6 @@ import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedBt
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.sensor.PhoneMotionAvailability
-import com.tinkernorth.dish.source.system.BluetoothPermissionState
 import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -108,9 +107,15 @@ class SetupBluetoothHostViewModel
             combine(
                 store.rememberedBtFlow,
                 permission.state,
-            ) { remembered, perm ->
-                project(remembered, perm)
-            }.onEach { next -> _state.value = next }.launchIn(viewModelScope)
+            ) { remembered, perm -> remembered to perm }
+                .onEach { (remembered, perm) ->
+                    _state.update { current ->
+                        current.copy(
+                            hosts = remembered.map { it.toRow() },
+                            permissionMissing = perm.anyMissing,
+                        )
+                    }
+                }.launchIn(viewModelScope)
 
             // A registry slot reaching connected for our active session means the PC
             // finished the bond; bind the input and finish.
@@ -134,17 +139,6 @@ class SetupBluetoothHostViewModel
         // Refresh the grant snapshot on every foreground; the OS never broadcasts
         // a revoke, and a grant landed in the Activity launcher needs reflecting.
         fun refresh() = permission.refresh()
-
-        private fun project(
-            remembered: List<RememberedBt>,
-            perm: BluetoothPermissionState,
-        ): State {
-            val current = _state.value
-            return current.copy(
-                hosts = remembered.map { it.toRow() },
-                permissionMissing = perm.anyMissing,
-            )
-        }
 
         // Tapping a known host: its type is already locked, so skip the picker and
         // advertise straight away (gated only by the BT permission).

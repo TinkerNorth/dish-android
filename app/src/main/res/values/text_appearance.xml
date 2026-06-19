@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    CANONICAL TYPOGRAPHY: 14 TextAppearance.Dish.* styles. Every TextView
+    CANONICAL TYPOGRAPHY: 17 TextAppearance.Dish.* styles. Every TextView
     in `res/layout/*.xml` adopts one of these via `style="@style/…"`.
 
     Two-tier model (matches the dimens / colors layout):
-      - 12 truly canonical roles (Caption, Label, BodySmall, Body, BodyLarge,
-        Title, Display, Hero, plus their .Accent / .Plain / .Mono color/family
-        variants).
+      - 15 truly canonical roles (Caption, Label, BodySmall, Body, BodyLarge,
+        Title, Display, Hero, plus their .Accent / .Plain / .Micro / .Tight /
+        .Mono / .Bold color/family/tracking variants).
       - 2 one-off display states (.Large) for the brand header + pair-dialog
         title.
 
@@ -16,6 +16,7 @@
                    Title / Display / Hero
         Modifier = Accent  (cyan)
                    Plain   (sans-serif, otherwise mirrors the role)
+                   Micro   (caption-size on a label role)
                    Mono    (monospace override on a default-family role)
                    Bold    (textStyle bold)
                    Large   (next-step-up textSize)

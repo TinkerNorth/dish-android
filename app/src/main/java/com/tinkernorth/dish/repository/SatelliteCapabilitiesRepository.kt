@@ -53,7 +53,7 @@ class SatelliteCapabilitiesRepository
             if (caps.host.catalog.supported) {
                 hostFeaturesStore.setIfAbsent(satelliteId, HostFeatureSet.fromServerCapabilities(caps))
             }
-            runtimeStore.setRuntime(satelliteId, SatelliteHostRuntime(motionBackendOk = caps.motion.available))
+            runtimeStore.setRuntime(satelliteId, SatelliteHostRuntime(motionBackendOk = caps.motion?.available != false))
             return caps
         }
     }

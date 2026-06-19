@@ -228,7 +228,11 @@ class CapabilityComposerTest {
                 )
             composer.probe(this)
             testScheduler.runCurrent()
-            assertTrue(composer.capabilityFor(VIRTUAL_SLOT_ID).isAvailable(Feature.MOTION))
+            val caps = composer.capabilityFor(VIRTUAL_SLOT_ID)
+            assertTrue(caps.isAvailable(Feature.MOTION))
+            // The PlayStation type layer also carries touchpad and rumble (not just transport/host).
+            assertTrue(caps.isAvailable(Feature.TOUCHPAD))
+            assertTrue(caps.isAvailable(Feature.RUMBLE))
         }
 
     @Test

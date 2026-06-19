@@ -7,6 +7,7 @@ import com.tinkernorth.dish.core.model.HostFeatureSet
 import com.tinkernorth.dish.core.net.DiscoveryGateway
 import com.tinkernorth.dish.core.net.HttpReply
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
+import com.tinkernorth.dish.source.store.SatelliteHostRuntime
 import com.tinkernorth.dish.source.store.SatelliteHostRuntimeStore
 import io.mockk.coEvery
 import io.mockk.mockk
@@ -128,5 +129,43 @@ class SatelliteCapabilitiesRepositoryTest {
             assertNull(repo.refresh(server, "sat-1"))
             assertNull(hostFeaturesStore.featuresFor("sat-1"))
             assertNull(runtimeStore.runtimeFor("sat-1"))
+        }
+
+    @Test
+    fun `a malformed 200 body yields null and writes neither store`() =
+        runTest {
+            coEvery { gateway.serverCapabilities(any(), any(), any()) } returns HttpReply(200, "not json", null)
+
+            assertNull(repo.refresh(server, "sat-1"))
+            assertNull(hostFeaturesStore.featuresFor("sat-1"))
+            assertNull(runtimeStore.runtimeFor("sat-1"))
+        }
+
+    @Test
+    fun `an empty 200 body yields null and writes nothing`() =
+        runTest {
+            coEvery { gateway.serverCapabilities(any(), any(), any()) } returns HttpReply(200, "", null)
+
+            assertNull(repo.refresh(server, "sat-1"))
+            assertNull(hostFeaturesStore.featuresFor("sat-1"))
+            assertNull(runtimeStore.runtimeFor("sat-1"))
+        }
+
+    @Test
+    fun `an absent motion block records the backend as up`() =
+        runTest {
+            // motion is nullable: a host block with no motion field means backend-up, not down.
+            val noMotionBody =
+                """{"protocolVersion":1,"serverVersion":"1.6.0","maxControllers":16,""" +
+                    """"backend":{"id":"vigem","supported":true,"available":true,"errorCode":null},""" +
+                    """"host":{"catalog":{"supported":true},""" +
+                    """"mouseControl":{"supported":true,"available":true},""" +
+                    """"keyboardControl":{"supported":false},""" +
+                    """"rumble":{"supported":false,"available":false}}}"""
+            coEvery { gateway.serverCapabilities(any(), any(), any()) } returns HttpReply(200, noMotionBody, null)
+
+            repo.refresh(server, "sat-1")
+
+            assertEquals(SatelliteHostRuntime(motionBackendOk = true), runtimeStore.runtimeFor("sat-1"))
         }
 }

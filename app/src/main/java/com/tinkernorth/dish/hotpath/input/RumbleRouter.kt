@@ -77,7 +77,6 @@ class RumbleRouter
         ) {
             val target = resolveTarget(sessionHandle, controllerIndex)
             if (target is RumbleTarget.None) return
-            // The user can switch rumble off per slot; suppress delivery when so.
             if (!rumbleEnabled.isEnabled(slotIdOf(target))) return
             if (isRumbleStop(strongMagnitude, weakMagnitude, durationMs)) {
                 cancel(target)

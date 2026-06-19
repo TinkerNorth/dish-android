@@ -59,6 +59,10 @@ class SetupConfigureActivity : AppCompatActivity() {
     private var step = Step.TYPE
     private var current = ConfigUiState()
 
+    // ApplyState.Finished is a retained StateFlow value, so a STOP/START cycle re-collects it;
+    // guard the dashboard handoff so it fires once.
+    private var finished = false
+
     // The slot the screen actually loaded (a USB Direct claim can retire the id from the prior
     // step); the type cards resolve their candidate capabilities against this same id.
     private var resolvedSlotId = VIRTUAL_SLOT_ID
@@ -414,6 +418,8 @@ class SetupConfigureActivity : AppCompatActivity() {
     // Mirrors ConfigureBindingsActivity.finishWithToast: the result is held for the
     // next screen (the dashboard) since a live post would die with this activity.
     private fun finishToDashboard(state: ApplyState.Finished) {
+        if (finished) return
+        finished = true
         val warning = state.warningMessage
         if (warning != null) {
             notifications.postDeferred(

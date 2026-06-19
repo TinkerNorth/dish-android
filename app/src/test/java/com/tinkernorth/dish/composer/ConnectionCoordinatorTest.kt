@@ -33,6 +33,8 @@ class ConnectionCoordinatorTest {
     private lateinit var satellite: SatelliteConnectionManager
     private lateinit var bt: BluetoothGamepadRegistry
     private lateinit var store: ConnectionStore
+    private lateinit var hostFeaturesStore: com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
+    private lateinit var hostRuntimeStore: com.tinkernorth.dish.source.store.SatelliteHostRuntimeStore
     private lateinit var gamepadRegistry: com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
     private lateinit var scope: TestScope
 
@@ -55,6 +57,8 @@ class ConnectionCoordinatorTest {
         satellite = mockk(relaxed = true)
         bt = mockk(relaxed = true)
         store = mockk(relaxed = true)
+        hostFeaturesStore = mockk(relaxed = true)
+        hostRuntimeStore = mockk(relaxed = true)
         gamepadRegistry = mockk(relaxed = true)
         every { gamepadRegistry.devices } returns registryDevicesFlow
         registryDevicesFlow.value = emptyMap()
@@ -122,8 +126,8 @@ class ConnectionCoordinatorTest {
                 store = store,
                 bindingStore = bindingStore,
                 typeStore = typeStore,
-                hostFeaturesStore = mockk(relaxed = true),
-                hostRuntimeStore = mockk(relaxed = true),
+                hostFeaturesStore = hostFeaturesStore,
+                hostRuntimeStore = hostRuntimeStore,
                 composer = composer,
                 gamepadRegistry = gamepadRegistry,
             )
@@ -153,6 +157,8 @@ class ConnectionCoordinatorTest {
         assertNull(hub.bindings.value["slot-A"])
         assertNull(hub.satTypes.value["sat:1" to "slot-A"])
         verify { satellite.forget("sat:1") }
+        verify { hostFeaturesStore.clearConnection("sat:1") }
+        verify { hostRuntimeStore.clearConnection("sat:1") }
     }
 
     @Test

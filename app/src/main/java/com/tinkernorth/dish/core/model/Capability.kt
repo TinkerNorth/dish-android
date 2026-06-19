@@ -19,8 +19,8 @@ enum class Feature(
     // only gate.
     MOUSE(Direction.SEND, null),
 
-    // Host-gated via hostFeatures.keyboardControl (no longer hardwired false). Stays
-    // unoffered until both a host injection backend and a phone-side source exist.
+    // Host-gated via hostFeatures.keyboardControl; modeled but never user-offered
+    // (no phone-side source).
     KEYBOARD(Direction.SEND, null),
     RUMBLE(Direction.RECEIVE, "rumble"),
 

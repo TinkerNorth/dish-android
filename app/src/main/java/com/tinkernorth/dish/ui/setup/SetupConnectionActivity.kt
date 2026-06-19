@@ -89,6 +89,13 @@ class SetupConnectionActivity : AppCompatActivity() {
         observe()
     }
 
+    override fun onDestroy() {
+        pinDialog?.setOnDismissListener(null)
+        pinDialog?.dismiss()
+        pinDialog = null
+        super.onDestroy()
+    }
+
     private fun observe() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -122,11 +129,9 @@ class SetupConnectionActivity : AppCompatActivity() {
 
     private fun renderHosts(state: SetupConnectionViewModel.State) {
         binding.tvScanEyebrow.visibility = visibleIf(state.scanning)
-        // Help block shows while there's nothing to pick yet (empty or still scanning).
         binding.groupGetSatellite.visibility = visibleIf(state.hosts.isEmpty())
 
         val list = binding.hostList
-        // Rebuild on each emit: the list is short and bounded by LAN discovery.
         list.removeAllViews()
         state.hosts.forEach { host ->
             val row = SetupHostRowBinding.inflate(layoutInflater, list, false)

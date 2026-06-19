@@ -232,7 +232,8 @@ data class ServerCapabilitiesDto(
     val serverVersion: String = "",
     val maxControllers: Int = 16,
     val backend: ServerBackendDto = ServerBackendDto(),
-    val motion: ServerMotionDto = ServerMotionDto(),
+    // Absent (no motion block) is unknown, not down: callers treat null as backend-up.
+    val motion: ServerMotionDto? = null,
     // Absent (older satellite that predates the host block) → catalog.supported stays
     // false, the signal callers use to know the host block is real before trusting it.
     val host: ServerHostDto = ServerHostDto(),
