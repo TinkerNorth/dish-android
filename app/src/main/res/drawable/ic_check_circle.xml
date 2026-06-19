@@ -1,13 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Single filled path with the check knocked out (like ic_cancel), so app:tint /
-     imageTintList colours the circle and the checkmark reads as the surface behind
-     it. A multi-path version is flattened to a solid disc by a flat tint. -->
+<!-- Outlined circle + checkmark, stroked over a transparent fill so a flat tint
+     (app:tint / imageTintList) colours the ring and the tick while the centre stays
+     see-through. A filled disc would read as a solid coloured circle. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zm-2,15l-5,-5 1.41,-1.41L10,14.17l7.59,-7.59L19,8l-9,9z" />
+        android:fillColor="#00000000"
+        android:pathData="M12,21 A9,9 0 1 1 12,3 A9,9 0 1 1 12,21 Z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M7.8,12.3 L10.7,15.2 L16.2,9"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2" />
 </vector>

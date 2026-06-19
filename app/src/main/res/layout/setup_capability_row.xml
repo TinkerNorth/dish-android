@@ -19,9 +19,8 @@
         <TextView
             android:id="@+id/capName"
             style="@style/TextAppearance.Dish.BodySmall"
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
             android:fontFamily="monospace"
             android:textColor="@color/colorOnSurface"
             android:textStyle="bold"
@@ -32,6 +31,7 @@
             style="@style/TextAppearance.Dish.Label"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/spacing_md"
             android:letterSpacing="0.06"
             android:textAllCaps="true"
             tools:text="Available" />
