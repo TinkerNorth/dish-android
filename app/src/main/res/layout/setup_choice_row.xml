@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Tappable card row reused by the chooser screens (input, connection path,
+     host list). Icon, title, optional badge, body, and trailing chevron are
+     set per callsite from code. -->
 <com.google.android.material.card.MaterialCardView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/cardWizardOptionRoot"
+    android:id="@+id/choiceCard"
     style="@style/Widget.Dish.Card"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -14,7 +17,7 @@
 
     <LinearLayout
         style="@style/Widget.Dish.Card.RowContainer"
-        android:gravity="top">
+        android:gravity="center_vertical">
 
         <FrameLayout
             android:layout_width="@dimen/icon_card_container"
@@ -22,11 +25,11 @@
             android:background="@drawable/bg_icon_container">
 
             <ImageView
-                android:id="@+id/optionIcon"
+                android:id="@+id/choiceIcon"
                 style="@style/Widget.Dish.Icon.Card"
                 android:layout_gravity="center"
                 android:importantForAccessibility="no"
-                tools:src="@drawable/ic_wifi" />
+                tools:src="@drawable/ic_usb" />
         </FrameLayout>
 
         <LinearLayout
@@ -43,15 +46,15 @@
                 android:gravity="center_vertical">
 
                 <TextView
-                    android:id="@+id/optionTitle"
+                    android:id="@+id/choiceTitle"
                     style="@style/TextAppearance.Dish.Title"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    tools:text="Wi-Fi to Satellite" />
+                    tools:text="Wired controller" />
 
                 <TextView
-                    android:id="@+id/optionRecommendedPill"
+                    android:id="@+id/choiceBadge"
                     style="@style/TextAppearance.Dish.Caption"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -62,17 +65,26 @@
                     android:textColor="@color/colorOnPrimary"
                     android:textAllCaps="true"
                     android:visibility="gone"
-                    tools:text="RECOMMENDED"
+                    tools:text="BEST"
                     tools:visibility="visible" />
             </LinearLayout>
 
             <TextView
-                android:id="@+id/optionBody"
+                android:id="@+id/choiceBody"
                 style="@style/TextAppearance.Dish.Body"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_xs"
-                tools:text="Phone and PC on the same Wi-Fi. Lowest latency, full feature set." />
+                tools:text="Plugged into your phone. Lowest latency." />
         </LinearLayout>
+
+        <ImageView
+            android:id="@+id/choiceChevron"
+            android:layout_width="@dimen/icon_chevron_lg"
+            android:layout_height="@dimen/icon_chevron_lg"
+            android:layout_marginStart="@dimen/spacing_md"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_chevron_right"
+            app:tint="@color/colorMuted" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

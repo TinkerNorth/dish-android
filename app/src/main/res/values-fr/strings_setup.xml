@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fil d'Ariane + cadre partagé -->
+    <string name="setup_step_input">Entrée</string>
+    <string name="setup_step_destination">Destination</string>
+    <string name="setup_step_binding">Liaison</string>
+    <string name="setup_title">Configurer Dish</string>
+    <string name="setup_action_skip">Passer</string>
+    <string name="setup_action_back">Retour</string>
+
+    <!-- Étape 1 · choix de l'entrée -->
+    <string name="setup_input_toolbar">Configurer Dish</string>
+    <string name="setup_input_title">Comment voulez-vous jouer ?</string>
+    <string name="setup_input_subtitle">Choisissez une entrée. La configuration diffère un peu pour chacune.</string>
+    <string name="setup_input_wired_title">Manette filaire</string>
+    <string name="setup_input_wired_body">Branchée sur votre téléphone. Latence minimale.</string>
+    <string name="setup_input_badge_best">Meilleur</string>
+    <string name="setup_input_bluetooth_title">Manette Bluetooth</string>
+    <string name="setup_input_bluetooth_body">Une manette appairée à ce téléphone.</string>
+    <string name="setup_input_onscreen_title">Manette à l\'écran</string>
+    <string name="setup_input_onscreen_body">Boutons tactiles sur l\'écran.</string>
+
+    <!-- Étape 2 · branche USB -->
+    <string name="setup_usb_toolbar">Configuration USB</string>
+    <string name="setup_usb_detect_title">Branchez votre manette</string>
+    <string name="setup_usb_detect_subtitle">Sur le port USB de votre téléphone.</string>
+    <string name="setup_usb_status_scanning">Recherche…</string>
+    <string name="setup_usb_status_detected">Détectée</string>
+    <string name="setup_usb_continue">Continuer</string>
+    <string name="setup_usb_mode_title">Comment Dish doit-il la lire ?</string>
+    <string name="setup_usb_supported">Votre manette prend en charge le mode Direct</string>
+    <string name="setup_usb_unverified_title">Manette non vérifiée</string>
+    <string name="setup_usb_unverified_body">Le mode Direct fonctionne, mais la disposition n\'est pas confirmée.</string>
+    <string name="setup_usb_direct_title">USB Direct</string>
+    <string name="setup_usb_direct_body">Lit la manette directement. Latence minimale. Autorisation unique.</string>
+    <string name="setup_usb_direct_unverified_body">Latence minimale, mais cette manette précise n\'est pas vérifiée.</string>
+    <string name="setup_usb_direct_warning">Certains boutons ou gâchettes peuvent être mal mappés. Essayez, puis changez si cela semble incorrect.</string>
+    <string name="setup_usb_standard_title">USB Standard</string>
+    <string name="setup_usb_standard_body">La couche manette d\'Android. Fonctionne partout, sans invite.</string>
+    <string name="setup_usb_standard_verified_body">Disposition vérifiée via la couche manette d\'Android. Le choix fiable ici.</string>
+    <string name="setup_usb_badge_recommended">Recommandé</string>
+    <string name="setup_usb_grant_title">Un petit OK d\'Android</string>
+    <string name="setup_usb_grant_body">USB Direct lit directement le matériel de la manette, donc Android vous demande d\'accorder à Dish l\'accès à cet appareil. C\'est une invite unique.</string>
+    <string name="setup_usb_grant_card_title">Autorisez l\'accès pour continuer</string>
+    <string name="setup_usb_grant_card_body">Android accorde à Dish l\'accès à votre manette. Cochez « Toujours ouvrir Dish pour cet appareil » pour l\'éviter la prochaine fois.</string>
+    <string name="setup_usb_grant_action">Afficher l\'invite</string>
+
+    <!-- Étape 2 - branche manette Bluetooth -->
+    <string name="setup_btc_toolbar">Configurer Dish</string>
+    <string name="setup_btc_title">Appairez ou choisissez une manette</string>
+    <string name="setup_btc_subtitle">Appairez-en une nouvelle, ou touchez une manette déjà appairée à ce téléphone.</string>
+    <string name="setup_btc_continue">Continuer</string>
+    <string name="setup_btc_permission_title">Autorisez le Bluetooth pour continuer</string>
+    <string name="setup_btc_permission_body">Dish a besoin de l\'accès Bluetooth pour trouver des manettes. Une petite invite d\'Android.</string>
+    <string name="setup_btc_permission_action">Afficher l\'invite</string>
+    <string name="setup_btc_locked_placeholder">Les manettes appairées apparaissent une fois l\'accès autorisé</string>
+    <string name="setup_btc_pair_new_title">Appairer une nouvelle manette</string>
+    <string name="setup_btc_pair_new_body">Mettez-la d\'abord en mode appairage</string>
+    <string name="setup_btc_paired_eyebrow">Sur ce téléphone</string>
+    <string name="setup_btc_paired_empty">Aucune manette appairée pour l\'instant. Appairez-en une ci-dessus pour continuer.</string>
+    <string name="setup_btc_status_connected">Connectée</string>
+    <string name="setup_btc_status_paired">Appairée, non connectée</string>
+
+    <!-- Étape 3 - connexion (choix du chemin + recherche/scan/reconnexion/appairage du Satellite) -->
+    <string name="setup_conn_toolbar">Connexion</string>
+    <string name="setup_conn_path_title">Comment l\'entrée atteint-elle votre PC ?</string>
+    <string name="setup_conn_path_subtitle">Choisissez comment ce téléphone communique avec votre PC.</string>
+    <string name="setup_conn_satellite_title">Satellite par Wi-Fi</string>
+    <string name="setup_conn_satellite_body">Latence minimale, toutes les fonctionnalités. Nécessite l\'app PC gratuite.</string>
+    <string name="setup_conn_satellite_badge">Meilleur</string>
+    <string name="setup_conn_bt_host_title">Hôte Bluetooth</string>
+    <string name="setup_conn_bt_host_body">Le téléphone s\'appaire au PC comme une manette. Sans app PC.</string>
+    <string name="setup_conn_satellite_pick_title">Choisissez votre PC</string>
+    <string name="setup_conn_scanning_eyebrow">Analyse de votre Wi-Fi</string>
+    <string name="setup_conn_host_unnamed">Votre PC</string>
+    <string name="setup_conn_status_ready">Prêt, appairé</string>
+    <string name="setup_conn_status_needs_pairing">Appairage requis, PIN</string>
+    <string name="setup_conn_status_connected">Connecté</string>
+    <string name="setup_conn_status_reconnecting">Reconnexion…</string>
+    <string name="setup_conn_missing_title">Vous ne voyez pas votre PC ?</string>
+    <string name="setup_conn_missing_body">Installez-y l\'app Satellite gratuite.</string>
+    <string name="setup_conn_get_satellite">Obtenir Satellite sur GitHub</string>
+    <string name="setup_conn_rescan">Relancer l\'analyse</string>
+
+    <!-- Étape 3 - chemin hôte Bluetooth (design 5H) -->
+    <string name="setup_bth_toolbar">Configuration hôte Bluetooth</string>
+    <string name="setup_bth_pick_pc_title">Quel PC ?</string>
+    <string name="setup_bth_pick_pc_subtitle">Choisissez un PC pour lequel être une manette, ou appairez-en un nouveau.</string>
+    <string name="setup_bth_host_remembered">Déjà appairé. Touchez pour reconnecter.</string>
+    <string name="setup_bth_badge_xbox">Manette Xbox</string>
+    <string name="setup_bth_badge_playstation">Manette PlayStation</string>
+    <string name="setup_bth_pair_new_title">Appairer un nouvel appareil</string>
+    <string name="setup_bth_pair_new_body">Vous choisirez un type de manette pour lui.</string>
+    <string name="setup_bth_permission_title">Devenir la manette</string>
+    <string name="setup_bth_permission_body">Dish s\'annonce à votre PC comme une manette sans fil par Bluetooth.</string>
+    <string name="setup_bth_permission_callout_title">Autorisez le Bluetooth pour continuer</string>
+    <string name="setup_bth_permission_callout_body">Dish a besoin de l\'accès Bluetooth pour s\'annoncer comme une manette. Une petite invite d\'Android.</string>
+    <string name="setup_bth_permission_action">Afficher l\'invite</string>
+    <string name="setup_bth_type_locked_until_permission">Choisissez une fois le Bluetooth autorisé</string>
+    <string name="setup_bth_pick_type_title">Quelle manette votre PC doit-il voir ?</string>
+    <string name="setup_bth_pick_type_subtitle">Choisissez le type sous lequel votre PC lit Dish.</string>
+    <string name="setup_bth_type_xbox">Xbox</string>
+    <string name="setup_bth_type_playstation">PlayStation</string>
+    <string name="setup_bth_type_lock_note">Verrouillé pour ce PC. Pour le changer plus tard, vous réappairez.</string>
+    <string name="setup_bth_advertising_heading">Ajoutez-le sur votre PC</string>
+    <string name="setup_bth_advertising_type">Réglé sur manette %1$s</string>
+    <string name="setup_bth_advertising_title">Ajoutez-le sur votre PC</string>
+    <string name="setup_bth_advertising_steps">Sur le PC, ouvrez le Bluetooth, choisissez Ajouter un appareil, et sélectionnez « %1$s ».</string>
+    <string name="setup_bth_discoverable_waiting">En attente de votre PC</string>
+    <string name="setup_bth_discoverable_on">Visible. Choisissez Dish sur votre PC.</string>
+
+    <!-- Tableau des capacités (partagé par le choix de type hôte Bluetooth et la configuration) -->
+    <string name="setup_cap_rumble">Vibration</string>
+    <string name="setup_cap_motion">Mouvement / gyro</string>
+    <string name="setup_cap_touchpad">Pavé tactile</string>
+    <string name="setup_cap_available">Disponible</string>
+    <string name="setup_cap_off">Désactivé</string>
+    <string name="setup_cap_input">Entrée</string>
+    <string name="setup_cap_destination">Destination</string>
+    <string name="setup_cap_type">Type</string>
+
+    <!-- Étape 4 - configuration et liaison -->
+    <string name="setup_cfg_toolbar">Configurer</string>
+    <string name="setup_cfg_type_title">Comment le PC doit-il la voir ?</string>
+    <string name="setup_cfg_type_subtitle">Choisissez la manette que le PC doit signaler. Chacune débloque des extras différents.</string>
+    <string name="setup_cfg_type_locked_subtitle">Par Bluetooth, le type est fixe. Voici ce qu\'il transporte.</string>
+    <string name="setup_cfg_feel_title">Quel ressenti voulez-vous ?</string>
+    <string name="setup_cfg_feel_subtitle">Seuls les extras pris en charge à la fois par votre entrée et votre destination sont affichés.</string>
+    <string name="setup_cfg_feel_motion_body">Visée par inclinaison et gyro sur le PC.</string>
+    <string name="setup_cfg_feel_rumble_body">Le téléphone vibre en retour.</string>
+    <string name="setup_cfg_feel_empty">Rien à régler pour cette combinaison. Votre manette est prête à être liée.</string>
+    <string name="setup_cfg_review_title">Vérifier et lier</string>
+    <string name="setup_cfg_review_subtitle">Vérifiez la liaison, puis liez-la à votre destination.</string>
+    <string name="setup_cfg_review_gets">Obtient</string>
+    <string name="setup_cfg_review_none">Aucun extra</string>
+    <string name="setup_cfg_link_usb_direct">USB / Direct</string>
+    <string name="setup_cfg_link_usb_standard">USB / Standard</string>
+    <string name="setup_cfg_dest_satellite">Satellite</string>
+    <string name="setup_cfg_dest_bluetooth">Bluetooth</string>
+    <string name="setup_cfg_continue">Continuer</string>
+    <string name="setup_cfg_bind">Lier</string>
+    <string name="setup_cfg_done_title">Manette liée</string>
+    <string name="setup_cfg_done_body">%1$s est prête sur %2$s.</string>
+
+    <!-- Feuille d'erreur générique -->
+    <string name="setup_error_body">L\'entrée ou la destination choisie n\'est plus disponible.</string>
+    <string name="setup_error_retry">Réessayer</string>
+    <string name="setup_error_start_over">Recommencer</string>
+    <string name="setup_error_exit">Quitter</string>
+</resources>

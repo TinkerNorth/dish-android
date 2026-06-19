@@ -18,7 +18,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.WakeStateController
@@ -128,7 +127,7 @@ class ConfigureBindingsActivity : AppCompatActivity() {
         snapshot: BindingSnapshot,
     ) {
         val s = binding.sectionInput
-        s.ivInputIcon.setImageResource(linkIconForSection(snapshot))
+        s.ivInputIcon.setImageResource(snapshot.link.iconRes())
         s.tvInputName.text = " · ${snapshot.name}"
 
         val (linkLabel, linkIcon) =
@@ -199,7 +198,7 @@ class ConfigureBindingsActivity : AppCompatActivity() {
 
     private fun bindBindingSection(state: ConfigUiState) {
         val bz = binding.sectionBinding
-        val typeLabel = typeLabel(state.draft?.type ?: CONTROLLER_TYPE_XBOX)
+        val typeLabel = viewModel.typeLabel(state.draft?.type ?: CONTROLLER_TYPE_XBOX)
         bz.tvEmulateText.text = typeLabel
         bz.emulateDropdown.text = typeLabel
         bz.emulatePill.visibility = if (state.isBluetoothHost) View.VISIBLE else View.GONE
@@ -232,13 +231,6 @@ class ConfigureBindingsActivity : AppCompatActivity() {
     }
 
     private fun noneValue(parent: ViewGroup): View = BindingValueNoneBinding.inflate(layoutInflater, parent, false).root
-
-    private fun linkIconForSection(snapshot: BindingSnapshot): Int =
-        when (snapshot.link) {
-            BindingLink.BLUETOOTH -> R.drawable.ic_bluetooth
-            BindingLink.ONSCREEN -> R.drawable.ic_gamepad_virtual
-            BindingLink.USB -> R.drawable.ic_gamepad
-        }
 
     private fun renderApplyState(state: ApplyState) {
         when (state) {
@@ -398,12 +390,6 @@ class ConfigureBindingsActivity : AppCompatActivity() {
         }
         pm.show()
     }
-
-    private fun typeLabel(type: Int): String =
-        viewModel.ui.value.typeOptions
-            .firstOrNull { it.id == type }
-            ?.label
-            ?: getString(if (type == CONTROLLER_TYPE_PLAYSTATION) R.string.picker_type_playstation else R.string.picker_type_xbox)
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean = gamepadHost.dispatchKeyEvent(event) || super.dispatchKeyEvent(event)
 

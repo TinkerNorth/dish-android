@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Discovered/remembered satellite host row for the Stage 3 picker. Name and
+     status line are set per host from code; status reads "Ready, paired",
+     "Needs pairing, PIN", or "Reconnecting". -->
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/hostCard"
+    style="@style/Widget.Dish.Card"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="@dimen/card_margin_bottom"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground">
+
+    <LinearLayout
+        style="@style/Widget.Dish.Card.RowContainer"
+        android:gravity="center_vertical">
+
+        <FrameLayout
+            android:layout_width="@dimen/icon_card_container"
+            android:layout_height="@dimen/icon_card_container"
+            android:background="@drawable/bg_icon_container">
+
+            <ImageView
+                style="@style/Widget.Dish.Icon.Card"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_satellite" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="@dimen/spacing_2xl"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/hostName"
+                style="@style/TextAppearance.Dish.Title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                tools:text="Your PC" />
+
+            <TextView
+                android:id="@+id/hostStatus"
+                style="@style/TextAppearance.Dish.Body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xs"
+                tools:text="Ready, paired" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/hostChevron"
+            android:layout_width="@dimen/icon_chevron_lg"
+            android:layout_height="@dimen/icon_chevron_lg"
+            android:layout_marginStart="@dimen/spacing_md"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_chevron_right"
+            app:tint="@color/colorMuted" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

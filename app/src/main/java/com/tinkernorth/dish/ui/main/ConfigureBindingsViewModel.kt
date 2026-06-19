@@ -39,6 +39,15 @@ import javax.inject.Inject
 
 enum class BindingLink { USB, BLUETOOTH, ONSCREEN }
 
+// Controller glyph for an input link; shared by the dashboard configure screen and
+// the setup flow's review step so both render the same icon.
+fun BindingLink.iconRes(): Int =
+    when (this) {
+        BindingLink.BLUETOOTH -> R.drawable.ic_bluetooth
+        BindingLink.ONSCREEN -> R.drawable.ic_gamepad_virtual
+        BindingLink.USB -> R.drawable.ic_gamepad
+    }
+
 data class BindingHost(
     val id: String,
     val label: String,
@@ -239,6 +248,16 @@ class ConfigureBindingsViewModel
         fun setMotion(on: Boolean) = _ui.update { it.copy(draft = it.draft?.copy(motionOn = on)) }
 
         fun setTouchpad(mode: String) = _ui.update { it.copy(draft = it.draft?.copy(touchpadMode = mode)) }
+
+        // The label for a controller type from the live catalog, falling back to the
+        // bundled names; shared by the dashboard configure screen and the setup flow.
+        fun typeLabel(type: Int): String =
+            _ui.value.typeOptions
+                .firstOrNull { it.id == type }
+                ?.label
+                ?: context.getString(
+                    if (type == CONTROLLER_TYPE_PLAYSTATION) R.string.picker_type_playstation else R.string.picker_type_xbox,
+                )
 
         fun dismissApplyResult() {
             _applyState.value = ApplyState.Idle

@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copy for the guided Dish Setup flow (ui/setup/**). -->
+<resources>
+    <!-- Breadcrumb + shared chrome -->
+    <string name="setup_step_input">Input</string>
+    <string name="setup_step_destination">Destination</string>
+    <string name="setup_step_binding">Binding</string>
+    <string name="setup_title">Set up Dish</string>
+    <string name="setup_action_skip">Skip</string>
+    <string name="setup_action_back">Back</string>
+
+    <!-- Stage 1 · pick input -->
+    <string name="setup_input_toolbar">Set up Dish</string>
+    <string name="setup_input_title">How do you want to play?</string>
+    <string name="setup_input_subtitle">Pick an input. Each sets up a little differently.</string>
+    <string name="setup_input_wired_title">Wired controller</string>
+    <string name="setup_input_wired_body">Plugged into your phone. Lowest latency.</string>
+    <string name="setup_input_badge_best">Best</string>
+    <string name="setup_input_bluetooth_title">Bluetooth controller</string>
+    <string name="setup_input_bluetooth_body">A pad paired to this phone.</string>
+    <string name="setup_input_onscreen_title">On-screen gamepad</string>
+    <string name="setup_input_onscreen_body">Touch buttons on the glass.</string>
+
+    <!-- Stage 2 · USB branch -->
+    <string name="setup_usb_toolbar">USB setup</string>
+    <string name="setup_usb_detect_title">Plug your controller in</string>
+    <string name="setup_usb_detect_subtitle">Into your phone\'s USB port.</string>
+    <string name="setup_usb_status_scanning">Scanning</string>
+    <string name="setup_usb_status_detected">Detected</string>
+    <string name="setup_usb_continue">Continue</string>
+    <string name="setup_usb_mode_title">How should Dish read it?</string>
+    <string name="setup_usb_supported">Your controller supports Direct</string>
+    <string name="setup_usb_unverified_title">Unverified controller</string>
+    <string name="setup_usb_unverified_body">Direct works, but mapping isn\'t confirmed.</string>
+    <string name="setup_usb_direct_title">USB Direct</string>
+    <string name="setup_usb_direct_body">Reads the controller directly. Lowest latency. One-time permission.</string>
+    <string name="setup_usb_direct_unverified_body">Lowest latency, but this exact controller isn\'t verified.</string>
+    <string name="setup_usb_direct_warning">Some buttons or triggers may remap. Try it, then switch if it feels off.</string>
+    <string name="setup_usb_standard_title">USB Standard</string>
+    <string name="setup_usb_standard_body">Android\'s gamepad layer. Works everywhere, no prompt.</string>
+    <string name="setup_usb_standard_verified_body">Verified mapping through Android\'s gamepad layer. The reliable pick here.</string>
+    <string name="setup_usb_badge_recommended">Recommended</string>
+    <string name="setup_usb_grant_title">One quick OK from Android</string>
+    <string name="setup_usb_grant_body">USB Direct reads the controller hardware itself, so Android asks you to grant Dish access to this device. It\'s a one-time prompt.</string>
+    <string name="setup_usb_grant_card_title">Allow access to continue</string>
+    <string name="setup_usb_grant_card_body">Android grants Dish access to your controller. Tick \"Always open Dish for this device\" to skip it next time.</string>
+    <string name="setup_usb_grant_action">Show me the prompt</string>
+
+    <!-- Stage 2 - Bluetooth controller branch -->
+    <string name="setup_btc_toolbar">Set up Dish</string>
+    <string name="setup_btc_title">Pair or pick a controller</string>
+    <string name="setup_btc_subtitle">Pair a new one, or tap a controller already paired to this phone.</string>
+    <string name="setup_btc_continue">Continue</string>
+    <string name="setup_btc_permission_title">Allow Bluetooth to continue</string>
+    <string name="setup_btc_permission_body">Dish needs Bluetooth access to find controllers. One quick prompt from Android.</string>
+    <string name="setup_btc_permission_action">Show me the prompt</string>
+    <string name="setup_btc_locked_placeholder">Paired controllers appear once allowed</string>
+    <string name="setup_btc_pair_new_title">Pair a new controller</string>
+    <string name="setup_btc_pair_new_body">Put it in pairing mode first</string>
+    <string name="setup_btc_paired_eyebrow">On this phone</string>
+    <string name="setup_btc_paired_empty">No paired controllers yet. Pair one above to continue.</string>
+    <string name="setup_btc_status_connected">Connected</string>
+    <string name="setup_btc_status_paired">Paired, not connected</string>
+
+    <!-- Stage 3 - connection (path choice + Satellite find/scan/reconnect/pair) -->
+    <string name="setup_conn_toolbar">Connection</string>
+    <string name="setup_conn_path_title">How does input reach your PC?</string>
+    <string name="setup_conn_path_subtitle">Pick how this phone talks to your PC.</string>
+    <string name="setup_conn_satellite_title">Satellite over Wi-Fi</string>
+    <string name="setup_conn_satellite_body">Lowest latency, full features. Needs the free PC app.</string>
+    <string name="setup_conn_satellite_badge">Best</string>
+    <string name="setup_conn_bt_host_title">Bluetooth host</string>
+    <string name="setup_conn_bt_host_body">Phone pairs to the PC as a pad. No PC app.</string>
+    <string name="setup_conn_satellite_pick_title">Pick your PC</string>
+    <string name="setup_conn_scanning_eyebrow">Scanning your Wi-Fi</string>
+    <string name="setup_conn_host_unnamed">Your PC</string>
+    <string name="setup_conn_status_ready">Ready, paired</string>
+    <string name="setup_conn_status_needs_pairing">Needs pairing, PIN</string>
+    <string name="setup_conn_status_connected">Connected</string>
+    <string name="setup_conn_status_reconnecting">Reconnecting</string>
+    <string name="setup_conn_missing_title">Don\'t see your PC?</string>
+    <string name="setup_conn_missing_body">Install the free Satellite app on it.</string>
+    <string name="setup_conn_get_satellite">Get Satellite on GitHub</string>
+    <string name="setup_conn_rescan">Rescan</string>
+
+    <!-- Stage 3 - Bluetooth host path (design 5H) -->
+    <string name="setup_bth_toolbar">Bluetooth host setup</string>
+    <string name="setup_bth_pick_pc_title">Which PC?</string>
+    <string name="setup_bth_pick_pc_subtitle">Pick a PC to be a controller for, or pair a new one.</string>
+    <string name="setup_bth_host_remembered">Paired before. Tap to reconnect.</string>
+    <string name="setup_bth_badge_xbox">Xbox pad</string>
+    <string name="setup_bth_badge_playstation">PlayStation pad</string>
+    <string name="setup_bth_pair_new_title">Pair a new device</string>
+    <string name="setup_bth_pair_new_body">You\'ll choose a controller type for it.</string>
+    <string name="setup_bth_permission_title">Be the controller</string>
+    <string name="setup_bth_permission_body">Dish advertises itself to your PC as a wireless gamepad over Bluetooth.</string>
+    <string name="setup_bth_permission_callout_title">Allow Bluetooth to continue</string>
+    <string name="setup_bth_permission_callout_body">Dish needs Bluetooth access to advertise as a gamepad. One quick prompt from Android.</string>
+    <string name="setup_bth_permission_action">Show me the prompt</string>
+    <string name="setup_bth_type_locked_until_permission">Choose once Bluetooth is allowed</string>
+    <string name="setup_bth_pick_type_title">Which controller should your PC see?</string>
+    <string name="setup_bth_pick_type_subtitle">Pick the type your PC reads Dish as.</string>
+    <string name="setup_bth_type_xbox">Xbox</string>
+    <string name="setup_bth_type_playstation">PlayStation</string>
+    <string name="setup_bth_type_lock_note">Locked in for this PC. To change it later you re-pair.</string>
+    <string name="setup_bth_advertising_heading">Add it on your PC</string>
+    <string name="setup_bth_advertising_type">Set to %1$s controller</string>
+    <string name="setup_bth_advertising_title">Add it on your PC</string>
+    <string name="setup_bth_advertising_steps">On the PC open Bluetooth, choose Add a device, and pick \"%1$s\".</string>
+    <string name="setup_bth_discoverable_waiting">Waiting for your PC</string>
+    <string name="setup_bth_discoverable_on">Discoverable. Pick Dish on your PC.</string>
+
+    <!-- Capability table (shared by Bluetooth-host pick-type and configure) -->
+    <string name="setup_cap_rumble">Rumble</string>
+    <string name="setup_cap_motion">Motion / gyro</string>
+    <string name="setup_cap_touchpad">Touchpad</string>
+    <string name="setup_cap_available">Available</string>
+    <string name="setup_cap_off">Off</string>
+    <string name="setup_cap_input">Input</string>
+    <string name="setup_cap_destination">Destination</string>
+    <string name="setup_cap_type">Type</string>
+
+    <!-- Stage 4 - configure and bind -->
+    <string name="setup_cfg_toolbar">Configure</string>
+    <string name="setup_cfg_type_title">How should the PC see it?</string>
+    <string name="setup_cfg_type_subtitle">Pick the controller the PC should report. Each one unlocks different extras.</string>
+    <string name="setup_cfg_type_locked_subtitle">Over Bluetooth the type is fixed. Here is what it carries.</string>
+    <string name="setup_cfg_feel_title">How should it feel?</string>
+    <string name="setup_cfg_feel_subtitle">Only the extras your input and destination both support are shown.</string>
+    <string name="setup_cfg_feel_motion_body">Tilt and gyro aiming on the PC.</string>
+    <string name="setup_cfg_feel_rumble_body">The phone buzzes on feedback.</string>
+    <string name="setup_cfg_feel_empty">Nothing to tune for this combination. Your controller is ready to bind.</string>
+    <string name="setup_cfg_review_title">Review and bind</string>
+    <string name="setup_cfg_review_subtitle">Check the link, then bind it to your destination.</string>
+    <string name="setup_cfg_review_gets">Gets</string>
+    <string name="setup_cfg_review_none">No extras</string>
+    <string name="setup_cfg_link_usb_direct">USB / Direct</string>
+    <string name="setup_cfg_link_usb_standard">USB / Standard</string>
+    <string name="setup_cfg_dest_satellite">Satellite</string>
+    <string name="setup_cfg_dest_bluetooth">Bluetooth</string>
+    <string name="setup_cfg_continue">Continue</string>
+    <string name="setup_cfg_bind">Bind</string>
+    <string name="setup_cfg_done_title">Controller bound</string>
+    <string name="setup_cfg_done_body">%1$s is ready on %2$s.</string>
+
+    <!-- Generic error sheet -->
+    <string name="setup_error_body">Your chosen input or destination is no longer available.</string>
+    <string name="setup_error_retry">Retry</string>
+    <string name="setup_error_start_over">Start over</string>
+    <string name="setup_error_exit">Exit</string>
+</resources>

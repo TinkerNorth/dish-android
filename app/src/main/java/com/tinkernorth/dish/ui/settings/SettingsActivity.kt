@@ -56,7 +56,7 @@ class SettingsActivity : AppCompatActivity() {
         binding.cardRowSetupWizard.cardRowIcon.setImageResource(R.drawable.ic_route)
         binding.cardRowSetupWizard.cardRowTitle.setText(R.string.settings_setup_wizard_title)
         binding.cardRowSetupWizard.cardRowSubtitle.setText(R.string.settings_setup_wizard_body)
-        binding.cardSetupWizard.setOnClickListener { nav.toSetupWizard() }
+        binding.cardSetupWizard.setOnClickListener { nav.toSetupInput() }
 
         binding.cardRowHelp.cardRowIcon.setImageResource(R.drawable.ic_help)
         binding.cardRowHelp.cardRowTitle.setText(R.string.settings_help_title)

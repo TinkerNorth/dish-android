@@ -58,12 +58,55 @@ class DishNavigator(
         )
     }
 
-    fun toWelcome() {
-        go(R.id.welcomeActivity)
+    fun toSetupInput() {
+        go(R.id.setupInputActivity)
     }
 
-    fun toSetupWizard() {
-        go(R.id.setupWizardActivity)
+    fun toSetupUsb() {
+        go(R.id.setupUsbActivity)
+    }
+
+    fun toSetupBluetoothController() {
+        go(R.id.setupBluetoothControllerActivity)
+    }
+
+    fun toSetupConnection(
+        inputType: String,
+        slotId: String,
+    ) {
+        go(
+            R.id.setupConnectionActivity,
+            Bundle().apply {
+                putString("extra_setup_input_type", inputType)
+                putString("extra_setup_slot_id", slotId)
+            },
+        )
+    }
+
+    fun toSetupBluetoothHost(
+        inputType: String,
+        slotId: String,
+    ) {
+        go(
+            R.id.setupBluetoothHostActivity,
+            Bundle().apply {
+                putString("extra_setup_input_type", inputType)
+                putString("extra_setup_slot_id", slotId)
+            },
+        )
+    }
+
+    fun toSetupConfigure(
+        slotId: String,
+        connectionId: String,
+    ) {
+        go(
+            R.id.setupConfigureActivity,
+            Bundle().apply {
+                putString("extra_setup_slot_id", slotId)
+                putString("extra_setup_connection_id", connectionId)
+            },
+        )
     }
 
     fun toHelp() {

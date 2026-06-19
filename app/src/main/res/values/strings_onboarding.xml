@@ -1,82 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="welcome_skip">Skip</string>
-    <string name="welcome_back">Back</string>
-    <string name="welcome_next">Next</string>
-    <string name="welcome_get_started">Get started</string>
-
-    <string name="welcome_step1_eyebrow">WELCOME</string>
-    <string name="welcome_step1_title">Your phone, your gamepad</string>
-    <string name="welcome_step1_body">Dish turns your phone into a wireless controller for your PC. It works as a touch gamepad on its own, or as a wireless bridge for a controller you already own.</string>
-
-    <string name="welcome_step2_eyebrow">HOW IT WORKS</string>
-    <string name="welcome_step2_title">A short hop over Wi-Fi</string>
-    <string name="welcome_step2_body">Your phone sends button presses, sticks, and motion to a small free helper called Satellite running on your PC. Satellite shows up to your games as a regular gamepad. No extra setup per game.</string>
-
-    <string name="welcome_step3_eyebrow">ONE MORE THING</string>
-    <string name="welcome_step3_title">Install Satellite on your PC</string>
-    <string name="welcome_step3_body">Satellite is free and open source. Grab it from dish.tinkernorth.com/downloads/satellite, run the installer, and Dish will find it automatically. You can finish this intro now and install Satellite later.</string>
-    <string name="welcome_step3_satellite_link_label">Open download page</string>
-
-    <string name="welcome_step4_eyebrow">YOU\'RE SET</string>
-    <string name="welcome_step4_title">Ready when you are</string>
-    <string name="welcome_step4_body">Tap Get started to begin. Open Setup guide any time from Settings if you want a walkthrough, or jump straight in and pair with a Satellite on your network.</string>
-    <string name="welcome_step4_launch_wizard">Open setup guide</string>
-
-    <string name="welcome_step1_hero_desc">Dish app logo</string>
-    <string name="welcome_step2_hero_desc">Phone broadcasting a wireless signal</string>
-    <string name="welcome_step3_hero_desc">Desktop monitor showing Satellite running</string>
-    <string name="welcome_step4_hero_desc">Setup complete</string>
-
-    <string name="welcome_step_indicator_desc">Step %1$d of %2$d</string>
-
-    <string name="wizard_title">Setup guide</string>
-    <string name="wizard_step_progress">Step %1$d of %2$d</string>
-    <string name="wizard_action_back">Back</string>
-    <string name="wizard_action_next">Next</string>
-    <string name="wizard_action_finish">Finish</string>
-    <string name="wizard_recommended_label">Recommended</string>
-
-    <string name="wizard_step1_eyebrow">STEP 1 · CONNECTION</string>
-    <string name="wizard_step1_title">How will you reach your PC?</string>
-    <string name="wizard_step1_body">Two ways to send your input to a PC. Wi-Fi is the lowest-latency path and unlocks motion and the touchpad. Bluetooth treats this phone as a regular wireless gamepad. Works without Satellite, but with a small latency cost.</string>
-
-    <string name="wizard_option_lan_title">Wi-Fi to Satellite</string>
-    <string name="wizard_option_lan_body">Phone and PC on the same Wi-Fi. Lowest latency, full feature set (motion, touchpad, rumble).</string>
-    <string name="wizard_option_lan_pill_recommended">Recommended</string>
-
-    <string name="wizard_option_bt_title">Bluetooth gamepad</string>
-    <string name="wizard_option_bt_body">Pair your phone to your PC or console as a regular Bluetooth controller. Works without Satellite. Motion and touchpad aren\'t available on this path.</string>
-
-    <string name="wizard_step2_eyebrow">STEP 2 · CONTROLLER</string>
-    <string name="wizard_step2_title">What will you play with?</string>
-    <string name="wizard_step2_body">You can play with the on-screen pad, or plug in a real controller for proper sticks and triggers. A USB controller into your phone has the lowest input latency: no Bluetooth in the chain.</string>
-
-    <string name="wizard_option_virtual_title">On-screen gamepad</string>
-    <string name="wizard_option_virtual_body">Touch the buttons on the phone screen. Great for couch games and trying things out. Your phone\'s gyroscope is available for aim assist.</string>
-
-    <string name="wizard_option_usb_title">USB controller into phone</string>
-    <string name="wizard_option_usb_body">Plug a wired Xbox / PlayStation / generic gamepad into your phone\'s USB-C port. The phone forwards every press to your PC.</string>
-    <string name="wizard_option_usb_pill_recommended">Lowest latency</string>
-
-    <string name="wizard_option_phys_bt_title">Bluetooth controller paired to phone</string>
-    <string name="wizard_option_phys_bt_body">Use a controller you\'ve already paired to your phone (Xbox Wireless, DualSense, etc.). One Bluetooth hop instead of two compared with pairing the controller direct to your PC.</string>
-
-    <string name="wizard_step3_eyebrow">STEP 3 · LET\'S GO</string>
-    <string name="wizard_step3_title">Here\'s what we\'ll do</string>
-
-    <string name="wizard_summary_connection_label">Connection</string>
-    <string name="wizard_summary_controller_label">Controller</string>
-
-    <string name="wizard_next_lan_virtual">Tap Finish to open Connections. Scan for your Satellite, pair it with the 4-digit PIN, then open the on-screen gamepad.</string>
-    <string name="wizard_next_lan_usb">Tap Finish to open Connections. Pair your Satellite with the 4-digit PIN, then plug your USB controller into the phone. It\'ll appear as a new slot ready to bind.</string>
-    <string name="wizard_next_lan_phys_bt">Tap Finish to open Connections. Pair your Satellite with the 4-digit PIN. Your already-paired Bluetooth controller will appear as a slot you can bind to the Satellite.</string>
-    <string name="wizard_next_bt_virtual">Tap Finish to open Connections. Add a Bluetooth host, accept the pairing on your PC, then open the on-screen gamepad.</string>
-    <string name="wizard_next_bt_usb">Heads up: Bluetooth-host mode sends the phone\'s controller state, not a separate USB pad. Use the on-screen gamepad on this path, or switch to the Wi-Fi connection in the previous step.</string>
-    <string name="wizard_next_bt_phys_bt">Heads up: Bluetooth-host mode sends the phone\'s controller state, not your already-paired Bluetooth gamepad. Use the on-screen gamepad on this path, or switch to the Wi-Fi connection in the previous step.</string>
-
-    <string name="wizard_finish_review">Go back</string>
-
     <string name="help_title">Help &amp; FAQ</string>
 
     <string name="help_section_concepts">CONCEPTS</string>
@@ -130,7 +53,7 @@
     <string name="help_a_open_source">Yes. Dish (Android, Linux, Mac) and Satellite are all released under LGPL-3.0, source on GitHub at github.com/TinkerNorth. Pull requests welcome.</string>
 
     <string name="help_q_privacy">What does Dish collect?</string>
-    <string name="help_a_privacy">Almost nothing. Dish doesn\'t send gameplay or controller input anywhere. That traffic stays on your local network between phone and PC. Anonymous crash reports are opt-in (Settings → Diagnostics). See the privacy policy for the full list.</string>
+    <string name="help_a_privacy">Almost nothing. Dish doesn\'t send gameplay or controller input anywhere. That traffic stays on your local network between phone and PC. Anonymous crash reports are opt-in (Settings &#8594; Diagnostics). See the privacy policy for the full list.</string>
 
     <string name="help_view_privacy_policy">Privacy policy</string>
     <string name="help_view_github">View source on GitHub</string>

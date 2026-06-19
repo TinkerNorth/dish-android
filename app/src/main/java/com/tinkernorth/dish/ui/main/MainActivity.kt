@@ -99,7 +99,7 @@ class MainActivity :
         }
         if (!onboarding.state.value.welcomeCompleted) {
             splashHoldUntilFirstRender = false
-            nav.toWelcome()
+            nav.toSetupInput()
             finish()
             return
         }
@@ -169,7 +169,7 @@ class MainActivity :
         binding.btnManageConnections.setOnClickListener { nav.toConnections() }
         binding.btnSettings.setOnClickListener { nav.toSettings() }
         binding.cardDashboardHintInclude.btnDashboardHintOpen.setOnClickListener {
-            nav.toSetupWizard()
+            nav.toSetupInput()
         }
         binding.cardDashboardHintInclude.btnDashboardHintDismiss.setOnClickListener {
             onboarding.dismissDashboardHint()

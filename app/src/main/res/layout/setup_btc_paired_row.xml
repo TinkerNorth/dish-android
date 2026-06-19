@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    One bonded controller in the "on this phone" list of the Bluetooth setup
+    screen. Name plus a status line ("Connected" / "Paired, not connected");
+    inflated per device into the list container from code. The whole card is
+    tappable so a connected row commits the same as Continue.
+-->
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/pairedCard"
+    style="@style/Widget.Dish.Card"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="@dimen/card_margin_bottom"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground">
+
+    <LinearLayout
+        style="@style/Widget.Dish.Card.RowContainer"
+        android:gravity="center_vertical">
+
+        <ImageView
+            android:layout_width="@dimen/icon_picker_glyph"
+            android:layout_height="@dimen/icon_picker_glyph"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_gamepad"
+            app:tint="@color/colorPrimary" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="@dimen/spacing_2xl"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/pairedName"
+                style="@style/TextAppearance.Dish.BodyLarge.Bold"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                tools:text="Your controller" />
+
+            <TextView
+                android:id="@+id/pairedStatus"
+                style="@style/TextAppearance.Dish.Caption"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                tools:text="Connected" />
+        </LinearLayout>
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

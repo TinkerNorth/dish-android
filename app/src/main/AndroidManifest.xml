@@ -121,7 +121,7 @@
             tools:targetApi="p" />
 
         <activity
-            android:name=".ui.onboarding.WelcomeActivity"
+            android:name=".ui.setup.SetupInputActivity"
             android:exported="false"
             android:resizeableActivity="true"
             android:theme="@style/Theme.Dish"
@@ -129,12 +129,48 @@
             tools:targetApi="p" />
 
         <activity
-            android:name=".ui.onboarding.SetupWizardActivity"
+            android:name=".ui.setup.SetupUsbActivity"
             android:exported="false"
             android:resizeableActivity="true"
             android:theme="@style/Theme.Dish"
             android:configChanges="keyboardHidden"
-            android:parentActivityName=".ui.main.MainActivity"
+            android:parentActivityName=".ui.setup.SetupInputActivity"
+            tools:targetApi="p" />
+
+        <activity
+            android:name=".ui.setup.SetupBluetoothControllerActivity"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:theme="@style/Theme.Dish"
+            android:configChanges="keyboardHidden"
+            android:parentActivityName=".ui.setup.SetupInputActivity"
+            tools:targetApi="p" />
+
+        <activity
+            android:name=".ui.setup.SetupConnectionActivity"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:theme="@style/Theme.Dish"
+            android:configChanges="keyboardHidden"
+            android:parentActivityName=".ui.setup.SetupInputActivity"
+            tools:targetApi="p" />
+
+        <activity
+            android:name=".ui.setup.SetupBluetoothHostActivity"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:theme="@style/Theme.Dish"
+            android:configChanges="keyboardHidden"
+            android:parentActivityName=".ui.setup.SetupConnectionActivity"
+            tools:targetApi="p" />
+
+        <activity
+            android:name=".ui.setup.SetupConfigureActivity"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:theme="@style/Theme.Dish"
+            android:configChanges="keyboardHidden"
+            android:parentActivityName=".ui.setup.SetupConnectionActivity"
             tools:targetApi="p" />
 
         <activity

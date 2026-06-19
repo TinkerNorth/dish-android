@@ -1,0 +1,466 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            style="@style/Widget.Dish.Toolbar"
+            android:layout_width="match_parent"
+            app:title="@string/setup_cfg_toolbar" />
+
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/loader"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:indeterminate="true"
+            android:visibility="invisible"
+            app:indicatorColor="@color/colorPrimary"
+            app:trackColor="@color/colorSurfaceVariant" />
+
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/scroll"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:paddingHorizontal="@dimen/spacing_5xl"
+            android:paddingTop="@dimen/spacing_md"
+            android:paddingBottom="@dimen/spacing_5xl">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <include
+                    android:id="@+id/breadcrumb"
+                    layout="@layout/view_setup_breadcrumb"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <TextView
+                    android:id="@+id/tvTitle"
+                    style="@style/TextAppearance.Dish.Title.Large"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_5xl"
+                    tools:text="How should the PC see it?" />
+
+                <TextView
+                    android:id="@+id/tvSubtitle"
+                    style="@style/TextAppearance.Dish.Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_xs"
+                    tools:text="Pick the controller the PC should report." />
+
+                <!-- 4A type + capability table -->
+                <LinearLayout
+                    android:id="@+id/groupType"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="@dimen/spacing_xl">
+
+                    <include
+                        android:id="@+id/cardTypeXbox"
+                        layout="@layout/setup_type_card" />
+
+                    <include
+                        android:id="@+id/cardTypePlaystation"
+                        layout="@layout/setup_type_card" />
+                </LinearLayout>
+
+                <!-- 4B feel -->
+                <LinearLayout
+                    android:id="@+id/groupFeel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="@dimen/spacing_xl"
+                    android:visibility="gone"
+                    tools:visibility="gone">
+
+                    <LinearLayout
+                        android:id="@+id/touchpadRow"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:visibility="gone"
+                        tools:visibility="visible">
+
+                        <ImageView
+                            android:layout_width="@dimen/config_row_icon_size"
+                            android:layout_height="@dimen/config_row_icon_size"
+                            android:layout_marginEnd="@dimen/config_row_icon_gap"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_touchpad"
+                            app:tint="@color/colorPrimary" />
+
+                        <TextView
+                            style="@style/TextAppearance.Dish.Body"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/binding_func_touchpad"
+                            android:textColor="@color/colorOnSurface" />
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_binding_segmented"
+                            android:divider="@drawable/binding_segment_divider"
+                            android:orientation="horizontal"
+                            android:showDividers="middle">
+
+                            <TextView
+                                android:id="@+id/segOff"
+                                style="@style/Widget.Dish.Segment"
+                                android:text="@string/touchpad_mode_off" />
+
+                            <TextView
+                                android:id="@+id/segPad"
+                                style="@style/Widget.Dish.Segment"
+                                android:text="@string/touchpad_mode_pad" />
+
+                            <TextView
+                                android:id="@+id/segMouse"
+                                style="@style/Widget.Dish.Segment"
+                                android:text="@string/touchpad_mode_mouse" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <View
+                        android:id="@+id/motionDivider"
+                        style="@style/Widget.Dish.Divider"
+                        android:layout_marginTop="@dimen/config_row_gap"
+                        android:layout_marginBottom="@dimen/config_row_gap"
+                        android:visibility="gone"
+                        tools:visibility="visible" />
+
+                    <LinearLayout
+                        android:id="@+id/motionRow"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:visibility="gone"
+                        tools:visibility="visible">
+
+                        <ImageView
+                            android:layout_width="@dimen/config_row_icon_size"
+                            android:layout_height="@dimen/config_row_icon_size"
+                            android:layout_marginEnd="@dimen/config_row_icon_gap"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_motion"
+                            app:tint="@color/colorPrimary" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                style="@style/TextAppearance.Dish.Body"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/binding_func_motion"
+                                android:textColor="@color/colorOnSurface" />
+
+                            <TextView
+                                style="@style/TextAppearance.Dish.BodySmall"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/setup_cfg_feel_motion_body"
+                                android:textColor="@color/colorOnSurfaceVariant" />
+                        </LinearLayout>
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/swMotion"
+                            style="@style/Widget.Dish.Switch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content" />
+                    </LinearLayout>
+
+                    <View
+                        android:id="@+id/rumbleDivider"
+                        style="@style/Widget.Dish.Divider"
+                        android:layout_marginTop="@dimen/config_row_gap"
+                        android:layout_marginBottom="@dimen/config_row_gap"
+                        android:visibility="gone"
+                        tools:visibility="visible" />
+
+                    <LinearLayout
+                        android:id="@+id/rumbleRow"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:visibility="gone"
+                        tools:visibility="visible">
+
+                        <ImageView
+                            android:layout_width="@dimen/config_row_icon_size"
+                            android:layout_height="@dimen/config_row_icon_size"
+                            android:layout_marginEnd="@dimen/config_row_icon_gap"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_rumble"
+                            app:tint="@color/colorPrimary" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                style="@style/TextAppearance.Dish.Body"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/binding_func_rumble"
+                                android:textColor="@color/colorOnSurface" />
+
+                            <TextView
+                                style="@style/TextAppearance.Dish.BodySmall"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/setup_cfg_feel_rumble_body"
+                                android:textColor="@color/colorOnSurfaceVariant" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvFeelEmpty"
+                        style="@style/TextAppearance.Dish.Body"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/setup_cfg_feel_empty"
+                        android:textColor="@color/colorOnSurfaceVariant"
+                        android:visibility="gone"
+                        tools:visibility="visible" />
+                </LinearLayout>
+
+                <!-- 4C review and bind -->
+                <LinearLayout
+                    android:id="@+id/groupReview"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="@dimen/spacing_xl"
+                    android:visibility="gone"
+                    tools:visibility="gone">
+
+                    <com.google.android.material.card.MaterialCardView
+                        style="@style/Widget.Dish.Card"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:padding="@dimen/card_padding">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal">
+
+                                <ImageView
+                                    android:id="@+id/ivReviewInputIcon"
+                                    android:layout_width="@dimen/icon_picker_glyph"
+                                    android:layout_height="@dimen/icon_picker_glyph"
+                                    android:importantForAccessibility="no"
+                                    android:src="@drawable/ic_gamepad"
+                                    app:tint="@color/colorPrimary" />
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:layout_marginStart="@dimen/config_row_icon_gap"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        style="@style/Widget.Dish.MicroLabel"
+                                        android:layout_width="wrap_content"
+                                        android:text="@string/binding_label_input" />
+
+                                    <TextView
+                                        android:id="@+id/tvReviewInputName"
+                                        style="@style/TextAppearance.Dish.BodyLarge.Bold"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        tools:text="Xbox Wireless Controller" />
+                                </LinearLayout>
+
+                                <LinearLayout
+                                    style="@style/Widget.Dish.Pill"
+                                    android:background="@drawable/bg_binding_pill_fact">
+
+                                    <ImageView
+                                        android:id="@+id/ivReviewLinkIcon"
+                                        style="@style/Widget.Dish.Pill.Icon"
+                                        app:tint="@color/colorOnSurface" />
+
+                                    <TextView
+                                        android:id="@+id/tvReviewLink"
+                                        style="@style/Widget.Dish.Pill.Text"
+                                        android:textColor="@color/colorOnSurface"
+                                        tools:text="USB / Direct" />
+                                </LinearLayout>
+                            </LinearLayout>
+
+                            <View
+                                style="@style/Widget.Dish.Divider"
+                                android:layout_marginTop="@dimen/spacing_md" />
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="@dimen/spacing_md"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal">
+
+                                <TextView
+                                    style="@style/Widget.Dish.MicroLabel"
+                                    android:layout_width="wrap_content"
+                                    android:text="@string/setup_cfg_review_gets" />
+
+                                <LinearLayout
+                                    android:id="@+id/reviewCapsContainer"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:layout_marginStart="@dimen/spacing_md"
+                                    android:divider="@drawable/binding_pill_gap"
+                                    android:gravity="center_vertical|end"
+                                    android:orientation="horizontal"
+                                    android:showDividers="middle" />
+                            </LinearLayout>
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+
+                    <ImageView
+                        android:layout_width="@dimen/config_section_icon_size"
+                        android:layout_height="@dimen/config_section_icon_size"
+                        android:layout_gravity="center_horizontal"
+                        android:layout_marginTop="@dimen/spacing_sm"
+                        android:layout_marginBottom="@dimen/spacing_sm"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_arrow_downward"
+                        app:tint="@color/colorMuted" />
+
+                    <com.google.android.material.card.MaterialCardView
+                        style="@style/Widget.Dish.Card"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:padding="@dimen/card_padding">
+
+                            <ImageView
+                                android:id="@+id/ivReviewDestIcon"
+                                android:layout_width="@dimen/icon_picker_glyph"
+                                android:layout_height="@dimen/icon_picker_glyph"
+                                android:importantForAccessibility="no"
+                                android:src="@drawable/ic_satellite"
+                                app:tint="@color/colorPrimary" />
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginStart="@dimen/config_row_icon_gap"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    style="@style/Widget.Dish.MicroLabel"
+                                    android:layout_width="wrap_content"
+                                    android:text="@string/binding_label_destination" />
+
+                                <TextView
+                                    android:id="@+id/tvReviewDestName"
+                                    style="@style/TextAppearance.Dish.BodyLarge.Bold"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    tools:text="Living room PC" />
+                            </LinearLayout>
+
+                            <LinearLayout
+                                style="@style/Widget.Dish.Pill"
+                                android:background="@drawable/bg_binding_pill_fact">
+
+                                <ImageView
+                                    android:id="@+id/ivReviewDestLinkIcon"
+                                    style="@style/Widget.Dish.Pill.Icon"
+                                    app:tint="@color/colorOnSurface" />
+
+                                <TextView
+                                    android:id="@+id/tvReviewDestLink"
+                                    style="@style/Widget.Dish.Pill.Text"
+                                    android:textColor="@color/colorOnSurface"
+                                    tools:text="Satellite" />
+                            </LinearLayout>
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+                </LinearLayout>
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingHorizontal="@dimen/spacing_5xl"
+            android:paddingVertical="@dimen/spacing_xl"
+            android:gravity="center_vertical">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnBack"
+                style="@style/Widget.Dish.Button.Outlined"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:icon="@drawable/ic_chevron_left"
+                android:text="@string/setup_action_back" />
+
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1" />
+
+            <ProgressBar
+                android:id="@+id/btnBindProgress"
+                android:layout_width="@dimen/binding_edge_spinner_size"
+                android:layout_height="@dimen/binding_edge_spinner_size"
+                android:layout_marginEnd="@dimen/spacing_md"
+                android:indeterminate="true"
+                android:indeterminateTint="@color/colorPrimary"
+                android:visibility="gone"
+                tools:visibility="visible" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnContinue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:icon="@drawable/ic_chevron_right"
+                app:iconGravity="end"
+                android:text="@string/setup_cfg_continue" />
+        </LinearLayout>
+    </LinearLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>
