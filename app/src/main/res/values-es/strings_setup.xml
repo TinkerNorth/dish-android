@@ -137,8 +137,6 @@
     <string name="setup_error_exit">Salir</string>
     <string name="setup_cfg_review_sends">Envía</string>
     <string name="setup_cfg_flow_controller">Mando</string>
-    <string name="setup_cfg_screen_name">La pantalla de este teléfono</string>
-    <string name="setup_cfg_screen_sublabel">Superficie en pantalla</string>
     <string name="setup_cfg_virtual_sublabel">Mando virtual en tu PC</string>
     <string name="setup_bth_discoverable_retry">Intentar de nuevo</string>
 </resources>

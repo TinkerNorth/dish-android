@@ -147,8 +147,6 @@
     <string name="setup_error_exit">Exit</string>
     <string name="setup_cfg_review_sends">Sends</string>
     <string name="setup_cfg_flow_controller">Controller</string>
-    <string name="setup_cfg_screen_name">This phone\'s screen</string>
-    <string name="setup_cfg_screen_sublabel">On-screen surface</string>
     <string name="setup_cfg_virtual_sublabel">Virtual pad on your PC</string>
     <string name="setup_bth_discoverable_retry">Try again</string>
 </resources>

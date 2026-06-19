@@ -242,30 +242,70 @@ class SetupConfigureActivity : AppCompatActivity() {
         }
     }
 
-    // Every source's Sends mirror the host's Gets, and the host's Sends (rumble)
-    // mirror what the controller Gets, so each signal can be traced end to end.
+    // Each input and destination is one node showing what it sends (up) and gets
+    // (down) so every signal traces end to end.
     private fun reviewNodes(
         state: ConfigUiState,
         snapshot: BindingSnapshot,
     ): List<ReviewNode> {
-        val motionOn = state.motionAvailable && state.draft?.motionOn == true
         val touchpadMode = state.draft?.touchpadMode ?: TouchpadModeValue.OFF
         val touchpadOn = state.touchpadAvailable && touchpadMode != TouchpadModeValue.OFF
-        val mouseMode = touchpadOn && touchpadMode == TouchpadModeValue.MOUSE
-        val padMode = touchpadOn && touchpadMode == TouchpadModeValue.DS4
-        // Rumble flows back from a chosen host while the toggle is on; the phone
-        // vibrates as a fallback even with no controller motor.
-        val rumbleOn = state.hostChosen && state.draft?.rumbleOn == true
+        val model =
+            ReviewModel(
+                motionOn = state.motionAvailable && state.draft?.motionOn == true,
+                touchpadOn = touchpadOn,
+                mouseMode = touchpadOn && touchpadMode == TouchpadModeValue.MOUSE,
+                padMode = touchpadOn && touchpadMode == TouchpadModeValue.DS4,
+                // Rumble flows back from a chosen host while the toggle is on; the
+                // phone vibrates as a fallback even with no controller motor.
+                rumbleOn = state.hostChosen && state.draft?.rumbleOn == true,
+            )
+        return inputNodes(state, snapshot, model) + destinationNodes(state, model)
+    }
 
+    // The phone is always one "virtual controller": when it IS the input, the
+    // on-screen pad and its touch surface (mouse/touchpad) merge into a single
+    // node; when a connected controller is the input, the phone's touch surface is
+    // still shown as its own whole virtual-controller input.
+    private fun inputNodes(
+        state: ConfigUiState,
+        snapshot: BindingSnapshot,
+        model: ReviewModel,
+    ): List<ReviewNode> {
         val gamepad = ReviewFlow(R.drawable.ic_gamepad, R.string.setup_cfg_flow_controller)
         val motion = ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro)
         val rumble = ReviewFlow(R.drawable.ic_rumble, R.string.binding_func_rumble)
-        val mouse = ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse)
-        val touchpad = ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad)
+        val pointer =
+            if (model.mouseMode) {
+                ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse)
+            } else {
+                ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad)
+            }
+        val gets = if (model.rumbleOn) listOf(rumble) else emptyList()
+        val virtual =
+            ReviewNode(
+                kind = R.string.binding_label_input,
+                icon = R.drawable.ic_gamepad_virtual,
+                name = getString(R.string.default_virtual_controller_name),
+                sublabel = getString(R.string.binding_link_onscreen),
+                sends = listOf(pointer),
+                gets = emptyList(),
+            )
 
-        val nodes = mutableListOf<ReviewNode>()
-        // Source: the controller (a physical pad or the on-screen gamepad).
-        nodes +=
+        if (snapshot.link == BindingLink.ONSCREEN) {
+            return listOf(
+                virtual.copy(
+                    sends =
+                        buildList {
+                            add(gamepad)
+                            if (model.motionOn) add(motion)
+                            if (model.touchpadOn) add(pointer)
+                        },
+                    gets = gets,
+                ),
+            )
+        }
+        val controller =
             ReviewNode(
                 kind = R.string.binding_label_input,
                 icon = snapshot.link.iconRes(),
@@ -274,62 +314,70 @@ class SetupConfigureActivity : AppCompatActivity() {
                 sends =
                     buildList {
                         add(gamepad)
-                        if (motionOn) add(motion)
+                        if (model.motionOn) add(motion)
                     },
-                gets = if (rumbleOn) listOf(rumble) else emptyList(),
+                gets = gets,
             )
-        // Source: the phone's screen, only when the touchpad is on.
-        if (touchpadOn) {
-            nodes +=
-                ReviewNode(
-                    kind = R.string.binding_label_input,
-                    icon = R.drawable.ic_gamepad_virtual,
-                    name = getString(R.string.setup_cfg_screen_name),
-                    sublabel = getString(R.string.setup_cfg_screen_sublabel),
-                    sends = listOf(if (mouseMode) mouse else touchpad),
-                    gets = emptyList(),
-                )
-        }
+        return if (model.touchpadOn) listOf(controller, virtual) else listOf(controller)
+    }
+
+    private fun destinationNodes(
+        state: ConfigUiState,
+        model: ReviewModel,
+    ): List<ReviewNode> {
+        val gamepad = ReviewFlow(R.drawable.ic_gamepad, R.string.setup_cfg_flow_controller)
+        val motion = ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro)
+        val rumble = ReviewFlow(R.drawable.ic_rumble, R.string.binding_func_rumble)
+        val rumbleBack = if (model.rumbleOn) listOf(rumble) else emptyList()
         if (state.isBluetoothHost) {
-            // Bluetooth host: the phone is the pad, so there is one destination.
-            nodes +=
+            // The phone is the pad, so there is one destination.
+            return listOf(
                 ReviewNode(
                     kind = R.string.binding_label_destination,
                     icon = R.drawable.ic_bluetooth,
                     name = state.selectedHost?.label.orEmpty(),
                     sublabel = getString(R.string.setup_cfg_dest_bluetooth),
-                    sends = if (rumbleOn) listOf(rumble) else emptyList(),
+                    sends = rumbleBack,
                     gets = listOf(gamepad),
-                )
-        } else {
-            // Satellite injects the mouse itself; the virtual pad it creates carries
-            // the gamepad, motion, DS4 touchpad, and the rumble it sends back.
-            nodes +=
-                ReviewNode(
-                    kind = R.string.binding_label_destination,
-                    icon = R.drawable.ic_satellite,
-                    name = state.selectedHost?.label.orEmpty(),
-                    sublabel = getString(R.string.setup_cfg_dest_satellite),
-                    sends = emptyList(),
-                    gets = if (mouseMode) listOf(mouse) else emptyList(),
-                )
-            nodes +=
-                ReviewNode(
-                    kind = R.string.binding_label_destination,
-                    icon = R.drawable.ic_gamepad,
-                    name = viewModel.typeLabel(state.draft?.type ?: CONTROLLER_TYPE_XBOX),
-                    sublabel = getString(R.string.setup_cfg_virtual_sublabel),
-                    sends = if (rumbleOn) listOf(rumble) else emptyList(),
-                    gets =
-                        buildList {
-                            add(gamepad)
-                            if (motionOn) add(motion)
-                            if (padMode) add(touchpad)
-                        },
-                )
+                ),
+            )
         }
-        return nodes
+        // Satellite injects the mouse itself; the virtual pad it creates carries the
+        // gamepad, motion, DS4 touchpad, and the rumble it sends back.
+        val mouse = ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse)
+        val touchpad = ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad)
+        return listOf(
+            ReviewNode(
+                kind = R.string.binding_label_destination,
+                icon = R.drawable.ic_satellite,
+                name = state.selectedHost?.label.orEmpty(),
+                sublabel = getString(R.string.setup_cfg_dest_satellite),
+                sends = emptyList(),
+                gets = if (model.mouseMode) listOf(mouse) else emptyList(),
+            ),
+            ReviewNode(
+                kind = R.string.binding_label_destination,
+                icon = R.drawable.ic_gamepad,
+                name = viewModel.typeLabel(state.draft?.type ?: CONTROLLER_TYPE_XBOX),
+                sublabel = getString(R.string.setup_cfg_virtual_sublabel),
+                sends = rumbleBack,
+                gets =
+                    buildList {
+                        add(gamepad)
+                        if (model.motionOn) add(motion)
+                        if (model.padMode) add(touchpad)
+                    },
+            ),
+        )
     }
+
+    private data class ReviewModel(
+        val motionOn: Boolean,
+        val touchpadOn: Boolean,
+        val mouseMode: Boolean,
+        val padMode: Boolean,
+        val rumbleOn: Boolean,
+    )
 
     private fun bindFlows(
         row: View,
