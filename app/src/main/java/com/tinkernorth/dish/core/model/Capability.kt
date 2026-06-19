@@ -24,7 +24,8 @@ enum class Feature(
     KEYBOARD(Direction.SEND, null),
     RUMBLE(Direction.RECEIVE, "rumble"),
 
-    // TODO(capability-contract): no Android LED sink exists; lightbar is host-driven only for now.
+    // Modeled for a complete type/host view, but Android exposes no LED sink, so the
+    // controller layer never produces it and it is never offered locally.
     LIGHTBAR(Direction.RECEIVE, "lightbar"),
 }
 

@@ -295,8 +295,9 @@ each layer reads its own source of truth:
 - **type** (the emulated controller): the satellite's own per-type features from
   `CatalogTypeDto.features`, with `composer/BundledCatalog.kt` as the fallback
   for the slugs the app ships or a catalog not yet fetched.
-- **host** (the satellite itself): `CatalogDto.hostFeatures` as a `HostFeatureSet`
-  (mouse control today; the rest are in `capability-followups.md`).
+- **host** (the satellite itself): `CatalogDto.hostFeatures` (mouse, keyboard,
+  rumble) as a `HostFeatureSet`, seeded pre-bind from `GET /api/server/capabilities`
+  (`repository/SatelliteCapabilitiesRepository.kt`).
 - **user**: the per-slot toggle stores.
 
 `composer/CapabilityResolver.kt` is the pure Reducer:
