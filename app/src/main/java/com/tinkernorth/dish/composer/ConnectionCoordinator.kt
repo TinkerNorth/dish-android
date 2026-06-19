@@ -10,6 +10,7 @@ import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
 import com.tinkernorth.dish.source.store.ControllerTypeStore
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
+import com.tinkernorth.dish.source.store.SatelliteHostRuntimeStore
 import com.tinkernorth.dish.source.store.SlotBindingStore
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
@@ -48,6 +49,7 @@ class ConnectionCoordinator
         private val bindingStore: SlotBindingStore,
         private val typeStore: ControllerTypeStore,
         private val hostFeaturesStore: SatelliteHostFeaturesStore,
+        private val hostRuntimeStore: SatelliteHostRuntimeStore,
         private val composer: ConnectionsComposer,
         private val gamepadRegistry: PhysicalGamepadRegistry,
     ) {
@@ -123,6 +125,7 @@ class ConnectionCoordinator
             bindingStore.slotsFor(connectionId).toList().forEach(::unbind)
             typeStore.clearConnection(connectionId)
             hostFeaturesStore.clearConnection(connectionId)
+            hostRuntimeStore.clearConnection(connectionId)
             if (store.rememberedBt().any { it.id == connectionId }) {
                 store.forgetBt(connectionId)
             } else {

@@ -507,7 +507,9 @@ class ConfigureBindingsViewModel
                 capabilitiesRepo.refresh(conn.server.value, hostId)
                 _ui.update { state -> state.withCapabilities() }
                 val catalog = catalogRepo.catalogFor(conn.server.value, hostId) ?: return@launch
-                _ui.update { state -> state.copy(typeOptions = typeOptionsFrom(catalog.controllerTypes)) }
+                // Recompute the gates too: the fetched catalog's per-type features now back
+                // the type layer, not just the picker labels.
+                _ui.update { state -> state.copy(typeOptions = typeOptionsFrom(catalog.controllerTypes)).withCapabilities() }
             }
         }
 

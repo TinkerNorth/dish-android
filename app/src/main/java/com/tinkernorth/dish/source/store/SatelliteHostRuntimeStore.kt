@@ -26,7 +26,7 @@ class SatelliteHostRuntimeStore
             setState { it + (hostId to runtime) }
         }
 
-        fun clear(hostId: String) {
+        fun clearConnection(hostId: String) {
             setState { if (hostId in it) it - hostId else it }
         }
     }

@@ -194,6 +194,9 @@ data class CatalogDto(
 // the real receiver instead of an optimistic default. `host` enumerates the receiver's
 // own capabilities (presence) and their runtime availability.
 
+// The input-injection backend (the virtual-pad driver). Parsed from the contract for
+// completeness; the client gates runtime on motion.available and does not consume this
+// yet. A "host cannot inject controllers" surface would read it here.
 @Serializable
 data class ServerBackendDto(
     val id: String = "",
