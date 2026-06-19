@@ -145,4 +145,8 @@
     <string name="setup_error_retry">Retry</string>
     <string name="setup_error_start_over">Start over</string>
     <string name="setup_error_exit">Exit</string>
+    <string name="setup_cfg_review_sends">Sends</string>
+    <string name="setup_cfg_flow_controller">Controller</string>
+    <string name="setup_cfg_screen_name">This phone\'s screen</string>
+    <string name="setup_cfg_screen_sublabel">On-screen surface</string>
 </resources>

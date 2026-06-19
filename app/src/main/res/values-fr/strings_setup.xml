@@ -144,4 +144,8 @@
     <string name="setup_error_retry">Réessayer</string>
     <string name="setup_error_start_over">Recommencer</string>
     <string name="setup_error_exit">Quitter</string>
+    <string name="setup_cfg_review_sends">Envoie</string>
+    <string name="setup_cfg_flow_controller">Manette</string>
+    <string name="setup_cfg_screen_name">L\'écran de ce téléphone</string>
+    <string name="setup_cfg_screen_sublabel">Surface à l\'écran</string>
 </resources>

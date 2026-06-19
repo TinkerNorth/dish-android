@@ -13,14 +13,13 @@ class SetupCapabilityTest {
         destinationIsSatellite: Boolean,
         hasDestination: Boolean = true,
         hasGyro: Boolean = true,
-        hasRumble: Boolean = true,
     ) = SetupCapability
-        .rows(isPlayStation, destinationIsSatellite, hasDestination, hasGyro, hasRumble)
+        .rows(isPlayStation, destinationIsSatellite, hasDestination, hasGyro)
         .associateBy { it.kind }
 
     @Test
     fun `rows are returned in rumble, motion, touchpad order`() {
-        val kinds = SetupCapability.rows(true, true, true, true, true).map { it.kind }
+        val kinds = SetupCapability.rows(true, true, true, true).map { it.kind }
         assertEquals(
             listOf(SetupCapabilityKind.RUMBLE, SetupCapabilityKind.MOTION, SetupCapabilityKind.TOUCHPAD),
             kinds,
@@ -78,12 +77,19 @@ class SetupCapabilityTest {
     }
 
     @Test
-    fun `a controller without rumble does not advertise rumble`() {
-        val rumble =
-            rows(isPlayStation = true, destinationIsSatellite = true, hasRumble = false)
+    fun `rumble rides any host even when the input has no motor`() {
+        // The phone vibrates as a universal fallback, so rumble is input-available
+        // regardless of the controller's own motor; it only needs a destination.
+        val onSatellite =
+            rows(isPlayStation = false, destinationIsSatellite = true)
                 .getValue(SetupCapabilityKind.RUMBLE)
-        assertFalse(rumble.available)
-        assertFalse(rumble.inputOk)
+        assertTrue(onSatellite.inputOk)
+        assertTrue(onSatellite.available)
+
+        val onBtHost =
+            rows(isPlayStation = false, destinationIsSatellite = false, hasDestination = true)
+                .getValue(SetupCapabilityKind.RUMBLE)
+        assertTrue(onBtHost.available)
     }
 
     @Test
@@ -102,7 +108,6 @@ class SetupCapabilityTest {
                 isPlayStation = true,
                 destinationIsSatellite = true,
                 hasGyro = false,
-                hasRumble = false,
             ).getValue(SetupCapabilityKind.TOUCHPAD)
         assertTrue(touchpad.inputOk)
         assertTrue(touchpad.available)

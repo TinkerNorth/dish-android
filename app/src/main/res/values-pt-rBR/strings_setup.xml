@@ -135,4 +135,8 @@
     <string name="setup_error_retry">Tentar novamente</string>
     <string name="setup_error_start_over">Recomeçar</string>
     <string name="setup_error_exit">Sair</string>
+    <string name="setup_cfg_review_sends">Envia</string>
+    <string name="setup_cfg_flow_controller">Controle</string>
+    <string name="setup_cfg_screen_name">A tela deste telefone</string>
+    <string name="setup_cfg_screen_sublabel">Superfície na tela</string>
 </resources>

@@ -164,7 +164,6 @@ class SetupBluetoothHostActivity : AppCompatActivity() {
                 destinationIsSatellite = false,
                 hasDestination = true,
                 hasGyro = hasGyro,
-                hasRumble = true,
             ),
         )
         binding.cardPlaystation.capabilityContainer.bindCapabilityRows(
@@ -173,7 +172,6 @@ class SetupBluetoothHostActivity : AppCompatActivity() {
                 destinationIsSatellite = false,
                 hasDestination = true,
                 hasGyro = hasGyro,
-                hasRumble = true,
             ),
         )
     }

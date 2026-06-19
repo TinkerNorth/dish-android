@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.res.ColorStateList
 import android.os.Bundle
 import android.view.View
+import android.widget.LinearLayout
 import androidx.activity.addCallback
 import androidx.activity.viewModels
 import androidx.annotation.DrawableRes
@@ -21,6 +22,7 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.databinding.ActivitySetupConfigureBinding
 import com.tinkernorth.dish.databinding.BindingPillBinding
+import com.tinkernorth.dish.databinding.SetupReviewCardBinding
 import com.tinkernorth.dish.databinding.SetupTypeCardBinding
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.repository.TouchpadModeValue
@@ -120,7 +122,7 @@ class SetupConfigureActivity : AppCompatActivity() {
         binding.groupReview.visibility = visibleIf(step == Step.REVIEW)
         when (step) {
             Step.TYPE -> renderType(state, snapshot)
-            Step.FEEL -> renderFeel(state, snapshot)
+            Step.FEEL -> renderFeel(state)
             Step.REVIEW -> renderReview(state, snapshot)
         }
     }
@@ -170,7 +172,6 @@ class SetupConfigureActivity : AppCompatActivity() {
                 destinationIsSatellite = state.selectedHost?.kind == ConnectionKind.SATELLITE,
                 hasDestination = state.hostChosen,
                 hasGyro = snapshot.hasGyro,
-                hasRumble = snapshot.hasRumble,
             ),
         )
     }
@@ -178,10 +179,7 @@ class SetupConfigureActivity : AppCompatActivity() {
     // 4B mirrors ConfigureBindingsActivity.bindBindingSection gating exactly: only
     // the rows the current input/destination/type combination supports appear, and
     // listeners are nulled before state is written so re-render never echoes back.
-    private fun renderFeel(
-        state: ConfigUiState,
-        snapshot: BindingSnapshot,
-    ) {
+    private fun renderFeel(state: ConfigUiState) {
         binding.tvTitle.setText(R.string.setup_cfg_feel_title)
         binding.tvSubtitle.setText(R.string.setup_cfg_feel_subtitle)
         binding.btnContinue.setText(R.string.setup_cfg_continue)
@@ -207,13 +205,17 @@ class SetupConfigureActivity : AppCompatActivity() {
             binding.swMotion.setOnCheckedChangeListener { _, isChecked -> viewModel.setMotion(isChecked) }
         }
 
-        val rumbleVisible = snapshot.hasRumble
+        // Rumble always rides a chosen host (the phone vibrates as a fallback even
+        // with no controller motor), so it isn't gated on the input device.
+        val rumbleVisible = state.hostChosen
         binding.rumbleDivider.visibility = visibleIf(rumbleVisible && (motionVisible || touchpadVisible))
         binding.rumbleRow.visibility = visibleIf(rumbleVisible)
 
         binding.tvFeelEmpty.visibility = visibleIf(!touchpadVisible && !motionVisible && !rumbleVisible)
     }
 
+    // 4C: one card per source and destination, each showing what it sends (up)
+    // and gets (down) so the whole data flow is visible before binding.
     private fun renderReview(
         state: ConfigUiState,
         snapshot: BindingSnapshot,
@@ -223,51 +225,101 @@ class SetupConfigureActivity : AppCompatActivity() {
         binding.btnContinue.setText(R.string.setup_cfg_bind)
         binding.btnContinue.visibility = View.VISIBLE
 
-        binding.ivReviewInputIcon.setImageResource(snapshot.link.iconRes())
-        binding.tvReviewInputName.text = snapshot.name
-        val (linkLabel, linkIcon) = inputLink(state, snapshot)
-        binding.ivReviewLinkIcon.setImageResource(linkIcon)
-        binding.tvReviewLink.text = linkLabel
-        bindReviewCaps(state, snapshot)
-
-        val bt = state.isBluetoothHost
-        binding.ivReviewDestIcon.setImageResource(if (bt) R.drawable.ic_bluetooth else R.drawable.ic_satellite)
-        binding.tvReviewDestName.text = state.selectedHost?.label.orEmpty()
-        binding.ivReviewDestLinkIcon.setImageResource(if (bt) R.drawable.ic_bluetooth else R.drawable.ic_overlay_link)
-        binding.tvReviewDestLink.setText(if (bt) R.string.setup_cfg_dest_bluetooth else R.string.setup_cfg_dest_satellite)
+        val container = binding.reviewContainer
+        container.removeAllViews()
+        reviewNodes(state, snapshot).forEach { node ->
+            val card = SetupReviewCardBinding.inflate(layoutInflater, container, false)
+            card.reviewIcon.setImageResource(node.icon)
+            card.reviewKind.setText(node.kind)
+            card.reviewName.text = node.name
+            card.reviewSublabel.text = node.sublabel
+            bindFlows(card.reviewSendsRow, card.reviewSendsChips, node.sends)
+            bindFlows(card.reviewGetsRow, card.reviewGetsChips, node.gets)
+            container.addView(card.root)
+        }
     }
 
-    private fun bindReviewCaps(
+    // Every source's Sends mirror the host's Gets, and the host's Sends (rumble)
+    // mirror what the controller Gets, so each signal can be traced end to end.
+    private fun reviewNodes(
         state: ConfigUiState,
         snapshot: BindingSnapshot,
-    ) {
-        val rows =
-            SetupCapability.rows(
-                isPlayStation = (state.draft?.type ?: CONTROLLER_TYPE_XBOX) == CONTROLLER_TYPE_PLAYSTATION,
-                destinationIsSatellite = state.selectedHost?.kind == ConnectionKind.SATELLITE,
-                hasDestination = state.hostChosen,
-                hasGyro = snapshot.hasGyro,
-                hasRumble = snapshot.hasRumble,
-            )
-        val container = binding.reviewCapsContainer
-        container.removeAllViews()
-        rows.filter { it.available }.forEach { row ->
-            when (row.kind) {
-                SetupCapabilityKind.RUMBLE -> container.addView(capPill(R.drawable.ic_rumble, R.string.binding_func_rumble))
-                SetupCapabilityKind.MOTION -> container.addView(capPill(R.drawable.ic_motion, R.string.binding_func_gyro))
-                SetupCapabilityKind.TOUCHPAD -> container.addView(capPill(R.drawable.ic_touchpad, R.string.binding_func_touchpad))
+    ): List<ReviewNode> {
+        val motionOn = state.motionAvailable && state.draft?.motionOn == true
+        val touchpadMode = state.draft?.touchpadMode ?: TouchpadModeValue.OFF
+        val touchpadOn = state.touchpadAvailable && touchpadMode != TouchpadModeValue.OFF
+        // A chosen host always sends rumble back; the phone vibrates as a fallback
+        // even when the input has no motor (e.g. the on-screen pad).
+        val rumbleOn = state.hostChosen
+        val gamepad = ReviewFlow(R.drawable.ic_gamepad, R.string.setup_cfg_flow_controller)
+        val motion = ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro)
+        val rumble = ReviewFlow(R.drawable.ic_rumble, R.string.binding_func_rumble)
+        val pointer =
+            if (touchpadMode == TouchpadModeValue.MOUSE) {
+                ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse)
+            } else {
+                ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad)
             }
+
+        val nodes = mutableListOf<ReviewNode>()
+        nodes +=
+            ReviewNode(
+                kind = R.string.binding_label_input,
+                icon = snapshot.link.iconRes(),
+                name = snapshot.name,
+                sublabel = inputLink(state, snapshot).first,
+                sends =
+                    buildList {
+                        add(gamepad)
+                        if (motionOn) add(motion)
+                    },
+                gets = if (rumbleOn) listOf(rumble) else emptyList(),
+            )
+        if (touchpadOn) {
+            nodes +=
+                ReviewNode(
+                    kind = R.string.binding_label_input,
+                    icon = R.drawable.ic_gamepad_virtual,
+                    name = getString(R.string.setup_cfg_screen_name),
+                    sublabel = getString(R.string.setup_cfg_screen_sublabel),
+                    sends = listOf(pointer),
+                    gets = emptyList(),
+                )
         }
-        if (container.childCount == 0) {
-            container.addView(capPill(R.drawable.ic_cancel, R.string.setup_cfg_review_none))
-        }
+        val bt = state.isBluetoothHost
+        nodes +=
+            ReviewNode(
+                kind = R.string.binding_label_destination,
+                icon = if (bt) R.drawable.ic_bluetooth else R.drawable.ic_satellite,
+                name = state.selectedHost?.label.orEmpty(),
+                sublabel = getString(if (bt) R.string.setup_cfg_dest_bluetooth else R.string.setup_cfg_dest_satellite),
+                sends = if (rumbleOn) listOf(rumble) else emptyList(),
+                gets =
+                    buildList {
+                        add(gamepad)
+                        if (motionOn) add(motion)
+                        if (touchpadOn) add(pointer)
+                    },
+            )
+        return nodes
     }
 
-    private fun capPill(
+    private fun bindFlows(
+        row: View,
+        chips: LinearLayout,
+        flows: List<ReviewFlow>,
+    ) {
+        row.visibility = visibleIf(flows.isNotEmpty())
+        chips.removeAllViews()
+        flows.forEach { chips.addView(flowPill(chips, it.icon, it.label)) }
+    }
+
+    private fun flowPill(
+        parent: LinearLayout,
         @DrawableRes icon: Int,
         @StringRes label: Int,
     ): View {
-        val pill = BindingPillBinding.inflate(layoutInflater, binding.reviewCapsContainer, false)
+        val pill = BindingPillBinding.inflate(layoutInflater, parent, false)
         pill.root.setBackgroundResource(R.drawable.bg_binding_pill_cap)
         pill.ivPillIcon.setImageResource(icon)
         pill.ivPillIcon.imageTintList = ColorStateList.valueOf(getColor(R.color.colorOnSurfaceVariant))
@@ -275,6 +327,20 @@ class SetupConfigureActivity : AppCompatActivity() {
         pill.tvPillText.setTextColor(getColor(R.color.colorOnSurfaceVariant))
         return pill.root
     }
+
+    private data class ReviewNode(
+        @StringRes val kind: Int,
+        @DrawableRes val icon: Int,
+        val name: String,
+        val sublabel: String,
+        val sends: List<ReviewFlow>,
+        val gets: List<ReviewFlow>,
+    )
+
+    private data class ReviewFlow(
+        @DrawableRes val icon: Int,
+        @StringRes val label: Int,
+    )
 
     private fun renderApplyState(state: ApplyState) {
         when (state) {
