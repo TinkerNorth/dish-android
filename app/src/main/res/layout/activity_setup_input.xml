@@ -15,16 +15,7 @@
             style="@style/Widget.Dish.Toolbar"
             android:layout_width="match_parent"
             app:navigationIcon="@null"
-            app:title="@string/setup_input_toolbar">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnSkip"
-                style="@style/Widget.Dish.Button.Text"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="end"
-                android:text="@string/setup_action_skip" />
-        </com.google.android.material.appbar.MaterialToolbar>
+            app:title="@string/setup_input_toolbar" />
 
         <androidx.core.widget.NestedScrollView
             android:layout_width="match_parent"

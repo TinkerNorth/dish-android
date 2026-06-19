@@ -73,6 +73,7 @@ class SetupConfigureActivity : AppCompatActivity() {
         binding = ActivitySetupConfigureBinding.inflate(layoutInflater)
         setContentView(binding.root)
         setupDishToolbar(binding.toolbar)
+        wireSetupSkip(binding.toolbar, onboarding)
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()
         binding.breadcrumb.applyStep(SETUP_STEP_BINDING)

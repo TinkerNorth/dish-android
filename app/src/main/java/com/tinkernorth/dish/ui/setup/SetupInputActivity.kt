@@ -2,7 +2,6 @@
 
 package com.tinkernorth.dish.ui.setup
 
-import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import androidx.annotation.DrawableRes
@@ -16,7 +15,6 @@ import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.setupDishToolbar
-import com.tinkernorth.dish.ui.main.MainActivity
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -35,6 +33,7 @@ class SetupInputActivity : AppCompatActivity() {
         binding = ActivitySetupInputBinding.inflate(layoutInflater)
         setContentView(binding.root)
         setupDishToolbar(binding.toolbar)
+        wireSetupSkip(binding.toolbar, onboarding)
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()
         binding.breadcrumb.applyStep(SETUP_STEP_INPUT)
@@ -60,8 +59,6 @@ class SetupInputActivity : AppCompatActivity() {
             R.string.setup_input_onscreen_body,
             badge = null,
         ) { nav.toSetupConnection(SetupFlow.INPUT_ONSCREEN, VIRTUAL_SLOT_ID) }
-
-        binding.btnSkip.setOnClickListener { completeAndExit() }
     }
 
     private fun bindChoice(
@@ -82,16 +79,5 @@ class SetupInputActivity : AppCompatActivity() {
             row.choiceBadge.setText(badge)
         }
         row.choiceCard.setOnClickListener { onClick() }
-    }
-
-    // Skipping still records first-run as done so the gate doesn't re-trigger;
-    // the flow stays reachable from Settings.
-    private fun completeAndExit() {
-        onboarding.markWelcomeCompleted()
-        startActivity(
-            Intent(this, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
-        )
-        finish()
     }
 }

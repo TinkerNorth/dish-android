@@ -18,12 +18,14 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivitySetupBluetoothControllerBinding
 import com.tinkernorth.dish.databinding.SetupBtcPairedRowBinding
+import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 // Stage 2 Bluetooth controller (design 2C). Pairing lives in the system Bluetooth
 // settings; this screen gates on the runtime permission, lists the controllers
@@ -31,6 +33,8 @@ import kotlinx.coroutines.launch
 // the permission prompt and the jump to settings, mirroring ConnectionsActivity.
 @AndroidEntryPoint
 class SetupBluetoothControllerActivity : AppCompatActivity() {
+    @Inject lateinit var onboarding: OnboardingPreferenceStore
+
     private lateinit var binding: ActivitySetupBluetoothControllerBinding
     private val viewModel: SetupBluetoothControllerViewModel by viewModels()
     private val nav by lazy { DishNavigator(this) }
@@ -47,6 +51,7 @@ class SetupBluetoothControllerActivity : AppCompatActivity() {
         binding = ActivitySetupBluetoothControllerBinding.inflate(layoutInflater)
         setContentView(binding.root)
         setupDishToolbar(binding.toolbar)
+        wireSetupSkip(binding.toolbar, onboarding)
         binding.toolbar.setNavigationOnClickListener { handleBack() }
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()

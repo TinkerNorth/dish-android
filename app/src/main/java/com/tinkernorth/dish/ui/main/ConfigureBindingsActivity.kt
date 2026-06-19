@@ -9,7 +9,6 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
-import android.widget.PopupMenu
 import android.widget.ScrollView
 import androidx.activity.viewModels
 import androidx.annotation.ColorRes
@@ -61,8 +60,6 @@ class ConfigureBindingsActivity : AppCompatActivity() {
     private val viewModel: ConfigureBindingsViewModel by viewModels()
     private val nav by lazy { DishNavigator(this) }
 
-    private var current: ConfigUiState = ConfigUiState()
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityConfigureBindingsBinding.inflate(layoutInflater)
@@ -99,7 +96,6 @@ class ConfigureBindingsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.ui.collect { state ->
-                    current = state
                     if (state.loaded) renderContent(state)
                     renderBlocker(state)
                 }
@@ -192,7 +188,7 @@ class ConfigureBindingsActivity : AppCompatActivity() {
             val host = state.selectedHost
             d.hostDropdown.text = host?.label ?: getString(R.string.binding_choose_destination)
             d.hostDropdown.setTextColor(getColor(if (host != null) R.color.colorOnSurface else R.color.colorMuted))
-            d.hostDropdown.setOnClickListener { showHostMenu(d.hostDropdown) }
+            d.hostDropdown.setOnClickListener { showHostMenu() }
         }
         d.legendSatellite.visibility = if (state.hostChosen && !state.isBluetoothHost) View.VISIBLE else View.GONE
         d.legendBt.visibility = if (state.hostChosen && state.isBluetoothHost) View.VISIBLE else View.GONE
@@ -376,25 +372,45 @@ class ConfigureBindingsActivity : AppCompatActivity() {
         binding.btnToastAction.setOnClickListener { viewModel.apply() }
     }
 
-    private fun showHostMenu(anchor: View) {
-        val hosts = current.hosts
-        val pm = PopupMenu(this, anchor)
-        hosts.forEachIndexed { i, h ->
+    // The destination picker shows each host with the setup flow's capability table
+    // (what that destination carries per feature, and whether it is available) so the
+    // user can see what Bluetooth vs a Satellite supports before choosing.
+    private fun showHostMenu() {
+        val state = viewModel.ui.value
+        val snapshot = state.snapshot ?: return
+        val type = state.draft?.type ?: CONTROLLER_TYPE_XBOX
+        val container =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                val side = resources.getDimensionPixelSize(R.dimen.spacing_5xl)
+                setPadding(side, 0, side, 0)
+            }
+        val dialog =
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.binding_label_destination)
+                .setView(ScrollView(this).apply { addView(container) })
+                .setNegativeButton(android.R.string.cancel, null)
+                .create()
+        state.hosts.forEach { host ->
             val hint =
-                if (h.kind ==
-                    ConnectionKind.BLUETOOTH
-                ) {
+                if (host.kind == ConnectionKind.BLUETOOTH) {
                     getString(R.string.binding_host_hint_bt)
                 } else {
                     getString(R.string.binding_host_hint_satellite)
                 }
-            pm.menu.add(0, i, i, "${h.label} · $hint")
+            val card = SetupTypeCardBinding.inflate(layoutInflater, container, false)
+            card.typeTitle.text = "${host.label} · $hint"
+            card.typeChevron.visibility = View.GONE
+            card.capabilityContainer.bindCapabilityRows(
+                capabilityRows(viewModel.capabilityForCandidate(snapshot.slotId, type, host.kind, host.id)),
+            )
+            card.typeCard.setOnClickListener {
+                viewModel.setHost(host.id)
+                dialog.dismiss()
+            }
+            container.addView(card.root)
         }
-        pm.setOnMenuItemClickListener { item ->
-            hosts.getOrNull(item.itemId)?.let { viewModel.setHost(it.id) }
-            true
-        }
-        pm.show()
+        dialog.show()
     }
 
     // The type picker shows each emulated type with the setup flow's capability table

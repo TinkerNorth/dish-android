@@ -13,15 +13,19 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivitySetupUsbBinding
 import com.tinkernorth.dish.databinding.SetupChoiceRowBinding
+import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class SetupUsbActivity : AppCompatActivity() {
+    @Inject lateinit var onboarding: OnboardingPreferenceStore
+
     private lateinit var binding: ActivitySetupUsbBinding
     private val viewModel: SetupUsbViewModel by viewModels()
     private val nav by lazy { DishNavigator(this) }
@@ -31,6 +35,7 @@ class SetupUsbActivity : AppCompatActivity() {
         binding = ActivitySetupUsbBinding.inflate(layoutInflater)
         setContentView(binding.root)
         setupDishToolbar(binding.toolbar)
+        wireSetupSkip(binding.toolbar, onboarding)
         binding.toolbar.setNavigationOnClickListener { handleBack() }
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()

@@ -21,6 +21,7 @@ import com.tinkernorth.dish.databinding.ActivitySetupConnectionBinding
 import com.tinkernorth.dish.databinding.SetupChoiceRowBinding
 import com.tinkernorth.dish.databinding.SetupHostRowBinding
 import com.tinkernorth.dish.source.connection.PairingApproval
+import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
@@ -28,6 +29,7 @@ import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.connections.PairPinDialog
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 // Stage 3 destination. 3A picks the path (Satellite stays here, Bluetooth host
 // branches off); 3B lists/scans/reconnects satellites; 3C reuses PairPinDialog
@@ -35,6 +37,8 @@ import kotlinx.coroutines.launch
 // the flow hands off to the configure step with the host id as the connection id.
 @AndroidEntryPoint
 class SetupConnectionActivity : AppCompatActivity() {
+    @Inject lateinit var onboarding: OnboardingPreferenceStore
+
     private lateinit var binding: ActivitySetupConnectionBinding
     private val viewModel: SetupConnectionViewModel by viewModels()
     private val nav by lazy { DishNavigator(this) }
@@ -55,6 +59,7 @@ class SetupConnectionActivity : AppCompatActivity() {
         binding = ActivitySetupConnectionBinding.inflate(layoutInflater)
         setContentView(binding.root)
         setupDishToolbar(binding.toolbar)
+        wireSetupSkip(binding.toolbar, onboarding)
         binding.toolbar.setNavigationOnClickListener { handleBack() }
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()

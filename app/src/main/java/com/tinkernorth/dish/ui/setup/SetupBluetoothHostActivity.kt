@@ -64,6 +64,7 @@ class SetupBluetoothHostActivity : AppCompatActivity() {
         binding = ActivitySetupBluetoothHostBinding.inflate(layoutInflater)
         setContentView(binding.root)
         setupDishToolbar(binding.toolbar)
+        wireSetupSkip(binding.toolbar, onboarding)
         binding.toolbar.setNavigationOnClickListener { handleBack() }
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()
