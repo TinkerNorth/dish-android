@@ -5,9 +5,10 @@ package com.tinkernorth.dish.ui.main
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
-import com.tinkernorth.dish.composer.MotionCapability
+import com.tinkernorth.dish.core.model.CapabilitySet
+import com.tinkernorth.dish.core.model.Feature
+import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.source.sensor.MotionStreamState
-import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -463,14 +464,28 @@ class MotionIndicatorStateTest {
             boundSlotIds = emptyList(),
         )
 
-    private val fullCapability =
-        MotionCapability(
-            hasGyro = true,
-            carriesOnConnection = true,
-            userEnabled = true,
-            hostHasSinkForType = true,
-            satelliteBackendStatus = null,
+    // Parity helper: motionIndicatorFor reads only userWants(MOTION) (the user toggle),
+    // typeOk(MOTION) (the host sink for the emulated type), and MOTION in runtimeDown (the
+    // satellite backend health). The other layers are irrelevant to this translation, so they
+    // are filled full. backendDown=true maps to satelliteBackendOk=false; otherwise null.
+    private fun caps(
+        userMotion: Boolean = true,
+        typeMotion: Boolean = true,
+        backendDown: Boolean = false,
+    ): SlotCapabilities {
+        fun motionSet(present: Boolean) = if (present) CapabilitySet.of(Feature.MOTION) else CapabilitySet.EMPTY
+        val all = CapabilitySet(Feature.entries.toSet())
+        return SlotCapabilities(
+            controller = all,
+            transport = all,
+            type = motionSet(typeMotion),
+            host = all,
+            userEnabled = motionSet(userMotion),
+            runtimeDown = motionSet(backendDown),
         )
+    }
+
+    private val fullCapability = caps()
 
     @Test
     fun `motionIndicatorFor null summary with a streaming source maps to PAUSED`() {
@@ -525,8 +540,8 @@ class MotionIndicatorStateTest {
 
     @Test
     fun `motionIndicatorFor disabled source maps to UNAVAILABLE`() {
-        // The no-gyro / off condition reaches this function as a Disabled source, not via
-        // capability.hasGyro (which this translation never reads).
+        // The no-gyro / off condition reaches this function as a Disabled source, not via the
+        // controller layer (which this translation never reads).
         assertEquals(
             MotionIndicatorState.UNAVAILABLE,
             motionIndicatorFor(
@@ -540,16 +555,8 @@ class MotionIndicatorStateTest {
     @Test
     fun `motionIndicatorFor a Disabled source dominates regardless of summary and capability`() {
         // Mirrors the existing precedence test: UNAVAILABLE wins. Note the dominating input here is
-        // the source being Disabled, not MotionCapability.hasGyro, which motionIndicatorFor ignores.
-        val richCapability =
-            MotionCapability(
-                hasGyro = true,
-                carriesOnConnection = true,
-                userEnabled = false,
-                hostHasSinkForType = false,
-                satelliteBackendStatus =
-                    SatelliteMotionBackendStatus(sinkSupportedForType = false, backendOk = false),
-            )
+        // the source being Disabled, not the controller layer, which motionIndicatorFor ignores.
+        val richCapability = caps(userMotion = false, typeMotion = false, backendDown = true)
         for (kind in ConnectionKind.entries) {
             for (live in LinkState.entries) {
                 assertEquals(
@@ -596,7 +603,7 @@ class MotionIndicatorStateTest {
             MotionIndicatorState.USER_DISABLED,
             motionIndicatorFor(
                 summary = summary(ConnectionKind.SATELLITE, LinkState.Connected),
-                capability = fullCapability.copy(userEnabled = false),
+                capability = caps(userMotion = false),
                 source = MotionStreamState.Streaming,
             ),
         )
@@ -608,7 +615,7 @@ class MotionIndicatorStateTest {
             MotionIndicatorState.NO_HOST_SINK,
             motionIndicatorFor(
                 summary = summary(ConnectionKind.SATELLITE, LinkState.Connected),
-                capability = fullCapability.copy(hostHasSinkForType = false),
+                capability = caps(typeMotion = false),
                 source = MotionStreamState.Streaming,
             ),
         )
@@ -620,14 +627,7 @@ class MotionIndicatorStateTest {
             MotionIndicatorState.BACKEND_BROKEN,
             motionIndicatorFor(
                 summary = summary(ConnectionKind.SATELLITE, LinkState.Connected),
-                capability =
-                    fullCapability.copy(
-                        satelliteBackendStatus =
-                            SatelliteMotionBackendStatus(
-                                sinkSupportedForType = true,
-                                backendOk = false,
-                            ),
-                    ),
+                capability = caps(backendDown = true),
                 source = MotionStreamState.Streaming,
             ),
         )

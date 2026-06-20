@@ -362,8 +362,6 @@
     <string name="binding_dest_no_channel">Nema kanala</string>
     <string name="binding_dest_host">Host</string>
     <string name="binding_dest_bt_note">Telefon se uparuje kao Bluetooth kontroler. Žiro, dodirna ploča i miš trebaju Satelit host.</string>
-    <string name="binding_host_hint_satellite">Satelit</string>
-    <string name="binding_host_hint_bt">BT</string>
     <string name="binding_manage_destinations">Upravljaj odredištima</string>
     <string name="binding_no_hosts_title">Nema pronađenih hostova</string>
     <string name="binding_no_hosts_body">Skenirajte mrežu za Satelit host ili uparite jedan preko Bluetootha. Kada se host pojavi, vratite se da povežete %1$s.</string>

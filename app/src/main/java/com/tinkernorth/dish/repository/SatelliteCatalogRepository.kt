@@ -4,7 +4,9 @@ package com.tinkernorth.dish.repository
 
 import com.tinkernorth.dish.core.model.CatalogDto
 import com.tinkernorth.dish.core.model.DiscoveredServer
+import com.tinkernorth.dish.core.model.HostFeatureSet
 import com.tinkernorth.dish.core.net.DiscoveryGateway
+import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import kotlinx.serialization.json.Json
 import java.util.Locale
 import javax.inject.Inject
@@ -24,6 +26,7 @@ class SatelliteCatalogRepository
     constructor(
         private val gateway: DiscoveryGateway,
         private val json: Json,
+        private val hostFeaturesStore: SatelliteHostFeaturesStore,
     ) {
         private data class CacheEntry(
             val etag: String?,
@@ -51,12 +54,17 @@ class SatelliteCatalogRepository
                         etag = cached?.etag,
                     )
                 }.getOrNull() ?: return cached?.catalog
-            if (reply.notModified) return cached?.catalog
+            if (reply.notModified) {
+                // 304: the cache is still authoritative, so re-publish its host features for late observers.
+                cached?.catalog?.let { hostFeaturesStore.setFeatures(satelliteId, HostFeatureSet.fromCatalog(it)) }
+                return cached?.catalog
+            }
             if (reply.status != 200 || reply.body.isBlank()) return cached?.catalog
             val catalog =
                 runCatching { json.decodeFromString(CatalogDto.serializer(), reply.body) }
                     .getOrNull() ?: return cached?.catalog
             cache[satelliteId] = CacheEntry(reply.etag, catalog)
+            hostFeaturesStore.setFeatures(satelliteId, HostFeatureSet.fromCatalog(catalog))
             return catalog
         }
 

@@ -363,8 +363,6 @@
     <string name="binding_dest_no_channel">Sem canal</string>
     <string name="binding_dest_host">Host</string>
     <string name="binding_dest_bt_note">O telefone pareia como controle Bluetooth. Giroscópio, touchpad e mouse precisam de um host Satélite.</string>
-    <string name="binding_host_hint_satellite">Satélite</string>
-    <string name="binding_host_hint_bt">BT</string>
     <string name="binding_manage_destinations">Gerenciar destinos</string>
     <string name="binding_no_hosts_title">Nenhum host encontrado</string>
     <string name="binding_no_hosts_body">Procure um host Satélite na sua rede ou pareie um por Bluetooth. Quando um host aparecer, volte para vincular %1$s.</string>

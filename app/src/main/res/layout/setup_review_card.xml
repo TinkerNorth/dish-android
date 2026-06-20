@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One node in the review's data-flow: a source or destination, with the
+     things it sends (up arrow) and gets (down arrow). Header, sublabel, and the
+     two chip rows are filled per node; an empty row is hidden. -->
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/reviewCard"
+    style="@style/Widget.Dish.Card"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="@dimen/card_margin_bottom">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="@dimen/card_padding">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:id="@+id/reviewIcon"
+                android:layout_width="@dimen/icon_picker_glyph"
+                android:layout_height="@dimen/icon_picker_glyph"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_gamepad"
+                app:tint="@color/colorPrimary" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="@dimen/config_row_icon_gap"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/reviewKind"
+                    style="@style/Widget.Dish.MicroLabel"
+                    android:layout_width="wrap_content"
+                    tools:text="INPUT" />
+
+                <TextView
+                    android:id="@+id/reviewName"
+                    style="@style/TextAppearance.Dish.BodyLarge.Bold"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    tools:text="Your controller" />
+
+                <TextView
+                    android:id="@+id/reviewSublabel"
+                    style="@style/TextAppearance.Dish.BodySmall"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/colorOnSurfaceVariant"
+                    tools:text="USB / Direct" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/reviewSendsRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_md"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <ImageView
+                android:layout_width="@dimen/config_section_icon_size"
+                android:layout_height="@dimen/config_section_icon_size"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_arrow_upward"
+                app:tint="@color/colorMuted" />
+
+            <TextView
+                style="@style/Widget.Dish.MicroLabel"
+                android:layout_width="wrap_content"
+                android:layout_marginStart="@dimen/spacing_xs"
+                android:text="@string/setup_cfg_review_sends" />
+
+            <LinearLayout
+                android:id="@+id/reviewSendsChips"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="@dimen/spacing_md"
+                android:divider="@drawable/binding_pill_gap"
+                android:gravity="center_vertical|end"
+                android:orientation="horizontal"
+                android:showDividers="middle" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/reviewGetsRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_sm"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <ImageView
+                android:layout_width="@dimen/config_section_icon_size"
+                android:layout_height="@dimen/config_section_icon_size"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_arrow_downward"
+                app:tint="@color/colorMuted" />
+
+            <TextView
+                style="@style/Widget.Dish.MicroLabel"
+                android:layout_width="wrap_content"
+                android:layout_marginStart="@dimen/spacing_xs"
+                android:text="@string/setup_cfg_review_gets" />
+
+            <LinearLayout
+                android:id="@+id/reviewGetsChips"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="@dimen/spacing_md"
+                android:divider="@drawable/binding_pill_gap"
+                android:gravity="center_vertical|end"
+                android:orientation="horizontal"
+                android:showDividers="middle" />
+        </LinearLayout>
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

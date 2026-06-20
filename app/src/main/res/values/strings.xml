@@ -425,8 +425,6 @@
     <string name="binding_dest_no_channel">No channel</string>
     <string name="binding_dest_host">Host</string>
     <string name="binding_dest_bt_note">Phone pairs as a Bluetooth gamepad. Gyro, touchpad and mouse need a Satellite host.</string>
-    <string name="binding_host_hint_satellite">Satellite</string>
-    <string name="binding_host_hint_bt">BT</string>
     <string name="binding_choose_destination">Choose a destination</string>
 
     <string name="binding_edge_host_lost_title">Connection lost</string>

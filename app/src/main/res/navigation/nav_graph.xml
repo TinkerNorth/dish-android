@@ -70,14 +70,58 @@
     </activity>
 
     <activity
-        android:id="@+id/welcomeActivity"
-        android:name="com.tinkernorth.dish.ui.onboarding.WelcomeActivity"
-        android:label="@string/welcome_step1_title" />
+        android:id="@+id/setupInputActivity"
+        android:name="com.tinkernorth.dish.ui.setup.SetupInputActivity"
+        android:label="@string/setup_title" />
 
     <activity
-        android:id="@+id/setupWizardActivity"
-        android:name="com.tinkernorth.dish.ui.onboarding.SetupWizardActivity"
-        android:label="@string/wizard_title" />
+        android:id="@+id/setupUsbActivity"
+        android:name="com.tinkernorth.dish.ui.setup.SetupUsbActivity"
+        android:label="@string/setup_title" />
+
+    <activity
+        android:id="@+id/setupBluetoothControllerActivity"
+        android:name="com.tinkernorth.dish.ui.setup.SetupBluetoothControllerActivity"
+        android:label="@string/setup_title" />
+
+    <activity
+        android:id="@+id/setupConnectionActivity"
+        android:name="com.tinkernorth.dish.ui.setup.SetupConnectionActivity"
+        android:label="@string/setup_title">
+
+        <argument
+            android:name="extra_setup_input_type"
+            app:argType="string" />
+        <argument
+            android:name="extra_setup_slot_id"
+            app:argType="string" />
+    </activity>
+
+    <activity
+        android:id="@+id/setupBluetoothHostActivity"
+        android:name="com.tinkernorth.dish.ui.setup.SetupBluetoothHostActivity"
+        android:label="@string/setup_title">
+
+        <argument
+            android:name="extra_setup_input_type"
+            app:argType="string" />
+        <argument
+            android:name="extra_setup_slot_id"
+            app:argType="string" />
+    </activity>
+
+    <activity
+        android:id="@+id/setupConfigureActivity"
+        android:name="com.tinkernorth.dish.ui.setup.SetupConfigureActivity"
+        android:label="@string/setup_title">
+
+        <argument
+            android:name="extra_setup_slot_id"
+            app:argType="string" />
+        <argument
+            android:name="extra_setup_connection_id"
+            app:argType="string" />
+    </activity>
 
     <activity
         android:id="@+id/helpActivity"

@@ -25,6 +25,11 @@ internal fun mapBackedPrefs(seed: MutableMap<String, Any?>? = null): Pair<Contex
         store.remove(keySlot.captured)
         editor
     }
+    val boolSlot = slot<Boolean>()
+    every { editor.putBoolean(capture(keySlot), capture(boolSlot)) } answers {
+        store[keySlot.captured] = boolSlot.captured
+        editor
+    }
     every { editor.apply() } answers { }
 
     val prefs = mockk<SharedPreferences>(relaxed = true)
@@ -32,6 +37,11 @@ internal fun mapBackedPrefs(seed: MutableMap<String, Any?>? = null): Pair<Contex
         val k = firstArg<String>()
         val default = secondArg<String?>()
         (store[k] as? String) ?: default
+    }
+    every { prefs.getBoolean(any(), any()) } answers {
+        val k = firstArg<String>()
+        val default = secondArg<Boolean>()
+        (store[k] as? Boolean) ?: default
     }
     every { prefs.edit() } returns editor
     every { prefs.all } answers { store.toMap() }

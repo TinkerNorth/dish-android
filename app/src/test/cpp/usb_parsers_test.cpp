@@ -279,8 +279,9 @@ TEST(KnownDevices, UnknownModelIsNeitherRecognizedNorFastLane) {
 }
 
 TEST(Decode, SwitchProAveragesImuSubframes) {
-    // accelX 300/600/900 across the three subframes averages to 600: a single-subframe report of
-    // 600 must match, and the first subframe alone (300) must not.
+    // Raw accel X (byte 13) 300/600/900 across the three subframes averages to 600, and the axis
+    // rotation lands it on wire accel Z: a single-subframe report of 600 must match, and the first
+    // subframe alone (300) must not.
     auto three = switchReport(49);
     setLe16(three, 13, 300);
     setLe16(three, 25, 600);
@@ -296,8 +297,53 @@ TEST(Decode, SwitchProAveragesImuSubframes) {
     ASSERT_TRUE(decodeReport(Parser::SWITCH_PRO_USB, avg.data(), avg.size(), sAvg, &p2));
     ASSERT_TRUE(decodeReport(Parser::SWITCH_PRO_USB, first.data(), first.size(), sFirst, &p3));
     EXPECT_TRUE(sThree.motionValid);
-    EXPECT_EQ(sAvg.accelX, sThree.accelX);
-    EXPECT_NE(sFirst.accelX, sThree.accelX);
+    EXPECT_EQ(sAvg.accelZ, sThree.accelZ);
+    EXPECT_NE(sFirst.accelZ, sThree.accelZ);
+}
+
+TEST(Decode, SwitchProRotatesImuOntoDs4AxisConvention) {
+    // Each raw IMU axis is excited alone so any cross-wiring is visible. Subframe layout: accel
+    // x/y/z at 13/15/17, gyro x/y/z at 19/21/23. The Switch's pitch/yaw/roll land on raw gyro
+    // Y/Z/X and map onto wire gyro X/Y/Z; pitch and roll are negated to match the DS4 sign
+    // convention (verified on hardware: nose up aims up, steering tracks). Accel rotates to match.
+    auto decodeAxis = [](size_t off) {
+        auto r = switchReport(25);
+        setLe16(r, off, 4000);
+        DeviceState s;
+        ParserState p;
+        EXPECT_TRUE(decodeReport(Parser::SWITCH_PRO_USB, r.data(), r.size(), s, &p));
+        return s;
+    };
+
+    DeviceState pitch = decodeAxis(21); // raw gyro Y -> wire gyro X (pitch, negated)
+    EXPECT_LT(pitch.gyroX, 0);
+    EXPECT_EQ(0, pitch.gyroY);
+    EXPECT_EQ(0, pitch.gyroZ);
+
+    DeviceState yaw = decodeAxis(23); // raw gyro Z -> wire gyro Y (yaw, upright)
+    EXPECT_EQ(0, yaw.gyroX);
+    EXPECT_GT(yaw.gyroY, 0);
+    EXPECT_EQ(0, yaw.gyroZ);
+
+    DeviceState roll = decodeAxis(19); // raw gyro X -> wire gyro Z (roll, negated)
+    EXPECT_EQ(0, roll.gyroX);
+    EXPECT_EQ(0, roll.gyroY);
+    EXPECT_LT(roll.gyroZ, 0);
+
+    DeviceState accelRawX = decodeAxis(13); // raw accel X -> wire accel Z
+    EXPECT_EQ(0, accelRawX.accelX);
+    EXPECT_EQ(0, accelRawX.accelY);
+    EXPECT_NE(0, accelRawX.accelZ);
+
+    DeviceState accelRawY = decodeAxis(15); // raw accel Y -> wire accel X
+    EXPECT_NE(0, accelRawY.accelX);
+    EXPECT_EQ(0, accelRawY.accelY);
+    EXPECT_EQ(0, accelRawY.accelZ);
+
+    DeviceState accelRawZ = decodeAxis(17); // raw accel Z -> wire accel Y
+    EXPECT_EQ(0, accelRawZ.accelX);
+    EXPECT_NE(0, accelRawZ.accelY);
+    EXPECT_EQ(0, accelRawZ.accelZ);
 }
 
 TEST(Decode, SwitchProShortReportHasNoImu) {

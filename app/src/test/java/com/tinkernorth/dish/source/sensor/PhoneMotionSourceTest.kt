@@ -218,6 +218,20 @@ class PhoneMotionSourceTest {
     }
 
     @Test
+    fun `gyro pitch is inverted to match the DS4 wire convention, yaw and roll pass through`() {
+        val emissions = mutableListOf<Pair<MotionRateLimiter.MotionSample, Int>>()
+        val src = source() // rotationSupplier = { 0 }, so remapLandscape is identity
+        src.start { sample, dt -> emissions += sample to dt }
+        src.onAccel(floatArrayOf(0f, 9.80665f, 0f)) // satisfy the first-emission accel gate
+        src.onGyro(floatArrayOf(1f, 1f, 1f))
+
+        val sample = emissions.single().first
+        assertTrue(sample.gyroX < 0) // pitch (device X at ROTATION_0) is negated
+        assertTrue(sample.gyroY > 0) // yaw passes through
+        assertTrue(sample.gyroZ > 0) // roll passes through
+    }
+
+    @Test
     fun `deriveState - no gyro present means Disabled regardless of started`() {
         assertEquals(
             MotionStreamState.Disabled,

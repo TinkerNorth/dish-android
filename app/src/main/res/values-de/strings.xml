@@ -359,8 +359,6 @@
     <string name="binding_dest_no_channel">Kein Kanal</string>
     <string name="binding_dest_host">Host</string>
     <string name="binding_dest_bt_note">Das Telefon wird als Bluetooth-Gamepad gekoppelt. Gyro, Touchpad und Maus brauchen einen Satellit-Host.</string>
-    <string name="binding_host_hint_satellite">Satellit</string>
-    <string name="binding_host_hint_bt">BT</string>
     <string name="binding_manage_destinations">Ziele verwalten</string>
     <string name="binding_no_hosts_title">Keine Hosts gefunden</string>
     <string name="binding_no_hosts_body">Durchsuche dein Netzwerk nach einem Satellit-Host oder koppele einen über Bluetooth. Sobald ein Host erscheint, komm zurück, um %1$s zuzuordnen.</string>

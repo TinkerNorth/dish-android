@@ -46,7 +46,7 @@ class HelpActivity : AppCompatActivity() {
         binding.cardRowRunSetup.cardRowIcon.setImageResource(R.drawable.ic_route)
         binding.cardRowRunSetup.cardRowTitle.setText(R.string.help_run_setup_title)
         binding.cardRowRunSetup.cardRowSubtitle.setText(R.string.help_run_setup_body)
-        binding.cardRunSetup.setOnClickListener { nav.toSetupWizard() }
+        binding.cardRunSetup.setOnClickListener { nav.toSetupInput() }
     }
 
     private fun bindSectionLabels() {

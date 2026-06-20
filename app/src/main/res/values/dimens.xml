@@ -133,14 +133,9 @@
          ============================================================ -->
     <dimen name="settings_content_max_width">@dimen/size_600</dimen>
 
-    <dimen name="welcome_hero_size">@dimen/size_240</dimen>
     <dimen name="welcome_content_max_width">@dimen/size_600</dimen>
 
     <dimen name="step_indicator_height">@dimen/size_6</dimen>
-    <dimen name="step_indicator_dot_width">@dimen/size_8</dimen>
-    <dimen name="step_indicator_dot_width_active">@dimen/size_18</dimen>
-
-    <dimen name="wizard_option_stroke_selected">@dimen/size_2</dimen>
 
     <dimen name="recommended_pill_vertical_padding">@dimen/size_2</dimen>
 

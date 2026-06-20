@@ -134,7 +134,7 @@ class PhoneMotionSource(
         if (result is MotionScaling.RemapResult.Fallback) onUnknownRotation(result.unknownRotation)
         val sample =
             MotionRateLimiter.MotionSample(
-                gyroX = MotionScaling.gyroRadToWire(remapScratch[0]),
+                gyroX = MotionScaling.gyroRadToWire(-remapScratch[0]),
                 gyroY = MotionScaling.gyroRadToWire(remapScratch[1]),
                 gyroZ = MotionScaling.gyroRadToWire(remapScratch[2]),
                 accelX = accelX,

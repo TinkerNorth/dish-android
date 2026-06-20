@@ -7,13 +7,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
+import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
-import com.tinkernorth.dish.composer.MotionCapability
-import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.composer.TouchpadModeComposer
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
+import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.connection.ConnectionEvent
@@ -51,7 +51,7 @@ class MainViewModel
         private val gamepadRegistry: PhysicalGamepadRegistry,
         private val batteryStatusStore: BatteryStatusStore,
         private val motionEnabledStore: MotionEnabledStore,
-        private val motionCapability: MotionCapabilityComposer,
+        private val capabilityComposer: CapabilityComposer,
         private val touchpadModeStore: TouchpadModeStore,
         private val native: PhysicalInputNative,
         private val pathPrefs: UsbPathPreferenceStore,
@@ -74,7 +74,7 @@ class MainViewModel
                     hub.bindings,
                     gamepadRegistry.devices,
                     batteryStatusStore.samples,
-                    motionCapability.state,
+                    capabilityComposer.state,
                 ) { conns, bindings, devices, batteries, motionCaps ->
                     val virtual =
                         ControllerSlot(
@@ -276,14 +276,14 @@ class MainViewModel
         private data class SlotsBase(
             val slots: List<ControllerSlot>,
             val connections: List<ConnectionSummary>,
-            val motionCapabilities: Map<String, MotionCapability>,
+            val motionCapabilities: Map<String, SlotCapabilities>,
             val devices: Map<Int, PhysicalGamepadRegistry.Device>,
         )
 
         private data class SlotsRender(
             val slots: List<ControllerSlot>,
             val connections: List<ConnectionSummary>,
-            val motionCapabilities: Map<String, MotionCapability>,
+            val motionCapabilities: Map<String, SlotCapabilities>,
             val pathCards: Map<String, PathCard>,
             val inputRates: Map<String, SlotInputRates>,
             val screenPeakHz: Int,

@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Three-step progress chrome shared by every setup screen: Input ·
+    Destination · Binding. The active step is tinted from code via
+    SetupChrome.applyStep(); colours stay at their idle (future-step)
+    values here so the layout preview reads correctly.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <View
+            android:id="@+id/stepBar1"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/step_indicator_height"
+            android:layout_weight="1"
+            android:background="@drawable/bg_setup_step_bar"
+            android:backgroundTint="@color/colorPrimary" />
+
+        <View
+            android:id="@+id/stepBar2"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/step_indicator_height"
+            android:layout_weight="1"
+            android:layout_marginStart="@dimen/spacing_sm"
+            android:background="@drawable/bg_setup_step_bar"
+            android:backgroundTint="@color/colorSurfaceVariant" />
+
+        <View
+            android:id="@+id/stepBar3"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/step_indicator_height"
+            android:layout_weight="1"
+            android:layout_marginStart="@dimen/spacing_sm"
+            android:background="@drawable/bg_setup_step_bar"
+            android:backgroundTint="@color/colorSurfaceVariant" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_sm"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/stepLabel1"
+            style="@style/TextAppearance.Dish.Label.Micro"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="start"
+            android:textAllCaps="true"
+            android:textColor="@color/colorPrimary"
+            android:text="@string/setup_step_input" />
+
+        <TextView
+            android:id="@+id/stepLabel2"
+            style="@style/TextAppearance.Dish.Label.Micro"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:textAllCaps="true"
+            android:text="@string/setup_step_destination" />
+
+        <TextView
+            android:id="@+id/stepLabel3"
+            style="@style/TextAppearance.Dish.Label.Micro"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="end"
+            android:textAllCaps="true"
+            android:text="@string/setup_step_binding" />
+    </LinearLayout>
+</LinearLayout>

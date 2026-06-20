@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    CANONICAL TYPOGRAPHY: 14 TextAppearance.Dish.* styles. Every TextView
+    CANONICAL TYPOGRAPHY: 17 TextAppearance.Dish.* styles. Every TextView
     in `res/layout/*.xml` adopts one of these via `style="@style/…"`.
 
     Two-tier model (matches the dimens / colors layout):
-      - 12 truly canonical roles (Caption, Label, BodySmall, Body, BodyLarge,
-        Title, Display, Hero, plus their .Accent / .Plain / .Mono color/family
-        variants).
+      - 15 truly canonical roles (Caption, Label, BodySmall, Body, BodyLarge,
+        Title, Display, Hero, plus their .Accent / .Plain / .Micro / .Tight /
+        .Mono / .Bold color/family/tracking variants).
       - 2 one-off display states (.Large) for the brand header + pair-dialog
         title.
 
@@ -16,9 +16,11 @@
                    Title / Display / Hero
         Modifier = Accent  (cyan)
                    Plain   (sans-serif, otherwise mirrors the role)
+                   Micro   (caption-size on a label role)
                    Mono    (monospace override on a default-family role)
                    Bold    (textStyle bold)
                    Large   (next-step-up textSize)
+                   Tight   (reduced letterSpacing)
 
     Application:
       `style="@style/TextAppearance.Dish.X"`, NOT `android:textAppearance`.
@@ -34,6 +36,7 @@
             un-tracked-body "M2-era tight" look without overriding the
             brand's overall density.
       0.04: Hero (subtle tracking on giant numerals)
+      0.06: Label.Tight (compact mono status tag beside a value)
       0.12: Label / Label.Accent / Display.Large (eyebrow + brand wordmark)
       0.18: Caption (small mono eyebrow / footer)
 
@@ -101,6 +104,18 @@
         <item name="android:letterSpacing">0.12</item>
     </style>
 
+    <!-- Compact all-caps status tag set beside a value (capability AVAILABLE / OFF).
+         Tracking 0.06 sits below the eyebrow Labels so it reads tight, not spaced;
+         the colour is overridden per state at the callsite. -->
+    <style name="TextAppearance.Dish.Label.Tight" parent="">
+        <item name="android:textSize">@dimen/text_label</item>
+        <item name="android:textColor">@color/colorMuted</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:letterSpacing">0.06</item>
+        <item name="android:textAllCaps">true</item>
+    </style>
+
     <!-- ============================================================
          BODY SMALL: secondary copy under titles (slot status, empty
          hints, dialog subtitles).
@@ -110,6 +125,16 @@
         <item name="android:textColor">@color/colorMuted</item>
         <item name="android:fontFamily">sans-serif</item>
         <item name="android:textStyle">normal</item>
+        <item name="android:letterSpacing">0.02</item>
+    </style>
+
+    <!-- Monospace-bold variant: the capability-row feature name (the design's
+         JetBrains Mono 700), on-surface at body-small size. -->
+    <style name="TextAppearance.Dish.BodySmall.Mono.Bold" parent="">
+        <item name="android:textSize">@dimen/text_body_sm</item>
+        <item name="android:textColor">@color/colorOnSurface</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textStyle">bold</item>
         <item name="android:letterSpacing">0.02</item>
     </style>
 

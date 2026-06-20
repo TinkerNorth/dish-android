@@ -1,0 +1,8 @@
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/colorSuccessFill" />
+    <stroke
+        android:width="@dimen/border_thin"
+        android:color="@color/colorSuccessOutline" />
+    <corners android:radius="@dimen/config_callout_corner" />
+</shape>

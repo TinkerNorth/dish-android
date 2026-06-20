@@ -133,13 +133,6 @@
                             android:text="@string/action_manage" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
-
-                <include
-                    android:id="@+id/cardDashboardHintInclude"
-                    layout="@layout/dashboard_hint_card"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/card_margin_bottom" />
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>

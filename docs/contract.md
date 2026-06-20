@@ -18,6 +18,7 @@ Android-side mapping. The former `wire-format.md` is replaced by the contract.
 | Connect flow, terminal 401, exponential backoff, reconcile, self-unpair | `source/connection/SatelliteConnectionManager.kt` |
 | UDP streams + enriched heartbeat ack + close-notify (socket/crypto only) | `app/src/main/cpp/satellite_jni.cpp` |
 | Catalog cache (ETag, per-satellite) | `repository/SatelliteCatalogRepository.kt` |
+| Host capabilities (`GET /api/server/capabilities`) pre-bind read | `repository/SatelliteCapabilitiesRepository.kt` → host layer + `source/store/SatelliteHostRuntimeStore.kt` |
 
 ## Client behaviours required by the contract
 
@@ -49,4 +50,16 @@ Android-side mapping. The former `wire-format.md` is replaced by the contract.
 - **Catalog.** The "Emulate" picker renders from `GET /api/catalog`
   (Accept-Language, ETag-cached). Known slugs (`xbox360`, `ds4`) keep bundled
   labels; an unknown type still renders from server strings; unknown
-  feature/hostFeature slugs are silently not offered.
+  feature/hostFeature slugs are silently not offered. The DS4 PAD mode is gated
+  on the type's `features.touchpad.modes` containing `ds4` (read, not inferred
+  from the type id); an absent `modes` array falls back to the legacy assumption.
+- **Host features.** The host layer reads `hostFeatures.mouseControl`,
+  `keyboardControl`, and `rumble`. Rumble is opt-OUT (absent slug → assumed, for
+  back-compat with satellites predating it); keyboard is opt-IN (absent → not
+  offered, and it stays unoffered until a phone-side source exists).
+- **Pre-bind host read.** `GET /api/server/capabilities` carries a `host` block
+  (capability presence + runtime). The setup flow probes it before binding so the
+  host layer reflects the real receiver before the catalog round-trip
+  (`setIfAbsent`, so a richer catalog still wins) and the candidate report can show
+  a feature present-but-currently-down (motion backend) pre-bind. A server omitting
+  the block (`host.catalog.supported == false`) leaves the optimistic default.

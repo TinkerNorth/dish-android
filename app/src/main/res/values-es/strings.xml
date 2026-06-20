@@ -363,8 +363,6 @@
     <string name="binding_dest_no_channel">Sin canal</string>
     <string name="binding_dest_host">Host</string>
     <string name="binding_dest_bt_note">El teléfono se vincula como mando Bluetooth. El giro, el panel táctil y el ratón necesitan un host Satélite.</string>
-    <string name="binding_host_hint_satellite">Satélite</string>
-    <string name="binding_host_hint_bt">BT</string>
     <string name="binding_manage_destinations">Gestionar destinos</string>
     <string name="binding_no_hosts_title">No se encontraron hosts</string>
     <string name="binding_no_hosts_body">Busca un host Satélite en tu red o vincula uno por Bluetooth. Cuando aparezca un host, vuelve para vincular %1$s.</string>

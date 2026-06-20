@@ -10,6 +10,7 @@ import androidx.navigation.NavGraphNavigator
 import androidx.navigation.NavInflater
 import androidx.navigation.NavigatorProvider
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.ui.setup.SetupFlow
 
 // Activity destinations can't carry <action> children, so navigate by destination id, not action id.
 // Drives ActivityNavigator directly instead of NavController: setGraph() auto-navigates to the start
@@ -58,12 +59,55 @@ class DishNavigator(
         )
     }
 
-    fun toWelcome() {
-        go(R.id.welcomeActivity)
+    fun toSetupInput() {
+        go(R.id.setupInputActivity)
     }
 
-    fun toSetupWizard() {
-        go(R.id.setupWizardActivity)
+    fun toSetupUsb() {
+        go(R.id.setupUsbActivity)
+    }
+
+    fun toSetupBluetoothController() {
+        go(R.id.setupBluetoothControllerActivity)
+    }
+
+    fun toSetupConnection(
+        inputType: String,
+        slotId: String,
+    ) {
+        go(
+            R.id.setupConnectionActivity,
+            Bundle().apply {
+                putString(SetupFlow.EXTRA_INPUT_TYPE, inputType)
+                putString(SetupFlow.EXTRA_SLOT_ID, slotId)
+            },
+        )
+    }
+
+    fun toSetupBluetoothHost(
+        inputType: String,
+        slotId: String,
+    ) {
+        go(
+            R.id.setupBluetoothHostActivity,
+            Bundle().apply {
+                putString(SetupFlow.EXTRA_INPUT_TYPE, inputType)
+                putString(SetupFlow.EXTRA_SLOT_ID, slotId)
+            },
+        )
+    }
+
+    fun toSetupConfigure(
+        slotId: String,
+        connectionId: String,
+    ) {
+        go(
+            R.id.setupConfigureActivity,
+            Bundle().apply {
+                putString(SetupFlow.EXTRA_SLOT_ID, slotId)
+                putString(SetupFlow.EXTRA_CONNECTION_ID, connectionId)
+            },
+        )
     }
 
     fun toHelp() {

@@ -4,7 +4,7 @@ package com.tinkernorth.dish.ui.main
 
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
-import com.tinkernorth.dish.composer.MotionCapability
+import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
 import com.tinkernorth.dish.source.sensor.BatteryValidator
 
@@ -54,7 +54,7 @@ data class MainUiState(
             ControllerSlot(id = VIRTUAL_SLOT_ID, inputType = SlotInputType.VIRTUAL, name = ""),
         ),
     val connections: List<ConnectionSummary> = emptyList(),
-    val motionCapabilities: Map<String, MotionCapability> = emptyMap(),
+    val motionCapabilities: Map<String, SlotCapabilities> = emptyMap(),
     val touchpadModesBySatellite: Map<String, String> = emptyMap(),
     val pathCards: Map<String, PathCard> = emptyMap(),
     val inputRates: Map<String, SlotInputRates> = emptyMap(),
