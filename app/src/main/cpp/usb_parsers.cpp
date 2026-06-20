@@ -785,9 +785,9 @@ bool decodeSwitchProUsb(const uint8_t* buf, size_t len, DeviceState& s, ParserSt
 
     // Average the bundled IMU subframes (the pad packs up to three ~5ms samples per report; one
     // 12-byte frame = accel int16 LE x3 then gyro x3, first at byte 13), then rotate the Switch IMU
-    // frame onto the DS4 wire convention (wire gyro X=pitch, Y=yaw, Z=roll); the pad reports those on
-    // raw gyro Y/Z/X. Pitch and roll are negated to match the DS4 sign convention. Hardware testing
-    // confirmed pitch and yaw; roll's sign and the accel signs are unverified.
+    // frame onto the DS4 wire convention (wire gyro X=pitch, Y=yaw, Z=roll); the pad reports those
+    // on raw gyro Y/Z/X. Pitch and roll are negated to match the DS4 sign convention. Hardware
+    // testing confirmed pitch and yaw; roll's sign and the accel signs are unverified.
     size_t imuFrames = len >= 13 ? (len - 13) / 12 : 0;
     if (imuFrames > 3) imuFrames = 3;
     if (imuFrames > 0) {
