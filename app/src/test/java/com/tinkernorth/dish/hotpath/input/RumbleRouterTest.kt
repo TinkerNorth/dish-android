@@ -2,8 +2,20 @@
 
 package com.tinkernorth.dish.hotpath.input
 
+import android.content.Context
+import android.os.Vibrator
+import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.connection.SatelliteConnection
+import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.store.RumbleEnabledStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -164,5 +176,98 @@ class RumbleRouterTest {
     fun `isRumbleStop is false when there is a positive magnitude and duration`() {
         assertFalse(isRumbleStop(strongMagnitude = 500, weakMagnitude = 0, durationMs = 100))
         assertFalse(isRumbleStop(strongMagnitude = 0, weakMagnitude = 500, durationMs = 100))
+    }
+
+    private class DispatchHarness(
+        slotId: String,
+        controllerIndex: Int,
+        rumbleOn: Boolean,
+    ) {
+        val native = mockk<PhysicalInputNative>(relaxed = true)
+
+        // SDK_INT is 0 under the JVM stub, so the router takes the legacy single-vibrator phone path.
+        val vibrator = mockk<Vibrator>(relaxed = true) { every { hasVibrator() } returns true }
+        val rumbleEnabled =
+            mockk<RumbleEnabledStore> { every { isEnabled(any()) } returns rumbleOn }
+
+        private val context =
+            mockk<Context>(relaxed = true) {
+                every { getSystemService(Context.VIBRATOR_SERVICE) } returns vibrator
+            }
+        private val connection =
+            mockk<SatelliteConnection> {
+                every { handle } returns 7
+                every { state } returns MutableStateFlow(SatelliteSessionState.Live)
+                every { slots } returns
+                    MutableStateFlow(
+                        mapOf(slotId to SatelliteConnection.SlotBinding(controllerIndex, controllerType = 0, registered = true)),
+                    )
+            }
+        private val satellite =
+            mockk<SatelliteConnectionManager> {
+                every { connections } returns MutableStateFlow(mapOf("a" to connection))
+            }
+
+        val router =
+            RumbleRouter(
+                context = context,
+                satellite = satellite,
+                native = native,
+                scope = CoroutineScope(Dispatchers.Unconfined),
+                rumbleEnabled = rumbleEnabled,
+            )
+    }
+
+    @Test
+    fun `dispatch suppresses the phone vibrator when the virtual slot is rumble-off`() {
+        val h = DispatchHarness(slotId = VIRTUAL_SLOT_ID, controllerIndex = 0, rumbleOn = false)
+
+        h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 500, weakMagnitude = 500, durationMs = 100)
+
+        verify { h.rumbleEnabled.isEnabled(VIRTUAL_SLOT_ID) }
+        verify(exactly = 0) { h.vibrator.vibrate(any<Long>()) }
+        verify(exactly = 0) { h.native.sendUsbRumble(any(), any(), any()) }
+    }
+
+    @Test
+    fun `dispatch actuates the phone vibrator when the virtual slot is rumble-on`() {
+        val h = DispatchHarness(slotId = VIRTUAL_SLOT_ID, controllerIndex = 0, rumbleOn = true)
+
+        h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 500, weakMagnitude = 500, durationMs = 100)
+
+        verify { h.rumbleEnabled.isEnabled(VIRTUAL_SLOT_ID) }
+        verify { h.vibrator.vibrate(any<Long>()) }
+    }
+
+    @Test
+    fun `dispatch suppresses USB rumble when the direct slot is rumble-off`() {
+        val h = DispatchHarness(slotId = "-1000", controllerIndex = 0, rumbleOn = false)
+
+        h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 500, weakMagnitude = 500, durationMs = 100)
+
+        verify { h.rumbleEnabled.isEnabled("-1000") }
+        verify(exactly = 0) { h.native.sendUsbRumble(any(), any(), any()) }
+    }
+
+    @Test
+    fun `dispatch actuates USB rumble when the direct slot is rumble-on`() {
+        val h = DispatchHarness(slotId = "-1000", controllerIndex = 0, rumbleOn = true)
+
+        h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 500, weakMagnitude = 250, durationMs = 100)
+
+        verify { h.rumbleEnabled.isEnabled("-1000") }
+        verify { h.native.sendUsbRumble(-1000, 500, 250) }
+    }
+
+    @Test
+    fun `dispatch consults the gate with the framework device id and suppresses when off`() {
+        val h = DispatchHarness(slotId = "1234", controllerIndex = 0, rumbleOn = false)
+
+        h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 500, weakMagnitude = 500, durationMs = 100)
+
+        // slotIdOf maps a framework target to its device id string; with the gate off nothing actuates.
+        verify { h.rumbleEnabled.isEnabled("1234") }
+        verify(exactly = 0) { h.vibrator.vibrate(any<Long>()) }
+        verify(exactly = 0) { h.native.sendUsbRumble(any(), any(), any()) }
     }
 }

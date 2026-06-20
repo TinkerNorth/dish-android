@@ -12,7 +12,6 @@ import javax.inject.Singleton
 
 data class OnboardingState(
     val welcomeCompleted: Boolean,
-    val dashboardHintDismissed: Boolean,
 )
 
 @Singleton
@@ -31,30 +30,21 @@ class OnboardingPreferenceStore
             setState(state.value.copy(welcomeCompleted = true))
         }
 
-        fun dismissDashboardHint() {
-            prefs.edit { putBoolean(KEY_DASHBOARD_HINT_DISMISSED, true) }
-            setState(state.value.copy(dashboardHintDismissed = true))
-        }
-
         fun resetWelcome() {
-            prefs.edit {
-                putBoolean(KEY_WELCOME_COMPLETED, false)
-                putBoolean(KEY_DASHBOARD_HINT_DISMISSED, false)
-            }
-            setState(OnboardingState(welcomeCompleted = false, dashboardHintDismissed = false))
+            prefs.edit { putBoolean(KEY_WELCOME_COMPLETED, false) }
+            setState(OnboardingState(welcomeCompleted = false))
         }
 
         companion object {
             const val PREFS_NAME = "user_preferences"
             const val KEY_WELCOME_COMPLETED = "onboarding_welcome_completed"
-            const val KEY_DASHBOARD_HINT_DISMISSED = "onboarding_dashboard_hint_dismissed"
 
-            private fun readInitial(context: Context): OnboardingState {
-                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                return OnboardingState(
-                    welcomeCompleted = prefs.getBoolean(KEY_WELCOME_COMPLETED, false),
-                    dashboardHintDismissed = prefs.getBoolean(KEY_DASHBOARD_HINT_DISMISSED, false),
+            private fun readInitial(context: Context): OnboardingState =
+                OnboardingState(
+                    welcomeCompleted =
+                        context
+                            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                            .getBoolean(KEY_WELCOME_COMPLETED, false),
                 )
-            }
         }
     }

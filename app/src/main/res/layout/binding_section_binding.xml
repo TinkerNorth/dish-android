@@ -159,5 +159,43 @@
                     android:text="@string/touchpad_mode_mouse" />
             </LinearLayout>
         </LinearLayout>
+
+        <View
+            android:id="@+id/rumbleDivider"
+            style="@style/Widget.Dish.Divider"
+            android:layout_marginTop="@dimen/config_row_gap"
+            android:layout_marginBottom="@dimen/config_row_gap"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/rumbleRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="@dimen/config_row_icon_size"
+                android:layout_height="@dimen/config_row_icon_size"
+                android:layout_marginEnd="@dimen/config_row_icon_gap"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_rumble"
+                app:tint="@color/colorPrimary" />
+
+            <TextView
+                style="@style/TextAppearance.Dish.Body"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/binding_func_rumble"
+                android:textColor="@color/colorOnSurface" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/swRumble"
+                style="@style/Widget.Dish.Switch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
     </LinearLayout>
 </LinearLayout>

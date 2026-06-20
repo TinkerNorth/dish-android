@@ -273,6 +273,26 @@ internal object SatelliteHttpClient {
         )
     }
 
+    // GET /api/server/capabilities: live host state. Unauthenticated like the catalog
+    // (read before pairing); not ETag'd because it is dynamic, so fetched fresh each probe.
+    fun getServerCapabilities(
+        ip: String,
+        port: Int,
+        satelliteId: String,
+        pins: SatellitePinRepository,
+    ): HttpReply =
+        requestWithMeta(
+            method = "GET",
+            ip = ip,
+            port = port,
+            path = "/api/server/capabilities",
+            deviceId = null,
+            hmacProof = null,
+            body = null,
+            satelliteId = satelliteId,
+            pins = pins,
+        )
+
     // No X-Device-Id: /api/pair is the only client route that bypasses clientAuthorized.
     // `pin` drives Path A (the dish entered the satellite's PIN); `clientPin` drives
     // Path B (the dish shows its own PIN for the operator to accept). Both ride in the

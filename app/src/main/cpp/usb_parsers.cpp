@@ -784,8 +784,10 @@ bool decodeSwitchProUsb(const uint8_t* buf, size_t len, DeviceState& s, ParserSt
     s.sRY = scaleSwitchStickAuto(ry, sticks.ry);
 
     // Average the bundled IMU subframes (the pad packs up to three ~5ms samples per report; one
-    // 12-byte frame = accel int16 LE x3 then gyro x3, first at byte 13). Signs are an unflipped
-    // straight map, still unverified on hardware.
+    // 12-byte frame = accel int16 LE x3 then gyro x3, first at byte 13), then rotate the Switch IMU
+    // frame onto the DS4 wire convention (wire gyro X=pitch, Y=yaw, Z=roll); the pad reports those
+    // on raw gyro Y/Z/X. Pitch and roll are negated to match the DS4 sign convention. Hardware
+    // testing confirmed pitch and yaw; roll's sign and the accel signs are unverified.
     size_t imuFrames = len >= 13 ? (len - 13) / 12 : 0;
     if (imuFrames > 3) imuFrames = 3;
     if (imuFrames > 0) {
@@ -800,12 +802,16 @@ bool decodeSwitchProUsb(const uint8_t* buf, size_t len, DeviceState& s, ParserSt
             gz += rdLe16(buf, off + 10);
         }
         int32_t n = (int32_t)imuFrames;
-        s.accelX = switchAccelToWire((int16_t)(ax / n));
-        s.accelY = switchAccelToWire((int16_t)(ay / n));
-        s.accelZ = switchAccelToWire((int16_t)(az / n));
-        s.gyroX = switchGyroToWire((int16_t)(gx / n));
-        s.gyroY = switchGyroToWire((int16_t)(gy / n));
-        s.gyroZ = switchGyroToWire((int16_t)(gz / n));
+        int32_t pitchAvg = -(gy / n);
+        int32_t rollAvg = -(gx / n);
+        if (pitchAvg > 32767) pitchAvg = 32767;
+        if (rollAvg > 32767) rollAvg = 32767;
+        s.gyroX = switchGyroToWire((int16_t)pitchAvg);
+        s.gyroY = switchGyroToWire((int16_t)(gz / n));
+        s.gyroZ = switchGyroToWire((int16_t)rollAvg);
+        s.accelX = switchAccelToWire((int16_t)(ay / n));
+        s.accelY = switchAccelToWire((int16_t)(az / n));
+        s.accelZ = switchAccelToWire((int16_t)(ax / n));
         s.motionValid = true;
     }
     return true;

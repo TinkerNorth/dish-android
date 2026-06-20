@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Texte für den geführten Dish-Einrichtungsablauf (ui/setup/**). -->
+<resources>
+    <!-- Brotkrumen + gemeinsame Chrome-Elemente -->
+    <string name="setup_step_input">Eingabe</string>
+    <string name="setup_step_destination">Ziel</string>
+    <string name="setup_step_binding">Zuordnung</string>
+    <string name="setup_title">Dish einrichten</string>
+    <string name="setup_action_skip">Überspringen</string>
+    <string name="setup_action_back">Zurück</string>
+
+    <!-- Schritt 1 · Eingabe wählen -->
+    <string name="setup_input_toolbar">Dish einrichten</string>
+    <string name="setup_input_title">Wie möchtest du spielen?</string>
+    <string name="setup_input_subtitle">Wähle eine Eingabe. Jede wird etwas anders eingerichtet.</string>
+    <string name="setup_input_wired_title">Kabelgebundener Controller</string>
+    <string name="setup_input_wired_body">An dein Handy angeschlossen. Geringste Latenz.</string>
+    <string name="setup_input_badge_best">Am besten</string>
+    <string name="setup_input_bluetooth_title">Bluetooth-Controller</string>
+    <string name="setup_input_bluetooth_body">Ein mit diesem Handy gekoppeltes Pad.</string>
+    <string name="setup_input_onscreen_title">Bildschirm-Gamepad</string>
+    <string name="setup_input_onscreen_body">Touch-Tasten auf dem Glas.</string>
+
+    <!-- Schritt 2 · USB-Zweig -->
+    <string name="setup_usb_toolbar">USB-Einrichtung</string>
+    <string name="setup_usb_detect_title">Schließe deinen Controller an</string>
+    <string name="setup_usb_detect_subtitle">An den USB-Anschluss deines Handys.</string>
+    <string name="setup_usb_status_scanning">Suche läuft</string>
+    <string name="setup_usb_status_detected">Erkannt</string>
+    <string name="setup_usb_mode_title">Wie soll Dish ihn lesen?</string>
+    <string name="setup_usb_supported">Dein Controller unterstützt Direct</string>
+    <string name="setup_usb_unverified_title">Nicht verifizierter Controller</string>
+    <string name="setup_usb_unverified_body">Direct funktioniert, aber die Belegung ist nicht bestätigt.</string>
+    <string name="setup_usb_direct_title">USB Direct</string>
+    <string name="setup_usb_direct_body">Liest den Controller direkt. Geringste Latenz. Einmalige Berechtigung.</string>
+    <string name="setup_usb_direct_unverified_body">Geringste Latenz, aber genau dieser Controller ist nicht verifiziert.</string>
+    <string name="setup_usb_direct_warning">Einige Tasten oder Trigger könnten anders belegt sein. Probiere es aus und wechsle, wenn es sich falsch anfühlt.</string>
+    <string name="setup_usb_standard_title">USB Standard</string>
+    <string name="setup_usb_standard_body">Die Gamepad-Schicht von Android. Funktioniert überall, ohne Abfrage.</string>
+    <string name="setup_usb_standard_verified_body">Verifizierte Belegung über die Gamepad-Schicht von Android. Die zuverlässige Wahl hier.</string>
+    <string name="setup_usb_badge_recommended">Empfohlen</string>
+    <string name="setup_usb_grant_title">Ein kurzes OK von Android</string>
+    <string name="setup_usb_grant_body">USB Direct liest die Controller-Hardware selbst, daher bittet dich Android, Dish den Zugriff auf dieses Gerät zu erlauben. Es ist eine einmalige Abfrage.</string>
+    <string name="setup_usb_grant_card_title">Zugriff erlauben, um fortzufahren</string>
+    <string name="setup_usb_grant_card_body">Android erlaubt Dish den Zugriff auf deinen Controller. Setze ein Häkchen bei \"Dish für dieses Gerät immer öffnen\", um das nächste Mal zu überspringen.</string>
+    <string name="setup_usb_grant_action">Zeig mir die Abfrage</string>
+
+    <!-- Schritt 2 - Bluetooth-Controller-Zweig -->
+    <string name="setup_btc_toolbar">Dish einrichten</string>
+    <string name="setup_btc_title">Koppele oder wähle einen Controller</string>
+    <string name="setup_btc_subtitle">Koppele einen neuen oder tippe auf einen Controller, der bereits mit diesem Handy gekoppelt ist.</string>
+    <string name="setup_btc_permission_title">Bluetooth erlauben, um fortzufahren</string>
+    <string name="setup_btc_permission_body">Dish braucht Bluetooth-Zugriff, um Controller zu finden. Eine kurze Abfrage von Android.</string>
+    <string name="setup_btc_permission_action">Zeig mir die Abfrage</string>
+    <string name="setup_btc_locked_placeholder">Gekoppelte Controller erscheinen, sobald erlaubt</string>
+    <string name="setup_btc_pair_new_title">Einen neuen Controller koppeln</string>
+    <string name="setup_btc_pair_new_body">Versetze ihn zuerst in den Kopplungsmodus</string>
+    <string name="setup_btc_paired_eyebrow">Auf diesem Handy</string>
+    <string name="setup_btc_paired_empty">Noch keine gekoppelten Controller. Koppele oben einen, um fortzufahren.</string>
+    <string name="setup_btc_status_connected">Verbunden</string>
+
+    <!-- Schritt 3 - Verbindung (Pfadwahl + Satellite finden/suchen/neu verbinden/koppeln) -->
+    <string name="setup_conn_toolbar">Verbindung</string>
+    <string name="setup_conn_path_title">Wie erreicht die Eingabe deinen PC?</string>
+    <string name="setup_conn_path_subtitle">Wähle, wie dieses Handy mit deinem PC spricht.</string>
+    <string name="setup_conn_satellite_title">Satellite über WLAN</string>
+    <string name="setup_conn_satellite_body">Geringste Latenz, voller Funktionsumfang. Braucht die kostenlose PC-App.</string>
+    <string name="setup_conn_satellite_badge">Am besten</string>
+    <string name="setup_conn_bt_host_title">Bluetooth-Host</string>
+    <string name="setup_conn_bt_host_body">Das Handy koppelt sich als Pad mit dem PC. Keine PC-App.</string>
+    <string name="setup_conn_satellite_pick_title">Wähle deinen PC</string>
+    <string name="setup_conn_scanning_eyebrow">Dein WLAN wird durchsucht</string>
+    <string name="setup_conn_host_unnamed">Dein PC</string>
+    <string name="setup_conn_status_ready">Bereit, gekoppelt</string>
+    <string name="setup_conn_status_needs_pairing">Kopplung nötig, PIN</string>
+    <string name="setup_conn_status_connected">Verbunden</string>
+    <string name="setup_conn_status_reconnecting">Verbindet erneut</string>
+    <string name="setup_conn_missing_title">Siehst du deinen PC nicht?</string>
+    <string name="setup_conn_missing_body">Installiere die kostenlose Satellite-App darauf.</string>
+    <string name="setup_conn_get_satellite">Satellite auf GitHub holen</string>
+    <string name="setup_conn_rescan">Erneut suchen</string>
+
+    <!-- Schritt 3 - Bluetooth-Host-Pfad (Design 5H) -->
+    <string name="setup_bth_toolbar">Bluetooth-Host-Einrichtung</string>
+    <string name="setup_bth_pick_pc_title">Welcher PC?</string>
+    <string name="setup_bth_pick_pc_subtitle">Wähle einen PC, für den du ein Controller sein willst, oder koppele einen neuen.</string>
+    <string name="setup_bth_host_remembered">Schon gekoppelt. Zum erneuten Verbinden tippen.</string>
+    <string name="setup_bth_badge_xbox">Xbox-Pad</string>
+    <string name="setup_bth_badge_playstation">PlayStation-Pad</string>
+    <string name="setup_bth_pair_new_title">Ein neues Gerät koppeln</string>
+    <string name="setup_bth_pair_new_body">Du wählst einen Controller-Typ dafür.</string>
+    <string name="setup_bth_permission_title">Sei der Controller</string>
+    <string name="setup_bth_permission_body">Dish gibt sich gegenüber deinem PC über Bluetooth als kabelloses Gamepad aus.</string>
+    <string name="setup_bth_permission_callout_title">Bluetooth erlauben, um fortzufahren</string>
+    <string name="setup_bth_permission_callout_body">Dish braucht Bluetooth-Zugriff, um sich als Gamepad auszugeben. Eine kurze Abfrage von Android.</string>
+    <string name="setup_bth_permission_action">Zeig mir die Abfrage</string>
+    <string name="setup_bth_type_locked_until_permission">Wählbar, sobald Bluetooth erlaubt ist</string>
+    <string name="setup_bth_pick_type_title">Welchen Controller soll dein PC sehen?</string>
+    <string name="setup_bth_pick_type_subtitle">Wähle den Typ, als den dein PC Dish liest.</string>
+    <string name="setup_bth_type_xbox">Xbox</string>
+    <string name="setup_bth_type_playstation">PlayStation</string>
+    <string name="setup_bth_type_lock_note">Für diesen PC festgelegt. Um es später zu ändern, koppelst du neu.</string>
+    <string name="setup_bth_advertising_heading">Füge es auf deinem PC hinzu</string>
+    <string name="setup_bth_advertising_type">Als %1$s-Controller eingestellt</string>
+    <string name="setup_bth_advertising_steps">Öffne auf dem PC Bluetooth, wähle Gerät hinzufügen und wähle \"%1$s\".</string>
+    <string name="setup_bth_discoverable_waiting">Warte auf deinen PC</string>
+    <string name="setup_bth_discoverable_on">Sichtbar. Wähle Dish auf deinem PC.</string>
+
+    <!-- Funktionstabelle (geteilt von Bluetooth-Host-Typwahl und Konfiguration) -->
+    <string name="setup_cap_rumble">Vibration</string>
+    <string name="setup_cap_motion">Bewegung / Gyro</string>
+    <string name="setup_cap_touchpad">Touchpad</string>
+    <string name="setup_cap_available">Verfügbar</string>
+    <string name="setup_cap_off">Aus</string>
+    <string name="setup_cap_input">Eingabe</string>
+    <string name="setup_cap_destination">Ziel</string>
+    <string name="setup_cap_type">Typ</string>
+
+    <!-- Schritt 4 - Konfigurieren und zuordnen -->
+    <string name="setup_cfg_toolbar">Konfigurieren</string>
+    <string name="setup_cfg_type_title">Wie soll der PC ihn sehen?</string>
+    <string name="setup_cfg_type_subtitle">Wähle den Controller, den der PC melden soll. Jeder schaltet andere Extras frei.</string>
+    <string name="setup_cfg_type_locked_subtitle">Über Bluetooth ist der Typ festgelegt. Das ist enthalten.</string>
+    <string name="setup_cfg_feel_title">Wie soll es sich anfühlen?</string>
+    <string name="setup_cfg_feel_subtitle">Es werden nur die Extras gezeigt, die deine Eingabe und dein Ziel beide unterstützen.</string>
+    <string name="setup_cfg_feel_motion_body">Neigungs- und Gyro-Zielen am PC.</string>
+    <string name="setup_cfg_feel_rumble_body">Das Handy vibriert bei Feedback.</string>
+    <string name="setup_cfg_feel_empty">Für diese Kombination gibt es nichts einzustellen. Dein Controller ist bereit zur Zuordnung.</string>
+    <string name="setup_cfg_review_title">Prüfen und zuordnen</string>
+    <string name="setup_cfg_review_subtitle">Prüfe die Verbindung und ordne sie dann deinem Ziel zu.</string>
+    <string name="setup_cfg_review_gets">Bekommt</string>
+    <string name="setup_cfg_link_usb_direct">USB / Direct</string>
+    <string name="setup_cfg_link_usb_standard">USB / Standard</string>
+    <string name="setup_cfg_dest_satellite">Satellite</string>
+    <string name="setup_cfg_dest_bluetooth">Bluetooth</string>
+    <string name="setup_cfg_continue">Weiter</string>
+    <string name="setup_cfg_bind">Zuordnen</string>
+    <string name="setup_cfg_done_title">Controller zugeordnet</string>
+    <string name="setup_cfg_done_body">%1$s ist bereit auf %2$s.</string>
+
+    <!-- Allgemeines Fehlerblatt -->
+    <string name="setup_error_body">Deine gewählte Eingabe oder dein Ziel ist nicht mehr verfügbar.</string>
+    <string name="setup_error_retry">Erneut versuchen</string>
+    <string name="setup_error_start_over">Von vorne beginnen</string>
+    <string name="setup_error_exit">Beenden</string>
+    <string name="setup_cfg_review_sends">Sendet</string>
+    <string name="setup_cfg_flow_controller">Controller</string>
+    <string name="setup_cfg_virtual_sublabel">Virtuelles Pad auf deinem PC</string>
+    <string name="setup_bth_discoverable_retry">Erneut versuchen</string>
+    <string name="setup_bth_bind_warn">Mit %1$s gekoppelt, aber der Controller war nicht verbunden. Verbinde ihn im Dashboard.</string>
+</resources>

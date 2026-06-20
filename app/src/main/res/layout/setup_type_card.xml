@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tappable controller-type card (Xbox / PlayStation) with an embedded
+     capability table. The header text and the table rows are set per callsite;
+     capabilityContainer is filled via LinearLayout.bindCapabilityRows. -->
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/typeCard"
+    style="@style/Widget.Dish.Card"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="@dimen/card_margin_bottom"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="@dimen/card_padding">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <ImageView
+                android:layout_width="@dimen/icon_picker_glyph"
+                android:layout_height="@dimen/icon_picker_glyph"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_gamepad"
+                app:tint="@color/colorPrimary" />
+
+            <TextView
+                android:id="@+id/typeTitle"
+                style="@style/TextAppearance.Dish.Title"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="@dimen/config_row_icon_gap"
+                tools:text="PlayStation" />
+
+            <ImageView
+                android:id="@+id/typeChevron"
+                android:layout_width="@dimen/icon_chevron_lg"
+                android:layout_height="@dimen/icon_chevron_lg"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_chevron_right"
+                app:tint="@color/colorMuted" />
+        </LinearLayout>
+
+        <View
+            style="@style/Widget.Dish.Divider"
+            android:layout_marginTop="@dimen/spacing_md" />
+
+        <LinearLayout
+            android:id="@+id/capabilityContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One capability (Rumble / Motion / Touchpad) with its three Input · Destination
+     · Type checks. Rows are inflated into a type card's container per candidate
+     type; the name, status, and the three check/cancel glyphs are set from code. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:layout_marginTop="@dimen/spacing_md">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/capName"
+            style="@style/TextAppearance.Dish.BodySmall.Mono.Bold"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            tools:text="Motion / gyro" />
+
+        <TextView
+            android:id="@+id/capStatus"
+            style="@style/TextAppearance.Dish.Label.Tight"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/spacing_md"
+            tools:text="Available" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="@dimen/spacing_xs">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:gravity="center">
+
+            <TextView
+                style="@style/TextAppearance.Dish.Label.Plain"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/setup_cap_input" />
+
+            <ImageView
+                android:id="@+id/icInput"
+                android:layout_width="@dimen/config_callout_icon_size"
+                android:layout_height="@dimen/config_callout_icon_size"
+                android:layout_marginStart="@dimen/spacing_xs"
+                android:importantForAccessibility="no"
+                tools:src="@drawable/ic_check_circle" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:gravity="center">
+
+            <TextView
+                style="@style/TextAppearance.Dish.Label.Plain"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/setup_cap_destination" />
+
+            <ImageView
+                android:id="@+id/icDestination"
+                android:layout_width="@dimen/config_callout_icon_size"
+                android:layout_height="@dimen/config_callout_icon_size"
+                android:layout_marginStart="@dimen/spacing_xs"
+                android:importantForAccessibility="no"
+                tools:src="@drawable/ic_check_circle" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:gravity="center">
+
+            <TextView
+                style="@style/TextAppearance.Dish.Label.Plain"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/setup_cap_type" />
+
+            <ImageView
+                android:id="@+id/icType"
+                android:layout_width="@dimen/config_callout_icon_size"
+                android:layout_height="@dimen/config_callout_icon_size"
+                android:layout_marginStart="@dimen/spacing_xs"
+                android:importantForAccessibility="no"
+                tools:src="@drawable/ic_cancel" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

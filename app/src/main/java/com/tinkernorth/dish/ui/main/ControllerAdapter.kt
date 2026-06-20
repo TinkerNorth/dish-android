@@ -25,7 +25,8 @@ import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
-import com.tinkernorth.dish.composer.MotionCapability
+import com.tinkernorth.dish.core.model.Feature
+import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.databinding.BindingDecisionRowBinding
 import com.tinkernorth.dish.databinding.BindingPillBinding
 import com.tinkernorth.dish.databinding.BindingValueMonoBinding
@@ -69,9 +70,18 @@ internal fun LinkState.isLiveLink(): Boolean = this == LinkState.Connected || th
 
 // The motion source can stream while motion is user-facing off (no host sink for the emulated
 // type, broken backend): the card's motion rate hides in exactly the states the motion indicator
-// renders as muted, so the two never disagree.
-internal fun motionRateUserFacingOn(cap: MotionCapability): Boolean =
-    cap.effective && cap.hostHasSinkForType && cap.satelliteBackendStatus?.backendOk != false
+// renders as muted, so the two never disagree. Motion only carries to a Satellite, so the bound
+// summary's kind and liveness gate it (the capability model omits link state).
+internal fun motionRateUserFacingOn(
+    cap: SlotCapabilities,
+    boundStatus: ConnectionSummary?,
+): Boolean =
+    cap.inputOk(Feature.MOTION) &&
+        cap.userWants(Feature.MOTION) &&
+        boundStatus?.kind == ConnectionKind.SATELLITE &&
+        boundStatus?.live == LinkState.Connected &&
+        cap.typeOk(Feature.MOTION) &&
+        Feature.MOTION !in cap.runtimeDown
 
 // Screen input can drive a slot only while an overlay surface exists for it: the on-screen
 // gamepad for the virtual slot, or the slot's satellite touchpad surface when its mode is
@@ -95,7 +105,7 @@ class ControllerAdapter(
     data class Row(
         val slot: ControllerSlot,
         val connections: List<ConnectionSummary>,
-        val motionCap: MotionCapability = MotionCapability.Off,
+        val motionCap: SlotCapabilities = SlotCapabilities.NONE,
         val touchpadModes: Map<String, String> = emptyMap(),
         val pathCard: PathCard? = null,
         val inputRates: SlotInputRates? = null,
@@ -105,7 +115,7 @@ class ControllerAdapter(
     fun submitSlots(
         slots: List<ControllerSlot>,
         connections: List<ConnectionSummary>,
-        motionCapabilities: Map<String, MotionCapability> = emptyMap(),
+        motionCapabilities: Map<String, SlotCapabilities> = emptyMap(),
         touchpadModes: Map<String, String> = emptyMap(),
         pathCards: Map<String, PathCard> = emptyMap(),
         inputRates: Map<String, SlotInputRates> = emptyMap(),
@@ -116,7 +126,7 @@ class ControllerAdapter(
                 Row(
                     slot = slot,
                     connections = connections,
-                    motionCap = motionCapabilities[slot.id] ?: MotionCapability.Off,
+                    motionCap = motionCapabilities[slot.id] ?: SlotCapabilities.NONE,
                     touchpadModes = touchpadModes,
                     pathCard = pathCards[slot.id],
                     inputRates = inputRates[slot.id],
@@ -304,11 +314,11 @@ class ControllerAdapter(
 
             val type = bound.satelliteControllerTypes[row.slot.id] ?: CONTROLLER_TYPE_XBOX
             val motionAvailable =
-                row.motionCap.hasGyro &&
+                row.motionCap.inputOk(Feature.MOTION) &&
                     bound.kind == ConnectionKind.SATELLITE &&
                     type == CONTROLLER_TYPE_PLAYSTATION
             if (motionAvailable) {
-                val on = row.motionCap.userEnabled
+                val on = row.motionCap.userWants(Feature.MOTION)
                 val state = if (on) R.string.binding_state_on else R.string.binding_state_off
                 val tone = if (on) PillTone.ON else PillTone.OFF
                 specs.add(PillSpec(funcValue(R.string.binding_func_motion, state), R.drawable.ic_motion, tone))
@@ -445,7 +455,7 @@ class ControllerAdapter(
         ): PillSpec {
             val gyroHz = row.inputRates?.gyroHz ?: 0
             return when {
-                !motionRateUserFacingOn(row.motionCap) ->
+                !motionRateUserFacingOn(row.motionCap, row.slot.boundStatus) ->
                     PillSpec(ctx.getString(R.string.binding_state_off), R.drawable.ic_motion, PillTone.OFF)
                 gyroHz > 0 ->
                     PillSpec(ctx.getString(R.string.binding_rate_hz, gyroHz), R.drawable.ic_motion, measuredTone)

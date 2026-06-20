@@ -1,82 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="welcome_skip">Omitir</string>
-    <string name="welcome_back">Atrás</string>
-    <string name="welcome_next">Siguiente</string>
-    <string name="welcome_get_started">Empezar</string>
-
-    <string name="welcome_step1_eyebrow">BIENVENIDO</string>
-    <string name="welcome_step1_title">Tu teléfono, tu gamepad</string>
-    <string name="welcome_step1_body">Dish convierte tu teléfono en un mando inalámbrico para tu PC. Funciona como gamepad táctil por sí solo, o como puente inalámbrico para un mando que ya tengas.</string>
-
-    <string name="welcome_step2_eyebrow">CÓMO FUNCIONA</string>
-    <string name="welcome_step2_title">Un salto corto por Wi-Fi</string>
-    <string name="welcome_step2_body">Tu teléfono envía pulsaciones, sticks y movimiento a un pequeño ayudante gratuito llamado Satellite que se ejecuta en tu PC. Satellite aparece ante tus juegos como un mando normal, sin configuración extra por juego.</string>
-
-    <string name="welcome_step3_eyebrow">UNA COSA MÁS</string>
-    <string name="welcome_step3_title">Instala Satellite en tu PC</string>
-    <string name="welcome_step3_body">Satellite es gratuito y de código abierto. Descárgalo desde dish.tinkernorth.com/downloads/satellite, ejecuta el instalador y Dish lo encontrará automáticamente. Puedes terminar esta introducción ahora e instalar Satellite más tarde.</string>
-    <string name="welcome_step3_satellite_link_label">Abrir página de descarga</string>
-
-    <string name="welcome_step4_eyebrow">LISTO</string>
-    <string name="welcome_step4_title">Cuando tú quieras</string>
-    <string name="welcome_step4_body">Toca Empezar para comenzar. Abre la Guía de configuración cuando quieras desde Ajustes si necesitas instrucciones, o lánzate directamente y empareja con un Satellite en tu red.</string>
-    <string name="welcome_step4_launch_wizard">Abrir guía de configuración</string>
-
-    <string name="welcome_step1_hero_desc">Logo de la aplicación Dish</string>
-    <string name="welcome_step2_hero_desc">Teléfono emitiendo una señal inalámbrica</string>
-    <string name="welcome_step3_hero_desc">Monitor de escritorio mostrando Satellite en ejecución</string>
-    <string name="welcome_step4_hero_desc">Configuración completada</string>
-
-    <string name="welcome_step_indicator_desc">Paso %1$d de %2$d</string>
-
-    <string name="wizard_title">Guía de configuración</string>
-    <string name="wizard_step_progress">Paso %1$d de %2$d</string>
-    <string name="wizard_action_back">Atrás</string>
-    <string name="wizard_action_next">Siguiente</string>
-    <string name="wizard_action_finish">Finalizar</string>
-    <string name="wizard_recommended_label">Recomendado</string>
-
-    <string name="wizard_step1_eyebrow">PASO 1 · CONEXIÓN</string>
-    <string name="wizard_step1_title">¿Cómo llegarás a tu PC?</string>
-    <string name="wizard_step1_body">Dos formas de enviar tu entrada a un PC. Wi-Fi tiene la menor latencia y desbloquea el movimiento y el touchpad. Bluetooth trata este teléfono como un mando inalámbrico normal: funciona sin Satellite, pero con un pequeño coste de latencia.</string>
-
-    <string name="wizard_option_lan_title">Wi-Fi a Satellite</string>
-    <string name="wizard_option_lan_body">Teléfono y PC en el mismo Wi-Fi. Latencia mínima, conjunto completo de funciones (movimiento, touchpad, vibración).</string>
-    <string name="wizard_option_lan_pill_recommended">Recomendado</string>
-
-    <string name="wizard_option_bt_title">Mando Bluetooth</string>
-    <string name="wizard_option_bt_body">Empareja tu teléfono con tu PC o consola como un mando Bluetooth normal. Funciona sin Satellite. El movimiento y el touchpad no están disponibles por esta ruta.</string>
-
-    <string name="wizard_step2_eyebrow">PASO 2 · MANDO</string>
-    <string name="wizard_step2_title">¿Con qué vas a jugar?</string>
-    <string name="wizard_step2_body">Puedes jugar con el pad en pantalla, o conectar un mando real para tener sticks y gatillos de verdad. Un mando USB en tu teléfono tiene la menor latencia de entrada, sin Bluetooth en la cadena.</string>
-
-    <string name="wizard_option_virtual_title">Gamepad en pantalla</string>
-    <string name="wizard_option_virtual_body">Toca los botones en la pantalla del teléfono. Ideal para juegos casuales y para probar. El giroscopio de tu teléfono está disponible para ayuda de apuntado.</string>
-
-    <string name="wizard_option_usb_title">Mando USB en el teléfono</string>
-    <string name="wizard_option_usb_body">Conecta un mando Xbox / PlayStation / genérico con cable al puerto USB-C de tu teléfono. El teléfono reenvía cada pulsación a tu PC.</string>
-    <string name="wizard_option_usb_pill_recommended">Mínima latencia</string>
-
-    <string name="wizard_option_phys_bt_title">Mando Bluetooth emparejado al teléfono</string>
-    <string name="wizard_option_phys_bt_body">Usa un mando que ya hayas emparejado con tu teléfono (Xbox Wireless, DualSense, etc.). Un salto Bluetooth en lugar de dos, en comparación con emparejar el mando directamente con tu PC.</string>
-
-    <string name="wizard_step3_eyebrow">PASO 3 · ADELANTE</string>
-    <string name="wizard_step3_title">Esto es lo que haremos</string>
-
-    <string name="wizard_summary_connection_label">Conexión</string>
-    <string name="wizard_summary_controller_label">Mando</string>
-
-    <string name="wizard_next_lan_virtual">Toca Finalizar para abrir Conexiones. Busca tu Satellite, empareja con el PIN de 4 dígitos, y luego abre el gamepad en pantalla.</string>
-    <string name="wizard_next_lan_usb">Toca Finalizar para abrir Conexiones. Empareja tu Satellite con el PIN de 4 dígitos, y luego conecta tu mando USB al teléfono. Aparecerá como un nuevo slot listo para vincular.</string>
-    <string name="wizard_next_lan_phys_bt">Toca Finalizar para abrir Conexiones. Empareja tu Satellite con el PIN de 4 dígitos. Tu mando Bluetooth ya emparejado aparecerá como un slot que podrás vincular al Satellite.</string>
-    <string name="wizard_next_bt_virtual">Toca Finalizar para abrir Conexiones. Añade un host Bluetooth, acepta el emparejamiento en tu PC, y luego abre el gamepad en pantalla.</string>
-    <string name="wizard_next_bt_usb">Aviso: el modo host Bluetooth envía el estado del mando del teléfono, no un pad USB separado. Usa el gamepad en pantalla por esta ruta, o cambia a la conexión Wi-Fi en el paso anterior.</string>
-    <string name="wizard_next_bt_phys_bt">Aviso: el modo host Bluetooth envía el estado del mando del teléfono, no el de tu gamepad Bluetooth ya emparejado. Usa el gamepad en pantalla por esta ruta, o cambia a la conexión Wi-Fi en el paso anterior.</string>
-
-    <string name="wizard_finish_review">Volver</string>
-
     <string name="help_title">Ayuda y preguntas frecuentes</string>
 
     <string name="help_section_concepts">CONCEPTOS</string>
@@ -135,14 +58,12 @@
     <string name="help_view_privacy_policy">Política de privacidad</string>
     <string name="help_view_github">Ver código fuente en GitHub</string>
 
-    <string name="dashboard_hint_title">¿Necesitas ayuda?</string>
-    <string name="dashboard_hint_body">Abre la guía de configuración para elegir tu conexión y mando. Te llevamos a la pantalla adecuada.</string>
-    <string name="dashboard_hint_action_open">Abrir guía</string>
-    <string name="dashboard_hint_action_dismiss">Ahora no</string>
 
     <string name="settings_section_setup">CONFIGURACIÓN Y AYUDA</string>
     <string name="settings_setup_wizard_title">Guía de configuración</string>
     <string name="settings_setup_wizard_body">Recorre las opciones de conexión y mando. Repítela cuando quieras.</string>
     <string name="settings_help_title">Ayuda y preguntas frecuentes</string>
     <string name="settings_help_body">Conceptos, consejos de rendimiento y solución de problemas.</string>
+    <string name="dashboard_add_controller_title">Añadir un mando</string>
+    <string name="dashboard_add_controller_body">Por cable, Bluetooth o en pantalla.</string>
 </resources>

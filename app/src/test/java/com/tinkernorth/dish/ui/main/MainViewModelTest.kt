@@ -3,12 +3,13 @@
 package com.tinkernorth.dish.ui.main
 
 import android.content.Context
+import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
-import com.tinkernorth.dish.composer.MotionCapabilityComposer
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
+import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.connection.ConnectionEvent
@@ -52,7 +53,7 @@ class MainViewModelTest {
     private lateinit var gamepadRegistry: PhysicalGamepadRegistry
     private lateinit var batteryStore: BatteryStatusStore
     private lateinit var motionEnabledStore: MotionEnabledStore
-    private lateinit var motionCapabilityComposer: MotionCapabilityComposer
+    private lateinit var capabilityComposer: CapabilityComposer
     private lateinit var touchpadModeStore: TouchpadModeStore
     private lateinit var native: PhysicalInputNative
     private lateinit var pathPrefs: UsbPathPreferenceStore
@@ -76,11 +77,11 @@ class MainViewModelTest {
             MotionEnabledStore(
                 mockk(relaxed = true) { every { all() } returns emptyList() },
             )
-        motionCapabilityComposer =
+        capabilityComposer =
             mockk(relaxed = true) {
                 every { state } returns
                     kotlinx.coroutines.flow.MutableStateFlow(
-                        emptyMap<String, com.tinkernorth.dish.composer.MotionCapability>(),
+                        emptyMap<String, SlotCapabilities>(),
                     )
             }
         touchpadModeStore =
@@ -112,7 +113,7 @@ class MainViewModelTest {
                 gamepadRegistry,
                 batteryStore,
                 motionEnabledStore,
-                motionCapabilityComposer,
+                capabilityComposer,
                 touchpadModeStore,
                 native,
                 pathPrefs,

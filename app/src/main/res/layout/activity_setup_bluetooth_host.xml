@@ -1,0 +1,320 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            style="@style/Widget.Dish.Toolbar"
+            android:layout_width="match_parent"
+            app:title="@string/setup_bth_toolbar" />
+
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/loader"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:indeterminate="true"
+            android:visibility="invisible"
+            app:indicatorColor="@color/colorPrimary"
+            app:trackColor="@color/colorSurfaceVariant" />
+
+        <androidx.core.widget.NestedScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:paddingHorizontal="@dimen/spacing_5xl"
+            android:paddingTop="@dimen/spacing_md"
+            android:paddingBottom="@dimen/spacing_5xl">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <include
+                    android:id="@+id/breadcrumb"
+                    layout="@layout/view_setup_breadcrumb"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <TextView
+                    android:id="@+id/tvTitle"
+                    style="@style/TextAppearance.Dish.Title.Large"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_5xl"
+                    tools:text="Which PC?" />
+
+                <LinearLayout
+                    android:id="@+id/groupPickPc"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="@dimen/spacing_xl">
+
+                    <TextView
+                        style="@style/TextAppearance.Dish.Body"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/setup_bth_pick_pc_subtitle" />
+
+                    <LinearLayout
+                        android:id="@+id/hostContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:layout_marginTop="@dimen/spacing_sm" />
+
+                    <include
+                        android:id="@+id/rowPairNew"
+                        layout="@layout/setup_choice_row" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/groupPermission"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="@dimen/spacing_xl"
+                    android:visibility="gone"
+                    tools:visibility="gone">
+
+                    <TextView
+                        style="@style/TextAppearance.Dish.Body"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/setup_bth_permission_body" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="top"
+                        android:layout_marginTop="@dimen/spacing_2xl"
+                        android:background="@drawable/bg_setup_callout_warning"
+                        android:padding="@dimen/config_callout_padding">
+
+                        <ImageView
+                            android:layout_width="@dimen/config_callout_icon_size"
+                            android:layout_height="@dimen/config_callout_icon_size"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_bluetooth"
+                            app:tint="@color/colorWarning" />
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="@dimen/config_callout_icon_gap"
+                            android:orientation="vertical">
+
+                            <TextView
+                                style="@style/TextAppearance.Dish.BodySmall"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:textColor="@color/colorOnTertiaryContainer"
+                                android:text="@string/setup_bth_permission_callout_title" />
+
+                            <TextView
+                                style="@style/TextAppearance.Dish.BodySmall"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="@dimen/spacing_xs"
+                                android:textColor="@color/colorOnTertiaryContainer"
+                                android:text="@string/setup_bth_permission_callout_body" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnGrant"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_xl"
+                        app:icon="@drawable/ic_chevron_right"
+                        app:iconGravity="end"
+                        android:text="@string/setup_bth_permission_action" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginTop="@dimen/spacing_2xl">
+
+                        <ImageView
+                            android:layout_width="@dimen/config_callout_icon_size"
+                            android:layout_height="@dimen/config_callout_icon_size"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_lock"
+                            app:tint="@color/colorMuted" />
+
+                        <TextView
+                            style="@style/TextAppearance.Dish.BodySmall"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="@dimen/spacing_sm"
+                            android:textColor="@color/colorMuted"
+                            android:text="@string/setup_bth_type_locked_until_permission" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/groupPickType"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="@dimen/spacing_xl"
+                    android:visibility="gone"
+                    tools:visibility="gone">
+
+                    <TextView
+                        style="@style/TextAppearance.Dish.Body"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/setup_bth_pick_type_subtitle" />
+
+                    <include
+                        android:id="@+id/cardXbox"
+                        layout="@layout/setup_type_card" />
+
+                    <include
+                        android:id="@+id/cardPlaystation"
+                        layout="@layout/setup_type_card" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="top"
+                        android:layout_marginTop="@dimen/spacing_2xl">
+
+                        <ImageView
+                            android:layout_width="@dimen/config_callout_icon_size"
+                            android:layout_height="@dimen/config_callout_icon_size"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_lock"
+                            app:tint="@color/colorMuted" />
+
+                        <TextView
+                            style="@style/TextAppearance.Dish.BodySmall"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="@dimen/spacing_sm"
+                            android:textColor="@color/colorMuted"
+                            android:text="@string/setup_bth_type_lock_note" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/groupAdvertising"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="@dimen/spacing_xl"
+                    android:visibility="gone"
+                    tools:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:background="@drawable/bg_setup_callout_warning"
+                        android:padding="@dimen/config_callout_padding">
+
+                        <ImageView
+                            android:layout_width="@dimen/config_callout_icon_size"
+                            android:layout_height="@dimen/config_callout_icon_size"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_gamepad"
+                            app:tint="@color/colorPrimary" />
+
+                        <TextView
+                            android:id="@+id/tvAdvertisingType"
+                            style="@style/TextAppearance.Dish.BodySmall"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="@dimen/config_callout_icon_gap"
+                            android:textColor="@color/colorOnTertiaryContainer"
+                            tools:text="Set to Xbox controller" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvAdvertisingBody"
+                        style="@style/TextAppearance.Dish.Body"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_2xl"
+                        tools:text="On the PC open Bluetooth, choose Add a device, and pick &quot;Dish Xbox Controller&quot;." />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginTop="@dimen/spacing_2xl">
+
+                        <ImageView
+                            android:id="@+id/icDiscoverable"
+                            android:layout_width="@dimen/icon_card_glyph"
+                            android:layout_height="@dimen/icon_card_glyph"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_bluetooth_searching"
+                            app:tint="@color/colorMuted" />
+
+                        <TextView
+                            android:id="@+id/tvDiscoverable"
+                            style="@style/TextAppearance.Dish.Label"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="@dimen/spacing_md"
+                            android:textAllCaps="true"
+                            tools:text="Waiting for your PC" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnTryAgain"
+                        style="@style/Widget.Dish.Button.Outlined"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_xl"
+                        app:icon="@drawable/ic_refresh"
+                        android:text="@string/setup_bth_discoverable_retry"
+                        android:visibility="gone"
+                        tools:visibility="visible" />
+                </LinearLayout>
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingHorizontal="@dimen/spacing_5xl"
+            android:paddingVertical="@dimen/spacing_xl"
+            android:gravity="center_vertical">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnBack"
+                style="@style/Widget.Dish.Button.Outlined"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:icon="@drawable/ic_chevron_left"
+                android:text="@string/setup_action_back" />
+
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1" />
+        </LinearLayout>
+    </LinearLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

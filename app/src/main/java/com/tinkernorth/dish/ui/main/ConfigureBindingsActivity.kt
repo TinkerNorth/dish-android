@@ -8,7 +8,8 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.widget.PopupMenu
+import android.widget.LinearLayout
+import android.widget.ScrollView
 import androidx.activity.viewModels
 import androidx.annotation.ColorRes
 import androidx.annotation.DrawableRes
@@ -17,15 +18,19 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.model.DishNotification
+import com.tinkernorth.dish.core.model.Feature
+import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.databinding.ActivityConfigureBindingsBinding
 import com.tinkernorth.dish.databinding.BindingApplyStepBinding
 import com.tinkernorth.dish.databinding.BindingValueNoneBinding
+import com.tinkernorth.dish.databinding.SetupReviewCardBinding
+import com.tinkernorth.dish.databinding.SetupTypeCardBinding
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
 import com.tinkernorth.dish.repository.TouchpadModeValue
@@ -36,6 +41,10 @@ import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachGamepadHost
 import com.tinkernorth.dish.ui.common.wireDonateButton
+import com.tinkernorth.dish.ui.setup.ReviewFlow
+import com.tinkernorth.dish.ui.setup.bindCapabilityRows
+import com.tinkernorth.dish.ui.setup.bindReviewFlows
+import com.tinkernorth.dish.ui.setup.capabilityRows
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -54,8 +63,6 @@ class ConfigureBindingsActivity : AppCompatActivity() {
     private lateinit var gamepadHost: GamepadActivityHost
     private val viewModel: ConfigureBindingsViewModel by viewModels()
     private val nav by lazy { DishNavigator(this) }
-
-    private var current: ConfigUiState = ConfigUiState()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,7 +100,6 @@ class ConfigureBindingsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.ui.collect { state ->
-                    current = state
                     if (state.loaded) renderContent(state)
                     renderBlocker(state)
                 }
@@ -128,7 +134,7 @@ class ConfigureBindingsActivity : AppCompatActivity() {
         snapshot: BindingSnapshot,
     ) {
         val s = binding.sectionInput
-        s.ivInputIcon.setImageResource(linkIconForSection(snapshot))
+        s.ivInputIcon.setImageResource(snapshot.link.iconRes())
         s.tvInputName.text = " · ${snapshot.name}"
 
         val (linkLabel, linkIcon) =
@@ -186,7 +192,7 @@ class ConfigureBindingsActivity : AppCompatActivity() {
             val host = state.selectedHost
             d.hostDropdown.text = host?.label ?: getString(R.string.binding_choose_destination)
             d.hostDropdown.setTextColor(getColor(if (host != null) R.color.colorOnSurface else R.color.colorMuted))
-            d.hostDropdown.setOnClickListener { showHostMenu(d.hostDropdown) }
+            d.hostDropdown.setOnClickListener { showHostMenu() }
         }
         d.legendSatellite.visibility = if (state.hostChosen && !state.isBluetoothHost) View.VISIBLE else View.GONE
         d.legendBt.visibility = if (state.hostChosen && state.isBluetoothHost) View.VISIBLE else View.GONE
@@ -199,12 +205,12 @@ class ConfigureBindingsActivity : AppCompatActivity() {
 
     private fun bindBindingSection(state: ConfigUiState) {
         val bz = binding.sectionBinding
-        val typeLabel = typeLabel(state.draft?.type ?: CONTROLLER_TYPE_XBOX)
+        val typeLabel = viewModel.typeLabel(state.draft?.type ?: CONTROLLER_TYPE_XBOX)
         bz.tvEmulateText.text = typeLabel
         bz.emulateDropdown.text = typeLabel
         bz.emulatePill.visibility = if (state.isBluetoothHost) View.VISIBLE else View.GONE
         bz.emulateDropdown.visibility = if (state.isBluetoothHost) View.GONE else View.VISIBLE
-        bz.emulateDropdown.setOnClickListener { showTypeMenu(bz.emulateDropdown) }
+        bz.emulateDropdown.setOnClickListener { showTypeMenu() }
 
         val motionVisible = state.motionAvailable
         bz.motionDivider.visibility = if (motionVisible) View.VISIBLE else View.GONE
@@ -229,16 +235,20 @@ class ConfigureBindingsActivity : AppCompatActivity() {
             bz.segPad.setOnClickListener { viewModel.setTouchpad(TouchpadModeValue.DS4) }
             bz.segMouse.setOnClickListener { viewModel.setTouchpad(TouchpadModeValue.MOUSE) }
         }
+
+        // Rumble shows when the path can carry it: the phone vibrates as a fallback for the
+        // on-screen pad, a physical pad needs its own motor, and a Bluetooth host has no return path.
+        val rumbleVisible = state.capabilities.isAvailable(Feature.RUMBLE)
+        bz.rumbleDivider.visibility = if (rumbleVisible) View.VISIBLE else View.GONE
+        bz.rumbleRow.visibility = if (rumbleVisible) View.VISIBLE else View.GONE
+        if (rumbleVisible) {
+            bz.swRumble.setOnCheckedChangeListener(null)
+            bz.swRumble.isChecked = state.draft?.rumbleOn == true
+            bz.swRumble.setOnCheckedChangeListener { _, isChecked -> viewModel.setRumble(isChecked) }
+        }
     }
 
     private fun noneValue(parent: ViewGroup): View = BindingValueNoneBinding.inflate(layoutInflater, parent, false).root
-
-    private fun linkIconForSection(snapshot: BindingSnapshot): Int =
-        when (snapshot.link) {
-            BindingLink.BLUETOOTH -> R.drawable.ic_bluetooth
-            BindingLink.ONSCREEN -> R.drawable.ic_gamepad_virtual
-            BindingLink.USB -> R.drawable.ic_gamepad
-        }
 
     private fun renderApplyState(state: ApplyState) {
         when (state) {
@@ -366,44 +376,99 @@ class ConfigureBindingsActivity : AppCompatActivity() {
         binding.btnToastAction.setOnClickListener { viewModel.apply() }
     }
 
-    private fun showHostMenu(anchor: View) {
-        val hosts = current.hosts
-        val pm = PopupMenu(this, anchor)
-        hosts.forEachIndexed { i, h ->
-            val hint =
-                if (h.kind ==
-                    ConnectionKind.BLUETOOTH
-                ) {
-                    getString(R.string.binding_host_hint_bt)
-                } else {
-                    getString(R.string.binding_host_hint_satellite)
-                }
-            pm.menu.add(0, i, i, "${h.label} · $hint")
+    // The destination picker shows each host as the setup flow's destination card: the
+    // host, its transport, and the features it gets and sends. (A destination is not the
+    // controller/type card, which the emulate picker uses.)
+    private fun showHostMenu() {
+        val state = viewModel.ui.value
+        val snapshot = state.snapshot ?: return
+        val type = state.draft?.type ?: CONTROLLER_TYPE_XBOX
+        val container =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                val side = resources.getDimensionPixelSize(R.dimen.spacing_5xl)
+                setPadding(side, 0, side, 0)
+            }
+        val dialog =
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.binding_label_destination)
+                .setView(ScrollView(this).apply { addView(container) })
+                .setNegativeButton(android.R.string.cancel, null)
+                .create()
+        state.hosts.forEach { host ->
+            val caps = viewModel.capabilityForCandidate(snapshot.slotId, type, host.kind, host.id)
+            val bt = host.kind == ConnectionKind.BLUETOOTH
+            val card = SetupReviewCardBinding.inflate(layoutInflater, container, false)
+            card.reviewIcon.setImageResource(if (bt) R.drawable.ic_bluetooth else R.drawable.ic_satellite)
+            card.reviewKind.setText(R.string.binding_label_destination)
+            card.reviewName.text = host.label
+            card.reviewSublabel.setText(
+                if (bt) R.string.setup_cfg_dest_bluetooth else R.string.setup_cfg_dest_satellite,
+            )
+            bindReviewFlows(card.reviewSendsRow, card.reviewSendsChips, destinationSends(caps))
+            bindReviewFlows(card.reviewGetsRow, card.reviewGetsChips, destinationGets(caps))
+            card.reviewCard.isClickable = true
+            card.reviewCard.setOnClickListener {
+                viewModel.setHost(host.id)
+                dialog.dismiss()
+            }
+            container.addView(card.root)
         }
-        pm.setOnMenuItemClickListener { item ->
-            hosts.getOrNull(item.itemId)?.let { viewModel.setHost(it.id) }
-            true
-        }
-        pm.show()
+        dialog.show()
     }
 
-    private fun showTypeMenu(anchor: View) {
-        val pm = PopupMenu(this, anchor)
-        viewModel.ui.value.typeOptions.forEachIndexed { order, option ->
-            pm.menu.add(0, option.id, order, option.label)
+    // A destination gets the inputs the path can carry; what is shown is gated by what
+    // is actually deliverable end to end for the current type.
+    private fun destinationGets(caps: SlotCapabilities): List<ReviewFlow> =
+        buildList {
+            add(ReviewFlow(R.drawable.ic_gamepad, R.string.setup_cfg_flow_controller))
+            if (caps.isAvailable(Feature.MOTION)) add(ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro))
+            if (caps.isAvailable(Feature.TOUCHPAD)) add(ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad))
+            if (caps.isAvailable(Feature.MOUSE)) add(ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse))
         }
-        pm.setOnMenuItemClickListener { item ->
-            viewModel.setType(item.itemId)
-            true
-        }
-        pm.show()
-    }
 
-    private fun typeLabel(type: Int): String =
-        viewModel.ui.value.typeOptions
-            .firstOrNull { it.id == type }
-            ?.label
-            ?: getString(if (type == CONTROLLER_TYPE_PLAYSTATION) R.string.picker_type_playstation else R.string.picker_type_xbox)
+    // Rumble flows back only where the path carries a return channel.
+    private fun destinationSends(caps: SlotCapabilities): List<ReviewFlow> =
+        if (caps.isAvailable(Feature.RUMBLE)) {
+            listOf(ReviewFlow(R.drawable.ic_rumble, R.string.binding_func_rumble))
+        } else {
+            emptyList()
+        }
+
+    // The type picker shows each emulated type with the setup flow's capability table
+    // (what each carries per feature, and whether it is available) so the choice is
+    // informed rather than a bare label.
+    private fun showTypeMenu() {
+        val state = viewModel.ui.value
+        val snapshot = state.snapshot ?: return
+        val host = state.selectedHost ?: return
+        val container =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                val side = resources.getDimensionPixelSize(R.dimen.spacing_5xl)
+                setPadding(side, 0, side, 0)
+            }
+        val dialog =
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.binding_label_emulate)
+                .setView(ScrollView(this).apply { addView(container) })
+                .setNegativeButton(android.R.string.cancel, null)
+                .create()
+        state.typeOptions.forEach { option ->
+            val card = SetupTypeCardBinding.inflate(layoutInflater, container, false)
+            card.typeTitle.text = option.label
+            card.typeChevron.visibility = View.GONE
+            card.capabilityContainer.bindCapabilityRows(
+                capabilityRows(viewModel.capabilityForCandidate(snapshot.slotId, option.id, host.kind, host.id)),
+            )
+            card.typeCard.setOnClickListener {
+                viewModel.setType(option.id)
+                dialog.dismiss()
+            }
+            container.addView(card.root)
+        }
+        dialog.show()
+    }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean = gamepadHost.dispatchKeyEvent(event) || super.dispatchKeyEvent(event)
 
