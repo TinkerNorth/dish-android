@@ -71,7 +71,7 @@ The Kotlin → JNI → `sendto()` chain runs at gamepad polling rate
   send.
 
 Anything that wants to ride the hot path lives in `hotpath/` (e.g.
-`GamepadInputProcessor`, `BluetoothGamepadBridge`); code outside that
+`BluetoothGamepadBridge`, `RumbleRouter`); code outside that
 package is forbidden from making JNI calls from the input thread
 besides `sendReport`.
 
@@ -94,8 +94,7 @@ system service, timer, or in-memory cache. Provides:
 - `protected setState(...)`: atomic updates via
   `MutableStateFlow.update`.
 - `DefaultLifecycleObserver` integration: opt-in. Sources whose
-  lifecycle is registry-managed (e.g. `SatelliteConnection`) simply
-  don't override the hooks.
+  lifecycle is managed elsewhere simply don't override the hooks.
 
 Sources do **not** carry an event channel. Earlier iterations had a
 shared `events: SharedFlow<E>` alongside `state`; in practice only
@@ -329,7 +328,9 @@ a shared pointer, after which the lock is released.
 
 Slot bindings (physical Android `deviceId` → which session + which
 controller index) live in `g_slots`, also keyed by id, in
-`hotpath/input/`. The same physical pad can be reassigned between
+`satellite_jni.cpp`; the Kotlin observer that drives them is
+`hotpath/input/PhysicalSlotBindingObserver`. The same physical pad can
+be reassigned between
 satellites without touching the per-slot deadzone configuration:
 deadzones are per-device, not per-event.
 

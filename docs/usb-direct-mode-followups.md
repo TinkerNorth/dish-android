@@ -11,12 +11,13 @@ written so it can be picked up on its own. Verify file:line against current code
 
 **Context:** `decodeXboxOneGip` handles input report `0x20` and the Guide button (decoded from the
 virtual-key `0x07` report and merged as a sticky `XUSB_GUIDE` bit via `ParserState`, covered by
-`usb_parsers_test.cpp`). Two gaps remain: the init is a single 5-byte power-on (`runInit` /
-`InitKind::XBOX_ONE_POWERON`) that starts many controllers but not every Series/Elite model
-expecting the fuller GIP announce/identify handshake, and `probeDecodable` gives up after ~320ms, so
-a slow-to-start GIP pad falls back to Routed.
+`usb_parsers_test.cpp`). Two gaps remain: the init is now a 3-packet GIP sequence (power-on, LED-on,
+auth-done) built by `buildGipInitPacket` for `InitKind::XBOX_ONE_POWERON`, with an extra set-mode
+packet for the Xbox One S and Elite Series 2 (`InitKind::XBOX_ONE_S`). This starts many controllers
+but still omits the full GIP announce/identify handshake some Series models expect, and
+`probeDecodable` gives up after ~320ms, so a slow-to-start GIP pad falls back to Routed.
 
-**Where:** `app/src/main/cpp/usb_parsers.cpp` (`runInit`), `app/src/main/cpp/usb_host.cpp`
+**Where:** `app/src/main/cpp/usb_parsers.cpp` (`buildGipInitPacket`), `app/src/main/cpp/usb_host.cpp`
 (`probeDecodable` timeouts).
 
 **Task:** Add the fuller GIP announce/identify handshake for the silent models, and re-evaluate the
@@ -29,9 +30,9 @@ End-to-end Guide also needs the satellite to forward `wButtons` bit `0x0400` to 
 
 ## 2. Switch Pro IMU sign/orientation is unverified
 
-**Context:** The Switch Pro IMU scaling is correct (`32767/28568` gyro, `32767/16384` accel), but the
-per-axis signs and axis order were a straight map and were never checked on hardware (the code itself
-notes "signs may need an on-device flip").
+**Context:** The Switch Pro IMU scaling is correct (`32767/28568` gyro, `32767/16384` accel), and the
+axis order is now rotated onto the DS4 wire convention with pitch and yaw hardware-confirmed. Roll's
+sign and the three accel signs are still unverified (the code notes exactly this).
 
 **Where:** `app/src/main/cpp/usb_parsers.cpp` (`decodeSwitchProUsb`, IMU block).
 
@@ -81,7 +82,7 @@ unplug cycle.
 
 ## 6. Move USB claim/detach off the main thread (safely)
 
-**Context:** `attemptClaim` (USB init handshake + decode probe, up to ~400ms) and `detachUsbDevice`
+**Context:** `doClaim` (USB init handshake + decode probe, up to ~400ms) and `detachUsbDevice`
 (joins the native poll thread) still run synchronously on the broadcast/main thread, so a plug-in or
 unplug briefly hitches the UI. A first attempt to move them to `Dispatchers.IO` regressed streaming
 and was reverted: the claim path mutates `PhysicalGamepadRegistry` state that Android's
@@ -91,13 +92,13 @@ controller, multi-second "connecting", no timeout screen).
 
 **Already done:** `reconcile` is idempotent (no-ops in the resolved state, skips a vid/pid with a
 recorded `directFailed`), so the repeated full-claim stall on every `onResume` is gone. The
-`PhysicalGamepadRegistry` writes are `_devices.update {}`, and `directFailed` / `claimedDevices` are
-concurrent.
+`PhysicalGamepadRegistry` writes are `_devices.update {}`; `directFailed` is a `ConcurrentHashMap`,
+and `claimedConns` is a plain `HashMap` mutated on the main thread.
 
-**Task:** Move `attemptClaim` / `detachUsbDevice` to `Dispatchers.IO`, with an in-flight guard so an
+**Task:** Move `doClaim` / `detachUsbDevice` to `Dispatchers.IO`, with an in-flight guard so an
 unplug-during-claim cannot leave a stale synthetic. That is the actual fix for the plug-in hitch.
 
-**Where:** `UsbGamepadManager.kt` (`claimAndReport`, `attemptClaim`, `handleDetached`).
+**Where:** `UsbGamepadManager.kt` (`runClaim`, `doClaim`, `releaseToFramework`).
 
 **Acceptance:** A recognised controller plugged at app start causes no UI hitch; repeated plug/unplug
 stress never drops the synthetic device or its host registration.
@@ -113,8 +114,6 @@ counter handling, and sources are in `docs/rumble.md`.
 **Remaining work:**
 - Verify each builder on real hardware (motor mapping, magnitude feel, and that no controller NAKs
   the report). The Xbox One GIP `/512` divisor caps at half scale, matching xpad; revisit if weak.
-- Xbox 360 *wireless receivers* (PIDs 0x0291/0x0719/0x02A1) need the wrapped wireless rumble frame,
-  not the wired `00 08 00 ...` format currently sent.
 - Stadia uses a SET_REPORT control transfer (not interrupt OUT), so it has no builder yet; the
   generic-HID parser has none either. Both stay silent rather than guess.
 - Trigger-motor haptics on GIP pads need the wire-format change in `docs/rumble.md` FR-2.

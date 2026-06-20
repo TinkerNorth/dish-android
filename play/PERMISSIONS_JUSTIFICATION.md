@@ -8,7 +8,11 @@ These are the user-facing explanations for the Play Console "Sensitive Permissio
 
 ## BLUETOOTH_CONNECT (API 31+) / BLUETOOTH / BLUETOOTH_ADMIN (API ≤30 fallback)
 
-**Why we declare it**: For Bluetooth-host mode, Dish pairs with the user's PC, console, or set-top box and presents itself as a standard Bluetooth HID gamepad. The permission is requested at runtime, only when the user taps "Add Bluetooth host" in the Connections screen. Declining still lets the app run, since Wi-Fi mode does not need Bluetooth.
+**Why we declare it**: For Bluetooth-host mode, Dish pairs with the user's PC, console, or set-top box and presents itself as a standard Bluetooth HID gamepad. Dish can also connect a Bluetooth game controller as an input source. The permission is requested at runtime, only when the user starts a Bluetooth setup step or taps Add under Bluetooth Hosts in the Connections screen. Declining still lets the app run, since Wi-Fi mode does not need Bluetooth.
+
+## BLUETOOTH_SCAN (API 31+)
+
+**Why we declare it**: Dish scans for nearby Bluetooth devices so the user can discover and pair two things: a Bluetooth host to act as a gamepad for, and a Bluetooth game controller to forward input from. It is declared with the `neverForLocation` flag because Dish does not derive location from Bluetooth scan results. The permission is requested at runtime, alongside the Bluetooth setup steps and the Add action under Bluetooth Hosts. Declining still lets the app run, since Wi-Fi mode does not need Bluetooth.
 
 ## POST_NOTIFICATIONS (API 33+)
 

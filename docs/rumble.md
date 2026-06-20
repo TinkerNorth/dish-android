@@ -2,8 +2,8 @@
 
 How rumble (force feedback) reaches the right device on dish-android,
 what the platform can and cannot drive, and the satellite-side feature
-requests needed to round out support. The wire layout is in
-[`wire-format.md`](wire-format.md) (`MSG_RUMBLE`, 0x0009); the runtime
+requests needed to round out support. The wire layout is in the satellite
+contract (`satellite/docs/contract.md`, `MSG_RUMBLE` 0x0009); the runtime
 path is in [`architecture.md`](architecture.md) ("Rumble path").
 
 ## Routing model
@@ -116,6 +116,9 @@ frequency, right), 0..65535. Layouts follow the Linux kernel drivers:
 
 - **Xbox 360** (`XINPUT_360`, xpad): 8 bytes
   `00 08 00 <strong>>8> <weak>>8> 00 00 00`.
+- **Xbox 360 wireless** (`XINPUT_360_WIRELESS`, xpad `xpad360w`): 12 bytes
+  `00 01 0F C0 00 <strong>>8> <weak>>8> 00 00 00 00 00`, for the wireless
+  receiver PIDs (0x0291, 0x0719, 0x02A1).
 - **Xbox One / Series** (`XBOX_ONE_GIP`, xpad): 13 bytes
   `09 00 <seq> 09 00 0F 00 00 <strong/512> <weak/512> FF 00 FF`, where
   `seq` is a per-device output counter and `0F` is `GIP_MOTOR_ALL`.
@@ -140,8 +143,7 @@ detach by `DeviceCtx.outMtx` so it never races the fd close.
 
 **Not yet covered:** Stadia and the generic-HID parser have no rumble
 builder (Stadia rumble uses a SET_REPORT control transfer, not the
-interrupt OUT path, so it is left out rather than guessed). Xbox 360
-*wireless receivers* need a wrapped report and use the wired format for
-now. Trigger-motor haptics need FR-2. None of these report builders has
+interrupt OUT path, so it is left out rather than guessed).
+Trigger-motor haptics need FR-2. None of these report builders has
 been verified on hardware yet; see
 [`usb-direct-mode-followups.md`](usb-direct-mode-followups.md) item 7.
