@@ -112,6 +112,49 @@ fun reconcileSlots(
     return ops
 }
 
+// The ops reconcileSlots wants applied, paired with the bind-per-device map after applying them, so
+// the next pass can tell what is already live on the native side.
+data class DedupedBindOps(
+    val ops: List<BindOp>,
+    val applied: Map<Int, BindOp>,
+)
+
+// Drops a satellite/bluetooth bind byte-identical to the one already applied for that device, since
+// re-applying it costs a destructive syncSlotBaseline (held inputs flicker to neutral). A changed
+// bind (new handle/controller index/connection) still goes through, and unbinds are always kept --
+// they are idempotent on the native side and carry no neutral publish.
+fun dedupeBindOps(
+    ops: List<BindOp>,
+    lastApplied: Map<Int, BindOp>,
+): DedupedBindOps {
+    val applied = lastApplied.toMutableMap()
+    val out = mutableListOf<BindOp>()
+    for (op in ops) {
+        when (op) {
+            is BindOp.BindSatellite -> {
+                if (applied[op.deviceId] == op) continue
+                applied[op.deviceId] = op
+                out += op
+            }
+            is BindOp.BindBluetooth -> {
+                if (applied[op.deviceId] == op) continue
+                applied[op.deviceId] = op
+                out += op
+            }
+            is BindOp.Unbind -> {
+                applied.remove(op.deviceId)
+                out += op
+            }
+            is BindOp.Forget -> {
+                applied.remove(op.deviceId)
+                out += op
+            }
+            is BindOp.ReleaseHubBinding -> out += op
+        }
+    }
+    return DedupedBindOps(out, applied)
+}
+
 // Process-scoped (not activity-scoped) so bindings survive MainActivity → GamepadOverlayActivity hand-off.
 @Singleton
 class PhysicalSlotBindingObserver
@@ -131,6 +174,7 @@ class PhysicalSlotBindingObserver
 
         private var job: Job? = null
         private var lastBoundDeviceIds: Set<Int> = emptySet()
+        private var lastAppliedBinds: Map<Int, BindOp> = emptyMap()
 
         override fun onStart(owner: LifecycleOwner) {
             if (job != null) return
@@ -142,6 +186,7 @@ class PhysicalSlotBindingObserver
             job = null
             SatelliteNative.clearAllPhysicalSlots()
             lastBoundDeviceIds = emptySet()
+            lastAppliedBinds = emptyMap()
         }
 
         @OptIn(ExperimentalCoroutinesApi::class)
@@ -179,7 +224,14 @@ class PhysicalSlotBindingObserver
                     perConnectionSlotInfo = slotInfo,
                     btConnectedIds = btConnectedIds,
                 )
-            for (op in ops) execute(op)
+            // A satellite re-bind is not idempotent on the native side: bindPhysicalSlotSatellite
+            // re-runs syncSlotBaseline, which resets the device to neutral and publishes it, briefly
+            // releasing every held button/trigger until the next physical report. push() fires on
+            // every upstream re-emit (a few Hz), so replaying an unchanged bind makes held inputs
+            // flicker. Drop binds identical to the one already applied; let changed binds through.
+            val deduped = dedupeBindOps(ops, lastAppliedBinds)
+            for (op in deduped.ops) execute(op)
+            lastAppliedBinds = deduped.applied
             lastBoundDeviceIds = present
         }
 
