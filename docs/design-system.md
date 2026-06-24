@@ -197,18 +197,20 @@ zero-latency display over a 250 ms fade).
 
 ### Typography → `values/text_appearance.xml`
 
-14 canonical `TextAppearance.Dish.*` styles. Every TextView in
+17 canonical `TextAppearance.Dish.*` styles. Every TextView in
 `res/layout/*.xml` adopts one via `style="@style/…"` (NOT
 `android:textAppearance`: the `style="…"` form applies every attribute
 including `lineSpacingMultiplier`; `android:textAppearance` silently drops
 line spacing).
 
 Letter-spacing canon (single source of truth, do not drift):
+- `0.02`: Body / BodySmall / BodyLarge and their variants (Body.Mono,
+  BodyLarge.Bold), the low end of the M3 body tracking range.
 - `0.04`: Hero (giant numerals).
+- `0.06`: Label.Tight (compact status tag beside a value).
 - `0.12`: Label / Label.Accent / Display.Large (eyebrows + brand wordmark).
 - `0.18`: Caption (small mono micro-eyebrow / footer).
-- Everything else is callsite-specific override (the low-power HUD treatments
-  ride on top of Label/Body styles).
+- Title / Title.Large / Display stay at the platform default of 0.
 
 `Widget.Dish.Button` + `Widget.Dish.Button.Outlined` are NOT in this canon:
 the M3 base sets `letterSpacing=0` (no tracking) and `textAllCaps=false`
@@ -221,11 +223,14 @@ the M3 base sets `letterSpacing=0` (no tracking) and `textAllCaps=false`
 | `Label` | 11sp | muted | monospace | normal | 0.12 | none |
 | `Label.Accent` | 11sp | primary | monospace | normal | 0.12 | none |
 | `Label.Plain` | 11sp | muted | sans-serif | normal | none | none |
-| `BodySmall` | 12sp | muted | sans-serif | normal | none | none |
-| `Body` | 13sp | muted | sans-serif | normal | none | 1.35 |
-| `Body.Mono` | 13sp | on-surface | monospace | normal | none | none |
-| `BodyLarge` | 14sp | muted | monospace | normal | none | none |
-| `BodyLarge.Bold` | 14sp | on-surface | sans-serif | bold | none | none |
+| `Label.Micro` | 10sp | muted | monospace | normal | 0.12 | none |
+| `Label.Tight` | 11sp | muted | monospace | normal | 0.06 | none |
+| `BodySmall` | 12sp | muted | sans-serif | normal | 0.02 | none |
+| `BodySmall.Mono.Bold` | 12sp | on-surface | monospace | bold | 0.02 | none |
+| `Body` | 13sp | muted | sans-serif | normal | 0.02 | 1.35 |
+| `Body.Mono` | 13sp | on-surface | monospace | normal | 0.02 | none |
+| `BodyLarge` | 14sp | muted | monospace | normal | 0.02 | none |
+| `BodyLarge.Bold` | 14sp | on-surface | sans-serif | bold | 0.02 | none |
 | `Title` | 15sp | on-surface | sans-serif-medium | normal | none | 1.3 |
 | `Title.Large` | 18sp | on-surface | sans-serif | bold | none | none |
 | `Display` | 22sp | primary | monospace | bold | none | none |
@@ -366,6 +371,15 @@ nav.toTouchpad(connectionId = cid, touchpadMode = mode, slotId = slotId)
 | `mainActivity` (start) | `MainActivity` | none |
 | `connectionsActivity` | `ConnectionsActivity` | `extra_pair_prompt_for_id` (nullable string) |
 | `settingsActivity` | `SettingsActivity` | none |
+| `configureBindingsActivity` | `ConfigureBindingsActivity` | `extra_slot_id` |
+| `setupInputActivity` | `SetupInputActivity` | none |
+| `setupUsbActivity` | `SetupUsbActivity` | none |
+| `setupBluetoothControllerActivity` | `SetupBluetoothControllerActivity` | none |
+| `setupConnectionActivity` | `SetupConnectionActivity` | `extra_setup_input_type`, `extra_setup_slot_id` |
+| `setupBluetoothHostActivity` | `SetupBluetoothHostActivity` | `extra_setup_input_type`, `extra_setup_slot_id` |
+| `setupConfigureActivity` | `SetupConfigureActivity` | `extra_setup_slot_id`, `extra_setup_connection_id` |
+| `helpActivity` | `HelpActivity` | none |
+| `donateActivity` | `DonateActivity` | none |
 | `gamepadOverlayActivity` | `GamepadOverlayActivity` | `extra_connection_id`, `extra_use_ps_layout` |
 | `touchpadOverlayActivity` | `TouchpadOverlayActivity` | `extra_connection_id`, `extra_touchpad_mode`, `extra_slot_id` |
 | `nativeUnavailableActivity` | `NativeUnavailableActivity` | none |
@@ -433,8 +447,8 @@ resend loop) is a bigger interface than these three pieces centralise.
 ### When to add a new style
 
 - **2+ identical attribute combinations on a TextView** → adopt or add a
-  `TextAppearance.Dish.*` style. The 14 existing styles should cover almost
-  every case. Fix the callsite to one of them before adding #15.
+  `TextAppearance.Dish.*` style. The 17 existing styles should cover almost
+  every case. Fix the callsite to one of them before adding #18.
 - **2+ identical attribute combinations on a Material widget** → add a
   `Widget.Dish.<Component>.<Variant>` style in `values/styles_widgets.xml`.
 - **A new component-attribute closure** (a brand-new Material widget with
@@ -475,10 +489,10 @@ A new button in the app:
 
 A new TextView in the app:
 
-1. **Pick the matching role** from the 14 `TextAppearance.Dish.*` styles:
+1. **Pick the matching role** from the 17 `TextAppearance.Dish.*` styles:
    eyebrow → Label / Label.Accent, body copy → Body / BodySmall, card title
    → Title, big numeral → Display. If nothing fits, the callsite is the
-   wrong shape. Fix the layout, don't add a 15th style.
+   wrong shape. Fix the layout, don't add an 18th style.
 2. **Set `style="@style/TextAppearance.Dish.X"`** on the TextView, NOT
    `android:textAppearance="@style/…"`. The `style="…"` form applies every
    attribute including `lineSpacingMultiplier`.

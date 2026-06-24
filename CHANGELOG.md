@@ -15,6 +15,38 @@ four repos share a version number.
 
 ## [Unreleased]
 
+### Added
+
+- Guided Dish Setup flow that takes a first-run user from nothing to a
+  bound controller: pick an input (USB, a Bluetooth controller, or the
+  on-screen pad), set it up, choose a destination (a satellite over Wi-Fi
+  or a Bluetooth host), then configure the controller type and bind. This
+  replaces the old welcome carousel and setup wizard.
+- Bluetooth host pairing: the phone can present itself as a Bluetooth HID
+  gamepad to a paired PC, console, or set-top box. The add flow covers the
+  controller-type pick, the discoverability prompt, and a live
+  wait-for-host countdown.
+- Wider wired-controller support: a curated SDL controller-ID import plus
+  native USB and HID decoding, including a generic HID descriptor parser,
+  DualShock 4 and DualSense motion, Switch Pro motion, and Xbox 360
+  wireless rumble. Imported models are recognized but flagged unverified.
+- Tri-zone controller cards: a read-only report card (connection,
+  destination, emulated type, functions) plus a dedicated Configure
+  bindings screen. Binding changes are staged and applied explicitly
+  instead of committing live.
+
+### Changed (user-facing)
+
+- The Connections screen scans for satellites automatically when it opens,
+  and re-homes a remembered satellite whose box moved to a new IP or port,
+  so it reconnects without a manual rescan.
+
+### Fixed
+
+- Phantom held inputs (a button, the d-pad, or an off-center stick or
+  trigger) no longer linger on the virtual pad after binding a controller,
+  before the first real movement.
+
 ### Changed: control-plane rewrite (protocol 1) `[wire-coordinated]`
 
 Clean-break rewrite of the satellite control plane against
@@ -38,7 +70,7 @@ replacing the former `docs/wire-format.md`).
   Interop vectors are pinned on both ends.
 - A coded 401 (`NOT_PAIRED` / `BAD_PROOF`) is terminal: the key is
   dropped, the row reads "needs pairing", and retries stop. Silent
-  reconnects use bounded exponential backoff (1 s → 60 s) instead of a
+  reconnects use bounded exponential backoff (1 s to 60 s) instead of a
   fixed 1.5 s loop.
 - Binding commits the user's chosen type WITH the bind. The
   default-then-correct Xbox phase is gone end to end (USB-direct claims
@@ -112,10 +144,10 @@ replacing the former `docs/wire-format.md`).
 
 ### Notes
 
-This is the first tracked release. Earlier history is captured in
-`git log`; only the build/release/observability deltas listed above are
-documented here because they're the ones a downstream consumer of the
-binary cares about.
+This is the first tracked release, so it covers the public 1.0.0 feature
+set plus the build, release, and observability work that a downstream
+consumer of the binary cares about. Earlier development history is in
+`git log`.
 
 ---
 
