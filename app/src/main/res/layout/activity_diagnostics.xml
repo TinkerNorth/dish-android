@@ -65,6 +65,13 @@
                     android:layout_marginTop="@dimen/section_header_gap_above"
                     android:layout_marginBottom="@dimen/section_header_gap_below" />
 
+                <TextView
+                    android:id="@+id/tvWifiLink"
+                    style="@style/TextAppearance.Dish.Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="@dimen/spacing_md" />
+
                 <LinearLayout
                     android:id="@+id/containerConnections"
                     android:layout_width="match_parent"
@@ -135,6 +142,29 @@
                             android:orientation="vertical" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
+
+                <!-- ═══ EVENTS ═════════════════════════════════════════════ -->
+                <include
+                    android:id="@+id/sectionEvents"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+                <LinearLayout
+                    android:id="@+id/containerEvents"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCopyEvents"
+                    style="@style/Widget.Dish.Button.Outlined"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:text="@string/diagnostics_copy_events" />
 
             </LinearLayout>
         </androidx.core.widget.NestedScrollView>

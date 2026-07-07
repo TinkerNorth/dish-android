@@ -9,6 +9,7 @@ the cakama3a-equivalent poll cadence. Full chain and methodology: see that READM
 | 0 | Controller + USB poll interval | `SatelliteNative.getDeviceUrbCount(id)` sampled over time (already wired via `PollRateSampler` / `InputRateStore`) |
 | 1 | Android hot path: URB reap → parse → encrypt → `sendto` | `hotpath_latency` (this change) |
 | 2 | Network one-way ≈ ½ heartbeat RTT | `hotpath_latency` (this change) |
+| – | USB poll jitter (`urb_gap_us`: URB inter-arrival percentiles, gaps >100 ms dropped as stream pauses) | `hotpath_latency` |
 
 ## How the instrumentation works
 

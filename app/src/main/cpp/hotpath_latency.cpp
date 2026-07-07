@@ -24,6 +24,8 @@ inline int64_t nowNs() {
 // encrypt -> sendto all run synchronously on that one thread, so a thread_local
 // needs no synchronisation and never crosses sessions.
 thread_local int64_t t_reapNs = 0;
+// Previous reap on the same poller thread, for the inter-arrival (jitter) ring.
+thread_local int64_t t_prevReapNs = 0;
 
 // One bounded ring per metric. A mutex per sample is cheap next to the syscall
 // the send already does, and only taken while benchmarking.
@@ -45,8 +47,13 @@ struct Ring {
 
 Ring g_stage1; // URB reap -> gamepad sent
 Ring g_rtt;    // heartbeat ping -> ack
+Ring g_urbGap; // URB inter-arrival gap (polling jitter)
 
 std::atomic<int64_t> g_lastPingNs{0};
+
+// Gaps above this are stream pauses (idle pad, replug), not polling jitter; recording them
+// would drown the tail the metric exists to expose.
+constexpr double kUrbGapMaxUs = 100000.0;
 
 void appendPctl(std::string& out, const char* name, Ring& r, bool reset) {
     std::vector<double> v;
@@ -85,13 +92,20 @@ void setEnabled(bool on) {
     // radio between heartbeats reads tens of ms) into the reading the user asked for.
     g_stage1.clear();
     g_rtt.clear();
+    g_urbGap.clear();
     g_lastPingNs.store(0, std::memory_order_relaxed);
 }
 bool enabled() { return g_enabled.load(std::memory_order_relaxed); }
 
 void markInputRead() {
     if (!g_enabled.load(std::memory_order_relaxed)) return;
-    t_reapNs = nowNs();
+    const int64_t now = nowNs();
+    if (t_prevReapNs != 0) {
+        double us = (double)(now - t_prevReapNs) / 1000.0;
+        if (us >= 0 && us < kUrbGapMaxUs) g_urbGap.add(us);
+    }
+    t_prevReapNs = now;
+    t_reapNs = now;
 }
 
 void markGamepadSent() {
@@ -121,6 +135,23 @@ std::string statsJson(bool reset) {
     out += ",";
     appendPctl(out, "stage1_hotpath_us", g_stage1, reset);
     out += ",";
+    appendPctl(out, "urb_gap_us", g_urbGap, reset);
+    out += ",";
+    // Raw tail of the RTT window BEFORE the pctl block can reset it: feeds the
+    // diagnostics sparkline, which wants recent shape rather than an aggregate.
+    {
+        std::lock_guard<std::mutex> lk(g_rtt.mtx);
+        const size_t n = g_rtt.us.size();
+        const size_t take = n < 32 ? n : 32;
+        out += "\"rtt_recent_us\":[";
+        char num[32];
+        for (size_t i = n - take; i < n; i++) {
+            snprintf(num, sizeof(num), "%.0f", g_rtt.us[i]);
+            if (i != n - take) out += ",";
+            out += num;
+        }
+        out += "],";
+    }
     appendPctl(out, "rtt_us", g_rtt, reset);
     out += "}";
     return out;

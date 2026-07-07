@@ -93,4 +93,8 @@ class PhysicalInputNative
         fun setHotPathBench(on: Boolean) = SatelliteNative.setHotPathBench(on)
 
         fun hotPathBenchJson(reset: Boolean): String = SatelliteNative.hotPathBenchJson(reset)
+
+        fun setInputInspection(on: Boolean) = SatelliteNative.setInputInspection(on)
+
+        fun deviceStateJson(deviceId: Int): String = SatelliteNative.deviceStateJson(deviceId)
     }

@@ -112,6 +112,15 @@
             tools:targetApi="p" />
 
         <activity
+            android:name=".ui.diagnostics.InputInspectorActivity"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:theme="@style/Theme.Dish"
+            android:configChanges="keyboardHidden"
+            android:parentActivityName=".ui.diagnostics.DiagnosticsActivity"
+            tools:targetApi="p" />
+
+        <activity
             android:name=".ui.settings.LicensesActivity"
             android:exported="false"
             android:resizeableActivity="true"

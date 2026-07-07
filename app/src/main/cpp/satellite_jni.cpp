@@ -275,6 +275,11 @@ void prewarmDevice(int32_t deviceId) {
     g_devices[deviceId];
 }
 
+// Diagnostics-only mirror gate: motion/touch land in g_devices solely for the inspector
+// snapshot, and only while an inspector screen is open. Off costs one relaxed load per report,
+// the same budget as the latency bench markers.
+static std::atomic<bool> g_inspect{false};
+
 void applyUsbReport(int32_t deviceId, const gamepad::DeviceState& nu) {
     std::lock_guard<std::mutex> lock(g_devicesMtx);
     auto& s = g_devices[deviceId];
@@ -287,6 +292,31 @@ void applyUsbReport(int32_t deviceId, const gamepad::DeviceState& nu) {
     s.sRY = nu.sRY;
     applyUsbStickDeadzone(s.sLX, s.sLY);
     applyUsbStickDeadzone(s.sRX, s.sRY);
+    if (g_inspect.load(std::memory_order_relaxed)) {
+        // Copy-on-valid keeps the last known sample visible: a report without a touch
+        // update must not read as a lift in the inspector.
+        if (nu.motionValid) {
+            s.motionValid = true;
+            s.gyroX = nu.gyroX;
+            s.gyroY = nu.gyroY;
+            s.gyroZ = nu.gyroZ;
+            s.accelX = nu.accelX;
+            s.accelY = nu.accelY;
+            s.accelZ = nu.accelZ;
+        }
+        if (nu.touchValid) {
+            s.touchValid = true;
+            s.touch0Active = nu.touch0Active;
+            s.touch0Id = nu.touch0Id;
+            s.touch0X = nu.touch0X;
+            s.touch0Y = nu.touch0Y;
+            s.touch1Active = nu.touch1Active;
+            s.touch1Id = nu.touch1Id;
+            s.touch1X = nu.touch1X;
+            s.touch1Y = nu.touch1Y;
+            s.touchClick = nu.touchClick;
+        }
+    }
     publishIfChanged(deviceId, s);
 }
 
@@ -1101,6 +1131,23 @@ Java_com_tinkernorth_dish_core_jni_SatelliteNative_setHotPathBench(JNIEnv*, jobj
 JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_hotPathBenchJson(
     JNIEnv* env, jobject, jboolean reset) {
     return env->NewStringUTF(hotpath::statsJson(reset == JNI_TRUE).c_str());
+}
+
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setInputInspection(
+    JNIEnv*, jobject, jboolean on) {
+    dispatch::g_inspect.store(on == JNI_TRUE, std::memory_order_relaxed);
+}
+
+JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_deviceStateJson(
+    JNIEnv* env, jobject, jint deviceId) {
+    char buf[512];
+    size_t n = 0;
+    {
+        std::lock_guard<std::mutex> lock(g_devicesMtx);
+        auto it = g_devices.find((int32_t)deviceId);
+        if (it != g_devices.end()) n = gamepad::formatDeviceStateJson(it->second, buf, sizeof(buf));
+    }
+    return env->NewStringUTF(n > 0 ? buf : "");
 }
 
 JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDeviceInputEventCount(

@@ -158,4 +158,8 @@ bool consumePublishIfChanged(DeviceState& s);
 // A (re)bound target pad is neutral; without re-arming, the on-change latch would never resend.
 void resetPublishLatch(DeviceState& s);
 
+// Serializes the wire-facing view of a DeviceState for the diagnostics inspector. Pure and
+// bounded (host-testable); returns bytes written excluding the NUL, or 0 if cap is too small.
+size_t formatDeviceStateJson(const DeviceState& s, char* buf, size_t cap);
+
 } // namespace gamepad

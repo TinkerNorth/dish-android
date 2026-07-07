@@ -2,6 +2,8 @@
 
 package com.tinkernorth.dish.ui.diagnostics
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup
@@ -14,6 +16,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
+import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
@@ -24,7 +28,12 @@ import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.inputrate.InputRateStore
+import com.tinkernorth.dish.source.store.DiagnosticsLogEntry
+import com.tinkernorth.dish.source.store.DiagnosticsLogStore
 import com.tinkernorth.dish.source.store.LatencyProfilingStore
+import com.tinkernorth.dish.source.system.WifiBand
+import com.tinkernorth.dish.source.system.WifiLink
+import com.tinkernorth.dish.source.system.WifiLinkSource
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.setupDishToolbar
@@ -35,10 +44,15 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.float
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import javax.inject.Inject
 
+@Suppress("TooManyFunctions")
 @AndroidEntryPoint
 class DiagnosticsActivity : AppCompatActivity() {
     @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
@@ -55,6 +69,12 @@ class DiagnosticsActivity : AppCompatActivity() {
 
     @Inject lateinit var latencyProfilingStore: LatencyProfilingStore
 
+    @Inject lateinit var capabilityComposer: CapabilityComposer
+
+    @Inject lateinit var wifiLinkSource: WifiLinkSource
+
+    @Inject lateinit var diagnosticsLog: DiagnosticsLogStore
+
     @Inject lateinit var json: Json
 
     private lateinit var binding: ActivityDiagnosticsBinding
@@ -70,6 +90,8 @@ class DiagnosticsActivity : AppCompatActivity() {
         binding.sectionControllers.labelSection.setText(R.string.section_controllers)
         binding.sectionConnections.labelSection.setText(R.string.section_connections)
         binding.sectionLatency.labelSection.setText(R.string.diagnostics_section_latency)
+        binding.sectionEvents.labelSection.setText(R.string.diagnostics_section_events)
+        binding.btnCopyEvents.setOnClickListener { copyEventsToClipboard() }
 
         // Seed the switch synchronously BEFORE the listener exists: the collector below runs
         // async (onStart), so with profiling already on, its first emission would flip a live
@@ -81,6 +103,8 @@ class DiagnosticsActivity : AppCompatActivity() {
         observeLatencyToggle()
         wireLatencySwitch()
         observeLatencyStats()
+        observeEvents()
+        pollWifiLink()
     }
 
     // ── Controllers ─────────────────────────────────────────────────────────
@@ -113,7 +137,17 @@ class DiagnosticsActivity : AppCompatActivity() {
             lines += getString(R.string.diagnostics_kv, getString(R.string.diagnostics_gyro), gyroLabel(device))
         }
         lines += getString(R.string.diagnostics_kv, getString(R.string.diagnostics_state), controllerStateLabel(device))
-        return cardWithTitle(device.name, lines)
+        lines += getString(R.string.diagnostics_tap_inspect)
+        val card = cardWithTitle(device.name, lines)
+        card.setOnClickListener {
+            startActivity(
+                android.content.Intent(this, InputInspectorActivity::class.java).apply {
+                    putExtra(InputInspectorActivity.EXTRA_DEVICE_ID, device.id)
+                    putExtra(InputInspectorActivity.EXTRA_DEVICE_NAME, device.name)
+                },
+            )
+        }
+        return card
     }
 
     private fun transportLabel(device: PhysicalGamepadRegistry.Device): String {
@@ -183,8 +217,9 @@ class DiagnosticsActivity : AppCompatActivity() {
     }
 
     private fun satelliteTelemetry(id: String): List<String> {
-        val handle = satelliteConnectionManager.get(id)?.handle ?: HANDLE_NONE
-        if (handle == HANDLE_NONE) {
+        val conn = satelliteConnectionManager.get(id)
+        val handle = conn?.handle ?: HANDLE_NONE
+        if (conn == null || handle == HANDLE_NONE) {
             return listOf(getString(R.string.diagnostics_kv, getString(R.string.diagnostics_host), getString(R.string.diagnostics_offline)))
         }
         val vigem = controllerRepository.getVigemAvailable(handle)
@@ -194,8 +229,37 @@ class DiagnosticsActivity : AppCompatActivity() {
             getString(R.string.diagnostics_kv, getString(R.string.diagnostics_vigem), vigemLabel(vigem)),
             getString(R.string.diagnostics_kv, getString(R.string.diagnostics_active_controllers), active.toString()),
             getString(R.string.diagnostics_kv, getString(R.string.diagnostics_server_epoch), epoch.toString()),
-        )
+        ) + wireTruthLines(conn, controllerRepository.getActiveBitmap(handle))
     }
+
+    // Declared vs applied per slot: what this client asked the satellite to plug against what
+    // the satellite confirmed, so a converge failure is visible instead of inferred.
+    private fun wireTruthLines(
+        conn: com.tinkernorth.dish.source.connection.SatelliteConnection,
+        activeBitmap: Int,
+    ): List<String> =
+        conn.slots.value.entries
+            .sortedBy { it.value.controllerIndex }
+            .flatMap { (slotId, binding) ->
+                val typeRes =
+                    if (binding.controllerType == CONTROLLER_TYPE_PLAYSTATION) {
+                        R.string.picker_type_playstation
+                    } else {
+                        R.string.picker_type_xbox
+                    }
+                val mode = capabilityComposer.touchpadWireMode(slotId)
+                val streaming = activeBitmap >= 0 && (activeBitmap and (1 shl binding.controllerIndex)) != 0
+                listOf(
+                    getString(R.string.diagnostics_wire_declared, binding.controllerIndex, getString(typeRes), mode),
+                    getString(
+                        R.string.diagnostics_wire_applied,
+                        yesNo(binding.registered),
+                        yesNo(streaming),
+                    ),
+                )
+            }
+
+    private fun yesNo(value: Boolean): String = getString(if (value) R.string.diagnostics_yes else R.string.diagnostics_no)
 
     private fun vigemLabel(value: Int): String =
         getString(if (value > 0) R.string.diagnostics_available else R.string.diagnostics_unavailable)
@@ -294,7 +358,35 @@ class DiagnosticsActivity : AppCompatActivity() {
         // of it (symmetric-path estimate, hence the ~ rendering).
         val networkP50 = microToMs(root, RTT, P50)?.let { it / 2 }
         container.addView(statRow(getString(R.string.diagnostics_phone_path), phoneP50, phoneP99))
+        container.addView(
+            statRow(
+                getString(R.string.diagnostics_polling_jitter),
+                microToMs(root, URB_GAP, P50),
+                microToMs(root, URB_GAP, P99),
+            ),
+        )
         container.addView(statRow(getString(R.string.diagnostics_network_latency), networkP50, null, approx = true))
+        rttHistoryMs(root)?.let { history ->
+            val spark = SparklineView(this)
+            val params =
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    resources.getDimensionPixelSize(R.dimen.size_32),
+                )
+            params.topMargin = resources.getDimensionPixelSize(R.dimen.spacing_xs)
+            spark.layoutParams = params
+            spark.update(history)
+            container.addView(spark)
+        }
+    }
+
+    // Recent full-RTT samples in ms for the sparkline; null hides it until two samples exist.
+    private fun rttHistoryMs(root: JsonObject): FloatArray? {
+        val recent =
+            runCatching {
+                root[RTT_RECENT]?.jsonArray?.map { (it.jsonPrimitive.float / MICROS_PER_MS).toFloat() }
+            }.getOrNull() ?: return null
+        return if (recent.size < 2) null else recent.toFloatArray()
     }
 
     private fun microToMs(
@@ -328,6 +420,78 @@ class DiagnosticsActivity : AppCompatActivity() {
             }
         return bodyRow(getString(R.string.diagnostics_kv, label, value))
     }
+
+    // ── Events (flight recorder) ────────────────────────────────────────────
+
+    private fun observeEvents() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                diagnosticsLog.state.collect { renderEvents(it) }
+            }
+        }
+    }
+
+    private fun renderEvents(entries: List<DiagnosticsLogEntry>) {
+        val container = binding.containerEvents
+        container.removeAllViews()
+        if (entries.isEmpty()) {
+            container.addView(emptyRow(getString(R.string.diagnostics_events_empty)))
+            return
+        }
+        entries
+            .takeLast(SHOWN_EVENTS)
+            .asReversed()
+            .forEach { container.addView(bodyRow(formatEvent(it))) }
+    }
+
+    // Log lines are export material (English, fixed clock format), so bug reports paste uniformly.
+    private fun formatEvent(entry: DiagnosticsLogEntry): String {
+        val time = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date(entry.atMs))
+        return "$time [${entry.tag}] ${entry.message}"
+    }
+
+    private fun copyEventsToClipboard() {
+        val text = diagnosticsLog.state.value.joinToString("\n") { formatEvent(it) }
+        val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText(getString(R.string.diagnostics_section_events), text))
+    }
+
+    // ── Wi-Fi link ──────────────────────────────────────────────────────────
+
+    private fun pollWifiLink() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    renderWifi(wifiLinkSource.read())
+                    delay(WIFI_POLL_MS)
+                }
+            }
+        }
+    }
+
+    private fun renderWifi(link: WifiLink?) {
+        val value =
+            when {
+                link == null -> getString(R.string.diagnostics_wifi_none)
+                else ->
+                    getString(
+                        R.string.diagnostics_wifi_value,
+                        link.rssiDbm,
+                        bandLabel(WifiBand.fromFrequencyMhz(link.frequencyMhz)),
+                        link.linkSpeedMbps,
+                    )
+            }
+        binding.tvWifiLink.text = getString(R.string.diagnostics_kv, getString(R.string.diagnostics_wifi), value)
+    }
+
+    private fun bandLabel(band: WifiBand): String =
+        when (band) {
+            // 2.4 GHz is the one worth calling out: it is the band that makes streaming laggy.
+            WifiBand.GHZ_2_4 -> getString(R.string.diagnostics_wifi_band_warn)
+            WifiBand.GHZ_5 -> "5 GHz"
+            WifiBand.GHZ_6 -> "6 GHz"
+            WifiBand.UNKNOWN -> getString(R.string.diagnostics_unknown)
+        }
 
     // ── Row builders ────────────────────────────────────────────────────────
 
@@ -392,10 +556,14 @@ class DiagnosticsActivity : AppCompatActivity() {
     private companion object {
         const val HANDLE_NONE = -1
         const val LATENCY_POLL_MS = 2000L
+        const val WIFI_POLL_MS = 2000L
         const val MICROS_PER_MS = 1000.0
         const val STAGE1 = "stage1_hotpath_us"
+        const val URB_GAP = "urb_gap_us"
         const val RTT = "rtt_us"
+        const val RTT_RECENT = "rtt_recent_us"
         const val P50 = "p50"
         const val P99 = "p99"
+        const val SHOWN_EVENTS = 20
     }
 }

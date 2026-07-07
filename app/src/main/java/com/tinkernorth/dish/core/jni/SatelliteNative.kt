@@ -206,6 +206,13 @@ object SatelliteNative {
     // JSON snapshot of the benchmark window (microsecond percentiles). reset clears it.
     external fun hotPathBenchJson(reset: Boolean): String
 
+    // Inspector mirror gate: while on, USB-direct reports also copy motion/touch into the
+    // snapshot state. Off costs one relaxed atomic load per report, like the bench markers.
+    external fun setInputInspection(on: Boolean)
+
+    // JSON snapshot of a device's wire-facing input state; empty string for an unknown device.
+    external fun deviceStateJson(deviceId: Int): String
+
     // Flat parameter list (not packed) so each axis stays primitive Float: no per-event allocation.
     @Suppress("LongParameterList")
     external fun processGamepadMotionEvent(

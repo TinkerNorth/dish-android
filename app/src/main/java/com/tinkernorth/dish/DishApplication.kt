@@ -8,6 +8,7 @@ import android.os.StrictMode
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.tinkernorth.dish.bench.HotPathBenchController
 import com.tinkernorth.dish.composer.CrashReportingController
+import com.tinkernorth.dish.composer.DiagnosticsLogRecorder
 import com.tinkernorth.dish.composer.StreamingServiceController
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
@@ -78,6 +79,8 @@ class DishApplication : Application() {
 
     @Inject lateinit var latencyProfilingStore: LatencyProfilingStore
 
+    @Inject lateinit var diagnosticsLogRecorder: DiagnosticsLogRecorder
+
     // Exposed so StreamingService (framework-owned lifecycle) can reuse the Hilt singleton scope.
     @Inject lateinit var processScope: CoroutineScope
 
@@ -94,6 +97,7 @@ class DishApplication : Application() {
         try {
             installNativeBackedObservers()
             HotPathBenchController.install(this, processScope)
+            diagnosticsLogRecorder.install()
             // Re-arm latency profiling only if the user previously left it on (they accepted the
             // warning then). Default is false, so a fresh install keeps the hot path measurement-free.
             physicalInputNative.setHotPathBench(latencyProfilingStore.state.value)

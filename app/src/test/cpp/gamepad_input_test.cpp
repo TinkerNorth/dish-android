@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <cstring>
+
 using namespace gamepad;
 
 TEST(ScaleAxis, CenterReturnsZero) { EXPECT_EQ(0, scaleAxis(0.f, 32767.f)); }
@@ -625,4 +627,59 @@ TEST(TouchpadState, EqualityCoversEveryField) {
     b = a;
     b.f1Id = 9;
     EXPECT_TRUE(a != b);
+}
+
+// ── formatDeviceStateJson: the inspector snapshot layout ──
+
+TEST(DeviceStateJson, SerializesEveryFieldInTheDocumentedLayout) {
+    DeviceState s{};
+    s.wButtons = 0x1010; // A + START
+    s.bLT = 12;
+    s.bRT = 255;
+    s.sLX = -32768;
+    s.sLY = 32767;
+    s.sRX = -1;
+    s.sRY = 1;
+    s.motionValid = true;
+    s.gyroX = 10;
+    s.gyroY = -20;
+    s.gyroZ = 30;
+    s.accelX = -40;
+    s.accelY = 50;
+    s.accelZ = -60;
+    s.touchValid = true;
+    s.touch0Active = true;
+    s.touch0Id = 7;
+    s.touch0X = -100;
+    s.touch0Y = 200;
+    s.touch1Active = false;
+    s.touch1Id = 8;
+    s.touch1X = 0;
+    s.touch1Y = 0;
+    s.touchClick = true;
+
+    char buf[512];
+    size_t n = formatDeviceStateJson(s, buf, sizeof(buf));
+    ASSERT_GT(n, 0u);
+    EXPECT_STREQ(
+        "{\"buttons\":4112,\"lt\":12,\"rt\":255,\"lx\":-32768,\"ly\":32767,\"rx\":-1,\"ry\":1,"
+        "\"motionValid\":true,\"gx\":10,\"gy\":-20,\"gz\":30,\"ax\":-40,\"ay\":50,\"az\":-60,"
+        "\"touchValid\":true,\"f0Active\":true,\"f0Id\":7,\"f0X\":-100,\"f0Y\":200,"
+        "\"f1Active\":false,\"f1Id\":8,\"f1X\":0,\"f1Y\":0,\"click\":true}",
+        buf);
+}
+
+TEST(DeviceStateJson, DefaultStateIsAllZerosAndFalse) {
+    DeviceState s{};
+    char buf[512];
+    ASSERT_GT(formatDeviceStateJson(s, buf, sizeof(buf)), 0u);
+    EXPECT_NE(nullptr, strstr(buf, "\"buttons\":0"));
+    EXPECT_NE(nullptr, strstr(buf, "\"motionValid\":false"));
+    EXPECT_NE(nullptr, strstr(buf, "\"touchValid\":false"));
+}
+
+TEST(DeviceStateJson, TooSmallBufferReturnsZero) {
+    DeviceState s{};
+    char buf[16];
+    EXPECT_EQ(0u, formatDeviceStateJson(s, buf, sizeof(buf)));
 }
