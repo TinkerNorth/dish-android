@@ -11,10 +11,17 @@ import android.view.View
 import androidx.core.content.ContextCompat
 import com.tinkernorth.dish.R
 
+// Wire sticks are XUSB up-positive while screen pixels grow downward, so the stick plot
+// flips Y here and nowhere else (the touch plot draws direct: MSG_TOUCHPAD is down-positive
+// like the screen). Pure so the convention is pinned by a unit test.
+internal fun stickPlotFractionX(v: Float): Float = (v + 1f) / 2f
+
+internal fun stickPlotFractionY(v: Float): Float = (1f - v) / 2f
+
 /**
  * Live stick plot: bounding box, crosshair, current position dot, and (during a range
  * capture) the sweep trail so the reach envelope is visible as it is learned. Inputs are
- * normalized -1..1; +Y down matches the wire convention.
+ * normalized -1..1 in the wire's XUSB orientation (+Y up).
  */
 class StickPlotView
     @JvmOverloads
@@ -78,9 +85,9 @@ class StickPlotView
             invalidate()
         }
 
-        private fun toPxX(v: Float): Float = width / 2f + v * (width / 2f - PAD)
+        private fun toPxX(v: Float): Float = PAD + stickPlotFractionX(v) * (width - 2 * PAD)
 
-        private fun toPxY(v: Float): Float = height / 2f + v * (height / 2f - PAD)
+        private fun toPxY(v: Float): Float = PAD + stickPlotFractionY(v) * (height - 2 * PAD)
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
