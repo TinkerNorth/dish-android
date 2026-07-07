@@ -34,6 +34,15 @@ four repos share a version number.
   destination, emulated type, functions) plus a dedicated Configure
   bindings screen. Binding changes are staged and applied explicitly
   instead of committing live.
+- Diagnostics screen, reachable from Settings: live telemetry for every
+  connected controller and host, an input inspector (sticks, buttons,
+  motion, touch) with stick drift/range/circularity health and a rumble
+  tester, a wire-truth panel showing what is actually sent on the wire,
+  network stats with a one-way latency sparkline, a flight recorder,
+  and an opt-in hot-path latency benchmark.
+- Physical trackpads stream natively in USB Direct mode: a DualShock 4
+  or DualSense trackpad drives the satellite touchpad directly, and the
+  phone touchpad overlay is offered only for inputs without a trackpad.
 
 ### Changed (user-facing)
 
