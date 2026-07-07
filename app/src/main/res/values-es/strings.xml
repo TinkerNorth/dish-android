@@ -442,7 +442,7 @@
     <string name="diagnostics_active_controllers">Mandos activos</string>
     <string name="diagnostics_server_epoch">Época del host</string>
     <string name="diagnostics_latency_title">Perfilado de latencia</string>
-    <string name="diagnostics_latency_body">Mide cuánto tarda tu entrada en llegar al host.</string>
+    <string name="diagnostics_latency_body">Mide cuánto tarda tu entrada en llegar al host. Consúltalo mientras juegas: un enlace Wi-Fi inactivo se adormece entre paquetes y muestra valores altos.</string>
     <string name="diagnostics_latency_off_hint">El perfilado de latencia está desactivado. Actívalo para medir (añade algo de trabajo a la ruta de entrada).</string>
     <string name="diagnostics_latency_waiting">Midiendo…</string>
     <string name="diagnostics_phone_path">Ruta de entrada del teléfono</string>

@@ -59,6 +59,13 @@ stage 2  network one-way (RTT/2)   : <rtt p50 / 2 / 1000> ms
 Add the PC-measured stages 3+4 (~0.02 ms combined, loopback-isolated) for the full
 controller→game budget.
 
-> Note: `rtt_us` is the **full** heartbeat round trip; one-way network ≈ p50/2. The
-> heartbeat fires every 2 s, so a 30 s run yields ~15 RTT samples — enough for a median,
-> not a tail. For a denser network number, lower `HEARTBEAT_INTERVAL_SEC` temporarily.
+> Note: `rtt_us` is the **full** heartbeat round trip; one-way network ≈ p50/2 (the
+> Diagnostics screen already shows the halved value). The heartbeat fires every 2 s, so a
+> 30 s run yields ~15 RTT samples — enough for a median, not a tail. For a denser network
+> number, lower `HEARTBEAT_INTERVAL_SEC` temporarily.
+>
+> Measure **while input is streaming**. On an otherwise idle link, Wi-Fi power save parks
+> the phone's radio between the 2 s heartbeats and each ping waits out the wakeup cycle,
+> so an idle reading of tens of ms is the radio's doze schedule, not the latency games
+> see. Steady gamepad traffic keeps the radio awake and the same path reads a few ms.
+> Arming the bench clears the sample window, so old idle samples never pollute a run.

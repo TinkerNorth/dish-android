@@ -438,7 +438,7 @@
     <string name="diagnostics_active_controllers">Aktive Controller</string>
     <string name="diagnostics_server_epoch">Host-Epoche</string>
     <string name="diagnostics_latency_title">Latenz-Profiling</string>
-    <string name="diagnostics_latency_body">Miss, wie lange deine Eingabe bis zum Host braucht.</string>
+    <string name="diagnostics_latency_body">Miss, wie lange deine Eingabe bis zum Host braucht. Lies den Wert beim Spielen ab: eine unbenutzte WLAN-Verbindung schläft zwischen Paketen und zeigt zu hohe Werte.</string>
     <string name="diagnostics_latency_off_hint">Latenz-Profiling ist aus. Schalte es ein, um zu messen (verursacht etwas Mehraufwand im Eingabepfad).</string>
     <string name="diagnostics_latency_waiting">Wird gemessen…</string>
     <string name="diagnostics_phone_path">Eingabepfad des Telefons</string>

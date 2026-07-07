@@ -71,6 +71,11 @@ class DiagnosticsActivity : AppCompatActivity() {
         binding.sectionConnections.labelSection.setText(R.string.section_connections)
         binding.sectionLatency.labelSection.setText(R.string.diagnostics_section_latency)
 
+        // Seed the switch synchronously BEFORE the listener exists: the collector below runs
+        // async (onStart), so with profiling already on, its first emission would flip a live
+        // listener and pop the confirmation on every screen open.
+        binding.switchLatencyProfiling.isChecked = latencyProfilingStore.state.value
+
         observeControllers()
         observeConnections()
         observeLatencyToggle()
@@ -198,8 +203,6 @@ class DiagnosticsActivity : AppCompatActivity() {
     // ── Latency profiling toggle + warning ──────────────────────────────────
 
     private fun observeLatencyToggle() {
-        // Observe-then-bind: collecting before wiring the listener stops the first frame from
-        // re-writing the persisted preference. Mirrors SettingsActivity's crash-reporting guard.
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 latencyProfilingStore.state.collect { enabled ->
@@ -213,6 +216,9 @@ class DiagnosticsActivity : AppCompatActivity() {
 
     private fun wireLatencySwitch() {
         binding.switchLatencyProfiling.setOnCheckedChangeListener { switch, isChecked ->
+            // Programmatic syncs (collector echo, dialog-cancel revert) land here too; only a
+            // change relative to the store is a user action worth confirming or persisting.
+            if (isChecked == latencyProfilingStore.state.value) return@setOnCheckedChangeListener
             if (isChecked) {
                 confirmEnableLatency(switch as MaterialSwitch)
             } else {
@@ -242,8 +248,7 @@ class DiagnosticsActivity : AppCompatActivity() {
     }
 
     // Revert the switch WITHOUT arming the native bench. The listener re-fires on this
-    // programmatic flip, but isChecked=false routes to disableLatency(), which only writes
-    // the already-false preference and a redundant setHotPathBench(false): never arms.
+    // programmatic flip, but the no-op guard sees isChecked == store (both false) and ignores it.
     private fun revertSwitch(switch: MaterialSwitch) {
         if (switch.isChecked) switch.isChecked = false
     }

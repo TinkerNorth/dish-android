@@ -441,7 +441,7 @@
     <string name="diagnostics_active_controllers">Aktivni kontroleri</string>
     <string name="diagnostics_server_epoch">Epoha hosta</string>
     <string name="diagnostics_latency_title">Profiliranje kašnjenja</string>
-    <string name="diagnostics_latency_body">Izmjerite koliko vašem unosu treba da stigne do hosta.</string>
+    <string name="diagnostics_latency_body">Izmjerite koliko vašem unosu treba da stigne do hosta. Očitajte vrijednost dok igrate: neaktivna Wi-Fi veza drijema između paketa i prikazuje veće vrijednosti.</string>
     <string name="diagnostics_latency_off_hint">Profiliranje kašnjenja je isključeno. Uključite ga za mjerenje (dodaje malo posla putu unosa).</string>
     <string name="diagnostics_latency_waiting">Mjerenje…</string>
     <string name="diagnostics_phone_path">Put unosa telefona</string>

@@ -376,7 +376,7 @@
     <string name="diagnostics_active_controllers">Active controllers</string>
     <string name="diagnostics_server_epoch">Host epoch</string>
     <string name="diagnostics_latency_title">Latency profiling</string>
-    <string name="diagnostics_latency_body">Measure how long your input takes to reach the host.</string>
+    <string name="diagnostics_latency_body">Measure how long your input takes to reach the host. Read it while playing: an idle Wi-Fi link dozes between packets and reads high.</string>
     <string name="diagnostics_latency_off_hint">Latency profiling is off. Turn it on to measure (adds a little work to the input path).</string>
     <string name="diagnostics_latency_waiting">Measuring…</string>
     <string name="diagnostics_phone_path">Phone input path</string>

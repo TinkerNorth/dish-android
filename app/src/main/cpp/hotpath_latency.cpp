@@ -37,6 +37,10 @@ struct Ring {
         std::lock_guard<std::mutex> lk(mtx);
         if (us.size() < kCap) us.push_back(v);
     }
+    void clear() {
+        std::lock_guard<std::mutex> lk(mtx);
+        us.clear();
+    }
 };
 
 Ring g_stage1; // URB reap -> gamepad sent
@@ -73,7 +77,16 @@ void appendPctl(std::string& out, const char* name, Ring& r, bool reset) {
 
 } // namespace
 
-void setEnabled(bool on) { g_enabled.store(on, std::memory_order_relaxed); }
+void setEnabled(bool on) {
+    const bool was = g_enabled.exchange(on, std::memory_order_relaxed);
+    if (!on || was) return;
+    // Fresh window per arm: the flag persists across launches, so without this the
+    // percentiles would blend every idle stretch since process start (a dozing Wi-Fi
+    // radio between heartbeats reads tens of ms) into the reading the user asked for.
+    g_stage1.clear();
+    g_rtt.clear();
+    g_lastPingNs.store(0, std::memory_order_relaxed);
+}
 bool enabled() { return g_enabled.load(std::memory_order_relaxed); }
 
 void markInputRead() {

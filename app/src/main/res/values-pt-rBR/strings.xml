@@ -442,7 +442,7 @@
     <string name="diagnostics_active_controllers">Controles ativos</string>
     <string name="diagnostics_server_epoch">Época do host</string>
     <string name="diagnostics_latency_title">Perfilamento de latência</string>
-    <string name="diagnostics_latency_body">Meça quanto tempo sua entrada leva para chegar ao host.</string>
+    <string name="diagnostics_latency_body">Meça quanto tempo sua entrada leva para chegar ao host. Confira o valor jogando: um link Wi-Fi ocioso cochila entre pacotes e mostra valores altos.</string>
     <string name="diagnostics_latency_off_hint">O perfilamento de latência está desativado. Ative-o para medir (adiciona um pouco de trabalho ao caminho de entrada).</string>
     <string name="diagnostics_latency_waiting">Medindo…</string>
     <string name="diagnostics_phone_path">Caminho de entrada do telefone</string>

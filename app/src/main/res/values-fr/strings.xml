@@ -441,7 +441,7 @@
     <string name="diagnostics_active_controllers">Manettes actives</string>
     <string name="diagnostics_server_epoch">Époque de l\'hôte</string>
     <string name="diagnostics_latency_title">Profilage de latence</string>
-    <string name="diagnostics_latency_body">Mesurez le temps que met votre entrée pour atteindre l\'hôte.</string>
+    <string name="diagnostics_latency_body">Mesurez le temps que met votre entrée pour atteindre l\'hôte. Lisez la valeur en jouant : une liaison Wi-Fi inactive somnole entre les paquets et affiche des valeurs élevées.</string>
     <string name="diagnostics_latency_off_hint">Le profilage de latence est désactivé. Activez-le pour mesurer (ajoute un peu de travail à la chaîne d\'entrée).</string>
     <string name="diagnostics_latency_waiting">Mesure en cours…</string>
     <string name="diagnostics_phone_path">Chaîne d\'entrée du téléphone</string>
