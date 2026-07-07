@@ -139,6 +139,27 @@ class CapabilityComposer
             }
 
         /**
+         * The descriptor's touchpadMode for [slotId], pulled at descriptor-build time like
+         * [motionWireBit]. Reads the source stores directly instead of the composed [state]:
+         * the pick is keyed by the bound connection, and during a bind the store writes land
+         * synchronously before declareSlot while the composed map recomputes asynchronously,
+         * so going through [state] would declare a stale "off" and need a second PUT to heal.
+         */
+        fun touchpadWireMode(slotId: String): String {
+            val connId = hub.bindings.value[slotId] ?: return TouchpadModeValue.OFF
+            return TouchpadRouting.wireMode(
+                pick = touchpadMode.state.value[connId],
+                controller = liveControllerLayer(slotId),
+                type =
+                    typeCapabilitiesFor(
+                        hub.satTypes.value[connId to slotId] ?: CONTROLLER_TYPE_XBOX,
+                        connId,
+                    ),
+                host = (hostFeatures.featuresFor(connId) ?: HostFeatureSet.SATELLITE_DEFAULT).toCapabilitySet(),
+            )
+        }
+
+        /**
          * Inherent availability for [slotId] against a hypothetical host, ignoring the current binding.
          * The report table reads available/inputOk/destinationOk/typeOk, so userEnabled is forced full:
          * the table shows what the path could carry, not what the user has toggled on.
@@ -204,14 +225,33 @@ class CapabilityComposer
         }
 
         private fun deviceControllerLayer(device: PhysicalGamepadRegistry.Device): CapabilitySet {
-            // The pad supplies the gamepad axes; the phone screen still sources touchpad
-            // and mouse alongside it. Rumble needs the pad's OWN motor: routing never
-            // falls back to the phone for a physical controller, so a motorless pad has
-            // no rumble.
-            val out = mutableSetOf(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.TOUCHPAD, Feature.MOUSE)
+            // The pad supplies the gamepad axes. Touch comes from the pad's OWN trackpad where
+            // the path can read it (USB Direct); the phone screen substitutes only for a pad
+            // that has no trackpad at all. Rumble needs the pad's OWN motor: routing never
+            // falls back to the phone for a physical controller, so a motorless pad has no
+            // rumble.
+            val out = mutableSetOf(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS)
+            if (deviceTouchpadSource(device) != TouchpadSource.NONE) {
+                out += Feature.TOUCHPAD
+                out += Feature.MOUSE
+            }
             if (device.hasGyro || native.modelHasImu(device.vendorId, device.productId)) out += Feature.MOTION
             if (device.hasRumble || native.modelHasRumble(device.vendorId, device.productId)) out += Feature.RUMBLE
             return CapabilitySet(out)
+        }
+
+        private fun deviceTouchpadSource(device: PhysicalGamepadRegistry.Device): TouchpadSource =
+            TouchpadRouting.sourceFor(
+                isVirtual = false,
+                padHasTouchpad = native.modelHasTouchpad(device.vendorId, device.productId),
+                padCaptured = device.isUsbSynthetic,
+            )
+
+        /** Who produces touch for [slotId] right now: the pad, the phone screen, or nobody. */
+        fun touchpadSource(slotId: String): TouchpadSource {
+            if (slotId == VIRTUAL_SLOT_ID) return TouchpadSource.PHONE
+            val device = slotId.toIntOrNull()?.let { registry.devices.value[it] } ?: return TouchpadSource.NONE
+            return deviceTouchpadSource(device)
         }
 
         // The candidate path reuses the same controller layer the live map already derived for the slot.

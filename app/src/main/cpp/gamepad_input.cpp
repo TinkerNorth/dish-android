@@ -165,4 +165,31 @@ void resetPublishLatch(DeviceState& s) {
     s.lastSRY = 0;
 }
 
+bool operator==(const TouchpadState& a, const TouchpadState& b) {
+    return a.f0Active == b.f0Active && a.f1Active == b.f1Active && a.clickDown == b.clickDown &&
+           a.f0Id == b.f0Id && a.f1Id == b.f1Id && a.f0X == b.f0X && a.f0Y == b.f0Y &&
+           a.f1X == b.f1X && a.f1Y == b.f1Y;
+}
+
+TouchpadSend TouchpadGate::decide(const TouchpadState& cur, int64_t nowNs) {
+    if (cur != last_) {
+        const bool edge = cur.f0Active != last_.f0Active || cur.f1Active != last_.f1Active ||
+                          cur.clickDown != last_.clickDown || cur.f0Id != last_.f0Id ||
+                          cur.f1Id != last_.f1Id;
+        // A skipped move is not lost data: the next report carries fresher coordinates.
+        if (!edge && nowNs - lastSentNs_ < kTouchpadMoveIntervalNs) return TouchpadSend::SKIP;
+        last_ = cur;
+        lastSentNs_ = nowNs;
+        lastEventMs_ = nowNs / 1000000;
+        resendsLeft_ = kTouchpadHealResends;
+        return TouchpadSend::FRESH;
+    }
+    if (resendsLeft_ > 0 && nowNs - lastSentNs_ >= kTouchpadMoveIntervalNs) {
+        resendsLeft_--;
+        lastSentNs_ = nowNs;
+        return TouchpadSend::HEAL;
+    }
+    return TouchpadSend::SKIP;
+}
+
 } // namespace gamepad

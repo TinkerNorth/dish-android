@@ -289,6 +289,11 @@ each layer reads its own source of truth:
   pad is the phone, so it always sources touchpad/mouse and drives the phone
   vibrator for rumble; a physical pad rumbles only with its own motor (routing
   never falls back to the phone for a physical controller, see "Rumble path").
+  Touch is pad-first: a trackpad-bearing pad (DS4/DualSense families) sources
+  its own touch, which the app can only read on the USB-direct path (the
+  framework paths surface it as a system mouse); the phone screen substitutes
+  only for a pad with no trackpad at all, never alongside one
+  (`composer/TouchpadRouting.sourceFor`, one producer per slot).
 - **transport** (`composer/TransportProfiles.kt`, static): a Bluetooth host
   carries only the gamepad axes; a Satellite carries everything.
 - **type** (the emulated controller): the satellite's own per-type features from
@@ -312,6 +317,13 @@ The wire caps the satellite is told (`ControllerDescriptor` via
 `CapabilityResolver.wireCaps` / `CapabilityComposer.motionWireBit`) are a
 separate projection of the same model: a type-driven base plus motion gated on
 the input gyro and the user toggle, NOT on link-liveness or the host sink.
+The descriptor's `touchpadMode` is the same kind of projection
+(`CapabilityComposer.touchpadWireMode` via the pure
+`TouchpadRouting.wireMode`): the persisted per-satellite pick gated by the
+slot's touch source, the type's advertised modes, and the host's mouse grant.
+It is PULLED when the descriptor is built (like the motion bit) and converged
+for every bound slot through `refreshCapsIfChanged`, so quick-binds, migrations,
+and sibling slots can never declare a routing the dashboard doesn't show.
 
 ## Multi-session model
 
@@ -448,7 +460,7 @@ navigation site is a compile-time check rather than a runtime
 
 ```kotlin
 nav.toGamepad(connectionId = cid, usePsLayout = true)
-nav.toTouchpad(connectionId = cid, touchpadMode = mode, slotId = slotId)
+nav.toTouchpad(connectionId = cid, slotId = slotId)
 ```
 
 The input overlays (`GamepadOverlayActivity`, `TouchpadOverlayActivity`)

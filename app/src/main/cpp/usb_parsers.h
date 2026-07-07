@@ -87,6 +87,8 @@ bool parserHasImu(Parser p);
 
 bool parserHasRumble(Parser p);
 
+bool parserHasTouchpad(Parser p);
+
 // Pure: writes the index-th GIP init packet for an Xbox One InitKind into out (with the sequence
 // number at byte 2), returns its length or 0 when there are no more. runInit sends them in order.
 size_t buildGipInitPacket(InitKind init, int index, uint8_t seq, uint8_t* out, size_t outCap);

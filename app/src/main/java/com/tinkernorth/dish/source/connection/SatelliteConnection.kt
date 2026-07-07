@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
  * per-controller PUT/DELETE while live). UDP carries streams only. It can
  * never mutate topology (satellite docs/contract.md).
  */
+@Suppress("LongParameterList")
 class SatelliteConnection(
     val id: String,
     server: DiscoveredServer,
@@ -34,6 +35,9 @@ class SatelliteConnection(
     private val controllerRepo: ControllerRepository,
     private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO,
     private val motionCapsBitsFor: (slotId: String) -> Int = { CAP_MOTION_BIT_LEGACY },
+    // Pulled at descriptor-build time like motionCapsBitsFor, so the mode a slot declares can
+    // never drift from the store-derived routing the rest of the app displays.
+    private val touchpadModeFor: (slotId: String) -> String = { ControllerDescriptor.TOUCHPAD_MODE_OFF },
     private val motionBackendStatusStore: SatelliteMotionBackendStatusStore? = null,
     // Manager-provided REST sync hooks. Slot-level changes ride the
     // per-controller routes so the session (and its UDP keys) never churns.
@@ -74,11 +78,11 @@ class SatelliteConnection(
     data class SlotBinding(
         val controllerIndex: Int,
         val controllerType: Int,
-        val touchpadMode: String = ControllerDescriptor.TOUCHPAD_MODE_OFF,
         // True once the satellite confirmed this descriptor applied (the slot's
         // virtual pad exists). Streams are gated on it.
         val registered: Boolean,
         val lastAdvertisedCaps: Int? = null,
+        val lastAdvertisedTouchpadMode: String? = null,
     )
 
     private val _slots = MutableStateFlow<Map<String, SlotBinding>>(emptyMap())
@@ -219,21 +223,21 @@ class SatelliteConnection(
 
     /**
      * Declare a slot with its FINAL descriptor: the type travels with the
-     * attach, so there is never a default-then-correct phase anywhere in the
-     * pipeline. While live, the manager converges it via a controller PUT;
-     * while idle, it rides the next session PUT.
+     * attach and the touchpad mode is pulled from [touchpadModeFor] when the
+     * descriptor is built, so there is never a default-then-correct phase
+     * anywhere in the pipeline. While live, the manager converges it via a
+     * controller PUT; while idle, it rides the next session PUT.
      */
     fun attachSlot(
         slotId: String,
         controllerType: Int,
-        touchpadMode: String = ControllerDescriptor.TOUCHPAD_MODE_OFF,
     ) {
         var added = false
         _slots.update { map ->
             if (map.containsKey(slotId)) return@update map
             added = true
             val index = lowestFreeIndex(map.values.map { it.controllerIndex })
-            map + (slotId to SlotBinding(index, controllerType, touchpadMode, registered = false))
+            map + (slotId to SlotBinding(index, controllerType, registered = false))
         }
         if (added && _state.value == SatelliteSessionState.Live) onSlotChanged(slotId)
     }
@@ -242,24 +246,18 @@ class SatelliteConnection(
     fun declareSlot(
         slotId: String,
         controllerType: Int,
-        touchpadMode: String,
     ) {
         if (!_slots.value.containsKey(slotId)) {
-            attachSlot(slotId, controllerType, touchpadMode)
+            attachSlot(slotId, controllerType)
             return
         }
-        mutateSlot(slotId) { it.copy(controllerType = controllerType, touchpadMode = touchpadMode) }
+        mutateSlot(slotId) { it.copy(controllerType = controllerType) }
     }
 
     fun setControllerType(
         slotId: String,
         controllerType: Int,
     ) = mutateSlot(slotId) { it.copy(controllerType = controllerType) }
-
-    fun setTouchpadMode(
-        slotId: String,
-        touchpadMode: String,
-    ) = mutateSlot(slotId) { it.copy(touchpadMode = touchpadMode) }
 
     private fun mutateSlot(
         slotId: String,
@@ -276,14 +274,20 @@ class SatelliteConnection(
         if (changed && _state.value == SatelliteSessionState.Live) onSlotChanged(slotId)
     }
 
-    // Caps changed (e.g. motion toggled): the descriptor is re-sent whole via
-    // the per-controller route; nothing special-cased on the wire.
+    // Caps or touchpad routing changed (motion toggled, mode picked, type gate flipped): the
+    // descriptor is re-sent whole via the per-controller route; nothing special-cased on the
+    // wire. This is the convergence point for EVERY bound slot, so a per-satellite mode pick
+    // reaches sibling slots too, not just the one a screen happened to re-declare.
     internal fun refreshCapsIfChanged() {
         if (_state.value != SatelliteSessionState.Live) return
         for ((slotId, binding) in _slots.value) {
             if (!binding.registered) continue
             val newCaps = BASE_CAPABILITIES or motionCapsBitsFor(slotId)
-            if (binding.lastAdvertisedCaps == newCaps) continue
+            if (binding.lastAdvertisedCaps == newCaps &&
+                binding.lastAdvertisedTouchpadMode == touchpadModeFor(slotId)
+            ) {
+                continue
+            }
             onSlotChanged(slotId)
         }
     }
@@ -331,7 +335,7 @@ class SatelliteConnection(
             ctrlIdx = binding.controllerIndex,
             type = binding.controllerType,
             caps = BASE_CAPABILITIES or motionCapsBitsFor(slotId),
-            touchpadMode = binding.touchpadMode,
+            touchpadMode = touchpadModeFor(slotId),
         )
     }
 
@@ -342,7 +346,7 @@ class SatelliteConnection(
             .firstOrNull { it.value.controllerIndex == ctrlIdx }
             ?.key
 
-    internal fun wantsMouseControl(): Boolean = _slots.value.values.any { it.touchpadMode == ControllerDescriptor.TOUCHPAD_MODE_MOUSE }
+    internal fun wantsMouseControl(): Boolean = _slots.value.keys.any { touchpadModeFor(it) == ControllerDescriptor.TOUCHPAD_MODE_MOUSE }
 
     /**
      * Failures surface through [onApplyFailures], never swallowed: input
@@ -372,6 +376,7 @@ class SatelliteConnection(
                     binding.copy(
                         registered = true,
                         lastAdvertisedCaps = BASE_CAPABILITIES or motionCapsBitsFor(slotId),
+                        lastAdvertisedTouchpadMode = touchpadModeFor(slotId),
                     )
                 } else {
                     motionBackendStatusStore?.clear(id, slotId)

@@ -441,6 +441,11 @@ bool parserHasRumble(Parser p) {
     return false;
 }
 
+// Parser-level like parserHasImu: every device speaking the DS4/DualSense report format carries
+// the touch bytes, even the licensed sticks whose "pad" is only a click button. Those simply
+// never report a contact, so nothing streams.
+bool parserHasTouchpad(Parser p) { return p == Parser::DUALSHOCK4 || p == Parser::DUALSENSE; }
+
 namespace {
 
 #ifdef __ANDROID__
@@ -498,6 +503,40 @@ int16_t scaleSwitchStickAuto(uint16_t raw12, AxisAutoRange& axis) {
 
 int16_t rdLe16(const uint8_t* b, int off) {
     return (int16_t)((uint16_t)b[off] | ((uint16_t)b[off + 1] << 8));
+}
+
+// Inclusive logical maxima of the touch surfaces (hid-sony / hid-playstation): the DS4 pad is
+// 1920x942, the DualSense's is 1920x1080.
+constexpr uint16_t kDs4TouchMaxX = 1919;
+constexpr uint16_t kDs4TouchMaxY = 941;
+constexpr uint16_t kDualSenseTouchMaxX = 1919;
+constexpr uint16_t kDualSenseTouchMaxY = 1079;
+
+// Touchpad surfaces differ per model but the wire is resolution-agnostic: full-range int16,
+// same normalization the on-screen overlay applies to its view space.
+int16_t touchAxisToWire(uint16_t raw, uint16_t maxRaw) {
+    if (raw > maxRaw) raw = maxRaw;
+    int32_t scaled = ((int32_t)raw * 65535) / maxRaw - 32768;
+    if (scaled > 32767) scaled = 32767;
+    if (scaled < -32768) scaled = -32768;
+    return (int16_t)scaled;
+}
+
+// One DS4/DualSense touch point: [0] bit7 = inactive, bits 0-6 = contact id; 12-bit x/y packed
+// into [1..3]. Coordinates zero on lift to match the overlay's lift frames.
+void decodePsTouchPoint(const uint8_t* p, uint16_t maxX, uint16_t maxY, bool& active, uint8_t& id,
+                        int16_t& x, int16_t& y) {
+    active = (p[0] & 0x80) == 0;
+    id = (uint8_t)(p[0] & 0x7F);
+    if (!active) {
+        x = 0;
+        y = 0;
+        return;
+    }
+    uint16_t rawX = (uint16_t)p[1] | (((uint16_t)p[2] & 0x0F) << 8);
+    uint16_t rawY = ((uint16_t)p[2] >> 4) | ((uint16_t)p[3] << 4);
+    x = touchAxisToWire(rawX, maxX);
+    y = touchAxisToWire(rawY, maxY);
 }
 
 // Switch Pro IMU default scaling (no factory calibration yet). SDL uses gyro = raw / 14.2842 deg/s
@@ -695,6 +734,22 @@ bool decodeDualShock4(const uint8_t* buf, size_t len, DeviceState& s, const PsIm
         s.accelZ = ds4AccelAxisToWire(rdLe16(buf, 23), *calib, 2);
         s.motionValid = true;
     }
+
+    // Touch: [33] = bundled 9-byte frame count (timestamp + two points); only the newest frame
+    // matters since the wire stream supersedes per send. Zero frames means "no touch update",
+    // not "all lifted", so touchValid stays false and the last sent state persists.
+    if (len >= 43 && buf[33] > 0) {
+        uint8_t frames = buf[33] > 3 ? 3 : buf[33];
+        size_t base = 34 + 9u * (size_t)(frames - 1);
+        if (len >= base + 9) {
+            decodePsTouchPoint(buf + base + 1, kDs4TouchMaxX, kDs4TouchMaxY, s.touch0Active,
+                               s.touch0Id, s.touch0X, s.touch0Y);
+            decodePsTouchPoint(buf + base + 5, kDs4TouchMaxX, kDs4TouchMaxY, s.touch1Active,
+                               s.touch1Id, s.touch1X, s.touch1Y);
+            s.touchClick = (buf[7] & 0x02) != 0;
+            s.touchValid = true;
+        }
+    }
     return true;
 }
 
@@ -735,6 +790,17 @@ bool decodeDualSense(const uint8_t* buf, size_t len, DeviceState& s, const PsImu
         s.accelY = ds4AccelAxisToWire(rdLe16(buf, 24), *calib, 1);
         s.accelZ = ds4AccelAxisToWire(rdLe16(buf, 26), *calib, 2);
         s.motionValid = true;
+    }
+
+    // Touch: two 4-byte points at 33/37 in every report (no DS4-style frame bundling); the
+    // click rides button byte 10 bit 1. Taller surface than the DS4, hence its own Y max.
+    if (len >= 41) {
+        decodePsTouchPoint(buf + 33, kDualSenseTouchMaxX, kDualSenseTouchMaxY, s.touch0Active,
+                           s.touch0Id, s.touch0X, s.touch0Y);
+        decodePsTouchPoint(buf + 37, kDualSenseTouchMaxX, kDualSenseTouchMaxY, s.touch1Active,
+                           s.touch1Id, s.touch1X, s.touch1Y);
+        s.touchClick = (buf[10] & 0x02) != 0;
+        s.touchValid = true;
     }
     return true;
 }

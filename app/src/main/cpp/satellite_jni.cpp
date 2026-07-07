@@ -319,6 +319,24 @@ void applyUsbMotion(int32_t deviceId, int16_t gyroX, int16_t gyroY, int16_t gyro
     sendEncrypted(session.get(), MSG_MOTION, payload, sizeof(payload));
 }
 
+// Satellite-only like motion: the Bluetooth HID descriptor is a plain gamepad, so touch has
+// nowhere to go on that transport. Routing (ds4 pad vs mouse vs off) is the receiver's job,
+// declared per slot in the descriptor.
+void applyUsbTouchpad(int32_t deviceId, const gamepad::TouchpadState& t, uint32_t eventTimeMs) {
+    std::lock_guard<std::mutex> lock(g_slotsMtx);
+    auto it = g_slots.find(deviceId);
+    if (it == g_slots.end()) return;
+    const SlotBinding& binding = it->second;
+    if (binding.kind != SLOT_SATELLITE) return;
+    auto session = getSession(binding.sessionHandle);
+    if (!session) return;
+    uint8_t payload[16];
+    dish_wire::encodeTouchpadPayload(payload, (uint8_t)(binding.controllerIndex & 0xFF), t.f0Active,
+                                     t.f1Active, t.clickDown, t.f0Id, t.f0X, t.f0Y, t.f1Id, t.f1X,
+                                     t.f1Y, eventTimeMs);
+    sendEncrypted(session.get(), MSG_TOUCHPAD, payload, sizeof(payload));
+}
+
 } // namespace dispatch
 
 // Returning true consumes the event so it can't trigger incidental View focus navigation.
@@ -1053,6 +1071,14 @@ JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_mo
         usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
     if (!k) return JNI_FALSE;
     return usbparsers::parserHasRumble(k->parser) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_modelHasTouchpad(
+    JNIEnv*, jobject, jint vid, jint pid) {
+    const usbparsers::KnownDevice* k =
+        usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
+    if (!k) return JNI_FALSE;
+    return usbparsers::parserHasTouchpad(k->parser) ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDeviceUrbCount(

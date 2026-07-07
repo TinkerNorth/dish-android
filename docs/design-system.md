@@ -363,7 +363,7 @@ private val nav by lazy { DishNavigator(this) }
 nav.toConnections()
 nav.toConnectionsForPairing(connectionId)
 nav.toGamepad(connectionId = cid, usePsLayout = true)
-nav.toTouchpad(connectionId = cid, touchpadMode = mode, slotId = slotId)
+nav.toTouchpad(connectionId = cid, slotId = slotId)
 ```
 
 | Destination | Activity | Args |
@@ -381,7 +381,7 @@ nav.toTouchpad(connectionId = cid, touchpadMode = mode, slotId = slotId)
 | `helpActivity` | `HelpActivity` | none |
 | `donateActivity` | `DonateActivity` | none |
 | `gamepadOverlayActivity` | `GamepadOverlayActivity` | `extra_connection_id`, `extra_use_ps_layout` |
-| `touchpadOverlayActivity` | `TouchpadOverlayActivity` | `extra_connection_id`, `extra_touchpad_mode`, `extra_slot_id` |
+| `touchpadOverlayActivity` | `TouchpadOverlayActivity` | `extra_connection_id`, `extra_slot_id` |
 | `nativeUnavailableActivity` | `NativeUnavailableActivity` | none |
 
 **Deep links**: NOT declared in the graph. The navigation runtime's lint

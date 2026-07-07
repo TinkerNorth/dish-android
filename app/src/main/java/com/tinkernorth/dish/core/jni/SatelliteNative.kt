@@ -179,6 +179,13 @@ object SatelliteNative {
         productId: Int,
     ): Boolean
 
+    // Parser-level: true for the DS4/DualSense report families whose touch bytes the
+    // USB-direct path parses and streams.
+    external fun modelHasTouchpad(
+        vendorId: Int,
+        productId: Int,
+    ): Boolean
+
     external fun lookupKnownModelName(
         vendorId: Int,
         productId: Int,

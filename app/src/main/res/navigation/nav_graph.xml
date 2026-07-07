@@ -143,9 +143,6 @@
             android:name="extra_connection_id"
             app:argType="string" />
         <argument
-            android:name="extra_touchpad_mode"
-            app:argType="string" />
-        <argument
             android:name="extra_slot_id"
             app:argType="string" />
     </activity>

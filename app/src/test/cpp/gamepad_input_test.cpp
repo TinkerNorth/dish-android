@@ -525,3 +525,104 @@ TEST(BindBaselineSync, StaleHeldStateDoesNotSurviveRebind) {
     EXPECT_EQ(0, s.wButtons);
     EXPECT_FALSE(consumePublishIfChanged(s));
 }
+
+// ── TouchpadGate: send-on-change with edge-immediate, move throttle, heal resends ──
+
+namespace {
+
+TouchpadState touchAt(int16_t x, int16_t y, bool click = false, uint8_t id = 1) {
+    TouchpadState t;
+    t.f0Active = true;
+    t.f0Id = id;
+    t.f0X = x;
+    t.f0Y = y;
+    t.clickDown = click;
+    return t;
+}
+
+} // namespace
+
+TEST(TouchpadGate, IdleProducesNoTraffic) {
+    TouchpadGate gate;
+    EXPECT_EQ(TouchpadSend::SKIP, gate.decide(TouchpadState{}, 1000));
+    EXPECT_EQ(TouchpadSend::SKIP, gate.decide(TouchpadState{}, 1000 + kTouchpadMoveIntervalNs));
+}
+
+TEST(TouchpadGate, FirstContactIsAnImmediateEdge) {
+    TouchpadGate gate;
+    EXPECT_EQ(TouchpadSend::FRESH, gate.decide(touchAt(10, 10), 5000000));
+    EXPECT_EQ(5, gate.lastEventTimeMs());
+    EXPECT_EQ(10, gate.lastSent().f0X);
+}
+
+TEST(TouchpadGate, MovesCoalesceToTheIntervalAndSupersede) {
+    TouchpadGate gate;
+    int64_t t0 = 0;
+    EXPECT_EQ(TouchpadSend::FRESH, gate.decide(touchAt(0, 0), t0));
+    // Inside the interval: coalesced, last sent unchanged.
+    EXPECT_EQ(TouchpadSend::SKIP, gate.decide(touchAt(5, 5), t0 + 1000000));
+    EXPECT_EQ(0, gate.lastSent().f0X);
+    // Past the interval: the NEWEST coordinates go out, not the skipped ones.
+    EXPECT_EQ(TouchpadSend::FRESH, gate.decide(touchAt(9, 9), t0 + kTouchpadMoveIntervalNs));
+    EXPECT_EQ(9, gate.lastSent().f0X);
+}
+
+TEST(TouchpadGate, ClickAndLiftBypassTheMoveThrottle) {
+    TouchpadGate gate;
+    EXPECT_EQ(TouchpadSend::FRESH, gate.decide(touchAt(0, 0), 0));
+    EXPECT_EQ(TouchpadSend::FRESH, gate.decide(touchAt(0, 0, /*click=*/true), 1000));
+    EXPECT_EQ(TouchpadSend::FRESH, gate.decide(TouchpadState{}, 2000));
+}
+
+TEST(TouchpadGate, NewTrackingIdIsAnEdge) {
+    TouchpadGate gate;
+    EXPECT_EQ(TouchpadSend::FRESH, gate.decide(touchAt(0, 0, false, /*id=*/1), 0));
+    EXPECT_EQ(TouchpadSend::FRESH, gate.decide(touchAt(0, 0, false, /*id=*/2), 1000));
+}
+
+TEST(TouchpadGate, HealsTheFinalStateWithDuplicates) {
+    TouchpadGate gate;
+    int64_t t = 0;
+    EXPECT_EQ(TouchpadSend::FRESH, gate.decide(touchAt(3, 4), t));
+    const int64_t eventMs = gate.lastEventTimeMs();
+    // Unchanged reports re-send the same state kTouchpadHealResends times, spaced by the
+    // interval, with the SAME event time so the receiver can drop them as duplicates.
+    for (int i = 1; i <= kTouchpadHealResends; i++) {
+        t += kTouchpadMoveIntervalNs;
+        EXPECT_EQ(TouchpadSend::SKIP, gate.decide(touchAt(3, 4), t - 1));
+        EXPECT_EQ(TouchpadSend::HEAL, gate.decide(touchAt(3, 4), t));
+        EXPECT_EQ(eventMs, gate.lastEventTimeMs());
+    }
+    t += kTouchpadMoveIntervalNs;
+    EXPECT_EQ(TouchpadSend::SKIP, gate.decide(touchAt(3, 4), t));
+}
+
+TEST(TouchpadGate, AChangeReArmsTheHealBudget) {
+    TouchpadGate gate;
+    int64_t t = 0;
+    EXPECT_EQ(TouchpadSend::FRESH, gate.decide(touchAt(3, 4), t));
+    t += kTouchpadMoveIntervalNs;
+    EXPECT_EQ(TouchpadSend::HEAL, gate.decide(touchAt(3, 4), t));
+    t += kTouchpadMoveIntervalNs;
+    EXPECT_EQ(TouchpadSend::FRESH, gate.decide(TouchpadState{}, t)); // lift
+    t += kTouchpadMoveIntervalNs;
+    EXPECT_EQ(TouchpadSend::HEAL, gate.decide(TouchpadState{}, t));
+    t += kTouchpadMoveIntervalNs;
+    EXPECT_EQ(TouchpadSend::HEAL, gate.decide(TouchpadState{}, t));
+    t += kTouchpadMoveIntervalNs;
+    EXPECT_EQ(TouchpadSend::SKIP, gate.decide(TouchpadState{}, t));
+}
+
+TEST(TouchpadState, EqualityCoversEveryField) {
+    TouchpadState a = touchAt(1, 2, true, 3);
+    EXPECT_TRUE(a == a);
+    TouchpadState b = a;
+    b.f1Active = true;
+    EXPECT_TRUE(a != b);
+    b = a;
+    b.f0Y = 99;
+    EXPECT_TRUE(a != b);
+    b = a;
+    b.f1Id = 9;
+    EXPECT_TRUE(a != b);
+}

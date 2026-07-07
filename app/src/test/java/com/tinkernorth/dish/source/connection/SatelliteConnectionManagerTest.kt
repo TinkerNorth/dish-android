@@ -89,16 +89,19 @@ class SatelliteConnectionManagerTest {
         every { controllerRepo.isConnectionAlive(any()) } returns true
     }
 
-    private val capabilityProvider =
-        javax.inject.Provider<CapabilityComposer> {
-            mockk(relaxed = true) {
-                every { state } returns
-                    kotlinx.coroutines.flow.MutableStateFlow(
-                        emptyMap<String, com.tinkernorth.dish.core.model.SlotCapabilities>(),
-                    )
-                every { motionWireBit(any()) } returns 0
-            }
+    // One shared instance: the manager pulls wire projections through the provider on every
+    // descriptor build, so per-get() mocks would be unstubbable from a test body.
+    private val capabilityComposer: CapabilityComposer =
+        mockk(relaxed = true) {
+            every { state } returns
+                kotlinx.coroutines.flow.MutableStateFlow(
+                    emptyMap<String, com.tinkernorth.dish.core.model.SlotCapabilities>(),
+                )
+            every { motionWireBit(any()) } returns 0
+            every { touchpadWireMode(any()) } returns "off"
         }
+
+    private val capabilityProvider = javax.inject.Provider<CapabilityComposer> { capabilityComposer }
 
     private val motionBackendStatusStore = SatelliteMotionBackendStatusStore()
 
@@ -746,12 +749,16 @@ class SatelliteConnectionManagerTest {
             assertEquals(SatelliteSessionState.Live, conn.state.value)
 
             // A non-mouse slot change converges via the controller route alone.
-            conn.attachSlot("slot-1", controllerType = 1, touchpadMode = "ds4")
+            every { capabilityComposer.touchpadWireMode("slot-1") } returns "ds4"
+            conn.attachSlot("slot-1", controllerType = 1)
             scope.testScheduler.runCurrent()
             coVerify(exactly = 1) { discoveryRepo.putController(any(), any(), any(), any(), any(), any(), any()) }
             assertEquals(listOf(false), mouseRequests)
 
-            conn.setTouchpadMode("slot-1", "mouse")
+            // The pick moving to mouse converges the way production does: the wire projection
+            // changes and refreshCapsIfChanged re-syncs the slot.
+            every { capabilityComposer.touchpadWireMode("slot-1") } returns "mouse"
+            conn.refreshCapsIfChanged()
             scope.testScheduler.runCurrent()
 
             // wants ≠ granted after the controller PUT → reconcile GET → applied view
