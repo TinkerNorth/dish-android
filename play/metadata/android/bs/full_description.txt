@@ -1,4 +1,4 @@
-Dish pretvara bilo koji kontroler ili Android telefon u bežični gamepad niske latencije. Bilo da želite Wi-Fi vezu niske latencije sa motion-aim-om i touchpadom, ili jednostavnost uparivanja kao običnog Bluetooth kontrolera, Dish to može. Bez podešavanja po igri, bez mjesečnih pretplata, bez reklama.
+Dish pretvara bilo koji kontroler ili Android telefon u bežični gamepad niske latencije. Bilo da želite Wi-Fi vezu niske latencije sa motion-aim-om i touchpadom, ili jednostavnost uparivanja kao običnog Bluetooth kontrolera, Dish radi oboje. Bez podešavanja po igri, bez mjesečnih pretplata, bez reklama.
 
 
 DVA NAČINA POVEZIVANJA
@@ -15,7 +15,7 @@ Priključite USB gamepad u USB port telefona za nultu dodatnu latenciju, ili upa
 
 NAPRAVLJEN ZA IGRANJE
 
-• Optimizovan brzi put za najnižu latenciju
+• Podešen za najnižu moguću latenciju unosa
 • Enkriptovan Wi-Fi stream
 • Više satelita istovremeno: uparite više PC-ja i preusmjerite između njih po slotu
 • Motion i touchpad predstavljeni igrama kao standardan PlayStation pad
@@ -29,4 +29,4 @@ Besplatni Satellite pomoćnik dostupan je za Windows, macOS i Linux na https://d
 
 ZA ENTUZIJASTE
 
-Izvorni kod, sigurnosna politika i dokumentacija žičanog formata javni su na GitHub-u na github.com/TinkerNorth/dish-android. Telefonski klijent, Satellite server i platformske varijante.
+Izvorni kod, sigurnosna politika i dokumentacija protokola javni su na GitHub-u na github.com/TinkerNorth/dish-android. Telefonski klijent, Satellite server i ostali platformski klijenti su svi otvorenog koda.

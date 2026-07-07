@@ -1,4 +1,4 @@
-O Dish transforma qualquer controle ou celular Android em um gamepad sem fio de baixa latência. Seja para uma conexão Wi-Fi de baixa latência com motion-aim e touchpad, ou a simplicidade de parear como um controle Bluetooth comum, o Dish tem você coberto. Sem configuração por jogo, sem assinaturas mensais, sem anúncios.
+O Dish transforma qualquer controle ou celular Android em um gamepad sem fio de baixa latência. Seja para uma conexão Wi-Fi de baixa latência com motion-aim e touchpad, ou a simplicidade de parear como um controle Bluetooth comum, o Dish faz as duas coisas. Sem configuração por jogo, sem assinaturas mensais, sem anúncios.
 
 DUAS MANEIRAS DE CONECTAR
 
@@ -12,7 +12,7 @@ Conecte um gamepad USB na porta USB do seu celular para zero latência adicionad
 
 PROJETADO PARA JOGAR
 
-• Caminho otimizado para latência mínima
+• Ajustado para a menor latência de entrada possível
 • Stream Wi-Fi criptografado
 • Múltiplos satélites lado a lado: pareie mais de um PC e direcione entre eles por slot
 • Motion e touchpad apresentados aos jogos como um pad padrão estilo PlayStation
@@ -24,4 +24,4 @@ O auxiliar gratuito Satellite está disponível para Windows, macOS e Linux em h
 
 PARA QUEM GOSTA DE EXPLORAR
 
-O código fonte, política de segurança e documentação do formato de fio são públicos no GitHub em github.com/TinkerNorth/dish-android. Cliente para celular, servidor Satellite e variantes de plataforma.
+O código fonte, a política de segurança e a documentação do protocolo são públicos no GitHub em github.com/TinkerNorth/dish-android. O cliente para celular, o servidor Satellite e os outros clientes de plataforma são todos de código aberto.
