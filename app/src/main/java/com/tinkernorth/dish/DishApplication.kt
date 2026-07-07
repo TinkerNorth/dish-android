@@ -6,9 +6,11 @@ import android.app.Application
 import android.content.pm.ApplicationInfo
 import android.os.StrictMode
 import androidx.lifecycle.ProcessLifecycleOwner
+import com.tinkernorth.dish.bench.HotPathBenchController
 import com.tinkernorth.dish.composer.CrashReportingController
 import com.tinkernorth.dish.composer.StreamingServiceController
 import com.tinkernorth.dish.composer.WakeStateController
+import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.hotpath.input.BluetoothGamepadBridge
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.PhysicalSlotBindingObserver
@@ -19,6 +21,7 @@ import com.tinkernorth.dish.source.inputrate.InputRateStore
 import com.tinkernorth.dish.source.sensor.PhysicalBatterySource
 import com.tinkernorth.dish.source.sensor.PhysicalMotionSource
 import com.tinkernorth.dish.source.sensor.VirtualBatterySource
+import com.tinkernorth.dish.source.store.LatencyProfilingStore
 import com.tinkernorth.dish.source.store.ThemePreferenceStore
 import com.tinkernorth.dish.source.system.BluetoothAdapterStateObserver
 import com.tinkernorth.dish.source.system.BluetoothBondMonitor
@@ -71,6 +74,10 @@ class DishApplication : Application() {
 
     @Inject lateinit var rumbleRouter: RumbleRouter
 
+    @Inject lateinit var physicalInputNative: PhysicalInputNative
+
+    @Inject lateinit var latencyProfilingStore: LatencyProfilingStore
+
     // Exposed so StreamingService (framework-owned lifecycle) can reuse the Hilt singleton scope.
     @Inject lateinit var processScope: CoroutineScope
 
@@ -86,6 +93,10 @@ class DishApplication : Application() {
         // native ref; route to NativeUnavailableActivity instead of crashing.
         try {
             installNativeBackedObservers()
+            HotPathBenchController.install(this, processScope)
+            // Re-arm latency profiling only if the user previously left it on (they accepted the
+            // warning then). Default is false, so a fresh install keeps the hot path measurement-free.
+            physicalInputNative.setHotPathBench(latencyProfilingStore.state.value)
         } catch (t: UnsatisfiedLinkError) {
             nativeLoadFailed = true
             android.util.Log.e(

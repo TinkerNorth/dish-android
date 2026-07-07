@@ -192,6 +192,13 @@ object SatelliteNative {
     // Framework KeyEvent/MotionEvent updates applied for a routed device (USB Standard or Bluetooth).
     external fun getDeviceInputEventCount(deviceId: Int): Long
 
+    // Opt-in latency benchmark: stage-1 USB-direct hot path (URB reap -> sendto) and
+    // stage-2 heartbeat RTT. Off by default; one relaxed atomic load when disabled.
+    external fun setHotPathBench(on: Boolean)
+
+    // JSON snapshot of the benchmark window (microsecond percentiles). reset clears it.
+    external fun hotPathBenchJson(reset: Boolean): String
+
     // Flat parameter list (not packed) so each axis stays primitive Float: no per-event allocation.
     @Suppress("LongParameterList")
     external fun processGamepadMotionEvent(

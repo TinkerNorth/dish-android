@@ -80,6 +80,10 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
         }
+
+        // Gates the opt-in hot-path latency instrumentation (HotPathBenchController).
+        // Off for release; turned on for debug and the benchmark build type below.
+        buildConfigField("boolean", "HOTPATH_BENCH", "false")
     }
 
     signingConfigs {
@@ -95,6 +99,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            // The debug build keeps the latency bench available for quick iteration.
+            buildConfigField("boolean", "HOTPATH_BENCH", "true")
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -105,6 +113,19 @@ android {
             signingConfig = signingConfigs.findByName("release")
             // Emit native-debug-symbols.zip for Play Console and strip the shipped .so.
             ndk { debugSymbolLevel = "FULL" }
+        }
+        // Optimized measurement build: production native (-O3 + ThinLTO, because it is
+        // non-debuggable) but debug-signed so it installs locally, with the hot-path
+        // bench enabled. Never shipped; exists to measure the real (release-grade) hot
+        // path instead of the -O0 debug one. R8 is left off so the JNI/receiver the
+        // bench relies on can't be stripped; native optimization is the axis that matters.
+        create("benchmark") {
+            initWith(getByName("release"))
+            isMinifyEnabled = false
+            isShrinkResources = false
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
+            buildConfigField("boolean", "HOTPATH_BENCH", "true")
         }
     }
 

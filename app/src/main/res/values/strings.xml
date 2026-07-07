@@ -336,7 +336,54 @@
     <string name="settings_crash_reporting_body">Share anonymized crash logs and stack traces with TinkerNorth to help fix bugs. No gameplay or controller input is included.</string>
     <string name="settings_open_source_licenses_title">Open source licenses</string>
     <string name="settings_open_source_licenses_body">Acknowledgements for the libraries Dish is built on.</string>
+    <string name="settings_diagnostics_title">Diagnostics</string>
+    <string name="settings_diagnostics_body">See connected controllers and hosts, and measure input latency.</string>
     <string name="licenses_open_external">Open license for %1$s</string>
+
+    <!-- Diagnostics (telemetry) screen. Lists every connected controller and host with their
+         live telemetry, plus an opt-in latency-profiling toggle. The toggle is off by default
+         because measuring adds a little work to the input path; turning it on shows a warning the
+         user must accept first. Key/value rows are built at runtime; `diagnostics_kv` is the
+         "Label: value" template. Units (Hz, ms) are non-technical and kept short. -->
+    <string name="diagnostics_title">Diagnostics</string>
+    <string name="diagnostics_section_latency">LATENCY</string>
+    <string name="diagnostics_kv">%1$s: %2$s</string>
+    <string name="diagnostics_hz">%1$d Hz</string>
+    <string name="diagnostics_ms">%1$.2f ms</string>
+    <string name="diagnostics_ms_p50_p99">%1$.2f ms (p50) · %2$.2f ms (p99)</string>
+    <string name="diagnostics_unknown">Unknown</string>
+    <string name="diagnostics_present">Present</string>
+    <string name="diagnostics_no_controllers">No controllers connected.</string>
+    <string name="diagnostics_no_connections">No hosts connected.</string>
+    <string name="diagnostics_transport">Connection</string>
+    <string name="diagnostics_transport_usb_direct">USB direct</string>
+    <string name="diagnostics_transport_usb_standard">USB standard</string>
+    <string name="diagnostics_transport_bluetooth">Bluetooth</string>
+    <string name="diagnostics_poll_rate">Poll rate</string>
+    <string name="diagnostics_gyro">Gyro</string>
+    <string name="diagnostics_state">Status</string>
+    <string name="diagnostics_state_connected">Connected</string>
+    <string name="diagnostics_state_disconnecting">Disconnecting</string>
+    <string name="diagnostics_state_transitioning">Switching mode</string>
+    <string name="diagnostics_state_needs_replug">Needs replug</string>
+    <string name="diagnostics_link">Link</string>
+    <string name="diagnostics_host">Host</string>
+    <string name="diagnostics_offline">Offline</string>
+    <string name="diagnostics_vigem">Virtual controllers</string>
+    <string name="diagnostics_available">Available</string>
+    <string name="diagnostics_unavailable">Unavailable</string>
+    <string name="diagnostics_active_controllers">Active controllers</string>
+    <string name="diagnostics_server_epoch">Host epoch</string>
+    <string name="diagnostics_latency_title">Latency profiling</string>
+    <string name="diagnostics_latency_body">Measure how long your input takes to reach the host.</string>
+    <string name="diagnostics_latency_off_hint">Latency profiling is off. Turn it on to measure (adds a little work to the input path).</string>
+    <string name="diagnostics_latency_waiting">Measuring…</string>
+    <string name="diagnostics_phone_path">Phone input path</string>
+    <string name="diagnostics_round_trip">Round trip</string>
+    <string name="diagnostics_latency_warn_title">Turn on latency profiling?</string>
+    <string name="diagnostics_latency_warn_message">Latency profiling adds a small amount of work to the input path while it measures. Leave it off for normal play, and turn it off when you\'re done.</string>
+    <string name="diagnostics_latency_warn_positive">Turn on</string>
+
     <string name="settings_version_label">VERSION</string>
     <!-- Brand wordmark in the footer. Not translated: stylistic constant
          across all locales, matching the rest of TinkerNorth's brand usage. -->

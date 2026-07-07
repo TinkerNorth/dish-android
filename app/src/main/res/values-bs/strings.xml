@@ -406,4 +406,46 @@
 
     <string name="settings_support_title">Podrži Dish</string>
     <string name="settings_support_body">Donirajte preko GitHub Sponsors, Ko-fi ili Buy Me a Coffee.</string>
+
+    <string name="settings_diagnostics_title">Dijagnostika</string>
+    <string name="settings_diagnostics_body">Pogledajte povezane kontrolere i hostove te izmjerite kašnjenje unosa.</string>
+
+    <string name="diagnostics_title">Dijagnostika</string>
+    <string name="diagnostics_section_latency">KAŠNJENJE</string>
+    <string name="diagnostics_kv">%1$s: %2$s</string>
+    <string name="diagnostics_hz">%1$d Hz</string>
+    <string name="diagnostics_ms">%1$.2f ms</string>
+    <string name="diagnostics_ms_p50_p99">%1$.2f ms (p50) · %2$.2f ms (p99)</string>
+    <string name="diagnostics_unknown">Nepoznato</string>
+    <string name="diagnostics_present">Prisutno</string>
+    <string name="diagnostics_no_controllers">Nema povezanih kontrolera.</string>
+    <string name="diagnostics_no_connections">Nema povezanih hostova.</string>
+    <string name="diagnostics_transport">Veza</string>
+    <string name="diagnostics_transport_usb_direct">USB direktno</string>
+    <string name="diagnostics_transport_usb_standard">USB standardno</string>
+    <string name="diagnostics_transport_bluetooth">Bluetooth</string>
+    <string name="diagnostics_poll_rate">Učestalost očitavanja</string>
+    <string name="diagnostics_gyro">Žiroskop</string>
+    <string name="diagnostics_state">Status</string>
+    <string name="diagnostics_state_connected">Povezano</string>
+    <string name="diagnostics_state_disconnecting">Prekidanje veze</string>
+    <string name="diagnostics_state_transitioning">Promjena načina</string>
+    <string name="diagnostics_state_needs_replug">Ponovo priključite</string>
+    <string name="diagnostics_link">Veza</string>
+    <string name="diagnostics_host">Host</string>
+    <string name="diagnostics_offline">Van mreže</string>
+    <string name="diagnostics_vigem">Virtualni kontroleri</string>
+    <string name="diagnostics_available">Dostupno</string>
+    <string name="diagnostics_unavailable">Nedostupno</string>
+    <string name="diagnostics_active_controllers">Aktivni kontroleri</string>
+    <string name="diagnostics_server_epoch">Epoha hosta</string>
+    <string name="diagnostics_latency_title">Profiliranje kašnjenja</string>
+    <string name="diagnostics_latency_body">Izmjerite koliko vašem unosu treba da stigne do hosta.</string>
+    <string name="diagnostics_latency_off_hint">Profiliranje kašnjenja je isključeno. Uključite ga za mjerenje (dodaje malo posla putu unosa).</string>
+    <string name="diagnostics_latency_waiting">Mjerenje…</string>
+    <string name="diagnostics_phone_path">Put unosa telefona</string>
+    <string name="diagnostics_round_trip">Povratno vrijeme</string>
+    <string name="diagnostics_latency_warn_title">Uključiti profiliranje kašnjenja?</string>
+    <string name="diagnostics_latency_warn_message">Profiliranje kašnjenja dodaje malo posla putu unosa dok mjeri. Ostavite ga isključenim za normalnu igru i isključite ga kada završite.</string>
+    <string name="diagnostics_latency_warn_positive">Uključi</string>
 </resources>

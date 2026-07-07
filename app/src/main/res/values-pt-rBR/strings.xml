@@ -407,4 +407,46 @@
 
     <string name="settings_support_title">Apoiar o Dish</string>
     <string name="settings_support_body">Doe via GitHub Sponsors, Ko-fi ou Buy Me a Coffee.</string>
+
+    <string name="settings_diagnostics_title">Diagnóstico</string>
+    <string name="settings_diagnostics_body">Veja os controles e hosts conectados e meça a latência de entrada.</string>
+
+    <string name="diagnostics_title">Diagnóstico</string>
+    <string name="diagnostics_section_latency">LATÊNCIA</string>
+    <string name="diagnostics_kv">%1$s: %2$s</string>
+    <string name="diagnostics_hz">%1$d Hz</string>
+    <string name="diagnostics_ms">%1$.2f ms</string>
+    <string name="diagnostics_ms_p50_p99">%1$.2f ms (p50) · %2$.2f ms (p99)</string>
+    <string name="diagnostics_unknown">Desconhecido</string>
+    <string name="diagnostics_present">Presente</string>
+    <string name="diagnostics_no_controllers">Nenhum controle conectado.</string>
+    <string name="diagnostics_no_connections">Nenhum host conectado.</string>
+    <string name="diagnostics_transport">Conexão</string>
+    <string name="diagnostics_transport_usb_direct">USB direto</string>
+    <string name="diagnostics_transport_usb_standard">USB padrão</string>
+    <string name="diagnostics_transport_bluetooth">Bluetooth</string>
+    <string name="diagnostics_poll_rate">Taxa de sondagem</string>
+    <string name="diagnostics_gyro">Giroscópio</string>
+    <string name="diagnostics_state">Status</string>
+    <string name="diagnostics_state_connected">Conectado</string>
+    <string name="diagnostics_state_disconnecting">Desconectando</string>
+    <string name="diagnostics_state_transitioning">Mudando de modo</string>
+    <string name="diagnostics_state_needs_replug">Reconecte</string>
+    <string name="diagnostics_link">Link</string>
+    <string name="diagnostics_host">Host</string>
+    <string name="diagnostics_offline">Offline</string>
+    <string name="diagnostics_vigem">Controles virtuais</string>
+    <string name="diagnostics_available">Disponível</string>
+    <string name="diagnostics_unavailable">Indisponível</string>
+    <string name="diagnostics_active_controllers">Controles ativos</string>
+    <string name="diagnostics_server_epoch">Época do host</string>
+    <string name="diagnostics_latency_title">Perfilamento de latência</string>
+    <string name="diagnostics_latency_body">Meça quanto tempo sua entrada leva para chegar ao host.</string>
+    <string name="diagnostics_latency_off_hint">O perfilamento de latência está desativado. Ative-o para medir (adiciona um pouco de trabalho ao caminho de entrada).</string>
+    <string name="diagnostics_latency_waiting">Medindo…</string>
+    <string name="diagnostics_phone_path">Caminho de entrada do telefone</string>
+    <string name="diagnostics_round_trip">Ida e volta</string>
+    <string name="diagnostics_latency_warn_title">Ativar o perfilamento de latência?</string>
+    <string name="diagnostics_latency_warn_message">O perfilamento de latência adiciona um pouco de trabalho ao caminho de entrada enquanto mede. Deixe-o desativado durante o jogo normal e desative-o ao terminar.</string>
+    <string name="diagnostics_latency_warn_positive">Ativar</string>
 </resources>

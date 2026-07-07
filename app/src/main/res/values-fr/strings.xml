@@ -406,4 +406,46 @@
 
     <string name="settings_support_title">Soutenir Dish</string>
     <string name="settings_support_body">Faites un don via GitHub Sponsors, Ko-fi ou Buy Me a Coffee.</string>
+
+    <string name="settings_diagnostics_title">Diagnostics</string>
+    <string name="settings_diagnostics_body">Voir les manettes et hôtes connectés, et mesurer la latence d\'entrée.</string>
+
+    <string name="diagnostics_title">Diagnostics</string>
+    <string name="diagnostics_section_latency">LATENCE</string>
+    <string name="diagnostics_kv">%1$s : %2$s</string>
+    <string name="diagnostics_hz">%1$d Hz</string>
+    <string name="diagnostics_ms">%1$.2f ms</string>
+    <string name="diagnostics_ms_p50_p99">%1$.2f ms (p50) · %2$.2f ms (p99)</string>
+    <string name="diagnostics_unknown">Inconnu</string>
+    <string name="diagnostics_present">Présent</string>
+    <string name="diagnostics_no_controllers">Aucune manette connectée.</string>
+    <string name="diagnostics_no_connections">Aucun hôte connecté.</string>
+    <string name="diagnostics_transport">Connexion</string>
+    <string name="diagnostics_transport_usb_direct">USB direct</string>
+    <string name="diagnostics_transport_usb_standard">USB standard</string>
+    <string name="diagnostics_transport_bluetooth">Bluetooth</string>
+    <string name="diagnostics_poll_rate">Fréquence d\'interrogation</string>
+    <string name="diagnostics_gyro">Gyroscope</string>
+    <string name="diagnostics_state">État</string>
+    <string name="diagnostics_state_connected">Connectée</string>
+    <string name="diagnostics_state_disconnecting">Déconnexion</string>
+    <string name="diagnostics_state_transitioning">Changement de mode</string>
+    <string name="diagnostics_state_needs_replug">Rebranchez-la</string>
+    <string name="diagnostics_link">Lien</string>
+    <string name="diagnostics_host">Hôte</string>
+    <string name="diagnostics_offline">Hors ligne</string>
+    <string name="diagnostics_vigem">Manettes virtuelles</string>
+    <string name="diagnostics_available">Disponible</string>
+    <string name="diagnostics_unavailable">Indisponible</string>
+    <string name="diagnostics_active_controllers">Manettes actives</string>
+    <string name="diagnostics_server_epoch">Époque de l\'hôte</string>
+    <string name="diagnostics_latency_title">Profilage de latence</string>
+    <string name="diagnostics_latency_body">Mesurez le temps que met votre entrée pour atteindre l\'hôte.</string>
+    <string name="diagnostics_latency_off_hint">Le profilage de latence est désactivé. Activez-le pour mesurer (ajoute un peu de travail à la chaîne d\'entrée).</string>
+    <string name="diagnostics_latency_waiting">Mesure en cours…</string>
+    <string name="diagnostics_phone_path">Chaîne d\'entrée du téléphone</string>
+    <string name="diagnostics_round_trip">Aller-retour</string>
+    <string name="diagnostics_latency_warn_title">Activer le profilage de latence ?</string>
+    <string name="diagnostics_latency_warn_message">Le profilage de latence ajoute un peu de travail à la chaîne d\'entrée pendant la mesure. Laissez-le désactivé pour le jeu normal et désactivez-le une fois terminé.</string>
+    <string name="diagnostics_latency_warn_positive">Activer</string>
 </resources>

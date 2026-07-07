@@ -31,6 +31,7 @@
 
 #include "dispatch.h"
 #include "gamepad_input.h"
+#include "hotpath_latency.h"
 #include "thread_priority.h"
 #include "usb_host.h"
 #include "usb_parsers.h"
@@ -229,6 +230,7 @@ static void publishIfChanged(int32_t deviceId, DeviceState& s) {
         r->sThumbRX = s.sRX;
         r->sThumbRY = s.sRY;
         sendEncrypted(session.get(), MSG_GAMEPAD_DATA, payload, sizeof(payload));
+        hotpath::markGamepadSent(); // stage-1 end: the URB-driven packet has left sendto()
     } else if (binding.kind == SLOT_BLUETOOTH) {
         if (binding.btConnectionId.empty()) return;
         enqueueBtReport(BtReport{
@@ -438,6 +440,7 @@ static void heartbeatLoop(std::shared_ptr<Session> s) {
     LOGI("Heartbeat thread started (sock=%d)", s->udpSock);
     while (s->heartbeatRunning.load(std::memory_order_relaxed)) {
         sendEncrypted(s.get(), MSG_HEARTBEAT_PING, nullptr, 0);
+        hotpath::markPingSent(); // stage-2: round-trip clock starts here
         s->missedAcks.fetch_add(1, std::memory_order_relaxed);
 
         if (s->missedAcks.load(std::memory_order_relaxed) >= HEARTBEAT_MISS_MAX) {
@@ -753,6 +756,7 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiv
     uint16_t msgLen = ((uint16_t)decrypted[2] << 8) | decrypted[3];
 
     if (msgType == MSG_HEARTBEAT_ACK) {
+        hotpath::markAckReceived(); // stage-2: round-trip clock stops here (RTT)
         s->missedAcks.store(0);
         s->connectionAlive.store(true);
         // Enriched ack: backendAvailable(1) + totalActive(1) + epoch(u16 BE) +
@@ -1059,6 +1063,18 @@ JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDe
 JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDeviceMotionCount(
     JNIEnv*, jobject, jint deviceId) {
     return (jlong)usbhost::getMotionCount((int32_t)deviceId);
+}
+
+// Opt-in hot-path latency benchmark (stage 1 USB-direct + stage 2 heartbeat RTT).
+// Off by default; see hotpath_latency.h and satellite tools/bench/README.md.
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_core_jni_SatelliteNative_setHotPathBench(JNIEnv*, jobject, jboolean on) {
+    hotpath::setEnabled(on == JNI_TRUE);
+}
+
+JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_hotPathBenchJson(
+    JNIEnv* env, jobject, jboolean reset) {
+    return env->NewStringUTF(hotpath::statsJson(reset == JNI_TRUE).c_str());
 }
 
 JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDeviceInputEventCount(

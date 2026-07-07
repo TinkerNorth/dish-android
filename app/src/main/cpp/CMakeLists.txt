@@ -65,7 +65,8 @@ add_library(satellite SHARED
     gamepad_input.cpp
     usb_host.cpp
     usb_parsers.cpp
-    usb_hid_descriptor.cpp)
+    usb_hid_descriptor.cpp
+    hotpath_latency.cpp)
 
 # Release (RelWithDebInfo) is the streaming hot path: -O3 + ThinLTO cross-inlines the JNI dispatch,
 # parsers, and encoders; --gc-sections drops the dead code that opens up. Debug stays -O0 for fast

@@ -403,4 +403,46 @@
 
     <string name="settings_support_title">Dish unterstützen</string>
     <string name="settings_support_body">Spende über GitHub Sponsors, Ko-fi oder Buy Me a Coffee.</string>
+
+    <string name="settings_diagnostics_title">Diagnose</string>
+    <string name="settings_diagnostics_body">Verbundene Controller und Hosts ansehen und die Eingabelatenz messen.</string>
+
+    <string name="diagnostics_title">Diagnose</string>
+    <string name="diagnostics_section_latency">LATENZ</string>
+    <string name="diagnostics_kv">%1$s: %2$s</string>
+    <string name="diagnostics_hz">%1$d Hz</string>
+    <string name="diagnostics_ms">%1$.2f ms</string>
+    <string name="diagnostics_ms_p50_p99">%1$.2f ms (p50) · %2$.2f ms (p99)</string>
+    <string name="diagnostics_unknown">Unbekannt</string>
+    <string name="diagnostics_present">Vorhanden</string>
+    <string name="diagnostics_no_controllers">Keine Controller verbunden.</string>
+    <string name="diagnostics_no_connections">Keine Hosts verbunden.</string>
+    <string name="diagnostics_transport">Verbindung</string>
+    <string name="diagnostics_transport_usb_direct">USB direkt</string>
+    <string name="diagnostics_transport_usb_standard">USB standard</string>
+    <string name="diagnostics_transport_bluetooth">Bluetooth</string>
+    <string name="diagnostics_poll_rate">Abfragerate</string>
+    <string name="diagnostics_gyro">Gyroskop</string>
+    <string name="diagnostics_state">Status</string>
+    <string name="diagnostics_state_connected">Verbunden</string>
+    <string name="diagnostics_state_disconnecting">Wird getrennt</string>
+    <string name="diagnostics_state_transitioning">Moduswechsel</string>
+    <string name="diagnostics_state_needs_replug">Neu einstecken</string>
+    <string name="diagnostics_link">Verbindung</string>
+    <string name="diagnostics_host">Host</string>
+    <string name="diagnostics_offline">Offline</string>
+    <string name="diagnostics_vigem">Virtuelle Controller</string>
+    <string name="diagnostics_available">Verfügbar</string>
+    <string name="diagnostics_unavailable">Nicht verfügbar</string>
+    <string name="diagnostics_active_controllers">Aktive Controller</string>
+    <string name="diagnostics_server_epoch">Host-Epoche</string>
+    <string name="diagnostics_latency_title">Latenz-Profiling</string>
+    <string name="diagnostics_latency_body">Miss, wie lange deine Eingabe bis zum Host braucht.</string>
+    <string name="diagnostics_latency_off_hint">Latenz-Profiling ist aus. Schalte es ein, um zu messen (verursacht etwas Mehraufwand im Eingabepfad).</string>
+    <string name="diagnostics_latency_waiting">Wird gemessen…</string>
+    <string name="diagnostics_phone_path">Eingabepfad des Telefons</string>
+    <string name="diagnostics_round_trip">Hin und zurück</string>
+    <string name="diagnostics_latency_warn_title">Latenz-Profiling einschalten?</string>
+    <string name="diagnostics_latency_warn_message">Latenz-Profiling verursacht während der Messung etwas Mehraufwand im Eingabepfad. Lass es beim normalen Spielen aus und schalte es nach der Messung wieder aus.</string>
+    <string name="diagnostics_latency_warn_positive">Einschalten</string>
 </resources>

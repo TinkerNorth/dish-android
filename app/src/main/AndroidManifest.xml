@@ -103,6 +103,15 @@
             tools:targetApi="p" />
 
         <activity
+            android:name=".ui.diagnostics.DiagnosticsActivity"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:theme="@style/Theme.Dish"
+            android:configChanges="keyboardHidden"
+            android:parentActivityName=".ui.settings.SettingsActivity"
+            tools:targetApi="p" />
+
+        <activity
             android:name=".ui.settings.LicensesActivity"
             android:exported="false"
             android:resizeableActivity="true"

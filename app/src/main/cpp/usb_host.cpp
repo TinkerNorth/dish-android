@@ -19,6 +19,7 @@
 
 #include "dispatch.h"
 #include "gamepad_input.h"
+#include "hotpath_latency.h"
 #include "thread_priority.h"
 #include "usb_parsers.h"
 
@@ -165,6 +166,7 @@ void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
             }
 
             if (reaped->status == 0 && reaped->actual_length > 0) {
+                hotpath::markInputRead(); // stage-1 start: a fresh input report is in hand
                 ctx->urbCount.fetch_add(1, std::memory_order_relaxed);
                 memset(&scratch, 0, sizeof(scratch));
                 if (usbparsers::decodeReport(ctx->parser, completed->buf.data(),
