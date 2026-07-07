@@ -461,7 +461,7 @@
     <string name="diagnostics_section_events">DOGAĐAJI</string>
     <string name="diagnostics_events_empty">Još nema događaja.</string>
     <string name="diagnostics_copy_events">Kopiraj događaje</string>
-    <string name="diagnostics_tap_inspect">Dodirnite za pregled unosa</string>
+    <string name="diagnostics_inspect_button">Pregledaj unos</string>
     <string name="inspector_title">Inspektor kontrolera</string>
     <string name="inspector_section_motion">POKRET</string>
     <string name="inspector_section_touch">TOUCHPAD</string>

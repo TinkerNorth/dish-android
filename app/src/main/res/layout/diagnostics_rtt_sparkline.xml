@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Recent-RTT polyline under the latency stats; inflated when samples exist. -->
+<com.tinkernorth.dish.ui.diagnostics.SparklineView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/sparkRtt"
+    android:layout_width="match_parent"
+    android:layout_height="@dimen/size_32"
+    android:layout_marginTop="@dimen/spacing_xs" />

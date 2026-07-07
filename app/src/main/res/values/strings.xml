@@ -396,7 +396,7 @@
     <string name="diagnostics_section_events">EVENTS</string>
     <string name="diagnostics_events_empty">No events yet.</string>
     <string name="diagnostics_copy_events">Copy events</string>
-    <string name="diagnostics_tap_inspect">Tap to inspect input</string>
+    <string name="diagnostics_inspect_button">Inspect input</string>
     <string name="inspector_title">Controller inspector</string>
     <string name="inspector_section_motion">MOTION</string>
     <string name="inspector_section_touch">TOUCHPAD</string>

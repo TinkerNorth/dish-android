@@ -137,9 +137,15 @@ class DiagnosticsActivity : AppCompatActivity() {
             lines += getString(R.string.diagnostics_kv, getString(R.string.diagnostics_gyro), gyroLabel(device))
         }
         lines += getString(R.string.diagnostics_kv, getString(R.string.diagnostics_state), controllerStateLabel(device))
-        lines += getString(R.string.diagnostics_tap_inspect)
-        val card = cardWithTitle(device.name, lines)
-        card.setOnClickListener {
+        return cardWithTitle(device.name, lines) { parent -> inspectButton(parent, device) }
+    }
+
+    private fun inspectButton(
+        parent: ViewGroup,
+        device: PhysicalGamepadRegistry.Device,
+    ): android.view.View {
+        val button = layoutInflater.inflate(R.layout.diagnostics_inspect_button, parent, false)
+        button.setOnClickListener {
             startActivity(
                 android.content.Intent(this, InputInspectorActivity::class.java).apply {
                     putExtra(InputInspectorActivity.EXTRA_DEVICE_ID, device.id)
@@ -147,7 +153,7 @@ class DiagnosticsActivity : AppCompatActivity() {
                 },
             )
         }
-        return card
+        return button
     }
 
     private fun transportLabel(device: PhysicalGamepadRegistry.Device): String {
@@ -367,14 +373,7 @@ class DiagnosticsActivity : AppCompatActivity() {
         )
         container.addView(statRow(getString(R.string.diagnostics_network_latency), networkP50, null, approx = true))
         rttHistoryMs(root)?.let { history ->
-            val spark = SparklineView(this)
-            val params =
-                LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    resources.getDimensionPixelSize(R.dimen.size_32),
-                )
-            params.topMargin = resources.getDimensionPixelSize(R.dimen.spacing_xs)
-            spark.layoutParams = params
+            val spark = layoutInflater.inflate(R.layout.diagnostics_rtt_sparkline, container, false) as SparklineView
             spark.update(history)
             container.addView(spark)
         }
@@ -498,6 +497,7 @@ class DiagnosticsActivity : AppCompatActivity() {
     private fun cardWithTitle(
         title: String,
         lines: List<String>,
+        footer: ((ViewGroup) -> android.view.View)? = null,
     ): android.view.View {
         val card =
             com.google.android.material.card.MaterialCardView(this).apply {
@@ -516,6 +516,7 @@ class DiagnosticsActivity : AppCompatActivity() {
             }
         column.addView(titleView(title))
         lines.forEach { column.addView(bodyView(it)) }
+        footer?.let { column.addView(it(column)) }
         card.addView(column)
         return card
     }

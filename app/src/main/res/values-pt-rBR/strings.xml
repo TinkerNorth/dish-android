@@ -462,7 +462,7 @@
     <string name="diagnostics_section_events">EVENTOS</string>
     <string name="diagnostics_events_empty">Nenhum evento ainda.</string>
     <string name="diagnostics_copy_events">Copiar eventos</string>
-    <string name="diagnostics_tap_inspect">Toque para inspecionar a entrada</string>
+    <string name="diagnostics_inspect_button">Inspecionar entrada</string>
     <string name="inspector_title">Inspetor de controle</string>
     <string name="inspector_section_motion">MOVIMENTO</string>
     <string name="inspector_section_touch">TOUCHPAD</string>

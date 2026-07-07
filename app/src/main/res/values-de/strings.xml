@@ -458,7 +458,7 @@
     <string name="diagnostics_section_events">EREIGNISSE</string>
     <string name="diagnostics_events_empty">Noch keine Ereignisse.</string>
     <string name="diagnostics_copy_events">Ereignisse kopieren</string>
-    <string name="diagnostics_tap_inspect">Zum Prüfen der Eingabe tippen</string>
+    <string name="diagnostics_inspect_button">Eingabe prüfen</string>
     <string name="inspector_title">Controller-Inspektor</string>
     <string name="inspector_section_motion">BEWEGUNG</string>
     <string name="inspector_section_touch">TOUCHPAD</string>
