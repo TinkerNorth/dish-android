@@ -415,6 +415,7 @@
     <string name="diagnostics_kv">%1$s : %2$s</string>
     <string name="diagnostics_hz">%1$d Hz</string>
     <string name="diagnostics_ms">%1$.2f ms</string>
+    <string name="diagnostics_ms_approx">~%1$.2f ms</string>
     <string name="diagnostics_ms_p50_p99">%1$.2f ms (p50) · %2$.2f ms (p99)</string>
     <string name="diagnostics_unknown">Inconnu</string>
     <string name="diagnostics_present">Présent</string>
@@ -444,7 +445,7 @@
     <string name="diagnostics_latency_off_hint">Le profilage de latence est désactivé. Activez-le pour mesurer (ajoute un peu de travail à la chaîne d\'entrée).</string>
     <string name="diagnostics_latency_waiting">Mesure en cours…</string>
     <string name="diagnostics_phone_path">Chaîne d\'entrée du téléphone</string>
-    <string name="diagnostics_round_trip">Aller-retour</string>
+    <string name="diagnostics_network_latency">Latence réseau</string>
     <string name="diagnostics_latency_warn_title">Activer le profilage de latence ?</string>
     <string name="diagnostics_latency_warn_message">Le profilage de latence ajoute un peu de travail à la chaîne d\'entrée pendant la mesure. Laissez-le désactivé pour le jeu normal et désactivez-le une fois terminé.</string>
     <string name="diagnostics_latency_warn_positive">Activer</string>

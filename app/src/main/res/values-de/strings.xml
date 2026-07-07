@@ -412,6 +412,7 @@
     <string name="diagnostics_kv">%1$s: %2$s</string>
     <string name="diagnostics_hz">%1$d Hz</string>
     <string name="diagnostics_ms">%1$.2f ms</string>
+    <string name="diagnostics_ms_approx">~%1$.2f ms</string>
     <string name="diagnostics_ms_p50_p99">%1$.2f ms (p50) · %2$.2f ms (p99)</string>
     <string name="diagnostics_unknown">Unbekannt</string>
     <string name="diagnostics_present">Vorhanden</string>
@@ -441,7 +442,7 @@
     <string name="diagnostics_latency_off_hint">Latenz-Profiling ist aus. Schalte es ein, um zu messen (verursacht etwas Mehraufwand im Eingabepfad).</string>
     <string name="diagnostics_latency_waiting">Wird gemessen…</string>
     <string name="diagnostics_phone_path">Eingabepfad des Telefons</string>
-    <string name="diagnostics_round_trip">Hin und zurück</string>
+    <string name="diagnostics_network_latency">Netzwerklatenz</string>
     <string name="diagnostics_latency_warn_title">Latenz-Profiling einschalten?</string>
     <string name="diagnostics_latency_warn_message">Latenz-Profiling verursacht während der Messung etwas Mehraufwand im Eingabepfad. Lass es beim normalen Spielen aus und schalte es nach der Messung wieder aus.</string>
     <string name="diagnostics_latency_warn_positive">Einschalten</string>

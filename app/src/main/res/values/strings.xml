@@ -350,6 +350,7 @@
     <string name="diagnostics_kv">%1$s: %2$s</string>
     <string name="diagnostics_hz">%1$d Hz</string>
     <string name="diagnostics_ms">%1$.2f ms</string>
+    <string name="diagnostics_ms_approx">~%1$.2f ms</string>
     <string name="diagnostics_ms_p50_p99">%1$.2f ms (p50) · %2$.2f ms (p99)</string>
     <string name="diagnostics_unknown">Unknown</string>
     <string name="diagnostics_present">Present</string>
@@ -379,7 +380,7 @@
     <string name="diagnostics_latency_off_hint">Latency profiling is off. Turn it on to measure (adds a little work to the input path).</string>
     <string name="diagnostics_latency_waiting">Measuring…</string>
     <string name="diagnostics_phone_path">Phone input path</string>
-    <string name="diagnostics_round_trip">Round trip</string>
+    <string name="diagnostics_network_latency">Network latency</string>
     <string name="diagnostics_latency_warn_title">Turn on latency profiling?</string>
     <string name="diagnostics_latency_warn_message">Latency profiling adds a small amount of work to the input path while it measures. Leave it off for normal play, and turn it off when you\'re done.</string>
     <string name="diagnostics_latency_warn_positive">Turn on</string>

@@ -415,6 +415,7 @@
     <string name="diagnostics_kv">%1$s: %2$s</string>
     <string name="diagnostics_hz">%1$d Hz</string>
     <string name="diagnostics_ms">%1$.2f ms</string>
+    <string name="diagnostics_ms_approx">~%1$.2f ms</string>
     <string name="diagnostics_ms_p50_p99">%1$.2f ms (p50) · %2$.2f ms (p99)</string>
     <string name="diagnostics_unknown">Nepoznato</string>
     <string name="diagnostics_present">Prisutno</string>
@@ -444,7 +445,7 @@
     <string name="diagnostics_latency_off_hint">Profiliranje kašnjenja je isključeno. Uključite ga za mjerenje (dodaje malo posla putu unosa).</string>
     <string name="diagnostics_latency_waiting">Mjerenje…</string>
     <string name="diagnostics_phone_path">Put unosa telefona</string>
-    <string name="diagnostics_round_trip">Povratno vrijeme</string>
+    <string name="diagnostics_network_latency">Mrežna latencija</string>
     <string name="diagnostics_latency_warn_title">Uključiti profiliranje kašnjenja?</string>
     <string name="diagnostics_latency_warn_message">Profiliranje kašnjenja dodaje malo posla putu unosa dok mjeri. Ostavite ga isključenim za normalnu igru i isključite ga kada završite.</string>
     <string name="diagnostics_latency_warn_positive">Uključi</string>

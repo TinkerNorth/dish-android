@@ -285,9 +285,11 @@ class DiagnosticsActivity : AppCompatActivity() {
         }
         val phoneP50 = microToMs(root, STAGE1, P50)
         val phoneP99 = microToMs(root, STAGE1, P99)
-        val rttP50 = microToMs(root, RTT, P50)
+        // The bench measures the full heartbeat round trip; one-way network latency is half
+        // of it (symmetric-path estimate, hence the ~ rendering).
+        val networkP50 = microToMs(root, RTT, P50)?.let { it / 2 }
         container.addView(statRow(getString(R.string.diagnostics_phone_path), phoneP50, phoneP99))
-        container.addView(statRow(getString(R.string.diagnostics_round_trip), rttP50, null))
+        container.addView(statRow(getString(R.string.diagnostics_network_latency), networkP50, null, approx = true))
     }
 
     private fun microToMs(
@@ -310,10 +312,12 @@ class DiagnosticsActivity : AppCompatActivity() {
         label: String,
         p50: Double?,
         p99: Double?,
+        approx: Boolean = false,
     ): android.view.View {
         val value =
             when {
                 p50 == null -> getString(R.string.diagnostics_unknown)
+                approx -> getString(R.string.diagnostics_ms_approx, p50)
                 p99 == null -> getString(R.string.diagnostics_ms, p50)
                 else -> getString(R.string.diagnostics_ms_p50_p99, p50, p99)
             }
