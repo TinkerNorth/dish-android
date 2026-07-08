@@ -30,14 +30,23 @@ thread_local int64_t t_prevReapNs = 0;
 // One bounded ring per metric. A mutex per sample is cheap next to the syscall
 // the send already does, and only taken while benchmarking.
 struct Ring {
+    explicit Ring(size_t window = 0) : window(window) {}
     std::mutex mtx;
     std::vector<double> us; // sample window, microseconds
+    // 0 = accumulate to kCap (bench-dump semantics); >0 = sliding window of the
+    // last N samples so percentiles answer "now", not "since arming".
+    const size_t window;
     // ~262k samples (~2 MB) so an offline "arm, unplug cable, play, replug, dump"
     // session at 1 kHz captures minutes, not seconds, before it stops growing.
     static constexpr size_t kCap = 262144;
     void add(double v) {
         std::lock_guard<std::mutex> lk(mtx);
-        if (us.size() < kCap) us.push_back(v);
+        if (window > 0) {
+            if (us.size() >= window) us.erase(us.begin());
+            us.push_back(v);
+        } else if (us.size() < kCap) {
+            us.push_back(v);
+        }
     }
     void clear() {
         std::lock_guard<std::mutex> lk(mtx);
@@ -45,9 +54,15 @@ struct Ring {
     }
 };
 
-Ring g_stage1; // URB reap -> gamepad sent
-Ring g_rtt;    // heartbeat ping -> ack
-Ring g_urbGap; // URB inter-arrival gap (polling jitter)
+// A ping every 2 s in steady state, 4/s in probe mode: 64 samples spans ~2 min
+// idle and ~16 s while the diagnostics panel probes.
+constexpr size_t kRttWindow = 64;
+// A ping unanswered past this is lost, not in flight (matches the ack-side cap).
+constexpr int64_t kRttMaxNs = 5000000000LL;
+
+Ring g_stage1;          // URB reap -> gamepad sent
+Ring g_rtt{kRttWindow}; // heartbeat ping -> ack, sliding
+Ring g_urbGap;          // URB inter-arrival gap (polling jitter)
 
 std::atomic<int64_t> g_lastPingNs{0};
 
@@ -118,7 +133,12 @@ void markGamepadSent() {
 
 void markPingSent() {
     if (!g_enabled.load(std::memory_order_relaxed)) return;
-    g_lastPingNs.store(nowNs(), std::memory_order_relaxed);
+    const int64_t now = nowNs();
+    const int64_t outstanding = g_lastPingNs.load(std::memory_order_relaxed);
+    // Keep an in-flight ping's clock: overwriting would pair its late ack with this
+    // newer ping and read low. Past the validity window the ping is lost; reclaim.
+    if (outstanding != 0 && now - outstanding < kRttMaxNs) return;
+    g_lastPingNs.store(now, std::memory_order_relaxed);
 }
 
 void markAckReceived() {
@@ -126,8 +146,10 @@ void markAckReceived() {
     int64_t sent = g_lastPingNs.exchange(0, std::memory_order_relaxed);
     if (sent == 0) return;
     double us = (double)(nowNs() - sent) / 1000.0;
-    if (us >= 0 && us < 5e6) g_rtt.add(us);
+    if (us >= 0 && us < (double)kRttMaxNs / 1000.0) g_rtt.add(us);
 }
+
+void resetRttWindow() { g_rtt.clear(); }
 
 std::string statsJson(bool reset) {
     std::string out = "{\"enabled\":";

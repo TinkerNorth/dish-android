@@ -44,6 +44,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.float
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -343,9 +344,14 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
     }
 
     private suspend fun pollLatencyStats() {
-        while (true) {
-            renderLatencyStats(physicalInputNative.hotPathBenchJson(false))
-            delay(LATENCY_POLL_MS)
+        physicalInputNative.setLatencyProbe(true)
+        try {
+            while (true) {
+                renderLatencyStats(physicalInputNative.hotPathBenchJson(false))
+                delay(LATENCY_POLL_MS)
+            }
+        } finally {
+            physicalInputNative.setLatencyProbe(false)
         }
     }
 
@@ -360,8 +366,11 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
         val phoneP50 = microToMs(root, STAGE1, P50)
         val phoneP99 = microToMs(root, STAGE1, P99)
         // The bench measures the full heartbeat round trip; one-way network latency is half
-        // of it (symmetric-path estimate, hence the ~ rendering).
+        // of it (symmetric-path estimate, hence the ~ rendering). The RTT window slides, so
+        // the figure answers "now"; the sample count is shown so a barely-seeded window reads
+        // as tentative instead of authoritative.
         val networkP50 = microToMs(root, RTT, P50)?.let { it / 2 }
+        val rttSamples = intField(root, RTT, "n")
         container.addView(statRow(getString(R.string.diagnostics_phone_path), phoneP50, phoneP99))
         container.addView(
             statRow(
@@ -370,7 +379,15 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
                 microToMs(root, URB_GAP, P99),
             ),
         )
-        container.addView(statRow(getString(R.string.diagnostics_network_latency), networkP50, null, approx = true))
+        container.addView(
+            statRow(
+                getString(R.string.diagnostics_network_latency),
+                networkP50,
+                null,
+                approx = true,
+                windowSamples = rttSamples,
+            ),
+        )
         rttHistoryMs(root)?.let { history ->
             val spark = layoutInflater.inflate(R.layout.diagnostics_rtt_sparkline, container, false) as SparklineView
             spark.update(history)
@@ -403,15 +420,31 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
         return value / MICROS_PER_MS
     }
 
+    private fun intField(
+        root: JsonObject,
+        group: String,
+        field: String,
+    ): Int? =
+        runCatching {
+            root[group]
+                ?.jsonObject
+                ?.get(field)
+                ?.jsonPrimitive
+                ?.int
+        }.getOrNull()
+
     private fun statRow(
         label: String,
         p50: Double?,
         p99: Double?,
         approx: Boolean = false,
+        windowSamples: Int? = null,
     ): android.view.View {
         val value =
             when {
                 p50 == null -> getString(R.string.diagnostics_unknown)
+                approx && windowSamples != null ->
+                    getString(R.string.diagnostics_ms_approx_window, p50, windowSamples)
                 approx -> getString(R.string.diagnostics_ms_approx, p50)
                 p99 == null -> getString(R.string.diagnostics_ms, p50)
                 else -> getString(R.string.diagnostics_ms_p50_p99, p50, p99)
@@ -555,7 +588,7 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
 
     private companion object {
         const val HANDLE_NONE = -1
-        const val LATENCY_POLL_MS = 2000L
+        const val LATENCY_POLL_MS = 1000L
         const val WIFI_POLL_MS = 2000L
         const val MICROS_PER_MS = 1000.0
         const val STAGE1 = "stage1_hotpath_us"

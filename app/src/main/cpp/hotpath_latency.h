@@ -30,6 +30,9 @@ void markGamepadSent(); // the resulting MSG_GAMEPAD_DATA packet has left sendto
 void markPingSent();    // MSG_HEARTBEAT_PING sent
 void markAckReceived(); // MSG_HEARTBEAT_ACK received
 
+// Drops accumulated RTT samples so a probe-mode window starts fresh.
+void resetRttWindow();
+
 // JSON snapshot of the current window (microseconds). reset=true clears samples.
 std::string statsJson(bool reset);
 
