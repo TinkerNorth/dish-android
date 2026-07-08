@@ -37,7 +37,6 @@ on:
 #                                 and the R8 mapping is auto-uploaded to
 #                                 Firebase. When unset, the build still
 #                                 succeeds but ships without crash reporting.
-#   NVD_API_KEY                   speeds up OWASP Dependency-Check syncs.
 #   PLAY_SERVICE_ACCOUNT_JSON     Google Play service-account key (raw
 #                                 JSON). When set, the signed AAB rolls
 #                                 out to the Play production track with
