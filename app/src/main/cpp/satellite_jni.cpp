@@ -41,8 +41,13 @@
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
-static constexpr int HEARTBEAT_INTERVAL_MS = 2000;
-static constexpr int HEARTBEAT_MISS_MAX = 5;
+// Steady-state cadence is contractual (satellite docs/contract.md: 2000 ms). Probe
+// mode densifies RTT sampling only while the diagnostics latency panel is open; the
+// death window stays ~10 s wall clock because the miss threshold scales with it.
+static constexpr int HEARTBEAT_INTERVAL_DEFAULT_MS = 2000;
+static constexpr int HEARTBEAT_INTERVAL_PROBE_MS = 250;
+static constexpr int HEARTBEAT_DEATH_TIMEOUT_MS = 10000;
+static std::atomic<int> g_heartbeatIntervalMs{HEARTBEAT_INTERVAL_DEFAULT_MS};
 // Topology mutation is REST-only (satellite docs/contract.md): the native
 // layer carries streams + the two authenticated notifications, nothing else.
 static constexpr uint16_t MSG_GAMEPAD_DATA = 0x0001;
@@ -85,6 +90,7 @@ struct Session {
     std::atomic<bool> heartbeatRunning{false};
     std::atomic<int> missedAcks{0};
     std::atomic<bool> connectionAlive{true};
+    std::atomic<int64_t> lastPingNs{0};
 
     // Downstream replay guard (server → client direction).
     std::atomic<uint32_t> lastRxCounter{0};
@@ -488,17 +494,24 @@ static void heartbeatLoop(std::shared_ptr<Session> s) {
     LOGI("Heartbeat thread started (sock=%d)", s->udpSock);
     while (s->heartbeatRunning.load(std::memory_order_relaxed)) {
         sendEncrypted(s.get(), MSG_HEARTBEAT_PING, nullptr, 0);
-        hotpath::markPingSent(); // stage-2: round-trip clock starts here
-        s->missedAcks.fetch_add(1, std::memory_order_relaxed);
+        if (hotpath::enabled()) {
+            // stage-2: round-trip clock starts here, on this session's own clock.
+            const int64_t now = hotpath::nowMonotonicNs();
+            if (hotpath::shouldArmPing(s->lastPingNs.load(std::memory_order_relaxed), now)) {
+                s->lastPingNs.store(now, std::memory_order_relaxed);
+            }
+        }
 
-        if (s->missedAcks.load(std::memory_order_relaxed) >= HEARTBEAT_MISS_MAX) {
-            LOGE("Missed %d heartbeat ACKs, connection dead", HEARTBEAT_MISS_MAX);
+        const int intervalMs = g_heartbeatIntervalMs.load(std::memory_order_relaxed);
+        const int missMax = HEARTBEAT_DEATH_TIMEOUT_MS / intervalMs;
+        if (s->missedAcks.fetch_add(1, std::memory_order_relaxed) + 1 >= missMax) {
+            LOGE("Missed %d heartbeat ACKs, connection dead", missMax);
             s->connectionAlive.store(false, std::memory_order_relaxed);
         }
 
-        for (int i = 0; i < HEARTBEAT_INTERVAL_MS / 100; i++) {
+        for (int i = 0; i < intervalMs / 50; i++) {
             if (!s->heartbeatRunning.load(std::memory_order_relaxed)) break;
-            usleep(100000);
+            usleep(50000);
         }
     }
     LOGI("Heartbeat thread stopped");
@@ -804,7 +817,10 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiv
     uint16_t msgLen = ((uint16_t)decrypted[2] << 8) | decrypted[3];
 
     if (msgType == MSG_HEARTBEAT_ACK) {
-        hotpath::markAckReceived(); // stage-2: round-trip clock stops here (RTT)
+        if (hotpath::enabled()) {
+            const int64_t sent = s->lastPingNs.exchange(0, std::memory_order_relaxed);
+            if (sent != 0) hotpath::addRttSample(sent, hotpath::nowMonotonicNs());
+        }
         s->missedAcks.store(0);
         s->connectionAlive.store(true);
         // Enriched ack: backendAvailable(1) + totalActive(1) + epoch(u16 BE) +
@@ -1131,6 +1147,17 @@ Java_com_tinkernorth_dish_core_jni_SatelliteNative_setHotPathBench(JNIEnv*, jobj
 JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_hotPathBenchJson(
     JNIEnv* env, jobject, jboolean reset) {
     return env->NewStringUTF(hotpath::statsJson(reset == JNI_TRUE).c_str());
+}
+
+// Densify heartbeat pings for RTT measurement while the diagnostics latency panel is
+// open. The RTT window is dropped on enable so the readout reflects probe-era samples,
+// not the idle-radio tail accumulated before the panel opened.
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_core_jni_SatelliteNative_setLatencyProbe(JNIEnv*, jobject, jboolean on) {
+    g_heartbeatIntervalMs.store(on == JNI_TRUE ? HEARTBEAT_INTERVAL_PROBE_MS
+                                               : HEARTBEAT_INTERVAL_DEFAULT_MS,
+                                std::memory_order_relaxed);
+    if (on == JNI_TRUE) hotpath::resetRttWindow();
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setInputInspection(

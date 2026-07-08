@@ -2,38 +2,27 @@
 
 package com.tinkernorth.dish.ui.onboarding
 
-import android.content.Intent
 import android.os.Bundle
 import androidx.annotation.StringRes
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.net.toUri
 import androidx.core.view.isVisible
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivityHelpBinding
 import com.tinkernorth.dish.databinding.HelpFaqRowBinding
-import com.tinkernorth.dish.source.notification.DishNotifications
+import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
-import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
-import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachDonatePill
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
 
 @AndroidEntryPoint
-class HelpActivity : AppCompatActivity() {
-    @Inject lateinit var notifications: DishNotifications
-
+class HelpActivity : BaseGamepadHostActivity() {
     private lateinit var binding: ActivityHelpBinding
     private val nav by lazy { DishNavigator(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityHelpBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        binding = setScaffoldContent(ActivityHelpBinding::inflate)
         setupDishToolbar(binding.toolbar)
-        applyDishSystemBars(binding.root)
-        applyDishActivityTransitions()
         attachDonatePill()
 
         bindRunSetupCard()
@@ -121,19 +110,5 @@ class HelpActivity : AppCompatActivity() {
         binding.cardHelpGithub.setOnClickListener {
             openExternalUrl(getString(R.string.url_github))
         }
-    }
-
-    private fun openExternalUrl(url: String) {
-        val intent =
-            Intent(Intent.ACTION_VIEW, url.toUri())
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        runCatching { startActivity(intent) }
-            .onFailure {
-                notifications.warn(
-                    title = getString(R.string.error_open_url),
-                    body = url,
-                    key = "external-url-failed",
-                )
-            }
     }
 }

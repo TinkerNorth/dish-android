@@ -262,4 +262,82 @@ class PhysicalSlotBindingObserverTest {
     fun `an empty snapshot yields no ops`() {
         assertEquals(emptyList<BindOp>(), reconcile())
     }
+
+    @Test
+    fun `a stale binding whose device is in neither present nor lastBound is swept`() {
+        // Device 7 departed while the observer was stopped: it is in neither set, yet its binding
+        // survived. Without the sweep its slot re-registers on the satellite on every reconnect.
+        val ops =
+            reconcile(
+                bindings = mapOf("7" to "sat:a"),
+                summaries = listOf(satSummary("sat:a")),
+            )
+        assertEquals(
+            listOf(
+                BindOp.Unbind(7),
+                BindOp.Forget(7),
+                BindOp.ReleaseHubBinding(7),
+            ),
+            ops,
+        )
+    }
+
+    @Test
+    fun `a stale synthetic binding is swept without a forget`() {
+        val ops = reconcile(bindings = mapOf("-1000" to "sat:a"))
+        assertEquals(listOf(BindOp.Unbind(-1000), BindOp.ReleaseHubBinding(-1000)), ops)
+    }
+
+    @Test
+    fun `a non-numeric slot binding is never swept`() {
+        val ops = reconcile(bindings = mapOf("virtual" to "sat:a"))
+        assertEquals(emptyList<BindOp>(), ops)
+    }
+
+    @Test
+    fun `a stale binding also departed this pass is swept once`() {
+        val ops = reconcile(lastBound = setOf(7), bindings = mapOf("7" to "sat:a"))
+        assertEquals(
+            listOf(
+                BindOp.Unbind(7),
+                BindOp.Forget(7),
+                BindOp.ReleaseHubBinding(7),
+            ),
+            ops,
+        )
+    }
+
+    @Test
+    fun `a swept stale binding precedes the present device's bind`() {
+        val ops =
+            reconcile(
+                present = setOf(5),
+                lastBound = setOf(5),
+                bindings = mapOf("5" to "sat:a", "7" to "sat:a"),
+                summaries = listOf(satSummary("sat:a")),
+                slotInfo = mapOf("sat:a" to SatelliteSlotSnapshot(handle = 9, slots = mapOf("5" to slot(0)))),
+            )
+        assertEquals(
+            listOf(
+                BindOp.Unbind(7),
+                BindOp.Forget(7),
+                BindOp.ReleaseHubBinding(7),
+                BindOp.BindSatellite(deviceId = 5, handle = 9, controllerIndex = 0),
+            ),
+            ops,
+        )
+    }
+
+    @Test
+    fun `a bound present device is not swept`() {
+        val ops =
+            reconcile(
+                present = setOf(5),
+                lastBound = setOf(5),
+                bindings = mapOf("5" to "sat:a"),
+                summaries = listOf(satSummary("sat:a")),
+                slotInfo = mapOf("sat:a" to SatelliteSlotSnapshot(handle = 9, slots = mapOf("5" to slot(0)))),
+            )
+        assertEquals(listOf(BindOp.BindSatellite(deviceId = 5, handle = 9, controllerIndex = 0)), ops)
+    }
 }

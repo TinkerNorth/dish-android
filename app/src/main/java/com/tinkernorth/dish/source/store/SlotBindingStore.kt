@@ -31,6 +31,17 @@ class SlotBindingStore
             setState { if (slotId in it) it - slotId else it }
         }
 
+        // One emission: downstream composers must never observe both keys bound at once.
+        fun migrate(
+            fromSlotId: String,
+            toSlotId: String,
+        ) {
+            setState { current ->
+                val connId = current[fromSlotId] ?: return@setState current
+                (current - fromSlotId) + (toSlotId to connId)
+            }
+        }
+
         fun replace(
             slotId: String,
             connectionId: String,

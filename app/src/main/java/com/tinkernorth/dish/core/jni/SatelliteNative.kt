@@ -206,6 +206,10 @@ object SatelliteNative {
     // JSON snapshot of the benchmark window (microsecond percentiles). reset clears it.
     external fun hotPathBenchJson(reset: Boolean): String
 
+    // Heartbeat probe mode: densifies pings for RTT sampling while the diagnostics
+    // latency panel is open; steady-state cadence resumes when off.
+    external fun setLatencyProbe(on: Boolean)
+
     // Inspector mirror gate: while on, USB-direct reports also copy motion/touch into the
     // snapshot state. Off costs one relaxed atomic load per report, like the bench markers.
     external fun setInputInspection(on: Boolean)

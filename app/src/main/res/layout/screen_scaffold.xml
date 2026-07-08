@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shared chrome for standard screens: content inflates into screenContent via
+     BaseGamepadHostActivity.setScaffoldContent, so the streaming overlays exist
+     exactly once. Bespoke screens (main, connections, bindings, input overlays)
+     keep their own coordinator roots and must carry these includes themselves. -->
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <FrameLayout
+        android:id="@+id/screenContent"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <include layout="@layout/overlay_low_power_chip" />
+
+    <include layout="@layout/overlay_low_power" />
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

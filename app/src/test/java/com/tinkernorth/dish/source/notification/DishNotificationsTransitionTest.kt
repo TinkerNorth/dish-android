@@ -44,7 +44,7 @@ class DishNotificationsTransitionTest {
         )
 
     @Test
-    fun `two STARTED attachments both render the same post`() =
+    fun `a post renders only on the most recently resumed attachment`() =
         runTest {
             val notifications = DishNotifications()
             val ownerA = TestLifecycleOwner()
@@ -54,15 +54,64 @@ class DishNotificationsTransitionTest {
             val rendererB = RecordingRenderer()
             attach(notifications, ownerB, rendererB, this)
 
-            ownerA.start()
-            ownerB.start()
+            // Transition overlap: A is still STARTED while B comes to the front.
+            ownerA.resume()
+            ownerA.pause()
+            ownerB.resume()
             testScheduler.runCurrent()
 
-            notifications.info(title = "fanout")
+            notifications.info(title = "front-only")
+            testScheduler.runCurrent()
+
+            assertTrue(rendererA.shown.isEmpty())
+            assertEquals(1, rendererB.shown.size)
+        }
+
+    @Test
+    fun `destroying the front attachment routes posts back to the previous one`() =
+        runTest {
+            val notifications = DishNotifications()
+            val ownerA = TestLifecycleOwner()
+            val rendererA = RecordingRenderer()
+            attach(notifications, ownerA, rendererA, this)
+            val ownerB = TestLifecycleOwner()
+            val rendererB = RecordingRenderer()
+            attach(notifications, ownerB, rendererB, this)
+
+            ownerA.resume()
+            ownerA.pause()
+            ownerB.resume()
+            testScheduler.runCurrent()
+
+            ownerB.destroy()
+            ownerA.resume()
+            testScheduler.runCurrent()
+
+            notifications.info(title = "back-on-a")
             testScheduler.runCurrent()
 
             assertEquals(1, rendererA.shown.size)
-            assertEquals(1, rendererB.shown.size)
+            assertTrue(rendererB.shown.isEmpty())
+        }
+
+    @Test
+    fun `a deferred post renders on the attachment that resumes next`() =
+        runTest {
+            val notifications = DishNotifications()
+            notifications.postDeferred(title = "held")
+
+            val owner = TestLifecycleOwner()
+            val renderer = RecordingRenderer()
+            attach(notifications, owner, renderer, this)
+            owner.start()
+            testScheduler.runCurrent()
+            assertTrue(renderer.shown.isEmpty())
+
+            owner.resume()
+            testScheduler.runCurrent()
+
+            assertEquals(1, renderer.shown.size)
+            assertEquals("held", renderer.shown[0].notification.title)
         }
 
     @Test
@@ -73,7 +122,7 @@ class DishNotificationsTransitionTest {
             val rendererA = RecordingRenderer()
             attach(notifications, ownerA, rendererA, this)
 
-            ownerA.start()
+            ownerA.resume()
             testScheduler.runCurrent()
             notifications.info(title = "on-a")
             testScheduler.runCurrent()
@@ -85,7 +134,7 @@ class DishNotificationsTransitionTest {
             val ownerB = TestLifecycleOwner()
             val rendererB = RecordingRenderer()
             attach(notifications, ownerB, rendererB, this)
-            ownerB.start()
+            ownerB.resume()
             testScheduler.runCurrent()
 
             notifications.error(title = "on-b")
@@ -138,10 +187,14 @@ class DishNotificationsTransitionTest {
             val rendererB = RecordingRenderer()
             val attachmentB = attach(notifications, ownerB, rendererB, this)
 
-            ownerA.start()
-            ownerB.start()
+            ownerA.resume()
             testScheduler.runCurrent()
-            notifications.info(title = "shared")
+            notifications.info(title = "on-a")
+            testScheduler.runCurrent()
+            ownerA.pause()
+            ownerB.resume()
+            testScheduler.runCurrent()
+            notifications.info(title = "on-b")
             testScheduler.runCurrent()
 
             assertEquals(1, attachmentA.liveById())
@@ -159,7 +212,7 @@ class DishNotificationsTransitionTest {
         }
 
     @Test
-    fun `same-key dedup is per-attachment - A's key does not affect B`() =
+    fun `a same-key repost on the new screen leaves the old screen handle alone`() =
         runTest {
             val notifications = DishNotifications()
             val ownerA = TestLifecycleOwner()
@@ -169,26 +222,29 @@ class DishNotificationsTransitionTest {
             val rendererB = RecordingRenderer()
             val attachmentB = attach(notifications, ownerB, rendererB, this)
 
-            ownerA.start()
-            ownerB.start()
+            ownerA.resume()
             testScheduler.runCurrent()
-
             notifications.warn(title = "v1", key = "shared-key")
             testScheduler.runCurrent()
             val a1 = rendererA.handles.last()
-            val b1 = rendererB.handles.last()
 
+            ownerA.pause()
+            ownerB.resume()
+            testScheduler.runCurrent()
             notifications.warn(title = "v2", key = "shared-key")
             testScheduler.runCurrent()
 
-            assertTrue(a1.dismissed)
-            assertTrue(b1.dismissed)
+            assertFalse(a1.dismissed)
             assertEquals(1, attachmentA.liveById())
             assertEquals(1, attachmentB.liveByKey())
+
+            ownerA.destroy()
+            testScheduler.runCurrent()
+            assertTrue(a1.dismissed)
         }
 
     @Test
-    fun `dismiss(id) propagates to every attachment that has the live handle`() =
+    fun `dismiss(id) reaches the attachment holding the live handle`() =
         runTest {
             val notifications = DishNotifications()
             val ownerA = TestLifecycleOwner()
@@ -198,21 +254,20 @@ class DishNotificationsTransitionTest {
             val rendererB = RecordingRenderer()
             val attachmentB = attach(notifications, ownerB, rendererB, this)
 
-            ownerA.start()
-            ownerB.start()
+            ownerA.resume()
+            ownerA.pause()
+            ownerB.resume()
             testScheduler.runCurrent()
 
             val id = notifications.info(title = "x")
             testScheduler.runCurrent()
-            assertEquals(1, attachmentA.liveById())
+            assertEquals(0, attachmentA.liveById())
             assertEquals(1, attachmentB.liveById())
 
             notifications.dismiss(id)
             testScheduler.runCurrent()
 
-            assertEquals(0, attachmentA.liveById())
             assertEquals(0, attachmentB.liveById())
-            assertTrue(rendererA.handles.last().dismissed)
             assertTrue(rendererB.handles.last().dismissed)
         }
 
@@ -224,7 +279,7 @@ class DishNotificationsTransitionTest {
             val rendererA1 = RecordingRenderer()
             val attachmentA1 = attach(notifications, ownerA1, rendererA1, this)
 
-            ownerA1.start()
+            ownerA1.resume()
             testScheduler.runCurrent()
             notifications.info(title = "a")
             testScheduler.runCurrent()
@@ -235,7 +290,7 @@ class DishNotificationsTransitionTest {
             val ownerA2 = TestLifecycleOwner()
             val rendererA2 = RecordingRenderer()
             val attachmentA2 = attach(notifications, ownerA2, rendererA2, this)
-            ownerA2.start()
+            ownerA2.resume()
             testScheduler.runCurrent()
 
             assertEquals(0, attachmentA2.liveById())

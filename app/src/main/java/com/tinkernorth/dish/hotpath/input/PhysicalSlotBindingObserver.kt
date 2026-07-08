@@ -65,6 +65,10 @@ data class SatelliteSlotSnapshot(
 // controller index a stale entry still owns. A present device only emits BindSatellite when its
 // session is known with a live handle and its slot is registered, and BindBluetooth only when the
 // connection is actually connected now; otherwise it emits Unbind.
+// Departed = ids that vanished since the last pass PLUS any numeric binding whose device the
+// registry no longer knows: a device that left while the observer was stopped is in neither
+// `present` nor `lastBound`, and without the sweep its slot would be re-declared to the satellite
+// on every reconnect forever. Non-numeric slot ids (the on-screen controller) are never swept.
 fun reconcileSlots(
     present: Set<Int>,
     lastBound: Set<Int>,
@@ -74,7 +78,8 @@ fun reconcileSlots(
     btConnectedIds: Set<String>,
 ): List<BindOp> {
     val ops = mutableListOf<BindOp>()
-    for (id in lastBound - present) {
+    val staleBound = bindings.keys.mapNotNull { it.toIntOrNull() }.filter { it !in present }
+    for (id in (lastBound - present) + staleBound) {
         ops += BindOp.Unbind(id)
         // A claimed USB synthetic (negative id) is freed by detachUsbDevice, not forgetPhysicalDevice.
         if (id >= 0) ops += BindOp.Forget(id)

@@ -10,14 +10,12 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.view.KeyEvent
-import android.view.MotionEvent
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
@@ -33,17 +31,13 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionCoordinator
-import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
-import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.input.BluetoothGamepad
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.DiscoverySource
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.databinding.ActivityConnectionsBinding
-import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
-import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedBt
 import com.tinkernorth.dish.source.bluetooth.BluetoothDeviceScanner
@@ -53,7 +47,6 @@ import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.PairingApproval
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
-import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.notification.dishSnackbar
 import com.tinkernorth.dish.source.store.BluetoothPermissionBannerStore
 import com.tinkernorth.dish.source.system.BluetoothAdapterState
@@ -63,11 +56,11 @@ import com.tinkernorth.dish.source.system.BluetoothPermissionBannerVariant
 import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
 import com.tinkernorth.dish.source.system.NetworkState
 import com.tinkernorth.dish.source.system.NetworkStateObserver
+import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.StaticViewAdapter
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachDonatePill
-import com.tinkernorth.dish.ui.common.attachGamepadHost
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
@@ -77,7 +70,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class ConnectionsActivity : AppCompatActivity() {
+class ConnectionsActivity : BaseGamepadHostActivity() {
     @Inject lateinit var satellite: SatelliteConnectionManager
 
     @Inject lateinit var btRegistry: BluetoothGamepadRegistry
@@ -86,26 +79,18 @@ class ConnectionsActivity : AppCompatActivity() {
 
     @Inject lateinit var hub: ConnectionCoordinator
 
-    @Inject lateinit var store: com.tinkernorth.dish.repository.ConnectionStore
+    @Inject lateinit var store: ConnectionStore
 
-    @Inject lateinit var wakeState: WakeStateController
+    @Inject lateinit var btAdapterState: BluetoothAdapterStateObserver
 
-    @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
-
-    @Inject lateinit var notifications: DishNotifications
-
-    @Inject lateinit var lowPowerSignal: com.tinkernorth.dish.source.lowpower.LowPowerSignal
-
-    @Inject lateinit var btAdapterState: com.tinkernorth.dish.source.system.BluetoothAdapterStateObserver
-
-    @Inject lateinit var btPermissionState: com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
+    @Inject lateinit var btPermissionState: BluetoothPermissionStateObserver
 
     @Inject lateinit var btPermissionBannerStore: BluetoothPermissionBannerStore
 
-    @Inject lateinit var networkState: com.tinkernorth.dish.source.system.NetworkStateObserver
+    @Inject lateinit var networkState: NetworkStateObserver
 
     private lateinit var binding: ActivityConnectionsBinding
-    private lateinit var gamepadHost: GamepadActivityHost
+    private val viewModel: ConnectionsViewModel by viewModels()
 
     private lateinit var satelliteHeader: SectionHeaderAdapter
     private lateinit var bluetoothHeader: SectionHeaderAdapter
@@ -160,7 +145,6 @@ class ConnectionsActivity : AppCompatActivity() {
                     confirmForgetBt(summary.id, remembered)
                 } else {
                     btRegistry.stop(summary.id)
-                    render()
                 }
             }
         }
@@ -226,7 +210,7 @@ class ConnectionsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityConnectionsBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications, lowPowerSignal)
+        installGamepadHost(binding.root)
         setupDishToolbar(binding.toolbar)
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()
@@ -243,35 +227,12 @@ class ConnectionsActivity : AppCompatActivity() {
     private fun observeSatelliteHub() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                hub.connections.collect { conns ->
-                    render()
+                viewModel.ui.collect { state ->
+                    render(state)
+                    satelliteHeader.setLoading(state.scanning, getString(R.string.action_scanning))
                     // Success path emits no ConnectionEvent, so observe state directly to dismiss PIN dialog.
-                    val pairing = pairingServer
-                    if (pairing != null) {
-                        val pid = SatelliteConnection.idFor(pairing)
-                        val summary = conns.firstOrNull { it.id == pid }
-                        if (summary?.live == LinkState.Connected) {
-                            pinDialog?.dismiss()
-                        }
-                    }
+                    dismissPinDialogIfPaired(state)
                 }
-            }
-        }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                satellite.discoveredServers.collect { render() }
-            }
-        }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                satellite.isScanning.collect { scanning ->
-                    satelliteHeader.setLoading(scanning, getString(R.string.action_scanning))
-                }
-            }
-        }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                satellite.lastScanAtMs.collect { render() }
             }
         }
         lifecycleScope.launch {
@@ -351,11 +312,6 @@ class ConnectionsActivity : AppCompatActivity() {
         satellite.startDiscovery()
     }
 
-    override fun onStop() {
-        super.onStop()
-        gamepadHost.cancelDimOnStop()
-    }
-
     private fun setupList() {
         satelliteHeader =
             SectionHeaderAdapter(
@@ -397,44 +353,36 @@ class ConnectionsActivity : AppCompatActivity() {
         (itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
     }
 
-    private fun render() {
-        val conns = hub.connections.value
-        renderSatellites(conns)
-        renderBluetooth(conns)
-    }
-
-    private fun renderSatellites(conns: List<ConnectionSummary>) {
-        val satConns = conns.filter { it.kind == ConnectionKind.SATELLITE }
-        val knownIds = satConns.mapTo(mutableSetOf()) { it.id }
-        val rows =
-            buildList {
-                satConns.forEach { add(SatelliteRow.Known(it)) }
-                satellite.discoveredServers.value.forEach { server ->
-                    if (SatelliteConnection.idFor(server) !in knownIds) add(SatelliteRow.Discovered(server))
-                }
+    private fun dismissPinDialogIfPaired(state: ConnectionsUiState) {
+        val pairing = pairingServer ?: return
+        val pid = SatelliteConnection.idFor(pairing)
+        val connected =
+            state.satelliteRows.any {
+                it is SatelliteRow.Known && it.summary.id == pid && it.summary.live == LinkState.Connected
             }
-        satelliteList.submitList(rows.ifEmpty { listOf(SatelliteRow.Empty(satelliteEmptyMessage())) })
+        if (connected) pinDialog?.dismiss()
     }
 
-    private fun satelliteEmptyMessage(): String {
-        val lastScan = satellite.lastScanAtMs.value ?: return getString(R.string.discovery_empty_never_scanned)
-        return getString(R.string.discovery_empty_no_results, formatClock(lastScan))
-    }
-
-    private fun renderBluetooth(conns: List<ConnectionSummary>) {
+    private fun render(state: ConnectionsUiState) {
+        satelliteList.submitList(
+            state.satelliteRows.ifEmpty { listOf(SatelliteRow.Empty(satelliteEmptyMessage(state.lastScanAtMs))) },
+        )
         val rows =
-            conns
-                .filter { it.kind == ConnectionKind.BLUETOOTH }
-                .map { c ->
-                    BluetoothRow.Item(
-                        BtRowUi(
-                            summary = c,
-                            connectingLabel = if (c.live == LinkState.Connecting) btConnectingLabel(c.id) else null,
-                            secondaryIsForget = store.rememberedBt().any { it.id == c.id },
-                        ),
-                    )
-                }
+            state.bluetoothSummaries.map { c ->
+                BluetoothRow.Item(
+                    BtRowUi(
+                        summary = c,
+                        connectingLabel = if (c.live == LinkState.Connecting) btConnectingLabel(c.id) else null,
+                        secondaryIsForget = c.id in state.rememberedBtIds,
+                    ),
+                )
+            }
         bluetoothList.submitList(rows.ifEmpty { listOf(BluetoothRow.Empty(getString(R.string.bt_hosts_empty))) })
+    }
+
+    private fun satelliteEmptyMessage(lastScanAtMs: Long?): String {
+        val lastScan = lastScanAtMs ?: return getString(R.string.discovery_empty_never_scanned)
+        return getString(R.string.discovery_empty_no_results, formatClock(lastScan))
     }
 
     private fun btConnectingLabel(id: String): String {
@@ -476,7 +424,6 @@ class ConnectionsActivity : AppCompatActivity() {
     private fun commitForgetBt(id: String) {
         btRegistry.stop(id)
         hub.forgetConnection(id)
-        render()
     }
 
     private fun openBluetoothDeviceDetails(mac: String) {
@@ -1067,18 +1014,6 @@ class ConnectionsActivity : AppCompatActivity() {
 
     private fun openWifiSettings() {
         runCatching { startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)) }
-    }
-
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean = gamepadHost.dispatchKeyEvent(event) || super.dispatchKeyEvent(event)
-
-    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean =
-        gamepadHost.dispatchGenericMotionEvent(event) || super.dispatchGenericMotionEvent(event)
-
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean = gamepadHost.dispatchTouchEvent(ev) || super.dispatchTouchEvent(ev)
-
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        gamepadHost.onWindowFocusChanged(hasFocus)
     }
 
     companion object {

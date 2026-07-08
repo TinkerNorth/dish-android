@@ -1,370 +1,364 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:orientation="vertical">
 
-    <LinearLayout
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        style="@style/Widget.Dish.Toolbar"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical">
+        app:title="@string/settings_title" />
 
-        <com.google.android.material.appbar.MaterialToolbar
-            android:id="@+id/toolbar"
-            style="@style/Widget.Dish.Toolbar"
-            android:layout_width="match_parent"
-            app:title="@string/settings_title" />
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingTop="@dimen/spacing_md"
+        android:paddingBottom="@dimen/spacing_6xl">
 
-        <androidx.core.widget.NestedScrollView
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:paddingTop="@dimen/spacing_md"
-            android:paddingBottom="@dimen/spacing_6xl">
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center_horizontal">
 
             <LinearLayout
-                android:layout_width="match_parent"
+                android:layout_width="@dimen/settings_content_max_width"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="center_horizontal">
+                android:orientation="vertical">
 
-                <LinearLayout
-                    android:layout_width="@dimen/settings_content_max_width"
+                <include
+                    android:id="@+id/sectionSetup"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical">
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
 
-                    <include
-                        android:id="@+id/sectionSetup"
-                        layout="@layout/section_header"
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardSetupWizard"
+                    style="@style/Widget.Dish.Card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground">
+
+                    <LinearLayout
+                        style="@style/Widget.Dish.Card.RowContainer"
+                        android:gravity="center_vertical">
+
+                        <include
+                            android:id="@+id/cardRowSetupWizard"
+                            layout="@layout/card_row_icon_label_value"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1" />
+
+                        <ImageView
+                            android:layout_width="@dimen/icon_card_glyph"
+                            android:layout_height="@dimen/icon_card_glyph"
+                            android:layout_marginStart="@dimen/spacing_xl"
+                            android:src="@drawable/ic_chevron_right"
+                            android:importantForAccessibility="no" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardHelp"
+                    style="@style/Widget.Dish.Card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/card_margin_bottom"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground">
+
+                    <LinearLayout
+                        style="@style/Widget.Dish.Card.RowContainer"
+                        android:gravity="center_vertical">
+
+                        <include
+                            android:id="@+id/cardRowHelp"
+                            layout="@layout/card_row_icon_label_value"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1" />
+
+                        <ImageView
+                            android:layout_width="@dimen/icon_card_glyph"
+                            android:layout_height="@dimen/icon_card_glyph"
+                            android:layout_marginStart="@dimen/spacing_xl"
+                            android:src="@drawable/ic_chevron_right"
+                            android:importantForAccessibility="no" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <include
+                    android:id="@+id/sectionAppearance"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+                <com.google.android.material.card.MaterialCardView
+                    style="@style/Widget.Dish.Card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginBottom="@dimen/section_header_gap_below" />
+                        android:orientation="vertical"
+                        android:padding="@dimen/card_padding">
 
-                    <com.google.android.material.card.MaterialCardView
-                        android:id="@+id/cardSetupWizard"
-                        style="@style/Widget.Dish.Card"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:foreground="?attr/selectableItemBackground">
+                        <include
+                            android:id="@+id/cardRowAppearance"
+                            layout="@layout/card_row_icon_label_value"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content" />
 
-                        <LinearLayout
-                            style="@style/Widget.Dish.Card.RowContainer"
-                            android:gravity="center_vertical">
-
-                            <include
-                                android:id="@+id/cardRowSetupWizard"
-                                layout="@layout/card_row_icon_label_value"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1" />
-
-                            <ImageView
-                                android:layout_width="@dimen/icon_card_glyph"
-                                android:layout_height="@dimen/icon_card_glyph"
-                                android:layout_marginStart="@dimen/spacing_xl"
-                                android:src="@drawable/ic_chevron_right"
-                                android:importantForAccessibility="no" />
-                        </LinearLayout>
-                    </com.google.android.material.card.MaterialCardView>
-
-                    <com.google.android.material.card.MaterialCardView
-                        android:id="@+id/cardHelp"
-                        style="@style/Widget.Dish.Card"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/card_margin_bottom"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:foreground="?attr/selectableItemBackground">
-
-                        <LinearLayout
-                            style="@style/Widget.Dish.Card.RowContainer"
-                            android:gravity="center_vertical">
-
-                            <include
-                                android:id="@+id/cardRowHelp"
-                                layout="@layout/card_row_icon_label_value"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1" />
-
-                            <ImageView
-                                android:layout_width="@dimen/icon_card_glyph"
-                                android:layout_height="@dimen/icon_card_glyph"
-                                android:layout_marginStart="@dimen/spacing_xl"
-                                android:src="@drawable/ic_chevron_right"
-                                android:importantForAccessibility="no" />
-                        </LinearLayout>
-                    </com.google.android.material.card.MaterialCardView>
-
-                    <include
-                        android:id="@+id/sectionAppearance"
-                        layout="@layout/section_header"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/section_header_gap_above"
-                        android:layout_marginBottom="@dimen/section_header_gap_below" />
-
-                    <com.google.android.material.card.MaterialCardView
-                        style="@style/Widget.Dish.Card"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content">
-
-                        <LinearLayout
+                        <com.google.android.material.chip.ChipGroup
+                            android:id="@+id/chipGroupTheme"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:padding="@dimen/card_padding">
+                            android:layout_marginTop="@dimen/spacing_lg"
+                            app:chipSpacingHorizontal="@dimen/chip_margin_end"
+                            app:selectionRequired="true"
+                            app:singleSelection="true">
 
-                            <include
-                                android:id="@+id/cardRowAppearance"
-                                layout="@layout/card_row_icon_label_value"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content" />
-
-                            <com.google.android.material.chip.ChipGroup
-                                android:id="@+id/chipGroupTheme"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="@dimen/spacing_lg"
-                                app:chipSpacingHorizontal="@dimen/chip_margin_end"
-                                app:selectionRequired="true"
-                                app:singleSelection="true">
-
-                                <com.google.android.material.chip.Chip
-                                    android:id="@+id/chipThemeSystem"
-                                    style="@style/Widget.Dish.Chip"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/settings_appearance_system" />
-
-                                <com.google.android.material.chip.Chip
-                                    android:id="@+id/chipThemeLight"
-                                    style="@style/Widget.Dish.Chip"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/settings_appearance_light" />
-
-                                <com.google.android.material.chip.Chip
-                                    android:id="@+id/chipThemeDark"
-                                    style="@style/Widget.Dish.Chip"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="@string/settings_appearance_dark" />
-                            </com.google.android.material.chip.ChipGroup>
-                        </LinearLayout>
-                    </com.google.android.material.card.MaterialCardView>
-
-                    <include
-                        android:id="@+id/sectionDiagnostics"
-                        layout="@layout/section_header"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/section_header_gap_above"
-                        android:layout_marginBottom="@dimen/section_header_gap_below" />
-
-                    <com.google.android.material.card.MaterialCardView
-                        android:id="@+id/cardDiagnostics"
-                        style="@style/Widget.Dish.Card"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginBottom="@dimen/card_margin_bottom"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:foreground="?attr/selectableItemBackground">
-
-                        <LinearLayout
-                            style="@style/Widget.Dish.Card.RowContainer"
-                            android:gravity="center_vertical">
-
-                            <include
-                                android:id="@+id/cardRowDiagnostics"
-                                layout="@layout/card_row_icon_label_value"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1" />
-
-                            <ImageView
-                                android:layout_width="@dimen/icon_card_glyph"
-                                android:layout_height="@dimen/icon_card_glyph"
-                                android:layout_marginStart="@dimen/spacing_xl"
-                                android:src="@drawable/ic_chevron_right"
-                                android:importantForAccessibility="no" />
-                        </LinearLayout>
-                    </com.google.android.material.card.MaterialCardView>
-
-                    <com.google.android.material.card.MaterialCardView
-                        style="@style/Widget.Dish.Card"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content">
-
-                        <LinearLayout
-                            style="@style/Widget.Dish.Card.RowContainer"
-                            android:gravity="top">
-
-                            <include
-                                android:id="@+id/cardRowCrash"
-                                layout="@layout/card_row_icon_label_value"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1" />
-
-                            <com.google.android.material.materialswitch.MaterialSwitch
-                                android:id="@+id/switchCrashReporting"
-                                style="@style/Widget.Dish.Switch"
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chipThemeSystem"
+                                style="@style/Widget.Dish.Chip"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginStart="@dimen/spacing_xl"
-                                android:layout_marginTop="@dimen/size_2"
-                                android:contentDescription="@string/settings_crash_reporting_title" />
-                        </LinearLayout>
-                    </com.google.android.material.card.MaterialCardView>
+                                android:text="@string/settings_appearance_system" />
 
-                    <include
-                        android:id="@+id/sectionAbout"
-                        layout="@layout/section_header"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/section_header_gap_above"
-                        android:layout_marginBottom="@dimen/section_header_gap_below" />
-
-                    <com.google.android.material.card.MaterialCardView
-                        android:id="@+id/cardSupport"
-                        style="@style/Widget.Dish.Card"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:foreground="?attr/selectableItemBackground">
-
-                        <LinearLayout
-                            style="@style/Widget.Dish.Card.RowContainer"
-                            android:gravity="center_vertical">
-
-                            <include
-                                android:id="@+id/cardRowSupport"
-                                layout="@layout/card_row_icon_label_value"
-                                android:layout_width="0dp"
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chipThemeLight"
+                                style="@style/Widget.Dish.Chip"
+                                android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_weight="1" />
+                                android:text="@string/settings_appearance_light" />
 
-                            <ImageView
-                                android:layout_width="@dimen/icon_card_glyph"
-                                android:layout_height="@dimen/icon_card_glyph"
-                                android:layout_marginStart="@dimen/spacing_xl"
-                                android:src="@drawable/ic_chevron_right"
-                                android:importantForAccessibility="no" />
-                        </LinearLayout>
-                    </com.google.android.material.card.MaterialCardView>
-
-                    <com.google.android.material.card.MaterialCardView
-                        android:id="@+id/cardPrivacyPolicy"
-                        style="@style/Widget.Dish.Card"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/card_margin_bottom"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:foreground="?attr/selectableItemBackground">
-
-                        <LinearLayout
-                            style="@style/Widget.Dish.Card.RowContainer"
-                            android:gravity="center_vertical">
-
-                            <include
-                                android:id="@+id/cardRowPrivacy"
-                                layout="@layout/card_row_icon_label_value"
-                                android:layout_width="0dp"
+                            <com.google.android.material.chip.Chip
+                                android:id="@+id/chipThemeDark"
+                                style="@style/Widget.Dish.Chip"
+                                android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_weight="1" />
+                                android:text="@string/settings_appearance_dark" />
+                        </com.google.android.material.chip.ChipGroup>
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
 
-                            <ImageView
-                                android:layout_width="@dimen/icon_card_glyph"
-                                android:layout_height="@dimen/icon_card_glyph"
-                                android:layout_marginStart="@dimen/spacing_xl"
-                                android:src="@drawable/ic_open_in_new"
-                                android:importantForAccessibility="no" />
-                        </LinearLayout>
-                    </com.google.android.material.card.MaterialCardView>
+                <include
+                    android:id="@+id/sectionDiagnostics"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
 
-                    <com.google.android.material.card.MaterialCardView
-                        android:id="@+id/cardOpenSourceLicenses"
-                        style="@style/Widget.Dish.Card"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/card_margin_bottom"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:foreground="?attr/selectableItemBackground">
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardDiagnostics"
+                    style="@style/Widget.Dish.Card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="@dimen/card_margin_bottom"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground">
 
-                        <LinearLayout
-                            style="@style/Widget.Dish.Card.RowContainer"
-                            android:gravity="center_vertical">
+                    <LinearLayout
+                        style="@style/Widget.Dish.Card.RowContainer"
+                        android:gravity="center_vertical">
 
-                            <include
-                                android:id="@+id/cardRowOpenSourceLicenses"
-                                layout="@layout/card_row_icon_label_value"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1" />
-
-                            <ImageView
-                                android:layout_width="@dimen/icon_card_glyph"
-                                android:layout_height="@dimen/icon_card_glyph"
-                                android:layout_marginStart="@dimen/spacing_xl"
-                                android:src="@drawable/ic_chevron_right"
-                                android:importantForAccessibility="no" />
-                        </LinearLayout>
-                    </com.google.android.material.card.MaterialCardView>
-
-                    <com.google.android.material.card.MaterialCardView
-                        style="@style/Widget.Dish.Card"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/card_margin_bottom">
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
+                        <include
+                            android:id="@+id/cardRowDiagnostics"
+                            layout="@layout/card_row_icon_label_value"
+                            android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical"
-                            android:paddingHorizontal="@dimen/card_padding_horizontal"
-                            android:paddingVertical="@dimen/size_11">
+                            android:layout_weight="1" />
 
-                            <TextView
-                                style="@style/TextAppearance.Dish.Label"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/settings_version_label"
-                                android:textAllCaps="true" />
+                        <ImageView
+                            android:layout_width="@dimen/icon_card_glyph"
+                            android:layout_height="@dimen/icon_card_glyph"
+                            android:layout_marginStart="@dimen/spacing_xl"
+                            android:src="@drawable/ic_chevron_right"
+                            android:importantForAccessibility="no" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
 
-                            <TextView
-                                android:id="@+id/tvVersion"
-                                style="@style/TextAppearance.Dish.Body.Mono"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:layout_marginStart="@dimen/spacing_xl"
-                                android:gravity="end"
-                                android:singleLine="true"
-                                android:ellipsize="end" />
-                        </LinearLayout>
-                    </com.google.android.material.card.MaterialCardView>
+                <com.google.android.material.card.MaterialCardView
+                    style="@style/Widget.Dish.Card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
 
-                    <TextView
-                        style="@style/TextAppearance.Dish.Caption"
+                    <LinearLayout
+                        style="@style/Widget.Dish.Card.RowContainer"
+                        android:gravity="top">
+
+                        <include
+                            android:id="@+id/cardRowCrash"
+                            layout="@layout/card_row_icon_label_value"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1" />
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/switchCrashReporting"
+                            style="@style/Widget.Dish.Switch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="@dimen/spacing_xl"
+                            android:layout_marginTop="@dimen/size_2"
+                            android:contentDescription="@string/settings_crash_reporting_title" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <include
+                    android:id="@+id/sectionAbout"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardSupport"
+                    style="@style/Widget.Dish.Card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground">
+
+                    <LinearLayout
+                        style="@style/Widget.Dish.Card.RowContainer"
+                        android:gravity="center_vertical">
+
+                        <include
+                            android:id="@+id/cardRowSupport"
+                            layout="@layout/card_row_icon_label_value"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1" />
+
+                        <ImageView
+                            android:layout_width="@dimen/icon_card_glyph"
+                            android:layout_height="@dimen/icon_card_glyph"
+                            android:layout_marginStart="@dimen/spacing_xl"
+                            android:src="@drawable/ic_chevron_right"
+                            android:importantForAccessibility="no" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardPrivacyPolicy"
+                    style="@style/Widget.Dish.Card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/card_margin_bottom"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground">
+
+                    <LinearLayout
+                        style="@style/Widget.Dish.Card.RowContainer"
+                        android:gravity="center_vertical">
+
+                        <include
+                            android:id="@+id/cardRowPrivacy"
+                            layout="@layout/card_row_icon_label_value"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1" />
+
+                        <ImageView
+                            android:layout_width="@dimen/icon_card_glyph"
+                            android:layout_height="@dimen/icon_card_glyph"
+                            android:layout_marginStart="@dimen/spacing_xl"
+                            android:src="@drawable/ic_open_in_new"
+                            android:importantForAccessibility="no" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardOpenSourceLicenses"
+                    style="@style/Widget.Dish.Card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/card_margin_bottom"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground">
+
+                    <LinearLayout
+                        style="@style/Widget.Dish.Card.RowContainer"
+                        android:gravity="center_vertical">
+
+                        <include
+                            android:id="@+id/cardRowOpenSourceLicenses"
+                            layout="@layout/card_row_icon_label_value"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1" />
+
+                        <ImageView
+                            android:layout_width="@dimen/icon_card_glyph"
+                            android:layout_height="@dimen/icon_card_glyph"
+                            android:layout_marginStart="@dimen/spacing_xl"
+                            android:src="@drawable/ic_chevron_right"
+                            android:importantForAccessibility="no" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
+                    style="@style/Widget.Dish.Card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/card_margin_bottom">
+
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/size_32"
-                        android:text="@string/settings_brand_footer"
-                        android:textAllCaps="true"
-                        android:gravity="center"
-                        android:alpha="0.7" />
-                </LinearLayout>
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingHorizontal="@dimen/card_padding_horizontal"
+                        android:paddingVertical="@dimen/size_11">
+
+                        <TextView
+                            style="@style/TextAppearance.Dish.Label"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/settings_version_label"
+                            android:textAllCaps="true" />
+
+                        <TextView
+                            android:id="@+id/tvVersion"
+                            style="@style/TextAppearance.Dish.Body.Mono"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="@dimen/spacing_xl"
+                            android:gravity="end"
+                            android:singleLine="true"
+                            android:ellipsize="end" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <TextView
+                    style="@style/TextAppearance.Dish.Caption"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/size_32"
+                    android:text="@string/settings_brand_footer"
+                    android:textAllCaps="true"
+                    android:gravity="center"
+                    android:alpha="0.7" />
             </LinearLayout>
-        </androidx.core.widget.NestedScrollView>
-    </LinearLayout>
-
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

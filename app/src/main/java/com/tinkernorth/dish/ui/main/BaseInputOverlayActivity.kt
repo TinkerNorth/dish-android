@@ -6,14 +6,11 @@ import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Process
-import android.view.KeyEvent
-import android.view.MotionEvent
 import android.view.Surface
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -24,15 +21,11 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionSummary
-import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.model.DishNotification
-import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
-import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.inputrate.InputRateStore
-import com.tinkernorth.dish.source.lowpower.LowPowerSignal
-import com.tinkernorth.dish.source.notification.DishNotifications
+import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.FoldAwareSession
 import com.tinkernorth.dish.ui.common.Posture
 import com.tinkernorth.dish.ui.common.ResendPacer
@@ -49,22 +42,12 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import kotlin.math.max
 
-abstract class BaseInputOverlayActivity : AppCompatActivity() {
+abstract class BaseInputOverlayActivity : BaseGamepadHostActivity() {
     @Inject lateinit var hub: ConnectionCoordinator
 
     @Inject lateinit var satellite: SatelliteConnectionManager
 
-    @Inject lateinit var wakeState: WakeStateController
-
-    @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
-
-    @Inject lateinit var notifications: DishNotifications
-
-    @Inject lateinit var lowPowerSignal: LowPowerSignal
-
     @Inject lateinit var inputRateStore: InputRateStore
-
-    protected lateinit var gamepadHost: GamepadActivityHost
 
     protected var connectionId: String = ""
 
@@ -99,9 +82,7 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
                 }
         }
 
-        gamepadHost =
-            GamepadActivityHost(this, rootView(), wakeState, gamepadRegistry, lowPowerSignal)
-                .also { it.install(notifications) }
+        installGamepadHost(rootView())
         hideSystemBars()
 
         ViewCompat.setOnApplyWindowInsetsListener(rootView()) { v, wi ->
@@ -287,23 +268,6 @@ abstract class BaseInputOverlayActivity : AppCompatActivity() {
                     or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
             )
         }
-    }
-
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean = gamepadHost.dispatchKeyEvent(event) || super.dispatchKeyEvent(event)
-
-    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean =
-        gamepadHost.dispatchGenericMotionEvent(event) || super.dispatchGenericMotionEvent(event)
-
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean = gamepadHost.dispatchTouchEvent(ev) || super.dispatchTouchEvent(ev)
-
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        gamepadHost.onWindowFocusChanged(hasFocus)
-    }
-
-    override fun onStop() {
-        super.onStop()
-        gamepadHost.cancelDimOnStop()
     }
 
     override fun onDestroy() {

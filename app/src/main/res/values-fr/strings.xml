@@ -416,6 +416,7 @@
     <string name="diagnostics_hz">%1$d Hz</string>
     <string name="diagnostics_ms">%1$.2f ms</string>
     <string name="diagnostics_ms_approx">~%1$.2f ms</string>
+    <string name="diagnostics_ms_approx_window">~%1$.2f ms · %2$d derniers pings</string>
     <string name="diagnostics_ms_p50_p99">%1$.2f ms (p50) · %2$.2f ms (p99)</string>
     <string name="diagnostics_unknown">Inconnu</string>
     <string name="diagnostics_present">Présent</string>

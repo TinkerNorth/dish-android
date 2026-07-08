@@ -23,424 +23,418 @@
       C.night      → @color/navy_800        → @color/colorSurface
       C.cardStroke → @color/signal_cyan_200 → @color/colorCardStroke  (~12% alpha)
 -->
-<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:orientation="vertical">
 
-    <LinearLayout
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        style="@style/Widget.Dish.Toolbar"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical">
+        app:title="@string/settings_title">
 
-        <com.google.android.material.appbar.MaterialToolbar
-            android:id="@+id/toolbar"
-            style="@style/Widget.Dish.Toolbar"
+        <include
+            layout="@layout/view_donate_heart_button"
+            android:layout_width="@dimen/icon_settings_button"
+            android:layout_height="@dimen/icon_settings_button"
+            android:layout_gravity="end" />
+    </com.google.android.material.appbar.MaterialToolbar>
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingHorizontal="@dimen/spacing_5xl"
+        android:paddingTop="@dimen/spacing_md"
+        android:paddingBottom="@dimen/spacing_6xl">
+
+        <LinearLayout
             android:layout_width="match_parent"
-            app:title="@string/settings_title">
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
 
             <include
-                layout="@layout/view_donate_heart_button"
-                android:layout_width="@dimen/icon_settings_button"
-                android:layout_height="@dimen/icon_settings_button"
-                android:layout_gravity="end" />
-        </com.google.android.material.appbar.MaterialToolbar>
-
-        <androidx.core.widget.NestedScrollView
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:paddingHorizontal="@dimen/spacing_5xl"
-            android:paddingTop="@dimen/spacing_md"
-            android:paddingBottom="@dimen/spacing_6xl">
-
-            <LinearLayout
+                android:id="@+id/sectionSetup"
+                layout="@layout/section_header"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical">
+                android:layout_marginBottom="@dimen/section_header_gap_below" />
 
-                <include
-                    android:id="@+id/sectionSetup"
-                    layout="@layout/section_header"
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardSetupWizard"
+                style="@style/Widget.Dish.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground">
+
+                <LinearLayout
+                    style="@style/Widget.Dish.Card.RowContainer"
+                    android:gravity="center_vertical">
+
+                    <include
+                        android:id="@+id/cardRowSetupWizard"
+                        layout="@layout/card_row_icon_label_value"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1" />
+
+                    <ImageView
+                        android:layout_width="@dimen/icon_card_glyph"
+                        android:layout_height="@dimen/icon_card_glyph"
+                        android:layout_marginStart="@dimen/spacing_xl"
+                        android:src="@drawable/ic_chevron_right"
+                        android:importantForAccessibility="no" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardHelp"
+                style="@style/Widget.Dish.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/card_margin_bottom"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground">
+
+                <LinearLayout
+                    style="@style/Widget.Dish.Card.RowContainer"
+                    android:gravity="center_vertical">
+
+                    <include
+                        android:id="@+id/cardRowHelp"
+                        layout="@layout/card_row_icon_label_value"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1" />
+
+                    <ImageView
+                        android:layout_width="@dimen/icon_card_glyph"
+                        android:layout_height="@dimen/icon_card_glyph"
+                        android:layout_marginStart="@dimen/spacing_xl"
+                        android:src="@drawable/ic_chevron_right"
+                        android:importantForAccessibility="no" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- ═══ APPEARANCE ═════════════════════════════════════════
+                 Eyebrow uses the canonical `section_header.xml` include
+                 (label only); SettingsActivity.onCreate sets the text. -->
+            <include
+                android:id="@+id/sectionAppearance"
+                layout="@layout/section_header"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/section_header_gap_above"
+                android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+            <!-- Theme card. Vertical orientation deviates from the other
+                 Settings cards (which are horizontal `Widget.Dish.Card.RowContainer`
+                 rows): the icon+title+body composite sits on top, then the
+                 three-way chip picker stacks underneath. The horizontal
+                 row container can't host this because the chip group is
+                 wider than any trailing affordance and would push the
+                 icon column off-screen on narrow devices. -->
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.Dish.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="@dimen/section_header_gap_below" />
+                    android:orientation="vertical"
+                    android:padding="@dimen/card_padding">
 
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/cardSetupWizard"
-                    style="@style/Widget.Dish.Card"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:foreground="?attr/selectableItemBackground">
+                    <!-- Same composite as the Crash + Privacy cards;
+                         SettingsActivity.onCreate sets icon (ic_contrast),
+                         title, and body. -->
+                    <include
+                        android:id="@+id/cardRowAppearance"
+                        layout="@layout/card_row_icon_label_value"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
 
-                    <LinearLayout
-                        style="@style/Widget.Dish.Card.RowContainer"
-                        android:gravity="center_vertical">
-
-                        <include
-                            android:id="@+id/cardRowSetupWizard"
-                            layout="@layout/card_row_icon_label_value"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1" />
-
-                        <ImageView
-                            android:layout_width="@dimen/icon_card_glyph"
-                            android:layout_height="@dimen/icon_card_glyph"
-                            android:layout_marginStart="@dimen/spacing_xl"
-                            android:src="@drawable/ic_chevron_right"
-                            android:importantForAccessibility="no" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/cardHelp"
-                    style="@style/Widget.Dish.Card"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/card_margin_bottom"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:foreground="?attr/selectableItemBackground">
-
-                    <LinearLayout
-                        style="@style/Widget.Dish.Card.RowContainer"
-                        android:gravity="center_vertical">
-
-                        <include
-                            android:id="@+id/cardRowHelp"
-                            layout="@layout/card_row_icon_label_value"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1" />
-
-                        <ImageView
-                            android:layout_width="@dimen/icon_card_glyph"
-                            android:layout_height="@dimen/icon_card_glyph"
-                            android:layout_marginStart="@dimen/spacing_xl"
-                            android:src="@drawable/ic_chevron_right"
-                            android:importantForAccessibility="no" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-
-                <!-- ═══ APPEARANCE ═════════════════════════════════════════
-                     Eyebrow uses the canonical `section_header.xml` include
-                     (label only); SettingsActivity.onCreate sets the text. -->
-                <include
-                    android:id="@+id/sectionAppearance"
-                    layout="@layout/section_header"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/section_header_gap_above"
-                    android:layout_marginBottom="@dimen/section_header_gap_below" />
-
-                <!-- Theme card. Vertical orientation deviates from the other
-                     Settings cards (which are horizontal `Widget.Dish.Card.RowContainer`
-                     rows): the icon+title+body composite sits on top, then the
-                     three-way chip picker stacks underneath. The horizontal
-                     row container can't host this because the chip group is
-                     wider than any trailing affordance and would push the
-                     icon column off-screen on narrow devices. -->
-                <com.google.android.material.card.MaterialCardView
-                    style="@style/Widget.Dish.Card"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content">
-
-                    <LinearLayout
+                    <!-- Three-way chip picker for ThemeMode: System /
+                         Light / Dark. ChipGroup's `singleSelection` +
+                         `selectionRequired` enforce the invariant that
+                         exactly one chip is checked at any time, so
+                         SettingsActivity only has to map a chip id to a
+                         ThemeMode and persist the choice. The chip style
+                         (`Widget.Dish.Chip`) is the same one the slot
+                         card's inline pickers use, so the cyan-filled
+                         checked / pale-cyan-stroked unchecked treatment
+                         matches the rest of the app. -->
+                    <com.google.android.material.chip.ChipGroup
+                        android:id="@+id/chipGroupTheme"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:padding="@dimen/card_padding">
+                        android:layout_marginTop="@dimen/spacing_lg"
+                        app:chipSpacingHorizontal="@dimen/chip_margin_end"
+                        app:selectionRequired="true"
+                        app:singleSelection="true">
 
-                        <!-- Same composite as the Crash + Privacy cards;
-                             SettingsActivity.onCreate sets icon (ic_contrast),
-                             title, and body. -->
-                        <include
-                            android:id="@+id/cardRowAppearance"
-                            layout="@layout/card_row_icon_label_value"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content" />
-
-                        <!-- Three-way chip picker for ThemeMode: System /
-                             Light / Dark. ChipGroup's `singleSelection` +
-                             `selectionRequired` enforce the invariant that
-                             exactly one chip is checked at any time, so
-                             SettingsActivity only has to map a chip id to a
-                             ThemeMode and persist the choice. The chip style
-                             (`Widget.Dish.Chip`) is the same one the slot
-                             card's inline pickers use, so the cyan-filled
-                             checked / pale-cyan-stroked unchecked treatment
-                             matches the rest of the app. -->
-                        <com.google.android.material.chip.ChipGroup
-                            android:id="@+id/chipGroupTheme"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="@dimen/spacing_lg"
-                            app:chipSpacingHorizontal="@dimen/chip_margin_end"
-                            app:selectionRequired="true"
-                            app:singleSelection="true">
-
-                            <com.google.android.material.chip.Chip
-                                android:id="@+id/chipThemeSystem"
-                                style="@style/Widget.Dish.Chip"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/settings_appearance_system" />
-
-                            <com.google.android.material.chip.Chip
-                                android:id="@+id/chipThemeLight"
-                                style="@style/Widget.Dish.Chip"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/settings_appearance_light" />
-
-                            <com.google.android.material.chip.Chip
-                                android:id="@+id/chipThemeDark"
-                                style="@style/Widget.Dish.Chip"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/settings_appearance_dark" />
-                        </com.google.android.material.chip.ChipGroup>
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-
-                <!-- ═══ DIAGNOSTICS ════════════════════════════════════════
-                     Eyebrow uses the canonical `section_header.xml` include
-                     with icon + button hidden by default (`Label.Accent`
-                     label only). SettingsActivity.onCreate sets the label
-                     text. -->
-                <include
-                    android:id="@+id/sectionDiagnostics"
-                    layout="@layout/section_header"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/section_header_gap_above"
-                    android:layout_marginBottom="@dimen/section_header_gap_below" />
-
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/cardDiagnostics"
-                    style="@style/Widget.Dish.Card"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="@dimen/card_margin_bottom"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:foreground="?attr/selectableItemBackground">
-
-                    <LinearLayout
-                        style="@style/Widget.Dish.Card.RowContainer"
-                        android:gravity="center_vertical">
-
-                        <include
-                            android:id="@+id/cardRowDiagnostics"
-                            layout="@layout/card_row_icon_label_value"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1" />
-
-                        <ImageView
-                            android:layout_width="@dimen/icon_card_glyph"
-                            android:layout_height="@dimen/icon_card_glyph"
-                            android:layout_marginStart="@dimen/spacing_xl"
-                            android:src="@drawable/ic_chevron_right"
-                            android:importantForAccessibility="no" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-
-                <com.google.android.material.card.MaterialCardView
-                    style="@style/Widget.Dish.Card"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content">
-
-                    <LinearLayout
-                        style="@style/Widget.Dish.Card.RowContainer"
-                        android:gravity="top">
-
-                        <!-- Leading icon + title/subtitle column. Icon
-                             (`ic_bug`) + title + subtitle text are set in
-                             SettingsActivity.onCreate. The Switch sits as a
-                             sibling so this card keeps the multi-line
-                             gravity=top alignment without the composite
-                             knowing about the trailing affordance. -->
-                        <include
-                            android:id="@+id/cardRowCrash"
-                            layout="@layout/card_row_icon_label_value"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1" />
-
-                        <com.google.android.material.materialswitch.MaterialSwitch
-                            android:id="@+id/switchCrashReporting"
-                            style="@style/Widget.Dish.Switch"
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipThemeSystem"
+                            style="@style/Widget.Dish.Chip"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="@dimen/spacing_xl"
-                            android:layout_marginTop="@dimen/size_2"
-                            android:contentDescription="@string/settings_crash_reporting_title" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
+                            android:text="@string/settings_appearance_system" />
 
-                <!-- ═══ ABOUT ══════════════════════════════════════════════
-                     Eyebrow uses the canonical `section_header.xml` include.
-                     SettingsActivity.onCreate sets the label text. -->
-                <include
-                    android:id="@+id/sectionAbout"
-                    layout="@layout/section_header"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/section_header_gap_above"
-                    android:layout_marginBottom="@dimen/section_header_gap_below" />
-
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/cardSupport"
-                    style="@style/Widget.Dish.Card"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:foreground="?attr/selectableItemBackground">
-
-                    <LinearLayout
-                        style="@style/Widget.Dish.Card.RowContainer"
-                        android:gravity="center_vertical">
-
-                        <include
-                            android:id="@+id/cardRowSupport"
-                            layout="@layout/card_row_icon_label_value"
-                            android:layout_width="0dp"
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipThemeLight"
+                            style="@style/Widget.Dish.Chip"
+                            android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_weight="1" />
+                            android:text="@string/settings_appearance_light" />
 
-                        <ImageView
-                            android:layout_width="@dimen/icon_card_glyph"
-                            android:layout_height="@dimen/icon_card_glyph"
-                            android:layout_marginStart="@dimen/spacing_xl"
-                            android:src="@drawable/ic_chevron_right"
-                            android:importantForAccessibility="no" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/cardPrivacyPolicy"
-                    style="@style/Widget.Dish.Card"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/card_margin_bottom"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:foreground="?attr/selectableItemBackground">
-
-                    <LinearLayout
-                        style="@style/Widget.Dish.Card.RowContainer"
-                        android:gravity="center_vertical">
-
-                        <!-- Leading icon + title/subtitle column. Icon
-                             (`ic_shield`), title, and subtitle URL text +
-                             single-line ellipsizing are wired in
-                             SettingsActivity.onCreate. The subtitle's
-                             TextAppearance is swapped from the composite
-                             default `Body` to `Body.Mono` so the URL renders
-                             in the on-surface mono tone the version row uses. -->
-                        <include
-                            android:id="@+id/cardRowPrivacy"
-                            layout="@layout/card_row_icon_label_value"
-                            android:layout_width="0dp"
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/chipThemeDark"
+                            style="@style/Widget.Dish.Chip"
+                            android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_weight="1" />
+                            android:text="@string/settings_appearance_dark" />
+                    </com.google.android.material.chip.ChipGroup>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
 
-                        <ImageView
-                            android:layout_width="@dimen/icon_card_glyph"
-                            android:layout_height="@dimen/icon_card_glyph"
-                            android:layout_marginStart="@dimen/spacing_xl"
-                            android:src="@drawable/ic_open_in_new"
-                            android:importantForAccessibility="no" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
+            <!-- ═══ DIAGNOSTICS ════════════════════════════════════════
+                 Eyebrow uses the canonical `section_header.xml` include
+                 with icon + button hidden by default (`Label.Accent`
+                 label only). SettingsActivity.onCreate sets the label
+                 text. -->
+            <include
+                android:id="@+id/sectionDiagnostics"
+                layout="@layout/section_header"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/section_header_gap_above"
+                android:layout_marginBottom="@dimen/section_header_gap_below" />
 
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/cardOpenSourceLicenses"
-                    style="@style/Widget.Dish.Card"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/card_margin_bottom"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:foreground="?attr/selectableItemBackground">
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardDiagnostics"
+                style="@style/Widget.Dish.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/card_margin_bottom"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground">
 
-                    <LinearLayout
-                        style="@style/Widget.Dish.Card.RowContainer"
-                        android:gravity="center_vertical">
+                <LinearLayout
+                    style="@style/Widget.Dish.Card.RowContainer"
+                    android:gravity="center_vertical">
 
-                        <include
-                            android:id="@+id/cardRowOpenSourceLicenses"
-                            layout="@layout/card_row_icon_label_value"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1" />
-
-                        <ImageView
-                            android:layout_width="@dimen/icon_card_glyph"
-                            android:layout_height="@dimen/icon_card_glyph"
-                            android:layout_marginStart="@dimen/spacing_xl"
-                            android:src="@drawable/ic_chevron_right"
-                            android:importantForAccessibility="no" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-
-                <com.google.android.material.card.MaterialCardView
-                    style="@style/Widget.Dish.Card"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/card_margin_bottom">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
+                    <include
+                        android:id="@+id/cardRowDiagnostics"
+                        layout="@layout/card_row_icon_label_value"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:paddingHorizontal="@dimen/card_padding_horizontal"
-                        android:paddingVertical="@dimen/size_11">
+                        android:layout_weight="1" />
 
-                        <!-- Version label adopts Label and keeps textAllCaps
-                             inline: capitalisation is callsite intent, not a
-                             style-wide concern. -->
-                        <TextView
-                            style="@style/TextAppearance.Dish.Label"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/settings_version_label"
-                            android:textAllCaps="true" />
+                    <ImageView
+                        android:layout_width="@dimen/icon_card_glyph"
+                        android:layout_height="@dimen/icon_card_glyph"
+                        android:layout_marginStart="@dimen/spacing_xl"
+                        android:src="@drawable/ic_chevron_right"
+                        android:importantForAccessibility="no" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
 
-                        <TextView
-                            android:id="@+id/tvVersion"
-                            style="@style/TextAppearance.Dish.Body.Mono"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:layout_marginStart="@dimen/spacing_xl"
-                            android:gravity="end"
-                            android:singleLine="true"
-                            android:ellipsize="end" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.Dish.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
 
-                <!-- Brand footer: stylistic constant, not localised. Adopts
-                     Caption and keeps textAllCaps + alpha + gravity inline
-                     (those are callsite intent, not style-wide concerns). -->
-                <TextView
-                    style="@style/TextAppearance.Dish.Caption"
+                <LinearLayout
+                    style="@style/Widget.Dish.Card.RowContainer"
+                    android:gravity="top">
+
+                    <!-- Leading icon + title/subtitle column. Icon
+                         (`ic_bug`) + title + subtitle text are set in
+                         SettingsActivity.onCreate. The Switch sits as a
+                         sibling so this card keeps the multi-line
+                         gravity=top alignment without the composite
+                         knowing about the trailing affordance. -->
+                    <include
+                        android:id="@+id/cardRowCrash"
+                        layout="@layout/card_row_icon_label_value"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/switchCrashReporting"
+                        style="@style/Widget.Dish.Switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="@dimen/spacing_xl"
+                        android:layout_marginTop="@dimen/size_2"
+                        android:contentDescription="@string/settings_crash_reporting_title" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- ═══ ABOUT ══════════════════════════════════════════════
+                 Eyebrow uses the canonical `section_header.xml` include.
+                 SettingsActivity.onCreate sets the label text. -->
+            <include
+                android:id="@+id/sectionAbout"
+                layout="@layout/section_header"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/section_header_gap_above"
+                android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardSupport"
+                style="@style/Widget.Dish.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground">
+
+                <LinearLayout
+                    style="@style/Widget.Dish.Card.RowContainer"
+                    android:gravity="center_vertical">
+
+                    <include
+                        android:id="@+id/cardRowSupport"
+                        layout="@layout/card_row_icon_label_value"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1" />
+
+                    <ImageView
+                        android:layout_width="@dimen/icon_card_glyph"
+                        android:layout_height="@dimen/icon_card_glyph"
+                        android:layout_marginStart="@dimen/spacing_xl"
+                        android:src="@drawable/ic_chevron_right"
+                        android:importantForAccessibility="no" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardPrivacyPolicy"
+                style="@style/Widget.Dish.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/card_margin_bottom"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground">
+
+                <LinearLayout
+                    style="@style/Widget.Dish.Card.RowContainer"
+                    android:gravity="center_vertical">
+
+                    <!-- Leading icon + title/subtitle column. Icon
+                         (`ic_shield`), title, and subtitle URL text +
+                         single-line ellipsizing are wired in
+                         SettingsActivity.onCreate. The subtitle's
+                         TextAppearance is swapped from the composite
+                         default `Body` to `Body.Mono` so the URL renders
+                         in the on-surface mono tone the version row uses. -->
+                    <include
+                        android:id="@+id/cardRowPrivacy"
+                        layout="@layout/card_row_icon_label_value"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1" />
+
+                    <ImageView
+                        android:layout_width="@dimen/icon_card_glyph"
+                        android:layout_height="@dimen/icon_card_glyph"
+                        android:layout_marginStart="@dimen/spacing_xl"
+                        android:src="@drawable/ic_open_in_new"
+                        android:importantForAccessibility="no" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardOpenSourceLicenses"
+                style="@style/Widget.Dish.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/card_margin_bottom"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground">
+
+                <LinearLayout
+                    style="@style/Widget.Dish.Card.RowContainer"
+                    android:gravity="center_vertical">
+
+                    <include
+                        android:id="@+id/cardRowOpenSourceLicenses"
+                        layout="@layout/card_row_icon_label_value"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1" />
+
+                    <ImageView
+                        android:layout_width="@dimen/icon_card_glyph"
+                        android:layout_height="@dimen/icon_card_glyph"
+                        android:layout_marginStart="@dimen/spacing_xl"
+                        android:src="@drawable/ic_chevron_right"
+                        android:importantForAccessibility="no" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.Dish.Card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/card_margin_bottom">
+
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/size_32"
-                    android:text="@string/settings_brand_footer"
-                    android:textAllCaps="true"
-                    android:gravity="center"
-                    android:alpha="0.7" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="@dimen/card_padding_horizontal"
+                    android:paddingVertical="@dimen/size_11">
 
-            </LinearLayout>
-        </androidx.core.widget.NestedScrollView>
-    </LinearLayout>
+                    <!-- Version label adopts Label and keeps textAllCaps
+                         inline: capitalisation is callsite intent, not a
+                         style-wide concern. -->
+                    <TextView
+                        style="@style/TextAppearance.Dish.Label"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_version_label"
+                        android:textAllCaps="true" />
 
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+                    <TextView
+                        android:id="@+id/tvVersion"
+                        style="@style/TextAppearance.Dish.Body.Mono"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="@dimen/spacing_xl"
+                        android:gravity="end"
+                        android:singleLine="true"
+                        android:ellipsize="end" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Brand footer: stylistic constant, not localised. Adopts
+                 Caption and keeps textAllCaps + alpha + gravity inline
+                 (those are callsite intent, not style-wide concerns). -->
+            <TextView
+                style="@style/TextAppearance.Dish.Caption"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/size_32"
+                android:text="@string/settings_brand_footer"
+                android:textAllCaps="true"
+                android:gravity="center"
+                android:alpha="0.7" />
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

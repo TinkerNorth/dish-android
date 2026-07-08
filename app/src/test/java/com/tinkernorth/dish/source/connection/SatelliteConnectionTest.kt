@@ -701,4 +701,98 @@ class SatelliteConnectionTest {
         conn.adoptEpoch(8)
         assertEquals(8, conn.lastAppliedEpoch)
     }
+
+    @Test
+    fun `applyDesired attaches every desired slot with its type`() {
+        conn.applyDesired(mapOf("slot-A" to 1, "slot-B" to 0))
+
+        assertEquals(1, conn.slots.value["slot-A"]?.controllerType)
+        assertEquals(0, conn.slots.value["slot-B"]?.controllerType)
+        assertEquals(
+            setOf(0, 1),
+            conn.slots.value.values
+                .map { it.controllerIndex }
+                .toSet(),
+        )
+    }
+
+    @Test
+    fun `applyDesired detaches slots absent from the desired set`() {
+        every { repo.isConnectionAlive(any()) } returns true
+        conn.applyDesired(mapOf("slot-A" to 0, "slot-B" to 0))
+        connectLive(applied = listOf(okApply(0), okApply(1)))
+
+        conn.applyDesired(mapOf("slot-A" to 0))
+
+        assertNull(conn.slots.value["slot-B"])
+        assertEquals(listOf(1), slotRemovals)
+    }
+
+    @Test
+    fun `applyDesired updates a changed type in place`() {
+        every { repo.isConnectionAlive(any()) } returns true
+        conn.applyDesired(mapOf("slot-A" to 0))
+        connectLive(applied = listOf(okApply(0)))
+        slotSyncs.clear()
+
+        conn.applyDesired(mapOf("slot-A" to 1))
+
+        assertEquals(1, conn.slots.value["slot-A"]?.controllerType)
+        assertEquals(listOf("slot-A"), slotSyncs)
+    }
+
+    @Test
+    fun `applyDesired with an unchanged set is silent`() {
+        every { repo.isConnectionAlive(any()) } returns true
+        conn.applyDesired(mapOf("slot-A" to 1))
+        connectLive(applied = listOf(okApply(0, appliedType = 1)))
+        slotSyncs.clear()
+
+        conn.applyDesired(mapOf("slot-A" to 1))
+
+        assertTrue(slotSyncs.isEmpty())
+        assertTrue(slotRemovals.isEmpty())
+    }
+
+    @Test
+    fun `applyDesired treats a same-type remove+add pair as a rename that keeps the pad alive`() {
+        every { repo.isConnectionAlive(any()) } returns true
+        conn.applyDesired(mapOf("slot-fw" to 1))
+        connectLive(applied = listOf(okApply(0, appliedType = 1)))
+        slotSyncs.clear()
+
+        conn.applyDesired(mapOf("slot-usb" to 1))
+
+        val renamed = conn.slots.value["slot-usb"]
+        assertEquals(0, renamed?.controllerIndex)
+        assertTrue(renamed?.registered == true)
+        assertNull(conn.slots.value["slot-fw"])
+        assertTrue(slotSyncs.isEmpty())
+        assertTrue(slotRemovals.isEmpty())
+    }
+
+    @Test
+    fun `applyDesired re-key with a different type is a real detach and attach`() {
+        every { repo.isConnectionAlive(any()) } returns true
+        conn.applyDesired(mapOf("slot-fw" to 1))
+        connectLive(applied = listOf(okApply(0, appliedType = 1)))
+        slotSyncs.clear()
+
+        conn.applyDesired(mapOf("slot-usb" to 0))
+
+        assertEquals(listOf(0), slotRemovals)
+        assertEquals(listOf("slot-usb"), slotSyncs)
+        assertTrue(conn.slots.value["slot-usb"]?.registered == false)
+    }
+
+    @Test
+    fun `applyDesired rename among unchanged siblings still renames`() {
+        conn.applyDesired(mapOf("slot-fw" to 1, "virtual" to 0))
+        val fwIndex = conn.slots.value["slot-fw"]!!.controllerIndex
+
+        conn.applyDesired(mapOf("slot-usb" to 1, "virtual" to 0))
+
+        assertEquals(fwIndex, conn.slots.value["slot-usb"]?.controllerIndex)
+        assertEquals(2, conn.slots.value.size)
+    }
 }

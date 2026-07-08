@@ -23,12 +23,30 @@ gamepad / virtual pad / sensor
   encrypted UDP ───►  satellite server
 ```
 
-Controller events enter through `MainActivity.dispatchKeyEvent` /
-`dispatchGenericMotionEvent` (or the on-screen virtual pad), get
-normalised on the JVM, and cross into the native layer via
-`SatelliteNative`. The native side runs the encoder + `sendto` on the
-same thread the event arrived on. Discovery, motion, battery, and
+Framework controller events (Bluetooth pads, USB Standard) enter
+through the focused Activity's dispatch overrides. EVERY screen hosts
+them: standard screens extend `BaseGamepadHostActivity` (ui/common),
+which owns the `GamepadActivityHost` plumbing (dispatch forwarding,
+focus-loss release, keep-screen-on, the low-power dim);
+`MainActivity` wires the same host itself on top of `GameActivity`,
+and only `NativeUnavailableActivity` is exempt.
+`StreamingScreenCoverageTest` enforces this against the manifest.
+USB Direct never touches an Activity: native per-device poller
+threads read URBs and send straight to the wire. Events get
+normalised on the JVM, cross into the native layer via
+`SatelliteNative`, and the native side runs the encoder + `sendto` on
+the same thread the event arrived on. Discovery, motion, battery, and
 touchpad take the same JNI path with their own opcodes.
+
+Standard screens carry no chrome of their own:
+`BaseGamepadHostActivity.setScaffoldContent` inflates the screen's
+content layout into `@layout/screen_scaffold`, which holds the
+coordinator root and the low-power overlays exactly once. Bespoke
+screens (main, connections, configure-bindings, the input overlays)
+keep their own coordinator roots and must carry the overlay includes
+themselves. `DishNotifications` routes each post to the attachment
+whose owner most recently RESUMED, so a banner can never render on
+both sides of an activity transition.
 
 The REST control plane (pairing, the declarative session/controller
 routes, the catalog) **doesn't** go through JNI: TLS lives on the JVM
@@ -180,11 +198,20 @@ satellite, auto-reconnect) and the invariants that span more than one
 store. It does not derive state (that is a composer) and it is not a
 lifecycle actuator (that is a controller).
 
-- `ConnectionCoordinator` sequences `SlotBindingStore`,
-  `ControllerTypeStore`, and each `SatelliteConnection`, and re-exposes
+- `ConnectionCoordinator` records intent into `SlotBindingStore` and
+  `ControllerTypeStore` (type BEFORE binding, so the topology composer
+  never observes a binding without its type) and re-exposes
   `ConnectionsComposer.state` as `connections` directly: no
   coordinator-local mirror, which would create a two-writer race with
-  the composer's `onEach`.
+  the composer's `onEach`. It never touches a `SatelliteConnection`'s
+  slots: `SlotTopologyComposer` derives the desired topology
+  (connectionId -> slotId -> type) from the two stores, and
+  `SlotTopologyController` converges every live connection to it via
+  `SatelliteConnection.applyDesired`, the ONLY production write path
+  into a connection's slot map. A same-type remove+add pair in one
+  emission is read as a rename (a USB claim/release re-keying the
+  device id), preserving the controller index so the server-side pad
+  survives without an unplug/replug.
 - `SatelliteConnectionManager` owns the connect/pair/retry lifecycle
   and the live `SatelliteConnection` map.
 
@@ -271,6 +298,14 @@ analogue of `ComposerProbe` and `StateSourceProbe`.
 Rule: if a class both derives a value and effects something, split it
 (derive in a composer, effect in a controller) rather than collapsing
 the two.
+
+Rule: inputs keep moving while an actuator is stopped, so `apply`
+must reconcile fully from the current upstream value and never trust
+memory recorded before the stop. Cross-emission state (dedupe caches,
+last-seen sets) may only suppress redundant work, never substitute
+for looking at the world again on the post-start emission. The
+phantom-slot bug was exactly this: departed devices remembered in a
+set that a lifecycle stop reset.
 
 ## Capabilities
 

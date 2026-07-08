@@ -58,6 +58,26 @@ class DishNotifications
         private val nextId = AtomicLong(1L)
         private val deferred = AtomicReference<DishNotification?>(null)
 
+        // Top of the deque = the attachment whose owner most recently RESUMED: the one
+        // screen the user is actually looking at. Posts route only there, so the old
+        // and new screens of an activity transition can never both render a banner.
+        private val attachments = ArrayDeque<Attachment>()
+        private val attachLock = Any()
+
+        private fun activate(attachment: Attachment) {
+            synchronized(attachLock) {
+                attachments.remove(attachment)
+                attachments.addLast(attachment)
+            }
+            deferred.getAndSet(null)?.let { attachment.handlePost(it) }
+        }
+
+        private fun drop(attachment: Attachment) {
+            synchronized(attachLock) { attachments.remove(attachment) }
+        }
+
+        private fun isActive(attachment: Attachment): Boolean = synchronized(attachLock) { attachments.lastOrNull() === attachment }
+
         fun post(
             severity: DishNotification.Severity = DishNotification.Severity.INFO,
             title: String,
@@ -159,9 +179,8 @@ class DishNotifications
 
             scope.launch {
                 owner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                    deferred.getAndSet(null)?.let { attachment.handlePost(it) }
                     launch {
-                        posts.onEach { n -> attachment.handlePost(n) }.launchIn(this)
+                        posts.onEach { n -> if (isActive(attachment)) attachment.handlePost(n) }.launchIn(this)
                     }
                     launch {
                         dismissals.onEach { id -> attachment.handleDismiss(id) }.launchIn(this)
@@ -171,7 +190,12 @@ class DishNotifications
 
             owner.lifecycle.addObserver(
                 object : DefaultLifecycleObserver {
+                    override fun onResume(o: LifecycleOwner) {
+                        activate(attachment)
+                    }
+
                     override fun onDestroy(o: LifecycleOwner) {
+                        drop(attachment)
                         attachment.dismissAll()
                     }
                 },

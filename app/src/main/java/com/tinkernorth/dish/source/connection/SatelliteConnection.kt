@@ -222,13 +222,39 @@ class SatelliteConnection(
     }
 
     /**
+     * Converge this connection's desired slot set to [desired] (slotId -> type),
+     * derived from the binding/type stores by SlotTopologyComposer. The ONLY
+     * production write path into the slot map; everything below it is plumbing.
+     * A single removed+added pair of the same type is the same physical
+     * controller re-keyed (a USB claim/release swaps the device id): renaming
+     * preserves the controller index so the server-side pad survives without an
+     * unplug/replug.
+     */
+    fun applyDesired(desired: Map<String, Int>) {
+        val current = _slots.value
+        val removed = current.keys - desired.keys
+        val added = desired.keys - current.keys
+        if (removed.size == 1 && added.size == 1) {
+            val from = removed.first()
+            val to = added.first()
+            if (current.getValue(from).controllerType == desired.getValue(to)) {
+                renameSlot(from, to)
+            }
+        }
+        for (slotId in _slots.value.keys.toList()) {
+            if (slotId !in desired) detachSlot(slotId)
+        }
+        for ((slotId, type) in desired) declareSlot(slotId, type)
+    }
+
+    /**
      * Declare a slot with its FINAL descriptor: the type travels with the
      * attach and the touchpad mode is pulled from [touchpadModeFor] when the
      * descriptor is built, so there is never a default-then-correct phase
      * anywhere in the pipeline. While live, the manager converges it via a
      * controller PUT; while idle, it rides the next session PUT.
      */
-    fun attachSlot(
+    internal fun attachSlot(
         slotId: String,
         controllerType: Int,
     ) {
@@ -243,7 +269,7 @@ class SatelliteConnection(
     }
 
     /** Attach-or-update: the WHOLE descriptor in one declaration, one sync. */
-    fun declareSlot(
+    internal fun declareSlot(
         slotId: String,
         controllerType: Int,
     ) {
@@ -254,7 +280,7 @@ class SatelliteConnection(
         mutateSlot(slotId) { it.copy(controllerType = controllerType) }
     }
 
-    fun setControllerType(
+    internal fun setControllerType(
         slotId: String,
         controllerType: Int,
     ) = mutateSlot(slotId) { it.copy(controllerType = controllerType) }
@@ -292,7 +318,7 @@ class SatelliteConnection(
         }
     }
 
-    fun detachSlot(slotId: String) {
+    internal fun detachSlot(slotId: String) {
         var removed: SlotBinding? = null
         _slots.update { map ->
             val cur = map[slotId] ?: return@update map
@@ -306,7 +332,7 @@ class SatelliteConnection(
         }
     }
 
-    fun renameSlot(
+    internal fun renameSlot(
         fromSlotId: String,
         toSlotId: String,
     ): Boolean {
@@ -505,9 +531,11 @@ class SatelliteConnection(
         const val CLOSE_REASON_REPLACED = 2
         const val CLOSE_REASON_UNPAIRED = 3
 
+        const val ID_PREFIX = "satellite:"
+
         // Keyed on the stable machineId so a receiver that changes IP keeps the
         // same identity; ip:udpPort only for a beacon that carries no id at all.
-        fun idFor(server: DiscoveredServer): String = "satellite:${server.stableKey}"
+        fun idFor(server: DiscoveredServer): String = "$ID_PREFIX${server.stableKey}"
 
         private fun lowestFreeIndex(taken: List<Int>): Int {
             val set = taken.toHashSet()

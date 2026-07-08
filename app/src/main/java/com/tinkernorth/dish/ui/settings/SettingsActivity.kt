@@ -2,51 +2,40 @@
 
 package com.tinkernorth.dish.ui.settings
 
-import android.content.Intent
 import android.content.res.ColorStateList
 import android.os.Bundle
 import android.text.TextUtils
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.BuildConfig
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivitySettingsBinding
-import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.store.CrashReportingStore
 import com.tinkernorth.dish.source.store.ThemeMode
 import com.tinkernorth.dish.source.store.ThemePreferenceStore
+import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
-import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
-import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachDonatePill
 import com.tinkernorth.dish.ui.common.setupDishToolbar
-import com.tinkernorth.dish.ui.diagnostics.DiagnosticsActivity
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class SettingsActivity : AppCompatActivity() {
+class SettingsActivity : BaseGamepadHostActivity() {
     @Inject lateinit var crashReportingStore: CrashReportingStore
 
     @Inject lateinit var themePreferenceStore: ThemePreferenceStore
-
-    @Inject lateinit var notifications: DishNotifications
 
     private lateinit var binding: ActivitySettingsBinding
     private val nav by lazy { DishNavigator(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivitySettingsBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        binding = setScaffoldContent(ActivitySettingsBinding::inflate)
         setupDishToolbar(binding.toolbar)
-        applyDishSystemBars(binding.root)
-        applyDishActivityTransitions()
         attachDonatePill()
 
         binding.sectionSetup.labelSection.setText(R.string.settings_section_setup)
@@ -86,9 +75,7 @@ class SettingsActivity : AppCompatActivity() {
         binding.cardRowDiagnostics.cardRowIcon.setImageResource(R.drawable.ic_bug)
         binding.cardRowDiagnostics.cardRowTitle.setText(R.string.settings_diagnostics_title)
         binding.cardRowDiagnostics.cardRowSubtitle.setText(R.string.settings_diagnostics_body)
-        binding.cardDiagnostics.setOnClickListener {
-            startActivity(Intent(this, DiagnosticsActivity::class.java))
-        }
+        binding.cardDiagnostics.setOnClickListener { nav.toDiagnostics() }
 
         binding.cardRowCrash.cardRowIcon.setImageResource(R.drawable.ic_bug)
         binding.cardRowCrash.cardRowTitle.setText(R.string.settings_crash_reporting_title)
@@ -105,9 +92,7 @@ class SettingsActivity : AppCompatActivity() {
         binding.cardRowOpenSourceLicenses.cardRowIcon.setImageResource(R.drawable.ic_license)
         binding.cardRowOpenSourceLicenses.cardRowTitle.setText(R.string.settings_open_source_licenses_title)
         binding.cardRowOpenSourceLicenses.cardRowSubtitle.setText(R.string.settings_open_source_licenses_body)
-        binding.cardOpenSourceLicenses.setOnClickListener {
-            startActivity(Intent(this, LicensesActivity::class.java))
-        }
+        binding.cardOpenSourceLicenses.setOnClickListener { nav.toLicenses() }
 
         binding.cardRowSupport.cardRowIcon.setImageResource(R.drawable.ic_heart)
         binding.cardRowSupport.cardRowIcon.imageTintList =
@@ -153,18 +138,4 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun formatVersion(): String = "${BuildConfig.VERSION_NAME} · build ${BuildConfig.VERSION_CODE}"
-
-    private fun openExternalUrl(url: String) {
-        val intent =
-            Intent(Intent.ACTION_VIEW, url.toUri())
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        runCatching { startActivity(intent) }
-            .onFailure {
-                notifications.warn(
-                    title = getString(R.string.error_open_url),
-                    body = url,
-                    key = "external-url-failed",
-                )
-            }
-    }
 }

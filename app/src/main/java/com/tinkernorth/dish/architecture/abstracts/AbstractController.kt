@@ -12,6 +12,11 @@ import kotlinx.coroutines.flow.onEach
 
 // Lifecycle-actuator: collects an upstream [Flow] while STARTED and drives a side effect.
 // Subclasses keep their own [apply] and teardown; only the onStart/launchIn/job plumbing is shared.
+//
+// CONTRACT: inputs keep moving while the actuator is stopped, so [apply] must reconcile fully
+// from the current upstream value and never trust memory recorded before the stop. State kept
+// across emissions (dedupe caches, last-seen sets) may only ever suppress redundant work, never
+// substitute for looking at the world again on the post-start emission.
 abstract class AbstractController<S>(
     private val scope: CoroutineScope,
 ) : DefaultLifecycleObserver {

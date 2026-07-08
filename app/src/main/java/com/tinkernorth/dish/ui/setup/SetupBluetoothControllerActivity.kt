@@ -11,7 +11,6 @@ import android.view.View
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -19,9 +18,8 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivitySetupBluetoothControllerBinding
 import com.tinkernorth.dish.databinding.SetupBtcPairedRowBinding
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
+import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
-import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
-import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -32,7 +30,7 @@ import javax.inject.Inject
 // currently connected, and advances the moment one is tapped. The Activity owns
 // the permission prompt and the jump to settings, mirroring ConnectionsActivity.
 @AndroidEntryPoint
-class SetupBluetoothControllerActivity : AppCompatActivity() {
+class SetupBluetoothControllerActivity : BaseGamepadHostActivity() {
     @Inject lateinit var onboarding: OnboardingPreferenceStore
 
     private lateinit var binding: ActivitySetupBluetoothControllerBinding
@@ -48,13 +46,10 @@ class SetupBluetoothControllerActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivitySetupBluetoothControllerBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        binding = setScaffoldContent(ActivitySetupBluetoothControllerBinding::inflate)
         setupDishToolbar(binding.toolbar)
         wireSetupSkip(binding.toolbar, onboarding)
         binding.toolbar.setNavigationOnClickListener { handleBack() }
-        applyDishSystemBars(binding.root)
-        applyDishActivityTransitions()
         binding.breadcrumb.applyStep(SETUP_STEP_INPUT)
 
         binding.btnBack.setOnClickListener { handleBack() }

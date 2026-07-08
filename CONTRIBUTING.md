@@ -48,6 +48,17 @@ license: the project is LGPL-3.0-or-later end-to-end (`LICENSE`,
   `StateFlow`. Don't introduce competing sources of truth: every UI-bound
   field belongs in `MainUiState`.
 - Coroutines for async, `kotlinx.serialization` for JSON, Hilt for DI.
+- Comments state non-obvious constraints only (why a lock order matters,
+  what a magic value encodes). No narration of what the next line does.
+  Older files are denser; new code follows this rule, not their example.
+- All in-app navigation goes through `DishNavigator`; raw Intents are for
+  external targets (system settings, browsers) only.
+- Screens with reactive state or multi-step flows get a ViewModel exposing
+  one immutable UiState `StateFlow`; static content screens may render
+  directly. Derivation lives in composers/ViewModels, never in an Activity.
+- Views are defined in layout XML and inflated; no programmatic View
+  construction. Standard screens go through
+  `BaseGamepadHostActivity.setScaffoldContent`.
 
 ### JNI / C++
 
@@ -78,10 +89,9 @@ Build + style:
 Security gates (also blocking):
 
 - `security.yml`: action-pin lint, vulnerability allowlist expiry,
-  OSV-Scanner, gitleaks secret scan, GitHub `dependency-review-action`
-  (consumes the Gradle dependency graph), and the OWASP Dependency-Check
-  Gradle plugin (`./gradlew dependencyCheckAnalyze`: fails on
-  CVSS >= 7.0).
+  OSV-Scanner, gitleaks secret scan, and GitHub `dependency-review-action`
+  (consumes the Gradle dependency graph). Release artifacts additionally
+  get a Grype scan in `release.yml`.
 - `codeql.yml`: CodeQL `java-kotlin` and `cpp` analysis
   (security-extended + security-and-quality query packs).
 
@@ -96,16 +106,9 @@ Open a PR that adds an entry to [`.security/allowlist.yaml`](.security/allowlist
 `expires`. CI rejects the PR if any field is missing or `expires` is in
 the past.
 
-If the same finding is raised by OWASP Dependency-Check, mirror the
-entry in [`.security/dependency-check-suppressions.xml`](.security/dependency-check-suppressions.xml)
-using the [official suppression schema](https://jeremylong.github.io/DependencyCheck/general/suppression.html).
-
 ### Running security checks locally
 
 ```bash
-# OWASP Dependency-Check (the same task CI runs)
-./gradlew dependencyCheckAnalyze
-
 # Gradle dependency verification: recompute checksums into
 # gradle/verification-metadata.xml after a deliberate dep bump
 ./gradlew --write-verification-metadata sha256 help
@@ -143,7 +146,7 @@ verification metadata so transitive jar tampering fails resolution:
 
 ```bash
 ./gradlew --write-verification-metadata sha256 \
-  assembleDebug bundleRelease testDebugUnitTest dependencyCheckAnalyze
+  assembleDebug bundleRelease testDebugUnitTest
 ```
 
 Commit the regenerated `gradle/verification-metadata.xml` in the same
