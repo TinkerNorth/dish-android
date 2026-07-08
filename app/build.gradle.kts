@@ -113,6 +113,13 @@ android {
             signingConfig = signingConfigs.findByName("release")
             // Emit native-debug-symbols.zip for Play Console and strip the shipped .so.
             ndk { debugSymbolLevel = "FULL" }
+            if (firebaseEnabled) {
+                configure<com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension> {
+                    // Uploaded by release.yml via uploadCrashlyticsSymbolFileRelease so native
+                    // crash reports symbolicate; Play Console gets its copy from debugSymbolLevel.
+                    nativeSymbolUploadEnabled = true
+                }
+            }
         }
         // Optimized measurement build: production native (-O3 + ThinLTO, because it is
         // non-debuggable) but debug-signed so it installs locally, with the hot-path
@@ -191,6 +198,7 @@ dependencies {
     // Firebase SDKs always on classpath; controller no-ops when google-services.json is absent.
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.crashlytics)
+    implementation(libs.firebase.crashlytics.ndk)
     // Firebase Analytics is deliberately omitted: it would auto-inject AD_ID permission and break the zero-analytics privacy posture.
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
@@ -230,6 +238,9 @@ val nativeTestConfigure =
         inputs.file(layout.projectDirectory.file("src/main/cpp/gamepad_input.cpp"))
         inputs.file(layout.projectDirectory.file("src/main/cpp/wire_encoders.h"))
         outputs.dir(nativeTestBuildDir)
+        // Ninja on Windows (no make in a stock environment); Make everywhere else, matching CI.
+        val generator =
+            if (System.getProperty("os.name").startsWith("Windows")) "Ninja" else "Unix Makefiles"
         commandLine(
             "cmake",
             "-S",
@@ -237,7 +248,7 @@ val nativeTestConfigure =
             "-B",
             nativeTestBuildDir.get().asFile.absolutePath,
             "-G",
-            "Unix Makefiles",
+            generator,
         )
     }
 

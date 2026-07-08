@@ -219,7 +219,7 @@ jobs:
           DISH_VERSION_CODE: ${{ steps.ver.outputs.code }}
           DISH_VERSION_NAME: ${{ steps.ver.outputs.name }}
         run: |
-          ./gradlew assembleRelease bundleRelease
+          ./gradlew assembleRelease bundleRelease uploadCrashlyticsSymbolFileRelease
 
       - name: Stage artifacts
         id: stage
