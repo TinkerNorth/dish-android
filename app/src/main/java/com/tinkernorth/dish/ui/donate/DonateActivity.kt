@@ -2,35 +2,24 @@
 
 package com.tinkernorth.dish.ui.donate
 
-import android.content.Intent
 import android.os.Bundle
 import androidx.annotation.StringRes
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.net.toUri
 import androidx.core.view.isVisible
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivityDonateBinding
 import com.tinkernorth.dish.databinding.DonateRailCardBinding
-import com.tinkernorth.dish.source.notification.DishNotifications
-import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
-import com.tinkernorth.dish.ui.common.applyDishSystemBars
+import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
 
 @AndroidEntryPoint
-class DonateActivity : AppCompatActivity() {
-    @Inject lateinit var notifications: DishNotifications
-
+class DonateActivity : BaseGamepadHostActivity() {
     private lateinit var binding: ActivityDonateBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityDonateBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        binding = setScaffoldContent(ActivityDonateBinding::inflate)
         setupDishToolbar(binding.toolbar)
-        applyDishSystemBars(binding.root)
-        applyDishActivityTransitions()
 
         bindCta()
         bindRails()
@@ -97,19 +86,5 @@ class DonateActivity : AppCompatActivity() {
         binding.whySigning.donateWhyText.setText(R.string.donate_why_signing)
         binding.whyPlay.donateWhyText.setText(R.string.donate_why_play)
         binding.whyTime.donateWhyText.setText(R.string.donate_why_time)
-    }
-
-    private fun openExternalUrl(url: String) {
-        val intent =
-            Intent(Intent.ACTION_VIEW, url.toUri())
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        runCatching { startActivity(intent) }
-            .onFailure {
-                notifications.warn(
-                    title = getString(R.string.error_open_url),
-                    body = url,
-                    key = "external-url-failed",
-                )
-            }
     }
 }

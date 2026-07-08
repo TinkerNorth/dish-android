@@ -3,6 +3,7 @@
 package com.tinkernorth.dish.ui.common
 
 import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import androidx.navigation.ActivityNavigator
 import androidx.navigation.NavGraph
@@ -10,6 +11,7 @@ import androidx.navigation.NavGraphNavigator
 import androidx.navigation.NavInflater
 import androidx.navigation.NavigatorProvider
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.ui.main.MainActivity
 import com.tinkernorth.dish.ui.setup.SetupFlow
 
 // Activity destinations can't carry <action> children, so navigate by destination id, not action id.
@@ -116,6 +118,36 @@ class DishNavigator(
 
     fun toDonate() {
         go(R.id.donateActivity)
+    }
+
+    fun toDiagnostics() {
+        go(R.id.diagnosticsActivity)
+    }
+
+    fun toLicenses() {
+        go(R.id.licensesActivity)
+    }
+
+    fun toInputInspector(
+        deviceId: Int,
+        deviceName: String,
+    ) {
+        go(
+            R.id.inputInspectorActivity,
+            Bundle().apply {
+                putInt("extra_device_id", deviceId)
+                putString("extra_device_name", deviceName)
+            },
+        )
+    }
+
+    // Setup flow handoff to the dashboard: the setup task is over, so the back stack resets.
+    fun finishSetupToDashboard() {
+        activity.startActivity(
+            Intent(activity, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
+        )
+        activity.finish()
     }
 
     fun toTouchpad(

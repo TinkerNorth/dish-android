@@ -68,12 +68,11 @@ class ConnectionCoordinator
         }
 
         /**
-         * Bind [slotId] to [connectionId] with its FINAL descriptor: the type travels with the
-         * bind and the touchpad routing is derived from the persisted per-satellite pick at
-         * descriptor-build time, so the satellite plugs the right virtual device on the first
-         * try (no default-then-correct phase anywhere). The binding and type stores are written
-         * BEFORE declareSlot: the descriptor pull reads them synchronously. Returns false
-         * (refusing the bind) for a slot the registry no longer knows.
+         * Record the intent to bind [slotId] to [connectionId] with its FINAL type.
+         * SlotTopologyController converges every satellite connection to the stores, so
+         * this writes intent only. The type is written BEFORE the binding: the topology
+         * composer must never observe a binding without its type (a transient default
+         * would churn the wire). Returns false for a slot the registry no longer knows.
          */
         fun bind(
             slotId: String,
@@ -82,27 +81,21 @@ class ConnectionCoordinator
         ): Boolean {
             if (!slotExists(slotId)) return false
             val priorConnId = bindingStore.connectionFor(slotId)
-            if (priorConnId != null && priorConnId != connectionId) {
-                satellite.get(priorConnId)?.detachSlot(slotId)
-                typeStore.clear(priorConnId, slotId)
-            }
 
             // Android HID Device profile allows only one active host; release prior slot first.
             val isBt = store.rememberedBt().any { it.id == connectionId }
             if (isBt) {
                 val priorSlot =
                     bindingStore.slotsFor(connectionId).firstOrNull { it != slotId }
-                if (priorSlot != null) {
-                    bindingStore.unbind(priorSlot)
-                    satellite.get(connectionId)?.detachSlot(priorSlot)
-                }
+                if (priorSlot != null) bindingStore.unbind(priorSlot)
+            } else {
+                typeStore.setType(connectionId, slotId, controllerType)
             }
 
             bindingStore.bind(slotId, connectionId)
 
-            if (!isBt) {
-                typeStore.setType(connectionId, slotId, controllerType)
-                satellite.get(connectionId)?.declareSlot(slotId, controllerType)
+            if (priorConnId != null && priorConnId != connectionId) {
+                typeStore.clear(priorConnId, slotId)
             }
             return true
         }
@@ -110,7 +103,6 @@ class ConnectionCoordinator
         fun unbind(slotId: String) {
             val connId = bindingStore.connectionFor(slotId) ?: return
             bindingStore.unbind(slotId)
-            satellite.get(connId)?.detachSlot(slotId)
             typeStore.clear(connId, slotId)
         }
 
@@ -130,6 +122,9 @@ class ConnectionCoordinator
             }
         }
 
+        // The binding re-keys in ONE store emission, so the topology diff reads it as a
+        // same-type remove+add pair and renames the connection slot in place (index kept,
+        // no server-side unplug/replug).
         fun migrateSlotBinding(
             fromSlotId: String,
             toSlotId: String,
@@ -137,16 +132,9 @@ class ConnectionCoordinator
             if (fromSlotId == toSlotId) return
             val connId = bindingStore.connectionFor(fromSlotId) ?: return
             val type = typeStore.typeFor(connId, fromSlotId)
-            bindingStore.unbind(fromSlotId)
-            bindingStore.bind(toSlotId, connId)
-            if (type != null) {
-                typeStore.clear(connId, fromSlotId)
-                typeStore.setType(connId, toSlotId, type)
-            }
-            val conn = satellite.get(connId) ?: return
-            if (!conn.renameSlot(fromSlotId, toSlotId)) {
-                conn.attachSlot(toSlotId, controllerType = type ?: CONTROLLER_TYPE_XBOX)
-            }
+            if (type != null) typeStore.setType(connId, toSlotId, type)
+            bindingStore.migrate(fromSlotId, toSlotId)
+            if (type != null) typeStore.clear(connId, fromSlotId)
         }
 
         /**
@@ -181,7 +169,6 @@ class ConnectionCoordinator
         ) {
             if (typeStore.typeFor(connectionId, slotId) == type) return
             typeStore.setType(connectionId, slotId, type)
-            satellite.get(connectionId)?.setControllerType(slotId, type)
         }
 
         fun boundConnection(slotId: String): ConnectionSummary? =

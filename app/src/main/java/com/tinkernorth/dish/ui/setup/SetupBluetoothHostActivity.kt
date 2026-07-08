@@ -13,7 +13,6 @@ import android.view.View
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -25,12 +24,10 @@ import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.databinding.ActivitySetupBluetoothHostBinding
 import com.tinkernorth.dish.databinding.SetupChoiceRowBinding
 import com.tinkernorth.dish.databinding.SetupTypeCardBinding
-import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
-import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
-import com.tinkernorth.dish.ui.common.applyDishSystemBars
+import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
+import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.setupDishToolbar
-import com.tinkernorth.dish.ui.main.MainActivity
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -41,12 +38,11 @@ import javax.inject.Inject
 // Everything else (host list, type lock, advertising session, the proceed gate)
 // lives in the ViewModel.
 @AndroidEntryPoint
-class SetupBluetoothHostActivity : AppCompatActivity() {
+class SetupBluetoothHostActivity : BaseGamepadHostActivity() {
     @Inject lateinit var onboarding: OnboardingPreferenceStore
 
-    @Inject lateinit var notifications: DishNotifications
-
     private lateinit var binding: ActivitySetupBluetoothHostBinding
+    private val nav by lazy { DishNavigator(this) }
     private val viewModel: SetupBluetoothHostViewModel by viewModels()
 
     private val permissionLauncher =
@@ -61,13 +57,10 @@ class SetupBluetoothHostActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivitySetupBluetoothHostBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        binding = setScaffoldContent(ActivitySetupBluetoothHostBinding::inflate)
         setupDishToolbar(binding.toolbar)
         wireSetupSkip(binding.toolbar, onboarding)
         binding.toolbar.setNavigationOnClickListener { handleBack() }
-        applyDishSystemBars(binding.root)
-        applyDishActivityTransitions()
         binding.breadcrumb.applyStep(SETUP_STEP_DESTINATION)
 
         viewModel.bindArgs(intent.getStringExtra(SetupFlow.EXTRA_SLOT_ID).orEmpty())
@@ -241,11 +234,7 @@ class SetupBluetoothHostActivity : AppCompatActivity() {
             )
         }
         onboarding.markWelcomeCompleted()
-        startActivity(
-            Intent(this, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
-        )
-        finish()
+        nav.finishSetupToDashboard()
     }
 
     private fun typeTitleRes(profile: BluetoothGamepad.GamepadProfile): Int =

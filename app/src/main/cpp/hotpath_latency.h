@@ -8,12 +8,14 @@
 // Stages (see satellite tools/bench/README.md for the full chain):
 //   stage 1  USB-direct hot path : markInputRead() at URB reap, markGamepadSent()
 //            right after the gamepad packet leaves sendto() -- delta on one thread.
-//   stage 2  network one-way     : markPingSent()/markAckReceived() time the
-//            heartbeat round trip on the device clock; one-way ~= RTT/2.
+//   stage 2  network one-way     : shouldArmPing()/addRttSample() time the heartbeat
+//            round trip on the device clock (per-session clock); one-way ~= RTT/2.
 //
 // statsJson() returns microsecond percentiles for the JNI/debug readout.
 
 #pragma once
+
+#include <stdint.h>
 
 #include <string>
 
@@ -26,9 +28,15 @@ bool enabled();
 void markInputRead();   // URB reaped with a fresh input report
 void markGamepadSent(); // the resulting MSG_GAMEPAD_DATA packet has left sendto()
 
-// stage 2 (heartbeat thread / receive thread)
-void markPingSent();    // MSG_HEARTBEAT_PING sent
-void markAckReceived(); // MSG_HEARTBEAT_ACK received
+// stage 2 (heartbeat thread / receive thread). The ping clock lives on the Session so
+// concurrent sessions can never pair one session's ping with another's ack; these keep
+// the policy (in-flight guard, loss reclaim, sample validity) in one place.
+int64_t nowMonotonicNs();
+bool shouldArmPing(int64_t outstandingNs, int64_t nowNs);
+void addRttSample(int64_t sentNs, int64_t nowNs);
+
+// Drops accumulated RTT samples so a probe-mode window starts fresh.
+void resetRttWindow();
 
 // JSON snapshot of the current window (microseconds). reset=true clears samples.
 std::string statsJson(bool reset);

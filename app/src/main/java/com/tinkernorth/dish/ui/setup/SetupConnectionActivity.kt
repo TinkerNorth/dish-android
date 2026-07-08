@@ -9,7 +9,6 @@ import androidx.activity.addCallback
 import androidx.activity.viewModels
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -22,9 +21,8 @@ import com.tinkernorth.dish.databinding.SetupChoiceRowBinding
 import com.tinkernorth.dish.databinding.SetupHostRowBinding
 import com.tinkernorth.dish.source.connection.PairingApproval
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
+import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
-import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
-import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.connections.PairPinDialog
 import dagger.hilt.android.AndroidEntryPoint
@@ -36,7 +34,7 @@ import javax.inject.Inject
 // for PIN entry + reverse approval. On a satellite reaching Connected/Unstable
 // the flow hands off to the configure step with the host id as the connection id.
 @AndroidEntryPoint
-class SetupConnectionActivity : AppCompatActivity() {
+class SetupConnectionActivity : BaseGamepadHostActivity() {
     @Inject lateinit var onboarding: OnboardingPreferenceStore
 
     private lateinit var binding: ActivitySetupConnectionBinding
@@ -56,13 +54,10 @@ class SetupConnectionActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivitySetupConnectionBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        binding = setScaffoldContent(ActivitySetupConnectionBinding::inflate)
         setupDishToolbar(binding.toolbar)
         wireSetupSkip(binding.toolbar, onboarding)
         binding.toolbar.setNavigationOnClickListener { handleBack() }
-        applyDishSystemBars(binding.root)
-        applyDishActivityTransitions()
         binding.breadcrumb.applyStep(SETUP_STEP_DESTINATION)
 
         bindChoice(

@@ -103,9 +103,9 @@ gradle/libs.versions.toml        Version catalog
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) and the
 [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md). CI runs build + style
 (`android-ci.yml`) and security gates (`security.yml`, `codeql.yml`)
-on every PR: OWASP Dependency-Check (fails on CVSS >= 7.0),
-OSV-Scanner, gitleaks, action-pin lint, and CodeQL for `java-kotlin`
-and `cpp`.
+on every PR: OSV-Scanner, dependency-review, gitleaks, action-pin
+lint, and CodeQL for `java-kotlin` and `cpp`; release artifacts get a
+Grype scan in `release.yml`.
 
 > Branch protection is unavailable on this repo's current org plan,
 > so direct pushes to `main` are blocked by convention only. The CI

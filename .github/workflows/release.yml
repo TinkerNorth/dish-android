@@ -219,7 +219,11 @@ jobs:
           DISH_VERSION_CODE: ${{ steps.ver.outputs.code }}
           DISH_VERSION_NAME: ${{ steps.ver.outputs.name }}
         run: |
-          ./gradlew assembleRelease bundleRelease
+          if [ "${{ steps.firebase.outputs.present }}" = "true" ]; then
+            ./gradlew assembleRelease bundleRelease uploadCrashlyticsSymbolFileRelease
+          else
+            ./gradlew assembleRelease bundleRelease
+          fi
 
       - name: Stage artifacts
         id: stage

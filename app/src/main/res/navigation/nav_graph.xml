@@ -161,6 +161,30 @@
             android:defaultValue="false" />
     </activity>
 
+    <activity
+        android:id="@+id/diagnosticsActivity"
+        android:name="com.tinkernorth.dish.ui.diagnostics.DiagnosticsActivity"
+        android:label="@string/settings_diagnostics_title" />
+
+    <activity
+        android:id="@+id/inputInspectorActivity"
+        android:name="com.tinkernorth.dish.ui.diagnostics.InputInspectorActivity"
+        android:label="@string/settings_diagnostics_title">
+        <argument
+            android:name="extra_device_id"
+            app:argType="integer"
+            android:defaultValue="0" />
+        <argument
+            android:name="extra_device_name"
+            app:argType="string"
+            android:defaultValue="" />
+    </activity>
+
+    <activity
+        android:id="@+id/licensesActivity"
+        android:name="com.tinkernorth.dish.ui.settings.LicensesActivity"
+        android:label="@string/settings_open_source_licenses_title" />
+
     <!-- ═══ FATAL FALLBACK ════════════════════════════════════════════ -->
     <activity
         android:id="@+id/nativeUnavailableActivity"
