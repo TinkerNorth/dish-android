@@ -1,0 +1,89 @@
+name: Play Listing Sync
+
+# Pushes the committed store listing (per-locale text, screenshots,
+# feature graphics, icon) to the Play Console from play/metadata.
+# Binary releases ride release.yml's publish-play job instead; this
+# workflow only syncs listing content, so listing edits do not require
+# cutting a release.
+#
+# Requires the PLAY_SERVICE_ACCOUNT_JSON secret (raw JSON key). The app
+# record and its first build must already exist in the Play Console.
+#
+# Pin map (verify with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`):
+#   actions/checkout                @ v6.0.3  → df4cb1c069e1874edd31b4311f1884172cec0e10
+
+on:
+  workflow_dispatch:
+    inputs:
+      validate_only:
+        description: "Dry run: validate against the Play API without committing"
+        type: boolean
+        default: true
+      upload_images:
+        description: "Also upload screenshots, feature graphics, and the icon"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  sync-listing:
+    name: Sync listing to Play
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Gate on Play credentials
+        id: gate
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${PLAY_SERVICE_ACCOUNT_JSON:-}" ]; then
+            echo "::error::PLAY_SERVICE_ACCOUNT_JSON not set. Add the service-account key secret first."
+            exit 1
+          fi
+          printf '%s' "${PLAY_SERVICE_ACCOUNT_JSON}" > "${RUNNER_TEMP}/play-key.json"
+
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Lint metadata before upload
+        run: python3 scripts/check_play_metadata.py
+
+      - name: Flatten feature graphics for Supply
+        shell: bash
+        # Supply expects images/featureGraphic.png; the repo keeps the
+        # active graphic as a named file inside images/featureGraphic/.
+        run: |
+          set -euo pipefail
+          for dir in play/metadata/android/*/images/featureGraphic; do
+            [ -d "$dir" ] || continue
+            active=$(find "$dir" -maxdepth 1 -name '*.png' | LC_ALL=C sort | head -1)
+            [ -n "$active" ] && cp "$active" "$(dirname "$dir")/featureGraphic.png"
+          done
+          find play/metadata -maxdepth 4 -name 'featureGraphic.png'
+
+      - name: Install fastlane
+        run: sudo gem install fastlane -N -v "~> 2.226"
+
+      - name: Sync listing
+        env:
+          VALIDATE_ONLY: ${{ inputs.validate_only }}
+          UPLOAD_IMAGES: ${{ inputs.upload_images }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_args=(--skip_upload_images true --skip_upload_screenshots true)
+          if [ "${UPLOAD_IMAGES}" = "true" ]; then
+            image_args=(--skip_upload_images false --skip_upload_screenshots false)
+          fi
+          fastlane supply \
+            --json_key "${RUNNER_TEMP}/play-key.json" \
+            --package_name com.tinkernorth.dish \
+            --metadata_path play/metadata \
+            --skip_upload_aab true \
+            --skip_upload_apk true \
+            --skip_upload_changelogs true \
+            "${image_args[@]}" \
+            --validate_only "${VALIDATE_ONLY}"
