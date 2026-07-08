@@ -12,11 +12,11 @@ on:
       play_track:
         description: "Play track to upload the AAB to"
         required: false
-        default: "internal"
+        default: "production"
       play_release_status:
         description: "Play release status (draft or completed)"
         required: false
-        default: "draft"
+        default: "completed"
 
 # Required secrets (optional: workflow falls back to unsigned artifacts
 # for workflow_dispatch on feature branches; tagged releases on main are
@@ -39,14 +39,17 @@ on:
 #                                 succeeds but ships without crash reporting.
 #   NVD_API_KEY                   speeds up OWASP Dependency-Check syncs.
 #   PLAY_SERVICE_ACCOUNT_JSON     Google Play service-account key (raw
-#                                 JSON). When set, the signed AAB is
-#                                 uploaded to the Play internal track as a
-#                                 draft release with per-locale release
-#                                 notes from play/metadata changelogs.
-#                                 When unset, the publish-play job no-ops.
-#                                 Note the app record and its FIRST build
-#                                 must be created manually in the Play
-#                                 Console before the API can publish.
+#                                 JSON). When set, the signed AAB rolls
+#                                 out to the Play production track with
+#                                 per-locale release notes and the full
+#                                 store listing (text, screenshots,
+#                                 graphics) synced from play/metadata.
+#                                 workflow_dispatch can pick another
+#                                 track or a draft status. When unset,
+#                                 the publish-play job no-ops. The app
+#                                 record and its FIRST build must be
+#                                 created manually in the Play Console
+#                                 before the API can publish.
 #
 # Pin map (verify with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`):
 #   actions/checkout                @ v6.0.3  → df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -310,15 +313,32 @@ jobs:
           echo "mapping=$mapping" >> "$GITHUB_OUTPUT"
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
+      - name: Lint metadata before upload
+        if: ${{ steps.gate.outputs.enabled == 'true' && steps.artifacts.outputs.ready == 'true' }}
+        run: python3 scripts/check_play_metadata.py
+
+      - name: Flatten feature graphics for Supply
+        if: ${{ steps.gate.outputs.enabled == 'true' && steps.artifacts.outputs.ready == 'true' }}
+        shell: bash
+        # Supply expects images/featureGraphic.png; the repo keeps the
+        # active graphic as a named file inside images/featureGraphic/.
+        run: |
+          set -euo pipefail
+          for dir in play/metadata/android/*/images/featureGraphic; do
+            [ -d "$dir" ] || continue
+            active=$(find "$dir" -maxdepth 1 -name '*.png' | LC_ALL=C sort | head -1)
+            [ -n "$active" ] && cp "$active" "$(dirname "$dir")/featureGraphic.png"
+          done
+
       - name: Install fastlane
         if: ${{ steps.gate.outputs.enabled == 'true' && steps.artifacts.outputs.ready == 'true' }}
         run: sudo gem install fastlane -N -v "~> 2.226"
 
-      - name: Upload to Play
+      - name: Upload to Play (AAB + store listing)
         if: ${{ steps.gate.outputs.enabled == 'true' && steps.artifacts.outputs.ready == 'true' }}
         env:
-          PLAY_TRACK: ${{ inputs.play_track || 'internal' }}
-          PLAY_RELEASE_STATUS: ${{ inputs.play_release_status || 'draft' }}
+          PLAY_TRACK: ${{ inputs.play_track || 'production' }}
+          PLAY_RELEASE_STATUS: ${{ inputs.play_release_status || 'completed' }}
           AAB: ${{ steps.artifacts.outputs.aab }}
           MAPPING: ${{ steps.artifacts.outputs.mapping }}
         shell: bash
@@ -334,9 +354,9 @@ jobs:
             --aab "${AAB}" \
             "${mapping_args[@]}" \
             --metadata_path play/metadata \
-            --skip_upload_metadata true \
-            --skip_upload_images true \
-            --skip_upload_screenshots true \
+            --skip_upload_metadata false \
+            --skip_upload_images false \
+            --skip_upload_screenshots false \
             --skip_upload_apk true
 
   harden:
