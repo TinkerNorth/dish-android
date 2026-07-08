@@ -90,6 +90,7 @@ struct Session {
     std::atomic<bool> heartbeatRunning{false};
     std::atomic<int> missedAcks{0};
     std::atomic<bool> connectionAlive{true};
+    std::atomic<int64_t> lastPingNs{0};
 
     // Downstream replay guard (server → client direction).
     std::atomic<uint32_t> lastRxCounter{0};
@@ -493,7 +494,13 @@ static void heartbeatLoop(std::shared_ptr<Session> s) {
     LOGI("Heartbeat thread started (sock=%d)", s->udpSock);
     while (s->heartbeatRunning.load(std::memory_order_relaxed)) {
         sendEncrypted(s.get(), MSG_HEARTBEAT_PING, nullptr, 0);
-        hotpath::markPingSent(); // stage-2: round-trip clock starts here
+        if (hotpath::enabled()) {
+            // stage-2: round-trip clock starts here, on this session's own clock.
+            const int64_t now = hotpath::nowMonotonicNs();
+            if (hotpath::shouldArmPing(s->lastPingNs.load(std::memory_order_relaxed), now)) {
+                s->lastPingNs.store(now, std::memory_order_relaxed);
+            }
+        }
 
         const int intervalMs = g_heartbeatIntervalMs.load(std::memory_order_relaxed);
         const int missMax = HEARTBEAT_DEATH_TIMEOUT_MS / intervalMs;
@@ -810,7 +817,10 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiv
     uint16_t msgLen = ((uint16_t)decrypted[2] << 8) | decrypted[3];
 
     if (msgType == MSG_HEARTBEAT_ACK) {
-        hotpath::markAckReceived(); // stage-2: round-trip clock stops here (RTT)
+        if (hotpath::enabled()) {
+            const int64_t sent = s->lastPingNs.exchange(0, std::memory_order_relaxed);
+            if (sent != 0) hotpath::addRttSample(sent, hotpath::nowMonotonicNs());
+        }
         s->missedAcks.store(0);
         s->connectionAlive.store(true);
         // Enriched ack: backendAvailable(1) + totalActive(1) + epoch(u16 BE) +

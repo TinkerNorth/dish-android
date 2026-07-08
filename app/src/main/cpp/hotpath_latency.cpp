@@ -64,8 +64,6 @@ Ring g_stage1;          // URB reap -> gamepad sent
 Ring g_rtt{kRttWindow}; // heartbeat ping -> ack, sliding
 Ring g_urbGap;          // URB inter-arrival gap (polling jitter)
 
-std::atomic<int64_t> g_lastPingNs{0};
-
 // Gaps above this are stream pauses (idle pad, replug), not polling jitter; recording them
 // would drown the tail the metric exists to expose.
 constexpr double kUrbGapMaxUs = 100000.0;
@@ -108,7 +106,6 @@ void setEnabled(bool on) {
     g_stage1.clear();
     g_rtt.clear();
     g_urbGap.clear();
-    g_lastPingNs.store(0, std::memory_order_relaxed);
 }
 bool enabled() { return g_enabled.load(std::memory_order_relaxed); }
 
@@ -131,21 +128,17 @@ void markGamepadSent() {
     if (us >= 0 && us < 1e6) g_stage1.add(us);
 }
 
-void markPingSent() {
-    if (!g_enabled.load(std::memory_order_relaxed)) return;
-    const int64_t now = nowNs();
-    const int64_t outstanding = g_lastPingNs.load(std::memory_order_relaxed);
-    // Keep an in-flight ping's clock: overwriting would pair its late ack with this
-    // newer ping and read low. Past the validity window the ping is lost; reclaim.
-    if (outstanding != 0 && now - outstanding < kRttMaxNs) return;
-    g_lastPingNs.store(now, std::memory_order_relaxed);
+int64_t nowMonotonicNs() { return nowNs(); }
+
+// Keep an in-flight ping's clock: overwriting would pair its late ack with a newer
+// ping and read low. Past the validity window the ping is lost; reclaim.
+bool shouldArmPing(int64_t outstandingNs, int64_t nowNs) {
+    return outstandingNs == 0 || nowNs - outstandingNs >= kRttMaxNs;
 }
 
-void markAckReceived() {
+void addRttSample(int64_t sentNs, int64_t nowNs) {
     if (!g_enabled.load(std::memory_order_relaxed)) return;
-    int64_t sent = g_lastPingNs.exchange(0, std::memory_order_relaxed);
-    if (sent == 0) return;
-    double us = (double)(nowNs() - sent) / 1000.0;
+    double us = (double)(nowNs - sentNs) / 1000.0;
     if (us >= 0 && us < (double)kRttMaxNs / 1000.0) g_rtt.add(us);
 }
 
