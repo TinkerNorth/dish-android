@@ -167,4 +167,8 @@
             </LinearLayout>
         </androidx.core.widget.NestedScrollView>
     </LinearLayout>
+
+    <include layout="@layout/overlay_low_power_chip" />
+
+    <include layout="@layout/overlay_low_power" />
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

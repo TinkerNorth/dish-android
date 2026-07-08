@@ -13,7 +13,6 @@ import android.view.View
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -25,8 +24,8 @@ import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.databinding.ActivitySetupBluetoothHostBinding
 import com.tinkernorth.dish.databinding.SetupChoiceRowBinding
 import com.tinkernorth.dish.databinding.SetupTypeCardBinding
-import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
+import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.setupDishToolbar
@@ -41,10 +40,8 @@ import javax.inject.Inject
 // Everything else (host list, type lock, advertising session, the proceed gate)
 // lives in the ViewModel.
 @AndroidEntryPoint
-class SetupBluetoothHostActivity : AppCompatActivity() {
+class SetupBluetoothHostActivity : BaseGamepadHostActivity() {
     @Inject lateinit var onboarding: OnboardingPreferenceStore
-
-    @Inject lateinit var notifications: DishNotifications
 
     private lateinit var binding: ActivitySetupBluetoothHostBinding
     private val viewModel: SetupBluetoothHostViewModel by viewModels()
@@ -63,6 +60,7 @@ class SetupBluetoothHostActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivitySetupBluetoothHostBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        installGamepadHost(binding.root)
         setupDishToolbar(binding.toolbar)
         wireSetupSkip(binding.toolbar, onboarding)
         binding.toolbar.setNavigationOnClickListener { handleBack() }

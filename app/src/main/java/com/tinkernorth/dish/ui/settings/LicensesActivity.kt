@@ -4,24 +4,27 @@ package com.tinkernorth.dish.ui.settings
 
 import android.content.Intent
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.net.toUri
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivityLicensesBinding
+import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachDonatePill
 import com.tinkernorth.dish.ui.common.setupDishToolbar
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.serialization.json.Json
 
-class LicensesActivity : AppCompatActivity() {
+@AndroidEntryPoint
+class LicensesActivity : BaseGamepadHostActivity() {
     private lateinit var binding: ActivityLicensesBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityLicensesBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        installGamepadHost(binding.root)
         setupDishToolbar(binding.toolbar)
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()

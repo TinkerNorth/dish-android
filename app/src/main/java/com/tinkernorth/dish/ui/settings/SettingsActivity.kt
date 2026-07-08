@@ -6,7 +6,6 @@ import android.content.Intent
 import android.content.res.ColorStateList
 import android.os.Bundle
 import android.text.TextUtils
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
@@ -15,10 +14,10 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.BuildConfig
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivitySettingsBinding
-import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.store.CrashReportingStore
 import com.tinkernorth.dish.source.store.ThemeMode
 import com.tinkernorth.dish.source.store.ThemePreferenceStore
+import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
@@ -30,12 +29,10 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class SettingsActivity : AppCompatActivity() {
+class SettingsActivity : BaseGamepadHostActivity() {
     @Inject lateinit var crashReportingStore: CrashReportingStore
 
     @Inject lateinit var themePreferenceStore: ThemePreferenceStore
-
-    @Inject lateinit var notifications: DishNotifications
 
     private lateinit var binding: ActivitySettingsBinding
     private val nav by lazy { DishNavigator(this) }
@@ -44,6 +41,7 @@ class SettingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivitySettingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        installGamepadHost(binding.root)
         setupDishToolbar(binding.toolbar)
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()

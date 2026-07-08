@@ -254,4 +254,8 @@
                 android:text="@string/setup_action_back" />
         </LinearLayout>
     </LinearLayout>
+
+    <include layout="@layout/overlay_low_power_chip" />
+
+    <include layout="@layout/overlay_low_power" />
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

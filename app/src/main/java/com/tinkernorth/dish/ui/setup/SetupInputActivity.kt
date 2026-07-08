@@ -6,11 +6,11 @@ import android.os.Bundle
 import android.view.View
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
-import androidx.appcompat.app.AppCompatActivity
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivitySetupInputBinding
 import com.tinkernorth.dish.databinding.SetupChoiceRowBinding
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
+import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
@@ -22,7 +22,7 @@ import javax.inject.Inject
 // Entry point of the guided flow and the app's first-run destination. Each
 // input opens its own branch; all branches rejoin at the connection step.
 @AndroidEntryPoint
-class SetupInputActivity : AppCompatActivity() {
+class SetupInputActivity : BaseGamepadHostActivity() {
     @Inject lateinit var onboarding: OnboardingPreferenceStore
 
     private lateinit var binding: ActivitySetupInputBinding
@@ -32,6 +32,7 @@ class SetupInputActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivitySetupInputBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        installGamepadHost(binding.root)
         setupDishToolbar(binding.toolbar)
         wireSetupSkip(binding.toolbar, onboarding)
         applyDishSystemBars(binding.root)

@@ -5,25 +5,21 @@ package com.tinkernorth.dish.ui.onboarding
 import android.content.Intent
 import android.os.Bundle
 import androidx.annotation.StringRes
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.net.toUri
 import androidx.core.view.isVisible
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivityHelpBinding
 import com.tinkernorth.dish.databinding.HelpFaqRowBinding
-import com.tinkernorth.dish.source.notification.DishNotifications
+import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachDonatePill
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
 
 @AndroidEntryPoint
-class HelpActivity : AppCompatActivity() {
-    @Inject lateinit var notifications: DishNotifications
-
+class HelpActivity : BaseGamepadHostActivity() {
     private lateinit var binding: ActivityHelpBinding
     private val nav by lazy { DishNavigator(this) }
 
@@ -31,6 +27,7 @@ class HelpActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityHelpBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        installGamepadHost(binding.root)
         setupDishToolbar(binding.toolbar)
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()

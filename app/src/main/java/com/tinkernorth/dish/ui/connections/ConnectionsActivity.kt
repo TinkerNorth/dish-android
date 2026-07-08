@@ -10,14 +10,11 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.view.KeyEvent
-import android.view.MotionEvent
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
@@ -36,14 +33,11 @@ import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
-import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.input.BluetoothGamepad
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.DiscoverySource
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.databinding.ActivityConnectionsBinding
-import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
-import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedBt
 import com.tinkernorth.dish.source.bluetooth.BluetoothDeviceScanner
@@ -53,7 +47,6 @@ import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.PairingApproval
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
-import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.notification.dishSnackbar
 import com.tinkernorth.dish.source.store.BluetoothPermissionBannerStore
 import com.tinkernorth.dish.source.system.BluetoothAdapterState
@@ -63,11 +56,11 @@ import com.tinkernorth.dish.source.system.BluetoothPermissionBannerVariant
 import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
 import com.tinkernorth.dish.source.system.NetworkState
 import com.tinkernorth.dish.source.system.NetworkStateObserver
+import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.StaticViewAdapter
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachDonatePill
-import com.tinkernorth.dish.ui.common.attachGamepadHost
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
@@ -77,7 +70,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class ConnectionsActivity : AppCompatActivity() {
+class ConnectionsActivity : BaseGamepadHostActivity() {
     @Inject lateinit var satellite: SatelliteConnectionManager
 
     @Inject lateinit var btRegistry: BluetoothGamepadRegistry
@@ -88,14 +81,6 @@ class ConnectionsActivity : AppCompatActivity() {
 
     @Inject lateinit var store: com.tinkernorth.dish.repository.ConnectionStore
 
-    @Inject lateinit var wakeState: WakeStateController
-
-    @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
-
-    @Inject lateinit var notifications: DishNotifications
-
-    @Inject lateinit var lowPowerSignal: com.tinkernorth.dish.source.lowpower.LowPowerSignal
-
     @Inject lateinit var btAdapterState: com.tinkernorth.dish.source.system.BluetoothAdapterStateObserver
 
     @Inject lateinit var btPermissionState: com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
@@ -105,7 +90,6 @@ class ConnectionsActivity : AppCompatActivity() {
     @Inject lateinit var networkState: com.tinkernorth.dish.source.system.NetworkStateObserver
 
     private lateinit var binding: ActivityConnectionsBinding
-    private lateinit var gamepadHost: GamepadActivityHost
 
     private lateinit var satelliteHeader: SectionHeaderAdapter
     private lateinit var bluetoothHeader: SectionHeaderAdapter
@@ -226,7 +210,7 @@ class ConnectionsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityConnectionsBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications, lowPowerSignal)
+        installGamepadHost(binding.root)
         setupDishToolbar(binding.toolbar)
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()
@@ -349,11 +333,6 @@ class ConnectionsActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         satellite.startDiscovery()
-    }
-
-    override fun onStop() {
-        super.onStop()
-        gamepadHost.cancelDimOnStop()
     }
 
     private fun setupList() {
@@ -1067,18 +1046,6 @@ class ConnectionsActivity : AppCompatActivity() {
 
     private fun openWifiSettings() {
         runCatching { startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)) }
-    }
-
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean = gamepadHost.dispatchKeyEvent(event) || super.dispatchKeyEvent(event)
-
-    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean =
-        gamepadHost.dispatchGenericMotionEvent(event) || super.dispatchGenericMotionEvent(event)
-
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean = gamepadHost.dispatchTouchEvent(ev) || super.dispatchTouchEvent(ev)
-
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        gamepadHost.onWindowFocusChanged(hasFocus)
     }
 
     companion object {

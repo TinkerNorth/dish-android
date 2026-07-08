@@ -9,7 +9,6 @@ import androidx.activity.addCallback
 import androidx.activity.viewModels
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -22,10 +21,9 @@ import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.databinding.ActivitySetupConfigureBinding
 import com.tinkernorth.dish.databinding.SetupReviewCardBinding
 import com.tinkernorth.dish.databinding.SetupTypeCardBinding
-import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.repository.TouchpadModeValue
-import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
+import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.setupDishToolbar
@@ -46,12 +44,8 @@ import javax.inject.Inject
 // and the bind round-trip; this screen only renders sub-steps and feeds the
 // wizard's chosen destination in via setHost.
 @AndroidEntryPoint
-class SetupConfigureActivity : AppCompatActivity() {
+class SetupConfigureActivity : BaseGamepadHostActivity() {
     @Inject lateinit var onboarding: OnboardingPreferenceStore
-
-    @Inject lateinit var notifications: DishNotifications
-
-    @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
 
     private lateinit var binding: ActivitySetupConfigureBinding
     private val viewModel: ConfigureBindingsViewModel by viewModels()
@@ -73,6 +67,7 @@ class SetupConfigureActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivitySetupConfigureBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        installGamepadHost(binding.root)
         setupDishToolbar(binding.toolbar)
         wireSetupSkip(binding.toolbar, onboarding)
         applyDishSystemBars(binding.root)

@@ -4,8 +4,6 @@ package com.tinkernorth.dish.ui.main
 
 import android.content.res.ColorStateList
 import android.os.Bundle
-import android.view.KeyEvent
-import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
@@ -14,7 +12,6 @@ import androidx.activity.viewModels
 import androidx.annotation.ColorRes
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -22,7 +19,6 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionKind
-import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
@@ -31,15 +27,11 @@ import com.tinkernorth.dish.databinding.BindingApplyStepBinding
 import com.tinkernorth.dish.databinding.BindingValueNoneBinding
 import com.tinkernorth.dish.databinding.SetupReviewCardBinding
 import com.tinkernorth.dish.databinding.SetupTypeCardBinding
-import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
-import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
 import com.tinkernorth.dish.repository.TouchpadModeValue
-import com.tinkernorth.dish.source.lowpower.LowPowerSignal
-import com.tinkernorth.dish.source.notification.DishNotifications
+import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
-import com.tinkernorth.dish.ui.common.attachGamepadHost
 import com.tinkernorth.dish.ui.common.wireDonateButton
 import com.tinkernorth.dish.ui.setup.ReviewFlow
 import com.tinkernorth.dish.ui.setup.bindCapabilityRows
@@ -47,20 +39,10 @@ import com.tinkernorth.dish.ui.setup.bindReviewFlows
 import com.tinkernorth.dish.ui.setup.capabilityRows
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 @AndroidEntryPoint
-class ConfigureBindingsActivity : AppCompatActivity() {
-    @Inject lateinit var wakeState: WakeStateController
-
-    @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
-
-    @Inject lateinit var notifications: DishNotifications
-
-    @Inject lateinit var lowPowerSignal: LowPowerSignal
-
+class ConfigureBindingsActivity : BaseGamepadHostActivity() {
     private lateinit var binding: ActivityConfigureBindingsBinding
-    private lateinit var gamepadHost: GamepadActivityHost
     private val viewModel: ConfigureBindingsViewModel by viewModels()
     private val nav by lazy { DishNavigator(this) }
 
@@ -68,7 +50,7 @@ class ConfigureBindingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityConfigureBindingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications, lowPowerSignal)
+        installGamepadHost(binding.root)
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()
         wireDonateButton()
@@ -89,11 +71,6 @@ class ConfigureBindingsActivity : AppCompatActivity() {
 
         viewModel.load(slotId)
         observe()
-    }
-
-    override fun onStop() {
-        super.onStop()
-        gamepadHost.cancelDimOnStop()
     }
 
     private fun observe() {
@@ -470,18 +447,6 @@ class ConfigureBindingsActivity : AppCompatActivity() {
             container.addView(card.root)
         }
         dialog.show()
-    }
-
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean = gamepadHost.dispatchKeyEvent(event) || super.dispatchKeyEvent(event)
-
-    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean =
-        gamepadHost.dispatchGenericMotionEvent(event) || super.dispatchGenericMotionEvent(event)
-
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean = gamepadHost.dispatchTouchEvent(ev) || super.dispatchTouchEvent(ev)
-
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        gamepadHost.onWindowFocusChanged(hasFocus)
     }
 
     companion object {

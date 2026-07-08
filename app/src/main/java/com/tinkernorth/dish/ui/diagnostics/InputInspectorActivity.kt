@@ -4,7 +4,6 @@ package com.tinkernorth.dish.ui.diagnostics
 
 import android.os.Bundle
 import android.os.SystemClock
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -12,6 +11,7 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.databinding.ActivityInputInspectorBinding
 import com.tinkernorth.dish.hotpath.input.RumbleRouter
+import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.setupDishToolbar
@@ -23,7 +23,7 @@ import javax.inject.Inject
 import kotlin.math.roundToInt
 
 @AndroidEntryPoint
-class InputInspectorActivity : AppCompatActivity() {
+class InputInspectorActivity : BaseGamepadHostActivity() {
     @Inject lateinit var physicalInputNative: PhysicalInputNative
 
     @Inject lateinit var rumbleRouter: RumbleRouter
@@ -45,6 +45,7 @@ class InputInspectorActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityInputInspectorBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        installGamepadHost(binding.root)
         setupDishToolbar(binding.toolbar)
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()

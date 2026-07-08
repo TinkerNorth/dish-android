@@ -9,7 +9,6 @@ import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -34,6 +33,7 @@ import com.tinkernorth.dish.source.store.LatencyProfilingStore
 import com.tinkernorth.dish.source.system.WifiBand
 import com.tinkernorth.dish.source.system.WifiLink
 import com.tinkernorth.dish.source.system.WifiLinkSource
+import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.setupDishToolbar
@@ -54,9 +54,7 @@ import javax.inject.Inject
 
 @Suppress("TooManyFunctions")
 @AndroidEntryPoint
-class DiagnosticsActivity : AppCompatActivity() {
-    @Inject lateinit var gamepadRegistry: PhysicalGamepadRegistry
-
+class DiagnosticsActivity : BaseGamepadHostActivity() {
     @Inject lateinit var inputRateStore: InputRateStore
 
     @Inject lateinit var connectionCoordinator: ConnectionCoordinator
@@ -83,6 +81,7 @@ class DiagnosticsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityDiagnosticsBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        installGamepadHost(binding.root)
         setupDishToolbar(binding.toolbar)
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()

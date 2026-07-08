@@ -5,29 +5,26 @@ package com.tinkernorth.dish.ui.donate
 import android.content.Intent
 import android.os.Bundle
 import androidx.annotation.StringRes
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.net.toUri
 import androidx.core.view.isVisible
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivityDonateBinding
 import com.tinkernorth.dish.databinding.DonateRailCardBinding
-import com.tinkernorth.dish.source.notification.DishNotifications
+import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
 
 @AndroidEntryPoint
-class DonateActivity : AppCompatActivity() {
-    @Inject lateinit var notifications: DishNotifications
-
+class DonateActivity : BaseGamepadHostActivity() {
     private lateinit var binding: ActivityDonateBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityDonateBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        installGamepadHost(binding.root)
         setupDishToolbar(binding.toolbar)
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()

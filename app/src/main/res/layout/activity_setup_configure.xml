@@ -312,4 +312,8 @@
                 android:text="@string/setup_cfg_continue" />
         </LinearLayout>
     </LinearLayout>
+
+    <include layout="@layout/overlay_low_power_chip" />
+
+    <include layout="@layout/overlay_low_power" />
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
