@@ -89,6 +89,10 @@ jobs:
 
       - name: Capture screenshots
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        env:
+          CAPTURE_SIZE: ${{ matrix.size }}
+          CAPTURE_DENSITY: ${{ matrix.density }}
+          CAPTURE_LOCALES: ${{ github.event_name == 'workflow_dispatch' && inputs.locales || 'en-US' }}
         with:
           api-level: 35
           target: google_apis
@@ -96,24 +100,8 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-snapshot-save -no-window -noaudio -no-boot-anim -gpu swiftshader_indirect
-          script: |
-            adb shell wm size ${{ matrix.size }}
-            adb shell wm density ${{ matrix.density }}
-            adb shell cmd uimode night yes
-            adb shell settings put secure immersive_mode_confirmations confirmed
-            adb install -r -g app/build/outputs/apk/debug/app-debug.apk
-            adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-            mkdir -p captures
-            for LOC in ${{ github.event_name == 'workflow_dispatch' && inputs.locales || 'en-US' }}; do
-              adb shell cmd locale set-app-locales com.tinkernorth.dish --locales "$LOC"
-              adb shell am force-stop com.tinkernorth.dish
-              adb shell run-as com.tinkernorth.dish rm -rf files/screengrab || true
-              adb shell am instrument -w -e testLocale "$LOC" \
-                -e class com.tinkernorth.dish.screenshots.DishScreenshots \
-                com.tinkernorth.dish.test/androidx.test.runner.AndroidJUnitRunner
-              adb exec-out run-as com.tinkernorth.dish tar cf - -C files screengrab > captures/grab.tar
-              tar xf captures/grab.tar -C captures && rm captures/grab.tar
-            done
+          # The runner executes each script line as its own shell; keep this a single command.
+          script: bash scripts/ci_capture_screenshots.sh
 
       - name: Crop to Play dimensions
         run: python scripts/crop_play_screenshots.py captures ${{ matrix.crop }}
