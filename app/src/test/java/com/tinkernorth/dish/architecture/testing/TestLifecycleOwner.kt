@@ -18,6 +18,14 @@ class TestLifecycleOwner : LifecycleOwner {
         registry.currentState = Lifecycle.State.STARTED
     }
 
+    fun resume() {
+        registry.currentState = Lifecycle.State.RESUMED
+    }
+
+    fun pause() {
+        registry.currentState = Lifecycle.State.STARTED
+    }
+
     fun stop() {
         registry.currentState = Lifecycle.State.CREATED
     }

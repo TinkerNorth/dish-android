@@ -50,7 +50,7 @@ class DishNotificationsAttachmentTest {
         )
 
     @Test
-    fun `posts before STARTED are not rendered`() =
+    fun `posts before the owner is resumed are not rendered`() =
         runTest {
             val notifications = DishNotifications()
             val owner = TestLifecycleOwner()
@@ -64,13 +64,13 @@ class DishNotificationsAttachmentTest {
         }
 
     @Test
-    fun `posts during STARTED are rendered`() =
+    fun `posts while the owner is resumed are rendered`() =
         runTest {
             val notifications = DishNotifications()
             val owner = TestLifecycleOwner()
             val renderer = RecordingRenderer()
             attach(notifications, owner, renderer, this)
-            owner.start()
+            owner.resume()
             testScheduler.runCurrent()
 
             notifications.error(title = "boom")
@@ -88,7 +88,7 @@ class DishNotificationsAttachmentTest {
             val renderer = RecordingRenderer()
             attach(notifications, owner, renderer, this)
 
-            owner.start()
+            owner.resume()
             testScheduler.runCurrent()
             notifications.info(title = "while-started")
             testScheduler.runCurrent()
@@ -112,14 +112,14 @@ class DishNotificationsAttachmentTest {
             val renderer = RecordingRenderer()
             attach(notifications, owner, renderer, this)
 
-            owner.start()
+            owner.resume()
             testScheduler.runCurrent()
             owner.stop()
             testScheduler.runCurrent()
             notifications.info(title = "between")
             testScheduler.runCurrent()
 
-            owner.start()
+            owner.resume()
             testScheduler.runCurrent()
             notifications.info(title = "after-restart")
             testScheduler.runCurrent()
@@ -137,7 +137,7 @@ class DishNotificationsAttachmentTest {
             val owner = TestLifecycleOwner()
             val renderer = RecordingRenderer()
             val attachment = attach(notifications, owner, renderer, this)
-            owner.start()
+            owner.resume()
             testScheduler.runCurrent()
 
             notifications.info(title = "x")
@@ -154,7 +154,7 @@ class DishNotificationsAttachmentTest {
             val owner = TestLifecycleOwner()
             val renderer = RecordingRenderer()
             val attachment = attach(notifications, owner, renderer, this)
-            owner.start()
+            owner.resume()
             testScheduler.runCurrent()
 
             notifications.info(title = "first")
@@ -176,7 +176,7 @@ class DishNotificationsAttachmentTest {
             val owner = TestLifecycleOwner()
             val renderer = RecordingRenderer()
             val attachment = attach(notifications, owner, renderer, this)
-            owner.start()
+            owner.resume()
             testScheduler.runCurrent()
 
             val anchor = mockk<View>()
@@ -199,7 +199,7 @@ class DishNotificationsAttachmentTest {
             val owner = TestLifecycleOwner()
             val renderer = RecordingRenderer()
             val attachment = attach(notifications, owner, renderer, this)
-            owner.start()
+            owner.resume()
             testScheduler.runCurrent()
 
             val id = notifications.info(title = "x")
@@ -221,7 +221,7 @@ class DishNotificationsAttachmentTest {
             val owner = TestLifecycleOwner()
             val renderer = RecordingRenderer()
             val attachment = attach(notifications, owner, renderer, this)
-            owner.start()
+            owner.resume()
             testScheduler.runCurrent()
 
             notifications.info(title = "live")
@@ -244,7 +244,7 @@ class DishNotificationsAttachmentTest {
             val owner = TestLifecycleOwner()
             val renderer = RecordingRenderer()
             attach(notifications, owner, renderer, this)
-            owner.start()
+            owner.resume()
             testScheduler.runCurrent()
 
             val firstId = notifications.info(title = "v1", key = "k")
@@ -268,7 +268,7 @@ class DishNotificationsAttachmentTest {
             val owner = TestLifecycleOwner()
             val renderer = RecordingRenderer()
             val attachment = attach(notifications, owner, renderer, this)
-            owner.start()
+            owner.resume()
             testScheduler.runCurrent()
 
             notifications.warn(title = "v1", key = "bt-off")
@@ -294,7 +294,7 @@ class DishNotificationsAttachmentTest {
             val owner = TestLifecycleOwner()
             val renderer = RecordingRenderer()
             val attachment = attach(notifications, owner, renderer, this)
-            owner.start()
+            owner.resume()
             testScheduler.runCurrent()
 
             notifications.warn(title = "x", key = "a")
@@ -313,7 +313,7 @@ class DishNotificationsAttachmentTest {
             val owner = TestLifecycleOwner()
             val renderer = RecordingRenderer()
             val attachment = attach(notifications, owner, renderer, this)
-            owner.start()
+            owner.resume()
             testScheduler.runCurrent()
 
             notifications.info(title = "a")
@@ -335,7 +335,7 @@ class DishNotificationsAttachmentTest {
             val owner = TestLifecycleOwner()
             val renderer = RecordingRenderer()
             val attachment = attach(notifications, owner, renderer, this)
-            owner.start()
+            owner.resume()
             testScheduler.runCurrent()
 
             val id = notifications.info(title = "x", key = "the-key")
@@ -356,7 +356,7 @@ class DishNotificationsAttachmentTest {
             val owner = TestLifecycleOwner()
             val renderer = RecordingRenderer()
             attach(notifications, owner, renderer, this)
-            owner.start()
+            owner.resume()
             testScheduler.runCurrent()
 
             notifications.info(title = "a")
@@ -376,7 +376,7 @@ class DishNotificationsAttachmentTest {
             val owner = TestLifecycleOwner()
             val renderer = RecordingRenderer()
             val attachment = attach(notifications, owner, renderer, this)
-            owner.start()
+            owner.resume()
             testScheduler.runCurrent()
 
             notifications.info(title = "a")
@@ -402,7 +402,7 @@ class DishNotificationsAttachmentTest {
             val owner = TestLifecycleOwner()
             val renderer = RecordingRenderer()
             attach(notifications, owner, renderer, this)
-            owner.start()
+            owner.resume()
             testScheduler.runCurrent()
 
             owner.destroy()
@@ -425,7 +425,7 @@ class DishNotificationsAttachmentTest {
             val owner = TestLifecycleOwner()
             val renderer = RecordingRenderer()
             attach(notifications, owner, renderer, this)
-            owner.start()
+            owner.resume()
             testScheduler.runCurrent()
 
             val ids =
@@ -444,7 +444,7 @@ class DishNotificationsAttachmentTest {
             val owner = TestLifecycleOwner()
             val renderer = RecordingRenderer()
             attach(notifications, owner, renderer, this)
-            owner.start()
+            owner.resume()
             testScheduler.runCurrent()
 
             val a = notifications.info(title = "a")
@@ -470,7 +470,7 @@ class DishNotificationsAttachmentTest {
             val owner = TestLifecycleOwner()
             val renderer = RecordingRenderer()
             attach(notifications, owner, renderer, this)
-            owner.start()
+            owner.resume()
             testScheduler.runCurrent()
 
             val first = notifications.warn(title = "x", key = "k")
