@@ -6,8 +6,6 @@ import android.content.res.ColorStateList
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
-import android.widget.LinearLayout
-import android.widget.ScrollView
 import androidx.activity.viewModels
 import androidx.annotation.ColorRes
 import androidx.annotation.DrawableRes
@@ -25,6 +23,7 @@ import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.databinding.ActivityConfigureBindingsBinding
 import com.tinkernorth.dish.databinding.BindingApplyStepBinding
 import com.tinkernorth.dish.databinding.BindingValueNoneBinding
+import com.tinkernorth.dish.databinding.DialogCardListBinding
 import com.tinkernorth.dish.databinding.SetupReviewCardBinding
 import com.tinkernorth.dish.databinding.SetupTypeCardBinding
 import com.tinkernorth.dish.repository.TouchpadModeValue
@@ -362,16 +361,12 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
         val state = viewModel.ui.value
         val snapshot = state.snapshot ?: return
         val type = state.draft?.type ?: CONTROLLER_TYPE_XBOX
-        val container =
-            LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                val side = resources.getDimensionPixelSize(R.dimen.spacing_5xl)
-                setPadding(side, 0, side, 0)
-            }
+        val list = DialogCardListBinding.inflate(layoutInflater)
+        val container = list.dialogCardList
         val dialog =
             MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.binding_label_destination)
-                .setView(ScrollView(this).apply { addView(container) })
+                .setView(list.root)
                 .setNegativeButton(android.R.string.cancel, null)
                 .create()
         state.hosts.forEach { host ->
@@ -421,16 +416,12 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
         val state = viewModel.ui.value
         val snapshot = state.snapshot ?: return
         val host = state.selectedHost ?: return
-        val container =
-            LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                val side = resources.getDimensionPixelSize(R.dimen.spacing_5xl)
-                setPadding(side, 0, side, 0)
-            }
+        val list = DialogCardListBinding.inflate(layoutInflater)
+        val container = list.dialogCardList
         val dialog =
             MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.binding_label_emulate)
-                .setView(ScrollView(this).apply { addView(container) })
+                .setView(list.root)
                 .setNegativeButton(android.R.string.cancel, null)
                 .create()
         state.typeOptions.forEach { option ->
