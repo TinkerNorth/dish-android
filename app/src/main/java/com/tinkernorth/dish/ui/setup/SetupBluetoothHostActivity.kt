@@ -26,8 +26,6 @@ import com.tinkernorth.dish.databinding.SetupChoiceRowBinding
 import com.tinkernorth.dish.databinding.SetupTypeCardBinding
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
-import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
-import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.main.MainActivity
 import dagger.hilt.android.AndroidEntryPoint
@@ -58,14 +56,10 @@ class SetupBluetoothHostActivity : BaseGamepadHostActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivitySetupBluetoothHostBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-        installGamepadHost(binding.root)
+        binding = setScaffoldContent(ActivitySetupBluetoothHostBinding::inflate)
         setupDishToolbar(binding.toolbar)
         wireSetupSkip(binding.toolbar, onboarding)
         binding.toolbar.setNavigationOnClickListener { handleBack() }
-        applyDishSystemBars(binding.root)
-        applyDishActivityTransitions()
         binding.breadcrumb.applyStep(SETUP_STEP_DESTINATION)
 
         viewModel.bindArgs(intent.getStringExtra(SetupFlow.EXTRA_SLOT_ID).orEmpty())

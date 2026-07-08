@@ -34,8 +34,6 @@ import com.tinkernorth.dish.source.system.WifiBand
 import com.tinkernorth.dish.source.system.WifiLink
 import com.tinkernorth.dish.source.system.WifiLinkSource
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
-import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
-import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
@@ -80,12 +78,8 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityDiagnosticsBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-        installGamepadHost(binding.root)
+        binding = setScaffoldContent(ActivityDiagnosticsBinding::inflate)
         setupDishToolbar(binding.toolbar)
-        applyDishSystemBars(binding.root)
-        applyDishActivityTransitions()
 
         binding.sectionControllers.labelSection.setText(R.string.section_controllers)
         binding.sectionConnections.labelSection.setText(R.string.section_connections)

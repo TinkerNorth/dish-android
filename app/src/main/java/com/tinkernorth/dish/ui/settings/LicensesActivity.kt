@@ -9,8 +9,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivityLicensesBinding
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
-import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
-import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachDonatePill
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
@@ -22,12 +20,8 @@ class LicensesActivity : BaseGamepadHostActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityLicensesBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-        installGamepadHost(binding.root)
+        binding = setScaffoldContent(ActivityLicensesBinding::inflate)
         setupDishToolbar(binding.toolbar)
-        applyDishSystemBars(binding.root)
-        applyDishActivityTransitions()
         attachDonatePill()
 
         binding.toolbar.title = getString(R.string.settings_open_source_licenses_title)

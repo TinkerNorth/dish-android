@@ -1,215 +1,205 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:orientation="vertical">
 
-    <LinearLayout
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        style="@style/Widget.Dish.Toolbar"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical">
+        app:title="@string/help_title" />
 
-        <com.google.android.material.appbar.MaterialToolbar
-            android:id="@+id/toolbar"
-            style="@style/Widget.Dish.Toolbar"
-            android:layout_width="match_parent"
-            app:title="@string/help_title" />
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingTop="@dimen/spacing_md"
+        android:paddingBottom="@dimen/spacing_6xl">
 
-        <androidx.core.widget.NestedScrollView
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:paddingTop="@dimen/spacing_md"
-            android:paddingBottom="@dimen/spacing_6xl">
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center_horizontal">
 
             <LinearLayout
-                android:layout_width="match_parent"
+                android:layout_width="@dimen/welcome_content_max_width"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="center_horizontal">
+                android:orientation="vertical">
 
-                <LinearLayout
-                    android:layout_width="@dimen/welcome_content_max_width"
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardRunSetup"
+                    style="@style/Widget.Dish.Card"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical">
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground">
 
-                    <com.google.android.material.card.MaterialCardView
-                        android:id="@+id/cardRunSetup"
-                        style="@style/Widget.Dish.Card"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:foreground="?attr/selectableItemBackground">
+                    <LinearLayout
+                        style="@style/Widget.Dish.Card.RowContainer"
+                        android:gravity="center_vertical">
 
-                        <LinearLayout
-                            style="@style/Widget.Dish.Card.RowContainer"
-                            android:gravity="center_vertical">
+                        <include
+                            android:id="@+id/cardRowRunSetup"
+                            layout="@layout/card_row_icon_label_value"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1" />
 
-                            <include
-                                android:id="@+id/cardRowRunSetup"
-                                layout="@layout/card_row_icon_label_value"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1" />
+                        <ImageView
+                            android:layout_width="@dimen/icon_card_glyph"
+                            android:layout_height="@dimen/icon_card_glyph"
+                            android:layout_marginStart="@dimen/spacing_xl"
+                            android:src="@drawable/ic_chevron_right"
+                            android:importantForAccessibility="no" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
 
-                            <ImageView
-                                android:layout_width="@dimen/icon_card_glyph"
-                                android:layout_height="@dimen/icon_card_glyph"
-                                android:layout_marginStart="@dimen/spacing_xl"
-                                android:src="@drawable/ic_chevron_right"
-                                android:importantForAccessibility="no" />
-                        </LinearLayout>
-                    </com.google.android.material.card.MaterialCardView>
+                <include
+                    android:id="@+id/sectionConcepts"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
 
-                    <include
-                        android:id="@+id/sectionConcepts"
-                        layout="@layout/section_header"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/section_header_gap_above"
-                        android:layout_marginBottom="@dimen/section_header_gap_below" />
+                <include
+                    android:id="@+id/faqWhatIsDish"
+                    layout="@layout/help_faq_row" />
+                <include
+                    android:id="@+id/faqWhatIsSatellite"
+                    layout="@layout/help_faq_row" />
+                <include
+                    android:id="@+id/faqLanVsBluetooth"
+                    layout="@layout/help_faq_row" />
+                <include
+                    android:id="@+id/faqControllerModes"
+                    layout="@layout/help_faq_row" />
+                <include
+                    android:id="@+id/faqMotionTouchpad"
+                    layout="@layout/help_faq_row" />
 
-                    <include
-                        android:id="@+id/faqWhatIsDish"
-                        layout="@layout/help_faq_row" />
-                    <include
-                        android:id="@+id/faqWhatIsSatellite"
-                        layout="@layout/help_faq_row" />
-                    <include
-                        android:id="@+id/faqLanVsBluetooth"
-                        layout="@layout/help_faq_row" />
-                    <include
-                        android:id="@+id/faqControllerModes"
-                        layout="@layout/help_faq_row" />
-                    <include
-                        android:id="@+id/faqMotionTouchpad"
-                        layout="@layout/help_faq_row" />
+                <include
+                    android:id="@+id/sectionPerformance"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
 
-                    <include
-                        android:id="@+id/sectionPerformance"
-                        layout="@layout/section_header"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/section_header_gap_above"
-                        android:layout_marginBottom="@dimen/section_header_gap_below" />
+                <include
+                    android:id="@+id/faqBestSetup"
+                    layout="@layout/help_faq_row" />
+                <include
+                    android:id="@+id/faqWhyLanLower"
+                    layout="@layout/help_faq_row" />
+                <include
+                    android:id="@+id/faqWiredBetter"
+                    layout="@layout/help_faq_row" />
 
-                    <include
-                        android:id="@+id/faqBestSetup"
-                        layout="@layout/help_faq_row" />
-                    <include
-                        android:id="@+id/faqWhyLanLower"
-                        layout="@layout/help_faq_row" />
-                    <include
-                        android:id="@+id/faqWiredBetter"
-                        layout="@layout/help_faq_row" />
+                <include
+                    android:id="@+id/sectionTrouble"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
 
-                    <include
-                        android:id="@+id/sectionTrouble"
-                        layout="@layout/section_header"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/section_header_gap_above"
-                        android:layout_marginBottom="@dimen/section_header_gap_below" />
+                <include
+                    android:id="@+id/faqNoSatellites"
+                    layout="@layout/help_faq_row" />
+                <include
+                    android:id="@+id/faqPinRejected"
+                    layout="@layout/help_faq_row" />
+                <include
+                    android:id="@+id/faqDisconnects"
+                    layout="@layout/help_faq_row" />
+                <include
+                    android:id="@+id/faqNoMotion"
+                    layout="@layout/help_faq_row" />
+                <include
+                    android:id="@+id/faqBatteryDrain"
+                    layout="@layout/help_faq_row" />
 
-                    <include
-                        android:id="@+id/faqNoSatellites"
-                        layout="@layout/help_faq_row" />
-                    <include
-                        android:id="@+id/faqPinRejected"
-                        layout="@layout/help_faq_row" />
-                    <include
-                        android:id="@+id/faqDisconnects"
-                        layout="@layout/help_faq_row" />
-                    <include
-                        android:id="@+id/faqNoMotion"
-                        layout="@layout/help_faq_row" />
-                    <include
-                        android:id="@+id/faqBatteryDrain"
-                        layout="@layout/help_faq_row" />
+                <include
+                    android:id="@+id/sectionAbout"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
 
-                    <include
-                        android:id="@+id/sectionAbout"
-                        layout="@layout/section_header"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/section_header_gap_above"
-                        android:layout_marginBottom="@dimen/section_header_gap_below" />
+                <include
+                    android:id="@+id/faqOpenSource"
+                    layout="@layout/help_faq_row" />
+                <include
+                    android:id="@+id/faqPrivacy"
+                    layout="@layout/help_faq_row" />
 
-                    <include
-                        android:id="@+id/faqOpenSource"
-                        layout="@layout/help_faq_row" />
-                    <include
-                        android:id="@+id/faqPrivacy"
-                        layout="@layout/help_faq_row" />
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardHelpPrivacy"
+                    style="@style/Widget.Dish.Card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/card_margin_bottom"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground">
 
-                    <com.google.android.material.card.MaterialCardView
-                        android:id="@+id/cardHelpPrivacy"
-                        style="@style/Widget.Dish.Card"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/card_margin_bottom"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:foreground="?attr/selectableItemBackground">
+                    <LinearLayout
+                        style="@style/Widget.Dish.Card.RowContainer"
+                        android:gravity="center_vertical">
 
-                        <LinearLayout
-                            style="@style/Widget.Dish.Card.RowContainer"
-                            android:gravity="center_vertical">
+                        <include
+                            android:id="@+id/cardRowHelpPrivacy"
+                            layout="@layout/card_row_icon_label_value"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1" />
 
-                            <include
-                                android:id="@+id/cardRowHelpPrivacy"
-                                layout="@layout/card_row_icon_label_value"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1" />
+                        <ImageView
+                            android:layout_width="@dimen/icon_card_glyph"
+                            android:layout_height="@dimen/icon_card_glyph"
+                            android:layout_marginStart="@dimen/spacing_xl"
+                            android:src="@drawable/ic_open_in_new"
+                            android:importantForAccessibility="no" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
 
-                            <ImageView
-                                android:layout_width="@dimen/icon_card_glyph"
-                                android:layout_height="@dimen/icon_card_glyph"
-                                android:layout_marginStart="@dimen/spacing_xl"
-                                android:src="@drawable/ic_open_in_new"
-                                android:importantForAccessibility="no" />
-                        </LinearLayout>
-                    </com.google.android.material.card.MaterialCardView>
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardHelpGithub"
+                    style="@style/Widget.Dish.Card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/card_margin_bottom"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground">
 
-                    <com.google.android.material.card.MaterialCardView
-                        android:id="@+id/cardHelpGithub"
-                        style="@style/Widget.Dish.Card"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/card_margin_bottom"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:foreground="?attr/selectableItemBackground">
+                    <LinearLayout
+                        style="@style/Widget.Dish.Card.RowContainer"
+                        android:gravity="center_vertical">
 
-                        <LinearLayout
-                            style="@style/Widget.Dish.Card.RowContainer"
-                            android:gravity="center_vertical">
+                        <include
+                            android:id="@+id/cardRowHelpGithub"
+                            layout="@layout/card_row_icon_label_value"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1" />
 
-                            <include
-                                android:id="@+id/cardRowHelpGithub"
-                                layout="@layout/card_row_icon_label_value"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1" />
-
-                            <ImageView
-                                android:layout_width="@dimen/icon_card_glyph"
-                                android:layout_height="@dimen/icon_card_glyph"
-                                android:layout_marginStart="@dimen/spacing_xl"
-                                android:src="@drawable/ic_open_in_new"
-                                android:importantForAccessibility="no" />
-                        </LinearLayout>
-                    </com.google.android.material.card.MaterialCardView>
-                </LinearLayout>
+                        <ImageView
+                            android:layout_width="@dimen/icon_card_glyph"
+                            android:layout_height="@dimen/icon_card_glyph"
+                            android:layout_marginStart="@dimen/spacing_xl"
+                            android:src="@drawable/ic_open_in_new"
+                            android:importantForAccessibility="no" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
-        </androidx.core.widget.NestedScrollView>
-    </LinearLayout>
-
-    <include layout="@layout/overlay_low_power_chip" />
-
-    <include layout="@layout/overlay_low_power" />
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

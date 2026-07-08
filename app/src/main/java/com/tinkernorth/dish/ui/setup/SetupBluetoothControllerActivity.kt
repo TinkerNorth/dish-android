@@ -20,8 +20,6 @@ import com.tinkernorth.dish.databinding.SetupBtcPairedRowBinding
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
-import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
-import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -48,14 +46,10 @@ class SetupBluetoothControllerActivity : BaseGamepadHostActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivitySetupBluetoothControllerBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-        installGamepadHost(binding.root)
+        binding = setScaffoldContent(ActivitySetupBluetoothControllerBinding::inflate)
         setupDishToolbar(binding.toolbar)
         wireSetupSkip(binding.toolbar, onboarding)
         binding.toolbar.setNavigationOnClickListener { handleBack() }
-        applyDishSystemBars(binding.root)
-        applyDishActivityTransitions()
         binding.breadcrumb.applyStep(SETUP_STEP_INPUT)
 
         binding.btnBack.setOnClickListener { handleBack() }

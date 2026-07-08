@@ -23,8 +23,6 @@ import com.tinkernorth.dish.source.connection.PairingApproval
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
-import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
-import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.connections.PairPinDialog
 import dagger.hilt.android.AndroidEntryPoint
@@ -56,14 +54,10 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivitySetupConnectionBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-        installGamepadHost(binding.root)
+        binding = setScaffoldContent(ActivitySetupConnectionBinding::inflate)
         setupDishToolbar(binding.toolbar)
         wireSetupSkip(binding.toolbar, onboarding)
         binding.toolbar.setNavigationOnClickListener { handleBack() }
-        applyDishSystemBars(binding.root)
-        applyDishActivityTransitions()
         binding.breadcrumb.applyStep(SETUP_STEP_DESTINATION)
 
         bindChoice(

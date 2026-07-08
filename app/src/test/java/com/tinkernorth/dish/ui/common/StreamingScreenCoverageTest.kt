@@ -41,17 +41,25 @@ class StreamingScreenCoverageTest {
         assertTrue("onWindowFocusChanged" in declared)
     }
 
+    // Scaffolded screens inherit the overlays from screen_scaffold; a bespoke screen keeps
+    // its own CoordinatorLayout root and must carry the includes itself.
     @Test
-    fun `every activity layout includes the low power overlays`() {
+    fun `every full-screen activity layout includes the low power overlays`() {
         val missing =
             File(mainDir, "res")
                 .listFiles { dir -> dir.name.startsWith("layout") }
                 .orEmpty()
                 .flatMap { dir -> dir.listFiles { f -> f.name.startsWith("activity_") }.orEmpty().toList() }
                 .filterNot { it.name in exemptLayouts }
+                .filter { it.readText().contains("CoordinatorLayout") }
                 .filterNot { hasOverlayIncludes(it) }
                 .map { "${it.parentFile.name}/${it.name}" }
-        assertTrue("activity layouts without the low-power overlays: $missing", missing.isEmpty())
+        assertTrue("full-screen activity layouts without the low-power overlays: $missing", missing.isEmpty())
+    }
+
+    @Test
+    fun `the screen scaffold carries the low power overlays`() {
+        assertTrue(hasOverlayIncludes(File(mainDir, "res/layout/screen_scaffold.xml")))
     }
 
     private fun hasOverlayIncludes(file: File): Boolean {

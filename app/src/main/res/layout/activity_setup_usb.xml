@@ -1,411 +1,401 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:orientation="vertical">
 
-    <LinearLayout
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        style="@style/Widget.Dish.Toolbar"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical">
+        app:title="@string/setup_usb_toolbar" />
 
-        <com.google.android.material.appbar.MaterialToolbar
-            android:id="@+id/toolbar"
-            style="@style/Widget.Dish.Toolbar"
-            android:layout_width="match_parent"
-            app:title="@string/setup_usb_toolbar" />
+    <com.google.android.material.progressindicator.LinearProgressIndicator
+        android:id="@+id/loader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:indeterminate="true"
+        android:visibility="invisible"
+        app:indicatorColor="@color/colorPrimary"
+        app:trackColor="@color/colorSurfaceVariant" />
 
-        <com.google.android.material.progressindicator.LinearProgressIndicator
-            android:id="@+id/loader"
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingHorizontal="@dimen/spacing_5xl"
+        android:paddingTop="@dimen/spacing_md"
+        android:paddingBottom="@dimen/spacing_5xl">
+
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:indeterminate="true"
-            android:visibility="invisible"
-            app:indicatorColor="@color/colorPrimary"
-            app:trackColor="@color/colorSurfaceVariant" />
+            android:orientation="vertical">
 
-        <androidx.core.widget.NestedScrollView
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:paddingHorizontal="@dimen/spacing_5xl"
-            android:paddingTop="@dimen/spacing_md"
-            android:paddingBottom="@dimen/spacing_5xl">
+            <include
+                android:id="@+id/breadcrumb"
+                layout="@layout/view_setup_breadcrumb"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
 
-            <LinearLayout
+            <TextView
+                android:id="@+id/tvTitle"
+                style="@style/TextAppearance.Dish.Title.Large"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical">
+                android:layout_marginTop="@dimen/spacing_5xl"
+                tools:text="Plug your controller in" />
 
-                <include
-                    android:id="@+id/breadcrumb"
-                    layout="@layout/view_setup_breadcrumb"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content" />
+            <LinearLayout
+                android:id="@+id/groupDetect"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="@dimen/spacing_xl">
 
                 <TextView
-                    android:id="@+id/tvTitle"
-                    style="@style/TextAppearance.Dish.Title.Large"
+                    style="@style/TextAppearance.Dish.Body"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/spacing_5xl"
-                    tools:text="Plug your controller in" />
+                    android:text="@string/setup_usb_detect_subtitle" />
 
                 <LinearLayout
-                    android:id="@+id/groupDetect"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:layout_marginTop="@dimen/spacing_xl">
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="@dimen/spacing_2xl">
+
+                    <ImageView
+                        android:layout_width="@dimen/icon_card_glyph"
+                        android:layout_height="@dimen/icon_card_glyph"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_usb"
+                        app:tint="@color/colorMuted" />
 
                     <TextView
-                        style="@style/TextAppearance.Dish.Body"
-                        android:layout_width="match_parent"
+                        android:id="@+id/tvStatus"
+                        style="@style/TextAppearance.Dish.Label"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/setup_usb_detect_subtitle" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:layout_marginTop="@dimen/spacing_2xl">
-
-                        <ImageView
-                            android:layout_width="@dimen/icon_card_glyph"
-                            android:layout_height="@dimen/icon_card_glyph"
-                            android:importantForAccessibility="no"
-                            android:src="@drawable/ic_usb"
-                            app:tint="@color/colorMuted" />
-
-                        <TextView
-                            android:id="@+id/tvStatus"
-                            style="@style/TextAppearance.Dish.Label"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="@dimen/spacing_md"
-                            android:textAllCaps="true"
-                            tools:text="Scanning" />
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:id="@+id/usbList"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/spacing_md"
-                        android:orientation="vertical" />
+                        android:layout_marginStart="@dimen/spacing_md"
+                        android:textAllCaps="true"
+                        tools:text="Scanning" />
                 </LinearLayout>
 
                 <LinearLayout
-                    android:id="@+id/groupMode"
+                    android:id="@+id/usbList"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:layout_marginTop="@dimen/spacing_xl"
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:orientation="vertical" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/groupMode"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:visibility="gone"
+                tools:visibility="gone">
+
+                <LinearLayout
+                    android:id="@+id/calloutVerified"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="@drawable/bg_setup_callout_success"
+                    android:padding="@dimen/config_callout_padding"
                     android:visibility="gone"
-                    tools:visibility="gone">
+                    tools:visibility="visible">
+
+                    <ImageView
+                        android:layout_width="@dimen/config_callout_icon_size"
+                        android:layout_height="@dimen/config_callout_icon_size"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_check_circle"
+                        app:tint="@color/colorSuccess" />
+
+                    <TextView
+                        style="@style/TextAppearance.Dish.BodySmall"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="@dimen/config_callout_icon_gap"
+                        android:textColor="@color/colorSuccess"
+                        android:text="@string/setup_usb_supported" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/calloutUnverified"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="@drawable/bg_setup_callout_warning"
+                    android:padding="@dimen/config_callout_padding"
+                    android:visibility="gone"
+                    tools:visibility="visible">
+
+                    <ImageView
+                        android:layout_width="@dimen/config_callout_icon_size"
+                        android:layout_height="@dimen/config_callout_icon_size"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_warning"
+                        app:tint="@color/colorWarning" />
 
                     <LinearLayout
-                        android:id="@+id/calloutVerified"
-                        android:layout_width="match_parent"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:background="@drawable/bg_setup_callout_success"
-                        android:padding="@dimen/config_callout_padding"
-                        android:visibility="gone"
-                        tools:visibility="visible">
-
-                        <ImageView
-                            android:layout_width="@dimen/config_callout_icon_size"
-                            android:layout_height="@dimen/config_callout_icon_size"
-                            android:importantForAccessibility="no"
-                            android:src="@drawable/ic_check_circle"
-                            app:tint="@color/colorSuccess" />
+                        android:layout_marginStart="@dimen/config_callout_icon_gap"
+                        android:orientation="vertical">
 
                         <TextView
                             style="@style/TextAppearance.Dish.BodySmall"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="@dimen/config_callout_icon_gap"
-                            android:textColor="@color/colorSuccess"
-                            android:text="@string/setup_usb_supported" />
-                    </LinearLayout>
+                            android:textColor="@color/colorOnTertiaryContainer"
+                            android:text="@string/setup_usb_unverified_title" />
 
-                    <LinearLayout
-                        android:id="@+id/calloutUnverified"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:background="@drawable/bg_setup_callout_warning"
-                        android:padding="@dimen/config_callout_padding"
-                        android:visibility="gone"
-                        tools:visibility="visible">
-
-                        <ImageView
-                            android:layout_width="@dimen/config_callout_icon_size"
-                            android:layout_height="@dimen/config_callout_icon_size"
-                            android:importantForAccessibility="no"
-                            android:src="@drawable/ic_warning"
-                            app:tint="@color/colorWarning" />
-
-                        <LinearLayout
+                        <TextView
+                            style="@style/TextAppearance.Dish.BodySmall"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="@dimen/config_callout_icon_gap"
-                            android:orientation="vertical">
-
-                            <TextView
-                                style="@style/TextAppearance.Dish.BodySmall"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:textColor="@color/colorOnTertiaryContainer"
-                                android:text="@string/setup_usb_unverified_title" />
-
-                            <TextView
-                                style="@style/TextAppearance.Dish.BodySmall"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:textColor="@color/colorOnTertiaryContainer"
-                                android:text="@string/setup_usb_unverified_body" />
-                        </LinearLayout>
+                            android:textColor="@color/colorOnTertiaryContainer"
+                            android:text="@string/setup_usb_unverified_body" />
                     </LinearLayout>
-
-                    <com.google.android.material.card.MaterialCardView
-                        android:id="@+id/cardDirect"
-                        style="@style/Widget.Dish.Card"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/spacing_2xl"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:foreground="?attr/selectableItemBackground">
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:padding="@dimen/card_padding">
-
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:orientation="horizontal"
-                                android:gravity="center_vertical">
-
-                                <ImageView
-                                    android:layout_width="@dimen/icon_picker_glyph"
-                                    android:layout_height="@dimen/icon_picker_glyph"
-                                    android:importantForAccessibility="no"
-                                    android:src="@drawable/ic_bolt"
-                                    app:tint="@color/colorPrimary" />
-
-                                <TextView
-                                    style="@style/TextAppearance.Dish.Title"
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:layout_marginStart="@dimen/config_row_icon_gap"
-                                    android:text="@string/setup_usb_direct_title" />
-
-                                <TextView
-                                    android:id="@+id/pillDirect"
-                                    style="@style/TextAppearance.Dish.Caption"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:background="@drawable/bg_recommended_pill"
-                                    android:paddingHorizontal="@dimen/spacing_md"
-                                    android:paddingVertical="@dimen/recommended_pill_vertical_padding"
-                                    android:textColor="@color/colorOnPrimary"
-                                    android:textAllCaps="true"
-                                    android:text="@string/setup_usb_badge_recommended"
-                                    android:visibility="gone"
-                                    tools:visibility="visible" />
-                            </LinearLayout>
-
-                            <TextView
-                                android:id="@+id/tvDirectBody"
-                                style="@style/TextAppearance.Dish.Body"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="@dimen/spacing_sm"
-                                tools:text="Reads the controller directly. Lowest latency. One-time permission." />
-
-                            <LinearLayout
-                                android:id="@+id/directWarningRow"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:orientation="horizontal"
-                                android:layout_marginTop="@dimen/spacing_md"
-                                android:gravity="top"
-                                android:visibility="gone"
-                                tools:visibility="visible">
-
-                                <ImageView
-                                    android:layout_width="@dimen/config_section_icon_size"
-                                    android:layout_height="@dimen/config_section_icon_size"
-                                    android:importantForAccessibility="no"
-                                    android:src="@drawable/ic_warning"
-                                    app:tint="@color/colorWarning" />
-
-                                <TextView
-                                    style="@style/TextAppearance.Dish.BodySmall"
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:layout_marginStart="@dimen/spacing_sm"
-                                    android:textColor="@color/colorWarning"
-                                    android:text="@string/setup_usb_direct_warning" />
-                            </LinearLayout>
-                        </LinearLayout>
-                    </com.google.android.material.card.MaterialCardView>
-
-                    <com.google.android.material.card.MaterialCardView
-                        android:id="@+id/cardStandard"
-                        style="@style/Widget.Dish.Card"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/card_margin_bottom"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:foreground="?attr/selectableItemBackground">
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:padding="@dimen/card_padding">
-
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:orientation="horizontal"
-                                android:gravity="center_vertical">
-
-                                <ImageView
-                                    android:layout_width="@dimen/icon_picker_glyph"
-                                    android:layout_height="@dimen/icon_picker_glyph"
-                                    android:importantForAccessibility="no"
-                                    android:src="@drawable/ic_tune"
-                                    app:tint="@color/colorPrimary" />
-
-                                <TextView
-                                    style="@style/TextAppearance.Dish.Title"
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:layout_marginStart="@dimen/config_row_icon_gap"
-                                    android:text="@string/setup_usb_standard_title" />
-
-                                <TextView
-                                    android:id="@+id/pillStandard"
-                                    style="@style/TextAppearance.Dish.Caption"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:background="@drawable/bg_recommended_pill"
-                                    android:paddingHorizontal="@dimen/spacing_md"
-                                    android:paddingVertical="@dimen/recommended_pill_vertical_padding"
-                                    android:textColor="@color/colorOnPrimary"
-                                    android:textAllCaps="true"
-                                    android:text="@string/setup_usb_badge_recommended"
-                                    android:visibility="gone"
-                                    tools:visibility="visible" />
-                            </LinearLayout>
-
-                            <TextView
-                                android:id="@+id/tvStandardBody"
-                                style="@style/TextAppearance.Dish.Body"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="@dimen/spacing_sm"
-                                tools:text="Android's gamepad layer. Works everywhere, no prompt." />
-                        </LinearLayout>
-                    </com.google.android.material.card.MaterialCardView>
                 </LinearLayout>
 
-                <LinearLayout
-                    android:id="@+id/groupGrant"
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardDirect"
+                    style="@style/Widget.Dish.Card"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:layout_marginTop="@dimen/spacing_xl"
-                    android:visibility="gone"
-                    tools:visibility="gone">
-
-                    <TextView
-                        style="@style/TextAppearance.Dish.Body"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/setup_usb_grant_body" />
+                    android:layout_marginTop="@dimen/spacing_2xl"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground">
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
-                        android:gravity="center_horizontal"
-                        android:layout_marginTop="@dimen/spacing_3xl"
-                        android:background="@drawable/bg_setup_callout_warning"
                         android:padding="@dimen/card_padding">
 
-                        <ImageView
-                            android:layout_width="@dimen/config_empty_glyph_size"
-                            android:layout_height="@dimen/config_empty_glyph_size"
-                            android:importantForAccessibility="no"
-                            android:src="@drawable/ic_usb"
-                            app:tint="@color/colorPrimary" />
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <ImageView
+                                android:layout_width="@dimen/icon_picker_glyph"
+                                android:layout_height="@dimen/icon_picker_glyph"
+                                android:importantForAccessibility="no"
+                                android:src="@drawable/ic_bolt"
+                                app:tint="@color/colorPrimary" />
+
+                            <TextView
+                                style="@style/TextAppearance.Dish.Title"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginStart="@dimen/config_row_icon_gap"
+                                android:text="@string/setup_usb_direct_title" />
+
+                            <TextView
+                                android:id="@+id/pillDirect"
+                                style="@style/TextAppearance.Dish.Caption"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/bg_recommended_pill"
+                                android:paddingHorizontal="@dimen/spacing_md"
+                                android:paddingVertical="@dimen/recommended_pill_vertical_padding"
+                                android:textColor="@color/colorOnPrimary"
+                                android:textAllCaps="true"
+                                android:text="@string/setup_usb_badge_recommended"
+                                android:visibility="gone"
+                                tools:visibility="visible" />
+                        </LinearLayout>
 
                         <TextView
-                            style="@style/TextAppearance.Dish.Title"
-                            android:layout_width="wrap_content"
+                            android:id="@+id/tvDirectBody"
+                            style="@style/TextAppearance.Dish.Body"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/spacing_sm"
+                            tools:text="Reads the controller directly. Lowest latency. One-time permission." />
+
+                        <LinearLayout
+                            android:id="@+id/directWarningRow"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
                             android:layout_marginTop="@dimen/spacing_md"
-                            android:gravity="center"
-                            android:text="@string/setup_usb_grant_card_title" />
+                            android:gravity="top"
+                            android:visibility="gone"
+                            tools:visibility="visible">
+
+                            <ImageView
+                                android:layout_width="@dimen/config_section_icon_size"
+                                android:layout_height="@dimen/config_section_icon_size"
+                                android:importantForAccessibility="no"
+                                android:src="@drawable/ic_warning"
+                                app:tint="@color/colorWarning" />
+
+                            <TextView
+                                style="@style/TextAppearance.Dish.BodySmall"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginStart="@dimen/spacing_sm"
+                                android:textColor="@color/colorWarning"
+                                android:text="@string/setup_usb_direct_warning" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardStandard"
+                    style="@style/Widget.Dish.Card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/card_margin_bottom"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="@dimen/card_padding">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <ImageView
+                                android:layout_width="@dimen/icon_picker_glyph"
+                                android:layout_height="@dimen/icon_picker_glyph"
+                                android:importantForAccessibility="no"
+                                android:src="@drawable/ic_tune"
+                                app:tint="@color/colorPrimary" />
+
+                            <TextView
+                                style="@style/TextAppearance.Dish.Title"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginStart="@dimen/config_row_icon_gap"
+                                android:text="@string/setup_usb_standard_title" />
+
+                            <TextView
+                                android:id="@+id/pillStandard"
+                                style="@style/TextAppearance.Dish.Caption"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/bg_recommended_pill"
+                                android:paddingHorizontal="@dimen/spacing_md"
+                                android:paddingVertical="@dimen/recommended_pill_vertical_padding"
+                                android:textColor="@color/colorOnPrimary"
+                                android:textAllCaps="true"
+                                android:text="@string/setup_usb_badge_recommended"
+                                android:visibility="gone"
+                                tools:visibility="visible" />
+                        </LinearLayout>
 
                         <TextView
-                            style="@style/TextAppearance.Dish.BodySmall"
+                            android:id="@+id/tvStandardBody"
+                            style="@style/TextAppearance.Dish.Body"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="@dimen/spacing_xs"
-                            android:gravity="center"
-                            android:textColor="@color/colorOnTertiaryContainer"
-                            android:text="@string/setup_usb_grant_card_body" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnGrant"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="@dimen/spacing_xl"
-                            app:icon="@drawable/ic_chevron_right"
-                            app:iconGravity="end"
-                            android:text="@string/setup_usb_grant_action" />
+                            android:layout_marginTop="@dimen/spacing_sm"
+                            tools:text="Android's gamepad layer. Works everywhere, no prompt." />
                     </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/groupGrant"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:visibility="gone"
+                tools:visibility="gone">
+
+                <TextView
+                    style="@style/TextAppearance.Dish.Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/setup_usb_grant_body" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal"
+                    android:layout_marginTop="@dimen/spacing_3xl"
+                    android:background="@drawable/bg_setup_callout_warning"
+                    android:padding="@dimen/card_padding">
+
+                    <ImageView
+                        android:layout_width="@dimen/config_empty_glyph_size"
+                        android:layout_height="@dimen/config_empty_glyph_size"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_usb"
+                        app:tint="@color/colorPrimary" />
+
+                    <TextView
+                        style="@style/TextAppearance.Dish.Title"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_md"
+                        android:gravity="center"
+                        android:text="@string/setup_usb_grant_card_title" />
+
+                    <TextView
+                        style="@style/TextAppearance.Dish.BodySmall"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_xs"
+                        android:gravity="center"
+                        android:textColor="@color/colorOnTertiaryContainer"
+                        android:text="@string/setup_usb_grant_card_body" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnGrant"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_xl"
+                        app:icon="@drawable/ic_chevron_right"
+                        app:iconGravity="end"
+                        android:text="@string/setup_usb_grant_action" />
                 </LinearLayout>
             </LinearLayout>
-        </androidx.core.widget.NestedScrollView>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:paddingHorizontal="@dimen/spacing_5xl"
-            android:paddingVertical="@dimen/spacing_xl"
-            android:gravity="center_vertical">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnBack"
-                style="@style/Widget.Dish.Button.Outlined"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                app:icon="@drawable/ic_chevron_left"
-                android:text="@string/setup_action_back" />
         </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="@dimen/spacing_5xl"
+        android:paddingVertical="@dimen/spacing_xl"
+        android:gravity="center_vertical">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnBack"
+            style="@style/Widget.Dish.Button.Outlined"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:icon="@drawable/ic_chevron_left"
+            android:text="@string/setup_action_back" />
     </LinearLayout>
-
-    <include layout="@layout/overlay_low_power_chip" />
-
-    <include layout="@layout/overlay_low_power" />
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+</LinearLayout>

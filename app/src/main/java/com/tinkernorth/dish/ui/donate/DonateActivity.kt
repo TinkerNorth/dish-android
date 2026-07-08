@@ -11,8 +11,6 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivityDonateBinding
 import com.tinkernorth.dish.databinding.DonateRailCardBinding
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
-import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
-import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -22,12 +20,8 @@ class DonateActivity : BaseGamepadHostActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityDonateBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-        installGamepadHost(binding.root)
+        binding = setScaffoldContent(ActivityDonateBinding::inflate)
         setupDishToolbar(binding.toolbar)
-        applyDishSystemBars(binding.root)
-        applyDishActivityTransitions()
 
         bindCta()
         bindRails()
