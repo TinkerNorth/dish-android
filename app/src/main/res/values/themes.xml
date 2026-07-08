@@ -284,6 +284,17 @@
         <item name="rippleColor">@color/colorPrimaryDark</item>
     </style>
 
+    <!-- Dialog button-bar variants. Material's stock dialog spacing lives in the
+         transparent padding of its text buttons; these filled/outlined chips paint
+         their full bounds, so without an explicit margin adjacent buttons touch. -->
+    <style name="Widget.Dish.Button.Dialog" parent="Widget.Dish.Button">
+        <item name="android:layout_marginStart">@dimen/spacing_md</item>
+    </style>
+
+    <style name="Widget.Dish.Button.Outlined.Dialog" parent="Widget.Dish.Button.Outlined">
+        <item name="android:layout_marginStart">@dimen/spacing_md</item>
+    </style>
+
     <!-- Custom dialog theme: transparent window background so the bg_pill
          surface's rounded corners + cyan outline are the only visible shape,
          dim behind so the activity recedes (matches the dim-on-low-power
@@ -424,9 +435,9 @@
     <style name="ThemeOverlay.Dish.MaterialAlertDialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
         <item name="materialAlertDialogTitleTextStyle">@style/TextAppearance.Dish.Dialog.Title</item>
         <item name="materialAlertDialogBodyTextStyle">@style/TextAppearance.Dish.Dialog.Body</item>
-        <item name="buttonBarPositiveButtonStyle">@style/Widget.Dish.Button</item>
-        <item name="buttonBarNegativeButtonStyle">@style/Widget.Dish.Button.Outlined</item>
-        <item name="buttonBarNeutralButtonStyle">@style/Widget.Dish.Button.Outlined</item>
+        <item name="buttonBarPositiveButtonStyle">@style/Widget.Dish.Button.Dialog</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Widget.Dish.Button.Outlined.Dialog</item>
+        <item name="buttonBarNeutralButtonStyle">@style/Widget.Dish.Button.Outlined.Dialog</item>
         <item name="colorSurface">@color/colorSurface</item>
         <item name="colorOnSurface">@color/colorOnSurface</item>
     </style>

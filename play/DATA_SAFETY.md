@@ -18,7 +18,7 @@ These map to the fields on the Data Safety form in Play Console. Cross-reference
 - **Collected?** YES
 - **Shared?** NO
 - **Purpose**: App functionality (crash diagnostics)
-- **Optional?** YES. User can opt out from Settings → "Share crash reports"
+- **Optional?** YES. User can opt out from Settings, under "Share crash reports"
 - **Notes**: Sent to Firebase Crashlytics. Includes stack trace, device model and Android version, app version, Firebase Installation ID. Does NOT include controller input, satellite/host names, Wi-Fi SSID, IP, or any personally identifying information.
 
 ### Everything else

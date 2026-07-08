@@ -1,7 +1,8 @@
 # Contributing to Dish Android
 
-Thanks for your interest in improving the Android client! This document
-captures the conventions that aren't obvious from skimming the code.
+Thanks for contributing to the Android client. This document captures
+the conventions that are not obvious from reading the code: the style
+gates, the JNI hot-path rules, and what CI enforces.
 
 ## Code of conduct
 
@@ -12,7 +13,7 @@ to `security@tinkernorth.com`.
 ## Getting set up
 
 ```bash
-# 1) Install Android Studio Ladybug+, NDK, CMake 3.22.1+, JDK 17+
+# 1) Install Android Studio Otter (2025.2)+ for AGP 9.2, NDK, CMake 3.22.1, JDK 17+
 # 2) Open the project in Android Studio (Gradle sync downloads deps)
 # 3) Point git at the in-tree pre-commit hook
 scripts/setup-hooks.sh
@@ -180,7 +181,8 @@ The full cross-repo verification recipe lives in
 
 The Kotlin → JNI → `sendto()` chain runs at gamepad polling rate and
 must never block. If you're modifying `MainActivity.dispatchGenericMotionEvent`,
-`GamepadInputProcessor`, `SatelliteNative`, or `satellite_jni.cpp::sendReport`:
+`SatelliteNative`, or the native input path (`gamepad_input.cpp`,
+`satellite_jni.cpp::sendReport`):
 
 - No `withContext`, no `runBlocking`, no `Dispatchers.IO` on the send path.
 - No allocations per event: use the preallocated `XUSB_REPORT`.
@@ -200,8 +202,9 @@ server and must produce byte-identical traffic:
 - Ports: discovery UDP 9879 (broadcast) + mDNS, pairing + REST over
   HTTPS 9443, streaming UDP 9876.
 
-The full opcode catalog and message layouts live in
-[`docs/wire-format.md`](docs/wire-format.md).
+The full opcode catalog and message layouts live in the protocol
+contract, `satellite/docs/contract.md`, in the TinkerNorth/satellite
+repo. The Android-side mapping is [`docs/contract.md`](docs/contract.md).
 
 Any change here must be coordinated with `dish-linux`, `dish-mac`, and
 `satellite` in the same PR / release cycle.

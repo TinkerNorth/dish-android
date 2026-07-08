@@ -1,4 +1,4 @@
-Dish transforme n'importe quelle manette ou téléphone Android en manette sans fil à faible latence. Que vous souhaitiez une connexion Wi-Fi à faible latence avec motion-aim et pavé tactile, ou la simplicité d'un appairage en manette Bluetooth classique, Dish vous couvre. Pas de configuration par jeu, pas d'abonnement mensuel, pas de publicité.
+Dish transforme n'importe quelle manette ou téléphone Android en manette sans fil à faible latence. Que vous souhaitiez une connexion Wi-Fi à faible latence avec motion-aim et pavé tactile, ou la simplicité d'un appairage en manette Bluetooth classique, Dish fait les deux. Pas de configuration par jeu, pas d'abonnement mensuel, pas de publicité.
 
 
 DEUX MOYENS DE CONNEXION
@@ -15,7 +15,7 @@ Branchez une manette USB sur le port USB de votre téléphone pour zéro latence
 
 CONÇU POUR LE JEU
 
-• Chemin rapide optimisé pour une latence minimale
+• Optimisé pour la plus faible latence d'entrée possible
 • Flux Wi-Fi chiffré
 • Plusieurs satellites côte à côte : appairez plus d'un PC et routez entre eux par slot
 • Mouvement et pavé tactile présentés aux jeux comme un pad standard de style PlayStation
@@ -29,4 +29,4 @@ L'assistant gratuit Satellite est disponible pour Windows, macOS et Linux sur ht
 
 POUR LES BIDOUILLEURS
 
-Le code source, la politique de sécurité et la documentation du format filaire sont publics sur GitHub à github.com/TinkerNorth/dish-android. Client téléphone, serveur Satellite et variantes de plateforme.
+Le code source, la politique de sécurité et la documentation du protocole sont publics sur GitHub à github.com/TinkerNorth/dish-android. Le client téléphone, le serveur Satellite et les autres clients de plateforme sont tous open source.

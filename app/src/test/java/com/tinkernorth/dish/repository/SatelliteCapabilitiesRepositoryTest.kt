@@ -59,15 +59,13 @@ class SatelliteCapabilitiesRepositoryTest {
     @Test
     fun `a richer catalog read is not clobbered by the capabilities probe`() =
         runTest {
-            // The catalog already populated the host layer (with touchpad modes); setIfAbsent
-            // must leave it intact.
+            // The catalog already populated the host layer; setIfAbsent must leave it intact.
             val fromCatalog =
                 HostFeatureSet(
                     hasCatalog = true,
                     mouseControl = true,
                     keyboardControl = false,
                     rumbleReturn = true,
-                    touchpadModes = setOf("off", "ds4", "mouse"),
                 )
             hostFeaturesStore.setFeatures("sat-1", fromCatalog)
             coEvery { gateway.serverCapabilities(any(), any(), any()) } returns

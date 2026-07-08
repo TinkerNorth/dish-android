@@ -147,6 +147,9 @@ data class ConfigUiState(
     val padModeAvailable: Boolean
         get() = capabilities.isAvailable(Feature.TOUCHPAD)
 
+    val mouseModeAvailable: Boolean
+        get() = capabilities.isAvailable(Feature.MOUSE)
+
     val isBluetoothHost: Boolean get() = selectedHost?.kind == ConnectionKind.BLUETOOTH
 }
 
@@ -238,17 +241,7 @@ class ConfigureBindingsViewModel
             refreshTypeOptions(hostId)
         }
 
-        fun setType(type: Int) =
-            _ui.update { state ->
-                val d = state.draft ?: return@update state
-                val nextTouchpad =
-                    if (type != CONTROLLER_TYPE_PLAYSTATION && d.touchpadMode == TouchpadModeValue.DS4) {
-                        TouchpadModeValue.OFF
-                    } else {
-                        d.touchpadMode
-                    }
-                state.copy(draft = d.copy(type = type, touchpadMode = nextTouchpad)).withCapabilities()
-            }
+        fun setType(type: Int) = _ui.update { it.copy(draft = it.draft?.copy(type = type)).withCapabilities() }
 
         fun setDirect(on: Boolean) = _ui.update { it.copy(draft = it.draft?.copy(directOn = on)).withCapabilities() }
 
@@ -269,17 +262,22 @@ class ConfigureBindingsViewModel
 
         // Re-resolves the path capabilities from the current draft/host so the gates stay in sync.
         // userEnabled is forced full inside the composer, so these are the inherent "available" layers.
+        // The touchpad pick is sanitized against them IN THE DRAFT, not just in the rendering:
+        // apply() persists the draft, so a display-only coercion would let a pick the user saw as
+        // "Off" ship (and later resurrect) as ds4/mouse.
         private fun ConfigUiState.withCapabilities(): ConfigUiState {
             val slotId = loadedSlotId ?: return copy(capabilities = SlotCapabilities.NONE)
             val d = draft ?: return copy(capabilities = SlotCapabilities.NONE)
+            val caps =
+                capabilityComposer.capabilityForCandidate(
+                    slotId = slotId,
+                    candidateType = d.type,
+                    candidateHostKind = selectedHost?.kind ?: ConnectionKind.SATELLITE,
+                    candidateHostId = d.hostId,
+                )
             return copy(
-                capabilities =
-                    capabilityComposer.capabilityForCandidate(
-                        slotId = slotId,
-                        candidateType = d.type,
-                        candidateHostKind = selectedHost?.kind ?: ConnectionKind.SATELLITE,
-                        candidateHostId = d.hostId,
-                    ),
+                draft = d.copy(touchpadMode = sanitizedTouchpadMode(d.touchpadMode, caps)),
+                capabilities = caps,
             )
         }
 
@@ -359,9 +357,10 @@ class ConfigureBindingsViewModel
                 // Rumble is a local delivery gate (the phone vibrates as a fallback),
                 // so it applies regardless of the controller's own motor.
                 rumbleEnabledStore.setEnabled(slotId, draft.rumbleOn)
-                val mode = if (TouchpadModeValue.isValid(draft.touchpadMode)) draft.touchpadMode else TouchpadModeValue.OFF
-                if (state.touchpadAvailable) touchpadModeStore.setMode(hostId, mode)
-                val bound = hub.bind(slotId, hostId, draft.type, mode)
+                // Store BEFORE bind: the descriptor pulls the pick synchronously at declareSlot.
+                // The draft is already capability-sanitized by withCapabilities().
+                if (state.touchpadAvailable) touchpadModeStore.setMode(hostId, draft.touchpadMode)
+                val bound = hub.bind(slotId, hostId, draft.type)
                 if (!bound) {
                     _applyState.value =
                         ApplyState.Finished(
@@ -552,7 +551,7 @@ class ConfigureBindingsViewModel
                 directVerified = native.isKnownFastLaneModel(vid, pid),
                 hasRumble = (device?.hasRumble ?: false) || native.modelHasRumble(vid, pid),
                 hasGyro = (device?.hasGyro ?: false) || native.modelHasImu(vid, pid),
-                hasTouchpad = false,
+                hasTouchpad = native.modelHasTouchpad(vid, pid),
                 bound = bound,
                 directPollHz = device?.pollRateHz ?: 0,
                 vendorId = vid,
@@ -568,6 +567,7 @@ class ConfigureBindingsViewModel
             val hostId = hub.bindings.value[slotId]
             val type = hostId?.let { hub.satTypes.value[it to slotId] } ?: CONTROLLER_TYPE_XBOX
             val device = slotId.toIntOrNull()?.let { gamepadRegistry.devices.value[it] }
+            // Raw store pick; withCapabilities() sanitizes it against the candidate path.
             val touchpad = hostId?.let { touchpadModeStore.modeFor(it) } ?: TouchpadModeValue.OFF
             return BindingDraft(
                 hostId = hostId,
@@ -575,7 +575,7 @@ class ConfigureBindingsViewModel
                 directOn = seedDirectOn(device, desiredUsbPathFor(device)),
                 motionOn = motionEnabledStore.isEnabled(slotId),
                 rumbleOn = rumbleEnabledStore.isEnabled(slotId),
-                touchpadMode = if (TouchpadModeValue.isValid(touchpad)) touchpad else TouchpadModeValue.OFF,
+                touchpadMode = touchpad,
             )
         }
 
@@ -604,4 +604,18 @@ internal fun seedDirectOn(
         device.isUsbSynthetic -> true
         device.transport == Transport.Bluetooth -> false
         else -> desired == PathChoice.Direct
+    }
+
+// A pick the candidate path cannot carry collapses to Off IN THE DRAFT: apply() persists the
+// draft, so display-only coercion would let a mode the user saw as "Off" ship and later
+// resurrect when the type or host changes underneath the store.
+internal fun sanitizedTouchpadMode(
+    mode: String,
+    caps: SlotCapabilities,
+): String =
+    when {
+        !TouchpadModeValue.isValid(mode) -> TouchpadModeValue.OFF
+        mode == TouchpadModeValue.DS4 && !caps.isAvailable(Feature.TOUCHPAD) -> TouchpadModeValue.OFF
+        mode == TouchpadModeValue.MOUSE && !caps.isAvailable(Feature.MOUSE) -> TouchpadModeValue.OFF
+        else -> mode
     }

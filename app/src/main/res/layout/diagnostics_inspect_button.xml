@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Footer action of a Diagnostics controller card; inflated per card. -->
+<com.google.android.material.button.MaterialButton xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/btnInspect"
+    style="@style/Widget.Dish.Button"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="@dimen/spacing_md"
+    android:text="@string/diagnostics_inspect_button" />

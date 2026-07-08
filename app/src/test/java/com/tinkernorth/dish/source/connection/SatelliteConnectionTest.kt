@@ -66,6 +66,9 @@ class SatelliteConnectionTest {
         result: String = "backendUnavailable",
     ) = ControllerApplyDto(ctrlIdx = ctrlIdx, result = result)
 
+    // Descriptor touchpad modes are PULLED per slot (like the caps bits); tests drive this map.
+    private val touchpadModes = mutableMapOf<String, String>()
+
     private fun newConnection(
         motionCapsBitsFor: (String) -> Int = { ControllerDescriptor.CAP_MOTION },
         store: SatelliteMotionBackendStatusStore? = null,
@@ -76,6 +79,7 @@ class SatelliteConnectionTest {
             scope = scope,
             controllerRepo = repo,
             motionCapsBitsFor = motionCapsBitsFor,
+            touchpadModeFor = { touchpadModes[it] ?: ControllerDescriptor.TOUCHPAD_MODE_OFF },
             motionBackendStatusStore = store,
             onSlotChanged = { slotSyncs += it },
             onSlotRemoved = { slotRemovals += it },
@@ -94,6 +98,7 @@ class SatelliteConnectionTest {
         scope = TestScope(StandardTestDispatcher())
         slotSyncs.clear()
         slotRemovals.clear()
+        touchpadModes.clear()
         conn = newConnection()
     }
 
@@ -191,7 +196,8 @@ class SatelliteConnectionTest {
 
     @Test
     fun `attachSlot records the full descriptor without any default-type phase`() {
-        conn.attachSlot("slot-1", controllerType = 1, touchpadMode = "ds4")
+        touchpadModes["slot-1"] = "ds4"
+        conn.attachSlot("slot-1", controllerType = 1)
 
         val descriptor = conn.descriptorFor("slot-1")
         assertEquals(1, descriptor?.type)
@@ -262,27 +268,29 @@ class SatelliteConnectionTest {
     }
 
     @Test
-    fun `setTouchpadMode rides the descriptor`() {
+    fun `a touchpad pick change converges through refreshCapsIfChanged`() {
         every { repo.isConnectionAlive(any()) } returns true
         conn.attachSlot("slot-1", controllerType = 1)
         connectLive(applied = listOf(okApply(0, appliedType = 1)))
         slotSyncs.clear()
 
-        conn.setTouchpadMode("slot-1", "mouse")
+        touchpadModes["slot-1"] = "mouse"
+        conn.refreshCapsIfChanged()
 
-        assertEquals("mouse", conn.slots.value["slot-1"]?.touchpadMode)
+        assertEquals("mouse", conn.descriptorFor("slot-1")?.touchpadMode)
         assertEquals(listOf("slot-1"), slotSyncs)
         assertTrue(conn.wantsMouseControl())
     }
 
     @Test
-    fun `declareSlot attaches when absent and updates whole descriptor when present`() {
-        conn.declareSlot("slot-1", controllerType = 0, touchpadMode = "off")
+    fun `declareSlot attaches when absent and updates the type when present`() {
+        conn.declareSlot("slot-1", controllerType = 0)
         assertEquals(0, conn.slots.value["slot-1"]?.controllerType)
 
-        conn.declareSlot("slot-1", controllerType = 1, touchpadMode = "ds4")
+        touchpadModes["slot-1"] = "ds4"
+        conn.declareSlot("slot-1", controllerType = 1)
         assertEquals(1, conn.slots.value["slot-1"]?.controllerType)
-        assertEquals("ds4", conn.slots.value["slot-1"]?.touchpadMode)
+        assertEquals("ds4", conn.descriptorFor("slot-1")?.touchpadMode)
         assertEquals(1, conn.slots.value.size)
         assertEquals(0, conn.slots.value["slot-1"]?.controllerIndex)
     }
@@ -419,12 +427,16 @@ class SatelliteConnectionTest {
 
     @Test
     fun `renameSlot re-keys a present slot, preserves its descriptor, and returns true`() {
-        conn.attachSlot("a", controllerType = 1, touchpadMode = "ds4")
+        // The mode is pulled per slot id, not stored in the binding, so a migration keeps it
+        // exactly when the provider's backing stores were re-keyed first (the coordinator does).
+        touchpadModes["a"] = "ds4"
+        touchpadModes["b"] = "ds4"
+        conn.attachSlot("a", controllerType = 1)
         assertTrue(conn.renameSlot("a", "b"))
         assertTrue(conn.slots.value.containsKey("b"))
         assertFalse(conn.slots.value.containsKey("a"))
         assertEquals(1, conn.slots.value["b"]?.controllerType)
-        assertEquals("ds4", conn.slots.value["b"]?.touchpadMode)
+        assertEquals("ds4", conn.descriptorFor("b")?.touchpadMode)
     }
 
     @Test
@@ -461,6 +473,9 @@ class SatelliteConnectionTest {
     @Test
     fun `refreshCapsIfChanged is idempotent when nothing moved`() {
         every { repo.isConnectionAlive(any()) } returns true
+        // A non-off mode proves applyResults stamped lastAdvertisedTouchpadMode: without the
+        // stamp every refresh would see off != ds4 and re-sync forever.
+        touchpadModes["slot-1"] = "ds4"
         val steady = newConnection(motionCapsBitsFor = { ControllerDescriptor.CAP_MOTION })
         steady.attachSlot("slot-1", controllerType = 1)
         connectLive(target = steady, applied = listOf(okApply(0, appliedType = 1)))
@@ -604,11 +619,8 @@ class SatelliteConnectionTest {
 
     @Test
     fun `matchesAppliedView is false when mouse is wanted but not granted`() {
-        conn.attachSlot(
-            "slot-1",
-            controllerType = 1,
-            touchpadMode = ControllerDescriptor.TOUCHPAD_MODE_MOUSE,
-        )
+        touchpadModes["slot-1"] = ControllerDescriptor.TOUCHPAD_MODE_MOUSE
+        conn.attachSlot("slot-1", controllerType = 1)
         val view =
             SessionViewDto(
                 connectionId = "conn_abc",

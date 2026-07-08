@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    CONTROLLER INSPECTOR: live wire-facing input for one device, opened from a
+    Diagnostics controller card. Same chrome as Diagnostics. Sections:
+
+      STICKS    two StickPlotView boxes + raw value row
+      TRIGGERS  two progress bars
+      BUTTONS   pressed-buttons text row
+      MOTION    gyro/accel value rows (USB Direct pads)
+      TOUCHPAD  TouchPlotView finger trails (USB Direct pads with a trackpad)
+      TESTS     drift + range capture buttons and their results
+      RUMBLE    weak / strong / both test buzzes
+
+    Polling and the native inspection mirror are armed in onStart and disarmed
+    in onStop, so the input path pays nothing while this screen is closed.
+-->
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            style="@style/Widget.Dish.Toolbar"
+            android:layout_width="match_parent"
+            app:title="@string/inspector_title" />
+
+        <androidx.core.widget.NestedScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:paddingHorizontal="@dimen/spacing_5xl"
+            android:paddingTop="@dimen/spacing_md"
+            android:paddingBottom="@dimen/spacing_6xl">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <com.tinkernorth.dish.ui.diagnostics.StickPlotView
+                        android:id="@+id/plotLeftStick"
+                        android:layout_width="0dp"
+                        android:layout_height="160dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="@dimen/spacing_md" />
+
+                    <com.tinkernorth.dish.ui.diagnostics.StickPlotView
+                        android:id="@+id/plotRightStick"
+                        android:layout_width="0dp"
+                        android:layout_height="160dp"
+                        android:layout_weight="1" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvRawValues"
+                    style="@style/TextAppearance.Dish.Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_xs" />
+
+                <ProgressBar
+                    android:id="@+id/barLeftTrigger"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:max="255" />
+
+                <ProgressBar
+                    android:id="@+id/barRightTrigger"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:max="255" />
+
+                <TextView
+                    android:id="@+id/tvButtons"
+                    style="@style/TextAppearance.Dish.Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_md" />
+
+                <include
+                    android:id="@+id/sectionMotion"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+                <TextView
+                    android:id="@+id/tvGyro"
+                    style="@style/TextAppearance.Dish.Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <TextView
+                    android:id="@+id/tvAccel"
+                    style="@style/TextAppearance.Dish.Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <include
+                    android:id="@+id/sectionTouch"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+                <com.tinkernorth.dish.ui.diagnostics.TouchPlotView
+                    android:id="@+id/plotTouch"
+                    android:layout_width="match_parent"
+                    android:layout_height="140dp" />
+
+                <TextView
+                    android:id="@+id/tvTouchHint"
+                    style="@style/TextAppearance.Dish.Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+                <include
+                    android:id="@+id/sectionTests"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnDriftTest"
+                    style="@style/Widget.Dish.Button.Outlined"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/inspector_drift_button" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnRangeTest"
+                    style="@style/Widget.Dish.Button.Outlined"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:text="@string/inspector_range_button" />
+
+                <TextView
+                    android:id="@+id/tvTestResult"
+                    style="@style/TextAppearance.Dish.Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_md" />
+
+                <include
+                    android:id="@+id/sectionRumble"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnRumbleWeak"
+                        style="@style/Widget.Dish.Button.Outlined"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/inspector_rumble_weak" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnRumbleStrong"
+                        style="@style/Widget.Dish.Button.Outlined"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="@dimen/spacing_md"
+                        android:text="@string/inspector_rumble_strong" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnRumbleBoth"
+                        style="@style/Widget.Dish.Button"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="@dimen/spacing_md"
+                        android:text="@string/inspector_rumble_both" />
+                </LinearLayout>
+
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+    </LinearLayout>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

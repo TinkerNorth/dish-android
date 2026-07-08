@@ -2,9 +2,11 @@
 
 This file describes how every PNG currently sitting in `metadata/android/<locale>/images/` was produced, what data it depicts, and how to recreate the set. It is the source of truth for the screenshot pipeline so the captures stay reproducible across model edits, emulator changes, and future locale additions.
 
+> Status: the screenshots currently committed were captured before the guided Setup flow and the dashboard card rework, so some show screens that no longer exist (the old welcome and setup-wizard screens). They are stale and must be re-captured before submission. The pipeline below is still the procedure to use, and the screen catalogue has been updated to the current screens.
+
 ## Output layout
 
-162 PNGs total: 9 screens times 6 locales times 3 form factors.
+162 screenshot PNGs: 9 screens times 6 locales times 3 form factors. The feature graphics live alongside them (see "Feature graphics" below).
 
 ```
 play/metadata/android/<locale>/images/
@@ -22,8 +24,8 @@ Aspect ratios are Play Console compliant: 9:16 for portrait phone shots, 16:9 fo
 | # | Filename | Activity | Fixture | What it sells |
 |---|---|---|---|---|
 | 1 | `01_dashboard.png` | `MainActivity` | `BasicHero` | Hero: 1 of 2 satellites online, virtual + physical controller both routed to Gaming PC, "STREAMING KEEP APP OPEN" pill, streamingSlotCount=2. |
-| 2 | `02_welcome.png` | `WelcomeActivity` | `FirstRun` | Welcome pager step 2 ("Phone Link"). |
-| 3 | `03_setup_wizard.png` | `SetupWizardActivity` | `FirstRun` | Step 1: Wi-Fi vs Bluetooth choice. |
+| 2 | `02_setup_input.png` | `SetupInputActivity` | `FirstRun` | Guided setup, "How do you want to play?": wired, Bluetooth, or on-screen. |
+| 3 | `03_setup_connection.png` | `SetupConnectionActivity` | `FirstRun` | Guided setup, "How does input reach your PC?": a satellite over Wi-Fi vs a Bluetooth host. |
 | 4 | `04_connections.png` | `ConnectionsActivity` | `MixedConnections` | Two satellites and two Bluetooth hosts, mixed live/saved. |
 | 5 | `05_slot_detail.png` | `MainActivity` | `BasicHero` | Dashboard scrolled to expanded Wired Controller picker. |
 | 6 | `06_settings.png` | `SettingsActivity` | `BasicHero` | Settings sections (Setup, Appearance, Diagnostics, About). |
@@ -33,7 +35,7 @@ Aspect ratios are Play Console compliant: 9:16 for portrait phone shots, 16:9 fo
 
 ## Fixtures
 
-The instrumented test seeds these data classes into a set of `@TestInstallIn`-replaced Hilt bindings before launching each Activity. Reproduce by copying these values verbatim. See "Architecture seams" below for the bindings the test relies on.
+The instrumented test seeds these data classes into a set of `@TestInstallIn`-replaced Hilt bindings before launching each Activity. Reproduce by copying these values verbatim. See "Architecture seams" below for the bindings the test relies on. In the fixtures, `onboardingComplete` maps to the store's `welcomeCompleted` flag, seeded through `markWelcomeCompleted`.
 
 ### `FirstRun`
 
@@ -147,7 +149,7 @@ The test cannot drive these screens by mutating production `@Singleton` classes 
 
 Each interface exposes only the read-only `StateFlow` surface the consumer needs. Production code mutates through the concrete classes; the test pushes literal `MainUiState` / `ConnectionSummary` values into the fakes.
 
-The `OnboardingPreferenceStore` and `ThemePreferenceStore` are seeded through their existing public API (`markWelcomeCompleted`, `setMode`). The real `ConnectionStore` is also seeded so `ConnectionsActivity`'s direct singleton observers (`hub.bindings` is fine via the fake, but the rest of the screen renders from `store.remembered()`).
+The `OnboardingPreferenceStore` and `ThemePreferenceStore` are seeded through their existing public API (`markWelcomeCompleted`, `setMode`). The real `ConnectionStore` is also seeded, because `ConnectionsActivity` renders the saved-host list directly from `store.remembered()` even though `hub.bindings` comes through the fake.
 
 ## Emulator setup
 

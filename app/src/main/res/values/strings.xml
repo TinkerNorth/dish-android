@@ -336,7 +336,90 @@
     <string name="settings_crash_reporting_body">Share anonymized crash logs and stack traces with TinkerNorth to help fix bugs. No gameplay or controller input is included.</string>
     <string name="settings_open_source_licenses_title">Open source licenses</string>
     <string name="settings_open_source_licenses_body">Acknowledgements for the libraries Dish is built on.</string>
+    <string name="settings_diagnostics_title">Diagnostics</string>
+    <string name="settings_diagnostics_body">See connected controllers and hosts, and measure input latency.</string>
     <string name="licenses_open_external">Open license for %1$s</string>
+
+    <!-- Diagnostics (telemetry) screen. Lists every connected controller and host with their
+         live telemetry, plus an opt-in latency-profiling toggle. The toggle is off by default
+         because measuring adds a little work to the input path; turning it on shows a warning the
+         user must accept first. Key/value rows are built at runtime; `diagnostics_kv` is the
+         "Label: value" template. Units (Hz, ms) are non-technical and kept short. -->
+    <string name="diagnostics_title">Diagnostics</string>
+    <string name="diagnostics_section_latency">LATENCY</string>
+    <string name="diagnostics_kv">%1$s: %2$s</string>
+    <string name="diagnostics_hz">%1$d Hz</string>
+    <string name="diagnostics_ms">%1$.2f ms</string>
+    <string name="diagnostics_ms_approx">~%1$.2f ms</string>
+    <string name="diagnostics_ms_p50_p99">%1$.2f ms (p50) · %2$.2f ms (p99)</string>
+    <string name="diagnostics_unknown">Unknown</string>
+    <string name="diagnostics_present">Present</string>
+    <string name="diagnostics_no_controllers">No controllers connected.</string>
+    <string name="diagnostics_no_connections">No hosts connected.</string>
+    <string name="diagnostics_transport">Connection</string>
+    <string name="diagnostics_transport_usb_direct">USB direct</string>
+    <string name="diagnostics_transport_usb_standard">USB standard</string>
+    <string name="diagnostics_transport_bluetooth">Bluetooth</string>
+    <string name="diagnostics_poll_rate">Poll rate</string>
+    <string name="diagnostics_gyro">Gyro</string>
+    <string name="diagnostics_state">Status</string>
+    <string name="diagnostics_state_connected">Connected</string>
+    <string name="diagnostics_state_disconnecting">Disconnecting</string>
+    <string name="diagnostics_state_transitioning">Switching mode</string>
+    <string name="diagnostics_state_needs_replug">Needs replug</string>
+    <string name="diagnostics_link">Link</string>
+    <string name="diagnostics_host">Host</string>
+    <string name="diagnostics_offline">Offline</string>
+    <string name="diagnostics_vigem">Virtual controllers</string>
+    <string name="diagnostics_available">Available</string>
+    <string name="diagnostics_unavailable">Unavailable</string>
+    <string name="diagnostics_active_controllers">Active controllers</string>
+    <string name="diagnostics_server_epoch">Host epoch</string>
+    <string name="diagnostics_latency_title">Latency profiling</string>
+    <string name="diagnostics_latency_body">Measure how long your input takes to reach the host. Read it while playing: an idle Wi-Fi link dozes between packets and reads high.</string>
+    <string name="diagnostics_latency_off_hint">Latency profiling is off. Turn it on to measure (adds a little work to the input path).</string>
+    <string name="diagnostics_latency_waiting">Measuring…</string>
+    <string name="diagnostics_phone_path">Phone input path</string>
+    <string name="diagnostics_network_latency">Network latency</string>
+    <string name="diagnostics_latency_warn_title">Turn on latency profiling?</string>
+    <string name="diagnostics_latency_warn_message">Latency profiling adds a small amount of work to the input path while it measures. Leave it off for normal play, and turn it off when you\'re done.</string>
+    <string name="diagnostics_latency_warn_positive">Turn on</string>
+    <string name="diagnostics_polling_jitter">Polling jitter</string>
+    <string name="diagnostics_wifi">Wi-Fi</string>
+    <string name="diagnostics_wifi_value">%1$d dBm · %2$s · %3$d Mbps</string>
+    <string name="diagnostics_wifi_none">Not on Wi-Fi</string>
+    <string name="diagnostics_wifi_band_warn">2.4 GHz (slow band)</string>
+    <string name="diagnostics_wire_declared">Slot %1$d: %2$s · touchpad %3$s</string>
+    <string name="diagnostics_wire_applied">applied: %1$s · streaming: %2$s</string>
+    <string name="diagnostics_yes">yes</string>
+    <string name="diagnostics_no">no</string>
+    <string name="diagnostics_section_events">EVENTS</string>
+    <string name="diagnostics_events_empty">No events yet.</string>
+    <string name="diagnostics_copy_events">Copy events</string>
+    <string name="diagnostics_inspect_button">Inspect input</string>
+    <string name="inspector_title">Controller inspector</string>
+    <string name="inspector_section_motion">MOTION</string>
+    <string name="inspector_section_touch">TOUCHPAD</string>
+    <string name="inspector_section_tests">STICK TESTS</string>
+    <string name="inspector_section_rumble">RUMBLE TEST</string>
+    <string name="inspector_values">L %1$d, %2$d · R %3$d, %4$d · LT %5$d · RT %6$d</string>
+    <string name="inspector_pressed">Pressed: %1$s</string>
+    <string name="inspector_none">none</string>
+    <string name="inspector_gyro_value">Gyro: %1$.1f · %2$.1f · %3$.1f deg/s</string>
+    <string name="inspector_accel_value">Accel: %1$.2f · %2$.2f · %3$.2f g</string>
+    <string name="inspector_motion_missing">No motion data on this path.</string>
+    <string name="inspector_touch_missing">No touch data on this path (trackpads stream on USB Direct).</string>
+    <string name="inspector_drift_button">Drift test (hands off the sticks)</string>
+    <string name="inspector_range_button">Range test (sweep full circles)</string>
+    <string name="inspector_capturing">Capturing… %1$d s</string>
+    <string name="inspector_drift_result">Resting drift: L %1$s · R %2$s. Suggested deadzone: %3$s.</string>
+    <string name="inspector_range_result">Reach: L %1$s · R %2$s. Circularity error: L %3$s · R %4$s.</string>
+    <string name="inspector_percent">%1$d%%</string>
+    <string name="inspector_na">n/a</string>
+    <string name="inspector_rumble_weak">Weak</string>
+    <string name="inspector_rumble_strong">Strong</string>
+    <string name="inspector_rumble_both">Both</string>
+
     <string name="settings_version_label">VERSION</string>
     <!-- Brand wordmark in the footer. Not translated: stylistic constant
          across all locales, matching the rest of TinkerNorth's brand usage. -->

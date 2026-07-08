@@ -17,11 +17,18 @@ attached.
   `sendto()` with no buffering
 - Bluetooth HID alternative: present as an Xbox-compatible gamepad
   to a paired host
+- USB Direct mode: claim a wired controller and decode it natively
+  for the lowest-latency path, falling back to Standard routing when a
+  device cannot be claimed
+- Wide wired-controller support: Xbox, DualShock and DualSense, and
+  Switch Pro pads decoded natively from a curated subset of SDL's
+  controller database
 - Motion (gyroscope + accelerometer), battery, and touchpad return
   paths
 - In-hand rumble driven by the host (`MSG_RUMBLE` → phone vibrator)
-- Live telemetry (event / sample / send rates, axis values, button
-  bitmap)
+- Live input-rate readout on the overlay while streaming
+- Guided setup that walks you through picking an input source,
+  finding a server, and configuring a controller
 - Per-slot binding so multiple satellites can run side-by-side
 
 ## Architecture
@@ -45,8 +52,8 @@ the hot-path rules are in [`docs/architecture.md`](docs/architecture.md).
 
 ## Requirements
 
-- Android Studio Ladybug or newer
-- Android SDK 36, NDK with CMake 3.22.1+
+- Android Studio that supports AGP 9.2 (Otter 2025.2 or newer)
+- Android SDK 37, NDK with CMake 3.22.1
 - JDK 17+
 - Min SDK 24 (Android 7.0)
 
@@ -58,7 +65,7 @@ cd dish-android
 ./gradlew assembleDebug
 ```
 
-Open the project in Android Studio and use **Run ▶** to deploy to a
+Open the project in Android Studio and use the Run action to deploy to a
 device or emulator. Connect a gamepad over Bluetooth or USB before
 launching, or use the on-screen virtual pad.
 
@@ -96,7 +103,7 @@ gradle/libs.versions.toml        Version catalog
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) and the
 [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md). CI runs build + style
 (`android-ci.yml`) and security gates (`security.yml`, `codeql.yml`)
-on every PR: OWASP Dependency-Check (fails on CVSS ≥ 7.0),
+on every PR: OWASP Dependency-Check (fails on CVSS >= 7.0),
 OSV-Scanner, gitleaks, action-pin lint, and CodeQL for `java-kotlin`
 and `cpp`.
 

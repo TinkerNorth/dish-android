@@ -120,14 +120,12 @@ class DishNavigator(
 
     fun toTouchpad(
         connectionId: String,
-        touchpadMode: String,
         slotId: String,
     ) {
         go(
             R.id.touchpadOverlayActivity,
             Bundle().apply {
                 putString("extra_connection_id", connectionId)
-                putString("extra_touchpad_mode", touchpadMode)
                 putString("extra_slot_id", slotId)
             },
         )

@@ -220,6 +220,36 @@
                     android:layout_marginBottom="@dimen/section_header_gap_below" />
 
                 <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardDiagnostics"
+                    style="@style/Widget.Dish.Card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="@dimen/card_margin_bottom"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground">
+
+                    <LinearLayout
+                        style="@style/Widget.Dish.Card.RowContainer"
+                        android:gravity="center_vertical">
+
+                        <include
+                            android:id="@+id/cardRowDiagnostics"
+                            layout="@layout/card_row_icon_label_value"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1" />
+
+                        <ImageView
+                            android:layout_width="@dimen/icon_card_glyph"
+                            android:layout_height="@dimen/icon_card_glyph"
+                            android:layout_marginStart="@dimen/spacing_xl"
+                            android:src="@drawable/ic_chevron_right"
+                            android:importantForAccessibility="no" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
                     style="@style/Widget.Dish.Card"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content">

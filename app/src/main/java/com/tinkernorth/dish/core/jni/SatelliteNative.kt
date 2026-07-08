@@ -179,6 +179,13 @@ object SatelliteNative {
         productId: Int,
     ): Boolean
 
+    // Parser-level: true for the DS4/DualSense report families whose touch bytes the
+    // USB-direct path parses and streams.
+    external fun modelHasTouchpad(
+        vendorId: Int,
+        productId: Int,
+    ): Boolean
+
     external fun lookupKnownModelName(
         vendorId: Int,
         productId: Int,
@@ -191,6 +198,20 @@ object SatelliteNative {
 
     // Framework KeyEvent/MotionEvent updates applied for a routed device (USB Standard or Bluetooth).
     external fun getDeviceInputEventCount(deviceId: Int): Long
+
+    // Opt-in latency benchmark: stage-1 USB-direct hot path (URB reap -> sendto) and
+    // stage-2 heartbeat RTT. Off by default; one relaxed atomic load when disabled.
+    external fun setHotPathBench(on: Boolean)
+
+    // JSON snapshot of the benchmark window (microsecond percentiles). reset clears it.
+    external fun hotPathBenchJson(reset: Boolean): String
+
+    // Inspector mirror gate: while on, USB-direct reports also copy motion/touch into the
+    // snapshot state. Off costs one relaxed atomic load per report, like the bench markers.
+    external fun setInputInspection(on: Boolean)
+
+    // JSON snapshot of a device's wire-facing input state; empty string for an unknown device.
+    external fun deviceStateJson(deviceId: Int): String
 
     // Flat parameter list (not packed) so each axis stays primitive Float: no per-event allocation.
     @Suppress("LongParameterList")

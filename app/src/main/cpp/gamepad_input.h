@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 namespace gamepad {
@@ -82,6 +83,57 @@ struct DeviceState {
     bool motionValid = false;
     int16_t gyroX = 0, gyroY = 0, gyroZ = 0;
     int16_t accelX = 0, accelY = 0, accelZ = 0;
+
+    // False when the report carried no touch update (short report, or a DS4 frame
+    // with zero bundled touch packets): the last sent state must persist, not lift.
+    bool touchValid = false;
+    bool touch0Active = false, touch1Active = false;
+    bool touchClick = false;
+    uint8_t touch0Id = 0, touch1Id = 0;
+    int16_t touch0X = 0, touch0Y = 0, touch1X = 0, touch1Y = 0;
+};
+
+// Wire-normalized (full-range int16) two-finger touchpad snapshot, the MSG_TOUCHPAD payload
+// minus ctrlIdx and timestamp.
+struct TouchpadState {
+    bool f0Active = false, f1Active = false;
+    bool clickDown = false;
+    uint8_t f0Id = 0, f1Id = 0;
+    int16_t f0X = 0, f0Y = 0, f1X = 0, f1Y = 0;
+};
+
+bool operator==(const TouchpadState& a, const TouchpadState& b);
+inline bool operator!=(const TouchpadState& a, const TouchpadState& b) { return !(a == b); }
+
+enum class TouchpadSend : uint8_t {
+    SKIP = 0,
+    FRESH = 1, // state changed: send with a new event time
+    HEAL = 2,  // unchanged duplicate: same event time so the receiver can drop it if the
+               // original arrived, or adopt it if that frame was lost on the wire
+};
+
+// Send-on-change gate for the USB-direct touchpad stream. Edges (contact, lift, click, new
+// tracking id) go out immediately because a lost or delayed edge is user-visible; coordinate
+// moves coalesce to the motion cadence since the next report supersedes them anyway. After
+// every change the final state is re-sent kTouchpadHealResends more times: like the overlay's
+// resend burst, this heals a lift frame dropped by plain UDP, which would otherwise leave the
+// receiver holding a phantom finger.
+constexpr int64_t kTouchpadMoveIntervalNs = 8000000;
+constexpr int kTouchpadHealResends = 2;
+
+class TouchpadGate {
+  public:
+    TouchpadSend decide(const TouchpadState& cur, int64_t nowNs);
+
+    const TouchpadState& lastSent() const { return last_; }
+
+    int64_t lastEventTimeMs() const { return lastEventMs_; }
+
+  private:
+    TouchpadState last_{};
+    int64_t lastSentNs_ = 0;
+    int64_t lastEventMs_ = 0;
+    int resendsLeft_ = 0;
 };
 
 int16_t scaleAxis(float v, float max);
@@ -106,5 +158,9 @@ bool consumePublishIfChanged(DeviceState& s);
 
 // A (re)bound target pad is neutral; without re-arming, the on-change latch would never resend.
 void resetPublishLatch(DeviceState& s);
+
+// Serializes the wire-facing view of a DeviceState for the diagnostics inspector. Pure and
+// bounded (host-testable); returns bytes written excluding the NUL, or 0 if cap is too small.
+size_t formatDeviceStateJson(const DeviceState& s, char* buf, size_t cap);
 
 } // namespace gamepad

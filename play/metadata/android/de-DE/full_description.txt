@@ -1,4 +1,4 @@
-Dish verwandelt jeden Controller oder jedes Android-Handy in ein drahtloses Gamepad mit niedriger Latenz. Egal ob du eine Wi-Fi-Verbindung mit niedriger Latenz, Motion-Aim und Touchpad möchtest oder die Einfachheit eines normalen Bluetooth-Controllers, Dish hat dich abgedeckt. Keine Pro-Spiel-Konfiguration, keine monatlichen Gebühren, keine Werbung.
+Dish verwandelt jeden Controller oder jedes Android-Handy in ein drahtloses Gamepad mit niedriger Latenz. Egal ob du eine Wi-Fi-Verbindung mit niedriger Latenz, Motion-Aim und Touchpad möchtest oder die Einfachheit eines normalen Bluetooth-Controllers, Dish kann beides. Keine Einrichtung pro Spiel, keine monatlichen Gebühren, keine Werbung.
 
 
 ZWEI VERBINDUNGSWEGE
@@ -15,7 +15,7 @@ Stecke ein USB-Gamepad in den USB-Anschluss deines Handys für null zusätzliche
 
 FÜRS GAMING ENTWORFEN
 
-• Optimierter Hot-Path für niedrigste Latenz
+• Auf die niedrigstmögliche Eingabelatenz abgestimmt
 • Verschlüsselter Wi-Fi-Stream
 • Mehrere Satelliten gleichzeitig: koppel mehrere PCs und route zwischen ihnen pro Slot
 • Motion und Touchpad werden Spielen als Standard-PlayStation-Pad präsentiert
@@ -29,4 +29,4 @@ Der kostenlose Satellite-Helfer ist für Windows, macOS und Linux unter https://
 
 FÜR BASTLER
 
-Quellcode, Sicherheitsrichtlinie und Wire-Format-Dokumentation sind öffentlich auf GitHub unter github.com/TinkerNorth/dish-android. Handy-Client, Satellite-Server und Plattformvarianten.
+Quellcode, Sicherheitsrichtlinie und Protokoll-Dokumentation sind öffentlich auf GitHub unter github.com/TinkerNorth/dish-android. Der Handy-Client, der Satellite-Server und die anderen Plattform-Clients sind alle quelloffen.

@@ -17,7 +17,6 @@ lifecycle = "2.11.0"
 gamesActivity = "4.4.2"
 ktlint = "14.2.0"
 detekt = "1.23.8"
-dependency-check = "12.2.2"
 mockk = "1.14.11"
 turbine = "1.2.1"
 kotlinx-coroutines-test = "1.11.0"
@@ -74,7 +73,6 @@ ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint" }
 detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
-dependency-check = { id = "org.owasp.dependencycheck", version.ref = "dependency-check" }
 google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }
 firebase-crashlytics = { id = "com.google.firebase.crashlytics", version.ref = "crashlyticsPlugin" }
 androidx-baselineprofile = { id = "androidx.baselineprofile", version.ref = "benchmark" }

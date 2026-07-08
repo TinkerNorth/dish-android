@@ -9,13 +9,11 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionCoordinator
-import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
-import com.tinkernorth.dish.composer.TouchpadModeComposer
+import com.tinkernorth.dish.composer.TouchpadSource
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
-import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.inputrate.InputRateStore
@@ -156,19 +154,19 @@ class MainViewModel
                     }
                 }.launchIn(viewModelScope)
 
-            combine(hub.connections, touchpadModeStore.state) { conns, savedModes ->
-                conns
-                    .filter { it.kind == ConnectionKind.SATELLITE }
-                    .associate { c ->
-                        c.id to
-                            TouchpadModeComposer.resolve(
-                                savedMode = savedModes[c.id],
-                                serverSupports = ASSUMED_SUPPORTED_TOUCHPAD_MODES,
-                                hasLocalTouchpadCapture = true,
-                            )
-                    }
+            // The pill and the launcher read the SAME projection the descriptor declares
+            // (CapabilityComposer.touchpadWireMode), so the dashboard can never claim a routing
+            // the satellite doesn't have. Store/bindings/type changes all funnel through the
+            // composer's emissions; the store is combined in for the pre-first-emission window.
+            combine(capabilityComposer.state, touchpadModeStore.state) { caps, _ ->
+                caps.keys.associateWith { slotId ->
+                    TouchpadSlotUi(
+                        mode = capabilityComposer.touchpadWireMode(slotId),
+                        phoneSourced = capabilityComposer.touchpadSource(slotId) == TouchpadSource.PHONE,
+                    )
+                }
             }.onEach { map ->
-                _uiState.update { it.copy(touchpadModesBySatellite = map) }
+                _uiState.update { it.copy(touchpadBySlot = map) }
             }.launchIn(viewModelScope)
         }
 
@@ -208,23 +206,6 @@ class MainViewModel
 
         // Use this in render code: absence and `false` differ in the store but mean the same to the user.
         fun isMotionEnabled(slotId: String): Boolean = motionEnabledStore.isEnabled(slotId)
-
-        // Local write is unconditional so a recovered server picks up the user's
-        // pick on reconnect. Routing rides each bound slot's DESCRIPTOR (one
-        // declarative per-controller PUT each, no bespoke mode endpoint);
-        // failures surface through the connection-manager event stream.
-        fun setSatelliteTouchpadMode(
-            connectionId: String,
-            mode: String,
-        ) {
-            if (!TouchpadModeValue.isValid(mode)) return
-            touchpadModeStore.setMode(connectionId, mode)
-            for (slotId in hub.bindings.value
-                .filterValues { it == connectionId }
-                .keys) {
-                hub.setSatelliteTouchpadMode(connectionId, slotId, mode)
-            }
-        }
 
         private fun pathCardFor(
             slot: ControllerSlot,
@@ -288,8 +269,4 @@ class MainViewModel
             val inputRates: Map<String, SlotInputRates>,
             val screenPeakHz: Int,
         )
-
-        private companion object {
-            val ASSUMED_SUPPORTED_TOUCHPAD_MODES: Set<String> = TouchpadModeValue.ALL.toSet()
-        }
     }

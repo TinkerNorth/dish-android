@@ -68,6 +68,20 @@ class RumbleRouter
                 context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator?
             }
 
+        // Diagnostics-only: drive the slot's actuator directly, bypassing the session resolve
+        // (there may be no session) and the per-slot delivery toggle (the user just pressed
+        // "test"), but never the physical routing rules.
+        fun testBuzz(
+            slotId: String,
+            strongMagnitude: Int,
+            weakMagnitude: Int,
+            durationMs: Int,
+        ) {
+            val target = classifyTarget(slotId)
+            if (target is RumbleTarget.None) return
+            actuate(target, strongMagnitude, weakMagnitude, rumbleSafeDurationMs(durationMs).toLong())
+        }
+
         fun dispatch(
             sessionHandle: Int,
             controllerIndex: Int,

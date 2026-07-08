@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Diagnostics (telemetry) screen. Same chrome as Settings/Donate: toolbar
+    (chevron + "Diagnostics") over a NestedScrollView. Body is three sections
+    populated at runtime by DiagnosticsActivity:
+
+      ── CONTROLLERS ──   per-device rows (name, transport, poll/gyro rate)
+      ── CONNECTIONS ──   per-host rows (label, link state, live host telemetry)
+      ── LATENCY ──       opt-in MaterialSwitch + a stats area
+
+    The three list containers (`containerControllers`, `containerConnections`,
+    `containerLatencyStats`) are empty LinearLayouts the Activity fills with
+    TextView/MaterialCardView rows; the switch defaults unchecked and is only
+    armed after the user accepts the warning dialog.
+-->
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            style="@style/Widget.Dish.Toolbar"
+            android:layout_width="match_parent"
+            app:title="@string/diagnostics_title" />
+
+        <androidx.core.widget.NestedScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:paddingHorizontal="@dimen/spacing_5xl"
+            android:paddingTop="@dimen/spacing_md"
+            android:paddingBottom="@dimen/spacing_6xl">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <!-- ═══ CONTROLLERS ════════════════════════════════════════ -->
+                <include
+                    android:id="@+id/sectionControllers"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+                <LinearLayout
+                    android:id="@+id/containerControllers"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <!-- ═══ CONNECTIONS ════════════════════════════════════════ -->
+                <include
+                    android:id="@+id/sectionConnections"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+                <TextView
+                    android:id="@+id/tvWifiLink"
+                    style="@style/TextAppearance.Dish.Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="@dimen/spacing_md" />
+
+                <LinearLayout
+                    android:id="@+id/containerConnections"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <!-- ═══ LATENCY ════════════════════════════════════════════ -->
+                <include
+                    android:id="@+id/sectionLatency"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+                <com.google.android.material.card.MaterialCardView
+                    style="@style/Widget.Dish.Card"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="@dimen/card_padding">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    style="@style/TextAppearance.Dish.Title"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/diagnostics_latency_title" />
+
+                                <TextView
+                                    style="@style/TextAppearance.Dish.Body"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="@dimen/spacing_xs"
+                                    android:text="@string/diagnostics_latency_body" />
+                            </LinearLayout>
+
+                            <com.google.android.material.materialswitch.MaterialSwitch
+                                android:id="@+id/switchLatencyProfiling"
+                                style="@style/Widget.Dish.Switch"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="@dimen/spacing_xl"
+                                android:layout_marginTop="@dimen/size_2"
+                                android:contentDescription="@string/diagnostics_latency_title" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/containerLatencyStats"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/spacing_lg"
+                            android:orientation="vertical" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- ═══ EVENTS ═════════════════════════════════════════════ -->
+                <include
+                    android:id="@+id/sectionEvents"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+                <LinearLayout
+                    android:id="@+id/containerEvents"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCopyEvents"
+                    style="@style/Widget.Dish.Button.Outlined"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:text="@string/diagnostics_copy_events" />
+
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+    </LinearLayout>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

@@ -6,29 +6,7 @@ plugins {
     alias(libs.plugins.hilt) apply false
     alias(libs.plugins.ktlint) apply false
     alias(libs.plugins.detekt) apply false
-    alias(libs.plugins.dependency.check) apply false
     alias(libs.plugins.google.services) apply false
     alias(libs.plugins.firebase.crashlytics) apply false
     alias(libs.plugins.androidx.baselineprofile) apply false
-}
-
-apply(plugin = "org.owasp.dependencycheck")
-
-configure<org.owasp.dependencycheck.gradle.extension.DependencyCheckExtension> {
-    failBuildOnCVSS = 7.0f
-    formats = listOf("HTML", "SARIF", "JSON")
-    suppressionFile = "${rootDir}/.security/dependency-check-suppressions.xml"
-    analyzers.run {
-        assemblyEnabled = false
-        nuspecEnabled = false
-        nugetconfEnabled = false
-    }
-    nvd.run {
-        apiKey = System.getenv("NVD_API_KEY") ?: ""
-        // NVD's API is chronically slow/503-prone; reuse the cached feed for a week so a healthy
-        // build never blocks on an upstream outage, and ride out transient 503s when it must sync.
-        validForHours = 168
-        maxRetryCount = 20
-        delay = 4000
-    }
 }

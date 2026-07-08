@@ -446,7 +446,7 @@ class ConnectionCoordinatorTest {
 
         val summary = hub.connections.value.first { it.id == "s:1" }
         assertEquals(CONTROLLER_TYPE_PLAYSTATION, summary.satelliteControllerTypes["slot-A"])
-        verify { satConn.declareSlot("slot-A", CONTROLLER_TYPE_PLAYSTATION, any()) }
+        verify { satConn.declareSlot("slot-A", CONTROLLER_TYPE_PLAYSTATION) }
     }
 
     @Test
@@ -464,7 +464,7 @@ class ConnectionCoordinatorTest {
 
         assertEquals(false, bound)
         assertNull(hub.bindings.value["42"])
-        verify(exactly = 0) { satConn.declareSlot(any(), any(), any()) }
+        verify(exactly = 0) { satConn.declareSlot(any(), any()) }
     }
 
     @Test

@@ -24,6 +24,7 @@ import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachDonatePill
 import com.tinkernorth.dish.ui.common.setupDishToolbar
+import com.tinkernorth.dish.ui.diagnostics.DiagnosticsActivity
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -80,6 +81,13 @@ class SettingsActivity : AppCompatActivity() {
             if (mode != themePreferenceStore.state.value) {
                 themePreferenceStore.setMode(mode)
             }
+        }
+
+        binding.cardRowDiagnostics.cardRowIcon.setImageResource(R.drawable.ic_bug)
+        binding.cardRowDiagnostics.cardRowTitle.setText(R.string.settings_diagnostics_title)
+        binding.cardRowDiagnostics.cardRowSubtitle.setText(R.string.settings_diagnostics_body)
+        binding.cardDiagnostics.setOnClickListener {
+            startActivity(Intent(this, DiagnosticsActivity::class.java))
         }
 
         binding.cardRowCrash.cardRowIcon.setImageResource(R.drawable.ic_bug)

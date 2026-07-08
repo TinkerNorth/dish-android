@@ -84,18 +84,16 @@ internal fun motionRateUserFacingOn(
         Feature.MOTION !in cap.runtimeDown
 
 // Screen input can drive a slot only while an overlay surface exists for it: the on-screen
-// gamepad for the virtual slot, or the slot's satellite touchpad surface when its mode is
-// enabled. Outside those states the card's screen rate reads Off.
+// gamepad for the virtual slot, or the slot's phone touchpad surface when it is openable
+// (mode on AND the phone is the touch source; a pad streaming its own trackpad has no phone
+// surface). Outside those states the card's screen rate reads Off.
 internal fun screenRateUserFacingOn(
     inputType: SlotInputType,
     boundKind: ConnectionKind?,
-    touchpadMode: String?,
+    touchpad: TouchpadSlotUi?,
 ): Boolean =
     inputType == SlotInputType.VIRTUAL ||
-        (
-            boundKind == ConnectionKind.SATELLITE &&
-                (touchpadMode ?: TouchpadModeValue.OFF) != TouchpadModeValue.OFF
-        )
+        (boundKind == ConnectionKind.SATELLITE && touchpad?.openable == true)
 
 class ControllerAdapter(
     private val listener: SlotActionListener,
@@ -106,7 +104,7 @@ class ControllerAdapter(
         val slot: ControllerSlot,
         val connections: List<ConnectionSummary>,
         val motionCap: SlotCapabilities = SlotCapabilities.NONE,
-        val touchpadModes: Map<String, String> = emptyMap(),
+        val touchpad: TouchpadSlotUi? = null,
         val pathCard: PathCard? = null,
         val inputRates: SlotInputRates? = null,
         val screenPeakHz: Int = 0,
@@ -116,7 +114,7 @@ class ControllerAdapter(
         slots: List<ControllerSlot>,
         connections: List<ConnectionSummary>,
         motionCapabilities: Map<String, SlotCapabilities> = emptyMap(),
-        touchpadModes: Map<String, String> = emptyMap(),
+        touchpadBySlot: Map<String, TouchpadSlotUi> = emptyMap(),
         pathCards: Map<String, PathCard> = emptyMap(),
         inputRates: Map<String, SlotInputRates> = emptyMap(),
         screenPeakHz: Int = 0,
@@ -127,7 +125,7 @@ class ControllerAdapter(
                     slot = slot,
                     connections = connections,
                     motionCap = motionCapabilities[slot.id] ?: SlotCapabilities.NONE,
-                    touchpadModes = touchpadModes,
+                    touchpad = touchpadBySlot[slot.id],
                     pathCard = pathCards[slot.id],
                     inputRates = inputRates[slot.id],
                     screenPeakHz = screenPeakHz,
@@ -325,7 +323,7 @@ class ControllerAdapter(
             }
 
             if (bound.kind == ConnectionKind.SATELLITE) {
-                val mode = row.touchpadModes[row.slot.boundConnectionId] ?: TouchpadModeValue.OFF
+                val mode = row.touchpad?.mode ?: TouchpadModeValue.OFF
                 val valueRes =
                     when (mode) {
                         TouchpadModeValue.DS4 -> R.string.touchpad_mode_pad
@@ -437,7 +435,7 @@ class ControllerAdapter(
                 screenRateUserFacingOn(
                     inputType = row.slot.inputType,
                     boundKind = row.slot.boundStatus?.kind,
-                    touchpadMode = row.touchpadModes[row.slot.boundConnectionId],
+                    touchpad = row.touchpad,
                 )
             return when {
                 !computes ->
@@ -534,8 +532,10 @@ class ControllerAdapter(
                         kind = ActionKind.GAMEPAD,
                     )
             }
-            val touchpadMode = row.touchpadModes[slot.boundConnectionId] ?: TouchpadModeValue.OFF
-            if (bound.kind == ConnectionKind.SATELLITE && connected && touchpadMode != TouchpadModeValue.OFF) {
+            // Openable = mode on AND the phone screen is the touch source. A USB-direct pad
+            // streaming its own trackpad gets no overlay: two producers would fight over the
+            // slot's single MSG_TOUCHPAD stream.
+            if (bound.kind == ConnectionKind.SATELLITE && connected && row.touchpad?.openable == true) {
                 actions +=
                     CardAction(
                         R.drawable.ic_open_touchpad,

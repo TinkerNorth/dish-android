@@ -1,11 +1,11 @@
 name: Android CI
 
 # Pin map (verify with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`):
-#   actions/checkout              @ v4.2.2 → 11bd71901bbe5b1630ceea73d27597364c9af683
-#   actions/setup-java            @ v5.2.0 → be666c2fcd27ec809703dec50e508c2fdc7f6654
-#   actions/setup-python          @ v5.3.0 → 0b93645e9fea7318ecaed2b359559ac225c90a2b
+#   actions/checkout              @ v6.0.3 → df4cb1c069e1874edd31b4311f1884172cec0e10
+#   actions/setup-java            @ v5.3.0 → ad2b38190b15e4d6bdf0c97fb4fca8412226d287
+#   actions/setup-python          @ v6.2.0 → a309ff8b426b58ec0e2a45f0f869d46889d02405
 #   actions/upload-artifact       @ v7.0.1 → 043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-#   gradle/actions/setup-gradle   @ v4.1.0 → d156388eb19639ec20ade50009f3d199ce1e2808
+#   gradle/actions/setup-gradle   @ v6.2.0 → 3f131e8634966bd73d06cc69884922b02e6faf92
 
 on:
   push:
@@ -54,6 +54,9 @@ jobs:
           FILES=$(find app/src/main/cpp -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.c' \))
           [ -z "$FILES" ] || echo "$FILES" | xargs clang-format --dry-run --Werror
 
+      - name: Play metadata lint (lengths, counts, dimensions)
+        run: python scripts/check_play_metadata.py
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
@@ -68,6 +71,9 @@ jobs:
 
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest
+
+      - name: Run native unit tests
+        run: ./gradlew :app:nativeTest
 
       - name: Build debug APK
         run: ./gradlew assembleDebug

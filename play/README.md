@@ -37,20 +37,27 @@ fastlane supply --aab path/to/dish-1.0.0.aab --metadata_path play/metadata
 
 Without Fastlane, the same files can be copy-pasted into the Play Console store-listing pages by hand.
 
-## What's missing (visual assets)
+## Visual assets: status
 
-These have to be designed and exported separately. None of them exist yet:
+Screenshots and feature graphics are committed under
+`play/metadata/android/<locale>/images/`. The store icon still needs to be
+exported, and the screenshots need re-capturing before submission (see the
+note below).
 
-| Asset | Spec |
-|---|---|
-| Store icon | 512×512 PNG, 32-bit, no alpha, ≤1 MB |
-| Feature graphic | 1024×500 PNG or JPG |
-| Phone screenshots | 2 to 8, 16:9 or 9:16, 320 to 3840 px short side |
-| 7-inch tablet screenshots | 16:9 or 9:16, recommended for tablet surfacing |
-| 10-inch tablet screenshots | 16:9 or 9:16, recommended for foldable/ChromeOS surfacing |
-| Promo video | YouTube URL, ≤30s landscape, optional but expected at Editor's Choice tier |
+| Asset | Spec | Status |
+|---|---|---|
+| Store icon | 512x512 PNG, 32-bit, no alpha, 1 MB max | Not exported yet |
+| Feature graphic | 1024x500 PNG or JPG | Present for every locale except `bs` (needs one before submission) |
+| Phone screenshots | 2 to 8, 16:9 or 9:16, 320 to 3840 px short side | 9 per locale, committed (stale, see note) |
+| 7-inch tablet screenshots | 16:9 or 9:16, recommended for tablet surfacing | 9 per locale, committed (stale, see note) |
+| 10-inch tablet screenshots | 16:9 or 9:16, recommended for foldable/ChromeOS surfacing | 9 per locale, committed (stale, see note) |
+| Promo video | YouTube URL, 30s max landscape, optional | Not set (`video.txt` is empty) |
 
-When ready, Fastlane Supply expects them under `play/metadata/android/<locale>/images/`:
+Note: the committed screenshots were captured before the guided Setup flow
+and the dashboard card rework, so some show screens that no longer exist.
+Re-capture them before submission. See [SCREENSHOT-STRATEGY.md](SCREENSHOT-STRATEGY.md).
+
+Fastlane Supply expects the images under `play/metadata/android/<locale>/images/`:
 
 ```
 images/icon.png

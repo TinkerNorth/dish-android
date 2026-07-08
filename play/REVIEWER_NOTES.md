@@ -11,11 +11,11 @@ Dish turns an Android phone into a wireless gamepad. It has two operating modes:
 
 **Bluetooth HID mode** needs nothing external. Pair to any nearby Bluetooth-capable device:
 
-1. Launch the app, then complete the welcome flow or tap Skip.
-2. From the dashboard, tap "Manage" under Connections.
-3. Open "Bluetooth Hosts" → "Add" → pair to any Bluetooth-capable device (for example, another phone, a Windows laptop, a console).
-4. From the dashboard, tap any controller slot → open the on-screen gamepad.
-5. Press buttons / sticks. The paired host will see them as a standard Xbox-compatible HID gamepad.
+1. Launch the app. On first run the guided "Set up Dish" flow opens; either complete it or tap Skip.
+2. On the dashboard, tap Manage on the connections card to open the Connections screen.
+3. Open the Bluetooth Hosts section, tap Add, then pair to any Bluetooth-capable device (for example, another phone, a Windows laptop, a console).
+4. On the dashboard, open a controller card and tap Open Gamepad.
+5. Press buttons and sticks. The paired host will see them as a standard Xbox-compatible HID gamepad.
 
 ## Testing Wi-Fi mode
 

@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 namespace gamepad {
 
@@ -163,6 +164,50 @@ void resetPublishLatch(DeviceState& s) {
     s.lastSLY = 0;
     s.lastSRX = 0;
     s.lastSRY = 0;
+}
+
+size_t formatDeviceStateJson(const DeviceState& s, char* buf, size_t cap) {
+    int n = snprintf(
+        buf, cap,
+        "{\"buttons\":%u,\"lt\":%u,\"rt\":%u,\"lx\":%d,\"ly\":%d,\"rx\":%d,\"ry\":%d,"
+        "\"motionValid\":%s,\"gx\":%d,\"gy\":%d,\"gz\":%d,\"ax\":%d,\"ay\":%d,\"az\":%d,"
+        "\"touchValid\":%s,\"f0Active\":%s,\"f0Id\":%u,\"f0X\":%d,\"f0Y\":%d,"
+        "\"f1Active\":%s,\"f1Id\":%u,\"f1X\":%d,\"f1Y\":%d,\"click\":%s}",
+        (unsigned)s.wButtons, (unsigned)s.bLT, (unsigned)s.bRT, (int)s.sLX, (int)s.sLY, (int)s.sRX,
+        (int)s.sRY, s.motionValid ? "true" : "false", (int)s.gyroX, (int)s.gyroY, (int)s.gyroZ,
+        (int)s.accelX, (int)s.accelY, (int)s.accelZ, s.touchValid ? "true" : "false",
+        s.touch0Active ? "true" : "false", (unsigned)s.touch0Id, (int)s.touch0X, (int)s.touch0Y,
+        s.touch1Active ? "true" : "false", (unsigned)s.touch1Id, (int)s.touch1X, (int)s.touch1Y,
+        s.touchClick ? "true" : "false");
+    if (n < 0 || (size_t)n >= cap) return 0;
+    return (size_t)n;
+}
+
+bool operator==(const TouchpadState& a, const TouchpadState& b) {
+    return a.f0Active == b.f0Active && a.f1Active == b.f1Active && a.clickDown == b.clickDown &&
+           a.f0Id == b.f0Id && a.f1Id == b.f1Id && a.f0X == b.f0X && a.f0Y == b.f0Y &&
+           a.f1X == b.f1X && a.f1Y == b.f1Y;
+}
+
+TouchpadSend TouchpadGate::decide(const TouchpadState& cur, int64_t nowNs) {
+    if (cur != last_) {
+        const bool edge = cur.f0Active != last_.f0Active || cur.f1Active != last_.f1Active ||
+                          cur.clickDown != last_.clickDown || cur.f0Id != last_.f0Id ||
+                          cur.f1Id != last_.f1Id;
+        // A skipped move is not lost data: the next report carries fresher coordinates.
+        if (!edge && nowNs - lastSentNs_ < kTouchpadMoveIntervalNs) return TouchpadSend::SKIP;
+        last_ = cur;
+        lastSentNs_ = nowNs;
+        lastEventMs_ = nowNs / 1000000;
+        resendsLeft_ = kTouchpadHealResends;
+        return TouchpadSend::FRESH;
+    }
+    if (resendsLeft_ > 0 && nowNs - lastSentNs_ >= kTouchpadMoveIntervalNs) {
+        resendsLeft_--;
+        lastSentNs_ = nowNs;
+        return TouchpadSend::HEAL;
+    }
+    return TouchpadSend::SKIP;
 }
 
 } // namespace gamepad

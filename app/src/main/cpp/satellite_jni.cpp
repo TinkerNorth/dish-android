@@ -31,6 +31,7 @@
 
 #include "dispatch.h"
 #include "gamepad_input.h"
+#include "hotpath_latency.h"
 #include "thread_priority.h"
 #include "usb_host.h"
 #include "usb_parsers.h"
@@ -229,6 +230,7 @@ static void publishIfChanged(int32_t deviceId, DeviceState& s) {
         r->sThumbRX = s.sRX;
         r->sThumbRY = s.sRY;
         sendEncrypted(session.get(), MSG_GAMEPAD_DATA, payload, sizeof(payload));
+        hotpath::markGamepadSent(); // stage-1 end: the URB-driven packet has left sendto()
     } else if (binding.kind == SLOT_BLUETOOTH) {
         if (binding.btConnectionId.empty()) return;
         enqueueBtReport(BtReport{
@@ -273,6 +275,11 @@ void prewarmDevice(int32_t deviceId) {
     g_devices[deviceId];
 }
 
+// Diagnostics-only mirror gate: motion/touch land in g_devices solely for the inspector
+// snapshot, and only while an inspector screen is open. Off costs one relaxed load per report,
+// the same budget as the latency bench markers.
+static std::atomic<bool> g_inspect{false};
+
 void applyUsbReport(int32_t deviceId, const gamepad::DeviceState& nu) {
     std::lock_guard<std::mutex> lock(g_devicesMtx);
     auto& s = g_devices[deviceId];
@@ -285,6 +292,31 @@ void applyUsbReport(int32_t deviceId, const gamepad::DeviceState& nu) {
     s.sRY = nu.sRY;
     applyUsbStickDeadzone(s.sLX, s.sLY);
     applyUsbStickDeadzone(s.sRX, s.sRY);
+    if (g_inspect.load(std::memory_order_relaxed)) {
+        // Copy-on-valid keeps the last known sample visible: a report without a touch
+        // update must not read as a lift in the inspector.
+        if (nu.motionValid) {
+            s.motionValid = true;
+            s.gyroX = nu.gyroX;
+            s.gyroY = nu.gyroY;
+            s.gyroZ = nu.gyroZ;
+            s.accelX = nu.accelX;
+            s.accelY = nu.accelY;
+            s.accelZ = nu.accelZ;
+        }
+        if (nu.touchValid) {
+            s.touchValid = true;
+            s.touch0Active = nu.touch0Active;
+            s.touch0Id = nu.touch0Id;
+            s.touch0X = nu.touch0X;
+            s.touch0Y = nu.touch0Y;
+            s.touch1Active = nu.touch1Active;
+            s.touch1Id = nu.touch1Id;
+            s.touch1X = nu.touch1X;
+            s.touch1Y = nu.touch1Y;
+            s.touchClick = nu.touchClick;
+        }
+    }
     publishIfChanged(deviceId, s);
 }
 
@@ -315,6 +347,24 @@ void applyUsbMotion(int32_t deviceId, int16_t gyroX, int16_t gyroY, int16_t gyro
     dish_wire::encodeMotionPayload(payload, (uint8_t)(binding.controllerIndex & 0xFF), gyroX, gyroY,
                                    gyroZ, accelX, accelY, accelZ, timestampDeltaUs);
     sendEncrypted(session.get(), MSG_MOTION, payload, sizeof(payload));
+}
+
+// Satellite-only like motion: the Bluetooth HID descriptor is a plain gamepad, so touch has
+// nowhere to go on that transport. Routing (ds4 pad vs mouse vs off) is the receiver's job,
+// declared per slot in the descriptor.
+void applyUsbTouchpad(int32_t deviceId, const gamepad::TouchpadState& t, uint32_t eventTimeMs) {
+    std::lock_guard<std::mutex> lock(g_slotsMtx);
+    auto it = g_slots.find(deviceId);
+    if (it == g_slots.end()) return;
+    const SlotBinding& binding = it->second;
+    if (binding.kind != SLOT_SATELLITE) return;
+    auto session = getSession(binding.sessionHandle);
+    if (!session) return;
+    uint8_t payload[16];
+    dish_wire::encodeTouchpadPayload(payload, (uint8_t)(binding.controllerIndex & 0xFF), t.f0Active,
+                                     t.f1Active, t.clickDown, t.f0Id, t.f0X, t.f0Y, t.f1Id, t.f1X,
+                                     t.f1Y, eventTimeMs);
+    sendEncrypted(session.get(), MSG_TOUCHPAD, payload, sizeof(payload));
 }
 
 } // namespace dispatch
@@ -438,6 +488,7 @@ static void heartbeatLoop(std::shared_ptr<Session> s) {
     LOGI("Heartbeat thread started (sock=%d)", s->udpSock);
     while (s->heartbeatRunning.load(std::memory_order_relaxed)) {
         sendEncrypted(s.get(), MSG_HEARTBEAT_PING, nullptr, 0);
+        hotpath::markPingSent(); // stage-2: round-trip clock starts here
         s->missedAcks.fetch_add(1, std::memory_order_relaxed);
 
         if (s->missedAcks.load(std::memory_order_relaxed) >= HEARTBEAT_MISS_MAX) {
@@ -753,6 +804,7 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiv
     uint16_t msgLen = ((uint16_t)decrypted[2] << 8) | decrypted[3];
 
     if (msgType == MSG_HEARTBEAT_ACK) {
+        hotpath::markAckReceived(); // stage-2: round-trip clock stops here (RTT)
         s->missedAcks.store(0);
         s->connectionAlive.store(true);
         // Enriched ack: backendAvailable(1) + totalActive(1) + epoch(u16 BE) +
@@ -1051,6 +1103,14 @@ JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_mo
     return usbparsers::parserHasRumble(k->parser) ? JNI_TRUE : JNI_FALSE;
 }
 
+JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_modelHasTouchpad(
+    JNIEnv*, jobject, jint vid, jint pid) {
+    const usbparsers::KnownDevice* k =
+        usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
+    if (!k) return JNI_FALSE;
+    return usbparsers::parserHasTouchpad(k->parser) ? JNI_TRUE : JNI_FALSE;
+}
+
 JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDeviceUrbCount(
     JNIEnv*, jobject, jint deviceId) {
     return (jlong)usbhost::getUrbCount((int32_t)deviceId);
@@ -1059,6 +1119,35 @@ JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDe
 JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDeviceMotionCount(
     JNIEnv*, jobject, jint deviceId) {
     return (jlong)usbhost::getMotionCount((int32_t)deviceId);
+}
+
+// Opt-in hot-path latency benchmark (stage 1 USB-direct + stage 2 heartbeat RTT).
+// Off by default; see hotpath_latency.h and satellite tools/bench/README.md.
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_core_jni_SatelliteNative_setHotPathBench(JNIEnv*, jobject, jboolean on) {
+    hotpath::setEnabled(on == JNI_TRUE);
+}
+
+JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_hotPathBenchJson(
+    JNIEnv* env, jobject, jboolean reset) {
+    return env->NewStringUTF(hotpath::statsJson(reset == JNI_TRUE).c_str());
+}
+
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setInputInspection(
+    JNIEnv*, jobject, jboolean on) {
+    dispatch::g_inspect.store(on == JNI_TRUE, std::memory_order_relaxed);
+}
+
+JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_deviceStateJson(
+    JNIEnv* env, jobject, jint deviceId) {
+    char buf[512];
+    size_t n = 0;
+    {
+        std::lock_guard<std::mutex> lock(g_devicesMtx);
+        auto it = g_devices.find((int32_t)deviceId);
+        if (it != g_devices.end()) n = gamepad::formatDeviceStateJson(it->second, buf, sizeof(buf));
+    }
+    return env->NewStringUTF(n > 0 ? buf : "");
 }
 
 JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDeviceInputEventCount(

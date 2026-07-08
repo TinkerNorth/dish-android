@@ -157,7 +157,6 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
     }
 
     companion object {
-        const val EXTRA_TOUCHPAD_MODE = "extra_touchpad_mode"
         const val EXTRA_SLOT_ID = "extra_slot_id"
         const val EXTRA_CONNECTION_ID = BaseInputOverlayActivity.EXTRA_CONNECTION_ID
     }

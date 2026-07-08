@@ -19,6 +19,7 @@
 
 #include "dispatch.h"
 #include "gamepad_input.h"
+#include "hotpath_latency.h"
 #include "thread_priority.h"
 #include "usb_parsers.h"
 
@@ -45,6 +46,7 @@ struct DeviceCtx {
     usbparsers::ParserState stickRange;
 
     int64_t lastMotionNs = 0;
+    gamepad::TouchpadGate touchGate;
 
     std::atomic<uint64_t> urbCount{0};
     std::atomic<uint64_t> motionCount{0};
@@ -165,6 +167,7 @@ void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
             }
 
             if (reaped->status == 0 && reaped->actual_length > 0) {
+                hotpath::markInputRead(); // stage-1 start: a fresh input report is in hand
                 ctx->urbCount.fetch_add(1, std::memory_order_relaxed);
                 memset(&scratch, 0, sizeof(scratch));
                 if (usbparsers::decodeReport(ctx->parser, completed->buf.data(),
@@ -172,10 +175,14 @@ void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
                                              &ctx->stickRange)) {
                     dispatch::applyUsbReport(ctx->syntheticDeviceId, scratch);
 
-                    if (scratch.motionValid) {
+                    int64_t nowNs = 0;
+                    if (scratch.motionValid || scratch.touchValid) {
                         struct timespec ts;
                         clock_gettime(CLOCK_MONOTONIC, &ts);
-                        int64_t nowNs = (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+                        nowNs = (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+                    }
+
+                    if (scratch.motionValid) {
                         if (ctx->lastMotionNs == 0 ||
                             nowNs - ctx->lastMotionNs >= kMotionMinIntervalNs) {
                             uint32_t deltaUs = ctx->lastMotionNs == 0
@@ -186,6 +193,24 @@ void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
                             dispatch::applyUsbMotion(ctx->syntheticDeviceId, scratch.gyroX,
                                                      scratch.gyroY, scratch.gyroZ, scratch.accelX,
                                                      scratch.accelY, scratch.accelZ, deltaUs);
+                        }
+                    }
+
+                    if (scratch.touchValid) {
+                        gamepad::TouchpadState cur;
+                        cur.f0Active = scratch.touch0Active;
+                        cur.f1Active = scratch.touch1Active;
+                        cur.clickDown = scratch.touchClick;
+                        cur.f0Id = scratch.touch0Id;
+                        cur.f1Id = scratch.touch1Id;
+                        cur.f0X = scratch.touch0X;
+                        cur.f0Y = scratch.touch0Y;
+                        cur.f1X = scratch.touch1X;
+                        cur.f1Y = scratch.touch1Y;
+                        if (ctx->touchGate.decide(cur, nowNs) != gamepad::TouchpadSend::SKIP) {
+                            dispatch::applyUsbTouchpad(ctx->syntheticDeviceId,
+                                                       ctx->touchGate.lastSent(),
+                                                       (uint32_t)ctx->touchGate.lastEventTimeMs());
                         }
                     }
                 }

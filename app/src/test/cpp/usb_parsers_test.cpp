@@ -499,3 +499,146 @@ TEST(Decode, DualSenseDecodesCalibratedImu) {
     EXPECT_GT(s.gyroX, 30000);
     EXPECT_GT(s.accelX, 7000);
 }
+
+// ── DS4 / DualSense touchpad decode ─────────────────────────────────────────
+
+namespace {
+
+void writeTouchPoint(uint8_t* p, bool active, uint8_t id, uint16_t x, uint16_t y) {
+    p[0] = (uint8_t)((active ? 0x00 : 0x80) | (id & 0x7F));
+    p[1] = (uint8_t)(x & 0xFF);
+    p[2] = (uint8_t)(((x >> 8) & 0x0F) | ((y & 0x0F) << 4));
+    p[3] = (uint8_t)(y >> 4);
+}
+
+std::vector<uint8_t> ds4Report() {
+    std::vector<uint8_t> r(64, 0);
+    r[0] = 0x01;
+    r[1] = r[2] = r[3] = r[4] = 128; // centered sticks
+    // No bundled touch frame by default (r[33] = 0) and both points inactive.
+    writeTouchPoint(r.data() + 35, false, 0, 0, 0);
+    writeTouchPoint(r.data() + 39, false, 0, 0, 0);
+    return r;
+}
+
+std::vector<uint8_t> dualSenseReport() {
+    std::vector<uint8_t> r(64, 0);
+    r[0] = 0x01;
+    r[1] = r[2] = r[3] = r[4] = 128;
+    writeTouchPoint(r.data() + 33, false, 0, 0, 0);
+    writeTouchPoint(r.data() + 37, false, 0, 0, 0);
+    return r;
+}
+
+} // namespace
+
+TEST(TouchDecode, Ds4CornersNormalizeToFullRangeInt16) {
+    auto r = ds4Report();
+    r[33] = 1;
+    writeTouchPoint(r.data() + 35, true, 3, 0, 0);
+    writeTouchPoint(r.data() + 39, true, 4, 1919, 941);
+    DeviceState s{};
+    ASSERT_TRUE(decodeReport(Parser::DUALSHOCK4, r.data(), r.size(), s, nullptr));
+    ASSERT_TRUE(s.touchValid);
+    EXPECT_TRUE(s.touch0Active);
+    EXPECT_EQ(3, s.touch0Id);
+    EXPECT_EQ(-32768, s.touch0X);
+    EXPECT_EQ(-32768, s.touch0Y);
+    EXPECT_TRUE(s.touch1Active);
+    EXPECT_EQ(4, s.touch1Id);
+    EXPECT_EQ(32767, s.touch1X);
+    EXPECT_EQ(32767, s.touch1Y);
+    EXPECT_FALSE(s.touchClick);
+}
+
+TEST(TouchDecode, Ds4ClickRidesButtonByteSeven) {
+    auto r = ds4Report();
+    r[33] = 1;
+    writeTouchPoint(r.data() + 35, true, 1, 100, 100);
+    r[7] |= 0x02;
+    DeviceState s{};
+    ASSERT_TRUE(decodeReport(Parser::DUALSHOCK4, r.data(), r.size(), s, nullptr));
+    ASSERT_TRUE(s.touchValid);
+    EXPECT_TRUE(s.touchClick);
+}
+
+TEST(TouchDecode, Ds4ZeroFramesMeansNoUpdateNotALift) {
+    auto r = ds4Report();
+    DeviceState s{};
+    ASSERT_TRUE(decodeReport(Parser::DUALSHOCK4, r.data(), r.size(), s, nullptr));
+    EXPECT_FALSE(s.touchValid);
+}
+
+TEST(TouchDecode, Ds4UsesTheNewestBundledFrame) {
+    auto r = ds4Report();
+    r[33] = 2;
+    // Frame 0 (older) at 34, frame 1 (newest) at 43.
+    writeTouchPoint(r.data() + 35, true, 1, 100, 100);
+    writeTouchPoint(r.data() + 39, false, 0, 0, 0);
+    writeTouchPoint(r.data() + 44, true, 2, 1919, 0);
+    writeTouchPoint(r.data() + 48, false, 0, 0, 0);
+    DeviceState s{};
+    ASSERT_TRUE(decodeReport(Parser::DUALSHOCK4, r.data(), r.size(), s, nullptr));
+    ASSERT_TRUE(s.touchValid);
+    EXPECT_EQ(2, s.touch0Id);
+    EXPECT_EQ(32767, s.touch0X);
+}
+
+TEST(TouchDecode, Ds4ShortReportStillDecodesGamepadWithoutTouch) {
+    auto r = ds4Report();
+    r[33] = 1;
+    DeviceState s{};
+    ASSERT_TRUE(decodeReport(Parser::DUALSHOCK4, r.data(), 20, s, nullptr));
+    EXPECT_FALSE(s.touchValid);
+}
+
+TEST(TouchDecode, Ds4InactivePointZeroesCoordinates) {
+    auto r = ds4Report();
+    r[33] = 1;
+    writeTouchPoint(r.data() + 35, false, 5, 1919, 941);
+    DeviceState s{};
+    ASSERT_TRUE(decodeReport(Parser::DUALSHOCK4, r.data(), r.size(), s, nullptr));
+    ASSERT_TRUE(s.touchValid);
+    EXPECT_FALSE(s.touch0Active);
+    EXPECT_EQ(5, s.touch0Id);
+    EXPECT_EQ(0, s.touch0X);
+    EXPECT_EQ(0, s.touch0Y);
+}
+
+TEST(TouchDecode, DualSensePointsAndClickDecode) {
+    auto r = dualSenseReport();
+    writeTouchPoint(r.data() + 33, true, 7, 0, 1079);
+    writeTouchPoint(r.data() + 37, true, 8, 1919, 0);
+    r[10] |= 0x02;
+    DeviceState s{};
+    ASSERT_TRUE(decodeReport(Parser::DUALSENSE, r.data(), r.size(), s, nullptr));
+    ASSERT_TRUE(s.touchValid);
+    EXPECT_TRUE(s.touch0Active);
+    EXPECT_EQ(7, s.touch0Id);
+    EXPECT_EQ(-32768, s.touch0X);
+    EXPECT_EQ(32767, s.touch0Y);
+    EXPECT_TRUE(s.touch1Active);
+    EXPECT_EQ(8, s.touch1Id);
+    EXPECT_EQ(32767, s.touch1X);
+    EXPECT_EQ(-32768, s.touch1Y);
+    EXPECT_TRUE(s.touchClick);
+}
+
+TEST(TouchDecode, DualSenseIdleSurfaceIsAValidAllLiftedUpdate) {
+    auto r = dualSenseReport();
+    DeviceState s{};
+    ASSERT_TRUE(decodeReport(Parser::DUALSENSE, r.data(), r.size(), s, nullptr));
+    ASSERT_TRUE(s.touchValid);
+    EXPECT_FALSE(s.touch0Active);
+    EXPECT_FALSE(s.touch1Active);
+    EXPECT_FALSE(s.touchClick);
+}
+
+TEST(TouchpadCapability, PlayStationParsersHaveTouchpads) {
+    EXPECT_TRUE(usbparsers::parserHasTouchpad(Parser::DUALSHOCK4));
+    EXPECT_TRUE(usbparsers::parserHasTouchpad(Parser::DUALSENSE));
+    EXPECT_FALSE(usbparsers::parserHasTouchpad(Parser::XINPUT_360));
+    EXPECT_FALSE(usbparsers::parserHasTouchpad(Parser::XBOX_ONE_GIP));
+    EXPECT_FALSE(usbparsers::parserHasTouchpad(Parser::SWITCH_PRO_USB));
+    EXPECT_FALSE(usbparsers::parserHasTouchpad(Parser::GENERIC_HID_GAMEPAD));
+}
