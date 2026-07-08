@@ -638,3 +638,14 @@ deeper), the error red can drop below AA. Compute before adopting.
 | Activity transitions | `app/src/main/res/anim/fade_through_enter.xml`, `fade_through_exit.xml` |
 | Navigation graph | `app/src/main/res/navigation/nav_graph.xml` |
 | Navigation wrapper | `app/src/main/java/com/tinkernorth/dish/ui/common/DishNavigator.kt` |
+
+## Naming
+
+- Layout files: `activity_*` for a full-screen root (CoordinatorLayout,
+  carries the low-power overlays) or a scaffold content layout inflated via
+  `setScaffoldContent`; `content-free` composites use their role
+  (`section_*`, `view_*`, `overlay_*`, `dialog_*`, feature-prefixed rows).
+- View ids: semantic names for containers and composites (`cardSupport`,
+  `sectionLatency`, `hostList`); a short type prefix only for leaf controls
+  where the type is the point (`tvTitle`, `btnApply`, `ivIcon`, `swDirect`).
+  Both exist in older layouts; new layouts follow this split.
