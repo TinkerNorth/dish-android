@@ -63,13 +63,23 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
 
+      - name: Compute NVD cache week
+        id: nvdweek
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
       - name: Cache OWASP Dependency-Check NVD database
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
-          # Speeds up re-runs by reusing the local NVD mirror across builds.
+          # Reuses the local NVD mirror across builds. The key rotates weekly
+          # because an exact-key hit never re-saves: a permanent key pins the
+          # first save forever, so runs restore an ever-staler database and
+          # rebuilt ones are thrown away (this bit us with a June dud that
+          # forced a full 346k-record sync on every run).
           path: ~/.gradle/dependency-check-data
-          key: depcheck-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
-          restore-keys: depcheck-${{ runner.os }}-
+          key: depcheck-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}-${{ steps.nvdweek.outputs.week }}
+          restore-keys: |
+            depcheck-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}-
+            depcheck-${{ runner.os }}-
 
       - name: Run dependencyCheckAnalyze
         env:
