@@ -54,6 +54,9 @@ jobs:
           FILES=$(find app/src/main/cpp -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.c' \))
           [ -z "$FILES" ] || echo "$FILES" | xargs clang-format --dry-run --Werror
 
+      - name: Play metadata lint (lengths, counts, dimensions)
+        run: python scripts/check_play_metadata.py
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
