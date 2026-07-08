@@ -13,14 +13,15 @@ import com.tinkernorth.dish.source.connection.ConnectIntent
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
-import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -376,7 +377,6 @@ class ConnectionCoordinatorTest {
         )
         val summary = hub.connections.value.first { it.id == "s:1" }
         assertEquals(setOf("slot-A", "slot-B"), summary.boundSlotIds.toSet())
-        verify(exactly = 0) { satConn.detachSlot(any()) }
     }
 
     @Test
@@ -395,11 +395,7 @@ class ConnectionCoordinatorTest {
     }
 
     @Test
-    fun `binding a slot to a new satellite detaches it from the prior one`() {
-        val sat1 = mockk<SatelliteConnection>(relaxed = true)
-        val sat2 = mockk<SatelliteConnection>(relaxed = true)
-        every { satellite.get("s:1") } returns sat1
-        every { satellite.get("s:2") } returns sat2
+    fun `binding a slot to a new satellite moves the binding and drops the prior type`() {
         satEntriesFlow.value =
             listOf(
                 RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
@@ -407,17 +403,16 @@ class ConnectionCoordinatorTest {
             )
         val hub = buildHub()
 
-        hub.bind("slot-A", "s:1", CONTROLLER_TYPE_XBOX)
+        hub.bind("slot-A", "s:1", CONTROLLER_TYPE_PLAYSTATION)
         hub.bind("slot-A", "s:2", CONTROLLER_TYPE_XBOX)
 
         assertEquals(mapOf("slot-A" to "s:2"), hub.bindings.value)
-        verify { sat1.detachSlot("slot-A") }
+        assertNull(hub.satTypes.value["s:1" to "slot-A"])
+        assertEquals(CONTROLLER_TYPE_XBOX, hub.satTypes.value["s:2" to "slot-A"])
     }
 
     @Test
-    fun `unbind removes the binding and detaches the satellite slot by id`() {
-        val satConn = mockk<SatelliteConnection>(relaxed = true)
-        every { satellite.get("s:1") } returns satConn
+    fun `unbind removes the binding and its type`() {
         satEntriesFlow.value =
             listOf(
                 RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
@@ -428,13 +423,11 @@ class ConnectionCoordinatorTest {
         hub.unbind("slot-A")
 
         assertNull(hub.bindings.value["slot-A"])
-        verify { satConn.detachSlot("slot-A") }
+        assertNull(hub.satTypes.value["s:1" to "slot-A"])
     }
 
     @Test
     fun `bind records the caller's type - the descriptor travels with the bind`() {
-        val satConn = mockk<SatelliteConnection>(relaxed = true)
-        every { satellite.get("s:1") } returns satConn
         satEntriesFlow.value =
             listOf(
                 RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
@@ -446,13 +439,10 @@ class ConnectionCoordinatorTest {
 
         val summary = hub.connections.value.first { it.id == "s:1" }
         assertEquals(CONTROLLER_TYPE_PLAYSTATION, summary.satelliteControllerTypes["slot-A"])
-        verify { satConn.declareSlot("slot-A", CONTROLLER_TYPE_PLAYSTATION) }
     }
 
     @Test
     fun `bind refuses a numeric slot id the registry no longer knows (zombie guard)`() {
-        val satConn = mockk<SatelliteConnection>(relaxed = true)
-        every { satellite.get("s:1") } returns satConn
         satEntriesFlow.value =
             listOf(
                 RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
@@ -464,7 +454,7 @@ class ConnectionCoordinatorTest {
 
         assertEquals(false, bound)
         assertNull(hub.bindings.value["42"])
-        verify(exactly = 0) { satConn.declareSlot(any(), any()) }
+        assertNull(hub.satTypes.value["s:1" to "42"])
     }
 
     @Test
@@ -537,9 +527,7 @@ class ConnectionCoordinatorTest {
     }
 
     @Test
-    fun `setSatelliteControllerType updates the summary and pushes to the connection`() {
-        val satConn = mockk<SatelliteConnection>(relaxed = true)
-        every { satellite.get("s:1") } returns satConn
+    fun `setSatelliteControllerType updates the summary through the type store`() {
         satEntriesFlow.value =
             listOf(
                 RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
@@ -784,10 +772,7 @@ class ConnectionCoordinatorTest {
     }
 
     @Test
-    fun `migrateSlotBinding carries binding and type to the new slot id and re-keys the satellite slot`() {
-        val satConn = mockk<SatelliteConnection>(relaxed = true)
-        every { satellite.get("s:1") } returns satConn
-        every { satConn.renameSlot("slot-fw", "slot-usb") } returns true
+    fun `migrateSlotBinding carries binding and type to the new slot id`() {
         satEntriesFlow.value =
             listOf(
                 RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
@@ -805,42 +790,40 @@ class ConnectionCoordinatorTest {
         val summary = hub.connections.value.first { it.id == "s:1" }
         assertEquals(CONTROLLER_TYPE_PLAYSTATION, summary.satelliteControllerTypes["slot-usb"])
         assertNull(summary.satelliteControllerTypes["slot-fw"])
-        verify { satConn.renameSlot("slot-fw", "slot-usb") }
-        verify(exactly = 0) { satConn.detachSlot(any()) }
+    }
+
+    @Test
+    fun `migrateSlotBinding re-keys the binding in one emission so the topology diff reads a rename`() {
+        satEntriesFlow.value =
+            listOf(
+                RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
+            )
+        val hub = buildHub()
+        hub.bind("slot-fw", "s:1", CONTROLLER_TYPE_XBOX)
+
+        // Unconfined collector: sees every distinct value synchronously, so a two-step
+        // unbind+bind implementation could not hide behind StateFlow conflation.
+        val observed = mutableListOf<Map<String, String>>()
+        val job =
+            scope.backgroundScope.launch(UnconfinedTestDispatcher(scope.testScheduler)) {
+                hub.bindings.collect { observed += it }
+            }
+
+        hub.migrateSlotBinding("slot-fw", "slot-usb")
+        job.cancel()
+
+        assertTrue(observed.none { "slot-fw" in it && "slot-usb" in it })
+        assertTrue(observed.none { "slot-fw" !in it && "slot-usb" !in it })
     }
 
     @Test
     fun `migrateSlotBinding does nothing when the source slot is unbound`() {
-        val satConn = mockk<SatelliteConnection>(relaxed = true)
-        every { satellite.get(any()) } returns satConn
         val hub = buildHub()
 
         hub.migrateSlotBinding("ghost", "slot-usb")
         scope.testScheduler.runCurrent()
 
         assertEquals(emptyMap<String, String>(), hub.bindings.value)
-        verify(exactly = 0) { satConn.renameSlot(any(), any()) }
-    }
-
-    @Test
-    fun `migrateSlotBinding attaches the new slot when the source slot was never registered`() {
-        val satConn = mockk<SatelliteConnection>(relaxed = true)
-        every { satellite.get("s:1") } returns satConn
-        every { satConn.renameSlot("slot-fw", "slot-usb") } returns false
-        satEntriesFlow.value =
-            listOf(
-                RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
-            )
-        val hub = buildHub()
-
-        hub.bind("slot-fw", "s:1", CONTROLLER_TYPE_XBOX)
-        scope.testScheduler.runCurrent()
-
-        hub.migrateSlotBinding("slot-fw", "slot-usb")
-        scope.testScheduler.runCurrent()
-
-        assertEquals(mapOf("slot-usb" to "s:1"), hub.bindings.value)
-        coVerify { satConn.attachSlot("slot-usb", any()) }
     }
 
     @Test
@@ -886,24 +869,21 @@ class ConnectionCoordinatorTest {
         }
 
     @Test
-    fun `bindClaimedSynthetic carries a bound twin's binding to the synthetic slot`() {
-        val satConn = mockk<SatelliteConnection>(relaxed = true)
-        every { satellite.get("s:1") } returns satConn
-        every { satConn.renameSlot("slot-fw", "-1000") } returns true
+    fun `bindClaimedSynthetic carries a bound twin's binding and type to the synthetic slot`() {
         satEntriesFlow.value =
             listOf(
                 RememberedSatellite(id = "s:1", name = "A", ip = "1", udpPort = 1, pairPort = 2, httpPort = 3),
             )
         val hub = buildHub()
 
-        hub.bind("slot-fw", "s:1", CONTROLLER_TYPE_XBOX)
+        hub.bind("slot-fw", "s:1", CONTROLLER_TYPE_PLAYSTATION)
         scope.testScheduler.runCurrent()
 
         hub.bindClaimedSynthetic(twinSlotId = "slot-fw", syntheticSlotId = "-1000")
         scope.testScheduler.runCurrent()
 
         assertEquals(mapOf("-1000" to "s:1"), hub.bindings.value)
-        verify { satConn.renameSlot("slot-fw", "-1000") }
+        assertEquals(CONTROLLER_TYPE_PLAYSTATION, hub.satTypes.value["s:1" to "-1000"])
     }
 
     // The claim registers the synthetic in the gamepad registry BEFORE the
