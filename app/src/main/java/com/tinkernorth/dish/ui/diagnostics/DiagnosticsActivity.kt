@@ -5,10 +5,7 @@ package com.tinkernorth.dish.ui.diagnostics
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.os.Bundle
-import android.view.Gravity
 import android.view.ViewGroup
-import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -23,6 +20,9 @@ import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.core.jni.ControllerRepository
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.databinding.ActivityDiagnosticsBinding
+import com.tinkernorth.dish.databinding.DiagnosticsBodyRowBinding
+import com.tinkernorth.dish.databinding.DiagnosticsCardBinding
+import com.tinkernorth.dish.databinding.DiagnosticsEmptyRowBinding
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
@@ -34,6 +34,7 @@ import com.tinkernorth.dish.source.system.WifiBand
 import com.tinkernorth.dish.source.system.WifiLink
 import com.tinkernorth.dish.source.system.WifiLinkSource
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
+import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
@@ -75,6 +76,7 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
     @Inject lateinit var json: Json
 
     private lateinit var binding: ActivityDiagnosticsBinding
+    private val nav by lazy { DishNavigator(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -117,13 +119,16 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
         val container = binding.containerControllers
         container.removeAllViews()
         if (devices.isEmpty()) {
-            container.addView(emptyRow(getString(R.string.diagnostics_no_controllers)))
+            container.addView(emptyRow(container, getString(R.string.diagnostics_no_controllers)))
             return
         }
-        devices.forEach { container.addView(controllerCard(it)) }
+        devices.forEach { container.addView(controllerCard(container, it)) }
     }
 
-    private fun controllerCard(device: PhysicalGamepadRegistry.Device): android.view.View {
+    private fun controllerCard(
+        parent: ViewGroup,
+        device: PhysicalGamepadRegistry.Device,
+    ): android.view.View {
         val lines = mutableListOf<String>()
         lines += getString(R.string.diagnostics_kv, getString(R.string.diagnostics_transport), transportLabel(device))
         lines += getString(R.string.diagnostics_kv, getString(R.string.diagnostics_poll_rate), pollRateLabel(device))
@@ -131,7 +136,7 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
             lines += getString(R.string.diagnostics_kv, getString(R.string.diagnostics_gyro), gyroLabel(device))
         }
         lines += getString(R.string.diagnostics_kv, getString(R.string.diagnostics_state), controllerStateLabel(device))
-        return cardWithTitle(device.name, lines) { parent -> inspectButton(parent, device) }
+        return cardWithTitle(parent, device.name, lines) { footerParent -> inspectButton(footerParent, device) }
     }
 
     private fun inspectButton(
@@ -139,14 +144,7 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
         device: PhysicalGamepadRegistry.Device,
     ): android.view.View {
         val button = layoutInflater.inflate(R.layout.diagnostics_inspect_button, parent, false)
-        button.setOnClickListener {
-            startActivity(
-                android.content.Intent(this, InputInspectorActivity::class.java).apply {
-                    putExtra(InputInspectorActivity.EXTRA_DEVICE_ID, device.id)
-                    putExtra(InputInspectorActivity.EXTRA_DEVICE_NAME, device.name)
-                },
-            )
-        }
+        button.setOnClickListener { nav.toInputInspector(device.id, device.name) }
         return button
     }
 
@@ -201,19 +199,22 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
         val container = binding.containerConnections
         container.removeAllViews()
         if (connections.isEmpty()) {
-            container.addView(emptyRow(getString(R.string.diagnostics_no_connections)))
+            container.addView(emptyRow(container, getString(R.string.diagnostics_no_connections)))
             return
         }
-        connections.forEach { container.addView(connectionCard(it)) }
+        connections.forEach { container.addView(connectionCard(container, it)) }
     }
 
-    private fun connectionCard(summary: ConnectionSummary): android.view.View {
+    private fun connectionCard(
+        parent: ViewGroup,
+        summary: ConnectionSummary,
+    ): android.view.View {
         val lines = mutableListOf<String>()
         lines += getString(R.string.diagnostics_kv, getString(R.string.diagnostics_link), summary.live.name)
         if (summary.kind == ConnectionKind.SATELLITE) {
             lines += satelliteTelemetry(summary.id)
         }
-        return cardWithTitle(summary.label, lines)
+        return cardWithTitle(parent, summary.label, lines)
     }
 
     private fun satelliteTelemetry(id: String): List<String> {
@@ -334,7 +335,7 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
     private fun renderLatencyOff() {
         val container = binding.containerLatencyStats
         container.removeAllViews()
-        container.addView(emptyRow(getString(R.string.diagnostics_latency_off_hint)))
+        container.addView(emptyRow(container, getString(R.string.diagnostics_latency_off_hint)))
     }
 
     private suspend fun pollLatencyStats() {
@@ -354,7 +355,7 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
         container.removeAllViews()
         val root = runCatching { json.parseToJsonElement(rawJson).jsonObject }.getOrNull()
         if (root == null) {
-            container.addView(emptyRow(getString(R.string.diagnostics_latency_waiting)))
+            container.addView(emptyRow(container, getString(R.string.diagnostics_latency_waiting)))
             return
         }
         val phoneP50 = microToMs(root, STAGE1, P50)
@@ -365,9 +366,10 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
         // as tentative instead of authoritative.
         val networkP50 = microToMs(root, RTT, P50)?.let { it / 2 }
         val rttSamples = intField(root, RTT, "n")
-        container.addView(statRow(getString(R.string.diagnostics_phone_path), phoneP50, phoneP99))
+        container.addView(statRow(container, getString(R.string.diagnostics_phone_path), phoneP50, phoneP99))
         container.addView(
             statRow(
+                container,
                 getString(R.string.diagnostics_polling_jitter),
                 microToMs(root, URB_GAP, P50),
                 microToMs(root, URB_GAP, P99),
@@ -375,6 +377,7 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
         )
         container.addView(
             statRow(
+                container,
                 getString(R.string.diagnostics_network_latency),
                 networkP50,
                 null,
@@ -428,6 +431,7 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
         }.getOrNull()
 
     private fun statRow(
+        parent: ViewGroup,
         label: String,
         p50: Double?,
         p99: Double?,
@@ -443,7 +447,7 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
                 p99 == null -> getString(R.string.diagnostics_ms, p50)
                 else -> getString(R.string.diagnostics_ms_p50_p99, p50, p99)
             }
-        return bodyRow(getString(R.string.diagnostics_kv, label, value))
+        return bodyRow(parent, getString(R.string.diagnostics_kv, label, value))
     }
 
     // ── Events (flight recorder) ────────────────────────────────────────────
@@ -460,13 +464,13 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
         val container = binding.containerEvents
         container.removeAllViews()
         if (entries.isEmpty()) {
-            container.addView(emptyRow(getString(R.string.diagnostics_events_empty)))
+            container.addView(emptyRow(container, getString(R.string.diagnostics_events_empty)))
             return
         }
         entries
             .takeLast(SHOWN_EVENTS)
             .asReversed()
-            .forEach { container.addView(bodyRow(formatEvent(it))) }
+            .forEach { container.addView(bodyRow(container, formatEvent(it))) }
     }
 
     // Log lines are export material (English, fixed clock format), so bug reports paste uniformly.
@@ -521,64 +525,27 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
     // ── Row builders ────────────────────────────────────────────────────────
 
     private fun cardWithTitle(
+        parent: ViewGroup,
         title: String,
         lines: List<String>,
         footer: ((ViewGroup) -> android.view.View)? = null,
     ): android.view.View {
-        val card =
-            com.google.android.material.card.MaterialCardView(this).apply {
-                layoutParams =
-                    LinearLayout
-                        .LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.WRAP_CONTENT,
-                        ).apply { topMargin = resources.getDimensionPixelSize(R.dimen.card_margin_bottom) }
-            }
-        val column =
-            LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                val pad = resources.getDimensionPixelSize(R.dimen.card_padding)
-                setPadding(pad, pad, pad, pad)
-            }
-        column.addView(titleView(title))
-        lines.forEach { column.addView(bodyView(it)) }
-        footer?.let { column.addView(it(column)) }
-        card.addView(column)
-        return card
+        val card = DiagnosticsCardBinding.inflate(layoutInflater, parent, false)
+        card.diagCardTitle.text = title
+        lines.forEach { card.diagCardColumn.addView(bodyRow(card.diagCardColumn, it)) }
+        footer?.let { card.diagCardColumn.addView(it(card.diagCardColumn)) }
+        return card.root
     }
 
-    private fun titleView(text: String): TextView =
-        TextView(this, null, 0, R.style.TextAppearance_Dish_Title).apply {
-            this.text = text
-        }
+    private fun bodyRow(
+        parent: ViewGroup,
+        text: String,
+    ): android.view.View = DiagnosticsBodyRowBinding.inflate(layoutInflater, parent, false).root.apply { this.text = text }
 
-    private fun bodyView(text: String): TextView =
-        TextView(this, null, 0, R.style.TextAppearance_Dish_Body).apply {
-            this.text = text
-            layoutParams =
-                LinearLayout
-                    .LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ).apply { topMargin = resources.getDimensionPixelSize(R.dimen.spacing_xs) }
-        }
-
-    private fun bodyRow(text: String): TextView =
-        TextView(this, null, 0, R.style.TextAppearance_Dish_Body).apply {
-            this.text = text
-            layoutParams =
-                LinearLayout
-                    .LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ).apply { topMargin = resources.getDimensionPixelSize(R.dimen.spacing_xs) }
-        }
-
-    private fun emptyRow(text: String): TextView =
-        TextView(this, null, 0, R.style.TextAppearance_Dish_Body).apply {
-            this.text = text
-            gravity = Gravity.START
-        }
+    private fun emptyRow(
+        parent: ViewGroup,
+        text: String,
+    ): android.view.View = DiagnosticsEmptyRowBinding.inflate(layoutInflater, parent, false).root.apply { this.text = text }
 
     private companion object {
         const val HANDLE_NONE = -1
