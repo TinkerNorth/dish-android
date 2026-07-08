@@ -207,7 +207,7 @@ class MainActivity :
             s.slots,
             s.connections,
             s.motionCapabilities,
-            s.touchpadModesBySatellite,
+            s.touchpadBySlot,
             s.pathCards,
             s.inputRates,
             s.screenPeakHz,
@@ -260,8 +260,8 @@ class MainActivity :
         val state = viewModel.uiState.value
         val slot = state.slots.firstOrNull { it.id == slotId } ?: return
         val cid = slot.boundConnectionId ?: return
-        val mode = state.touchpadModesBySatellite[cid] ?: return
-        nav.toTouchpad(connectionId = cid, touchpadMode = mode, slotId = slotId)
+        if (state.touchpadBySlot[slotId]?.openable != true) return
+        nav.toTouchpad(connectionId = cid, slotId = slotId)
     }
 
     override fun onOpenGamepad(slotId: String) {

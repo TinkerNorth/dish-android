@@ -1,6 +1,6 @@
 # Dish for Android: Privacy Policy
 
-**Effective date:** 2026-05-21.
+**Effective date:** 2026-06-20.
 **Hosted copy:** [`https://dish.tinkernorth.com/privacy/dish-android/`](https://dish.tinkernorth.com/privacy/dish-android/).
 The hosted copy at that URL is the canonical version; this file mirrors it
 in-repo so the code and the policy ship together. Google Play points at the
@@ -107,7 +107,8 @@ Crashlytics retains crash data for 90 days, then deletes it. See Google's
 | Permission | Why | When asked |
 |---|---|---|
 | `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `CHANGE_WIFI_MULTICAST_STATE` | Sending the encrypted UDP stream and discovery beacons over your local network. | Install-time (normal permissions). |
-| `BLUETOOTH_CONNECT` (API 31+) | Pairing with a Bluetooth host PC and presenting as a HID gamepad. | Runtime, when you tap *Add Bluetooth host*. |
+| `BLUETOOTH_CONNECT` (API 31+) | Pairing with a Bluetooth host (PC, console, set-top box) and presenting as a HID gamepad, or connecting a Bluetooth game controller. | Runtime, when you add a Bluetooth host or controller. |
+| `BLUETOOTH_SCAN` (API 31+) | Discovering nearby Bluetooth hosts and controllers so you can pair them. Declared with `neverForLocation`: we do not derive your location from Bluetooth results and collect no scan data. | Runtime, when you scan for a Bluetooth host or controller. |
 | `BLUETOOTH`, `BLUETOOTH_ADMIN` (API ≤ 30 only) | Legacy Bluetooth equivalent for Android ≤ 11. | Install-time. |
 | `POST_NOTIFICATIONS` (API 33+) | Showing the ongoing-session notification while a controller is streaming, plus actionable error banners. | Runtime, on first launch on Android 13+. Declining still lets the app run; the notification just isn't visible. |
 | `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_CONNECTED_DEVICE` | Keeping the streaming session alive when you background the app. | Install-time. |

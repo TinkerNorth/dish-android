@@ -115,11 +115,6 @@ TEST(DecodeLightbarPayload, DistinctChannelsAreNotAliased) {
     EXPECT_NE(lb.g, lb.b);
 }
 
-static uint32_t readLe32(const uint8_t* p) {
-    return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) |
-           (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
-}
-
 TEST(EncodeTouchpadPayload, CtrlIdxAtByteZero) {
     uint8_t out[16]{};
     dish_wire::encodeTouchpadPayload(out, 9, false, false, false, 0, 0, 0, 0, 0, 0, 0);

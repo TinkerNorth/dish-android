@@ -95,7 +95,6 @@ data class HostFeatureSet(
     val mouseControl: Boolean,
     val keyboardControl: Boolean,
     val rumbleReturn: Boolean,
-    val touchpadModes: Set<String>,
 ) {
     fun toCapabilitySet(): CapabilitySet {
         val out =
@@ -122,14 +121,12 @@ data class HostFeatureSet(
                 mouseControl = true,
                 keyboardControl = false,
                 rumbleReturn = true,
-                touchpadModes = emptySet(),
             )
 
-        fun fromCatalog(catalog: CatalogDto): HostFeatureSet {
-            val mouse = catalog.hostFeatures["mouseControl"]
-            return HostFeatureSet(
+        fun fromCatalog(catalog: CatalogDto): HostFeatureSet =
+            HostFeatureSet(
                 hasCatalog = true,
-                mouseControl = mouse?.supported == true,
+                mouseControl = catalog.hostFeatures["mouseControl"]?.supported == true,
                 // Keyboard is opt-IN: offered only when the host advertises it. A catalog
                 // without the slug (older satellite) leaves it unsupported, so keyboard
                 // stays unoffered exactly as before.
@@ -138,9 +135,7 @@ data class HostFeatureSet(
                 // returns rumble, so an ABSENT field keeps the optimistic assumption;
                 // a PRESENT field is honored (a host that can't return rumble hides it).
                 rumbleReturn = catalog.hostFeatures["rumble"]?.supported ?: true,
-                touchpadModes = mouse?.modes?.toSet() ?: emptySet(),
             )
-        }
 
         // Pre-bind, pre-catalog host read (GET /api/server/capabilities). Caller must
         // gate on host.catalog.supported first: an older satellite omits the block, and
@@ -151,7 +146,6 @@ data class HostFeatureSet(
                 mouseControl = caps.host.mouseControl.supported,
                 keyboardControl = caps.host.keyboardControl.supported,
                 rumbleReturn = caps.host.rumble.supported,
-                touchpadModes = emptySet(), // modes are a per-type catalog concern
             )
     }
 }

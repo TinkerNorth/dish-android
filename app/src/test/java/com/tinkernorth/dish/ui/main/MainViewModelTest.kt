@@ -64,6 +64,7 @@ class MainViewModelTest {
     private val connectionsFlow = MutableStateFlow<List<ConnectionSummary>>(emptyList())
     private val bindingsFlow = MutableStateFlow<Map<String, String>>(emptyMap())
     private val devicesFlow = MutableStateFlow<Map<Int, PhysicalGamepadRegistry.Device>>(emptyMap())
+    private val capabilityStateFlow = MutableStateFlow<Map<String, SlotCapabilities>>(emptyMap())
     private val satelliteEvents = MutableSharedFlow<ConnectionEvent>(extraBufferCapacity = 8)
 
     @Before
@@ -77,12 +78,10 @@ class MainViewModelTest {
             MotionEnabledStore(
                 mockk(relaxed = true) { every { all() } returns emptyList() },
             )
+        capabilityStateFlow.value = emptyMap()
         capabilityComposer =
             mockk(relaxed = true) {
-                every { state } returns
-                    kotlinx.coroutines.flow.MutableStateFlow(
-                        emptyMap<String, SlotCapabilities>(),
-                    )
+                every { state } returns capabilityStateFlow
             }
         touchpadModeStore =
             TouchpadModeStore(
@@ -231,6 +230,27 @@ class MainViewModelTest {
         vm.unbindSlot(slotId = "slot-X")
         verify { hub.unbind("slot-X") }
     }
+
+    @Test
+    fun `touchpad ui reads the wire projection per slot and blocks the overlay for a pad source`() =
+        runTest(dispatcher) {
+            every { capabilityComposer.touchpadWireMode(VIRTUAL_SLOT_ID) } returns "ds4"
+            every { capabilityComposer.touchpadSource(VIRTUAL_SLOT_ID) } returns
+                com.tinkernorth.dish.composer.TouchpadSource.PHONE
+            every { capabilityComposer.touchpadWireMode("9") } returns "ds4"
+            every { capabilityComposer.touchpadSource("9") } returns
+                com.tinkernorth.dish.composer.TouchpadSource.PAD
+            capabilityStateFlow.value =
+                mapOf(VIRTUAL_SLOT_ID to SlotCapabilities.NONE, "9" to SlotCapabilities.NONE)
+            dispatcher.scheduler.runCurrent()
+
+            val map = vm.uiState.value.touchpadBySlot
+            assertEquals(TouchpadSlotUi(mode = "ds4", phoneSourced = true), map[VIRTUAL_SLOT_ID])
+            assertTrue(map.getValue(VIRTUAL_SLOT_ID).openable)
+            assertEquals(TouchpadSlotUi(mode = "ds4", phoneSourced = false), map["9"])
+            // The pad streams its own trackpad: no phone overlay for the slot.
+            assertEquals(false, map.getValue("9").openable)
+        }
 
     @Test
     fun `setSatelliteControllerType delegates to hub`() {

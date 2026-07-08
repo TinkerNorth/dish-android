@@ -25,9 +25,6 @@ enum class LinkState { Found, Stale, Saved, Ready, Connecting, Connected, Unstab
 const val CONTROLLER_TYPE_XBOX = 0
 const val CONTROLLER_TYPE_PLAYSTATION = 1
 
-// Descriptor touchpadMode protocol constant (contract: off | ds4 | mouse).
-const val TOUCHPAD_MODE_OFF = "off"
-
 data class ConnectionSummary(
     val id: String,
     val kind: ConnectionKind,
@@ -71,17 +68,17 @@ class ConnectionCoordinator
         }
 
         /**
-         * Bind [slotId] to [connectionId] with its FINAL descriptor: type and
-         * touchpad routing travel with the bind, so the satellite plugs the
-         * right virtual device on the first try (no default-then-correct phase
-         * anywhere). Returns false (refusing the bind) for a slot the registry
-         * no longer knows.
+         * Bind [slotId] to [connectionId] with its FINAL descriptor: the type travels with the
+         * bind and the touchpad routing is derived from the persisted per-satellite pick at
+         * descriptor-build time, so the satellite plugs the right virtual device on the first
+         * try (no default-then-correct phase anywhere). The binding and type stores are written
+         * BEFORE declareSlot: the descriptor pull reads them synchronously. Returns false
+         * (refusing the bind) for a slot the registry no longer knows.
          */
         fun bind(
             slotId: String,
             connectionId: String,
             controllerType: Int,
-            touchpadMode: String = TOUCHPAD_MODE_OFF,
         ): Boolean {
             if (!slotExists(slotId)) return false
             val priorConnId = bindingStore.connectionFor(slotId)
@@ -105,7 +102,7 @@ class ConnectionCoordinator
 
             if (!isBt) {
                 typeStore.setType(connectionId, slotId, controllerType)
-                satellite.get(connectionId)?.declareSlot(slotId, controllerType, touchpadMode)
+                satellite.get(connectionId)?.declareSlot(slotId, controllerType)
             }
             return true
         }
@@ -185,15 +182,6 @@ class ConnectionCoordinator
             if (typeStore.typeFor(connectionId, slotId) == type) return
             typeStore.setType(connectionId, slotId, type)
             satellite.get(connectionId)?.setControllerType(slotId, type)
-        }
-
-        /** Per-slot touchpad routing. Rides the descriptor (client-owned, single writer). */
-        fun setSatelliteTouchpadMode(
-            connectionId: String,
-            slotId: String,
-            mode: String,
-        ) {
-            satellite.get(connectionId)?.setTouchpadMode(slotId, mode)
         }
 
         fun boundConnection(slotId: String): ConnectionSummary? =

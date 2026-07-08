@@ -43,7 +43,6 @@ class CapabilityTest {
                 mouseControl = false,
                 keyboardControl = false,
                 rumbleReturn = true,
-                touchpadModes = emptySet(),
             ).toCapabilitySet()
         assertTrue(Feature.GAMEPAD in baseline)
         assertTrue(Feature.ANALOG_TRIGGERS in baseline)
@@ -63,7 +62,6 @@ class CapabilityTest {
                 mouseControl = true,
                 keyboardControl = false,
                 rumbleReturn = true,
-                touchpadModes = emptySet(),
             ).toCapabilitySet()
         assertTrue(Feature.MOUSE in withMouse)
     }
@@ -76,7 +74,6 @@ class CapabilityTest {
                 mouseControl = false,
                 keyboardControl = false,
                 rumbleReturn = false,
-                touchpadModes = emptySet(),
             ).toCapabilitySet()
         assertFalse(Feature.RUMBLE in noRumble)
     }
@@ -107,7 +104,6 @@ class CapabilityTest {
         val features = HostFeatureSet.fromCatalog(catalog)
         assertTrue(features.hasCatalog)
         assertTrue(features.mouseControl)
-        assertEquals(setOf("absolute", "relative"), features.touchpadModes)
         assertTrue(Feature.MOUSE in features.toCapabilitySet())
     }
 
@@ -166,8 +162,6 @@ class CapabilityTest {
         assertFalse(features.keyboardControl)
         // The host explicitly reports no rumble return; honored, not assumed.
         assertFalse(features.rumbleReturn)
-        // Touchpad modes are a per-type catalog concern, never carried by the host probe.
-        assertTrue(features.touchpadModes.isEmpty())
         assertTrue(Feature.MOUSE in features.toCapabilitySet())
         assertFalse(Feature.RUMBLE in features.toCapabilitySet())
     }

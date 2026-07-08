@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     NAV GRAPH: single source of truth for in-app navigation between the
-    six chrome / overlay activities. Used through DishNavigator
+    app's activity destinations. Used through DishNavigator
     (app/src/main/java/com/tinkernorth/dish/ui/common/DishNavigator.kt),
     which exposes typed `navigateToX` methods over an ActivityNavigator
     seeded with this graph.
@@ -141,9 +141,6 @@
 
         <argument
             android:name="extra_connection_id"
-            app:argType="string" />
-        <argument
-            android:name="extra_touchpad_mode"
             app:argType="string" />
         <argument
             android:name="extra_slot_id"

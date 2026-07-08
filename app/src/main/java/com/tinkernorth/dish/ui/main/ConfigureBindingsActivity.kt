@@ -225,9 +225,11 @@ class ConfigureBindingsActivity : AppCompatActivity() {
         bz.touchpadDivider.visibility = if (touchpadVisible) View.VISIBLE else View.GONE
         bz.touchpadRow.visibility = if (touchpadVisible) View.VISIBLE else View.GONE
         if (touchpadVisible) {
+            // Each segment shows only when its routing can carry; the draft itself is
+            // capability-sanitized in the ViewModel, so the selection needs no coercion here.
             bz.segPad.visibility = if (state.padModeAvailable) View.VISIBLE else View.GONE
-            var selected = state.draft?.touchpadMode ?: TouchpadModeValue.OFF
-            if (selected == TouchpadModeValue.DS4 && !state.padModeAvailable) selected = TouchpadModeValue.OFF
+            bz.segMouse.visibility = if (state.mouseModeAvailable) View.VISIBLE else View.GONE
+            val selected = state.draft?.touchpadMode ?: TouchpadModeValue.OFF
             bz.segOff.isSelected = selected == TouchpadModeValue.OFF
             bz.segPad.isSelected = selected == TouchpadModeValue.DS4
             bz.segMouse.isSelected = selected == TouchpadModeValue.MOUSE

@@ -130,14 +130,20 @@ class SatelliteConnectionManager
         private val reconcileInFlight = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
 
         init {
-            // Project to wire-caps-by-slot so unrelated composer emissions (host/type/runtime
-            // changes that don't move the descriptor) don't fire no-op wire updates.
+            // Project to the per-slot wire view (caps bits + touchpad mode) so unrelated composer
+            // emissions (host/type/runtime changes that don't move the descriptor) don't fire
+            // no-op wire updates. The touchpad mode rides the same projection so a per-satellite
+            // pick converges EVERY bound slot, not just the one a screen re-declared.
             scope.launch {
                 capabilityProvider
                     .get()
                     .state
-                    .map { caps -> caps.mapValues { (_, slot) -> CapabilityResolver.wireCaps(slot) } }
-                    .distinctUntilChanged()
+                    .map { caps ->
+                        val composer = capabilityProvider.get()
+                        caps.mapValues { (slotId, slot) ->
+                            CapabilityResolver.wireCaps(slot) to composer.touchpadWireMode(slotId)
+                        }
+                    }.distinctUntilChanged()
                     .collect {
                         _connections.value.values.forEach { conn ->
                             conn.refreshCapsIfChanged()
@@ -179,6 +185,9 @@ class SatelliteConnectionManager
                 ioDispatcher = ioDispatcher,
                 motionCapsBitsFor = { slotId ->
                     capabilityProvider.get().motionWireBit(slotId)
+                },
+                touchpadModeFor = { slotId ->
+                    capabilityProvider.get().touchpadWireMode(slotId)
                 },
                 motionBackendStatusStore = motionBackendStatusStore,
                 onSlotChanged = { slotId -> scope.launch(ioDispatcher) { syncSlot(id, slotId) } },

@@ -1,0 +1,125 @@
+name: Store Screenshots
+
+# Re-captures the Play screenshot set on CI emulators using the
+# DishScreenshots instrumented harness: one matrix leg per store form
+# factor, each looping the six listing locales, cropped to Play's
+# dimensions and uploaded as artifacts laid out for play/metadata.
+# Dispatch-only: captures are reviewed by a human before committing.
+#
+# Pin map (verify with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`):
+#   actions/checkout                     @ v6.0.3  → df4cb1c069e1874edd31b4311f1884172cec0e10
+#   actions/setup-java                   @ v5.3.0  → ad2b38190b15e4d6bdf0c97fb4fca8412226d287
+#   actions/setup-python                 @ v6.2.0  → a309ff8b426b58ec0e2a45f0f869d46889d02405
+#   actions/upload-artifact              @ v7.0.1  → 043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+#   gradle/actions/setup-gradle          @ v6.2.0  → 3f131e8634966bd73d06cc69884922b02e6faf92
+#   reactivecircus/android-emulator-runner @ v2.38.0 → a421e43855164a8197daf9d8d40fe71c6996bb0d
+
+on:
+  workflow_dispatch:
+    inputs:
+      locales:
+        description: "Space-separated locale tags to capture"
+        required: false
+        default: "en-US bs de-DE es-ES fr-FR pt-BR"
+  # Self-test: editing this workflow re-runs it for en-US only, and a
+  # branch push registers it so workflow_dispatch works pre-merge.
+  push:
+    paths:
+      - ".github/workflows/store-screenshots.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    name: Capture (${{ matrix.form }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - form: phone
+            size: 1080x2424
+            density: "420"
+            crop: "1080 1920"
+          - form: sevenInch
+            size: 1920x1080
+            density: "240"
+            crop: "1920 1080"
+          - form: tenInch
+            size: 2560x1600
+            density: "320"
+            crop: "2560 1440"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@ad2b38190b15e4d6bdf0c97fb4fca8412226d287 # v5.3.0
+        with:
+          java-version: "17"
+          distribution: temurin
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
+
+      - name: Pre-install CMake 3.22.1
+        run: ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "cmake;3.22.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Install Pillow
+        run: python -m pip install 'pillow==11.1.0'
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Build app and test APKs
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
+
+      - name: Capture screenshots
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        env:
+          CAPTURE_SIZE: ${{ matrix.size }}
+          CAPTURE_DENSITY: ${{ matrix.density }}
+          CAPTURE_LOCALES: ${{ github.event_name == 'workflow_dispatch' && inputs.locales || 'en-US' }}
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-snapshot-save -no-window -noaudio -no-boot-anim -gpu swiftshader_indirect
+          # The runner executes each script line as its own shell; keep this a single command.
+          script: bash scripts/ci_capture_screenshots.sh
+
+      - name: Crop to Play dimensions
+        run: python scripts/crop_play_screenshots.py captures ${{ matrix.crop }}
+
+      - name: Stage into play/metadata layout
+        run: |
+          set -euo pipefail
+          for locdir in captures/screengrab/*/; do
+            loc=$(basename "$locdir")
+            dest="stage/play/metadata/android/${loc}/images/${{ matrix.form }}Screenshots"
+            mkdir -p "$dest"
+            cp "$locdir"*.png "$dest/"
+          done
+          find stage -name '*.png' | wc -l
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: screenshots-${{ matrix.form }}
+          path: stage/
+          retention-days: 14

@@ -2,8 +2,9 @@
 
 package com.tinkernorth.dish.ui.common
 
-// MSG_TOUCHPAD carries only finger 0, so two simultaneously emitting pads would race;
-// this pins ownership to whichever pad's first finger landed first.
+// Each pad view keeps its own full TouchpadState, so two simultaneously emitting pads would
+// interleave conflicting snapshots onto the slot's single MSG_TOUCHPAD stream; this pins
+// ownership to whichever pad's first finger landed first.
 class TouchpadPadCoordinator<T : Any> {
     private var owner: T? = null
 

@@ -94,8 +94,6 @@ Each repo runs the same shape of gates:
 - Gitleaks: secret scanning over the worktree.
 - CodeQL: `cpp` for `satellite` / `dish-linux`, `swift` for `dish-mac`,
   `java-kotlin` + `cpp` for `dish-android`.
-- (`dish-android` only) OWASP Dependency-Check
-  (`./gradlew dependencyCheckAnalyze`): fails on CVSS >= 7.0.
 
 **On every tagged release** (also blocking):
 

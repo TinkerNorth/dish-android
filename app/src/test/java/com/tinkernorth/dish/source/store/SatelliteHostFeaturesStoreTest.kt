@@ -16,7 +16,6 @@ class SatelliteHostFeaturesStoreTest {
             mouseControl = true,
             keyboardControl = false,
             rumbleReturn = true,
-            touchpadModes = setOf("absolute"),
         )
 
     @Test
