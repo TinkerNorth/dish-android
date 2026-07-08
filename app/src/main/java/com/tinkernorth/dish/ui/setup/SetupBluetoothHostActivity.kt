@@ -26,8 +26,8 @@ import com.tinkernorth.dish.databinding.SetupChoiceRowBinding
 import com.tinkernorth.dish.databinding.SetupTypeCardBinding
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
+import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.setupDishToolbar
-import com.tinkernorth.dish.ui.main.MainActivity
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -42,6 +42,7 @@ class SetupBluetoothHostActivity : BaseGamepadHostActivity() {
     @Inject lateinit var onboarding: OnboardingPreferenceStore
 
     private lateinit var binding: ActivitySetupBluetoothHostBinding
+    private val nav by lazy { DishNavigator(this) }
     private val viewModel: SetupBluetoothHostViewModel by viewModels()
 
     private val permissionLauncher =
@@ -233,11 +234,7 @@ class SetupBluetoothHostActivity : BaseGamepadHostActivity() {
             )
         }
         onboarding.markWelcomeCompleted()
-        startActivity(
-            Intent(this, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
-        )
-        finish()
+        nav.finishSetupToDashboard()
     }
 
     private fun typeTitleRes(profile: BluetoothGamepad.GamepadProfile): Int =

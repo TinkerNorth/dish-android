@@ -2,13 +2,16 @@
 
 package com.tinkernorth.dish.ui.common
 
+import android.content.Intent
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.net.toUri
 import androidx.viewbinding.ViewBinding
+import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.databinding.ScreenScaffoldBinding
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
@@ -33,6 +36,20 @@ abstract class BaseGamepadHostActivity : AppCompatActivity() {
 
     protected fun installGamepadHost(rootView: View) {
         gamepadHost = attachGamepadHost(rootView, wakeState, gamepadRegistry, notifications, lowPowerSignal)
+    }
+
+    protected fun openExternalUrl(url: String) {
+        val intent =
+            Intent(Intent.ACTION_VIEW, url.toUri())
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { startActivity(intent) }
+            .onFailure {
+                notifications.warn(
+                    title = getString(R.string.error_open_url),
+                    body = url,
+                    key = "external-url-failed",
+                )
+            }
     }
 
     protected fun <B : ViewBinding> setScaffoldContent(inflate: (LayoutInflater, ViewGroup, Boolean) -> B): B {

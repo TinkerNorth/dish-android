@@ -2,9 +2,7 @@
 
 package com.tinkernorth.dish.ui.settings
 
-import android.content.Intent
 import android.os.Bundle
-import androidx.core.net.toUri
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivityLicensesBinding
@@ -39,10 +37,7 @@ class LicensesActivity : BaseGamepadHostActivity() {
 
     private fun openLicenseUrl(entry: LicenseEntry) {
         val url = entry.licenses.firstOrNull()?.url ?: entry.url ?: return
-        val intent =
-            Intent(Intent.ACTION_VIEW, url.toUri())
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        runCatching { startActivity(intent) }
+        openExternalUrl(url)
     }
 
     companion object {

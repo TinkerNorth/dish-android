@@ -2,7 +2,6 @@
 
 package com.tinkernorth.dish.ui.setup
 
-import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import androidx.activity.addCallback
@@ -24,13 +23,13 @@ import com.tinkernorth.dish.databinding.SetupTypeCardBinding
 import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
+import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.main.ApplyState
 import com.tinkernorth.dish.ui.main.BindingLink
 import com.tinkernorth.dish.ui.main.BindingSnapshot
 import com.tinkernorth.dish.ui.main.ConfigUiState
 import com.tinkernorth.dish.ui.main.ConfigureBindingsViewModel
-import com.tinkernorth.dish.ui.main.MainActivity
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import com.tinkernorth.dish.ui.main.iconRes
 import dagger.hilt.android.AndroidEntryPoint
@@ -46,6 +45,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
     @Inject lateinit var onboarding: OnboardingPreferenceStore
 
     private lateinit var binding: ActivitySetupConfigureBinding
+    private val nav by lazy { DishNavigator(this) }
     private val viewModel: ConfigureBindingsViewModel by viewModels()
 
     private var step = Step.TYPE
@@ -426,11 +426,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
             )
         }
         onboarding.markWelcomeCompleted()
-        startActivity(
-            Intent(this, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
-        )
-        finish()
+        nav.finishSetupToDashboard()
     }
 
     // Tapping a type commits it and advances; the Bluetooth host's type is fixed

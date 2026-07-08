@@ -2,10 +2,8 @@
 
 package com.tinkernorth.dish.ui.donate
 
-import android.content.Intent
 import android.os.Bundle
 import androidx.annotation.StringRes
-import androidx.core.net.toUri
 import androidx.core.view.isVisible
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivityDonateBinding
@@ -88,19 +86,5 @@ class DonateActivity : BaseGamepadHostActivity() {
         binding.whySigning.donateWhyText.setText(R.string.donate_why_signing)
         binding.whyPlay.donateWhyText.setText(R.string.donate_why_play)
         binding.whyTime.donateWhyText.setText(R.string.donate_why_time)
-    }
-
-    private fun openExternalUrl(url: String) {
-        val intent =
-            Intent(Intent.ACTION_VIEW, url.toUri())
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        runCatching { startActivity(intent) }
-            .onFailure {
-                notifications.warn(
-                    title = getString(R.string.error_open_url),
-                    body = url,
-                    key = "external-url-failed",
-                )
-            }
     }
 }

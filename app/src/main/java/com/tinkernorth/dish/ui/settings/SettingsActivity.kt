@@ -2,12 +2,10 @@
 
 package com.tinkernorth.dish.ui.settings
 
-import android.content.Intent
 import android.content.res.ColorStateList
 import android.os.Bundle
 import android.text.TextUtils
 import androidx.core.content.ContextCompat
-import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -21,7 +19,6 @@ import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.attachDonatePill
 import com.tinkernorth.dish.ui.common.setupDishToolbar
-import com.tinkernorth.dish.ui.diagnostics.DiagnosticsActivity
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -78,9 +75,7 @@ class SettingsActivity : BaseGamepadHostActivity() {
         binding.cardRowDiagnostics.cardRowIcon.setImageResource(R.drawable.ic_bug)
         binding.cardRowDiagnostics.cardRowTitle.setText(R.string.settings_diagnostics_title)
         binding.cardRowDiagnostics.cardRowSubtitle.setText(R.string.settings_diagnostics_body)
-        binding.cardDiagnostics.setOnClickListener {
-            startActivity(Intent(this, DiagnosticsActivity::class.java))
-        }
+        binding.cardDiagnostics.setOnClickListener { nav.toDiagnostics() }
 
         binding.cardRowCrash.cardRowIcon.setImageResource(R.drawable.ic_bug)
         binding.cardRowCrash.cardRowTitle.setText(R.string.settings_crash_reporting_title)
@@ -97,9 +92,7 @@ class SettingsActivity : BaseGamepadHostActivity() {
         binding.cardRowOpenSourceLicenses.cardRowIcon.setImageResource(R.drawable.ic_license)
         binding.cardRowOpenSourceLicenses.cardRowTitle.setText(R.string.settings_open_source_licenses_title)
         binding.cardRowOpenSourceLicenses.cardRowSubtitle.setText(R.string.settings_open_source_licenses_body)
-        binding.cardOpenSourceLicenses.setOnClickListener {
-            startActivity(Intent(this, LicensesActivity::class.java))
-        }
+        binding.cardOpenSourceLicenses.setOnClickListener { nav.toLicenses() }
 
         binding.cardRowSupport.cardRowIcon.setImageResource(R.drawable.ic_heart)
         binding.cardRowSupport.cardRowIcon.imageTintList =
@@ -145,18 +138,4 @@ class SettingsActivity : BaseGamepadHostActivity() {
     }
 
     private fun formatVersion(): String = "${BuildConfig.VERSION_NAME} · build ${BuildConfig.VERSION_CODE}"
-
-    private fun openExternalUrl(url: String) {
-        val intent =
-            Intent(Intent.ACTION_VIEW, url.toUri())
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        runCatching { startActivity(intent) }
-            .onFailure {
-                notifications.warn(
-                    title = getString(R.string.error_open_url),
-                    body = url,
-                    key = "external-url-failed",
-                )
-            }
-    }
 }
