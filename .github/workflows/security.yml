@@ -8,10 +8,6 @@ name: Security
 # Known-vulnerable-dependency coverage: OSV-Scanner and dependency-review
 # here (GitHub/OSV advisory data, exact Maven coordinates), Grype against
 # release artifacts in release.yml (NVD + GHSA), and Dependabot updates.
-# OWASP Dependency-Check was removed 2026-07: its NVD sync burned 30 to
-# 90 runner-minutes per run for CPE-guess matching that never produced a
-# finding here (the suppression file stayed empty for its whole life).
-
 on:
   push:
     branches: [main]

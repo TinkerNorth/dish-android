@@ -11,8 +11,5 @@
 #       owner:   "@github-handle" of the engineer accountable for re-evaluation
 #       expires: YYYY-MM-DD (max 90 days out; renew via PR if still applicable)
 #
-# Note: OWASP Dependency-Check has its own XML suppression format; mirror
-# any entry here in `.security/dependency-check-suppressions.xml` when the
-# matching CVE is also surfaced by Dependency-Check.
 
 exceptions: []
