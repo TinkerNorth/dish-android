@@ -74,6 +74,19 @@ class FakeSatellite(
     @Volatile var heartbeatCount = 0
         private set
 
+    @Volatile var catalogRequests = 0
+        private set
+
+    @Volatile var lastClientPin: String? = null
+        private set
+
+    @Volatile private var stagedApprovalKey: String? = null
+
+    /** Path B: operator approves the pending client PIN; the poll then hands the key back once. */
+    fun approveClientPin() {
+        stagedApprovalKey = randomHex(32)
+    }
+
     val httpsPort: Int get() = https.localPort
     val udpPort: Int get() = udp.localPort
 
@@ -181,12 +194,15 @@ class FakeSatellite(
             val length = headers["content-length"]?.toIntOrNull() ?: 0
             val body = CharArray(length).also { if (length > 0) reader.read(it, 0, length) }.concatToString()
             val parts = requestLine.split(' ')
-            val (status, responseBody) = route(parts[0], parts.getOrElse(1) { "/" }, headers, body)
-            val payload = responseBody.toByteArray(Charsets.UTF_8)
+            val plainPath = parts.getOrElse(1) { "/" }.substringBefore('?')
+            val resp = route(parts[0], parts.getOrElse(1) { "/" }, headers, body)
+            val payload = resp.body.toByteArray(Charsets.UTF_8)
+            val etagLine = if (plainPath == "/api/catalog") "ETag: $CATALOG_ETAG\r\n" else ""
             out.write(
                 (
-                    "HTTP/1.1 $status\r\n" +
+                    "HTTP/1.1 ${resp.status}\r\n" +
                         "Content-Type: application/json\r\n" +
+                        etagLine +
                         "Content-Length: ${payload.size}\r\n\r\n"
                 ).toByteArray(Charsets.UTF_8),
             )
@@ -195,14 +211,32 @@ class FakeSatellite(
         }
     }
 
+    private data class Resp(
+        val status: String,
+        val body: String,
+    )
+
     private fun route(
         method: String,
         path: String,
         headers: Map<String, String>,
         body: String,
-    ): Pair<String, String> {
+    ): Resp {
         val plainPath = path.substringBefore('?')
-        return when {
+        val (status, responseBody) =
+            routePair(method, plainPath, headers, body, path)
+        return Resp(status, responseBody)
+    }
+
+    private fun routePair(
+        method: String,
+        plainPath: String,
+        headers: Map<String, String>,
+        body: String,
+        rawPath: String,
+    ): Pair<String, String> =
+        when {
+            method == "GET" && plainPath == "/api/catalog" -> catalog(headers)
             method == "POST" && plainPath == "/api/pair" -> pair(body)
             method == "DELETE" && plainPath == "/api/pair" -> unpair(headers)
             method == "PUT" && plainPath == "/api/connections" -> putSession(headers, body)
@@ -211,20 +245,44 @@ class FakeSatellite(
             method == "DELETE" && plainPath.startsWith("/api/connections/") -> "200 OK" to """{"ok":true}"""
             method == "PUT" && plainPath.contains("/controllers/") -> putController(headers, body)
             method == "GET" && plainPath == "/api/server/capabilities" -> "200 OK" to CAPABILITIES_JSON
-            method == "GET" && plainPath == "/api/catalog" -> "200 OK" to CATALOG_JSON
+            method == "GET" && rawPath.startsWith("/api/pair/status") -> pairStatus()
             else -> "404 Not Found" to """{"error":"unknown route"}"""
+        }
+
+    private fun catalog(headers: Map<String, String>): Pair<String, String> {
+        catalogRequests += 1
+        // Contract §Caching: If-None-Match hit -> 304, the client keeps its cache.
+        if (headers["if-none-match"] == CATALOG_ETAG) return "304 Not Modified" to ""
+        return "200 OK" to CATALOG_JSON
+    }
+
+    private fun pairStatus(): Pair<String, String> {
+        // Path B poll: pending until approveClientPin() stages the key, then it
+        // is handed back exactly once (single-use, per contract).
+        val key = stagedApprovalKey
+        return if (key != null) {
+            stagedApprovalKey = null
+            pairingKeyHex = key
+            "200 OK" to """{"ok":true,"status":"approved","sharedKey":"$key"}"""
+        } else {
+            "200 OK" to """{"ok":false,"status":"pending"}"""
         }
     }
 
     private fun pair(body: String): Pair<String, String> {
         val json = JSONObject(body)
         val pin = json.optString("pin")
+        val clientPin = json.optString("clientPin")
         return when {
             pin.isNotEmpty() && pin == operatorPin -> {
                 pairingKeyHex = randomHex(32)
                 "200 OK" to """{"ok":true,"message":"paired","sharedKey":"$pairingKeyHex","protocolVersion":1}"""
             }
             pin.isNotEmpty() -> "200 OK" to """{"ok":false,"error":"invalid pin"}"""
+            clientPin.isNotEmpty() -> {
+                lastClientPin = clientPin
+                "200 OK" to """{"ok":false,"pending":true,"message":"awaiting approval"}"""
+            }
             else -> "200 OK" to """{"ok":false,"error":"pairing required"}"""
         }
     }
@@ -433,6 +491,8 @@ class FakeSatellite(
 
         const val OP_HEARTBEAT = 0x0002
         const val OP_HEARTBEAT_ACK = 0x0003
+
+        const val CATALOG_ETAG = "\"1.6.0+en\""
 
         val UNAUTHORIZED = "401 Unauthorized" to """{"error":"unauthorized","code":"BAD_PROOF"}"""
 

@@ -182,15 +182,67 @@ class SatelliteProtocolTest {
     }
 
     @Test
-    fun sessionCloseNotify_kicked_takesTheSessionDown() {
+    fun sessionCloseNotify_kicked_reEntersTheBoundedBackoff() {
         val satellite = startFake()
-        val server = pairAndGoLive(satellite)
+        pairAndGoLive(satellite)
         assertTrue(satellite.awaitUdpOpcode(0x0002))
+        val putsBeforeKick = satellite.sessionPuts.size
 
+        // Kick is transient by contract: the client re-enters bounded backoff
+        // and reconnects, so a second session PUT reaches the (still-open) fake.
         satellite.sendSessionClose(reason = 1)
         assertTrue(
-            "an authenticated kick must leave Live",
-            await(timeoutMs = 15_000) { stateOf(server) != SatelliteSessionState.Live },
+            "kicked must trigger a reconnect PUT",
+            await(timeoutMs = 15_000) { satellite.sessionPuts.size > putsBeforeKick },
+        )
+    }
+
+    @Test
+    fun sessionCloseNotify_unpaired_isTerminalAndDropsTheKey() {
+        val satellite = startFake()
+        val server = pairAndGoLive(satellite)
+        val id = SatelliteConnection.idFor(server)
+        assertTrue(satellite.awaitUdpOpcode(0x0002))
+
+        // Unpaired is terminal: drop the key, mark needs-pairing, no reconnect.
+        satellite.sendSessionClose(reason = 3)
+        assertTrue(
+            "unpaired must drop the stored key",
+            await(timeoutMs = 15_000) { AppSingletons.store.satelliteSharedKey(id) == null },
+        )
+    }
+
+    @Test
+    fun pathB_reversePairing_reachesLiveAfterOperatorApproval() {
+        val satellite = startFake()
+        val server = satellite.server()
+
+        manager.requestApproval(server, clientPin = "5678")
+        assertTrue(
+            "the satellite must receive the client PIN",
+            await(timeoutMs = 10_000) { satellite.lastClientPin == "5678" },
+        )
+        // Operator accepts on the satellite; the next status poll hands the key back.
+        satellite.approveClientPin()
+        assertTrue(
+            "approval must open the session",
+            await { stateOf(server) == SatelliteSessionState.Live },
+        )
+        assertNotNull(AppSingletons.store.satelliteSharedKey(SatelliteConnection.idFor(server)))
+    }
+
+    @Test
+    fun zeroControllerSession_isValid() {
+        // No slots bound: a user sitting in menus is connected with no pads.
+        val satellite = startFake()
+        val server = pairAndGoLive(satellite)
+
+        assertEquals(SatelliteSessionState.Live, stateOf(server))
+        val put = satellite.sessionPuts.last()
+        assertEquals(
+            "a zero-controller session PUTs an empty controllers array",
+            0,
+            put.optJSONArray("controllers")?.length() ?: 0,
         )
     }
 }
