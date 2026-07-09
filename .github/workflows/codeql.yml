@@ -6,10 +6,10 @@ name: CodeQL
 # tooling. `cpp` covers the JNI shim under `app/src/main/cpp`.
 #
 # Pin map (verify with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`):
-#   actions/checkout              @ v6.0.3  → df4cb1c069e1874edd31b4311f1884172cec0e10
-#   actions/setup-java            @ v5.3.0  → ad2b38190b15e4d6bdf0c97fb4fca8412226d287
+#   actions/checkout              @ v7.0.0  → 9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+#   actions/setup-java            @ v5.5.0  → 0f481fcb613427c0f801b606911222b5b6f3083a
 #   gradle/actions/setup-gradle   @ v6.2.0  → 3f131e8634966bd73d06cc69884922b02e6faf92
-#   github/codeql-action/*        @ v4.36.2 → 8aad20d150bbac5944a9f9d289da16a4b0d87c1e
+#   github/codeql-action/*        @ v4.37.0 → 99df26d4f13ea111d4ec1a7dddef6063f76b97e9
 
 on:
   push:
