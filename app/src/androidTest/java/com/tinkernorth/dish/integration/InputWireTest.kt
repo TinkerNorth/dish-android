@@ -42,13 +42,17 @@ class InputWireTest {
         val satellite = FakeSatellite().also { fake = it }
         val server = satellite.server()
         val id = SatelliteConnection.idFor(server)
-        // Bind before connecting so the virtual pad rides the session descriptor.
-        AppSingletons.hub.bind(VIRTUAL_SLOT_ID, id, CONTROLLER_TYPE_XBOX)
         manager.pairWithPin(server, "1234")
         assertTrue(
             "session should reach Live",
             AppSingletons.await { manager.get(id)?.state?.value == SatelliteSessionState.Live },
         )
+        // Declare the virtual slot straight on the live connection. Production
+        // routes this through the lifecycle-scoped SlotTopologyController, which
+        // does not run on a headless CI emulator (no foreground window); calling
+        // applyDesired directly exercises the same declare -> syncSlot ->
+        // controller PUT -> registered path without the lifecycle dependency.
+        manager.get(id)!!.applyDesired(mapOf(VIRTUAL_SLOT_ID to CONTROLLER_TYPE_XBOX))
         assertTrue(
             "the virtual slot must register on the satellite before streams flow",
             AppSingletons.await {
