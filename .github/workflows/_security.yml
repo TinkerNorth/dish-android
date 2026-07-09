@@ -21,9 +21,9 @@ name: _security (reusable)
 #   gh api repos/<owner>/<repo>/git/ref/tags/<tag>
 #
 # Pin map (owner/repo @ tag → 40-char SHA), verify on update:
-#   actions/checkout                         @ v6.0.3  → df4cb1c069e1874edd31b4311f1884172cec0e10
+#   actions/checkout                         @ v7.0.0  → 9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 #   actions/dependency-review-action         @ v5.0.0  → a1d282b36b6f3519aa1f3fc636f609c47dddb294
-#   actions/setup-python                     @ v6.2.0  → a309ff8b426b58ec0e2a45f0f869d46889d02405
+#   actions/setup-python                     @ v6.3.0  → ece7cb06caefa5fff74198d8649806c4678c61a1
 #
 # OSV-Scanner and gitleaks are installed directly from upstream release
 # binaries (see the respective jobs below) rather than via third-party
