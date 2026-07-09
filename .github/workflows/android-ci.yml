@@ -103,7 +103,7 @@ jobs:
           retention-days: 7
 
   instrumented:
-    name: Integration tests (managed device)
+    name: Integration tests (emulator)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
