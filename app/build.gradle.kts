@@ -76,6 +76,8 @@ android {
         versionName = resolvedVersion.name
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Orchestrator wipes app data (prefs, connection store) between tests.
+        testInstrumentationRunnerArguments["clearPackageData"] = "true"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
@@ -174,6 +176,24 @@ android {
         unitTests {
             isReturnDefaultValues = true
         }
+        // Run each instrumented test in its own process via Android Test
+        // Orchestrator, clearing app state between them. The integration suite
+        // drives real process-wide singletons (connection manager, stores,
+        // native UDP), so per-test isolation keeps one test's session, retry
+        // jobs, and sockets from leaking into the next.
+        execution = "ANDROIDX_TEST_ORCHESTRATOR"
+        managedDevices {
+            localDevices {
+                create("pixel6Api34") {
+                    device = "Pixel 6"
+                    apiLevel = 34
+                    // Test-optimised system image: no Play services or extra
+                    // apps, so it boots faster and runs leaner in CI than the
+                    // google_apis image.
+                    systemImageSource = "aosp-atd"
+                }
+            }
+        }
     }
 }
 
@@ -209,6 +229,8 @@ dependencies {
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.rules)
+    androidTestImplementation(libs.okhttp.tls)
+    androidTestUtil(libs.androidx.test.orchestrator)
     "baselineProfile"(project(":baselineprofile"))
 }
 
