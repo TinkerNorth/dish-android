@@ -31,6 +31,7 @@ jobs:
   sync-listing:
     name: Sync listing to Play
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - name: Gate on Play credentials
         id: gate
