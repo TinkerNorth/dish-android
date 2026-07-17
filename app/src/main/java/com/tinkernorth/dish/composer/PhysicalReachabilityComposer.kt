@@ -31,7 +31,7 @@ class PhysicalReachabilityComposer
                 // registrations (every auto-reconnect) are picked up.
                 val slotFlows = conns.values.map { it.slots }
                 val slotsTrigger: Flow<Unit> =
-                    if (slotFlows.isEmpty()) flowOf(Unit) else combine(slotFlows) { Unit }
+                    if (slotFlows.isEmpty()) flowOf(Unit) else combine(slotFlows) { }
                 combine(
                     registry.devices,
                     hub.bindings,
@@ -91,7 +91,7 @@ internal object PhysicalReachability {
         connections.flatMapLatest { conns ->
             val slotFlows = conns.values.map { it.slots }
             val slotsTrigger: Flow<Unit> =
-                if (slotFlows.isEmpty()) flowOf(Unit) else combine(slotFlows) { Unit }
+                if (slotFlows.isEmpty()) flowOf(Unit) else combine(slotFlows) { }
             combine(devices, bindings, summaries, slotsTrigger) { devs, binds, summ, _ ->
                 PhysicalReachabilityComposer.resolve(devs.keys, binds, summ, conns)
             }

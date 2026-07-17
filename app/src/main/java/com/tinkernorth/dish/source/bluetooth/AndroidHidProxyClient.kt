@@ -121,7 +121,7 @@ class AndroidHidProxyClient(
             val hid = hidDevice ?: return false
             val device = connectedDevice ?: return false
             // Strip report-id byte into per-thread scratch: sendReport takes it separately from the payload.
-            val payload = payloadScratch.get()
+            val payload = payloadScratch.get() ?: return false
             System.arraycopy(report, 1, payload, 0, REPORT_SIZE - 1)
             hid.sendReport(device, REPORT_ID, payload)
         }.getOrDefault(false)

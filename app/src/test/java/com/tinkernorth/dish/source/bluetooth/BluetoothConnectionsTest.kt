@@ -19,6 +19,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
+// Exercises the SDK-guarded legacy Intent.getParcelableExtra(String) path (the JVM
+// unit-test stub reports SDK_INT = 0). Production BluetoothConnections suppresses the
+// same platform deprecation at its guarded call site; mirror that convention here.
+@Suppress("DEPRECATION")
 class BluetoothConnectionsTest {
     private val context = mockk<Context>(relaxed = true)
     private val receiverSlot = slot<BroadcastReceiver>()

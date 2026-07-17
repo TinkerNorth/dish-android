@@ -24,7 +24,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
+// Exercises the SDK-guarded legacy Intent.getParcelableExtra(String) path (the JVM
+// unit-test stub reports SDK_INT = 0). Production BluetoothDeviceScanner suppresses the
+// same platform deprecation at its guarded call site; mirror that convention here.
 @OptIn(ExperimentalCoroutinesApi::class)
+@Suppress("DEPRECATION")
 class BluetoothDeviceScannerTest {
     private lateinit var context: Context
     private lateinit var adapter: BluetoothAdapter

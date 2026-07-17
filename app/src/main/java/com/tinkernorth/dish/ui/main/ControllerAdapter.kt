@@ -79,7 +79,7 @@ internal fun motionRateUserFacingOn(
     cap.inputOk(Feature.MOTION) &&
         cap.userWants(Feature.MOTION) &&
         boundStatus?.kind == ConnectionKind.SATELLITE &&
-        boundStatus?.live == LinkState.Connected &&
+        boundStatus.live == LinkState.Connected &&
         cap.typeOk(Feature.MOTION) &&
         Feature.MOTION !in cap.runtimeDown
 
@@ -261,7 +261,7 @@ class ControllerAdapter(
                 }
             val specs = mutableListOf(PillSpec(ctx.getString(label), icon, PillTone.FACT))
             // The Direct/Standard mode chip only applies once a USB controller is on a known path.
-            if (isUsb && kind != null && card != null) specs.add(usbModeSpec(card))
+            if (isUsb && kind != null) specs.add(usbModeSpec(card))
             return specs
         }
 

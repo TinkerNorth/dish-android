@@ -22,6 +22,11 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+// The JVM unit-test stub reports SDK_INT = 0, so the router — and therefore these
+// doubles/verifications — drive the legacy single-vibrator path (Context.VIBRATOR_SERVICE,
+// Vibrator.vibrate(Long)). Production RumbleRouter suppresses the same platform
+// deprecations at each guarded call site; mirror that convention for the test.
+@Suppress("DEPRECATION")
 class RumbleRouterTest {
     private fun slot(index: Int) = SatelliteConnection.SlotBinding(controllerIndex = index, controllerType = 0, registered = true)
 

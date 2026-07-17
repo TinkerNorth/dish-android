@@ -180,7 +180,7 @@ class GamepadOverlayActivity :
             capability.inputOk(Feature.MOTION) &&
                 capability.userWants(Feature.MOTION) &&
                 summary?.kind == ConnectionKind.SATELLITE &&
-                summary?.live == LinkState.Connected
+                summary.live == LinkState.Connected
         if (effective && !motionSource.isStreaming) {
             motionSource.start { sample, deltaUs ->
                 inputRateStore.recordMotionSample(VIRTUAL_SLOT_ID)
