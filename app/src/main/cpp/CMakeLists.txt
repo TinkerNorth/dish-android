@@ -1,10 +1,7 @@
 cmake_minimum_required(VERSION 3.22.1)
 project(satellite)
 
-# libsodium is fetched below as a release tarball. Adopt CMP0135 (CMake >= 3.24)
-# so extracted files are stamped at extraction time — the modern default — which
-# also silences FetchContent's DOWNLOAD_EXTRACT_TIMESTAMP developer warning. The
-# guard keeps the pinned CMake 3.22.1 (whose policy set predates CMP0135) working.
+# Adopt CMP0135 where available to silence FetchContent's DOWNLOAD_EXTRACT_TIMESTAMP warning.
 if(POLICY CMP0135)
   cmake_policy(SET CMP0135 NEW)
 endif()
@@ -60,9 +57,7 @@ target_compile_definitions(sodium_static PRIVATE
     HAVE_POSIX_MEMALIGN=1
     HAVE_ARC4RANDOM=0
     HAVE_SYS_MMAN_H=1
-    # bionic exposes sysconf(_SC_PAGESIZE) (a macro), so let libsodium query the
-    # page size at runtime — the branch ./configure normally selects. Without this
-    # it fell through to `#warning Unknown page size` and a hardcoded fallback.
+    # HAVE_SYSCONF: let libsodium query the page size, silencing its "Unknown page size" warning.
     HAVE_SYSCONF=1
     __STDC_LIMIT_MACROS=1
     __STDC_CONSTANT_MACROS=1
