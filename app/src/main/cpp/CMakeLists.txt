@@ -57,7 +57,10 @@ target_compile_definitions(sodium_static PRIVATE
     HAVE_POSIX_MEMALIGN=1
     HAVE_ARC4RANDOM=0
     HAVE_SYS_MMAN_H=1
-    # HAVE_SYSCONF: let libsodium query the page size, silencing its "Unknown page size" warning.
+    # HAVE_SYSCONF: sodium_mlock/guarded allocations round to the RUNTIME page
+    # size via sysconf(_SC_PAGESIZE) instead of a compiled-in guess — required
+    # for Android 15's 16 KB-page devices (and clears the "Unknown page size"
+    # build warning).
     HAVE_SYSCONF=1
     __STDC_LIMIT_MACROS=1
     __STDC_CONSTANT_MACROS=1
