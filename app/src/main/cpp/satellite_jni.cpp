@@ -32,6 +32,7 @@
 #include "dispatch.h"
 #include "gamepad_input.h"
 #include "hotpath_latency.h"
+#include "send_counter.h"
 #include "thread_priority.h"
 #include "usb_host.h"
 #include "usb_parsers.h"
@@ -83,7 +84,8 @@ struct Session {
     struct sockaddr_in dest = {};
     uint8_t token[4] = {};
     uint8_t key[32] = {}; // per-session key (HKDF-derived in Kotlin), never the pairing key
-    std::atomic<uint32_t> counter{1};
+    // 64-bit so exhaustion goes silent instead of wrapping (send_counter.h).
+    std::atomic<uint64_t> counter{1};
     // Linux UDP sendto is thread-safe per-socket; userspace lock would only serialise stalls.
 
     std::thread heartbeatThread;
@@ -462,7 +464,8 @@ static bool sendEncrypted(Session* s, uint16_t msgType, const uint8_t* payload,
     putBE16(inner + 2, payloadLen);
     if (payloadLen > 0) memcpy(inner + 4, payload, payloadLen);
 
-    uint32_t ctr = s->counter.fetch_add(1, std::memory_order_relaxed);
+    uint32_t ctr = 0;
+    if (!dish_counter::acquireSendCounter(s->counter, &ctr)) return false;
 
     // Nonce: dir(1) | 0×7 | counter(4 BE). The direction byte keeps this
     // direction's nonces disjoint from the server's under the shared key.
@@ -755,6 +758,13 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getSes
     auto s = getSession(handle);
     if (!s) return -1;
     return s->closeReason.load(std::memory_order_acquire);
+}
+
+JNIEXPORT jlong JNICALL
+Java_com_tinkernorth_dish_core_jni_SatelliteNative_getSendCounter(JNIEnv*, jobject, jint handle) {
+    auto s = getSession(handle);
+    if (!s) return 0;
+    return (jlong)dish_counter::sendCounterView(s->counter);
 }
 
 JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getVigemAvailable(

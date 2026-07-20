@@ -90,6 +90,10 @@ object SatelliteNative {
     // Terminal: the session is gone server-side the moment this is non-negative.
     external fun getSessionCloseReason(handle: Int): Int
 
+    // Send counter for the proactive re-key poll. Clamped at 0xFFFFFFFF past
+    // exhaustion so it can never read below the re-PUT threshold again.
+    external fun getSendCounter(handle: Int): Long
+
     external fun getVigemAvailable(handle: Int): Int
 
     external fun getActiveControllerCount(handle: Int): Int

@@ -542,6 +542,7 @@ class SatelliteConnectionManager
                 },
                 onClosedByServer = { reason -> handleServerClose(conn, server, reason) },
                 onReconcileNeeded = { scope.launch(ioDispatcher) { reconcile(conn, server) } },
+                onRekeyNeeded = { scope.launch(ioDispatcher) { rekey(conn, server) } },
                 onApplyFailures = { failures ->
                     scope.launch {
                         _events.emit(
@@ -661,6 +662,20 @@ class SatelliteConnectionManager
             } finally {
                 reconcileInFlight.remove(id)
             }
+        }
+
+        // The send counter crossed the re-PUT threshold: converge with a fresh
+        // session PUT for new token/salt/key (counter back to 1). Reconcile
+        // can't carry this — its matched-view early-exit adopts the epoch
+        // without rotating anything.
+        private suspend fun rekey(
+            conn: SatelliteConnection,
+            server: DiscoveredServer,
+        ) {
+            if (conn.state.value != SatelliteSessionState.Live) return
+            conn.markDisconnected()
+            conn.markConnecting()
+            openSession(conn, server, ConnectIntent.RETRY_AFTER_DEATH)
         }
 
         // Single-slot converge while the session is live (PUT .../controllers/{idx}).

@@ -123,14 +123,18 @@ class SatelliteConnectionManagerTest {
             val mgr = manager()
             val events = mutableListOf<ConnectionEvent>()
             val collector = scope.launch { mgr.events.collect { events += it } }
-            block(mgr, events)
-            // A live session's heartbeat poll reschedules itself forever, so
-            // the scheduler can never go idle while one exists. Tear all
-            // sessions down before the final drain.
-            mgr.connections.value.keys
-                .forEach(mgr::disconnect)
-            scope.testScheduler.advanceUntilIdle()
-            collector.cancel()
+            try {
+                block(mgr, events)
+            } finally {
+                // A live session's heartbeat poll reschedules itself forever, so
+                // the scheduler can never go idle while one exists. Tear all
+                // sessions down before the final drain — on assertion failure
+                // too, or the drain spins virtual time into OOM.
+                mgr.connections.value.keys
+                    .forEach(mgr::disconnect)
+                scope.testScheduler.advanceUntilIdle()
+                collector.cancel()
+            }
         }
 
     @Test
@@ -673,6 +677,43 @@ class SatelliteConnectionManagerTest {
             assertEquals(SatelliteSessionState.Live, conn.state.value)
             coVerify(exactly = 1) { discoveryRepo.getSession(any(), any(), any(), any(), any()) }
             coVerify(exactly = 1) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any()) }
+        }
+
+    @Test
+    fun `crossing the re-key threshold re-PUTs the session for fresh token and keys`() =
+        runMgrTest { mgr, _ ->
+            every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
+            coEvery {
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+            } returns
+                ok(
+                    """{"connectionId":"conn_1","token":"00000001","sessionSalt":"0102030405060708",""" +
+                        """"epoch":1,"controllers":[],"hostFeatures":{"mouseControl":{"granted":false}}}""",
+                )
+            every { controllerRepo.openSocket(any(), any()) } returns 5
+            // Mirror the native contract: installing fresh params restarts the counter.
+            var sendCounter = 1L
+            every { controllerRepo.getSendCounter(any()) } answers { sendCounter }
+            every { controllerRepo.setConnectionParams(any(), any(), any()) } answers { sendCounter = 1L }
+
+            mgr.connect(server)
+            scope.testScheduler.runCurrent()
+            assertEquals(SatelliteSessionState.Live, mgr.get(serverId)?.state?.value)
+            coVerify(exactly = 1) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any()) }
+
+            sendCounter = COUNTER_REPUSH_THRESHOLD
+            scope.testScheduler.advanceTimeBy(1100) // one alive-poll tick
+            scope.testScheduler.runCurrent()
+
+            // Exactly one full re-PUT: fresh token/salt/key installed, session Live again.
+            coVerify(exactly = 2) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any()) }
+            verify(exactly = 2) { controllerRepo.setConnectionParams(5, any(), any()) }
+            assertEquals(SatelliteSessionState.Live, mgr.get(serverId)?.state?.value)
+
+            // The rotated counter sits back under the threshold: no re-PUT storm.
+            scope.testScheduler.advanceTimeBy(5000)
+            scope.testScheduler.runCurrent()
+            coVerify(exactly = 2) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any()) }
         }
 
     @Test
