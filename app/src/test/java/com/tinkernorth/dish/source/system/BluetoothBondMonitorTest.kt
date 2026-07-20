@@ -19,8 +19,6 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 
-// JVM stub reports SDK_INT=0, driving the legacy getParcelableExtra path; production suppresses the same.
-@Suppress("DEPRECATION")
 class BluetoothBondMonitorTest {
     private lateinit var context: Context
     private lateinit var store: ConnectionStore
@@ -69,6 +67,8 @@ class BluetoothBondMonitorTest {
         return intent
     }
 
+    // One-arg getParcelableExtra: the JVM stub's SDK_INT=0 drives the legacy path.
+    @Suppress("DEPRECATION")
     private fun intentForAction(
         action: String,
         mac: String,
@@ -114,6 +114,7 @@ class BluetoothBondMonitorTest {
     }
 
     @Test
+    @Suppress("DEPRECATION") // one-arg getParcelableExtra, as in intentForAction
     fun `KEY_MISSING with no EXTRA_DEVICE is ignored`() {
         val intent =
             mockk<Intent>(relaxed = true) {

@@ -19,8 +19,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-// JVM stub reports SDK_INT=0, driving the legacy getParcelableExtra path; production suppresses the same.
-@Suppress("DEPRECATION")
 class BluetoothConnectionsTest {
     private val context = mockk<Context>(relaxed = true)
     private val receiverSlot = slot<BroadcastReceiver>()
@@ -41,6 +39,7 @@ class BluetoothConnectionsTest {
         unmockkAll()
     }
 
+    // One-arg getParcelableExtra: the JVM stub's SDK_INT=0 drives the legacy path.
     @Suppress("DEPRECATION")
     private fun aclEvent(
         action: String,

@@ -24,9 +24,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-// JVM stub reports SDK_INT=0, driving the legacy getParcelableExtra path; production suppresses the same.
 @OptIn(ExperimentalCoroutinesApi::class)
-@Suppress("DEPRECATION")
 class BluetoothDeviceScannerTest {
     private lateinit var context: Context
     private lateinit var adapter: BluetoothAdapter
@@ -60,6 +58,8 @@ class BluetoothDeviceScannerTest {
         return device
     }
 
+    // One-arg getParcelableExtra: the JVM stub's SDK_INT=0 drives the legacy path.
+    @Suppress("DEPRECATION")
     private fun foundIntent(device: BluetoothDevice?): Intent {
         val intent = mockk<Intent>(relaxed = true)
         every { intent.action } returns BluetoothDevice.ACTION_FOUND
