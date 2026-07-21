@@ -50,6 +50,8 @@ class ControllerRepository
 
         fun getSessionCloseReason(handle: Int): Int = SatelliteNative.getSessionCloseReason(handle)
 
+        fun getSendCounter(handle: Int): Long = SatelliteNative.getSendCounter(handle)
+
         @Suppress("LongParameterList")
         fun sendMotion(
             handle: Int,

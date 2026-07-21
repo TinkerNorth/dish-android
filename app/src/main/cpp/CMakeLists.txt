@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.22.1)
 project(satellite)
 
+# Adopt CMP0135 where available to silence FetchContent's DOWNLOAD_EXTRACT_TIMESTAMP warning.
+if(POLICY CMP0135)
+  cmake_policy(SET CMP0135 NEW)
+endif()
+
 find_package(game-activity REQUIRED CONFIG)
 
 # ── libsodium (built from source via FetchContent) ──────────────────────────
@@ -52,6 +57,11 @@ target_compile_definitions(sodium_static PRIVATE
     HAVE_POSIX_MEMALIGN=1
     HAVE_ARC4RANDOM=0
     HAVE_SYS_MMAN_H=1
+    # HAVE_SYSCONF: sodium_mlock/guarded allocations round to the RUNTIME page
+    # size via sysconf(_SC_PAGESIZE) instead of a compiled-in guess — required
+    # for Android 15's 16 KB-page devices (and clears the "Unknown page size"
+    # build warning).
+    HAVE_SYSCONF=1
     __STDC_LIMIT_MACROS=1
     __STDC_CONSTANT_MACROS=1
 )

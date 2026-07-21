@@ -10,6 +10,7 @@ import androidx.activity.viewModels
 import androidx.annotation.ColorRes
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.core.view.isEmpty
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -151,7 +152,7 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
                 fc.inflateBindingPill(getString(R.string.binding_func_touchpad), R.drawable.ic_touchpad, PillTone.CAP),
             )
         }
-        if (fc.childCount == 0) fc.addView(noneValue(fc))
+        if (fc.isEmpty()) fc.addView(noneValue(fc))
     }
 
     private fun bindDestinationSection(

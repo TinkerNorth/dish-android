@@ -58,6 +58,8 @@ class BluetoothDeviceScannerTest {
         return device
     }
 
+    // One-arg getParcelableExtra: the JVM stub's SDK_INT=0 drives the legacy path.
+    @Suppress("DEPRECATION")
     private fun foundIntent(device: BluetoothDevice?): Intent {
         val intent = mockk<Intent>(relaxed = true)
         every { intent.action } returns BluetoothDevice.ACTION_FOUND

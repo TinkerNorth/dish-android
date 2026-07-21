@@ -190,11 +190,11 @@ class DishNotifications
 
             owner.lifecycle.addObserver(
                 object : DefaultLifecycleObserver {
-                    override fun onResume(o: LifecycleOwner) {
+                    override fun onResume(owner: LifecycleOwner) {
                         activate(attachment)
                     }
 
-                    override fun onDestroy(o: LifecycleOwner) {
+                    override fun onDestroy(owner: LifecycleOwner) {
                         drop(attachment)
                         attachment.dismissAll()
                     }

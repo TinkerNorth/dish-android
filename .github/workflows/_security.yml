@@ -74,6 +74,7 @@ jobs:
     if: ${{ inputs.action_pin_lint_enabled }}
     name: Action pin lint (40-char SHA required)
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -123,6 +124,7 @@ jobs:
     if: ${{ inputs.allowlist_expiry_enabled }}
     name: Vulnerability allowlist expiry check
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -166,6 +168,7 @@ jobs:
     if: ${{ inputs.osv_scan_paths != '' || inputs.osv_config != '' }}
     name: OSV-Scanner (vendored + manifest deps)
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -231,6 +234,7 @@ jobs:
     if: ${{ inputs.dependency_review_enabled && github.event_name == 'pull_request' }}
     name: Dependency review (GitHub advisory DB)
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -249,6 +253,7 @@ jobs:
     if: ${{ inputs.gitleaks_enabled }}
     name: Secret scan (gitleaks)
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout (full history)
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0

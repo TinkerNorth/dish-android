@@ -109,6 +109,7 @@ class SatelliteConnectionTest {
         clearAllMocks()
     }
 
+    @Suppress("LongParameterList")
     private fun connectLive(
         target: SatelliteConnection = conn,
         handle: Int = 7,
@@ -118,6 +119,7 @@ class SatelliteConnectionTest {
         onDead: () -> Unit = {},
         onClosedByServer: (Int) -> Unit = {},
         onReconcileNeeded: () -> Unit = {},
+        onRekeyNeeded: () -> Unit = {},
         onApplyFailures: (List<ControllerApplyDto>) -> Unit = {},
     ) {
         target.markConnecting()
@@ -130,6 +132,7 @@ class SatelliteConnectionTest {
             onDead = onDead,
             onClosedByServer = onClosedByServer,
             onReconcileNeeded = onReconcileNeeded,
+            onRekeyNeeded = onRekeyNeeded,
             onApplyFailures = onApplyFailures,
         )
     }
@@ -557,6 +560,62 @@ class SatelliteConnectionTest {
 
             scope.advanceTimeBy(3100)
             assertEquals(0, reconciles)
+        }
+
+    @Test
+    fun `counterNeedsRepush fires once the send counter crosses 0xF0000000`() {
+        assertFalse(counterNeedsRepush(1L))
+        assertFalse(counterNeedsRepush(0xEFFF_FFFFL))
+        assertTrue(counterNeedsRepush(0xF000_0000L))
+        assertTrue(counterNeedsRepush(0xFFFF_FFFFL))
+    }
+
+    @Test
+    fun `send counter at the re-PUT threshold fires onRekeyNeeded exactly once`() =
+        connTest {
+            every { repo.isConnectionAlive(any()) } returns true
+            every { repo.getSendCounter(any()) } returns COUNTER_REPUSH_THRESHOLD
+
+            var rekeys = 0
+            connectLive(onRekeyNeeded = { rekeys++ })
+
+            // Several alive-poll ticks: the latch must not re-fire while the
+            // rotation is still in flight (a re-PUT per tick would storm the server).
+            scope.advanceTimeBy(4100)
+            assertEquals(1, rekeys)
+        }
+
+    @Test
+    fun `send counter below the re-PUT threshold never requests a re-key`() =
+        connTest {
+            every { repo.isConnectionAlive(any()) } returns true
+            every { repo.getSendCounter(any()) } returns COUNTER_REPUSH_THRESHOLD - 1
+
+            var rekeys = 0
+            connectLive(onRekeyNeeded = { rekeys++ })
+
+            scope.advanceTimeBy(3100)
+            assertEquals(0, rekeys)
+        }
+
+    @Test
+    fun `re-key latch re-arms only after the rotation restarts the counter`() =
+        connTest {
+            every { repo.isConnectionAlive(any()) } returns true
+            var counter = COUNTER_REPUSH_THRESHOLD
+            every { repo.getSendCounter(any()) } answers { counter }
+
+            var rekeys = 0
+            connectLive(onRekeyNeeded = { rekeys++ })
+
+            scope.advanceTimeBy(2100)
+            assertEquals(1, rekeys)
+
+            counter = 1L // rotation installed fresh params, counter restarted
+            scope.advanceTimeBy(1100)
+            counter = COUNTER_REPUSH_THRESHOLD
+            scope.advanceTimeBy(1100)
+            assertEquals(2, rekeys)
         }
 
     @Test
