@@ -169,13 +169,18 @@ class PhysicalGamepadRegistry
             )
         }
 
-        private fun probeRumble(dev: InputDevice): Boolean =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        private fun probeRumble(dev: InputDevice): Boolean {
+            val vid = runCatching { dev.vendorId }.getOrDefault(0)
+            val pid = runCatching { dev.productId }.getOrDefault(0)
+            // The Switch Pro protocol exposes a framework vibrator Android can't drive; only Direct can.
+            if (native.modelFrameworkRumbleUnreliable(vid, pid)) return false
+            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 dev.vibratorManager.vibratorIds.isNotEmpty()
             } else {
                 @Suppress("DEPRECATION")
                 dev.vibrator?.hasVibrator() == true
             }
+        }
 
         private fun resolveTransport(
             name: String,
@@ -377,20 +382,29 @@ class PhysicalGamepadRegistry
                 return
             }
             cancelDisconnect(deviceId)
-            // Bluetooth Switch Pro Controllers enumerate sensors after onInputDeviceAdded; re-probe to catch the late gyro.
+            // Bluetooth Switch Pro Controllers enumerate sensors after onInputDeviceAdded; re-probe to catch a late gyro or vibrator.
             val nextHasGyro = PhysicalMotionProbe.hasGyro(deviceId)
+            val nextHasRumble = probeRumble(dev)
             val current = _devices.value[deviceId]
             val needsUpdate =
                 current == null ||
                     current.name != dev.name ||
                     current.isDisconnecting ||
-                    current.hasGyro != nextHasGyro
+                    current.hasGyro != nextHasGyro ||
+                    current.hasRumble != nextHasRumble
             if (needsUpdate) {
                 if (current?.hasGyro != nextHasGyro) {
                     Log.i(
                         TAG,
                         "pad $deviceId (${dev.name}) hasGyro re-probed: " +
                             "${current?.hasGyro} -> $nextHasGyro",
+                    )
+                }
+                if (current?.hasRumble != nextHasRumble) {
+                    Log.i(
+                        TAG,
+                        "pad $deviceId (${dev.name}) hasRumble re-probed: " +
+                            "${current?.hasRumble} -> $nextHasRumble",
                     )
                 }
                 _devices.update { it + (deviceId to makeRoutedDevice(deviceId, dev)) }

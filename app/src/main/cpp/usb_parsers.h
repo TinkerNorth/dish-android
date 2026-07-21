@@ -90,6 +90,11 @@ bool parserHasRumble(Parser p);
 
 bool parserHasTouchpad(Parser p);
 
+// True for families whose rumble the Android framework can't drive (the Switch Pro's proprietary
+// HD-rumble); a framework vibrator they expose is a false positive, so only the Direct path
+// actuates.
+bool parserFrameworkRumbleUnreliable(Parser p);
+
 // Pure: writes the index-th GIP init packet for an Xbox One InitKind into out (with the sequence
 // number at byte 2), returns its length or 0 when there are no more. runInit sends them in order.
 size_t buildGipInitPacket(InitKind init, int index, uint8_t seq, uint8_t* out, size_t outCap);
