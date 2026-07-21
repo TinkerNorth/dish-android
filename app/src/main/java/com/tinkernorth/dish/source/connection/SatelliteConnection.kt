@@ -20,6 +20,12 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+// Contract §Crypto: counters never wrap; clients SHOULD re-PUT once their send
+// counter crosses 0xF0000000. Rotating token/salt/key restarts the counter at 1.
+internal const val COUNTER_REPUSH_THRESHOLD = 0xF000_0000L
+
+internal fun counterNeedsRepush(sendCounter: Long): Boolean = sendCounter >= COUNTER_REPUSH_THRESHOLD
+
 /**
  * One satellite session. Slots are DECLARATIVE: this class holds the desired
  * descriptor per slot plus the applied state the satellite last confirmed;
@@ -105,7 +111,8 @@ class SatelliteConnection(
      * response. [onDead] fires on heartbeat death; [onClosedByServer] on an
      * authenticated close-notify (immediate, no death-timeout wait);
      * [onReconcileNeeded] when the heartbeat-ack epoch/bitmap stops matching
-     * what we believe is applied.
+     * what we believe is applied; [onRekeyNeeded] once per session when the
+     * send counter crosses the re-PUT threshold.
      */
     internal fun markConnected(
         handle: Int,
@@ -116,6 +123,7 @@ class SatelliteConnection(
         onDead: () -> Unit,
         onClosedByServer: (reason: Int) -> Unit = { onDead() },
         onReconcileNeeded: () -> Unit = {},
+        onRekeyNeeded: () -> Unit = {},
         onApplyFailures: (failures: List<ControllerApplyDto>) -> Unit = {},
     ) {
         if (_state.value != SatelliteSessionState.Linking) return
@@ -139,6 +147,7 @@ class SatelliteConnection(
         aliveJob =
             scope.launch {
                 var consecutiveMisses = 0
+                var rekeyRequested = false
                 while (isActive) {
                     delay(ALIVE_POLL_MS)
                     // An authenticated close-notify is terminal NOW: the
@@ -156,6 +165,7 @@ class SatelliteConnection(
                         }
                         consecutiveMisses = 0
                         checkReconcile(onReconcileNeeded)
+                        rekeyRequested = checkRekey(rekeyRequested, onRekeyNeeded)
                         continue
                     }
                     consecutiveMisses += 1
@@ -184,6 +194,20 @@ class SatelliteConnection(
         if (serverEpoch != lastAppliedEpoch || (serverBitmap >= 0 && serverBitmap != expectedBitmap)) {
             onReconcileNeeded()
         }
+    }
+
+    // Proactive re-key before the send counter can exhaust (contract §Crypto:
+    // re-PUT past 0xF0000000). Single-shot per crossing: the re-PUT rotates the
+    // token/key and restarts the counter, which re-arms the latch. A session
+    // that exhausts anyway goes silent natively and heals via heartbeat death.
+    private fun checkRekey(
+        alreadyRequested: Boolean,
+        onRekeyNeeded: () -> Unit,
+    ): Boolean {
+        val snap = live ?: return alreadyRequested
+        if (!counterNeedsRepush(controllerRepo.getSendCounter(snap.handle))) return false
+        if (!alreadyRequested) onRekeyNeeded()
+        return true
     }
 
     private fun registeredBitmap(): Int {

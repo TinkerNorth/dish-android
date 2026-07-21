@@ -67,8 +67,18 @@ target_include_directories(usb_hid_descriptor_test PRIVATE "${SATELLITE_CPP}")
 target_compile_options(usb_hid_descriptor_test PRIVATE -Wall -Wextra -Wpedantic)
 target_link_libraries(usb_hid_descriptor_test PRIVATE GTest::gtest_main)
 
+# UDP send-counter exhaustion guard: the header the JNI send path draws every
+# wire counter from (no wrap into ChaCha20 nonce reuse, contract §Crypto).
+add_executable(send_counter_test
+    send_counter_test.cpp
+)
+target_include_directories(send_counter_test PRIVATE "${SATELLITE_CPP}")
+target_compile_options(send_counter_test PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(send_counter_test PRIVATE GTest::gtest_main)
+
 include(GoogleTest)
 gtest_discover_tests(gamepad_input_test)
 gtest_discover_tests(wire_encoders_test)
 gtest_discover_tests(usb_parsers_test)
 gtest_discover_tests(usb_hid_descriptor_test)
+gtest_discover_tests(send_counter_test)

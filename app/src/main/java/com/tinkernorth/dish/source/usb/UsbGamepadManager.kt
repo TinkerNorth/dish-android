@@ -484,7 +484,7 @@ class UsbGamepadManager
         private fun friendlyName(device: UsbDevice): String {
             val known = native.lookupKnownModelName(device.vendorId, device.productId)
             if (known.isNotEmpty()) return known
-            val product = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) device.productName else null
+            val product = device.productName
             return product?.takeIf { it.isNotBlank() } ?: device.deviceName
         }
 

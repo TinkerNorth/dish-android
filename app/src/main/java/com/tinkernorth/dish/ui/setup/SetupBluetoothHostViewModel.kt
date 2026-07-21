@@ -249,7 +249,6 @@ class SetupBluetoothHostViewModel
             // Don't keep advertising once the wizard goes away unless we already
             // bonded and finished (the dashboard owns the live session from here).
             if (!proceeded) stopActive()
-            super.onCleared()
         }
 
         private fun emitDone(

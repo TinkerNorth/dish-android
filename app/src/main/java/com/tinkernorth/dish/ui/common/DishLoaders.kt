@@ -91,7 +91,7 @@ class DishSpinnerDrawable(
         strokePaint.color = tinted
     }
 
-    @Suppress("DEPRECATION")
+    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
 
     override fun start() {
@@ -173,7 +173,7 @@ class DishDotsDrawable(
         fillPaint.color = tinted
     }
 
-    @Suppress("DEPRECATION")
+    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
 
     override fun start() {
@@ -269,7 +269,7 @@ class DishBarDrawable(
         trackPaint.alpha = (0.22f * 255f).toInt()
     }
 
-    @Suppress("DEPRECATION")
+    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
 
     override fun start() {

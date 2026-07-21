@@ -190,6 +190,7 @@ class RumbleRouterTest {
         val rumbleEnabled =
             mockk<RumbleEnabledStore> { every { isEnabled(any()) } returns rumbleOn }
 
+        @Suppress("DEPRECATION") // VIBRATOR_SERVICE: the SDK_INT=0 legacy path resolves it
         private val context =
             mockk<Context>(relaxed = true) {
                 every { getSystemService(Context.VIBRATOR_SERVICE) } returns vibrator
@@ -219,6 +220,7 @@ class RumbleRouterTest {
     }
 
     @Test
+    @Suppress("DEPRECATION") // Vibrator.vibrate(Long): what the SDK_INT=0 legacy path calls
     fun `dispatch suppresses the phone vibrator when the virtual slot is rumble-off`() {
         val h = DispatchHarness(slotId = VIRTUAL_SLOT_ID, controllerIndex = 0, rumbleOn = false)
 
@@ -230,6 +232,7 @@ class RumbleRouterTest {
     }
 
     @Test
+    @Suppress("DEPRECATION") // Vibrator.vibrate(Long): what the SDK_INT=0 legacy path calls
     fun `dispatch actuates the phone vibrator when the virtual slot is rumble-on`() {
         val h = DispatchHarness(slotId = VIRTUAL_SLOT_ID, controllerIndex = 0, rumbleOn = true)
 
@@ -260,6 +263,7 @@ class RumbleRouterTest {
     }
 
     @Test
+    @Suppress("DEPRECATION") // Vibrator.vibrate(Long): what the SDK_INT=0 legacy path calls
     fun `dispatch consults the gate with the framework device id and suppresses when off`() {
         val h = DispatchHarness(slotId = "1234", controllerIndex = 0, rumbleOn = false)
 

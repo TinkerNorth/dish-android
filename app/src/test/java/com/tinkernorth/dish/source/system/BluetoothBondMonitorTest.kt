@@ -67,6 +67,8 @@ class BluetoothBondMonitorTest {
         return intent
     }
 
+    // One-arg getParcelableExtra: the JVM stub's SDK_INT=0 drives the legacy path.
+    @Suppress("DEPRECATION")
     private fun intentForAction(
         action: String,
         mac: String,
@@ -112,6 +114,7 @@ class BluetoothBondMonitorTest {
     }
 
     @Test
+    @Suppress("DEPRECATION") // one-arg getParcelableExtra, as in intentForAction
     fun `KEY_MISSING with no EXTRA_DEVICE is ignored`() {
         val intent =
             mockk<Intent>(relaxed = true) {

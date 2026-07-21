@@ -200,7 +200,7 @@ class PhysicalSlotBindingObserver
                 // Outer Map only re-emits on session add/remove; slotsTrigger re-pushes when a session's slot flips `registered`.
                 val slotFlows = conns.values.map { it.slots }
                 val slotsTrigger: Flow<Unit> =
-                    if (slotFlows.isEmpty()) flowOf(Unit) else combine(slotFlows) { Unit }
+                    if (slotFlows.isEmpty()) flowOf(Unit) else combine(slotFlows) { }
                 combine(
                     registry.devices,
                     hub.bindings,

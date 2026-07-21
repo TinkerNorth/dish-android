@@ -39,6 +39,7 @@ class BluetoothConnectionsTest {
         unmockkAll()
     }
 
+    // One-arg getParcelableExtra: the JVM stub's SDK_INT=0 drives the legacy path.
     @Suppress("DEPRECATION")
     private fun aclEvent(
         action: String,

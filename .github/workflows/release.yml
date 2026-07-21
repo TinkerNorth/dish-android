@@ -95,6 +95,7 @@ jobs:
     name: Required release secrets gate
     needs: [gates]
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Verify keystore secrets are present for tagged releases
         env:
@@ -124,6 +125,7 @@ jobs:
     name: Build + sign APK/AAB
     needs: [gates, required-secrets]
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -264,6 +266,7 @@ jobs:
     name: Upload AAB to Google Play
     needs: [release]
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -366,6 +369,7 @@ jobs:
     name: Harden artifacts (scan, SBOM, sign)
     needs: [release]
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: read
       id-token: write
@@ -502,6 +506,7 @@ jobs:
     name: Publish to GitHub Releases
     needs: [harden, provenance]
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:
