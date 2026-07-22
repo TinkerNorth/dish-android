@@ -69,6 +69,7 @@
     <string name="setup_conn_status_needs_pairing">Precisa parear, PIN</string>
     <string name="setup_conn_status_connected">Conectado</string>
     <string name="setup_conn_status_reconnecting">Reconectando</string>
+    <string name="setup_conn_local_network_denied">O Dish precisa de acesso à rede local para encontrar satélites no seu Wi-Fi. Permita para continuar.</string>
     <string name="setup_conn_missing_title">Não vê seu PC?</string>
     <string name="setup_conn_missing_body">Instale o app gratuito Satellite nele.</string>
     <string name="setup_conn_get_satellite">Obter o Satellite no GitHub</string>

@@ -216,6 +216,8 @@
     <string name="notif_no_network_body">Connectez-vous au même Wi-Fi que votre satellite.</string>
     <string name="notif_cellular_only_title">Données mobiles uniquement</string>
     <string name="notif_cellular_only_body">Les satellites vivent sur votre LAN Wi-Fi, pas sur les données mobiles.</string>
+    <string name="notif_local_network_title">Accès au réseau local requis</string>
+    <string name="notif_local_network_body">Dish trouve les satellites sur votre Wi-Fi et s\'y connecte. Autorisez l\'accès au réseau local pour scanner.</string>
     <string name="notif_bind_first_title">Liez d\'abord une connexion</string>
     <string name="notif_pairing_needed_title">Appairage requis</string>
     <string name="notif_pairing_needed_body">Ouvrez Connexions pour saisir le PIN de %1$s.</string>

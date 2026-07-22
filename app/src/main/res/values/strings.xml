@@ -252,6 +252,8 @@
     <string name="notif_no_network_body">Connect to the same Wi-Fi as your satellite.</string>
     <string name="notif_cellular_only_title">Mobile data only</string>
     <string name="notif_cellular_only_body">Satellites live on your Wi-Fi LAN, not on mobile data.</string>
+    <string name="notif_local_network_title">Local network access needed</string>
+    <string name="notif_local_network_body">Dish finds and connects to satellites on your Wi-Fi. Allow local network access to scan.</string>
     <string name="notif_bind_first_title">Bind a connection first</string>
     <string name="notif_pairing_needed_title">Pairing needed</string>
     <string name="notif_pairing_needed_body">Open Connections to enter the PIN for %1$s.</string>
