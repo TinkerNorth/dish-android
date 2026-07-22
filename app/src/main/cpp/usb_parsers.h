@@ -40,6 +40,12 @@ struct KnownDevice {
     InitKind init;
 };
 
+struct Classification {
+    Parser parser = Parser::NONE;
+    InitKind init = InitKind::NONE;
+    const char* name = nullptr;
+};
+
 // Per-device, expand-only auto-range for sticks that report raw ADC values. We don't read the
 // controller's factory calibration from SPI flash, and the usable deflection varies per unit and
 // per direction, so each axis tracks the largest deflection seen on each side of center
@@ -79,6 +85,9 @@ struct ParserState {
 };
 
 const KnownDevice* lookupKnown(uint16_t vid, uint16_t pid);
+
+Classification classifyDevice(uint16_t vid, uint16_t pid, uint8_t ifClass, uint8_t ifSubclass,
+                              uint8_t ifProtocol);
 
 bool isVerifiedFastLane(uint16_t vid, uint16_t pid);
 

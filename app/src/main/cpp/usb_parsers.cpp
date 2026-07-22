@@ -396,6 +396,27 @@ bool isVerifiedFastLane(uint16_t vid, uint16_t pid) {
     return k != nullptr && k->parser != Parser::NONE;
 }
 
+constexpr uint8_t kIfClassVendor = 0xFF;
+constexpr uint8_t kXInputSubclass = 0x5D;
+constexpr uint8_t kXInputProtocol = 0x01;
+constexpr uint8_t kGipSubclass = 0x47;
+constexpr uint8_t kGipProtocol = 0xD0;
+
+Classification classifyDevice(uint16_t vid, uint16_t pid, uint8_t ifClass, uint8_t ifSubclass,
+                              uint8_t ifProtocol) {
+    const KnownDevice* known = lookupKnown(vid, pid);
+    if (known != nullptr) { return {known->parser, known->init, known->name}; }
+    // Wired XInput streams unsolicited; GIP needs the power-on packet first.
+    if (ifClass == kIfClassVendor && ifSubclass == kXInputSubclass &&
+        ifProtocol == kXInputProtocol) {
+        return {Parser::XINPUT_360, InitKind::NONE, nullptr};
+    }
+    if (ifClass == kIfClassVendor && ifSubclass == kGipSubclass && ifProtocol == kGipProtocol) {
+        return {Parser::XBOX_ONE_GIP, InitKind::XBOX_ONE_POWERON, nullptr};
+    }
+    return {Parser::GENERIC_HID_GAMEPAD, InitKind::NONE, nullptr};
+}
+
 const char* parserName(Parser p) {
     switch (p) {
     case Parser::XINPUT_360:

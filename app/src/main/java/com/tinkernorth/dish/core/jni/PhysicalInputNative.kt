@@ -65,6 +65,9 @@ class PhysicalInputNative
             endpointIn: Int,
             endpointInMaxPacket: Int,
             endpointOut: Int,
+            interfaceClass: Int,
+            interfaceSubclass: Int,
+            interfaceProtocol: Int,
         ): Int =
             SatelliteNative.attachUsbDevice(
                 fd = fd,
@@ -74,6 +77,9 @@ class PhysicalInputNative
                 endpointIn = endpointIn,
                 endpointInMaxPacket = endpointInMaxPacket,
                 endpointOut = endpointOut,
+                interfaceClass = interfaceClass,
+                interfaceSubclass = interfaceSubclass,
+                interfaceProtocol = interfaceProtocol,
             )
 
         fun detachUsbDevice(syntheticDeviceId: Int) {

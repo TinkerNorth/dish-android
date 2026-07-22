@@ -13,7 +13,9 @@ struct AttachResult {
 };
 
 AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumber,
-                          uint8_t endpointIn, uint16_t endpointInMaxPacket, uint8_t endpointOut);
+                          uint8_t endpointIn, uint16_t endpointInMaxPacket, uint8_t endpointOut,
+                          uint8_t interfaceClass, uint8_t interfaceSubclass,
+                          uint8_t interfaceProtocol);
 
 void detachDevice(int32_t syntheticDeviceId);
 

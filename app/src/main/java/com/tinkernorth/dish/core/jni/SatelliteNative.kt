@@ -149,6 +149,7 @@ object SatelliteNative {
         keyCode: Int,
     ): Boolean
 
+    @Suppress("LongParameterList")
     external fun attachUsbDevice(
         fd: Int,
         vendorId: Int,
@@ -157,6 +158,9 @@ object SatelliteNative {
         endpointIn: Int,
         endpointInMaxPacket: Int,
         endpointOut: Int,
+        interfaceClass: Int,
+        interfaceSubclass: Int,
+        interfaceProtocol: Int,
     ): Int
 
     external fun detachUsbDevice(syntheticDeviceId: Int)

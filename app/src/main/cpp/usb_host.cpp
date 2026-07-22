@@ -339,21 +339,15 @@ void fetchPsCalibration(int fd, int interfaceNumber, uint8_t reportId,
 } // namespace
 
 AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumber, uint8_t epIn,
-                          uint16_t epInMaxPacket, uint8_t epOut) {
+                          uint16_t epInMaxPacket, uint8_t epOut, uint8_t ifClass,
+                          uint8_t ifSubclass, uint8_t ifProtocol) {
     AttachResult out;
 
-    const usbparsers::KnownDevice* known = usbparsers::lookupKnown(vid, pid);
-    std::string modelName;
-    usbparsers::Parser parser = usbparsers::Parser::NONE;
-    usbparsers::InitKind init = usbparsers::InitKind::NONE;
-    if (known) {
-        modelName = known->name;
-        parser = known->parser;
-        init = known->init;
-    } else {
-        modelName = "USB controller";
-        parser = usbparsers::Parser::GENERIC_HID_GAMEPAD;
-    }
+    usbparsers::Classification classification =
+        usbparsers::classifyDevice(vid, pid, ifClass, ifSubclass, ifProtocol);
+    std::string modelName = classification.name != nullptr ? classification.name : "USB controller";
+    usbparsers::Parser parser = classification.parser;
+    usbparsers::InitKind init = classification.init;
 
     // We expect Kotlin to have already called UsbDeviceConnection.claimInterface(force=true);
     // CLAIMINTERFACE here is idempotent (returns EBUSY if already held by our process, which is

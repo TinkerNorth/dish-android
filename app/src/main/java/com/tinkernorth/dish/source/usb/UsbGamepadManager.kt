@@ -339,6 +339,9 @@ class UsbGamepadManager
                     endpointIn = epIn.address,
                     endpointInMaxPacket = epIn.maxPacketSize,
                     endpointOut = epOut?.address ?: 0,
+                    interfaceClass = intf.interfaceClass,
+                    interfaceSubclass = intf.interfaceSubclass,
+                    interfaceProtocol = intf.interfaceProtocol,
                 )
             if (synthetic == 0) {
                 runCatching {
@@ -488,39 +491,48 @@ class UsbGamepadManager
             return product?.takeIf { it.isNotBlank() } ?: device.deviceName
         }
 
-        private fun isGamepadShaped(device: UsbDevice): Boolean {
-            for (i in 0 until device.interfaceCount) {
-                val intf = device.getInterface(i)
-                val isHid = intf.interfaceClass == UsbConstants.USB_CLASS_HID
-                val isVendor = intf.interfaceClass == UsbConstants.USB_CLASS_VENDOR_SPEC
-                if (!isHid && !isVendor) continue
-                for (e in 0 until intf.endpointCount) {
-                    val ep = intf.getEndpoint(e)
-                    if (ep.type == UsbConstants.USB_ENDPOINT_XFER_INT && ep.direction == UsbConstants.USB_DIR_IN) {
-                        return true
-                    }
-                }
+        private fun isGamepadShaped(device: UsbDevice): Boolean = findInterruptInPair(device) != null
+
+        private fun gameInterfaceRank(intf: UsbInterface): Int {
+            val cls = intf.interfaceClass
+            if (cls == UsbConstants.USB_CLASS_HID) return RANK_HID
+            if (cls != UsbConstants.USB_CLASS_VENDOR_SPEC) return RANK_NONE
+            val sub = intf.interfaceSubclass
+            val proto = intf.interfaceProtocol
+            return when {
+                sub == XINPUT_SUBCLASS && proto == XINPUT_PROTOCOL -> RANK_XINPUT
+                sub == GIP_SUBCLASS && proto == GIP_PROTOCOL -> RANK_GIP
+                sub == XINPUT_SUBCLASS && (proto == XINPUT_AUX_PROTOCOL || proto == XINPUT_AUDIO_PROTOCOL) -> RANK_NONE
+                sub == XINPUT_SECURITY_SUBCLASS -> RANK_NONE
+                else -> RANK_VENDOR_FALLBACK
             }
-            return false
         }
 
+        private fun interruptInOutOf(intf: UsbInterface): Pair<UsbEndpoint, UsbEndpoint?>? {
+            var epIn: UsbEndpoint? = null
+            var epOut: UsbEndpoint? = null
+            for (e in 0 until intf.endpointCount) {
+                val ep = intf.getEndpoint(e)
+                if (ep.type != UsbConstants.USB_ENDPOINT_XFER_INT) continue
+                if (ep.direction == UsbConstants.USB_DIR_IN && epIn == null) epIn = ep
+                if (ep.direction == UsbConstants.USB_DIR_OUT && epOut == null) epOut = ep
+            }
+            return epIn?.let { it to epOut }
+        }
+
+        // Ranked, not first-match: a composite 360 pad's audio/security interfaces also carry an interrupt-IN.
         private fun findInterruptInPair(device: UsbDevice): Triple<UsbInterface, UsbEndpoint, UsbEndpoint?>? {
+            var best: Triple<UsbInterface, UsbEndpoint, UsbEndpoint?>? = null
+            var bestRank = RANK_NONE
             for (i in 0 until device.interfaceCount) {
                 val intf = device.getInterface(i)
-                val isHid = intf.interfaceClass == UsbConstants.USB_CLASS_HID
-                val isVendor = intf.interfaceClass == UsbConstants.USB_CLASS_VENDOR_SPEC
-                if (!isHid && !isVendor) continue
-                var epIn: UsbEndpoint? = null
-                var epOut: UsbEndpoint? = null
-                for (e in 0 until intf.endpointCount) {
-                    val ep = intf.getEndpoint(e)
-                    if (ep.type != UsbConstants.USB_ENDPOINT_XFER_INT) continue
-                    if (ep.direction == UsbConstants.USB_DIR_IN && epIn == null) epIn = ep
-                    if (ep.direction == UsbConstants.USB_DIR_OUT && epOut == null) epOut = ep
-                }
-                if (epIn != null) return Triple(intf, epIn, epOut)
+                val rank = gameInterfaceRank(intf)
+                if (rank <= bestRank) continue
+                val pair = interruptInOutOf(intf) ?: continue
+                best = Triple(intf, pair.first, pair.second)
+                bestRank = rank
             }
-            return null
+            return best
         }
 
         private fun deviceFromIntent(intent: Intent): UsbDevice? =
@@ -537,6 +549,20 @@ class UsbGamepadManager
             const val TAG = "UsbGamepadManager"
             const val ACTION_USB_PERMISSION = "com.tinkernorth.dish.USB_PERMISSION"
             const val TRANSITION_TIMEOUT_MS = 4000L
+
+            const val XINPUT_SUBCLASS = 0x5D
+            const val XINPUT_PROTOCOL = 0x01
+            const val XINPUT_AUX_PROTOCOL = 0x02
+            const val XINPUT_AUDIO_PROTOCOL = 0x03
+            const val XINPUT_SECURITY_SUBCLASS = 0xFD
+            const val GIP_SUBCLASS = 0x47
+            const val GIP_PROTOCOL = 0xD0
+
+            const val RANK_NONE = 0
+            const val RANK_VENDOR_FALLBACK = 1
+            const val RANK_HID = 2
+            const val RANK_GIP = 3
+            const val RANK_XINPUT = 4
         }
     }
 

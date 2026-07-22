@@ -74,6 +74,8 @@ class UsbGamepadManagerTest {
         val intf =
             mockk<UsbInterface> {
                 every { interfaceClass } returns UsbConstants.USB_CLASS_HID
+                every { interfaceSubclass } returns 0
+                every { interfaceProtocol } returns 0
                 every { id } returns 0
                 every { endpointCount } returns 1
                 every { getEndpoint(0) } returns epIn
@@ -144,7 +146,9 @@ class UsbGamepadManagerTest {
         val conn = mockConn()
         every { usbManager.openDevice(device) } returns conn
         every { conn.claimInterface(any(), true) } returns true
-        every { native.attachUsbDevice(any(), any(), any(), any(), any(), any(), any()) } returns 0
+        every {
+            native.attachUsbDevice(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+        } returns 0
         val m = buildManager()
         m.tryDirectMode(vid, pid)
         // The interface was stolen, so we wait for re-enumeration rather than declaring Standard usable.
@@ -157,13 +161,92 @@ class UsbGamepadManagerTest {
         val conn = mockConn()
         every { usbManager.openDevice(device) } returns conn
         every { conn.claimInterface(any(), true) } returns true
-        every { native.attachUsbDevice(any(), any(), any(), any(), any(), any(), any()) } returns -1000
+        every {
+            native.attachUsbDevice(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+        } returns -1000
         val m = buildManager()
         m.tryDirectMode(vid, pid)
         assertEquals(UsbPhase.Direct, m.controllers.value[key]?.phase)
         assertEquals(-1000, m.controllers.value[key]?.syntheticId)
         assertNull(m.controllers.value[key]?.failure)
         verify { registry.addUsbSynthetic(-1000, "Pad", any(), any(), vid, pid) }
+    }
+
+    private fun vendorInterface(
+        ifaceId: Int,
+        subclass: Int,
+        protocol: Int,
+        epInAddress: Int,
+    ): UsbInterface {
+        val epIn =
+            mockk<UsbEndpoint> {
+                every { type } returns UsbConstants.USB_ENDPOINT_XFER_INT
+                every { direction } returns UsbConstants.USB_DIR_IN
+                every { address } returns epInAddress
+                every { maxPacketSize } returns 32
+                every { interval } returns 4
+            }
+        return mockk {
+            every { interfaceClass } returns UsbConstants.USB_CLASS_VENDOR_SPEC
+            every { interfaceSubclass } returns subclass
+            every { interfaceProtocol } returns protocol
+            every { id } returns ifaceId
+            every { endpointCount } returns 1
+            every { getEndpoint(0) } returns epIn
+        }
+    }
+
+    // Audio interface first (id 0) so a first-match bug would claim it over the gamepad (id 1).
+    private fun compositeXbox360(): UsbDevice {
+        val audio = vendorInterface(ifaceId = 0, subclass = 0x5D, protocol = 0x03, epInAddress = 0x81)
+        val game = vendorInterface(ifaceId = 1, subclass = 0x5D, protocol = 0x01, epInAddress = 0x82)
+        return mockk {
+            every { vendorId } returns vid
+            every { productId } returns pid
+            every { deviceName } returns "xbox360"
+            every { interfaceCount } returns 2
+            every { getInterface(0) } returns audio
+            every { getInterface(1) } returns game
+        }
+    }
+
+    private fun buildManagerForDevice(dev: UsbDevice): UsbGamepadManager {
+        val ctx = mockk<Context>(relaxed = true)
+        every { ctx.getSystemService(Context.USB_SERVICE) } returns usbManager
+        every { usbManager.deviceList } returns hashMapOf("d" to dev)
+        every { usbManager.hasPermission(dev) } returns true
+        every { registry.devices } returns MutableStateFlow(emptyMap())
+        every { native.lookupKnownModelName(vid, pid) } returns "Pad"
+        every { pathPrefs.choiceFor(vid, pid) } returns null
+        val scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher())
+        return UsbGamepadManager(ctx, registry, Provider { hub }, notifications, scope, native, pathPrefs)
+    }
+
+    @Test
+    fun `claims the gamepad interface of a composite controller, not the audio one`() {
+        val dev = compositeXbox360()
+        val conn = mockConn()
+        every { usbManager.openDevice(dev) } returns conn
+        every { conn.claimInterface(any(), true) } returns true
+        every {
+            native.attachUsbDevice(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+        } returns -1000
+        val m = buildManagerForDevice(dev)
+        m.tryDirectMode(vid, pid)
+        verify {
+            native.attachUsbDevice(
+                fd = any(),
+                vendorId = vid,
+                productId = pid,
+                interfaceNumber = 1,
+                endpointIn = 0x82,
+                endpointInMaxPacket = any(),
+                endpointOut = any(),
+                interfaceClass = UsbConstants.USB_CLASS_VENDOR_SPEC,
+                interfaceSubclass = 0x5D,
+                interfaceProtocol = 0x01,
+            )
+        }
     }
 
     // A real registry so directFailureFor genuinely reflects what markDirectFailed recorded, instead of
