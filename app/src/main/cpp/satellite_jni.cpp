@@ -1076,7 +1076,7 @@ Java_com_tinkernorth_dish_hotpath_input_RumbleBridge_nativeInstall(JNIEnv* env, 
 
 JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_attachUsbDevice(
     JNIEnv*, jobject, jint fd, jint vid, jint pid, jint interfaceNumber, jint epIn,
-    jint epInMaxPacket, jint epOut) {
+    jint epInMaxPacket, jint epOut, jint ifClass, jint ifSubclass, jint ifProtocol) {
     int dupFd = dup(fd);
     if (dupFd < 0) {
         LOGE("attachUsbDevice: dup(%d) failed: %s", fd, strerror(errno));
@@ -1084,7 +1084,8 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_attach
     }
     usbhost::AttachResult r = usbhost::attachDevice(
         dupFd, (uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF), interfaceNumber,
-        (uint8_t)(epIn & 0xFF), (uint16_t)(epInMaxPacket & 0xFFFF), (uint8_t)(epOut & 0xFF));
+        (uint8_t)(epIn & 0xFF), (uint16_t)(epInMaxPacket & 0xFFFF), (uint8_t)(epOut & 0xFF),
+        (uint8_t)(ifClass & 0xFF), (uint8_t)(ifSubclass & 0xFF), (uint8_t)(ifProtocol & 0xFF));
     return r.ok ? (jint)r.syntheticDeviceId : 0;
 }
 
