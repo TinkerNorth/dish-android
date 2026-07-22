@@ -215,6 +215,8 @@
     <string name="notif_no_network_body">Verbinde dich mit demselben WLAN wie dein Satellit.</string>
     <string name="notif_cellular_only_title">Nur mobile Daten</string>
     <string name="notif_cellular_only_body">Satelliten leben in deinem WLAN-LAN, nicht in den mobilen Daten.</string>
+    <string name="notif_local_network_title">Zugriff auf lokales Netzwerk nötig</string>
+    <string name="notif_local_network_body">Dish findet Satelliten in deinem WLAN und verbindet sich mit ihnen. Erlaube den Zugriff auf das lokale Netzwerk, um zu suchen.</string>
     <string name="notif_bind_first_title">Erst eine Verbindung verknüpfen</string>
     <string name="notif_pairing_needed_title">Kopplung nötig</string>
     <string name="notif_pairing_needed_body">Öffne Verbindungen, um den PIN für %1$s einzugeben.</string>

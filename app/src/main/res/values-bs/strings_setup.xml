@@ -69,6 +69,7 @@
     <string name="setup_conn_status_needs_pairing">Potrebno uparivanje, PIN</string>
     <string name="setup_conn_status_connected">Povezan</string>
     <string name="setup_conn_status_reconnecting">Ponovno povezivanje</string>
+    <string name="setup_conn_local_network_denied">Dish treba pristup lokalnoj mreži da pronađe satelite na vašem Wi-Fi-ju. Dozvolite ga za nastavak.</string>
     <string name="setup_conn_missing_title">Ne vidite svoj PC?</string>
     <string name="setup_conn_missing_body">Instalirajte besplatnu Satellite aplikaciju na njega.</string>
     <string name="setup_conn_get_satellite">Preuzmi Satellite na GitHub-u</string>

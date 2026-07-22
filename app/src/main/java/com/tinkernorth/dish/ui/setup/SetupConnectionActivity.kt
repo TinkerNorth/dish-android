@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import androidx.activity.addCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
@@ -21,6 +22,7 @@ import com.tinkernorth.dish.databinding.SetupChoiceRowBinding
 import com.tinkernorth.dish.databinding.SetupHostRowBinding
 import com.tinkernorth.dish.source.connection.PairingApproval
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
+import com.tinkernorth.dish.source.system.LocalNetworkAccess
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.setupDishToolbar
@@ -52,6 +54,21 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
     private var pinDialog: PairPinDialog? = null
     private var pairingServer: DiscoveredServer? = null
 
+    private var onLocalNetworkGranted: (() -> Unit)? = null
+
+    private val localNetworkPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            val resume = onLocalNetworkGranted
+            onLocalNetworkGranted = null
+            if (granted) {
+                resume?.invoke()
+            } else {
+                SetupErrorDialog.show(this, getString(R.string.setup_conn_local_network_denied)) {
+                    withLocalNetwork(resume ?: { viewModel.startDiscovery() })
+                }
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = setScaffoldContent(ActivitySetupConnectionBinding::inflate)
@@ -66,7 +83,7 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
             R.string.setup_conn_satellite_title,
             R.string.setup_conn_satellite_body,
             R.string.setup_conn_satellite_badge,
-        ) { viewModel.chooseSatellite() }
+        ) { withLocalNetwork { viewModel.chooseSatellite() } }
         bindChoice(
             binding.cardBluetoothHost,
             R.drawable.ic_bluetooth,
@@ -76,7 +93,7 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
         ) { nav.toSetupBluetoothHost(inputType, slotId) }
 
         binding.btnBack.setOnClickListener { handleBack() }
-        binding.btnRescan.setOnClickListener { viewModel.startDiscovery() }
+        binding.btnRescan.setOnClickListener { withLocalNetwork { viewModel.startDiscovery() } }
         binding.btnGetSatellite.setOnClickListener { openGitHub() }
 
         onBackPressedDispatcher.addCallback(this) { handleBack() }
@@ -202,11 +219,21 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
             dialog.showError(message)
             return
         }
-        SetupErrorDialog.show(this, message) { viewModel.startDiscovery() }
+        SetupErrorDialog.show(this, message) { withLocalNetwork { viewModel.startDiscovery() } }
     }
 
     private fun openGitHub() {
         startActivity(Intent(Intent.ACTION_VIEW, getString(R.string.url_github).toUri()))
+    }
+
+    // Request before scanning: a pre-grant blocked scan would shadow the real one via the single-flight guard.
+    private fun withLocalNetwork(action: () -> Unit) {
+        if (LocalNetworkAccess.isGranted(this)) {
+            action()
+            return
+        }
+        onLocalNetworkGranted = action
+        localNetworkPermissionLauncher.launch(LocalNetworkAccess.PERMISSION)
     }
 
     private fun bindChoice(

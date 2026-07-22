@@ -217,6 +217,8 @@
     <string name="notif_no_network_body">Conecte-se ao mesmo Wi-Fi do seu satélite.</string>
     <string name="notif_cellular_only_title">Somente dados móveis</string>
     <string name="notif_cellular_only_body">Satélites vivem na sua LAN Wi-Fi, não nos dados móveis.</string>
+    <string name="notif_local_network_title">Acesso à rede local necessário</string>
+    <string name="notif_local_network_body">O Dish encontra satélites no seu Wi-Fi e se conecta a eles. Permita o acesso à rede local para buscar.</string>
     <string name="notif_bind_first_title">Vincule uma conexão primeiro</string>
     <string name="notif_pairing_needed_title">Pareamento necessário</string>
     <string name="notif_pairing_needed_body">Abra Conexões para digitar o PIN de %1$s.</string>

@@ -54,6 +54,7 @@ import com.tinkernorth.dish.source.system.BluetoothAdapterStateObserver
 import com.tinkernorth.dish.source.system.BluetoothPermissionBannerDecision
 import com.tinkernorth.dish.source.system.BluetoothPermissionBannerVariant
 import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
+import com.tinkernorth.dish.source.system.LocalNetworkAccess
 import com.tinkernorth.dish.source.system.NetworkState
 import com.tinkernorth.dish.source.system.NetworkStateObserver
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
@@ -151,6 +152,9 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
 
     private var btAdapterBannerId: Long? = null
     private var networkBannerId: Long? = null
+    private var localNetworkBannerId: Long? = null
+
+    private var localNetworkPrompted = false
 
     private var btPermissionSnackbar: Snackbar? = null
     private var btPermissionShownVariant: BluetoothPermissionBannerVariant? = null
@@ -204,6 +208,18 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
             }
             btRegistry.start(pending.tempId, pending.profile, pending.autoConnectMac)
             armDiscoverabilityExpiryTimer(pending.tempId)
+        }
+
+    private val localNetworkPermissionLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.RequestPermission(),
+        ) { granted ->
+            if (granted) {
+                dismissLocalNetworkBanner()
+                satellite.startDiscovery()
+            } else {
+                showLocalNetworkBanner()
+            }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -309,7 +325,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
 
     override fun onStart() {
         super.onStart()
-        satellite.startDiscovery()
+        ensureLocalNetworkThenDiscover()
     }
 
     private fun setupList() {
@@ -320,7 +336,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 R.string.action_scan,
                 secondaryActionLabel = R.string.action_add,
                 onSecondaryAction = ::showAddSatelliteDialog,
-            ) { satellite.startDiscovery() }
+            ) { ensureLocalNetworkThenDiscover(userInitiated = true) }
         bluetoothHeader =
             SectionHeaderAdapter(
                 R.drawable.ic_bluetooth,
@@ -964,6 +980,50 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                         durationMs = DishNotification.DURATION_PERSISTENT,
                     )
             }
+    }
+
+    private fun ensureLocalNetworkThenDiscover(userInitiated: Boolean = false) {
+        if (LocalNetworkAccess.isGranted(this)) {
+            dismissLocalNetworkBanner()
+            satellite.startDiscovery()
+            return
+        }
+        if (userInitiated || !localNetworkPrompted) {
+            localNetworkPrompted = true
+            localNetworkPermissionLauncher.launch(LocalNetworkAccess.PERMISSION)
+        } else {
+            showLocalNetworkBanner()
+        }
+    }
+
+    private fun showLocalNetworkBanner() {
+        if (localNetworkBannerId != null) return
+        localNetworkBannerId =
+            notifications.warn(
+                glyph = R.drawable.ic_satellite_off,
+                title = getString(R.string.notif_local_network_title),
+                body = getString(R.string.notif_local_network_body),
+                action =
+                    DishNotification.Action(
+                        label = getString(R.string.action_open_settings),
+                    ) { openAppDetailsSettings() },
+                key = "local-network-permission",
+                durationMs = DishNotification.DURATION_PERSISTENT,
+            )
+    }
+
+    private fun dismissLocalNetworkBanner() {
+        localNetworkBannerId?.let { notifications.dismiss(it) }
+        localNetworkBannerId = null
+    }
+
+    private fun openAppDetailsSettings() {
+        val intent =
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = "package:$packageName".toUri()
+            }
+        runCatching { startActivity(intent) }
+            .onFailure { startActivity(Intent(Settings.ACTION_SETTINGS)) }
     }
 
     private fun armDiscoverabilityExpiryTimer(connId: String) {

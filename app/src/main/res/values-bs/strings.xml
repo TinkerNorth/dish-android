@@ -214,6 +214,8 @@
     <string name="notif_no_network_body">Povežite se na isti Wi-Fi kao i vaš satelit.</string>
     <string name="notif_cellular_only_title">Samo mobilni podaci</string>
     <string name="notif_cellular_only_body">Sateliti žive na vašem Wi-Fi LAN-u, ne na mobilnim podacima.</string>
+    <string name="notif_local_network_title">Potreban pristup lokalnoj mreži</string>
+    <string name="notif_local_network_body">Dish pronalazi satelite na vašem Wi-Fi-ju i povezuje se s njima. Dozvolite pristup lokalnoj mreži za skeniranje.</string>
     <string name="notif_bind_first_title">Prvo povežite jednu vezu</string>
     <string name="notif_pairing_needed_title">Potrebno uparivanje</string>
     <string name="notif_pairing_needed_body">Otvorite Veze da unesete PIN za %1$s.</string>

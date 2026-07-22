@@ -12,10 +12,13 @@ import com.tinkernorth.dish.core.net.HttpReply
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedSatellite
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
+import com.tinkernorth.dish.source.system.LocalNetworkAccess
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
 import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
@@ -428,6 +431,23 @@ class SatelliteConnectionManagerTest {
             scope.testScheduler.advanceUntilIdle()
 
             assertTrue(events.any { it is ConnectionEvent.Error })
+        }
+
+    @Test
+    fun `AUTO_RECONNECT is refused before any handshake when local network access is missing`() =
+        runMgrTest { mgr, _ ->
+            mockkObject(LocalNetworkAccess)
+            every { LocalNetworkAccess.isGranted(any(), any()) } returns false
+            try {
+                mgr.connect(server, ConnectIntent.AUTO_RECONNECT)
+                scope.testScheduler.advanceUntilIdle()
+
+                coVerify(exactly = 0) { discoveryRepo.pair(any(), any(), any(), any(), any()) }
+                verify(exactly = 0) { controllerRepo.openSocket(any(), any()) }
+                assertNull(mgr.get(serverId))
+            } finally {
+                unmockkObject(LocalNetworkAccess)
+            }
         }
 
     @Test

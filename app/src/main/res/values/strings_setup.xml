@@ -75,6 +75,7 @@
     <string name="setup_conn_status_needs_pairing">Needs pairing, PIN</string>
     <string name="setup_conn_status_connected">Connected</string>
     <string name="setup_conn_status_reconnecting">Reconnecting</string>
+    <string name="setup_conn_local_network_denied">Dish needs local network access to find satellites on your Wi-Fi. Allow it to continue.</string>
     <string name="setup_conn_missing_title">Don\'t see your PC?</string>
     <string name="setup_conn_missing_body">Install the free Satellite app on it.</string>
     <string name="setup_conn_get_satellite">Get Satellite on GitHub</string>
