@@ -30,6 +30,7 @@ import com.tinkernorth.dish.source.lowpower.LowPowerSignal
 import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.source.system.LocalNetworkAccess
+import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.DishSpinnerDrawable
@@ -293,6 +294,10 @@ class MainActivity :
         val cid = slot.boundConnectionId ?: return
         if (state.touchpadBySlot[slotId]?.openable != true) return
         nav.toTouchpad(connectionId = cid, slotId = slotId)
+    }
+
+    override fun onSwitchToDirect(slotId: String) {
+        viewModel.setInputPath(slotId, PathChoice.Direct)
     }
 
     override fun onOpenGamepad(slotId: String) {

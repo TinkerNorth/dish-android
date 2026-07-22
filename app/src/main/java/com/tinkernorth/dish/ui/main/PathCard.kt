@@ -38,6 +38,7 @@ data class PathCard(
     val restoreStuck: Boolean = false,
     // Why the last Direct claim failed, when not already covered by needsReplug/restoreStuck.
     val failure: DirectClaimFailure? = null,
+    val suggestDirectForTouch: Boolean = false,
 )
 
 object PathCardMapper {
@@ -53,6 +54,7 @@ object PathCardMapper {
         needsReplug: Boolean = false,
         restoreStuck: Boolean = false,
         directFailure: DirectClaimFailure? = null,
+        padHasTouchpad: Boolean = false,
     ): PathCard {
         // The card reflects the mode the controller is ACTUALLY in: Direct only when a synthetic is live
         // (claimed, not mid-release, not stuck). Badge and toggle both derive from this so they can never
@@ -64,6 +66,16 @@ object PathCardMapper {
                 !recognized -> PathRisk.GuessedLayout
                 else -> PathRisk.None
             }
+        // A pad's own trackpad streams only on Direct and has no phone-overlay fallback: nudge only when
+        // cleanly on Standard USB with Direct actually reachable (a recent failure is left to settle first).
+        val suggestDirectForTouch =
+            padHasTouchpad &&
+                transport == Transport.Usb &&
+                !isClaimedDirect &&
+                !restoring &&
+                !restoreStuck &&
+                !needsReplug &&
+                directFailure == null
         return PathCard(
             currentMode = if (onDirect) InputPathMode.Direct else InputPathMode.Standard,
             selected = if (onDirect) PathChoice.Direct else PathChoice.Standard,
@@ -78,6 +90,7 @@ object PathCardMapper {
             needsReplug = needsReplug,
             restoreStuck = restoreStuck,
             failure = directFailure,
+            suggestDirectForTouch = suggestDirectForTouch,
         )
     }
 }

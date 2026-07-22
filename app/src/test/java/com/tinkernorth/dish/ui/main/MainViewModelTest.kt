@@ -472,6 +472,49 @@ class MainViewModelTest {
         }
 
     @Test
+    fun `a routed touch-capable usb pad surfaces a direct suggestion on its card`() =
+        runTest(dispatcher) {
+            every { native.modelHasTouchpad(0x054C, 0x09CC) } returns true
+            devicesFlow.value = mapOf(80 to routed(80, 0x054C, 0x09CC))
+            dispatcher.scheduler.runCurrent()
+
+            val card = vm.uiState.value.pathCards["80"]
+            assertTrue(card?.suggestDirectForTouch == true)
+        }
+
+    @Test
+    fun `a routed pad with no trackpad gets no direct suggestion`() =
+        runTest(dispatcher) {
+            devicesFlow.value = mapOf(81 to routed(81, 0x045E, 0x028E))
+            dispatcher.scheduler.runCurrent()
+
+            val card = vm.uiState.value.pathCards["81"]
+            assertEquals(false, card?.suggestDirectForTouch)
+        }
+
+    @Test
+    fun `a touch-capable pad already on direct gets no suggestion`() =
+        runTest(dispatcher) {
+            every { native.modelHasTouchpad(0x054C, 0x09CC) } returns true
+            devicesFlow.value = mapOf(-2000 to synthetic(-2000, 0x054C, 0x09CC))
+            dispatcher.scheduler.runCurrent()
+
+            val card = vm.uiState.value.pathCards["-2000"]
+            assertEquals(false, card?.suggestDirectForTouch)
+        }
+
+    @Test
+    fun `a bluetooth touch-capable pad gets no direct suggestion`() =
+        runTest(dispatcher) {
+            every { native.modelHasTouchpad(0x054C, 0x09CC) } returns true
+            devicesFlow.value = mapOf(82 to routed(82, 0x054C, 0x09CC, transport = Transport.Bluetooth))
+            dispatcher.scheduler.runCurrent()
+
+            val card = vm.uiState.value.pathCards["82"]
+            assertEquals(false, card?.suggestDirectForTouch)
+        }
+
+    @Test
     fun `the virtual slot has no path card`() =
         runTest(dispatcher) {
             dispatcher.scheduler.runCurrent()
