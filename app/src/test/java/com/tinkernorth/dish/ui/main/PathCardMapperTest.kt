@@ -23,6 +23,7 @@ class PathCardMapperTest {
         needsReplug: Boolean = false,
         restoreStuck: Boolean = false,
         directFailure: DirectClaimFailure? = null,
+        padHasTouchpad: Boolean = false,
     ) = PathCardMapper.map(
         isClaimedDirect = isClaimedDirect,
         transport = transport,
@@ -34,6 +35,7 @@ class PathCardMapperTest {
         needsReplug = needsReplug,
         restoreStuck = restoreStuck,
         directFailure = directFailure,
+        padHasTouchpad = padHasTouchpad,
     )
 
     @Test
@@ -115,5 +117,44 @@ class PathCardMapperTest {
         assertTrue(map(restoreStuck = true).restoreStuck)
         assertFalse(map().restoreStuck)
         assertTrue(map(needsReplug = true).needsReplug)
+    }
+
+    @Test
+    fun `a touch-capable usb pad on standard suggests switching to direct`() {
+        assertTrue(map(padHasTouchpad = true).suggestDirectForTouch)
+    }
+
+    @Test
+    fun `a pad with no trackpad never suggests direct`() {
+        assertFalse(map(padHasTouchpad = false).suggestDirectForTouch)
+    }
+
+    @Test
+    fun `a pad already claimed on direct does not suggest direct`() {
+        assertFalse(map(padHasTouchpad = true, isClaimedDirect = true).suggestDirectForTouch)
+    }
+
+    @Test
+    fun `a bluetooth trackpad pad does not suggest direct because bluetooth has no direct path`() {
+        assertFalse(map(padHasTouchpad = true, transport = Transport.Bluetooth).suggestDirectForTouch)
+    }
+
+    @Test
+    fun `transient path states suppress the direct suggestion`() {
+        assertFalse(map(padHasTouchpad = true, restoring = true).suggestDirectForTouch)
+        assertFalse(map(padHasTouchpad = true, restoreStuck = true).suggestDirectForTouch)
+        assertFalse(map(padHasTouchpad = true, needsReplug = true).suggestDirectForTouch)
+    }
+
+    @Test
+    fun `a recent direct claim failure suppresses the suggestion until it settles`() {
+        assertFalse(
+            map(padHasTouchpad = true, directFailure = DirectClaimFailure.PermissionDenied).suggestDirectForTouch,
+        )
+    }
+
+    @Test
+    fun `the direct suggestion defaults off`() {
+        assertFalse(map().suggestDirectForTouch)
     }
 }
