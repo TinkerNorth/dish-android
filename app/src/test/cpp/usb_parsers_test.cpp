@@ -655,3 +655,40 @@ TEST(TouchpadCapability, PlayStationParsersHaveTouchpads) {
     EXPECT_FALSE(usbparsers::parserHasTouchpad(Parser::SWITCH_PRO_USB));
     EXPECT_FALSE(usbparsers::parserHasTouchpad(Parser::GENERIC_HID_GAMEPAD));
 }
+
+TEST(ClassifyDevice, KnownDeviceWinsOverDescriptorTriple) {
+    auto c = usbparsers::classifyDevice(0x045E, 0x028E, 0x00, 0x00, 0x00);
+    EXPECT_EQ(c.parser, Parser::XINPUT_360);
+    EXPECT_NE(c.name, nullptr);
+}
+
+TEST(ClassifyDevice, WiredXInputInterfaceClassifiesWithoutTableEntry) {
+    auto c = usbparsers::classifyDevice(0x1234, 0x5678, 0xFF, 0x5D, 0x01);
+    EXPECT_EQ(c.parser, Parser::XINPUT_360);
+    EXPECT_EQ(c.init, InitKind::NONE);
+    EXPECT_EQ(c.name, nullptr);
+}
+
+TEST(ClassifyDevice, EightBitDoDongleTripleClassifiesAsXInput) {
+    // 0xFFFF stands in for the unlisted 2.4g dongle PID: only the descriptor can classify it.
+    auto c = usbparsers::classifyDevice(0x2DC8, 0xFFFF, 0xFF, 0x5D, 0x01);
+    EXPECT_EQ(c.parser, Parser::XINPUT_360);
+    EXPECT_EQ(c.init, InitKind::NONE);
+}
+
+TEST(ClassifyDevice, GipInterfaceClassifiesAsXboxOneWithPowerOn) {
+    auto c = usbparsers::classifyDevice(0x1234, 0x5678, 0xFF, 0x47, 0xD0);
+    EXPECT_EQ(c.parser, Parser::XBOX_ONE_GIP);
+    EXPECT_EQ(c.init, InitKind::XBOX_ONE_POWERON);
+}
+
+TEST(ClassifyDevice, HidInterfaceClassifiesAsGenericHid) {
+    auto c = usbparsers::classifyDevice(0x1234, 0x5678, 0x03, 0x00, 0x00);
+    EXPECT_EQ(c.parser, Parser::GENERIC_HID_GAMEPAD);
+    EXPECT_EQ(c.init, InitKind::NONE);
+}
+
+TEST(ClassifyDevice, UnknownVendorInterfaceFallsBackToGeneric) {
+    auto c = usbparsers::classifyDevice(0x1234, 0x5678, 0xFF, 0x99, 0x99);
+    EXPECT_EQ(c.parser, Parser::GENERIC_HID_GAMEPAD);
+}
