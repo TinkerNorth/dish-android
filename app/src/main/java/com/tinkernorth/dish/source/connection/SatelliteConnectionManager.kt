@@ -22,6 +22,7 @@ import com.tinkernorth.dish.di.IoDispatcher
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedSatellite
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
+import com.tinkernorth.dish.source.system.LocalNetworkAccess
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -213,6 +214,9 @@ class SatelliteConnectionManager
             server: DiscoveredServer,
             intent: ConnectIntent = ConnectIntent.USER_INITIATED,
         ) {
+            // Android 17 blocks the LAN sockets until ACCESS_LOCAL_NETWORK is granted; only a
+            // user-initiated connect (from a screen that prompts) may attempt before the grant.
+            if (intent != ConnectIntent.USER_INITIATED && !LocalNetworkAccess.isGranted(context)) return
             val id = SatelliteConnection.idFor(server)
             if (intent == ConnectIntent.USER_INITIATED) retryAttempts.remove(id)
             // Atomic find-or-create: prevents two concurrent first-time connects allocating duplicates.
