@@ -214,8 +214,7 @@ class SatelliteConnectionManager
             server: DiscoveredServer,
             intent: ConnectIntent = ConnectIntent.USER_INITIATED,
         ) {
-            // Android 17 blocks the LAN sockets until ACCESS_LOCAL_NETWORK is granted; only a
-            // user-initiated connect (from a screen that prompts) may attempt before the grant.
+            // Only user-initiated connects (which prompt) may open LAN sockets before the Android 17 grant.
             if (intent != ConnectIntent.USER_INITIATED && !LocalNetworkAccess.isGranted(context)) return
             val id = SatelliteConnection.idFor(server)
             if (intent == ConnectIntent.USER_INITIATED) retryAttempts.remove(id)

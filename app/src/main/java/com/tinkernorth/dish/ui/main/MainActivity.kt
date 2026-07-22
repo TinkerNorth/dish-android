@@ -153,8 +153,7 @@ class MainActivity :
         }
     }
 
-    // Foreground auto-reconnect (ConnectionForegroundObserver) runs off an Activity and can't prompt,
-    // so ask here — otherwise a remembered satellite fails silently on Android 17.
+    // The reconnect observer runs off an Activity and can't prompt; ask here or Android 17 fails it silently.
     private fun ensureLocalNetworkForReconnect() {
         if (localNetworkRequested || LocalNetworkAccess.isGranted(this)) return
         if (satellite.remembered().isEmpty()) return

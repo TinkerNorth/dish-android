@@ -154,7 +154,6 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     private var networkBannerId: Long? = null
     private var localNetworkBannerId: Long? = null
 
-    // Ask once per screen entry (Android 17+); after that the banner is the way back in.
     private var localNetworkPrompted = false
 
     private var btPermissionSnackbar: Snackbar? = null
@@ -983,7 +982,6 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
             }
     }
 
-    // Android 17+ blocks the scan until ACCESS_LOCAL_NETWORK is granted; deny falls back to the banner.
     private fun ensureLocalNetworkThenDiscover(userInitiated: Boolean = false) {
         if (LocalNetworkAccess.isGranted(this)) {
             dismissLocalNetworkBanner()

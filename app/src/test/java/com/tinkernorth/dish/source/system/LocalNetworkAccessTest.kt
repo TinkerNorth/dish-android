@@ -26,7 +26,6 @@ class LocalNetworkAccessTest {
 
     @Test
     fun `permission is the platform ACCESS_LOCAL_NETWORK string`() {
-        // Must match the manifest declaration verbatim.
         assertEquals("android.permission.ACCESS_LOCAL_NETWORK", LocalNetworkAccess.PERMISSION)
     }
 
@@ -42,7 +41,6 @@ class LocalNetworkAccessTest {
     fun `pre-enforcement OS is granted without checking the runtime permission`() {
         mockkStatic(ContextCompat::class)
         assertTrue(LocalNetworkAccess.isGranted(context, sdkInt = 36))
-        // Older OSes have implicit LAN access via INTERNET, so we must not gate on the grant.
         verify(exactly = 0) { ContextCompat.checkSelfPermission(any(), any()) }
     }
 

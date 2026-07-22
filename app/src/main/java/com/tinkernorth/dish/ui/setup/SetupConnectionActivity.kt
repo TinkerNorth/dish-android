@@ -54,7 +54,6 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
     private var pinDialog: PairPinDialog? = null
     private var pairingServer: DiscoveredServer? = null
 
-    // Pending action resumed when the grant returns (mirrors onDiscoverableResult).
     private var onLocalNetworkGranted: (() -> Unit)? = null
 
     private val localNetworkPermissionLauncher =
@@ -227,8 +226,7 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
         startActivity(Intent(Intent.ACTION_VIEW, getString(R.string.url_github).toUri()))
     }
 
-    // Request before scanning so a pre-grant (blocked) scan can't shadow the real one via
-    // the manager's single-flight guard.
+    // Request before scanning: a pre-grant blocked scan would shadow the real one via the single-flight guard.
     private fun withLocalNetwork(action: () -> Unit) {
         if (LocalNetworkAccess.isGranted(this)) {
             action()
