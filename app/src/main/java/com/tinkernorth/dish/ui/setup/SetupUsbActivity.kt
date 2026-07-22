@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.view.View
 import androidx.activity.addCallback
 import androidx.activity.viewModels
+import androidx.annotation.StringRes
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -13,6 +14,7 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivitySetupUsbBinding
 import com.tinkernorth.dish.databinding.SetupChoiceRowBinding
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
+import com.tinkernorth.dish.source.usb.DirectClaimFailure
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.setupDishToolbar
@@ -58,6 +60,7 @@ class SetupUsbActivity : BaseGamepadHostActivity() {
                     when (event) {
                         is SetupUsbViewModel.Event.Proceed ->
                             nav.toSetupConnection(SetupFlow.INPUT_USB, event.slotId)
+                        is SetupUsbViewModel.Event.Recover -> showRecovery(event.reason)
                     }
                 }
             }
@@ -119,6 +122,27 @@ class SetupUsbActivity : BaseGamepadHostActivity() {
     private fun handleBack() {
         if (!viewModel.back()) finish()
     }
+
+    // Retry re-runs whichever mode the user is on (Direct from the grant step, Standard otherwise);
+    // start over / exit are handled by the dialog.
+    private fun showRecovery(reason: DirectClaimFailure?) {
+        val message = reason?.let { getString(reasonText(it)) }
+        SetupErrorDialog.show(this, message) {
+            when (viewModel.state.value.stage) {
+                SetupUsbViewModel.Stage.GRANTING -> viewModel.showPrompt()
+                else -> viewModel.chooseStandard()
+            }
+        }
+    }
+
+    @StringRes
+    private fun reasonText(reason: DirectClaimFailure): Int =
+        when (reason) {
+            DirectClaimFailure.Busy -> R.string.path_reason_busy
+            DirectClaimFailure.InitFailed -> R.string.path_reason_init_failed
+            DirectClaimFailure.PermissionDenied -> R.string.path_reason_permission_denied
+            DirectClaimFailure.Dropped -> R.string.path_needs_replug
+        }
 
     private fun visibleIf(condition: Boolean): Int = if (condition) View.VISIBLE else View.GONE
 }
