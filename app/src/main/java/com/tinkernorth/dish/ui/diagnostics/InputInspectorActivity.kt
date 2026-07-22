@@ -8,13 +8,17 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
+import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.databinding.ActivityInputInspectorBinding
 import com.tinkernorth.dish.hotpath.input.RumbleRouter
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
@@ -25,6 +29,8 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
     @Inject lateinit var physicalInputNative: PhysicalInputNative
 
     @Inject lateinit var rumbleRouter: RumbleRouter
+
+    @Inject lateinit var capabilityComposer: CapabilityComposer
 
     @Inject lateinit var json: Json
 
@@ -58,6 +64,25 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
         binding.btnRumbleBoth.setOnClickListener { buzz(strong = TEST_MAGNITUDE, weak = TEST_MAGNITUDE) }
 
         pollWhileStarted()
+        gateRumbleControls()
+    }
+
+    // Dead when the slot's path can't actuate rumble, so the buttons never imply feedback that won't fire.
+    private fun gateRumbleControls() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                capabilityComposer.state
+                    .map { it[deviceId.toString()]?.inputOk(Feature.RUMBLE) ?: false }
+                    .distinctUntilChanged()
+                    .collect { canRumble ->
+                        for (button in listOf(binding.btnRumbleWeak, binding.btnRumbleStrong, binding.btnRumbleBoth)) {
+                            button.isEnabled = canRumble
+                            // The Dish button styles don't grey their fill on disable, so dim explicitly.
+                            button.alpha = if (canRumble) 1f else DISABLED_BUTTON_ALPHA
+                        }
+                    }
+            }
+        }
     }
 
     override fun onStart() {
@@ -199,6 +224,9 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
         private const val RANGE_CAPTURE_MS = 8000L
         private const val TEST_MAGNITUDE = 48000
         private const val TEST_BUZZ_MS = 400
+
+        // Material disabled emphasis; the Dish button styles don't dim their own fill.
+        private const val DISABLED_BUTTON_ALPHA = 0.38f
 
         // Wire scales (contract): gyro full scale 2000 deg/s, accel full scale 4 g.
         private const val GYRO_DPS_MAX = 2000f

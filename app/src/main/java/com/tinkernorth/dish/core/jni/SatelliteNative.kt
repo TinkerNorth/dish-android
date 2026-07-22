@@ -183,6 +183,11 @@ object SatelliteNative {
         productId: Int,
     ): Boolean
 
+    external fun modelFrameworkRumbleUnreliable(
+        vendorId: Int,
+        productId: Int,
+    ): Boolean
+
     // Parser-level: true for the DS4/DualSense report families whose touch bytes the
     // USB-direct path parses and streams.
     external fun modelHasTouchpad(

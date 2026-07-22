@@ -17,6 +17,7 @@ using usbparsers::decodeReport;
 using usbparsers::InitKind;
 using usbparsers::parsePsCalibration;
 using usbparsers::Parser;
+using usbparsers::parserFrameworkRumbleUnreliable;
 using usbparsers::parserHasImu;
 using usbparsers::parserHasRumble;
 using usbparsers::ParserState;
@@ -231,6 +232,18 @@ TEST(RumbleCapability, FamiliesWithoutBuildersReportFalse) {
     EXPECT_FALSE(parserHasRumble(Parser::STADIA));
     EXPECT_FALSE(parserHasRumble(Parser::GENERIC_HID_GAMEPAD));
     EXPECT_FALSE(parserHasRumble(Parser::NONE));
+}
+
+TEST(FrameworkRumble, SwitchProProtocolIsUnreliable) {
+    EXPECT_TRUE(parserFrameworkRumbleUnreliable(Parser::SWITCH_PRO_USB));
+}
+
+TEST(FrameworkRumble, OtherRumbleFamiliesAreTrusted) {
+    EXPECT_FALSE(parserFrameworkRumbleUnreliable(Parser::XINPUT_360));
+    EXPECT_FALSE(parserFrameworkRumbleUnreliable(Parser::XBOX_ONE_GIP));
+    EXPECT_FALSE(parserFrameworkRumbleUnreliable(Parser::DUALSHOCK4));
+    EXPECT_FALSE(parserFrameworkRumbleUnreliable(Parser::DUALSENSE));
+    EXPECT_FALSE(parserFrameworkRumbleUnreliable(Parser::NONE));
 }
 
 // Guards the refactor that moved I/O out: a non-Xbox decoder still works through decodeReport.

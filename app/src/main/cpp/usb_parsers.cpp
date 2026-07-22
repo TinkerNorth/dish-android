@@ -441,6 +441,10 @@ bool parserHasRumble(Parser p) {
     return false;
 }
 
+// Symptom-named (not just `== SWITCH_PRO_USB`) so the list can grow if another proprietary family
+// exposes the same phantom framework vibrator.
+bool parserFrameworkRumbleUnreliable(Parser p) { return p == Parser::SWITCH_PRO_USB; }
+
 // Parser-level like parserHasImu: every device speaking the DS4/DualSense report format carries
 // the touch bytes, even the licensed sticks whose "pad" is only a click button. Those simply
 // never report a contact, so nothing streams.

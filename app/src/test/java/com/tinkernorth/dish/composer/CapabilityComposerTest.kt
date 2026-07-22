@@ -166,8 +166,9 @@ class CapabilityComposerTest {
         }
 
     @Test
-    fun `physical slot controller layer unions Device caps with native model lookups`() =
+    fun `a framework pad trusts the OS probe and ignores the model DB`() =
         composerTest {
+            // Switch Pro USB on Standard: the model knows the motor, the framework exposes no actuator.
             val devices = MutableStateFlow(mapOf(9 to device(9, hasGyro = false, hasRumble = false)))
             val composer =
                 composerFor(
@@ -183,12 +184,108 @@ class CapabilityComposerTest {
             testScheduler.runCurrent()
 
             val controller = composer.capabilityFor("9").controller
-            // Device reports neither, but the native model DB does: the union wins.
-            assertTrue(Feature.MOTION in controller)
-            assertTrue(Feature.RUMBLE in controller)
-            // The phone screen sources touchpad and mouse alongside any physical pad.
+            assertFalse(Feature.MOTION in controller)
+            assertFalse(Feature.RUMBLE in controller)
+            // The phone screen still sources touchpad and mouse alongside any physical pad.
             assertTrue(Feature.TOUCHPAD in controller)
             assertTrue(Feature.MOUSE in controller)
+        }
+
+    @Test
+    fun `a framework pad advertises rumble and motion the OS probe confirms`() =
+        composerTest {
+            val devices = MutableStateFlow(mapOf(9 to device(9, hasGyro = true, hasRumble = true)))
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = devices,
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                    modelHasImu = false,
+                    modelHasRumble = false,
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            val controller = composer.capabilityFor("9").controller
+            assertTrue(Feature.MOTION in controller)
+            assertTrue(Feature.RUMBLE in controller)
+        }
+
+    @Test
+    fun `a USB-direct synthetic advertises rumble and motion from the model DB`() =
+        composerTest {
+            val devices =
+                MutableStateFlow(
+                    mapOf(-1000 to device(-1000, hasGyro = false, hasRumble = false, isUsbSynthetic = true)),
+                )
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = devices,
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                    modelHasImu = true,
+                    modelHasRumble = true,
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            val controller = composer.capabilityFor("-1000").controller
+            assertTrue(Feature.MOTION in controller)
+            assertTrue(Feature.RUMBLE in controller)
+        }
+
+    @Test
+    fun `a USB-direct synthetic whose model lacks feedback advertises neither`() =
+        composerTest {
+            val devices = MutableStateFlow(mapOf(-1000 to device(-1000, isUsbSynthetic = true)))
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = devices,
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                    modelHasImu = false,
+                    modelHasRumble = false,
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            val controller = composer.capabilityFor("-1000").controller
+            assertFalse(Feature.MOTION in controller)
+            assertFalse(Feature.RUMBLE in controller)
+        }
+
+    @Test
+    fun `capabilityForCandidate hides rumble for a Standard Switch Pro the framework cannot actuate`() =
+        composerTest {
+            // Type and host both carry rumble, so only the controller layer gates it off.
+            val devices =
+                MutableStateFlow(mapOf(7 to device(7, vendorId = 0x057E, productId = 0x2009, hasRumble = false)))
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = devices,
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                    modelHasRumble = true,
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            val caps =
+                composer.capabilityForCandidate(
+                    slotId = "7",
+                    candidateType = CONTROLLER_TYPE_PLAYSTATION,
+                    candidateHostKind = ConnectionKind.SATELLITE,
+                    candidateHostId = "sat-A",
+                )
+            assertFalse(caps.isAvailable(Feature.RUMBLE))
         }
 
     @Test

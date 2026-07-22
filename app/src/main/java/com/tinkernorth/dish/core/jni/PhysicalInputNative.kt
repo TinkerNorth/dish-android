@@ -24,6 +24,11 @@ class PhysicalInputNative
             productId: Int,
         ): Boolean = SatelliteNative.modelHasRumble(vendorId, productId)
 
+        fun modelFrameworkRumbleUnreliable(
+            vendorId: Int,
+            productId: Int,
+        ): Boolean = SatelliteNative.modelFrameworkRumbleUnreliable(vendorId, productId)
+
         fun modelHasTouchpad(
             vendorId: Int,
             productId: Int,

@@ -235,10 +235,17 @@ class CapabilityComposer
                 out += Feature.TOUCHPAD
                 out += Feature.MOUSE
             }
-            if (device.hasGyro || native.modelHasImu(device.vendorId, device.productId)) out += Feature.MOTION
-            if (device.hasRumble || native.modelHasRumble(device.vendorId, device.productId)) out += Feature.RUMBLE
+            if (deviceMotionAvailable(device)) out += Feature.MOTION
+            if (deviceRumbleAvailable(device)) out += Feature.RUMBLE
             return CapabilitySet(out)
         }
+
+        // A Direct synthetic has no framework InputDevice to probe, so its feedback comes from the native parser instead.
+        private fun deviceMotionAvailable(device: PhysicalGamepadRegistry.Device): Boolean =
+            if (device.isUsbSynthetic) native.modelHasImu(device.vendorId, device.productId) else device.hasGyro
+
+        private fun deviceRumbleAvailable(device: PhysicalGamepadRegistry.Device): Boolean =
+            if (device.isUsbSynthetic) native.modelHasRumble(device.vendorId, device.productId) else device.hasRumble
 
         private fun deviceTouchpadSource(device: PhysicalGamepadRegistry.Device): TouchpadSource =
             TouchpadRouting.sourceFor(
