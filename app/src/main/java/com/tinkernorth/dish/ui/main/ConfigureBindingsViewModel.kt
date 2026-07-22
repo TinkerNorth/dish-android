@@ -543,14 +543,15 @@ class ConfigureBindingsViewModel
             val isUsb = device?.transport != Transport.Bluetooth
             val vid = device?.vendorId ?: 0
             val pid = device?.productId ?: 0
+            val caps = capabilityComposer.capabilityFor(slotId)
             return BindingSnapshot(
                 slotId = slotId,
                 name = device?.name ?: "",
                 link = if (isUsb) BindingLink.USB else BindingLink.BLUETOOTH,
                 directCapable = isUsb,
                 directVerified = native.isKnownFastLaneModel(vid, pid),
-                hasRumble = (device?.hasRumble ?: false) || native.modelHasRumble(vid, pid),
-                hasGyro = (device?.hasGyro ?: false) || native.modelHasImu(vid, pid),
+                hasRumble = caps.inputOk(Feature.RUMBLE),
+                hasGyro = caps.inputOk(Feature.MOTION),
                 hasTouchpad = native.modelHasTouchpad(vid, pid),
                 bound = bound,
                 directPollHz = device?.pollRateHz ?: 0,
