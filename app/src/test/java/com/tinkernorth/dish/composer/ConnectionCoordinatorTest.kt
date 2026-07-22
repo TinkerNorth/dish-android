@@ -13,8 +13,11 @@ import com.tinkernorth.dish.source.connection.ConnectIntent
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.system.LocalNetworkAccess
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkAll
 import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,6 +26,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -79,6 +83,11 @@ class ConnectionCoordinatorTest {
         scope = TestScope(StandardTestDispatcher())
     }
 
+    @After
+    fun tearDown() {
+        unmockkAll()
+    }
+
     private fun fakeStringContext(): Context {
         val ctx = mockk<Context>(relaxed = true)
         every { ctx.getString(com.tinkernorth.dish.R.string.bt_transient_acquiring) } returns
@@ -131,6 +140,7 @@ class ConnectionCoordinatorTest {
                 hostRuntimeStore = hostRuntimeStore,
                 composer = composer,
                 gamepadRegistry = gamepadRegistry,
+                context = mockk(relaxed = true),
             )
         scope.testScheduler.runCurrent()
         return hub
@@ -575,6 +585,22 @@ class ConnectionCoordinatorTest {
         verify {
             satellite.connect(match { it.ip == "2.2.2.2" }, ConnectIntent.AUTO_RECONNECT)
         }
+    }
+
+    @Test
+    fun `autoReconnectAll skips satellites when local network access is missing`() {
+        mockkObject(LocalNetworkAccess)
+        every { LocalNetworkAccess.isGranted(any(), any()) } returns false
+        satEntriesFlow.value =
+            listOf(
+                RememberedSatellite(id = "s:idle", name = "I", ip = "2.2.2.2", udpPort = 4, pairPort = 5, httpPort = 6),
+            )
+        every { satellite.get("s:idle") } returns null
+        val hub = buildHub()
+
+        hub.autoReconnectAll()
+
+        verify(exactly = 0) { satellite.connect(any(), ConnectIntent.AUTO_RECONNECT) }
     }
 
     @Test

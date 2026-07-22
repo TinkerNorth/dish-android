@@ -2,6 +2,7 @@
 
 package com.tinkernorth.dish.composer
 
+import android.content.Context
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
@@ -12,6 +13,8 @@ import com.tinkernorth.dish.source.store.ControllerTypeStore
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.store.SatelliteHostRuntimeStore
 import com.tinkernorth.dish.source.store.SlotBindingStore
+import com.tinkernorth.dish.source.system.LocalNetworkAccess
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -39,6 +42,7 @@ data class ConnectionSummary(
 @Singleton
 class ConnectionCoordinator
     @Inject
+    @Suppress("LongParameterList")
     constructor(
         private val satellite: SatelliteConnectionManager,
         private val bt: BluetoothGamepadRegistry,
@@ -49,6 +53,7 @@ class ConnectionCoordinator
         private val hostRuntimeStore: SatelliteHostRuntimeStore,
         private val composer: ConnectionsComposer,
         private val gamepadRegistry: PhysicalGamepadRegistry,
+        @ApplicationContext private val context: Context,
     ) {
         val bindings: StateFlow<Map<String, String>> = bindingStore.state
         val satTypes: StateFlow<Map<Pair<String, String>, Int>> = typeStore.state
@@ -177,10 +182,14 @@ class ConnectionCoordinator
             }
 
         fun autoReconnectAll() {
-            for (remembered in store.remembered()) {
-                val existing = satellite.get(remembered.id)
-                if (existing?.state?.value != SatelliteSessionState.Live) {
-                    satellite.connect(remembered.toDiscovered(), ConnectIntent.AUTO_RECONNECT)
+            // Android 17 blocks the satellite sockets until ACCESS_LOCAL_NETWORK is granted, so a
+            // pre-grant attempt just fails with EPERM. An Activity requests it (Main/Connections/Setup).
+            if (LocalNetworkAccess.isGranted(context)) {
+                for (remembered in store.remembered()) {
+                    val existing = satellite.get(remembered.id)
+                    if (existing?.state?.value != SatelliteSessionState.Live) {
+                        satellite.connect(remembered.toDiscovered(), ConnectIntent.AUTO_RECONNECT)
+                    }
                 }
             }
             val btHosts = store.rememberedBt()

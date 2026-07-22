@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.widget.LinearLayout
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.isVisible
@@ -28,6 +29,7 @@ import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.lowpower.LowPowerSignal
 import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
+import com.tinkernorth.dish.source.system.LocalNetworkAccess
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.DishSpinnerDrawable
@@ -71,6 +73,26 @@ class MainActivity :
     private val connectionsSpinner by lazy {
         DishSpinnerDrawable(this, resources.getDimensionPixelSize(R.dimen.icon_battery))
     }
+
+    private var localNetworkRequested = false
+
+    private val localNetworkPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) {
+                hub.autoReconnectAll()
+            } else {
+                notifications.warn(
+                    glyph = R.drawable.ic_satellite_off,
+                    title = getString(R.string.notif_local_network_title),
+                    body = getString(R.string.notif_local_network_body),
+                    action =
+                        DishNotification.Action(
+                            label = getString(R.string.action_open),
+                        ) { nav.toConnections() },
+                    key = "local-network-permission",
+                )
+            }
+        }
 
     // Held by installSplashScreen()'s keep-on-screen gate; cleared either by the first
     // MainUiState render or the SPLASH_HOLD_MAX_MS fallback so a stalled ViewModel can't pin
@@ -127,7 +149,17 @@ class MainActivity :
         super.onResume()
         if (!com.tinkernorth.dish.DishApplication.nativeLoadFailed) {
             usbGamepadManager.reconcileForeground()
+            ensureLocalNetworkForReconnect()
         }
+    }
+
+    // Foreground auto-reconnect (ConnectionForegroundObserver) runs off an Activity and can't prompt,
+    // so ask here — otherwise a remembered satellite fails silently on Android 17.
+    private fun ensureLocalNetworkForReconnect() {
+        if (localNetworkRequested || LocalNetworkAccess.isGranted(this)) return
+        if (satellite.remembered().isEmpty()) return
+        localNetworkRequested = true
+        localNetworkPermissionLauncher.launch(LocalNetworkAccess.PERMISSION)
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
