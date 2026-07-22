@@ -44,6 +44,8 @@ interface SlotActionListener {
 
     fun onOpenTouchpad(slotId: String)
 
+    fun onSwitchToDirect(slotId: String)
+
     fun onManageDestinations()
 
     fun onReconnect(slotId: String)
@@ -323,24 +325,35 @@ class ControllerAdapter(
             }
 
             if (bound.kind == ConnectionKind.SATELLITE) {
-                val mode = row.touchpad?.mode ?: TouchpadModeValue.OFF
-                val valueRes =
-                    when (mode) {
-                        TouchpadModeValue.DS4 -> R.string.touchpad_mode_pad
-                        TouchpadModeValue.MOUSE -> R.string.touchpad_mode_mouse
-                        else -> R.string.touchpad_mode_off
-                    }
-                val label =
-                    ctx.getString(
-                        R.string.binding_func_value,
-                        ctx.getString(R.string.binding_func_touchpad),
-                        ctx.getString(valueRes),
-                    )
-                val icon = if (mode == TouchpadModeValue.MOUSE) R.drawable.ic_mouse else R.drawable.ic_touchpad
-                val tone = if (mode == TouchpadModeValue.OFF) PillTone.OFF else PillTone.ON
-                specs.add(PillSpec(label, icon, tone))
+                specs.add(touchpadFuncPill(row))
             }
             return specs
+        }
+
+        private fun touchpadFuncPill(row: Row): PillSpec {
+            val mode = row.touchpad?.mode ?: TouchpadModeValue.OFF
+            val needsDirect = row.pathCard?.suggestDirectForTouch == true
+            val valueRes =
+                when {
+                    needsDirect -> R.string.touchpad_mode_needs_direct
+                    mode == TouchpadModeValue.DS4 -> R.string.touchpad_mode_pad
+                    mode == TouchpadModeValue.MOUSE -> R.string.touchpad_mode_mouse
+                    else -> R.string.touchpad_mode_off
+                }
+            val label =
+                ctx.getString(
+                    R.string.binding_func_value,
+                    ctx.getString(R.string.binding_func_touchpad),
+                    ctx.getString(valueRes),
+                )
+            val icon = if (mode == TouchpadModeValue.MOUSE) R.drawable.ic_mouse else R.drawable.ic_touchpad
+            val tone =
+                when {
+                    needsDirect -> PillTone.WARN
+                    mode == TouchpadModeValue.OFF -> PillTone.OFF
+                    else -> PillTone.ON
+                }
+            return PillSpec(label, icon, tone)
         }
 
         private fun funcValue(
@@ -544,6 +557,15 @@ class ControllerAdapter(
                         kind = ActionKind.TOUCHPAD,
                     )
             }
+            if (bound.kind == ConnectionKind.SATELLITE && connected && row.pathCard?.suggestDirectForTouch == true) {
+                actions +=
+                    CardAction(
+                        R.drawable.ic_bolt,
+                        ctx.getString(R.string.card_switch_to_direct),
+                        outlined = false,
+                        kind = ActionKind.SWITCH_DIRECT,
+                    )
+            }
             actions +=
                 CardAction(
                     R.drawable.ic_tune,
@@ -561,6 +583,7 @@ class ControllerAdapter(
             when (kind) {
                 ActionKind.GAMEPAD -> listener.onOpenGamepad(slotId)
                 ActionKind.TOUCHPAD -> listener.onOpenTouchpad(slotId)
+                ActionKind.SWITCH_DIRECT -> listener.onSwitchToDirect(slotId)
                 ActionKind.CONFIGURE -> listener.onConfigure(slotId)
                 ActionKind.FIND_HOSTS -> listener.onManageDestinations()
             }
@@ -667,7 +690,7 @@ class ControllerAdapter(
         val kind: ActionKind,
     )
 
-    private enum class ActionKind { GAMEPAD, TOUCHPAD, CONFIGURE, FIND_HOSTS }
+    private enum class ActionKind { GAMEPAD, TOUCHPAD, SWITCH_DIRECT, CONFIGURE, FIND_HOSTS }
 
     private enum class EdgeState { NONE, HOST_LOST, INPUT_LOST, UNSTEADY }
 

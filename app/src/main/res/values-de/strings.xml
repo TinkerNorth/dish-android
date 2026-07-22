@@ -72,6 +72,8 @@
     <string name="touchpad_mode_off">Aus</string>
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Maus</string>
+    <string name="touchpad_mode_needs_direct">Direkt nötig</string>
+    <string name="card_switch_to_direct">Zu Direkt wechseln</string>
 
     <!-- Slot-Statustext im ControllerAdapter (unter dem Namen). -->
     <string name="slot_status_disconnecting">Trennt… %1$ds</string>

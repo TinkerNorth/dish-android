@@ -242,6 +242,7 @@ class MainViewModel
                 needsReplug = device.needsReplug,
                 restoreStuck = device.restoreStuck,
                 directFailure = device.directFailure,
+                padHasTouchpad = native.modelHasTouchpad(vid, pid),
             )
         }
 

@@ -73,6 +73,8 @@
     <string name="touchpad_mode_off">Désactivé</string>
     <string name="touchpad_mode_pad">Pavé</string>
     <string name="touchpad_mode_mouse">Souris</string>
+    <string name="touchpad_mode_needs_direct">Nécessite Direct</string>
+    <string name="card_switch_to_direct">Passer en Direct</string>
 
     <!-- Texte du statut de l\'emplacement dans ControllerAdapter (sous le nom). -->
     <string name="slot_status_disconnecting">Déconnexion… %1$ds</string>

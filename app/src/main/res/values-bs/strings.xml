@@ -73,6 +73,8 @@
     <string name="touchpad_mode_off">Isključeno</string>
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Miš</string>
+    <string name="touchpad_mode_needs_direct">Treba Brzi</string>
+    <string name="card_switch_to_direct">Prebaci na Brzi</string>
 
     <!-- Tekst statusa slota u ControllerAdapter (ispod imena). -->
     <string name="slot_status_disconnecting">Prekidanje veze… %1$ds</string>
