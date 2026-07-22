@@ -3,6 +3,7 @@
 package com.tinkernorth.dish.ui.setup
 
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
+import com.tinkernorth.dish.source.usb.DirectClaimFailure
 import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbController
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
@@ -58,6 +59,7 @@ class SetupUsbViewModelTest {
         frameworkId: Int? = null,
         syntheticId: Int? = null,
         desired: PathChoice = PathChoice.Standard,
+        failure: DirectClaimFailure? = null,
         vid: Int = VID,
         pid: Int = PID,
     ) = UsbController(
@@ -68,6 +70,7 @@ class SetupUsbViewModelTest {
         frameworkId = frameworkId,
         syntheticId = syntheticId,
         desired = desired,
+        failure = failure,
     )
 
     private fun present(
@@ -189,6 +192,155 @@ class SetupUsbViewModelTest {
             dispatcher.scheduler.runCurrent()
 
             assertEquals(listOf<SetupUsbViewModel.Event>(SetupUsbViewModel.Event.Proceed("50")), events)
+        }
+
+    @Test
+    fun `granting direct waits through the permission prompt instead of proceeding on the framework`() =
+        runTest(dispatcher) {
+            present(frameworkId = 50)
+            dispatcher.scheduler.runCurrent()
+            vm.selectController(key())
+            // Permission not granted yet: the FSM stays Routed with desired=Direct while the system
+            // prompt is up. The wizard must wait for the claim, not navigate on the Standard slot.
+            every { usb.setPathChoice(VID, PID, PathChoice.Direct) } answers {
+                controllers.value =
+                    mapOf(key() to controller(UsbPhase.Routed, frameworkId = 50, desired = PathChoice.Direct))
+            }
+            val events = collectEvents()
+
+            vm.showPrompt()
+            dispatcher.scheduler.runCurrent()
+            assertTrue("must not proceed on the framework slot before the claim resolves", events.isEmpty())
+
+            controllers.value =
+                mapOf(key() to controller(UsbPhase.Direct, syntheticId = -1000, desired = PathChoice.Direct))
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(listOf<SetupUsbViewModel.Event>(SetupUsbViewModel.Event.Proceed("-1000")), events)
+        }
+
+    @Test
+    fun `choosing standard recovers when no framework slot ever resolves`() =
+        runTest(dispatcher) {
+            present(frameworkId = null)
+            dispatcher.scheduler.runCurrent()
+            vm.selectController(key())
+            val events = collectEvents()
+
+            vm.chooseStandard()
+            dispatcher.scheduler.runCurrent()
+            assertTrue("waits rather than recovering before the timeout", events.isEmpty())
+
+            dispatcher.scheduler.advanceTimeBy(9_000)
+            dispatcher.scheduler.runCurrent()
+
+            verify { usb.setPathChoice(VID, PID, PathChoice.Standard) }
+            assertEquals(listOf<SetupUsbViewModel.Event>(SetupUsbViewModel.Event.Recover(null)), events)
+            assertFalse(vm.state.value.working)
+        }
+
+    @Test
+    fun `choosing standard proceeds once the framework device enumerates`() =
+        runTest(dispatcher) {
+            present(frameworkId = null)
+            dispatcher.scheduler.runCurrent()
+            vm.selectController(key())
+            val events = collectEvents()
+
+            vm.chooseStandard()
+            dispatcher.scheduler.runCurrent()
+            assertTrue("waits rather than recovering while the framework is still absent", events.isEmpty())
+
+            controllers.value = mapOf(key() to controller(UsbPhase.Routed, frameworkId = 77))
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(listOf<SetupUsbViewModel.Event>(SetupUsbViewModel.Event.Proceed("77")), events)
+        }
+
+    @Test
+    fun `granting direct recovers when it lands on needs-replug`() =
+        runTest(dispatcher) {
+            present(frameworkId = 50)
+            dispatcher.scheduler.runCurrent()
+            vm.selectController(key())
+            every { usb.setPathChoice(VID, PID, PathChoice.Direct) } answers {
+                controllers.value =
+                    mapOf(key() to controller(UsbPhase.NeedsReplug, failure = DirectClaimFailure.Dropped))
+            }
+            val events = collectEvents()
+
+            vm.showPrompt()
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(
+                listOf<SetupUsbViewModel.Event>(SetupUsbViewModel.Event.Recover(DirectClaimFailure.Dropped)),
+                events,
+            )
+            assertFalse(vm.state.value.working)
+        }
+
+    @Test
+    fun `granting direct recovers rather than proceeding on a restore-stuck placeholder`() =
+        runTest(dispatcher) {
+            present(frameworkId = 50)
+            dispatcher.scheduler.runCurrent()
+            vm.selectController(key())
+            every { usb.setPathChoice(VID, PID, PathChoice.Direct) } answers {
+                controllers.value = mapOf(key() to controller(UsbPhase.RestoreStuck, syntheticId = -2000))
+            }
+            val events = collectEvents()
+
+            vm.showPrompt()
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(listOf<SetupUsbViewModel.Event>(SetupUsbViewModel.Event.Recover(null)), events)
+        }
+
+    @Test
+    fun `a second path attempt is ignored while one is in flight`() =
+        runTest(dispatcher) {
+            present(frameworkId = 50)
+            dispatcher.scheduler.runCurrent()
+            vm.selectController(key())
+            every { usb.setPathChoice(VID, PID, PathChoice.Direct) } answers {
+                controllers.value = mapOf(key() to controller(UsbPhase.Claiming, desired = PathChoice.Direct))
+            }
+            val events = collectEvents()
+
+            vm.showPrompt()
+            dispatcher.scheduler.runCurrent()
+            vm.showPrompt()
+            dispatcher.scheduler.runCurrent()
+
+            controllers.value =
+                mapOf(key() to controller(UsbPhase.Direct, syntheticId = -1000, desired = PathChoice.Direct))
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(listOf<SetupUsbViewModel.Event>(SetupUsbViewModel.Event.Proceed("-1000")), events)
+            verify(exactly = 1) { usb.setPathChoice(VID, PID, PathChoice.Direct) }
+        }
+
+    @Test
+    fun `backing out during an in-flight wait suppresses navigation`() =
+        runTest(dispatcher) {
+            present(frameworkId = 50)
+            dispatcher.scheduler.runCurrent()
+            vm.selectController(key())
+            vm.chooseDirect()
+            every { usb.setPathChoice(VID, PID, PathChoice.Direct) } answers {
+                controllers.value = mapOf(key() to controller(UsbPhase.Claiming, desired = PathChoice.Direct))
+            }
+            val events = collectEvents()
+
+            vm.showPrompt()
+            dispatcher.scheduler.runCurrent()
+            assertTrue(vm.back())
+
+            controllers.value =
+                mapOf(key() to controller(UsbPhase.Direct, syntheticId = -1000, desired = PathChoice.Direct))
+            dispatcher.scheduler.runCurrent()
+
+            assertTrue("a cancelled wait must not navigate", events.isEmpty())
         }
 
     @Test
