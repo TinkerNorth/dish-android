@@ -54,8 +54,7 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
     private var pinDialog: PairPinDialog? = null
     private var pairingServer: DiscoveredServer? = null
 
-    // Mirrors ConnectionsActivity's onDiscoverableResult: the pending action runs when the
-    // grant returns, so the satellite-card tap and the Rescan button resume differently.
+    // Pending action resumed when the grant returns (mirrors onDiscoverableResult).
     private var onLocalNetworkGranted: (() -> Unit)? = null
 
     private val localNetworkPermissionLauncher =
@@ -228,10 +227,8 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
         startActivity(Intent(Intent.ACTION_VIEW, getString(R.string.url_github).toUri()))
     }
 
-    // Runs [action] once LAN access is available: immediately on older OSes or when already
-    // granted, otherwise after the Android 17 local-network prompt. Requesting before the
-    // scan avoids a pre-grant (blocked) scan shadowing the real one via the manager's
-    // single-flight guard.
+    // Request before scanning so a pre-grant (blocked) scan can't shadow the real one via
+    // the manager's single-flight guard.
     private fun withLocalNetwork(action: () -> Unit) {
         if (LocalNetworkAccess.isGranted(this)) {
             action()

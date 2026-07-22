@@ -154,8 +154,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     private var networkBannerId: Long? = null
     private var localNetworkBannerId: Long? = null
 
-    // Prompt for local-network access once per screen entry (Android 17+); after that the
-    // banner is the way back in, so returning to the screen doesn't re-fire the OS dialog.
+    // Ask once per screen entry (Android 17+); after that the banner is the way back in.
     private var localNetworkPrompted = false
 
     private var btPermissionSnackbar: Snackbar? = null
@@ -984,10 +983,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
             }
     }
 
-    // Local Network Protections (Android 17+): scanning for and connecting to a satellite
-    // are both LAN access, blocked until the user grants ACCESS_LOCAL_NETWORK. Ask on the
-    // first scan after entering the screen; if denied, a persistent banner explains the
-    // empty list and routes to app settings. On older OSes isGranted() is always true.
+    // Android 17+ blocks the scan until ACCESS_LOCAL_NETWORK is granted; deny falls back to the banner.
     private fun ensureLocalNetworkThenDiscover(userInitiated: Boolean = false) {
         if (LocalNetworkAccess.isGranted(this)) {
             dismissLocalNetworkBanner()
