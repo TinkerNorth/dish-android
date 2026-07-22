@@ -73,7 +73,7 @@
     <string name="touchpad_mode_off">Isključeno</string>
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Miš</string>
-    <string name="touchpad_mode_needs_direct">Treba Brzi</string>
+    <string name="touchpad_needs_direct">Dodirnoj ploči je potreban Brzi način</string>
     <string name="card_switch_to_direct">Prebaci na Brzi</string>
 
     <!-- Tekst statusa slota u ControllerAdapter (ispod imena). -->

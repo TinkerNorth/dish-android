@@ -331,13 +331,14 @@ class ControllerAdapter(
         }
 
         private fun touchpadFuncPill(row: Row): PillSpec {
+            if (row.pathCard?.suggestDirectForTouch == true) {
+                return PillSpec(ctx.getString(R.string.touchpad_needs_direct), R.drawable.ic_touchpad, PillTone.WARN)
+            }
             val mode = row.touchpad?.mode ?: TouchpadModeValue.OFF
-            val needsDirect = row.pathCard?.suggestDirectForTouch == true
             val valueRes =
-                when {
-                    needsDirect -> R.string.touchpad_mode_needs_direct
-                    mode == TouchpadModeValue.DS4 -> R.string.touchpad_mode_pad
-                    mode == TouchpadModeValue.MOUSE -> R.string.touchpad_mode_mouse
+                when (mode) {
+                    TouchpadModeValue.DS4 -> R.string.touchpad_mode_pad
+                    TouchpadModeValue.MOUSE -> R.string.touchpad_mode_mouse
                     else -> R.string.touchpad_mode_off
                 }
             val label =
@@ -347,12 +348,7 @@ class ControllerAdapter(
                     ctx.getString(valueRes),
                 )
             val icon = if (mode == TouchpadModeValue.MOUSE) R.drawable.ic_mouse else R.drawable.ic_touchpad
-            val tone =
-                when {
-                    needsDirect -> PillTone.WARN
-                    mode == TouchpadModeValue.OFF -> PillTone.OFF
-                    else -> PillTone.ON
-                }
+            val tone = if (mode == TouchpadModeValue.OFF) PillTone.OFF else PillTone.ON
             return PillSpec(label, icon, tone)
         }
 

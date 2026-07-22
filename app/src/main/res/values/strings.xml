@@ -94,7 +94,7 @@
     <string name="touchpad_mode_off">Off</string>
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Mouse</string>
-    <string name="touchpad_mode_needs_direct">Needs Direct</string>
+    <string name="touchpad_needs_direct">Trackpad needs Direct mode</string>
     <string name="card_switch_to_direct">Switch to Direct</string>
     <!-- ControllerAdapter slot-status text (renders below the slot name). -->
     <string name="slot_status_disconnecting">Disconnecting… %1$ds</string>

@@ -74,7 +74,7 @@
     <string name="touchpad_mode_off">Apagado</string>
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Ratón</string>
-    <string name="touchpad_mode_needs_direct">Requiere Directo</string>
+    <string name="touchpad_needs_direct">El panel táctil requiere el modo Directo</string>
     <string name="card_switch_to_direct">Cambiar a Directo</string>
 
     <!-- Texto de estado del slot en ControllerAdapter (bajo el nombre). -->
