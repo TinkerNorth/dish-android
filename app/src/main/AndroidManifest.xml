@@ -6,6 +6,12 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+
+    <!-- Android 17 (API 37) gates LAN access behind a runtime grant (Local Network
+         Protections). Satellite discovery is mDNS + UDP and the app connects directly
+         to the box, so it needs this. Older OSes get implicit access via INTERNET. -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- CONNECTED_DEVICE (not DATA_SYNC) fits a user-facing controller-to-host session. -->
