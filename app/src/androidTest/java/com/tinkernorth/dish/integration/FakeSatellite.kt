@@ -509,7 +509,7 @@ class FakeSatellite(
 
         val CATALOG_JSON =
             """
-            {"locale":"en","protocolVersion":1,"serverVersion":"1.6.0",
+            {"locale":"en","protocolVersion":1,"serverVersion":"1.6.0","catalogVersion":2,
              "controllerTypes":[
                {"id":0,"slug":"xbox360","name":"Xbox 360 Controller","shortName":"Xbox",
                 "description":"Best compatibility.",
