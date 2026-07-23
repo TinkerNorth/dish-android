@@ -334,6 +334,7 @@
     <string name="binding_apply_warn_title">Mode Direct indisponible</string>
     <string name="binding_apply_warn_detail">%1$s est lié à %2$s en mode Standard à la place.</string>
     <string name="binding_label_emulate">Émuler comme</string>
+    <string name="binding_emulate_load_failed">Impossible de charger les types. Appuyez pour réessayer</string>
     <string name="binding_label_functions">Fonctions</string>
     <string name="binding_label_input">Entrée</string>
     <string name="binding_label_binding">Liaison</string>

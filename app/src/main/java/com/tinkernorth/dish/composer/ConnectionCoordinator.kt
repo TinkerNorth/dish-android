@@ -4,6 +4,7 @@ package com.tinkernorth.dish.composer
 
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.repository.ConnectionStore
+import com.tinkernorth.dish.repository.SatelliteCatalogRepository
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.connection.ConnectIntent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
@@ -12,7 +13,13 @@ import com.tinkernorth.dish.source.store.ControllerTypeStore
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.store.SatelliteHostRuntimeStore
 import com.tinkernorth.dish.source.store.SlotBindingStore
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -41,6 +48,7 @@ data class ConnectionSummary(
 @Singleton
 class ConnectionCoordinator
     @Inject
+    @Suppress("LongParameterList")
     constructor(
         private val satellite: SatelliteConnectionManager,
         private val bt: BluetoothGamepadRegistry,
@@ -51,11 +59,32 @@ class ConnectionCoordinator
         private val hostRuntimeStore: SatelliteHostRuntimeStore,
         private val composer: ConnectionsComposer,
         private val gamepadRegistry: PhysicalGamepadRegistry,
+        private val catalogRepo: SatelliteCatalogRepository,
+        private val scope: CoroutineScope,
     ) {
         val bindings: StateFlow<Map<String, String>> = bindingStore.state
         val satTypes: StateFlow<Map<Pair<String, String>, Int>> = typeStore.state
 
         val connections: StateFlow<List<ConnectionSummary>> = composer.state
+
+        // Warm each satellite's controller-type catalog once its link goes Live (TOFU pinned), so the
+        // configure screen resolves the "Emulate as" type from cache instead of a loader. Observes the
+        // raw connection states, NOT the composed `connections`: collecting the composer's own output
+        // back into its scope perturbs its flatMapLatest. catalogFor caches + ETag-dedupes.
+        private val catalogWarmed = ConcurrentHashMap.newKeySet<String>()
+
+        init {
+            satellite.connections
+                .onEach { conns ->
+                    for ((id, conn) in conns) {
+                        if (!catalogWarmed.add(id)) continue
+                        scope.launch {
+                            conn.state.first { it == SatelliteSessionState.Live }
+                            catalogRepo.catalogFor(conn.server.value, id)
+                        }
+                    }
+                }.launchIn(scope)
+        }
 
         fun summary(id: String): ConnectionSummary? = connections.value.firstOrNull { it.id == id }
 

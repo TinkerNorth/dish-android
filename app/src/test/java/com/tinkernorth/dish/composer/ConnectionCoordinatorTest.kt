@@ -7,6 +7,7 @@ import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedBt
 import com.tinkernorth.dish.repository.RememberedSatellite
+import com.tinkernorth.dish.repository.SatelliteCatalogRepository
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.bluetooth.BtStaleReason
 import com.tinkernorth.dish.source.connection.ConnectIntent
@@ -37,6 +38,7 @@ class ConnectionCoordinatorTest {
     private lateinit var hostFeaturesStore: com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
     private lateinit var hostRuntimeStore: com.tinkernorth.dish.source.store.SatelliteHostRuntimeStore
     private lateinit var gamepadRegistry: com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
+    private lateinit var catalogRepo: SatelliteCatalogRepository
     private lateinit var scope: TestScope
 
     private val satConnsFlow = MutableStateFlow<Map<String, SatelliteConnection>>(emptyMap())
@@ -76,6 +78,7 @@ class ConnectionCoordinatorTest {
         every { store.rememberedBtFlow } returns btEntriesFlow
         every { store.remembered() } answers { satEntriesFlow.value }
         every { store.rememberedBt() } answers { btEntriesFlow.value }
+        catalogRepo = mockk(relaxed = true)
         scope = TestScope(StandardTestDispatcher())
     }
 
@@ -131,6 +134,8 @@ class ConnectionCoordinatorTest {
                 hostRuntimeStore = hostRuntimeStore,
                 composer = composer,
                 gamepadRegistry = gamepadRegistry,
+                catalogRepo = catalogRepo,
+                scope = scope,
             )
         scope.testScheduler.runCurrent()
         return hub

@@ -88,14 +88,13 @@ data class TypeOption(
 
 data class BindingDraft(
     val hostId: String?,
-    val type: Int,
+    // null until the host's catalog resolves the type (or a remembered/manual pick sets it); never a
+    // guessed default, so the configure screen shows a loader instead of a wrong type for a satellite.
+    val type: Int?,
     val directOn: Boolean,
     val motionOn: Boolean,
     val touchpadMode: String,
     val rumbleOn: Boolean = true,
-    // While true, [type] is only the offline seed and still yields to the catalog's first
-    // offered type; a remembered binding or a manual pick sets it false so neither is clobbered.
-    val typeIsSeedDefault: Boolean = false,
 )
 
 sealed interface BindingBlocker {
@@ -109,6 +108,17 @@ sealed interface BindingBlocker {
     data object HostUnsteady : BindingBlocker
 }
 
+// The "Emulate as" type is host-owned: a satellite host resolves it from the catalog, so the
+// configure screen shows a loader until it arrives (Error → tap-to-retry) rather than a guessed
+// default. A Bluetooth host is always Ready (its type is profile-driven).
+sealed interface TypeLoad {
+    data object Loading : TypeLoad
+
+    data object Ready : TypeLoad
+
+    data object Error : TypeLoad
+}
+
 data class ConfigUiState(
     val loaded: Boolean = false,
     val snapshot: BindingSnapshot? = null,
@@ -120,10 +130,27 @@ data class ConfigUiState(
     val controllerPresent: Boolean = true,
     val dismissedUnsteadyHostIds: Set<String> = emptySet(),
     val capabilities: SlotCapabilities = SlotCapabilities.NONE,
+    // Set only when a satellite catalog fetch failed with nothing cached, so Loading (fetch in
+    // flight) and Error (fetch failed) are distinguishable — neither is derivable from the draft alone.
+    val typeFetchFailed: Boolean = false,
 ) {
     val selectedHost: BindingHost? get() = hosts.firstOrNull { it.id == draft?.hostId }
     val noHosts: Boolean get() = hosts.isEmpty()
     val hostChosen: Boolean get() = selectedHost != null
+
+    // A Bluetooth host is profile-driven (always Ready); a resolved type (remembered/manual/catalog)
+    // is Ready; a failed fetch with nothing cached is Error; otherwise the catalog is still loading.
+    val typeLoad: TypeLoad
+        get() =
+            when {
+                isBluetoothHost -> TypeLoad.Ready
+                draft?.type != null -> TypeLoad.Ready
+                typeFetchFailed -> TypeLoad.Error
+                else -> TypeLoad.Loading
+            }
+
+    // Apply must never send an unresolved type: a satellite host needs its type resolved first.
+    val canApply: Boolean get() = hostChosen && (isBluetoothHost || draft?.type != null)
 
     val blocker: BindingBlocker?
         get() {
@@ -248,7 +275,13 @@ class ConfigureBindingsViewModel
             refreshTypeOptions(hostId)
         }
 
-        fun setType(type: Int) = _ui.update { it.copy(draft = it.draft?.copy(type = type, typeIsSeedDefault = false)).withCapabilities() }
+        fun setType(type: Int) = _ui.update { it.copy(draft = it.draft?.copy(type = type)).withCapabilities() }
+
+        // Re-runs the catalog fetch for the current host after a load error (the type-row retry affordance).
+        fun retryTypeLoad() {
+            val hostId = _ui.value.draft?.hostId ?: return
+            refreshTypeOptions(hostId)
+        }
 
         fun setDirect(on: Boolean) = _ui.update { it.copy(draft = it.draft?.copy(directOn = on)).withCapabilities() }
 
@@ -275,13 +308,16 @@ class ConfigureBindingsViewModel
         private fun ConfigUiState.withCapabilities(): ConfigUiState {
             val slotId = loadedSlotId ?: return copy(capabilities = SlotCapabilities.NONE)
             val d = draft ?: return copy(capabilities = SlotCapabilities.NONE)
+            // An unresolved type has no known capabilities yet: the caps rows stay hidden behind the loader.
             val caps =
-                capabilityComposer.capabilityForCandidate(
-                    slotId = slotId,
-                    candidateType = d.type,
-                    candidateHostKind = selectedHost?.kind ?: ConnectionKind.SATELLITE,
-                    candidateHostId = d.hostId,
-                )
+                d.type?.let {
+                    capabilityComposer.capabilityForCandidate(
+                        slotId = slotId,
+                        candidateType = it,
+                        candidateHostKind = selectedHost?.kind ?: ConnectionKind.SATELLITE,
+                        candidateHostId = d.hostId,
+                    )
+                } ?: SlotCapabilities.NONE
             return copy(
                 draft = d.copy(touchpadMode = sanitizedTouchpadMode(d.touchpadMode, caps)),
                 capabilities = caps,
@@ -336,8 +372,10 @@ class ConfigureBindingsViewModel
             val state = _ui.value
             val snapshot = state.snapshot ?: return
             val draft = state.draft ?: return
-            val hostId = draft.hostId ?: return
-            val host = state.hosts.firstOrNull { it.id == hostId } ?: return
+            // Apply is gated on canApply (a resolved type); guard defensively so an unresolved type never ships.
+            val type = draft.type ?: return
+            val host = state.hosts.firstOrNull { it.id == draft.hostId } ?: return
+            val hostId = host.id
             if (_applyState.value is ApplyState.Running) return
 
             val steps = buildSteps(state)
@@ -365,7 +403,7 @@ class ConfigureBindingsViewModel
                 // Store BEFORE bind: the descriptor pulls the pick synchronously at declareSlot.
                 // The draft is already capability-sanitized by withCapabilities().
                 if (state.touchpadAvailable) touchpadModeStore.setMode(hostId, draft.touchpadMode)
-                val bound = hub.bind(slotId, hostId, draft.type)
+                val bound = hub.bind(slotId, hostId, type)
                 if (!bound) {
                     _applyState.value =
                         ApplyState.Finished(
@@ -501,12 +539,14 @@ class ConfigureBindingsViewModel
                 _ui.update { it.copy(typeOptions = bundledTypeOptions()) }
                 return
             }
-            catalogRepo.cached(hostId)?.let { cached ->
-                _ui.update { state ->
-                    state
+            // Fresh resolve for this satellite host: clear any prior error, seed from cache if present.
+            _ui.update { state ->
+                val cleared = state.copy(typeFetchFailed = false)
+                catalogRepo.cached(hostId)?.let { cached ->
+                    cleared
                         .copy(typeOptions = typeOptionsFrom(cached.controllerTypes))
                         .withCatalogDefault(cached.controllerTypes)
-                }
+                } ?: cleared
             }
             viewModelScope.launch {
                 // Probe live host state first: it seeds the host layer + pre-bind runtime
@@ -514,12 +554,17 @@ class ConfigureBindingsViewModel
                 // report reflects the real receiver even if the catalog is slow/unreachable.
                 capabilitiesRepo.refresh(conn.server.value, hostId)
                 _ui.update { state -> state.withCapabilities() }
-                val catalog = catalogRepo.catalogFor(conn.server.value, hostId) ?: return@launch
+                val catalog = catalogRepo.catalogFor(conn.server.value, hostId)
+                if (catalog == null) {
+                    // Fetch failed: surface Error only when nothing is cached (a cache still resolves the type).
+                    _ui.update { state -> if (catalogRepo.cached(hostId) == null) state.copy(typeFetchFailed = true) else state }
+                    return@launch
+                }
                 // Recompute the gates too: the fetched catalog's per-type features now back
                 // the type layer, not just the picker labels.
                 _ui.update { state ->
                     state
-                        .copy(typeOptions = typeOptionsFrom(catalog.controllerTypes))
+                        .copy(typeOptions = typeOptionsFrom(catalog.controllerTypes), typeFetchFailed = false)
                         .withCatalogDefault(catalog.controllerTypes)
                         .withCapabilities()
                 }
@@ -541,11 +586,11 @@ class ConfigureBindingsViewModel
             }
         }
 
-        // The seed default follows the host: once its catalog is known, a still-seeded draft
-        // (no remembered binding, no manual pick) snaps to the first offered type, not Xbox.
+        // Once the host's catalog is known, an unresolved type (no remembered binding, no manual pick)
+        // snaps to the first offered type. A resolved (non-null) type is never overwritten.
         private fun ConfigUiState.withCatalogDefault(types: List<CatalogTypeDto>): ConfigUiState {
             val d = draft ?: return this
-            if (!d.typeIsSeedDefault) return this
+            if (d.type != null) return this
             val firstId = types.firstOrNull()?.id ?: return this
             return copy(draft = d.copy(type = firstId))
         }
@@ -599,9 +644,8 @@ class ConfigureBindingsViewModel
             val touchpad = hostId?.let { touchpadModeStore.modeFor(it) } ?: TouchpadModeValue.OFF
             return BindingDraft(
                 hostId = hostId,
-                // No remembered pick: seed the offline fallback, then let the catalog override it.
-                type = remembered ?: CONTROLLER_TYPE_XBOX,
-                typeIsSeedDefault = remembered == null,
+                // No guessed default: unresolved (null) until the catalog (or a remembered pick) sets it.
+                type = remembered,
                 directOn = seedDirectOn(device, desiredUsbPathFor(device)),
                 motionOn = motionEnabledStore.isEnabled(slotId),
                 rumbleOn = rumbleEnabledStore.isEnabled(slotId),
