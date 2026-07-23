@@ -21,9 +21,11 @@ enum class ConnectionKind { SATELLITE, BLUETOOTH }
 enum class LinkState { Found, Stale, Saved, Ready, Connecting, Connected, Unstable }
 
 // Catalog ids (wire enum values): the picker renders from GET /api/catalog,
-// these constants only name the two types this app has bundled art for.
+// these constants only name the types this app has bundled art for.
 const val CONTROLLER_TYPE_XBOX = 0
 const val CONTROLLER_TYPE_PLAYSTATION = 1
+const val CONTROLLER_TYPE_DUALSENSE = 2
+const val CONTROLLER_TYPE_SWITCHPRO = 3
 
 data class ConnectionSummary(
     val id: String,

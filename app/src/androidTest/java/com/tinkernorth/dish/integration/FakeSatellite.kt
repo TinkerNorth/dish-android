@@ -492,7 +492,7 @@ class FakeSatellite(
         const val OP_HEARTBEAT = 0x0002
         const val OP_HEARTBEAT_ACK = 0x0003
 
-        const val CATALOG_ETAG = "\"1.6.0+en\""
+        const val CATALOG_ETAG = "\"1.7.0+en\""
 
         val UNAUTHORIZED = "401 Unauthorized" to """{"error":"unauthorized","code":"BAD_PROOF"}"""
 
@@ -522,7 +522,19 @@ class FakeSatellite(
                 "image":{"href":"/api/catalog/images/ds4","etag":"\"1.6.0\""},
                 "features":{"rumble":{"supported":true},"analogTriggers":{"supported":true},
                             "motion":{"supported":true},"lightbar":{"supported":true},
-                            "touchpad":{"supported":true,"modes":["ds4"]}}}],
+                            "touchpad":{"supported":true,"modes":["ds4"]}}},
+               {"id":2,"slug":"dualsense","name":"DualSense Wireless Controller","shortName":"DualSense",
+                "description":"Motion, touchpad, light bar and haptics.",
+                "image":{"href":"/api/catalog/images/dualsense","etag":"\"1.7.0\""},
+                "features":{"rumble":{"supported":true},"analogTriggers":{"supported":true},
+                            "motion":{"supported":true},"lightbar":{"supported":true},
+                            "touchpad":{"supported":true,"modes":["ds4"]}}},
+               {"id":3,"slug":"switchpro","name":"Switch Pro Controller","shortName":"Switch Pro",
+                "description":"Motion and rumble.",
+                "image":{"href":"/api/catalog/images/switchpro","etag":"\"1.7.0\""},
+                "features":{"rumble":{"supported":true},"analogTriggers":{"supported":false},
+                            "motion":{"supported":true},"lightbar":{"supported":false},
+                            "touchpad":{"supported":false}}}],
              "hostFeatures":{"mouseControl":{"supported":true,"modes":["off","ds4","mouse"]},
                              "keyboardControl":{"supported":false},
                              "rumble":{"supported":true}}}

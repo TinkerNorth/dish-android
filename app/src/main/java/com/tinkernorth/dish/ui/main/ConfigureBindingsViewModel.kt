@@ -6,7 +6,9 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_SWITCHPRO
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionCoordinator
@@ -28,6 +30,7 @@ import com.tinkernorth.dish.source.store.TouchpadModeStore
 import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.source.usb.UsbPhase
+import com.tinkernorth.dish.ui.common.bundledControllerTypeLabelRes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -287,9 +290,7 @@ class ConfigureBindingsViewModel
             _ui.value.typeOptions
                 .firstOrNull { it.id == type }
                 ?.label
-                ?: context.getString(
-                    if (type == CONTROLLER_TYPE_PLAYSTATION) R.string.picker_type_playstation else R.string.picker_type_xbox,
-                )
+                ?: context.getString(bundledControllerTypeLabelRes(type))
 
         fun dismissApplyResult() {
             _applyState.value = ApplyState.Idle
@@ -486,6 +487,8 @@ class ConfigureBindingsViewModel
             listOf(
                 TypeOption(CONTROLLER_TYPE_PLAYSTATION, context.getString(R.string.picker_type_playstation)),
                 TypeOption(CONTROLLER_TYPE_XBOX, context.getString(R.string.picker_type_xbox)),
+                TypeOption(CONTROLLER_TYPE_DUALSENSE, context.getString(R.string.picker_type_dualsense)),
+                TypeOption(CONTROLLER_TYPE_SWITCHPRO, context.getString(R.string.picker_type_switchpro)),
             )
 
         private fun refreshTypeOptions(hostId: String) {
@@ -517,6 +520,8 @@ class ConfigureBindingsViewModel
                     when (t.slug) {
                         SLUG_XBOX360 -> context.getString(R.string.picker_type_xbox)
                         SLUG_DS4 -> context.getString(R.string.picker_type_playstation)
+                        SLUG_DUALSENSE -> context.getString(R.string.picker_type_dualsense)
+                        SLUG_SWITCHPRO -> context.getString(R.string.picker_type_switchpro)
                         else -> null
                     }
                 TypeOption(t.id, bundled ?: t.name.ifBlank { t.slug })
@@ -593,6 +598,8 @@ class ConfigureBindingsViewModel
             const val STEP_APPLY = "apply"
             const val SLUG_XBOX360 = "xbox360"
             const val SLUG_DS4 = "ds4"
+            const val SLUG_DUALSENSE = "dualsense"
+            const val SLUG_SWITCHPRO = "switchpro"
         }
     }
 

@@ -12,7 +12,6 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
@@ -35,6 +34,7 @@ import com.tinkernorth.dish.source.system.WifiLink
 import com.tinkernorth.dish.source.system.WifiLinkSource
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.ui.common.bundledControllerTypeLabelRes
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
@@ -242,16 +242,11 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
         conn.slots.value.entries
             .sortedBy { it.value.controllerIndex }
             .flatMap { (slotId, binding) ->
-                val typeRes =
-                    if (binding.controllerType == CONTROLLER_TYPE_PLAYSTATION) {
-                        R.string.picker_type_playstation
-                    } else {
-                        R.string.picker_type_xbox
-                    }
+                val typeLabel = getString(bundledControllerTypeLabelRes(binding.controllerType))
                 val mode = capabilityComposer.touchpadWireMode(slotId)
                 val streaming = activeBitmap >= 0 && (activeBitmap and (1 shl binding.controllerIndex)) != 0
                 listOf(
-                    getString(R.string.diagnostics_wire_declared, binding.controllerIndex, getString(typeRes), mode),
+                    getString(R.string.diagnostics_wire_declared, binding.controllerIndex, typeLabel, mode),
                     getString(
                         R.string.diagnostics_wire_applied,
                         yesNo(binding.registered),

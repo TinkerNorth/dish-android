@@ -119,6 +119,8 @@
     <string name="picker_type_label">Type</string>
     <string name="picker_type_xbox" translatable="false">Xbox</string>
     <string name="picker_type_playstation" translatable="false">PlayStation</string>
+    <string name="picker_type_dualsense" translatable="false">DualSense</string>
+    <string name="picker_type_switchpro" translatable="false">Switch Pro</string>
 
     <!-- LinkState chip / row-status vocabulary, shared across UI. -->
     <string name="chip_status_found">Found</string>
