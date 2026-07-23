@@ -7,6 +7,7 @@ import android.content.pm.ApplicationInfo
 import android.os.StrictMode
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.tinkernorth.dish.bench.HotPathBenchController
+import com.tinkernorth.dish.composer.CatalogPrewarmer
 import com.tinkernorth.dish.composer.CrashReportingController
 import com.tinkernorth.dish.composer.DiagnosticsLogRecorder
 import com.tinkernorth.dish.composer.SlotTopologyController
@@ -56,6 +57,8 @@ class DishApplication : Application() {
 
     @Inject lateinit var bluetoothBondMonitor: BluetoothBondMonitor
 
+    @Inject lateinit var catalogPrewarmer: CatalogPrewarmer
+
     @Inject lateinit var bluetoothAdapterStateObserver: BluetoothAdapterStateObserver
 
     @Inject lateinit var bluetoothPermissionStateObserver: BluetoothPermissionStateObserver
@@ -95,6 +98,8 @@ class DishApplication : Application() {
         themePreferenceStore.applyPersistedMode()
         // Must install before native-load try so the opt-in applies even when load fails.
         ProcessLifecycleOwner.get().lifecycle.addObserver(crashReportingController)
+        // Warm each satellite's catalog once its link is Live; independent of the native load.
+        catalogPrewarmer.start()
         // Missing ABI on sideloaded builds throws UnsatisfiedLinkError on first
         // native ref; route to NativeUnavailableActivity instead of crashing.
         try {
