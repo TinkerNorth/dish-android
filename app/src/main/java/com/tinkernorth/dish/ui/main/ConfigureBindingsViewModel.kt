@@ -16,6 +16,7 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
+import com.tinkernorth.dish.core.model.CatalogTypeDto
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
@@ -92,6 +93,9 @@ data class BindingDraft(
     val motionOn: Boolean,
     val touchpadMode: String,
     val rumbleOn: Boolean = true,
+    // While true, [type] is only the offline seed and still yields to the catalog's first
+    // offered type; a remembered binding or a manual pick sets it false so neither is clobbered.
+    val typeIsSeedDefault: Boolean = false,
 )
 
 sealed interface BindingBlocker {
@@ -244,7 +248,7 @@ class ConfigureBindingsViewModel
             refreshTypeOptions(hostId)
         }
 
-        fun setType(type: Int) = _ui.update { it.copy(draft = it.draft?.copy(type = type)).withCapabilities() }
+        fun setType(type: Int) = _ui.update { it.copy(draft = it.draft?.copy(type = type, typeIsSeedDefault = false)).withCapabilities() }
 
         fun setDirect(on: Boolean) = _ui.update { it.copy(draft = it.draft?.copy(directOn = on)).withCapabilities() }
 
@@ -498,7 +502,11 @@ class ConfigureBindingsViewModel
                 return
             }
             catalogRepo.cached(hostId)?.let { cached ->
-                _ui.update { state -> state.copy(typeOptions = typeOptionsFrom(cached.controllerTypes)) }
+                _ui.update { state ->
+                    state
+                        .copy(typeOptions = typeOptionsFrom(cached.controllerTypes))
+                        .withCatalogDefault(cached.controllerTypes)
+                }
             }
             viewModelScope.launch {
                 // Probe live host state first: it seeds the host layer + pre-bind runtime
@@ -509,11 +517,16 @@ class ConfigureBindingsViewModel
                 val catalog = catalogRepo.catalogFor(conn.server.value, hostId) ?: return@launch
                 // Recompute the gates too: the fetched catalog's per-type features now back
                 // the type layer, not just the picker labels.
-                _ui.update { state -> state.copy(typeOptions = typeOptionsFrom(catalog.controllerTypes)).withCapabilities() }
+                _ui.update { state ->
+                    state
+                        .copy(typeOptions = typeOptionsFrom(catalog.controllerTypes))
+                        .withCatalogDefault(catalog.controllerTypes)
+                        .withCapabilities()
+                }
             }
         }
 
-        private fun typeOptionsFrom(types: List<com.tinkernorth.dish.core.model.CatalogTypeDto>): List<TypeOption> {
+        private fun typeOptionsFrom(types: List<CatalogTypeDto>): List<TypeOption> {
             if (types.isEmpty()) return bundledTypeOptions()
             return types.map { t ->
                 val bundled =
@@ -526,6 +539,15 @@ class ConfigureBindingsViewModel
                     }
                 TypeOption(t.id, bundled ?: t.name.ifBlank { t.slug })
             }
+        }
+
+        // The seed default follows the host: once its catalog is known, a still-seeded draft
+        // (no remembered binding, no manual pick) snaps to the first offered type, not Xbox.
+        private fun ConfigUiState.withCatalogDefault(types: List<CatalogTypeDto>): ConfigUiState {
+            val d = draft ?: return this
+            if (!d.typeIsSeedDefault) return this
+            val firstId = types.firstOrNull()?.id ?: return this
+            return copy(draft = d.copy(type = firstId))
         }
 
         private fun buildSnapshot(slotId: String): BindingSnapshot {
@@ -571,13 +593,15 @@ class ConfigureBindingsViewModel
 
         private fun buildSeedDraft(slotId: String): BindingDraft {
             val hostId = hub.bindings.value[slotId]
-            val type = hostId?.let { hub.satTypes.value[it to slotId] } ?: CONTROLLER_TYPE_XBOX
+            val remembered = hostId?.let { hub.satTypes.value[it to slotId] }
             val device = slotId.toIntOrNull()?.let { gamepadRegistry.devices.value[it] }
             // Raw store pick; withCapabilities() sanitizes it against the candidate path.
             val touchpad = hostId?.let { touchpadModeStore.modeFor(it) } ?: TouchpadModeValue.OFF
             return BindingDraft(
                 hostId = hostId,
-                type = type,
+                // No remembered pick: seed the offline fallback, then let the catalog override it.
+                type = remembered ?: CONTROLLER_TYPE_XBOX,
+                typeIsSeedDefault = remembered == null,
                 directOn = seedDirectOn(device, desiredUsbPathFor(device)),
                 motionOn = motionEnabledStore.isEnabled(slotId),
                 rumbleOn = rumbleEnabledStore.isEnabled(slotId),
