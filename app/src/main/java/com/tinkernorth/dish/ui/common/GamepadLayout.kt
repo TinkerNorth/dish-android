@@ -57,8 +57,10 @@ internal fun computeGamepadLayout(
     height: Int,
     density: Float,
     safeInsets: Rect,
-    usePlayStation: Boolean,
+    skin: GamepadSkin,
 ): GamepadLayout {
+    // Only PlayStation flips the d-pad above the left stick; Switch keeps the Xbox arrangement.
+    val psLayout = skin == GamepadSkin.PlayStation
     val cushion = SAFE_AREA_CUSHION_DP * density
     val safeTop = safeInsets.top + cushion
     val safeLeft = safeInsets.left + cushion
@@ -93,7 +95,7 @@ internal fun computeGamepadLayout(
     val clusterSize = min(qw * 2f - pad * 2, contentH * CLUSTER_HEIGHT_FRACTION)
 
     val dpadCx = contentLeft + qw * CLUSTER_X_FRACTION_OF_QUARTER
-    val dpadCy = if (usePlayStation) topRowCy else bottomRowCy
+    val dpadCy = if (psLayout) topRowCy else bottomRowCy
     val dpadRect =
         RectF(dpadCx - clusterSize / 2, dpadCy - clusterSize / 2, dpadCx + clusterSize / 2, dpadCy + clusterSize / 2)
 
@@ -101,7 +103,7 @@ internal fun computeGamepadLayout(
     val l3StickRadius = stickRadius * L3_STICK_RADIUS_FRACTION
     val l3Gap = L3_STICK_GAP_DP * density
     val leftStickCx = contentLeft + qw * STICK_X_FRACTION_OF_QUARTER
-    val leftStickCy = if (usePlayStation) bottomRowCy else topRowCy
+    val leftStickCy = if (psLayout) bottomRowCy else topRowCy
     val l3StickCx = leftStickCx + stickRadius + l3StickRadius + l3Gap
     val l3StickCy = leftStickCy
 

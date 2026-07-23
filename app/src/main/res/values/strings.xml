@@ -119,6 +119,8 @@
     <string name="picker_type_label">Type</string>
     <string name="picker_type_xbox" translatable="false">Xbox</string>
     <string name="picker_type_playstation" translatable="false">PlayStation</string>
+    <string name="picker_type_dualsense" translatable="false">DualSense</string>
+    <string name="picker_type_switchpro" translatable="false">Switch Pro</string>
 
     <!-- LinkState chip / row-status vocabulary, shared across UI. -->
     <string name="chip_status_found">Found</string>
@@ -475,6 +477,7 @@
     <string name="binding_label_connection">Connection</string>
     <string name="binding_label_destination">Destination</string>
     <string name="binding_label_emulate">Emulate as</string>
+    <string name="binding_emulate_load_failed">Couldn\'t load types. Tap to retry</string>
     <string name="binding_label_functions">Functions</string>
     <string name="binding_label_input">Input</string>
     <string name="binding_label_binding">Binding</string>

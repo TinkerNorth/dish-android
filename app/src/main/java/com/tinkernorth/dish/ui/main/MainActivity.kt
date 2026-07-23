@@ -18,7 +18,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.ConcatAdapter
 import com.google.androidgamesdk.GameActivity
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.model.DishNotification
@@ -34,6 +34,7 @@ import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.DishSpinnerDrawable
+import com.tinkernorth.dish.ui.common.GamepadSkin
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachDonatePill
@@ -313,11 +314,14 @@ class MainActivity :
                 return
             }
         val summary = slot.boundStatus
-        val usePs =
-            summary?.btProfile == "PlayStation" ||
-                summary?.satelliteControllerTypes?.get(slotId) ==
-                com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
-        nav.toGamepad(connectionId = cid, usePsLayout = usePs)
+        // Bluetooth carries its skin in the profile name; a satellite carries it in the per-slot type.
+        val skin =
+            when (summary?.btProfile) {
+                "PlayStation" -> GamepadSkin.PlayStation
+                "Xbox" -> GamepadSkin.Xbox
+                else -> GamepadSkin.forControllerType(summary?.satelliteControllerTypes?.get(slotId) ?: CONTROLLER_TYPE_XBOX)
+            }
+        nav.toGamepad(connectionId = cid, skin = skin)
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean = gamepadHost.dispatchKeyEvent(event) || super.dispatchKeyEvent(event)

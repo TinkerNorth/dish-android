@@ -6,7 +6,9 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_SWITCHPRO
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionCoordinator
@@ -14,6 +16,7 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
+import com.tinkernorth.dish.core.model.CatalogTypeDto
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
@@ -28,6 +31,7 @@ import com.tinkernorth.dish.source.store.TouchpadModeStore
 import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.source.usb.UsbPhase
+import com.tinkernorth.dish.ui.common.bundledControllerTypeLabelRes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -84,7 +88,9 @@ data class TypeOption(
 
 data class BindingDraft(
     val hostId: String?,
-    val type: Int,
+    // null until the host's catalog resolves the type (or a remembered/manual pick sets it); never a
+    // guessed default, so the configure screen shows a loader instead of a wrong type for a satellite.
+    val type: Int?,
     val directOn: Boolean,
     val motionOn: Boolean,
     val touchpadMode: String,
@@ -102,6 +108,17 @@ sealed interface BindingBlocker {
     data object HostUnsteady : BindingBlocker
 }
 
+// The "Emulate as" type is host-owned: a satellite host resolves it from the catalog, so the
+// configure screen shows a loader until it arrives (Error → tap-to-retry) rather than a guessed
+// default. A Bluetooth host is always Ready (its type is profile-driven).
+sealed interface TypeLoad {
+    data object Loading : TypeLoad
+
+    data object Ready : TypeLoad
+
+    data object Error : TypeLoad
+}
+
 data class ConfigUiState(
     val loaded: Boolean = false,
     val snapshot: BindingSnapshot? = null,
@@ -113,10 +130,27 @@ data class ConfigUiState(
     val controllerPresent: Boolean = true,
     val dismissedUnsteadyHostIds: Set<String> = emptySet(),
     val capabilities: SlotCapabilities = SlotCapabilities.NONE,
+    // Set only when a satellite catalog fetch failed with nothing cached, so Loading (fetch in
+    // flight) and Error (fetch failed) are distinguishable — neither is derivable from the draft alone.
+    val typeFetchFailed: Boolean = false,
 ) {
     val selectedHost: BindingHost? get() = hosts.firstOrNull { it.id == draft?.hostId }
     val noHosts: Boolean get() = hosts.isEmpty()
     val hostChosen: Boolean get() = selectedHost != null
+
+    // A Bluetooth host is profile-driven (always Ready); a resolved type (remembered/manual/catalog)
+    // is Ready; a failed fetch with nothing cached is Error; otherwise the catalog is still loading.
+    val typeLoad: TypeLoad
+        get() =
+            when {
+                isBluetoothHost -> TypeLoad.Ready
+                draft?.type != null -> TypeLoad.Ready
+                typeFetchFailed -> TypeLoad.Error
+                else -> TypeLoad.Loading
+            }
+
+    // Apply must never send an unresolved type: a satellite host needs its type resolved first.
+    val canApply: Boolean get() = hostChosen && (isBluetoothHost || draft?.type != null)
 
     val blocker: BindingBlocker?
         get() {
@@ -243,6 +277,12 @@ class ConfigureBindingsViewModel
 
         fun setType(type: Int) = _ui.update { it.copy(draft = it.draft?.copy(type = type)).withCapabilities() }
 
+        // Re-runs the catalog fetch for the current host after a load error (the type-row retry affordance).
+        fun retryTypeLoad() {
+            val hostId = _ui.value.draft?.hostId ?: return
+            refreshTypeOptions(hostId)
+        }
+
         fun setDirect(on: Boolean) = _ui.update { it.copy(draft = it.draft?.copy(directOn = on)).withCapabilities() }
 
         fun setMotion(on: Boolean) = _ui.update { it.copy(draft = it.draft?.copy(motionOn = on)).withCapabilities() }
@@ -268,13 +308,16 @@ class ConfigureBindingsViewModel
         private fun ConfigUiState.withCapabilities(): ConfigUiState {
             val slotId = loadedSlotId ?: return copy(capabilities = SlotCapabilities.NONE)
             val d = draft ?: return copy(capabilities = SlotCapabilities.NONE)
+            // An unresolved type has no known capabilities yet: the caps rows stay hidden behind the loader.
             val caps =
-                capabilityComposer.capabilityForCandidate(
-                    slotId = slotId,
-                    candidateType = d.type,
-                    candidateHostKind = selectedHost?.kind ?: ConnectionKind.SATELLITE,
-                    candidateHostId = d.hostId,
-                )
+                d.type?.let {
+                    capabilityComposer.capabilityForCandidate(
+                        slotId = slotId,
+                        candidateType = it,
+                        candidateHostKind = selectedHost?.kind ?: ConnectionKind.SATELLITE,
+                        candidateHostId = d.hostId,
+                    )
+                } ?: SlotCapabilities.NONE
             return copy(
                 draft = d.copy(touchpadMode = sanitizedTouchpadMode(d.touchpadMode, caps)),
                 capabilities = caps,
@@ -287,9 +330,7 @@ class ConfigureBindingsViewModel
             _ui.value.typeOptions
                 .firstOrNull { it.id == type }
                 ?.label
-                ?: context.getString(
-                    if (type == CONTROLLER_TYPE_PLAYSTATION) R.string.picker_type_playstation else R.string.picker_type_xbox,
-                )
+                ?: context.getString(bundledControllerTypeLabelRes(type))
 
         fun dismissApplyResult() {
             _applyState.value = ApplyState.Idle
@@ -331,8 +372,10 @@ class ConfigureBindingsViewModel
             val state = _ui.value
             val snapshot = state.snapshot ?: return
             val draft = state.draft ?: return
-            val hostId = draft.hostId ?: return
-            val host = state.hosts.firstOrNull { it.id == hostId } ?: return
+            // Apply is gated on canApply (a resolved type); guard defensively so an unresolved type never ships.
+            val type = draft.type ?: return
+            val host = state.hosts.firstOrNull { it.id == draft.hostId } ?: return
+            val hostId = host.id
             if (_applyState.value is ApplyState.Running) return
 
             val steps = buildSteps(state)
@@ -360,7 +403,7 @@ class ConfigureBindingsViewModel
                 // Store BEFORE bind: the descriptor pulls the pick synchronously at declareSlot.
                 // The draft is already capability-sanitized by withCapabilities().
                 if (state.touchpadAvailable) touchpadModeStore.setMode(hostId, draft.touchpadMode)
-                val bound = hub.bind(slotId, hostId, draft.type)
+                val bound = hub.bind(slotId, hostId, type)
                 if (!bound) {
                     _applyState.value =
                         ApplyState.Finished(
@@ -486,6 +529,8 @@ class ConfigureBindingsViewModel
             listOf(
                 TypeOption(CONTROLLER_TYPE_PLAYSTATION, context.getString(R.string.picker_type_playstation)),
                 TypeOption(CONTROLLER_TYPE_XBOX, context.getString(R.string.picker_type_xbox)),
+                TypeOption(CONTROLLER_TYPE_DUALSENSE, context.getString(R.string.picker_type_dualsense)),
+                TypeOption(CONTROLLER_TYPE_SWITCHPRO, context.getString(R.string.picker_type_switchpro)),
             )
 
         private fun refreshTypeOptions(hostId: String) {
@@ -494,8 +539,14 @@ class ConfigureBindingsViewModel
                 _ui.update { it.copy(typeOptions = bundledTypeOptions()) }
                 return
             }
-            catalogRepo.cached(hostId)?.let { cached ->
-                _ui.update { state -> state.copy(typeOptions = typeOptionsFrom(cached.controllerTypes)) }
+            // Fresh resolve for this satellite host: clear any prior error, seed from cache if present.
+            _ui.update { state ->
+                val cleared = state.copy(typeFetchFailed = false)
+                catalogRepo.cached(hostId)?.let { cached ->
+                    cleared
+                        .copy(typeOptions = typeOptionsFrom(cached.controllerTypes))
+                        .withCatalogDefault(cached.controllerTypes)
+                } ?: cleared
             }
             viewModelScope.launch {
                 // Probe live host state first: it seeds the host layer + pre-bind runtime
@@ -503,24 +554,45 @@ class ConfigureBindingsViewModel
                 // report reflects the real receiver even if the catalog is slow/unreachable.
                 capabilitiesRepo.refresh(conn.server.value, hostId)
                 _ui.update { state -> state.withCapabilities() }
-                val catalog = catalogRepo.catalogFor(conn.server.value, hostId) ?: return@launch
+                val catalog = catalogRepo.catalogFor(conn.server.value, hostId)
+                if (catalog == null) {
+                    // Fetch failed: surface Error only when nothing is cached (a cache still resolves the type).
+                    _ui.update { state -> if (catalogRepo.cached(hostId) == null) state.copy(typeFetchFailed = true) else state }
+                    return@launch
+                }
                 // Recompute the gates too: the fetched catalog's per-type features now back
                 // the type layer, not just the picker labels.
-                _ui.update { state -> state.copy(typeOptions = typeOptionsFrom(catalog.controllerTypes)).withCapabilities() }
+                _ui.update { state ->
+                    state
+                        .copy(typeOptions = typeOptionsFrom(catalog.controllerTypes), typeFetchFailed = false)
+                        .withCatalogDefault(catalog.controllerTypes)
+                        .withCapabilities()
+                }
             }
         }
 
-        private fun typeOptionsFrom(types: List<com.tinkernorth.dish.core.model.CatalogTypeDto>): List<TypeOption> {
+        private fun typeOptionsFrom(types: List<CatalogTypeDto>): List<TypeOption> {
             if (types.isEmpty()) return bundledTypeOptions()
             return types.map { t ->
                 val bundled =
                     when (t.slug) {
                         SLUG_XBOX360 -> context.getString(R.string.picker_type_xbox)
                         SLUG_DS4 -> context.getString(R.string.picker_type_playstation)
+                        SLUG_DUALSENSE -> context.getString(R.string.picker_type_dualsense)
+                        SLUG_SWITCHPRO -> context.getString(R.string.picker_type_switchpro)
                         else -> null
                     }
                 TypeOption(t.id, bundled ?: t.name.ifBlank { t.slug })
             }
+        }
+
+        // Once the host's catalog is known, an unresolved type (no remembered binding, no manual pick)
+        // snaps to the first offered type. A resolved (non-null) type is never overwritten.
+        private fun ConfigUiState.withCatalogDefault(types: List<CatalogTypeDto>): ConfigUiState {
+            val d = draft ?: return this
+            if (d.type != null) return this
+            val firstId = types.firstOrNull()?.id ?: return this
+            return copy(draft = d.copy(type = firstId))
         }
 
         private fun buildSnapshot(slotId: String): BindingSnapshot {
@@ -566,13 +638,14 @@ class ConfigureBindingsViewModel
 
         private fun buildSeedDraft(slotId: String): BindingDraft {
             val hostId = hub.bindings.value[slotId]
-            val type = hostId?.let { hub.satTypes.value[it to slotId] } ?: CONTROLLER_TYPE_XBOX
+            val remembered = hostId?.let { hub.satTypes.value[it to slotId] }
             val device = slotId.toIntOrNull()?.let { gamepadRegistry.devices.value[it] }
             // Raw store pick; withCapabilities() sanitizes it against the candidate path.
             val touchpad = hostId?.let { touchpadModeStore.modeFor(it) } ?: TouchpadModeValue.OFF
             return BindingDraft(
                 hostId = hostId,
-                type = type,
+                // No guessed default: unresolved (null) until the catalog (or a remembered pick) sets it.
+                type = remembered,
                 directOn = seedDirectOn(device, desiredUsbPathFor(device)),
                 motionOn = motionEnabledStore.isEnabled(slotId),
                 rumbleOn = rumbleEnabledStore.isEnabled(slotId),
@@ -593,6 +666,8 @@ class ConfigureBindingsViewModel
             const val STEP_APPLY = "apply"
             const val SLUG_XBOX360 = "xbox360"
             const val SLUG_DS4 = "ds4"
+            const val SLUG_DUALSENSE = "dualsense"
+            const val SLUG_SWITCHPRO = "switchpro"
         }
     }
 

@@ -334,6 +334,7 @@
     <string name="binding_apply_warn_title">Brzi način nije dostupan</string>
     <string name="binding_apply_warn_detail">%1$s je povezan s %2$s u Standardnom načinu.</string>
     <string name="binding_label_emulate">Emuliraj kao</string>
+    <string name="binding_emulate_load_failed">Učitavanje tipova nije uspjelo. Dodirnite za ponovni pokušaj</string>
     <string name="binding_label_functions">Funkcije</string>
     <string name="binding_label_input">Ulaz</string>
     <string name="binding_label_binding">Povezivanje</string>
