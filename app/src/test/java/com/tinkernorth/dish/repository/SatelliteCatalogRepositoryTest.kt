@@ -17,11 +17,14 @@ import org.junit.Test
 class SatelliteCatalogRepositoryTest {
     private val gateway = mockk<DiscoveryGateway>()
     private val hostFeaturesStore = SatelliteHostFeaturesStore()
-    private val repo = SatelliteCatalogRepository(gateway, Json { ignoreUnknownKeys = true }, hostFeaturesStore)
+    private val repo =
+        SatelliteCatalogRepository(gateway, Json { ignoreUnknownKeys = true }, hostFeaturesStore, LegacyCatalogTranslator())
     private val server = DiscoveredServer(name = "Pc", ip = "10.0.0.5", udpPort = 9876, machineId = "m1")
 
+    // catalogVersion:2 keeps these caching/ETag/host-feature fixtures on the modern pass-through
+    // path, so the mechanics under test aren't perturbed by legacy substitution.
     private val catalogBody =
-        """{"locale":"en","protocolVersion":1,"serverVersion":"1.6.0","controllerTypes":""" +
+        """{"locale":"en","protocolVersion":1,"serverVersion":"1.6.0","catalogVersion":2,"controllerTypes":""" +
             """[{"id":0,"slug":"xbox360","name":"Xbox 360 Controller"}],"hostFeatures":{}}"""
 
     private val receivedEtags = mutableListOf<String?>()
@@ -92,7 +95,7 @@ class SatelliteCatalogRepositoryTest {
         }
 
     private val catalogWithMouseHost =
-        """{"locale":"en","protocolVersion":1,"serverVersion":"1.6.0","controllerTypes":""" +
+        """{"locale":"en","protocolVersion":1,"serverVersion":"1.6.0","catalogVersion":2,"controllerTypes":""" +
             """[{"id":0,"slug":"xbox360","name":"Xbox 360 Controller"}],""" +
             """"hostFeatures":{"mouseControl":{"supported":true}}}"""
 
@@ -145,5 +148,38 @@ class SatelliteCatalogRepositoryTest {
             repo.catalogFor(server, "sat-1")
 
             assertNull(hostFeaturesStore.featuresFor("sat-1"))
+        }
+
+    // The version logic itself is LegacyCatalogTranslatorTest's; these two prove the repository
+    // delegates through it, so catalogFor AND cached both yield the normalized shape.
+
+    @Test
+    fun `a legacy body is normalized to the hardcoded v1 catalog, on the way out and in the cache`() =
+        runTest {
+            stubGateway()
+            // No catalogVersion (legacy) and a junk type: the served controllerTypes must be replaced.
+            val legacyBody =
+                """{"locale":"en","serverVersion":"1.5.0","controllerTypes":""" +
+                    """[{"id":99,"slug":"frobnicator"}],"hostFeatures":{}}"""
+            replies += HttpReply(200, legacyBody, null)
+
+            val fetched = repo.catalogFor(server, "sat-1")
+            assertEquals(listOf("xbox360", "ds4"), fetched?.controllerTypes?.map { it.slug })
+            assertEquals(listOf("xbox360", "ds4"), repo.cached("sat-1")?.controllerTypes?.map { it.slug })
+        }
+
+    @Test
+    fun `a current catalog is served unchanged`() =
+        runTest {
+            stubGateway()
+            val modernBody =
+                """{"locale":"en","serverVersion":"2.0.0","catalogVersion":2,"controllerTypes":[""" +
+                    """{"id":0,"slug":"xbox360"},{"id":1,"slug":"ds4"},""" +
+                    """{"id":2,"slug":"dualsense"},{"id":3,"slug":"switchpro"}],"hostFeatures":{}}"""
+            replies += HttpReply(200, modernBody, null)
+
+            val fetched = repo.catalogFor(server, "sat-1")
+            assertEquals(4, fetched?.controllerTypes?.size)
+            assertEquals("dualsense", fetched?.controllerTypes?.get(2)?.slug)
         }
 }

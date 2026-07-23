@@ -116,4 +116,13 @@ class ModelsTest {
         assertEquals("fluxcap>=2", catalog.controllerTypes[1].features["warp"]?.requires)
         assertEquals(listOf("off", "ds4", "mouse"), catalog.hostFeatures["mouseControl"]?.modes)
     }
+
+    @Test
+    fun `CatalogDto reads catalogVersion, defaulting an absent field to legacy 1`() {
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        val base = """{"locale":"en","controllerTypes":[]"""
+        assertEquals(2, json.decodeFromString(CatalogDto.serializer(), """$base,"catalogVersion":2}""").catalogVersion)
+        assertEquals(3, json.decodeFromString(CatalogDto.serializer(), """$base,"catalogVersion":3}""").catalogVersion)
+        assertEquals(1, json.decodeFromString(CatalogDto.serializer(), "$base}").catalogVersion) // absent ⇒ legacy
+    }
 }

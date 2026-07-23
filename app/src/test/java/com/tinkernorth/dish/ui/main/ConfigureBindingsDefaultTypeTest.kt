@@ -15,6 +15,7 @@ import com.tinkernorth.dish.core.model.CatalogTypeDto
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
+import com.tinkernorth.dish.repository.LegacyCatalogTranslator
 import com.tinkernorth.dish.repository.SatelliteCapabilitiesRepository
 import com.tinkernorth.dish.repository.SatelliteCatalogRepository
 import com.tinkernorth.dish.repository.TouchpadModeValue
@@ -190,6 +191,25 @@ class ConfigureBindingsDefaultTypeTest {
             dispatcher.scheduler.advanceUntilIdle()
             assertEquals(TYPE_XBOX360, currentDraft()?.type)
             assertEquals(TypeLoad.Ready, vm.ui.value.typeLoad)
+        }
+
+    @Test
+    fun `a legacy satellite resolves to xbox via the hardcoded catalog - Ready, applyable, no loader-block`() =
+        runTest(dispatcher) {
+            connectionsFlow.value = listOf(satelliteHost())
+            // A legacy/absent-version body (even carrying a junk type) normalizes to the hardcoded
+            // v1 catalog, xbox first; the repository yields it, so the VM resolves it like any other.
+            val hardcodedV1 =
+                LegacyCatalogTranslator().normalize(
+                    CatalogDto(controllerTypes = listOf(CatalogTypeDto(id = 99, slug = "frobnicator"))),
+                )
+            coEvery { catalogRepo.catalogFor(any(), any()) } returns hardcodedV1
+            vm.load(SLOT)
+            vm.setHost(HOST)
+            dispatcher.scheduler.advanceUntilIdle()
+            assertEquals(TYPE_XBOX360, currentDraft()?.type)
+            assertEquals(TypeLoad.Ready, vm.ui.value.typeLoad)
+            assertTrue(vm.ui.value.canApply)
         }
 
     @Test
