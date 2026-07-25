@@ -20,7 +20,6 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
@@ -36,6 +35,7 @@ import com.tinkernorth.dish.databinding.ItemControllerBinding
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
+import com.tinkernorth.dish.ui.common.bundledControllerTypeLabelRes
 
 interface SlotActionListener {
     fun onConfigure(slotId: String)
@@ -282,7 +282,7 @@ class ControllerAdapter(
             when (bound.kind) {
                 ConnectionKind.SATELLITE -> {
                     val type = bound.satelliteControllerTypes[row.slot.id] ?: CONTROLLER_TYPE_XBOX
-                    ctx.getString(if (type == CONTROLLER_TYPE_PLAYSTATION) R.string.picker_type_playstation else R.string.picker_type_xbox)
+                    ctx.getString(bundledControllerTypeLabelRes(type))
                 }
                 ConnectionKind.BLUETOOTH -> bound.btProfile
             }
@@ -298,7 +298,7 @@ class ControllerAdapter(
         }
 
         // Reports the configured (not live-gated) routing: motion only carries on a Satellite host
-        // emulating PlayStation; touchpad only on a Satellite host.
+        // emulating a motion-bearing type; touchpad only on a Satellite host.
         private fun functionSpecs(
             row: Row,
             bound: ConnectionSummary,
@@ -312,11 +312,10 @@ class ControllerAdapter(
                 specs.add(PillSpec(funcValue(R.string.binding_func_rumble, R.string.binding_state_on), R.drawable.ic_rumble, PillTone.ON))
             }
 
-            val type = bound.satelliteControllerTypes[row.slot.id] ?: CONTROLLER_TYPE_XBOX
             val motionAvailable =
                 row.motionCap.inputOk(Feature.MOTION) &&
                     bound.kind == ConnectionKind.SATELLITE &&
-                    type == CONTROLLER_TYPE_PLAYSTATION
+                    row.motionCap.typeOk(Feature.MOTION)
             if (motionAvailable) {
                 val on = row.motionCap.userWants(Feature.MOTION)
                 val state = if (on) R.string.binding_state_on else R.string.binding_state_off

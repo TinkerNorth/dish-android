@@ -34,13 +34,36 @@ class BundledCatalogTest {
     }
 
     @Test
+    fun `dualsense carries motion touchpad and lightbar`() {
+        val caps = BundledCatalog.typeCapabilities(BundledCatalog.SLUG_DUALSENSE)!!
+        assertTrue(Feature.MOTION in caps)
+        assertTrue(Feature.TOUCHPAD in caps)
+        assertTrue(Feature.LIGHTBAR in caps)
+        assertTrue(Feature.RUMBLE in caps)
+    }
+
+    @Test
+    fun `switchpro carries motion and rumble but no touchpad or lightbar`() {
+        val caps = BundledCatalog.typeCapabilities(BundledCatalog.SLUG_SWITCHPRO)!!
+        assertTrue(Feature.MOTION in caps)
+        assertTrue(Feature.RUMBLE in caps)
+        assertFalse(Feature.TOUCHPAD in caps)
+        assertFalse(Feature.LIGHTBAR in caps)
+    }
+
+    @Test
     fun `an unknown slug falls through to the server catalog`() {
         assertNull(BundledCatalog.typeCapabilities("gamecube"))
     }
 
     @Test
-    fun `typeCapabilitiesById maps PlayStation to the ds4 set and others to xbox360`() {
+    fun `typeCapabilitiesById lights motion for every pad but Xbox`() {
         assertTrue(Feature.MOTION in BundledCatalog.typeCapabilitiesById(CONTROLLER_TYPE_PLAYSTATION))
+        assertTrue(Feature.MOTION in BundledCatalog.typeCapabilitiesById(CONTROLLER_TYPE_DUALSENSE))
+        assertTrue(Feature.MOTION in BundledCatalog.typeCapabilitiesById(CONTROLLER_TYPE_SWITCHPRO))
         assertFalse(Feature.MOTION in BundledCatalog.typeCapabilitiesById(CONTROLLER_TYPE_XBOX))
+        // Switch Pro is the only motion pad without a touchpad.
+        assertTrue(Feature.TOUCHPAD in BundledCatalog.typeCapabilitiesById(CONTROLLER_TYPE_DUALSENSE))
+        assertFalse(Feature.TOUCHPAD in BundledCatalog.typeCapabilitiesById(CONTROLLER_TYPE_SWITCHPRO))
     }
 }

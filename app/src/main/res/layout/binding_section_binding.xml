@@ -49,6 +49,17 @@
             app:iconGravity="end"
             app:iconTint="@color/colorMuted" />
 
+        <!-- Shown in place of the dropdown while a satellite host's catalog is (re)loading the type. -->
+        <ProgressBar
+            android:id="@+id/emulateLoading"
+            android:layout_width="@dimen/binding_edge_spinner_size"
+            android:layout_height="@dimen/binding_edge_spinner_size"
+            android:layout_marginTop="@dimen/spacing_sm"
+            android:layout_marginBottom="@dimen/spacing_sm"
+            android:indeterminate="true"
+            android:indeterminateTint="@color/colorPrimary"
+            android:visibility="gone" />
+
         <LinearLayout
             android:id="@+id/emulatePill"
             style="@style/Widget.Dish.Pill"

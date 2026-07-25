@@ -165,13 +165,13 @@ class DishNavigator(
 
     fun toGamepad(
         connectionId: String,
-        usePsLayout: Boolean,
+        skin: GamepadSkin,
     ) {
         go(
             R.id.gamepadOverlayActivity,
             Bundle().apply {
                 putString("extra_connection_id", connectionId)
-                putBoolean("extra_use_ps_layout", usePsLayout)
+                putString("extra_gamepad_skin", skin.name)
             },
         )
     }

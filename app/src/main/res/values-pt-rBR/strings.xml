@@ -335,6 +335,7 @@
     <string name="binding_apply_warn_title">Modo Direto indisponível</string>
     <string name="binding_apply_warn_detail">%1$s está vinculado a %2$s no modo Padrão.</string>
     <string name="binding_label_emulate">Emular como</string>
+    <string name="binding_emulate_load_failed">Não foi possível carregar os tipos. Toque para tentar novamente</string>
     <string name="binding_label_functions">Funções</string>
     <string name="binding_label_input">Entrada</string>
     <string name="binding_label_binding">Vínculo</string>

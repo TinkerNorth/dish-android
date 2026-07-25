@@ -331,6 +331,7 @@
     <string name="binding_apply_warn_title">Direktmodus nicht verfügbar</string>
     <string name="binding_apply_warn_detail">%1$s ist mit %2$s im Standardmodus verbunden.</string>
     <string name="binding_label_emulate">Emulieren als</string>
+    <string name="binding_emulate_load_failed">Typen konnten nicht geladen werden. Zum Wiederholen tippen</string>
     <string name="binding_label_functions">Funktionen</string>
     <string name="binding_label_input">Eingabe</string>
     <string name="binding_label_binding">Zuordnung</string>

@@ -12,7 +12,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
+import com.tinkernorth.dish.composer.CONTROLLER_TYPE_SWITCHPRO
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.core.model.DishNotification
@@ -90,6 +92,8 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
 
         binding.cardTypeXbox.typeCard.setOnClickListener { pickType(CONTROLLER_TYPE_XBOX) }
         binding.cardTypePlaystation.typeCard.setOnClickListener { pickType(CONTROLLER_TYPE_PLAYSTATION) }
+        binding.cardTypeDualsense.typeCard.setOnClickListener { pickType(CONTROLLER_TYPE_DUALSENSE) }
+        binding.cardTypeSwitchpro.typeCard.setOnClickListener { pickType(CONTROLLER_TYPE_SWITCHPRO) }
 
         binding.segOff.setOnClickListener { viewModel.setTouchpad(TouchpadModeValue.OFF) }
         binding.segPad.setOnClickListener { viewModel.setTouchpad(TouchpadModeValue.DS4) }
@@ -142,8 +146,13 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         val locked = state.isBluetoothHost
         bindTypeCard(binding.cardTypeXbox, state, CONTROLLER_TYPE_XBOX, locked)
         bindTypeCard(binding.cardTypePlaystation, state, CONTROLLER_TYPE_PLAYSTATION, locked)
+        bindTypeCard(binding.cardTypeDualsense, state, CONTROLLER_TYPE_DUALSENSE, locked)
+        bindTypeCard(binding.cardTypeSwitchpro, state, CONTROLLER_TYPE_SWITCHPRO, locked)
+        // A Bluetooth host locks to Xbox/PlayStation, so its other cards never show.
         binding.cardTypeXbox.typeCard.visibility = visibleIf(!locked || selectedType == CONTROLLER_TYPE_XBOX)
         binding.cardTypePlaystation.typeCard.visibility = visibleIf(!locked || selectedType == CONTROLLER_TYPE_PLAYSTATION)
+        binding.cardTypeDualsense.typeCard.visibility = visibleIf(!locked || selectedType == CONTROLLER_TYPE_DUALSENSE)
+        binding.cardTypeSwitchpro.typeCard.visibility = visibleIf(!locked || selectedType == CONTROLLER_TYPE_SWITCHPRO)
     }
 
     private fun bindTypeCard(

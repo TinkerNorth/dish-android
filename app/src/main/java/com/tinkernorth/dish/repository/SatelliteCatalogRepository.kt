@@ -27,6 +27,7 @@ class SatelliteCatalogRepository
         private val gateway: DiscoveryGateway,
         private val json: Json,
         private val hostFeaturesStore: SatelliteHostFeaturesStore,
+        private val legacyCatalogTranslator: LegacyCatalogTranslator,
     ) {
         private data class CacheEntry(
             val etag: String?,
@@ -63,9 +64,13 @@ class SatelliteCatalogRepository
             val catalog =
                 runCatching { json.decodeFromString(CatalogDto.serializer(), reply.body) }
                     .getOrNull() ?: return cached?.catalog
-            cache[satelliteId] = CacheEntry(reply.etag, catalog)
-            hostFeaturesStore.setFeatures(satelliteId, HostFeatureSet.fromCatalog(catalog))
-            return catalog
+            // All catalogVersion handling is the translator's: legacy/absent is substituted for a
+            // known catalog here, so the cache, host features and every caller see the normalized
+            // shape and the rest of the app never branches on the version.
+            val normalized = legacyCatalogTranslator.normalize(catalog)
+            cache[satelliteId] = CacheEntry(reply.etag, normalized)
+            hostFeaturesStore.setFeatures(satelliteId, HostFeatureSet.fromCatalog(normalized))
+            return normalized
         }
 
         fun cached(satelliteId: String): CatalogDto? = cache[satelliteId]?.catalog

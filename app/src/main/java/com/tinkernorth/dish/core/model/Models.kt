@@ -185,6 +185,9 @@ data class CatalogDto(
     val locale: String = "en",
     val protocolVersion: Int = 1,
     val serverVersion: String = "",
+    // Catalog schema version. Absent ⇒ a satellite predating it, parsed as 1 (legacy); the
+    // repository substitutes a known catalog for legacy versions (see LegacyCatalogTranslator).
+    val catalogVersion: Int = 1,
     val controllerTypes: List<CatalogTypeDto> = emptyList(),
     val hostFeatures: Map<String, CatalogHostFeatureDto> = emptyMap(),
 )

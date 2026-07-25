@@ -71,6 +71,14 @@
                 <include
                     android:id="@+id/cardTypePlaystation"
                     layout="@layout/setup_type_card" />
+
+                <include
+                    android:id="@+id/cardTypeDualsense"
+                    layout="@layout/setup_type_card" />
+
+                <include
+                    android:id="@+id/cardTypeSwitchpro"
+                    layout="@layout/setup_type_card" />
             </LinearLayout>
 
             <LinearLayout

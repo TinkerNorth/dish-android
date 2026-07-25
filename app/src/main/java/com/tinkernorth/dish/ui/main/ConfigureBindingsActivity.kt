@@ -95,8 +95,8 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
             getString(if (snapshot.bound) R.string.binding_activity_title else R.string.binding_activity_title_bind)
         binding.btnApply.text =
             getString(if (snapshot.bound) R.string.binding_activity_apply else R.string.binding_activity_bind)
-        binding.btnApply.isEnabled = state.hostChosen
-        binding.btnApply.alpha = if (state.hostChosen) 1f else DISABLED_ALPHA
+        binding.btnApply.isEnabled = state.canApply
+        binding.btnApply.alpha = if (state.canApply) 1f else DISABLED_ALPHA
         binding.btnUnbind.visibility = if (snapshot.bound) View.VISIBLE else View.GONE
         binding.bottomBar.visibility = if (state.noHosts) View.GONE else View.VISIBLE
 
@@ -182,12 +182,7 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
 
     private fun bindBindingSection(state: ConfigUiState) {
         val bz = binding.sectionBinding
-        val typeLabel = viewModel.typeLabel(state.draft?.type ?: CONTROLLER_TYPE_XBOX)
-        bz.tvEmulateText.text = typeLabel
-        bz.emulateDropdown.text = typeLabel
-        bz.emulatePill.visibility = if (state.isBluetoothHost) View.VISIBLE else View.GONE
-        bz.emulateDropdown.visibility = if (state.isBluetoothHost) View.GONE else View.VISIBLE
-        bz.emulateDropdown.setOnClickListener { showTypeMenu() }
+        bindEmulateRow(state)
 
         val motionVisible = state.motionAvailable
         bz.motionDivider.visibility = if (motionVisible) View.VISIBLE else View.GONE
@@ -224,6 +219,36 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
             bz.swRumble.setOnCheckedChangeListener(null)
             bz.swRumble.isChecked = state.draft?.rumbleOn == true
             bz.swRumble.setOnCheckedChangeListener { _, isChecked -> viewModel.setRumble(isChecked) }
+        }
+    }
+
+    // The "Emulate as" type is host-owned. A Bluetooth host shows the static profile pill (unchanged).
+    // A satellite host shows a loader until its catalog resolves the type, the dropdown once Ready, or a
+    // tap-to-retry affordance if the fetch failed with nothing cached — never a guessed default.
+    private fun bindEmulateRow(state: ConfigUiState) {
+        val bz = binding.sectionBinding
+        if (state.isBluetoothHost) {
+            bz.tvEmulateText.text = viewModel.typeLabel(state.draft?.type ?: CONTROLLER_TYPE_XBOX)
+            bz.emulatePill.visibility = View.VISIBLE
+            bz.emulateLoading.visibility = View.GONE
+            bz.emulateDropdown.visibility = View.GONE
+            return
+        }
+        bz.emulatePill.visibility = View.GONE
+        bz.emulateLoading.visibility = if (state.typeLoad == TypeLoad.Loading) View.VISIBLE else View.GONE
+        bz.emulateDropdown.visibility = if (state.typeLoad == TypeLoad.Loading) View.GONE else View.VISIBLE
+        when (state.typeLoad) {
+            TypeLoad.Loading -> Unit
+            TypeLoad.Ready -> {
+                state.draft?.type?.let { bz.emulateDropdown.text = viewModel.typeLabel(it) }
+                bz.emulateDropdown.setIconResource(R.drawable.ic_chevron_down)
+                bz.emulateDropdown.setOnClickListener { showTypeMenu() }
+            }
+            TypeLoad.Error -> {
+                bz.emulateDropdown.text = getString(R.string.binding_emulate_load_failed)
+                bz.emulateDropdown.setIconResource(R.drawable.ic_refresh)
+                bz.emulateDropdown.setOnClickListener { viewModel.retryTypeLoad() }
+            }
         }
     }
 
