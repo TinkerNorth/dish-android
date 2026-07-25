@@ -28,6 +28,12 @@ class ControllerDescriptorTest {
     }
 
     @Test
+    fun `toJson carries a non-legacy type id verbatim (DualSense = 2)`() {
+        val d = ControllerDescriptor(ctrlIdx = 0, type = 2, caps = ControllerDescriptor.CAP_RUMBLE, touchpadMode = "off")
+        assertTrue(d.toJson().contains("\"type\":2"))
+    }
+
+    @Test
     fun `an unknown touchpad mode is sanitized to off, never sent raw`() {
         val d = ControllerDescriptor(ctrlIdx = 0, type = 0, caps = 0, touchpadMode = "warp-drive")
         assertTrue(d.toJson().contains("\"touchpadMode\":\"off\""))

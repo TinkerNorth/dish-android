@@ -28,6 +28,7 @@ import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.sensor.MotionStreamState
 import com.tinkernorth.dish.source.sensor.PhoneBatterySource
 import com.tinkernorth.dish.source.sensor.PhoneMotionSource
+import com.tinkernorth.dish.ui.common.GamepadSkin
 import com.tinkernorth.dish.ui.common.GamepadTouchView
 import com.tinkernorth.dish.ui.common.paintConnectionMenuItem
 import com.tinkernorth.dish.ui.common.setupDishToolbar
@@ -71,7 +72,7 @@ class GamepadOverlayActivity :
         installBaseScaffolding()
 
         binding.gamepadTouchView.listener = this
-        binding.gamepadTouchView.usePlayStation = intent.getBooleanExtra(EXTRA_USE_PS_LAYOUT, false)
+        binding.gamepadTouchView.skin = GamepadSkin.fromName(intent.getStringExtra(EXTRA_GAMEPAD_SKIN))
         setupDishToolbar(binding.overlayToolbar)
         binding.overlayToolbar.setTitle(R.string.overlay_title_gamepad)
         installRateReadout(
@@ -332,6 +333,6 @@ class GamepadOverlayActivity :
         // Companion members aren't inherited. Re-export keeps existing
         // qualified call sites compiling.
         const val EXTRA_CONNECTION_ID = BaseInputOverlayActivity.EXTRA_CONNECTION_ID
-        const val EXTRA_USE_PS_LAYOUT = "extra_use_ps_layout"
+        const val EXTRA_GAMEPAD_SKIN = "extra_gamepad_skin"
     }
 }

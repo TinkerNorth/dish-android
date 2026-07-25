@@ -88,7 +88,7 @@ class GamepadTouchView
             const val HAT_NW = 8
         }
 
-        var usePlayStation = false
+        var skin = GamepadSkin.Xbox
             set(value) {
                 field = value
                 loadDrawables()
@@ -205,44 +205,68 @@ class GamepadTouchView
         private fun loadDrawables() {
             val c = context
             val tint = ContextCompat.getColor(c, R.color.colorOnSurface)
-            if (usePlayStation) {
-                icBtnA = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_cross)
-                icBtnB = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_circle)
-                icBtnX = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_square)
-                icBtnY = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_triangle)
-                icDpad = loadTinted(c, R.drawable.ic_gp_ps_dpad, tint)
-                icDpadUp = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_dpad_up)
-                icDpadDown = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_dpad_down)
-                icDpadLeft = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_dpad_left)
-                icDpadRight = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_dpad_right)
-                icLB = loadTinted(c, R.drawable.ic_gp_ps_l1, tint)
-                icRB = loadTinted(c, R.drawable.ic_gp_ps_r1, tint)
-                icLT = loadTinted(c, R.drawable.ic_gp_ps_l2, tint)
-                icRT = loadTinted(c, R.drawable.ic_gp_ps_r2, tint)
-                icStickL = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_stick_l)
-                icStickR = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_stick_r)
-                icSelect = loadTinted(c, R.drawable.ic_gp_ps_share, tint)
-                icStart = loadTinted(c, R.drawable.ic_gp_ps_options, tint)
-                icHome = loadTinted(c, R.drawable.ic_gp_ps_logo, tint)
-            } else {
-                icBtnA = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_a)
-                icBtnB = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_b)
-                icBtnX = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_x)
-                icBtnY = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_y)
-                icDpad = loadTinted(c, R.drawable.ic_gp_xbox_dpad, tint)
-                icDpadUp = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_dpad_up)
-                icDpadDown = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_dpad_down)
-                icDpadLeft = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_dpad_left)
-                icDpadRight = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_dpad_right)
-                icLB = loadTinted(c, R.drawable.ic_gp_xbox_lb, tint)
-                icRB = loadTinted(c, R.drawable.ic_gp_xbox_rb, tint)
-                icLT = loadTinted(c, R.drawable.ic_gp_xbox_lt, tint)
-                icRT = loadTinted(c, R.drawable.ic_gp_xbox_rt, tint)
-                icStickL = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_stick_l)
-                icStickR = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_stick_r)
-                icSelect = loadTinted(c, R.drawable.ic_gp_xbox_view, tint)
-                icStart = loadTinted(c, R.drawable.ic_gp_xbox_menu, tint)
-                icHome = loadTinted(c, R.drawable.ic_gp_xbox_guide, tint)
+            when (skin) {
+                GamepadSkin.PlayStation -> {
+                    icBtnA = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_cross)
+                    icBtnB = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_circle)
+                    icBtnX = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_square)
+                    icBtnY = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_triangle)
+                    icDpad = loadTinted(c, R.drawable.ic_gp_ps_dpad, tint)
+                    icDpadUp = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_dpad_up)
+                    icDpadDown = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_dpad_down)
+                    icDpadLeft = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_dpad_left)
+                    icDpadRight = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_dpad_right)
+                    icLB = loadTinted(c, R.drawable.ic_gp_ps_l1, tint)
+                    icRB = loadTinted(c, R.drawable.ic_gp_ps_r1, tint)
+                    icLT = loadTinted(c, R.drawable.ic_gp_ps_l2, tint)
+                    icRT = loadTinted(c, R.drawable.ic_gp_ps_r2, tint)
+                    icStickL = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_stick_l)
+                    icStickR = ContextCompat.getDrawable(c, R.drawable.ic_gp_ps_stick_r)
+                    icSelect = loadTinted(c, R.drawable.ic_gp_ps_share, tint)
+                    icStart = loadTinted(c, R.drawable.ic_gp_ps_options, tint)
+                    icHome = loadTinted(c, R.drawable.ic_gp_ps_logo, tint)
+                }
+                // Nintendo swaps A/B and X/Y positions vs Xbox: south=B, east=A, west=Y, north=X.
+                GamepadSkin.Switch -> {
+                    icBtnA = ContextCompat.getDrawable(c, R.drawable.ic_gp_switch_b)
+                    icBtnB = ContextCompat.getDrawable(c, R.drawable.ic_gp_switch_a)
+                    icBtnX = ContextCompat.getDrawable(c, R.drawable.ic_gp_switch_y)
+                    icBtnY = ContextCompat.getDrawable(c, R.drawable.ic_gp_switch_x)
+                    icDpad = loadTinted(c, R.drawable.ic_gp_switch_dpad, tint)
+                    icDpadUp = ContextCompat.getDrawable(c, R.drawable.ic_gp_switch_dpad_up)
+                    icDpadDown = ContextCompat.getDrawable(c, R.drawable.ic_gp_switch_dpad_down)
+                    icDpadLeft = ContextCompat.getDrawable(c, R.drawable.ic_gp_switch_dpad_left)
+                    icDpadRight = ContextCompat.getDrawable(c, R.drawable.ic_gp_switch_dpad_right)
+                    icLB = loadTinted(c, R.drawable.ic_gp_switch_l, tint)
+                    icRB = loadTinted(c, R.drawable.ic_gp_switch_r, tint)
+                    icLT = loadTinted(c, R.drawable.ic_gp_switch_zl, tint)
+                    icRT = loadTinted(c, R.drawable.ic_gp_switch_zr, tint)
+                    icStickL = ContextCompat.getDrawable(c, R.drawable.ic_gp_switch_stick_l)
+                    icStickR = ContextCompat.getDrawable(c, R.drawable.ic_gp_switch_stick_r)
+                    icSelect = loadTinted(c, R.drawable.ic_gp_switch_minus, tint)
+                    icStart = loadTinted(c, R.drawable.ic_gp_switch_plus, tint)
+                    icHome = loadTinted(c, R.drawable.ic_gp_switch_home, tint)
+                }
+                GamepadSkin.Xbox -> {
+                    icBtnA = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_a)
+                    icBtnB = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_b)
+                    icBtnX = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_x)
+                    icBtnY = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_y)
+                    icDpad = loadTinted(c, R.drawable.ic_gp_xbox_dpad, tint)
+                    icDpadUp = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_dpad_up)
+                    icDpadDown = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_dpad_down)
+                    icDpadLeft = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_dpad_left)
+                    icDpadRight = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_dpad_right)
+                    icLB = loadTinted(c, R.drawable.ic_gp_xbox_lb, tint)
+                    icRB = loadTinted(c, R.drawable.ic_gp_xbox_rb, tint)
+                    icLT = loadTinted(c, R.drawable.ic_gp_xbox_lt, tint)
+                    icRT = loadTinted(c, R.drawable.ic_gp_xbox_rt, tint)
+                    icStickL = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_stick_l)
+                    icStickR = ContextCompat.getDrawable(c, R.drawable.ic_gp_xbox_stick_r)
+                    icSelect = loadTinted(c, R.drawable.ic_gp_xbox_view, tint)
+                    icStart = loadTinted(c, R.drawable.ic_gp_xbox_menu, tint)
+                    icHome = loadTinted(c, R.drawable.ic_gp_xbox_guide, tint)
+                }
             }
         }
 
@@ -266,7 +290,7 @@ class GamepadTouchView
         private fun relayout() {
             if (width <= 0 || height <= 0) return
             density = resources.displayMetrics.density
-            layout = computeGamepadLayout(width, height, density, safeInsets, usePlayStation)
+            layout = computeGamepadLayout(width, height, density, safeInsets, skin)
         }
 
         private fun drawDrawable(

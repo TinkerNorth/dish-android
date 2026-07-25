@@ -288,7 +288,7 @@ class DishScreenshots {
         val intent =
             Intent(targetContext, GamepadOverlayActivity::class.java).apply {
                 putExtra("extra_connection_id", gamingId)
-                putExtra("extra_use_ps_layout", false)
+                putExtra("extra_gamepad_skin", "Xbox")
             }
         ActivityScenario.launch<GamepadOverlayActivity>(intent).use {
             settle(2000)
