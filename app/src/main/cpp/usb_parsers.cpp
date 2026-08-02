@@ -45,6 +45,7 @@ static constexpr int32_t kPsAccelResPerG = 8192;
 static const KnownDevice kKnown[] = {
     {0x045E, 0x028E, "Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
     {0x045E, 0x028F, "Xbox 360 Wireless Receiver (wired)", Parser::XINPUT_360, InitKind::NONE},
+    {0x1949, 0x041A, "Amazon Luna Controller", Parser::XINPUT_360, InitKind::NONE},
     {0x045E, 0x02A1, "Xbox 360 Wireless Controller (PC)", Parser::XINPUT_360_WIRELESS,
      InitKind::NONE},
     {0x045E, 0x0291, "Xbox 360 Wireless Receiver (rev 1)", Parser::XINPUT_360_WIRELESS,

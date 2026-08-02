@@ -30,6 +30,9 @@ four repos share a version number.
   native USB and HID decoding, including a generic HID descriptor parser,
   DualShock 4 and DualSense motion, Switch Pro motion, and Xbox 360
   wireless rumble. Imported models are recognized but flagged unverified.
+- Amazon Luna Controller (wired USB) recognized on the verified fast lane:
+  its wired mode is a byte-identical Xbox 360/XInput report, confirmed on
+  hardware for every button, both triggers, both sticks, and rumble.
 - Tri-zone controller cards: a read-only report card (connection,
   destination, emulated type, functions) plus a dedicated Configure
   bindings screen. Binding changes are staged and applied explicitly
