@@ -22,6 +22,7 @@ enum class Parser : uint8_t {
     GENERIC_HID_GAMEPAD = 7,
     // Same input report as XINPUT_360, but rumble needs the wrapped wireless-receiver frame.
     XINPUT_360_WIRELESS = 8,
+    STEAM_CONTROLLER = 9,
 };
 
 enum class InitKind : uint8_t {
@@ -30,6 +31,16 @@ enum class InitKind : uint8_t {
     SWITCH_PRO_HANDSHAKE = 2,
     // Xbox One S / Elite Series 2 want the GIP set-mode packet on top of the universal sequence.
     XBOX_ONE_S = 3,
+    // Steam Controller: stop the firmware's stand-alone keyboard/mouse emulation and enable the
+    // IMU.
+    STEAM_QUIET = 4,
+};
+
+// Which direction a Steam Controller config sequence runs. QUIET is sent at attach; RESTORE must
+// run on every exit path or the pad stays mute as a desktop mouse after we hand it back.
+enum class SteamConfig : uint8_t {
+    QUIET = 0,
+    RESTORE = 1,
 };
 
 struct KnownDevice {
@@ -82,6 +93,9 @@ struct ParserState {
     // Filled at attach for DUALSHOCK4 / DUALSENSE when the calibration report reads; invalid
     // otherwise.
     PsImuCalib psImu;
+    // Steam Controller stick, held across the frames where the shared left axes carry pad data.
+    int16_t steamStickX = 0;
+    int16_t steamStickY = 0;
 };
 
 const KnownDevice* lookupKnown(uint16_t vid, uint16_t pid);
@@ -108,7 +122,15 @@ bool parserFrameworkRumbleUnreliable(Parser p);
 // number at byte 2), returns its length or 0 when there are no more. runInit sends them in order.
 size_t buildGipInitPacket(InitKind init, int index, uint8_t seq, uint8_t* out, size_t outCap);
 
-bool runInit(int fd, uint8_t epOut, Parser p, InitKind init);
+// Pure: writes the index-th Steam Controller feature report for a config direction into out,
+// returns its length or 0 when there are no more. Payload only; the caller frames it as a
+// SET_REPORT.
+size_t buildSteamConfigPacket(SteamConfig stage, int index, uint8_t* out, size_t outCap);
+
+bool runInit(int fd, int interfaceNumber, uint8_t epOut, Parser p, InitKind init);
+
+// Undoes runInit's device-side changes. No-op for families that never changed the device.
+void runTeardown(int fd, int interfaceNumber, Parser p);
 
 bool runRumble(int fd, uint8_t epOut, Parser p, uint16_t strong, uint16_t weak, uint8_t seq);
 

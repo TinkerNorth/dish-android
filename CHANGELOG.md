@@ -30,6 +30,11 @@ four repos share a version number.
   native USB and HID decoding, including a generic HID descriptor parser,
   DualShock 4 and DualSense motion, Switch Pro motion, and Xbox 360
   wireless rumble. Imported models are recognized but flagged unverified.
+- Steam Controller over USB Direct (wired and dongle): sticks, triggers,
+  buttons, motion, and the right trackpad as a right stick. While claimed
+  it no longer doubles as a mouse and keyboard for the phone, and it is
+  put back the way it was when released. Unverified on hardware, so it
+  stays opt-in and is never auto-claimed.
 - Tri-zone controller cards: a read-only report card (connection,
   destination, emulated type, functions) plus a dedicated Configure
   bindings screen. Binding changes are staged and applied explicitly

@@ -249,6 +249,109 @@ class UsbGamepadManagerTest {
         }
     }
 
+    private fun hidInterface(
+        ifaceId: Int,
+        subclass: Int,
+        protocol: Int,
+        epInAddress: Int,
+    ): UsbInterface {
+        val epIn =
+            mockk<UsbEndpoint> {
+                every { type } returns UsbConstants.USB_ENDPOINT_XFER_INT
+                every { direction } returns UsbConstants.USB_DIR_IN
+                every { address } returns epInAddress
+                every { maxPacketSize } returns 64
+                every { interval } returns 4
+            }
+        return mockk {
+            every { interfaceClass } returns UsbConstants.USB_CLASS_HID
+            every { interfaceSubclass } returns subclass
+            every { interfaceProtocol } returns protocol
+            every { id } returns ifaceId
+            every { endpointCount } returns 1
+            every { getEndpoint(0) } returns epIn
+        }
+    }
+
+    // Boot keyboard and mouse first, the way a Steam Controller enumerates: ranking every HID
+    // interface alike would claim the keyboard and stream decoded key bytes as gamepad state.
+    private fun keyboardMousePadComposite(): UsbDevice {
+        val keyboard = hidInterface(ifaceId = 0, subclass = 0x01, protocol = 0x01, epInAddress = 0x81)
+        val mouse = hidInterface(ifaceId = 1, subclass = 0x01, protocol = 0x02, epInAddress = 0x82)
+        val pad = hidInterface(ifaceId = 2, subclass = 0x00, protocol = 0x00, epInAddress = 0x83)
+        return mockk {
+            every { vendorId } returns vid
+            every { productId } returns pid
+            every { deviceName } returns "composite-hid"
+            every { interfaceCount } returns 3
+            every { getInterface(0) } returns keyboard
+            every { getInterface(1) } returns mouse
+            every { getInterface(2) } returns pad
+        }
+    }
+
+    private fun bootKeyboardOnly(): UsbDevice {
+        val keyboard = hidInterface(ifaceId = 0, subclass = 0x01, protocol = 0x01, epInAddress = 0x81)
+        return mockk {
+            every { vendorId } returns vid
+            every { productId } returns pid
+            every { deviceName } returns "boot-only"
+            every { interfaceCount } returns 1
+            every { getInterface(0) } returns keyboard
+        }
+    }
+
+    private fun expectAttach(dev: UsbDevice): UsbGamepadManager {
+        val conn = mockConn()
+        every { usbManager.openDevice(dev) } returns conn
+        every { conn.claimInterface(any(), true) } returns true
+        every {
+            native.attachUsbDevice(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+        } returns -1000
+        return buildManagerForDevice(dev)
+    }
+
+    @Test
+    fun `claims the controller interface of a composite pad, not its boot keyboard or mouse`() {
+        val dev = keyboardMousePadComposite()
+        expectAttach(dev).tryDirectMode(vid, pid)
+        verify {
+            native.attachUsbDevice(
+                fd = any(),
+                vendorId = vid,
+                productId = pid,
+                interfaceNumber = 2,
+                endpointIn = 0x83,
+                endpointInMaxPacket = any(),
+                endpointOut = any(),
+                interfaceClass = UsbConstants.USB_CLASS_HID,
+                interfaceSubclass = 0x00,
+                interfaceProtocol = 0x00,
+            )
+        }
+    }
+
+    // Deprioritised, not disqualified: a device with nothing else must still be claimable.
+    @Test
+    fun `falls back to a boot interface when the device offers no other`() {
+        val dev = bootKeyboardOnly()
+        expectAttach(dev).tryDirectMode(vid, pid)
+        verify {
+            native.attachUsbDevice(
+                fd = any(),
+                vendorId = vid,
+                productId = pid,
+                interfaceNumber = 0,
+                endpointIn = 0x81,
+                endpointInMaxPacket = any(),
+                endpointOut = any(),
+                interfaceClass = UsbConstants.USB_CLASS_HID,
+                interfaceSubclass = 0x01,
+                interfaceProtocol = 0x01,
+            )
+        }
+    }
+
     // A real registry so directFailureFor genuinely reflects what markDirectFailed recorded, instead of
     // relying on stubbing the read back (the guard is integration, not a single mocked return).
     private fun realRegistry(): PhysicalGamepadRegistry {

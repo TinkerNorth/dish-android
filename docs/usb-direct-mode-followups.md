@@ -126,3 +126,41 @@ counter handling, and sources are in `docs/rumble.md`.
 **Acceptance:** A claimed USB-direct pad of each verified family rumbles on `MSG_RUMBLE` and stops on
 the 0,0 packet (or the safety auto-stop), with no effect on input latency. Unverified families either
 work or stay silent; none receives a malformed report.
+
+---
+
+## 8. Steam Controller (implemented, needs hardware verification)
+
+**Status:** Implemented from SDL and `hid-steam` (see `THIRD_PARTY.md`), never run against the
+hardware. `Parser::STEAM_CONTROLLER` decodes the state packet; `InitKind::STEAM_QUIET` stops the
+firmware's stand-alone keyboard/mouse emulation at attach and `runTeardown` restores it on all three
+exit paths. Listed in `kImported`, so Direct is opt-in and never auto-claimed.
+
+**Unverified and worth checking first:**
+- IMU axis order and signs. Gyro is mapped pitch/yaw/roll from raw X/Z/Y and accel from X/Z/-Y,
+  following SDL's sensor block; the same signs are unverified for the Switch Pro (item 2).
+- Right pad as right stick. It recentres on lift and carries SDL's 15-degree shell rotation but not
+  SDL's extra +1000 offset, which would park the stick off centre. Feel is untested; an outer
+  radius or response curve may be needed.
+- Whether the settings survive an unplug. They are assumed volatile. A wired pad powers down when
+  unplugged, but a controller left paired to the dongle stays powered, so an app kill between attach
+  and teardown could leave it mute as a desktop mouse until it sleeps.
+- Dongle-specific behaviour: `ID_CONTROLLER_WIRELESS` connect/disconnect events arrive on the same
+  endpoint and are currently rejected by the decoder rather than driving connect state.
+
+**Deliberately absent:**
+- Rumble. The pad has no motors, only trackpad voice coils driven by `ID_TRIGGER_HAPTIC_PULSE`
+  pulse trains; the simple rumble command is Steam Deck firmware only, and `hid-steam` gates force
+  feedback on the Deck quirk. `parserHasRumble` is false, so nothing is advertised.
+- The grip buttons, which have no XUSB equivalent.
+- Streaming either trackpad over `MSG_TOUCHPAD`, which would double-actuate against the right stick.
+- Bluetooth. The pad speaks Valve's own BLE protocol, not HID over GATT, so it never reaches the
+  framework as a gamepad.
+
+**Where:** `app/src/main/cpp/usb_parsers.cpp` (`decodeSteamController`, `buildSteamConfigPacket`,
+`runInit`, `runTeardown`), `app/src/main/cpp/usb_host.cpp` (`attachDevice`, `shutdownLocked`),
+`app/src/main/java/.../source/usb/UsbGamepadManager.kt` (`gameInterfaceRank`).
+
+**Acceptance:** A wired Steam Controller picked as Direct streams sticks, triggers, buttons and
+motion, drives nothing on the phone while claimed, and works as a desktop mouse again after being
+unplugged or switched back to Standard.

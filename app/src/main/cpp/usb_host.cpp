@@ -263,6 +263,7 @@ void shutdownLocked(const std::shared_ptr<DeviceCtx>& ctx) {
     }
     // outMtx so an in-flight sendRumble finishes before the fd it is writing to is closed.
     std::lock_guard<std::mutex> lock(ctx->outMtx);
+    usbparsers::runTeardown(ctx->fd, ctx->interfaceNumber, ctx->parser);
     releaseAndReattach(ctx->fd, ctx->interfaceNumber);
     if (ctx->fd >= 0) {
         ::close(ctx->fd);
@@ -363,9 +364,12 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
         }
     }
 
-    if (!usbparsers::runInit(fd, epOut, parser, init)) {
+    // Both bail-outs below run teardown first: a partly-applied init still changed the device, and
+    // handing it back that way leaves it useless to its owner outside this app.
+    if (!usbparsers::runInit(fd, interfaceNumber, epOut, parser, init)) {
         LOGI("attach %04X:%04X (%s): init failed, falling back to routed", vid, pid,
              modelName.c_str());
+        usbparsers::runTeardown(fd, interfaceNumber, parser);
         releaseAndReattach(fd, interfaceNumber);
         ::close(fd);
         return out;
@@ -374,6 +378,7 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
     if (!probeDecodable(fd, epIn, epInMaxPacket, parser)) {
         LOGI("attach %04X:%04X (%s): no parseable reports, releasing to framework", vid, pid,
              modelName.c_str());
+        usbparsers::runTeardown(fd, interfaceNumber, parser);
         releaseAndReattach(fd, interfaceNumber);
         ::close(fd);
         return out;
