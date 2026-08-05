@@ -501,11 +501,13 @@ bool bulkWrite(int fd, uint8_t epOut, const uint8_t* data, size_t len, unsigned 
 }
 
 constexpr size_t kFeatureReportBytes = 64;
-constexpr int kFeatureReportAttempts = 10;
+constexpr int kFeatureReportAttempts = 25;
 constexpr unsigned kFeatureReportRetryUs = 20000;
 
 // SET_REPORT(Feature, report id 0), always a full 64-byte buffer. EPIPE here is the wireless
 // dongle under load, not a real failure; SDL and hid-steam both retry it rather than give up.
+// hid-steam allows 50 tries; the cap is lower here so that even a wholly unresponsive device
+// finishes init and teardown well inside the Kotlin side's 4s path-transition timeout.
 bool sendFeatureReport(int fd, int interfaceNumber, const uint8_t* data, size_t len) {
     if (interfaceNumber < 0 || len > kFeatureReportBytes) return false;
     uint8_t buf[kFeatureReportBytes] = {};
@@ -1258,6 +1260,10 @@ size_t buildSteamConfigPacket(SteamConfig stage, int index, uint8_t* out, size_t
                                              0x07, 0x00, 0x30, 0x18, 0x00};
     static const uint8_t kDefaultMappings[] = {0x85, 0x00};
     static const uint8_t kDefaultSettings[] = {0x8E, 0x00};
+    // Loading the defaults does not by itself hand the right pad back as a mouse: SDL follows it
+    // with an explicit right trackpad mode = absolute mouse, and leaving that out is the one way
+    // this teardown could still return a pad its owner cannot use.
+    static const uint8_t kRestoreMouse[] = {0x87, 0x03, 0x08, 0x00, 0x00};
 
     struct Pkt {
         const uint8_t* data;
@@ -1266,10 +1272,14 @@ size_t buildSteamConfigPacket(SteamConfig stage, int index, uint8_t* out, size_t
     static const Pkt kQuietSeq[] = {{kClearMappings, sizeof(kClearMappings)},
                                     {kQuietSettings, sizeof(kQuietSettings)}};
     static const Pkt kRestoreSeq[] = {{kDefaultMappings, sizeof(kDefaultMappings)},
-                                      {kDefaultSettings, sizeof(kDefaultSettings)}};
+                                      {kDefaultSettings, sizeof(kDefaultSettings)},
+                                      {kRestoreMouse, sizeof(kRestoreMouse)}};
 
-    if (index < 0 || index >= 2) return 0;
-    const Pkt* seqArr = stage == SteamConfig::QUIET ? kQuietSeq : kRestoreSeq;
+    const bool quiet = stage == SteamConfig::QUIET;
+    const Pkt* seqArr = quiet ? kQuietSeq : kRestoreSeq;
+    const int seqLen = quiet ? (int)(sizeof(kQuietSeq) / sizeof(kQuietSeq[0]))
+                             : (int)(sizeof(kRestoreSeq) / sizeof(kRestoreSeq[0]));
+    if (index < 0 || index >= seqLen) return 0;
     size_t len = seqArr[index].len;
     if (len > outCap) return 0;
     memcpy(out, seqArr[index].data, len);

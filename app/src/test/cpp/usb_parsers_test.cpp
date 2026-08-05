@@ -987,7 +987,16 @@ TEST(SteamConfigPackets, RestoreSequencePutsTheDeviceBack) {
     EXPECT_EQ(0x85, buf[0]);
     ASSERT_EQ(2u, buildSteamConfigPacket(SteamConfig::RESTORE, 1, buf, sizeof(buf)));
     EXPECT_EQ(0x8E, buf[0]);
-    EXPECT_EQ(0u, buildSteamConfigPacket(SteamConfig::RESTORE, 2, buf, sizeof(buf)));
+
+    // Loading the defaults leaves the right pad silent, so mouse mode is restored by name.
+    ASSERT_EQ(5u, buildSteamConfigPacket(SteamConfig::RESTORE, 2, buf, sizeof(buf)));
+    EXPECT_EQ(0x87, buf[0]);
+    EXPECT_EQ(0x03, buf[1]);
+    EXPECT_EQ(0x08, buf[2]); // right trackpad mode
+    EXPECT_EQ(0x00, buf[3]); // = absolute mouse
+    EXPECT_EQ(0x00, buf[4]);
+
+    EXPECT_EQ(0u, buildSteamConfigPacket(SteamConfig::RESTORE, 3, buf, sizeof(buf)));
 }
 
 TEST(SteamConfigPackets, RefusesToOverrunACallerBuffer) {

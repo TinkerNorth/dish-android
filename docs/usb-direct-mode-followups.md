@@ -148,6 +148,18 @@ exit paths. Listed in `kImported`, so Direct is opt-in and never auto-claimed.
 - Dongle-specific behaviour: `ID_CONTROLLER_WIRELESS` connect/disconnect events arrive on the same
   endpoint and are currently rejected by the decoder rather than driving connect state.
 
+**Known limitation, the dongle reaches one slot:** the wired pad enumerates as mouse, keyboard,
+pad; the dongle enumerates as keyboard then four pad interfaces, one per paired controller.
+`findInterruptInPair` breaks a rank tie by taking the first candidate, so only the first slot is
+ever claimed. A pad paired to another slot fails `probeDecodable` and falls back to routed, which
+is safe but looks like "Direct failed". Reaching the others means attaching each candidate in turn
+rather than picking one up front.
+
+The interface pick also assumes the emulated keyboard and mouse declare the HID boot subclass.
+`hid-steam` deliberately does not rely on that, distinguishing the real pad by its report
+descriptor instead. If the assumption is wrong the config packets go to the wrong interface, stall,
+and the claim falls back to routed after roughly a second.
+
 **Deliberately absent:**
 - Rumble. The pad has no motors, only trackpad voice coils driven by `ID_TRIGGER_HAPTIC_PULSE`
   pulse trains; the simple rumble command is Steam Deck firmware only, and `hid-steam` gates force
