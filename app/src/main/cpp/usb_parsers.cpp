@@ -45,7 +45,6 @@ static constexpr int32_t kPsAccelResPerG = 8192;
 static const KnownDevice kKnown[] = {
     {0x045E, 0x028E, "Xbox 360 Controller", Parser::XINPUT_360, InitKind::NONE},
     {0x045E, 0x028F, "Xbox 360 Wireless Receiver (wired)", Parser::XINPUT_360, InitKind::NONE},
-    {0x1949, 0x041A, "Amazon Luna Controller", Parser::XINPUT_360, InitKind::NONE},
     {0x045E, 0x02A1, "Xbox 360 Wireless Controller (PC)", Parser::XINPUT_360_WIRELESS,
      InitKind::NONE},
     {0x045E, 0x0291, "Xbox 360 Wireless Receiver (rev 1)", Parser::XINPUT_360_WIRELESS,
@@ -108,6 +107,7 @@ static const KnownDevice kKnown[] = {
     {0x12AB, 0x0301, "PDP AFTERGLOW AX.1", Parser::XINPUT_360, InitKind::NONE},
     {0x1532, 0x0037, "Razer Sabertooth", Parser::XINPUT_360, InitKind::NONE},
     {0x1532, 0x0A00, "Razer Atrox Arcade Stick", Parser::XINPUT_360, InitKind::NONE},
+    {0x1949, 0x041A, "Amazon Luna Controller", Parser::XINPUT_360, InitKind::NONE},
     {0x24C6, 0x5000, "Razer Atrox Arcade Stick", Parser::XINPUT_360, InitKind::NONE},
     {0x24C6, 0x5300, "PowerA MINI PROEX", Parser::XINPUT_360, InitKind::NONE},
     {0x24C6, 0x5303, "Xbox Airflo Wired Controller", Parser::XINPUT_360, InitKind::NONE},
