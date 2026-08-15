@@ -296,6 +296,8 @@
         <item quantity="one">%1$d controller streaming to %2$s</item>
         <item quantity="other">%1$d controllers streaming to %2$s</item>
     </plurals>
+    <!-- Body while nothing is streaming but a USB controller is still claimed in Direct mode. -->
+    <string name="streaming_notification_body_usb_hold">USB controller held in Direct mode</string>
     <string name="streaming_notification_stop">Stop</string>
 
     <!-- Native-load fatal fallback. -->

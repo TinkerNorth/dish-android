@@ -250,6 +250,7 @@
         <item quantity="many">%1$d manettes diffusent vers %2$s</item>
         <item quantity="other">%1$d manettes diffusent vers %2$s</item>
     </plurals>
+    <string name="streaming_notification_body_usb_hold">Manette USB maintenue en mode direct</string>
     <string name="streaming_notification_stop">Arrêter</string>
 
     <!-- Écran de repli quand le chargement natif échoue. -->

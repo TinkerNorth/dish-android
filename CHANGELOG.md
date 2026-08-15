@@ -33,6 +33,18 @@ four repos share a version number.
 - Amazon Luna Controller (wired USB) recognized on the verified fast lane:
   its wired mode is a byte-identical Xbox 360/XInput report, confirmed on
   hardware for every button, both triggers, both sticks, and rumble.
+- Steam Controller over USB Direct (wired and dongle): sticks, triggers,
+  buttons, motion, and the right trackpad as a right stick. While claimed
+  it no longer doubles as a mouse and keyboard for the phone, and it is
+  put back the way it was when released. Switching it back to Standard
+  settles instantly instead of ending in a false "restore failed" banner,
+  a pad that drops off the dongle no longer leaves its last input held,
+  and one that reconnects is set up again automatically. Unverified on
+  hardware, so it stays opt-in and is never auto-claimed.
+- The streaming notification now also keeps Dish alive while a USB
+  controller is held in Direct mode, so a backgrounded app can always
+  hand the pad back properly, and its Stop action releases those
+  controllers too.
 - Tri-zone controller cards: a read-only report card (connection,
   destination, emulated type, functions) plus a dedicated Configure
   bindings screen. Binding changes are staged and applied explicitly

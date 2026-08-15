@@ -8,9 +8,12 @@ import android.os.Build
 import android.util.Log
 import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.architecture.abstracts.AbstractController
+import com.tinkernorth.dish.source.usb.UsbGamepadManager
+import com.tinkernorth.dish.source.usb.directClaimCount
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -20,11 +23,17 @@ class StreamingServiceController
     constructor(
         @ApplicationContext private val context: Context,
         private val wakeState: WakeStateController,
+        private val usbGamepadManager: UsbGamepadManager,
         scope: CoroutineScope,
     ) : AbstractController<Int>(scope) {
         private var running = false
 
-        override fun upstream(): Flow<Int> = wakeState.streamingSlotCount
+        // Held Direct claims count alongside streaming slots: a claimed pad has been reconfigured at
+        // the device level, and only a live process can run the restore that hands it back.
+        override fun upstream(): Flow<Int> =
+            combine(wakeState.streamingSlotCount, usbGamepadManager.controllers) { slots, controllers ->
+                slots + controllers.directClaimCount()
+            }
 
         override fun apply(value: Int) {
             val shouldRun = value > 0
@@ -35,9 +44,19 @@ class StreamingServiceController
             }
         }
 
+        // The service may have stopped itself while collection was down (claims released in the
+        // background), so re-derive `running` from the fresh post-start emission; a redundant start
+        // against a live service is harmless.
+        override fun onStarting() {
+            running = false
+        }
+
         override fun onStop(owner: LifecycleOwner) {
             cancelCollection()
-            if (running) stopService()
+            // WakeState zeroes the slot count on process stop, but a held claim keeps the service
+            // (and with it the process) alive; the service watches the claims itself and exits when
+            // the last one goes.
+            if (running && usbGamepadManager.controllers.value.directClaimCount() == 0) stopService()
         }
 
         private fun startService() {

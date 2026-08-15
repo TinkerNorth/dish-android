@@ -175,8 +175,9 @@ static const KnownDevice kKnown[] = {
     {0x18D1, 0x9400, "Google Stadia Controller", Parser::STADIA, InitKind::NONE},
 };
 
-// Device IDs below are a curated subset of SDL's src/joystick/controller_list.h (zlib license,
-// Copyright (C) Valve Corporation; see THIRD_PARTY.md). They are NOT hardware-verified here:
+// Device IDs below are a curated subset of SDL's src/joystick/controller_list.h and its hidapi
+// drivers (zlib license, Copyright (C) Valve Corporation; see THIRD_PARTY.md). They are NOT
+// hardware-verified here:
 // lookupKnown recognises them (name + the family parser) and the user can opt into Direct, where
 // probeDecodable still guards the byte layout, but isVerifiedFastLane returns false for them so
 // auto-claim never silently moves an untested model onto Direct. Bluetooth-only PIDs, USB-differs
@@ -377,6 +378,10 @@ static const KnownDevice kImported[] = {
     {0x1532, 0x1012, "Razer Kitsune", Parser::DUALSENSE, InitKind::NONE},
     {0x3285, 0x0D18, "Nacon Revolution 5 Pro (PS5 dongle)", Parser::DUALSENSE, InitKind::NONE},
     {0x3285, 0x0D19, "Nacon Revolution 5 Pro (PS5 wired)", Parser::DUALSENSE, InitKind::NONE},
+
+    {0x28DE, 0x1102, "Valve Steam Controller", Parser::STEAM_CONTROLLER, InitKind::STEAM_QUIET},
+    {0x28DE, 0x1142, "Valve Steam Controller (dongle)", Parser::STEAM_CONTROLLER,
+     InitKind::STEAM_QUIET},
 };
 
 template <size_t N>
@@ -395,6 +400,11 @@ const KnownDevice* lookupKnown(uint16_t vid, uint16_t pid) {
 bool isVerifiedFastLane(uint16_t vid, uint16_t pid) {
     const KnownDevice* k = findIn(kKnown, vid, pid);
     return k != nullptr && k->parser != Parser::NONE;
+}
+
+bool modelExpectsFrameworkGamepad(uint16_t vid, uint16_t pid) {
+    const KnownDevice* k = lookupKnown(vid, pid);
+    return k == nullptr || k->parser != Parser::STEAM_CONTROLLER;
 }
 
 constexpr uint8_t kIfClassVendor = 0xFF;
@@ -436,6 +446,8 @@ const char* parserName(Parser p) {
         return "Stadia protocol";
     case Parser::GENERIC_HID_GAMEPAD:
         return "Generic HID gamepad";
+    case Parser::STEAM_CONTROLLER:
+        return "Steam Controller protocol";
     case Parser::NONE:
         return "Unknown";
     }
@@ -443,7 +455,8 @@ const char* parserName(Parser p) {
 }
 
 bool parserHasImu(Parser p) {
-    return p == Parser::SWITCH_PRO_USB || p == Parser::DUALSHOCK4 || p == Parser::DUALSENSE;
+    return p == Parser::SWITCH_PRO_USB || p == Parser::DUALSHOCK4 || p == Parser::DUALSENSE ||
+           p == Parser::STEAM_CONTROLLER;
 }
 
 bool parserHasRumble(Parser p) {
@@ -455,6 +468,9 @@ bool parserHasRumble(Parser p) {
     case Parser::DUALSENSE:
     case Parser::SWITCH_PRO_USB:
         return true;
+    // The Steam Controller has no rumble motors, only trackpad voice coils driven by pulse trains;
+    // its simple-rumble command is Steam Deck firmware only.
+    case Parser::STEAM_CONTROLLER:
     case Parser::STADIA:
     case Parser::GENERIC_HID_GAMEPAD:
     case Parser::NONE:
@@ -488,6 +504,35 @@ bool bulkWrite(int fd, uint8_t epOut, const uint8_t* data, size_t len, unsigned 
         return false;
     }
     return (size_t)n == len;
+}
+
+constexpr size_t kFeatureReportBytes = 64;
+constexpr int kFeatureReportAttempts = 25;
+constexpr unsigned kFeatureReportRetryUs = 20000;
+
+// SET_REPORT(Feature, report id 0), always a full 64-byte buffer. EPIPE here is the wireless
+// dongle under load, not a real failure; SDL and hid-steam both retry it rather than give up.
+// hid-steam allows 50 tries; the cap is lower here so that even a wholly unresponsive device
+// finishes init and teardown well inside the Kotlin side's 4s path-transition timeout.
+bool sendFeatureReport(int fd, int interfaceNumber, const uint8_t* data, size_t len) {
+    if (interfaceNumber < 0 || len > kFeatureReportBytes) return false;
+    uint8_t buf[kFeatureReportBytes] = {};
+    memcpy(buf, data, len);
+    for (int attempt = 0; attempt < kFeatureReportAttempts; attempt++) {
+        struct usbdevfs_ctrltransfer ct = {};
+        ct.bRequestType = 0x21;            // OUT | Class | Interface
+        ct.bRequest = 0x09;                // SET_REPORT
+        ct.wValue = (uint16_t)(0x03 << 8); // Feature report, id 0
+        ct.wIndex = (uint16_t)interfaceNumber;
+        ct.wLength = (uint16_t)sizeof(buf);
+        ct.timeout = 250;
+        ct.data = buf;
+        if (ioctl(fd, USBDEVFS_CONTROL, &ct) >= 0) return true;
+        if (errno != EPIPE) break;
+        usleep(kFeatureReportRetryUs);
+    }
+    LOGE("SET_REPORT 0x%02X to iface %d failed: %s", data[0], interfaceNumber, strerror(errno));
+    return false;
 }
 #endif
 
@@ -934,6 +979,133 @@ bool decodeStadia(const uint8_t* buf, size_t len, DeviceState& s) {
     return true;
 }
 
+// Steam Controller state packet, layout from SDL's src/joystick/hidapi/steam headers (zlib,
+// Copyright (C) Valve Corporation; see THIRD_PARTY.md). Buttons occupy the low 24 bits of a 64-bit
+// field whose bytes 3 and 4 are the analog triggers.
+constexpr uint32_t kSteamRightBumper = 0x000004;
+constexpr uint32_t kSteamLeftBumper = 0x000008;
+constexpr uint32_t kSteamNorth = 0x000010;
+constexpr uint32_t kSteamEast = 0x000020;
+constexpr uint32_t kSteamWest = 0x000040;
+constexpr uint32_t kSteamSouth = 0x000080;
+constexpr uint32_t kSteamDpadUp = 0x000100;
+constexpr uint32_t kSteamDpadRight = 0x000200;
+constexpr uint32_t kSteamDpadLeft = 0x000400;
+constexpr uint32_t kSteamDpadDown = 0x000800;
+constexpr uint32_t kSteamMenu = 0x001000;
+constexpr uint32_t kSteamGuide = 0x002000;
+constexpr uint32_t kSteamEscape = 0x004000;
+constexpr uint32_t kSteamLeftPadClicked = 0x020000;
+constexpr uint32_t kSteamRightPadClicked = 0x040000;
+constexpr uint32_t kSteamLeftPadFinger = 0x080000;
+constexpr uint32_t kSteamRightPadFinger = 0x100000;
+constexpr uint32_t kSteamStickButton = 0x400000;
+constexpr uint32_t kSteamLeftPadAndStick = 0x800000;
+
+constexpr size_t kSteamStateLen = 48;
+constexpr uint8_t kSteamStateType = 0x01;
+constexpr uint8_t kSteamWirelessType = 0x03;
+constexpr uint8_t kSteamWirelessDisconnect = 0x01;
+constexpr uint8_t kSteamWirelessConnect = 0x02;
+constexpr int32_t kSteamTriggerMaxAnalog = 26000;
+// 15 degrees in Q16; the pads sit rotated on the shell and SDL applies the same correction.
+constexpr int32_t kSteamPadCos = 63303;
+constexpr int32_t kSteamPadSin = 16962;
+
+int16_t steamClampI16(int64_t v) {
+    if (v > 32767) return 32767;
+    if (v < -32768) return -32768;
+    return (int16_t)v;
+}
+
+uint8_t steamTriggerToWire(uint8_t raw) {
+    int32_t v = ((int32_t)raw << 7) | raw;
+    if (v > kSteamTriggerMaxAnalog) v = kSteamTriggerMaxAnalog;
+    return (uint8_t)((v * 255) / kSteamTriggerMaxAnalog);
+}
+
+// SDL adds a further +1000 to each axis while a finger is down. That is harmless for a touch
+// surface but would park a stick off centre, so it is deliberately not carried over.
+void steamRotatePad(int32_t x, int32_t y, int16_t& outX, int16_t& outY) {
+    outX = steamClampI16(((int64_t)kSteamPadCos * x - (int64_t)kSteamPadSin * y) / 65536);
+    outY = steamClampI16(((int64_t)kSteamPadSin * x + (int64_t)kSteamPadCos * y) / 65536);
+}
+
+// Steam reports gyro over +-2000 deg/s and accel over +-2g; the wire wants deg/s / 2000 and g / 4.
+int16_t steamGyroToWire(int32_t raw) { return steamClampI16((int64_t)raw * 32767 / 32768); }
+
+int16_t steamAccelToWire(int32_t raw) { return steamClampI16((int64_t)raw * 32767 / 65536); }
+
+bool decodeSteamController(const uint8_t* buf, size_t len, DeviceState& s, ParserState& st) {
+    if (len < kSteamStateLen) return false;
+    if (buf[0] != 0x01 || buf[1] != 0x00) return false;
+    if (buf[2] != kSteamStateType) return false;
+
+    const uint32_t btn = (uint32_t)buf[8] | ((uint32_t)buf[9] << 8) | ((uint32_t)buf[10] << 16);
+
+    uint16_t b = 0;
+    if (btn & kSteamSouth) b |= XUSB_A;
+    if (btn & kSteamEast) b |= XUSB_B;
+    if (btn & kSteamWest) b |= XUSB_X;
+    if (btn & kSteamNorth) b |= XUSB_Y;
+    if (btn & kSteamLeftBumper) b |= XUSB_LB;
+    if (btn & kSteamRightBumper) b |= XUSB_RB;
+    if (btn & kSteamMenu) b |= XUSB_BACK;
+    if (btn & kSteamEscape) b |= XUSB_START;
+    if (btn & kSteamGuide) b |= XUSB_GUIDE;
+    if (btn & kSteamDpadUp) b |= XUSB_DPAD_UP;
+    if (btn & kSteamDpadDown) b |= XUSB_DPAD_DOWN;
+    if (btn & kSteamDpadLeft) b |= XUSB_DPAD_LEFT;
+    if (btn & kSteamDpadRight) b |= XUSB_DPAD_RIGHT;
+    if (btn & kSteamRightPadClicked) b |= XUSB_THUMB_R;
+
+    s.bLT = steamTriggerToWire(buf[11]);
+    s.bRT = steamTriggerToWire(buf[12]);
+
+    // One pair of axes carries either the stick or the left pad. The finger-down bit says which;
+    // the interleave bit means pad frames alternate with stick frames worth holding on to.
+    const bool padOnLeft = (btn & kSteamLeftPadFinger) != 0;
+    const bool interleaved = (btn & kSteamLeftPadAndStick) != 0;
+    if (!padOnLeft) {
+        st.steamStickX = rdLe16(buf, 16);
+        st.steamStickY = rdLe16(buf, 18);
+        // With no live pad the firmware reports a stick click as a left-pad click.
+        if (!interleaved && (btn & kSteamLeftPadClicked)) b |= XUSB_THUMB_L;
+    } else if (!interleaved) {
+        st.steamStickX = 0;
+        st.steamStickY = 0;
+    }
+    if (btn & kSteamStickButton) b |= XUSB_THUMB_L;
+    s.wButtons = b;
+    s.sLX = st.steamStickX;
+    s.sLY = st.steamStickY;
+
+    if (btn & kSteamRightPadFinger) {
+        steamRotatePad(rdLe16(buf, 20), rdLe16(buf, 22), s.sRX, s.sRY);
+    } else {
+        s.sRX = 0;
+        s.sRY = 0;
+    }
+
+    const int16_t ax = rdLe16(buf, 28);
+    const int16_t ay = rdLe16(buf, 30);
+    const int16_t az = rdLe16(buf, 32);
+    const int16_t gx = rdLe16(buf, 34);
+    const int16_t gy = rdLe16(buf, 36);
+    const int16_t gz = rdLe16(buf, 38);
+    // An all-zero block means the IMU setting never took; publishing it would stream a dead sensor.
+    if ((ax | ay | az | gx | gy | gz) != 0) {
+        s.gyroX = steamGyroToWire(gx);
+        s.gyroY = steamGyroToWire(gz);
+        s.gyroZ = steamGyroToWire(gy);
+        s.accelX = steamAccelToWire(ax);
+        s.accelY = steamAccelToWire(az);
+        s.accelZ = steamAccelToWire(-(int32_t)ay);
+        s.motionValid = true;
+    }
+    return true;
+}
+
 // Switch Pro HD-rumble amplitude codes from the Linux hid-nintendo table; frequency held at the
 // neutral default so a coarse strong/weak motor still encodes a faithful buzz. See docs/rumble.md.
 struct SwitchAmpCode {
@@ -1008,6 +1180,8 @@ bool decodeReport(Parser p, const uint8_t* buf, size_t len, DeviceState& s, Pars
         return sticks != nullptr && decodeSwitchProUsb(buf, len, s, *sticks);
     case Parser::STADIA:
         return decodeStadia(buf, len, s);
+    case Parser::STEAM_CONTROLLER:
+        return sticks != nullptr && decodeSteamController(buf, len, s, *sticks);
     case Parser::GENERIC_HID_GAMEPAD:
         return sticks != nullptr && sticks->hidLayout.valid
                    ? usbhid::decodeFromLayout(buf, len, s, sticks->hidLayout)
@@ -1016,6 +1190,23 @@ bool decodeReport(Parser p, const uint8_t* buf, size_t len, DeviceState& s, Pars
         return false;
     }
     return false;
+}
+
+// Event framing and the one-byte payload values follow the Linux hid-steam driver
+// (steam_raw_event, ID_CONTROLLER_WIRELESS).
+WirelessEvent checkWirelessEvent(Parser p, const uint8_t* buf, size_t len) {
+    if (p != Parser::STEAM_CONTROLLER) return WirelessEvent::NONE;
+    if (len < 5) return WirelessEvent::NONE;
+    if (buf[0] != 0x01 || buf[1] != 0x00) return WirelessEvent::NONE;
+    if (buf[2] != kSteamWirelessType || buf[3] != 0x01) return WirelessEvent::NONE;
+    switch (buf[4]) {
+    case kSteamWirelessDisconnect:
+        return WirelessEvent::DISCONNECT;
+    case kSteamWirelessConnect:
+        return WirelessEvent::CONNECT;
+    default:
+        return WirelessEvent::NONE;
+    }
 }
 
 bool decodeGenericHidGamepad(const uint8_t* buf, size_t len, DeviceState& s) {
@@ -1083,6 +1274,41 @@ size_t buildGipInitPacket(InitKind init, int index, uint8_t seq, uint8_t* out, s
     if (len > outCap) return 0;
     memcpy(out, seqArr[index].data, len);
     out[2] = seq;
+    return len;
+}
+
+size_t buildSteamConfigPacket(SteamConfig stage, int index, uint8_t* out, size_t outCap) {
+    // Framing is {message id, payload length, payload}. Message ids and the choice of the shortest
+    // working sequence follow the Linux hid-steam driver.
+    static const uint8_t kClearMappings[] = {0x81, 0x00};
+    // Left and right trackpad mode = none (kills mouse emulation), IMU mode = raw accel | raw gyro.
+    static const uint8_t kQuietSettings[] = {0x87, 0x09, 0x07, 0x07, 0x00, 0x08,
+                                             0x07, 0x00, 0x30, 0x18, 0x00};
+    static const uint8_t kDefaultMappings[] = {0x85, 0x00};
+    static const uint8_t kDefaultSettings[] = {0x8E, 0x00};
+    // Loading the defaults does not by itself hand the right pad back as a mouse: SDL follows it
+    // with an explicit right trackpad mode = absolute mouse, and leaving that out is the one way
+    // this teardown could still return a pad its owner cannot use.
+    static const uint8_t kRestoreMouse[] = {0x87, 0x03, 0x08, 0x00, 0x00};
+
+    struct Pkt {
+        const uint8_t* data;
+        size_t len;
+    };
+    static const Pkt kQuietSeq[] = {{kClearMappings, sizeof(kClearMappings)},
+                                    {kQuietSettings, sizeof(kQuietSettings)}};
+    static const Pkt kRestoreSeq[] = {{kDefaultMappings, sizeof(kDefaultMappings)},
+                                      {kDefaultSettings, sizeof(kDefaultSettings)},
+                                      {kRestoreMouse, sizeof(kRestoreMouse)}};
+
+    const bool quiet = stage == SteamConfig::QUIET;
+    const Pkt* seqArr = quiet ? kQuietSeq : kRestoreSeq;
+    const int seqLen = quiet ? (int)(sizeof(kQuietSeq) / sizeof(kQuietSeq[0]))
+                             : (int)(sizeof(kRestoreSeq) / sizeof(kRestoreSeq[0]));
+    if (index < 0 || index >= seqLen) return 0;
+    size_t len = seqArr[index].len;
+    if (len > outCap) return 0;
+    memcpy(out, seqArr[index].data, len);
     return len;
 }
 
@@ -1159,6 +1385,7 @@ size_t buildRumbleReport(Parser p, uint16_t strong, uint16_t weak, uint8_t seq, 
         switchEncodeMotor(&out[2], strong);
         switchEncodeMotor(&out[6], weak);
         return 10;
+    case Parser::STEAM_CONTROLLER:
     case Parser::STADIA:
     case Parser::GENERIC_HID_GAMEPAD:
     case Parser::NONE:
@@ -1168,10 +1395,25 @@ size_t buildRumbleReport(Parser p, uint16_t strong, uint16_t weak, uint8_t seq, 
 }
 
 #ifdef __ANDROID__
-bool runInit(int fd, uint8_t epOut, Parser p, InitKind init) {
+bool runInit(int fd, int interfaceNumber, uint8_t epOut, Parser p, InitKind init) {
     switch (init) {
     case InitKind::NONE:
         return true;
+    case InitKind::STEAM_QUIET: {
+        (void)p;
+        (void)epOut;
+        uint8_t buf[16];
+        for (int i = 0;; i++) {
+            size_t n = buildSteamConfigPacket(SteamConfig::QUIET, i, buf, sizeof(buf));
+            if (n == 0) break;
+            if (!sendFeatureReport(fd, interfaceNumber, buf, n)) {
+                LOGE("Steam Controller: quiet-mode packet %d failed", i);
+                return false;
+            }
+        }
+        LOGI("Steam Controller quiet-mode sequence sent");
+        return true;
+    }
     case InitKind::XBOX_ONE_POWERON:
     case InitKind::XBOX_ONE_S: {
         // GIP init: power-on tells the pad to start sending input reports; the rest of the sequence
@@ -1238,6 +1480,17 @@ bool runInit(int fd, uint8_t epOut, Parser p, InitKind init) {
     }
     }
     return false;
+}
+
+void runTeardown(int fd, int interfaceNumber, Parser p) {
+    if (p != Parser::STEAM_CONTROLLER) return;
+    uint8_t buf[16];
+    for (int i = 0;; i++) {
+        size_t n = buildSteamConfigPacket(SteamConfig::RESTORE, i, buf, sizeof(buf));
+        if (n == 0) break;
+        sendFeatureReport(fd, interfaceNumber, buf, n);
+    }
+    LOGI("Steam Controller restored to stand-alone mode");
 }
 
 bool runRumble(int fd, uint8_t epOut, Parser p, uint16_t strong, uint16_t weak, uint8_t seq) {
