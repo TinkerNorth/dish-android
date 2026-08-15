@@ -43,6 +43,15 @@ enum class SteamConfig : uint8_t {
     RESTORE = 1,
 };
 
+// Wireless dongle connect/disconnect events that arrive on the same endpoint as input reports.
+// They never decode as state, so without them a departed pad would keep its last published input
+// latched and a returning pad (fresh boot, settings gone) would stream without its quiet-mode init.
+enum class WirelessEvent : uint8_t {
+    NONE = 0,
+    CONNECT = 1,
+    DISCONNECT = 2,
+};
+
 struct KnownDevice {
     uint16_t vid;
     uint16_t pid;
@@ -105,6 +114,11 @@ Classification classifyDevice(uint16_t vid, uint16_t pid, uint8_t ifClass, uint8
 
 bool isVerifiedFastLane(uint16_t vid, uint16_t pid);
 
+// Whether releasing this model back to Standard produces a framework gamepad InputDevice. False
+// for the Steam Controller, whose stand-alone identity is a keyboard and mouse: a release that
+// waited for a framework gamepad would always time out into a false "restore stuck".
+bool modelExpectsFrameworkGamepad(uint16_t vid, uint16_t pid);
+
 const char* parserName(Parser p);
 
 bool parserHasImu(Parser p);
@@ -141,6 +155,10 @@ size_t buildRumbleReport(Parser p, uint16_t strong, uint16_t weak, uint8_t seq, 
 
 bool decodeReport(Parser p, const uint8_t* buf, size_t len, gamepad::DeviceState& s,
                   ParserState* sticks);
+
+// Pure: classifies a report as a wireless connect/disconnect event for families that interleave
+// them with input (the Steam Controller dongle). NONE for every other parser and packet.
+WirelessEvent checkWirelessEvent(Parser p, const uint8_t* buf, size_t len);
 
 bool decodeGenericHidGamepad(const uint8_t* buf, size_t len, gamepad::DeviceState& s);
 

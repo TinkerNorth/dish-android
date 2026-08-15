@@ -26,9 +26,11 @@ using gamepad::XUSB_Y;
 using usbparsers::buildGipInitPacket;
 using usbparsers::buildRumbleReport;
 using usbparsers::buildSteamConfigPacket;
+using usbparsers::checkWirelessEvent;
 using usbparsers::decodeReport;
 using usbparsers::InitKind;
 using usbparsers::isVerifiedFastLane;
+using usbparsers::modelExpectsFrameworkGamepad;
 using usbparsers::parsePsCalibration;
 using usbparsers::Parser;
 using usbparsers::parserFrameworkRumbleUnreliable;
@@ -38,6 +40,7 @@ using usbparsers::parserHasTouchpad;
 using usbparsers::ParserState;
 using usbparsers::PsImuCalib;
 using usbparsers::SteamConfig;
+using usbparsers::WirelessEvent;
 
 namespace {
 
@@ -1003,4 +1006,96 @@ TEST(SteamConfigPackets, RefusesToOverrunACallerBuffer) {
     uint8_t small[4];
     EXPECT_EQ(0u, buildSteamConfigPacket(SteamConfig::QUIET, 1, small, sizeof(small)));
     EXPECT_EQ(0u, buildSteamConfigPacket(SteamConfig::QUIET, -1, small, sizeof(small)));
+}
+
+namespace {
+
+// Dongle wireless event framing per hid-steam: header {version u16, type, payload length},
+// payload byte 0x01 = disconnected, 0x02 = connected.
+std::vector<uint8_t> steamWirelessEvent(uint8_t payload) {
+    std::vector<uint8_t> r(64, 0);
+    r[0] = 0x01;
+    r[1] = 0x00;
+    r[2] = 0x03; // ID_CONTROLLER_WIRELESS
+    r[3] = 0x01; // payload length
+    r[4] = payload;
+    return r;
+}
+
+} // namespace
+
+TEST(SteamWireless, ConnectAndDisconnectEventsClassify) {
+    auto disc = steamWirelessEvent(0x01);
+    EXPECT_EQ(WirelessEvent::DISCONNECT,
+              checkWirelessEvent(Parser::STEAM_CONTROLLER, disc.data(), disc.size()));
+
+    auto conn = steamWirelessEvent(0x02);
+    EXPECT_EQ(WirelessEvent::CONNECT,
+              checkWirelessEvent(Parser::STEAM_CONTROLLER, conn.data(), conn.size()));
+}
+
+// The issue and the fix as a pair: a wireless event never decodes as input (so on its own the last
+// published state would stay latched), and the classifier is what routes it to the host instead.
+TEST(SteamWireless, WirelessEventNeverDecodesAsInputButStillClassifies) {
+    ParserState st;
+    DeviceState s;
+    auto disc = steamWirelessEvent(0x01);
+    EXPECT_FALSE(decodeReport(Parser::STEAM_CONTROLLER, disc.data(), disc.size(), s, &st));
+    EXPECT_NE(WirelessEvent::NONE,
+              checkWirelessEvent(Parser::STEAM_CONTROLLER, disc.data(), disc.size()));
+}
+
+TEST(SteamWireless, InputStateIsNotAWirelessEvent) {
+    ParserState st;
+    DeviceState s;
+    auto state = steamState(kBtnSouth);
+    EXPECT_EQ(WirelessEvent::NONE,
+              checkWirelessEvent(Parser::STEAM_CONTROLLER, state.data(), state.size()));
+    EXPECT_TRUE(decodeReport(Parser::STEAM_CONTROLLER, state.data(), state.size(), s, &st));
+}
+
+TEST(SteamWireless, RejectsMalformedEvents) {
+    auto shortEvent = steamWirelessEvent(0x02);
+    shortEvent.resize(4);
+    EXPECT_EQ(WirelessEvent::NONE,
+              checkWirelessEvent(Parser::STEAM_CONTROLLER, shortEvent.data(), shortEvent.size()));
+
+    auto badVersion = steamWirelessEvent(0x02);
+    badVersion[0] = 0x02;
+    EXPECT_EQ(WirelessEvent::NONE,
+              checkWirelessEvent(Parser::STEAM_CONTROLLER, badVersion.data(), badVersion.size()));
+
+    auto badPayloadLen = steamWirelessEvent(0x02);
+    badPayloadLen[3] = 0x02;
+    EXPECT_EQ(WirelessEvent::NONE, checkWirelessEvent(Parser::STEAM_CONTROLLER,
+                                                      badPayloadLen.data(), badPayloadLen.size()));
+
+    auto unknownPayload = steamWirelessEvent(0x03);
+    EXPECT_EQ(
+        WirelessEvent::NONE,
+        checkWirelessEvent(Parser::STEAM_CONTROLLER, unknownPayload.data(), unknownPayload.size()));
+
+    // ID_CONTROLLER_STATUS (battery) shares the endpoint but is not a connect event.
+    auto battery = steamWirelessEvent(0x02);
+    battery[2] = 0x04;
+    EXPECT_EQ(WirelessEvent::NONE,
+              checkWirelessEvent(Parser::STEAM_CONTROLLER, battery.data(), battery.size()));
+}
+
+TEST(SteamWireless, OtherParsersNeverSeeWirelessEvents) {
+    auto conn = steamWirelessEvent(0x02);
+    EXPECT_EQ(WirelessEvent::NONE,
+              checkWirelessEvent(Parser::XINPUT_360, conn.data(), conn.size()));
+    EXPECT_EQ(WirelessEvent::NONE, checkWirelessEvent(Parser::DUALSENSE, conn.data(), conn.size()));
+    EXPECT_EQ(WirelessEvent::NONE, checkWirelessEvent(Parser::NONE, conn.data(), conn.size()));
+}
+
+// A released Steam Controller settles as a keyboard/mouse, never a framework gamepad; every other
+// model (and anything unknown) keeps the wait-for-re-enumeration contract.
+TEST(SteamClassify, OnlySteamModelsSettleWithoutAFrameworkGamepad) {
+    EXPECT_FALSE(modelExpectsFrameworkGamepad(0x28DE, 0x1102));
+    EXPECT_FALSE(modelExpectsFrameworkGamepad(0x28DE, 0x1142));
+    EXPECT_TRUE(modelExpectsFrameworkGamepad(0x045E, 0x028E));
+    EXPECT_TRUE(modelExpectsFrameworkGamepad(0x054C, 0x05C4));
+    EXPECT_TRUE(modelExpectsFrameworkGamepad(0x1234, 0x5678));
 }

@@ -98,6 +98,9 @@ class UsbGamepadManagerTest {
         every { usbManager.hasPermission(device) } returns true
         every { registry.devices } returns MutableStateFlow(emptyMap())
         every { native.lookupKnownModelName(vid, pid) } returns "Pad"
+        // The relaxed default (false) is the keyboard-settling exception; almost every model
+        // re-enumerates as a framework gamepad, so pin the common case.
+        every { native.modelExpectsFrameworkGamepad(vid, pid) } returns true
         // Relaxed mocks hand back the first enum constant for an enum return even when it is nullable, so
         // an unstubbed choiceFor would read as Direct and short-circuit resolvePath. Pin it to "no pick".
         every { pathPrefs.choiceFor(vid, pid) } returns null
@@ -172,6 +175,57 @@ class UsbGamepadManagerTest {
         verify { registry.addUsbSynthetic(-1000, "Pad", any(), any(), vid, pid) }
     }
 
+    private fun claimTo(syntheticId: Int): UsbGamepadManager {
+        val conn = mockConn()
+        every { usbManager.openDevice(device) } returns conn
+        every { conn.claimInterface(any(), true) } returns true
+        every { hub.bindings } returns MutableStateFlow(emptyMap())
+        every { hub.satTypes } returns MutableStateFlow(emptyMap())
+        every {
+            native.attachUsbDevice(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+        } returns syntheticId
+        return buildManager()
+    }
+
+    @Test
+    fun `releasing a claimed pad that re-enumerates waits for the framework`() {
+        val m = claimTo(-1000)
+        m.tryDirectMode(vid, pid)
+        m.setPathChoice(vid, pid, PathChoice.Standard)
+        assertEquals(UsbPhase.AwaitingFramework, m.controllers.value[key]?.phase)
+        verify { native.detachUsbDevice(-1000) }
+    }
+
+    // The Steam Controller settles as keyboard/mouse, so no framework gamepad ever re-enumerates
+    // after a release; waiting for one would strand every release in RestoreStuck with a false
+    // "restore failed" banner.
+    @Test
+    fun `releasing a keyboard-settling pad settles standard immediately`() {
+        val m = claimTo(-1000)
+        every { native.modelExpectsFrameworkGamepad(vid, pid) } returns false
+        m.tryDirectMode(vid, pid)
+        assertEquals(UsbPhase.Direct, m.controllers.value[key]?.phase)
+        m.setPathChoice(vid, pid, PathChoice.Standard)
+        assertEquals(UsbPhase.Routed, m.controllers.value[key]?.phase)
+        assertNull(m.controllers.value[key]?.syntheticId)
+        // Release detaches once and the RemoveSynthetic cleanup detaches again (idempotent
+        // natively); the second call is what the physical-unplug path relies on, since unplug
+        // emits RemoveSynthetic without a preceding Release.
+        verify(exactly = 2) { native.detachUsbDevice(-1000) }
+        verify { registry.removeUsbSynthetic(-1000) }
+    }
+
+    @Test
+    fun `stop-all releases every held direct claim with its device restore`() {
+        val m = claimTo(-1000)
+        every { native.modelExpectsFrameworkGamepad(vid, pid) } returns false
+        m.tryDirectMode(vid, pid)
+        m.releaseAllDirect()
+        assertEquals(UsbPhase.Routed, m.controllers.value[key]?.phase)
+        verify { native.detachUsbDevice(-1000) }
+        verify { pathPrefs.setChoice(vid, pid, PathChoice.Standard) }
+    }
+
     private fun vendorInterface(
         ifaceId: Int,
         subclass: Int,
@@ -217,6 +271,7 @@ class UsbGamepadManagerTest {
         every { usbManager.hasPermission(dev) } returns true
         every { registry.devices } returns MutableStateFlow(emptyMap())
         every { native.lookupKnownModelName(vid, pid) } returns "Pad"
+        every { native.modelExpectsFrameworkGamepad(vid, pid) } returns true
         every { pathPrefs.choiceFor(vid, pid) } returns null
         val scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher())
         return UsbGamepadManager(ctx, registry, Provider { hub }, notifications, scope, native, pathPrefs)
@@ -367,6 +422,7 @@ class UsbGamepadManagerTest {
         every { usbManager.deviceList } returns hashMapOf("d" to device)
         every { usbManager.hasPermission(device) } returns true
         every { native.lookupKnownModelName(vid, pid) } returns "Pad"
+        every { native.modelExpectsFrameworkGamepad(vid, pid) } returns true
         every { pathPrefs.choiceFor(vid, pid) } returns null
         val scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher())
         return UsbGamepadManager(ctx, reg, Provider { hub }, notifications, scope, native, pathPrefs)

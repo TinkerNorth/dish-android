@@ -401,6 +401,11 @@ bool isVerifiedFastLane(uint16_t vid, uint16_t pid) {
     return k != nullptr && k->parser != Parser::NONE;
 }
 
+bool modelExpectsFrameworkGamepad(uint16_t vid, uint16_t pid) {
+    const KnownDevice* k = lookupKnown(vid, pid);
+    return k == nullptr || k->parser != Parser::STEAM_CONTROLLER;
+}
+
 constexpr uint8_t kIfClassVendor = 0xFF;
 constexpr uint8_t kXInputSubclass = 0x5D;
 constexpr uint8_t kXInputProtocol = 0x01;
@@ -998,6 +1003,9 @@ constexpr uint32_t kSteamLeftPadAndStick = 0x800000;
 
 constexpr size_t kSteamStateLen = 48;
 constexpr uint8_t kSteamStateType = 0x01;
+constexpr uint8_t kSteamWirelessType = 0x03;
+constexpr uint8_t kSteamWirelessDisconnect = 0x01;
+constexpr uint8_t kSteamWirelessConnect = 0x02;
 constexpr int32_t kSteamTriggerMaxAnalog = 26000;
 // 15 degrees in Q16; the pads sit rotated on the shell and SDL applies the same correction.
 constexpr int32_t kSteamPadCos = 63303;
@@ -1181,6 +1189,23 @@ bool decodeReport(Parser p, const uint8_t* buf, size_t len, DeviceState& s, Pars
         return false;
     }
     return false;
+}
+
+// Event framing and the one-byte payload values follow the Linux hid-steam driver
+// (steam_raw_event, ID_CONTROLLER_WIRELESS).
+WirelessEvent checkWirelessEvent(Parser p, const uint8_t* buf, size_t len) {
+    if (p != Parser::STEAM_CONTROLLER) return WirelessEvent::NONE;
+    if (len < 5) return WirelessEvent::NONE;
+    if (buf[0] != 0x01 || buf[1] != 0x00) return WirelessEvent::NONE;
+    if (buf[2] != kSteamWirelessType || buf[3] != 0x01) return WirelessEvent::NONE;
+    switch (buf[4]) {
+    case kSteamWirelessDisconnect:
+        return WirelessEvent::DISCONNECT;
+    case kSteamWirelessConnect:
+        return WirelessEvent::CONNECT;
+    default:
+        return WirelessEvent::NONE;
+    }
 }
 
 bool decodeGenericHidGamepad(const uint8_t* buf, size_t len, DeviceState& s) {

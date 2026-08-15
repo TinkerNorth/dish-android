@@ -41,6 +41,7 @@ struct DeviceCtx {
     uint8_t epOut = 0;
     int interfaceNumber = 0;
     usbparsers::Parser parser = usbparsers::Parser::NONE;
+    usbparsers::InitKind init = usbparsers::InitKind::NONE;
     std::string modelName;
     std::string parserName;
     usbparsers::ParserState stickRange;
@@ -170,9 +171,23 @@ void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
                 hotpath::markInputRead(); // stage-1 start: a fresh input report is in hand
                 ctx->urbCount.fetch_add(1, std::memory_order_relaxed);
                 memset(&scratch, 0, sizeof(scratch));
-                if (usbparsers::decodeReport(ctx->parser, completed->buf.data(),
-                                             (size_t)reaped->actual_length, scratch,
-                                             &ctx->stickRange)) {
+                usbparsers::WirelessEvent wev = usbparsers::checkWirelessEvent(
+                    ctx->parser, completed->buf.data(), (size_t)reaped->actual_length);
+                if (wev != usbparsers::WirelessEvent::NONE) {
+                    // Both directions publish neutral: a departed pad must not keep its last input
+                    // latched, and a returning pad rebooted, so any held stick memory is stale.
+                    ctx->stickRange.steamStickX = 0;
+                    ctx->stickRange.steamStickY = 0;
+                    dispatch::applyUsbReport(ctx->syntheticDeviceId, scratch);
+                    if (wev == usbparsers::WirelessEvent::CONNECT) {
+                        // The reboot wiped the quiet-mode settings, so re-run the attach init or
+                        // the pad streams without motion while its lizard keyboard leaks through.
+                        usbparsers::runInit(ctx->fd, ctx->interfaceNumber, ctx->epOut, ctx->parser,
+                                            ctx->init);
+                    }
+                } else if (usbparsers::decodeReport(ctx->parser, completed->buf.data(),
+                                                    (size_t)reaped->actual_length, scratch,
+                                                    &ctx->stickRange)) {
                     dispatch::applyUsbReport(ctx->syntheticDeviceId, scratch);
 
                     int64_t nowNs = 0;
@@ -394,6 +409,7 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
     ctx->epOut = epOut;
     ctx->interfaceNumber = interfaceNumber;
     ctx->parser = parser;
+    ctx->init = init;
     ctx->modelName = modelName;
     ctx->parserName = usbparsers::parserName(parser);
     if (parser == usbparsers::Parser::GENERIC_HID_GAMEPAD) {

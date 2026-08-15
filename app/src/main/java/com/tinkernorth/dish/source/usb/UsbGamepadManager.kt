@@ -131,6 +131,14 @@ class UsbGamepadManager
             applyEvent(vpk(vendorId, productId), UsbEvent.Choose(choice, userInitiated = true))
         }
 
+        // The streaming notification's Stop action: release every held claim so each pad gets its
+        // device-side restore and is handed back before the service exits. Main thread only.
+        fun releaseAllDirect() {
+            for ((key, c) in _controllers.value) {
+                if (c.phase == UsbPhase.Direct) applyEvent(key, UsbEvent.Choose(PathChoice.Standard, userInitiated = true))
+            }
+        }
+
         private val receiver =
             object : BroadcastReceiver() {
                 override fun onReceive(
@@ -176,6 +184,7 @@ class UsbGamepadManager
                                     frameworkId = fwId,
                                     hasPermission = usbManager.hasPermission(device),
                                     desired = resolvePath(vid, pid),
+                                    frameworkExpected = native.modelExpectsFrameworkGamepad(vid, pid),
                                 ).withCapturedBinding(fwId)
                         )
                 }
@@ -250,6 +259,9 @@ class UsbGamepadManager
                 UsbEffect.RequestPermission -> usbDevices[key]?.let { requestPermission(it) }
                 is UsbEffect.BindFramework -> bindTo(fx.frameworkId, c.connId, c.type)
                 is UsbEffect.RemoveSynthetic -> {
+                    // Idempotent after a Release already detached; on a physical unplug it is the only
+                    // path that reaps the native poller and its fd instead of stranding them.
+                    native.detachUsbDevice(fx.syntheticId)
                     claimedConns.remove(key)?.let { runCatching { it.connection.close() } }
                     registry.removeUsbSynthetic(fx.syntheticId)
                 }

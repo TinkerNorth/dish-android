@@ -133,8 +133,25 @@ work or stay silent; none receives a malformed report.
 
 **Status:** Implemented from SDL and `hid-steam` (see `THIRD_PARTY.md`), never run against the
 hardware. `Parser::STEAM_CONTROLLER` decodes the state packet; `InitKind::STEAM_QUIET` stops the
-firmware's stand-alone keyboard/mouse emulation at attach and `runTeardown` restores it on all three
-exit paths. Listed in `kImported`, so Direct is opt-in and never auto-claimed.
+firmware's stand-alone keyboard/mouse emulation at attach and `runTeardown` restores it on every
+exit path that still has the device, physical unplug included (the unplug path detaches the native
+device too, so the attempt is made even though an unplugged wired pad has already lost the volatile
+settings with its power). The restore loads the firmware's stand-alone defaults, not a snapshot of
+the pre-claim state; that is deliberate and mirrors SDL's close sequence, and Steam re-pushes its
+own configuration whenever the pad reconnects to it. Listed in `kImported`, so Direct is opt-in and
+never auto-claimed.
+
+Because the released pad re-enumerates as a keyboard and mouse, never as a framework gamepad, the
+path FSM settles Standard immediately on release (`frameworkExpected` in `UsbPathMachine`) instead
+of waiting for a re-enumeration that cannot come and stranding in RestoreStuck. The foreground
+service also stays up while any Direct claim is held, so backgrounding the app does not leave the
+process (and the pending restore) at the mercy of the low-memory killer.
+
+Dongle connect/disconnect events (`ID_CONTROLLER_WIRELESS`, same endpoint as input) are classified
+by `checkWirelessEvent`: a disconnect publishes a neutral state, since a powering-off pad would
+otherwise leave its last input latched on the wire, plausibly the held Steam button of the
+power-off gesture; a connect re-runs the quiet init, since the pad rebooted into stand-alone
+defaults and would stream without motion while its lizard keyboard leaked into the phone.
 
 **Unverified and worth checking first:**
 - IMU axis order and signs. Gyro is mapped pitch/yaw/roll from raw X/Z/Y and accel from X/Z/-Y,
@@ -144,9 +161,10 @@ exit paths. Listed in `kImported`, so Direct is opt-in and never auto-claimed.
   radius or response curve may be needed.
 - Whether the settings survive an unplug. They are assumed volatile. A wired pad powers down when
   unplugged, but a controller left paired to the dongle stays powered, so an app kill between attach
-  and teardown could leave it mute as a desktop mouse until it sleeps.
-- Dongle-specific behaviour: `ID_CONTROLLER_WIRELESS` connect/disconnect events arrive on the same
-  endpoint and are currently rejected by the decoder rather than driving connect state.
+  and teardown leaves it mute as a desktop mouse until its own power cycle (hold the Steam button)
+  or until the relaunched app re-claims it.
+- The wireless event framing and the reconnect re-init, which follow `hid-steam` but have never
+  seen a real dongle.
 
 **Known limitation, the dongle reaches one slot:** the wired pad enumerates as mouse, keyboard,
 pad; the dongle enumerates as keyboard then four pad interfaces, one per paired controller.
@@ -170,8 +188,11 @@ and the claim falls back to routed after roughly a second.
   framework as a gamepad.
 
 **Where:** `app/src/main/cpp/usb_parsers.cpp` (`decodeSteamController`, `buildSteamConfigPacket`,
-`runInit`, `runTeardown`), `app/src/main/cpp/usb_host.cpp` (`attachDevice`, `shutdownLocked`),
-`app/src/main/java/.../source/usb/UsbGamepadManager.kt` (`gameInterfaceRank`).
+`checkWirelessEvent`, `modelExpectsFrameworkGamepad`, `runInit`, `runTeardown`),
+`app/src/main/cpp/usb_host.cpp` (`attachDevice`, `pollLoop`, `shutdownLocked`),
+`app/src/main/java/.../source/usb/UsbPathMachine.kt` (`frameworkExpected`),
+`app/src/main/java/.../source/usb/UsbGamepadManager.kt` (`gameInterfaceRank`, `releaseAllDirect`),
+`app/src/main/java/.../composer/StreamingServiceController.kt` (claim-hold).
 
 **Acceptance:** A wired Steam Controller picked as Direct streams sticks, triggers, buttons and
 motion, drives nothing on the phone while claimed, and works as a desktop mouse again after being
