@@ -359,7 +359,7 @@ jobs:
             --release_status "${PLAY_RELEASE_STATUS}" \
             --aab "${AAB}" \
             "${mapping_args[@]}" \
-            --metadata_path play/metadata \
+            --metadata_path play/metadata/android \
             --skip_upload_metadata false \
             --skip_upload_images false \
             --skip_upload_screenshots false \
