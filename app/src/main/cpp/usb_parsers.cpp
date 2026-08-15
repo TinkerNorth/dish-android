@@ -406,6 +406,18 @@ bool modelExpectsFrameworkGamepad(uint16_t vid, uint16_t pid) {
     return k == nullptr || k->parser != Parser::STEAM_CONTROLLER;
 }
 
+bool probePermitsClaim(ProbeOutcome outcome, bool verifiedFastLane) {
+    switch (outcome) {
+    case ProbeOutcome::DECODED:
+        return true;
+    case ProbeOutcome::SILENT:
+        return verifiedFastLane;
+    case ProbeOutcome::UNDECODED:
+        return false;
+    }
+    return false;
+}
+
 constexpr uint8_t kIfClassVendor = 0xFF;
 constexpr uint8_t kXInputSubclass = 0x5D;
 constexpr uint8_t kXInputProtocol = 0x01;

@@ -38,6 +38,8 @@ using usbparsers::parserHasImu;
 using usbparsers::parserHasRumble;
 using usbparsers::parserHasTouchpad;
 using usbparsers::ParserState;
+using usbparsers::ProbeOutcome;
+using usbparsers::probePermitsClaim;
 using usbparsers::PsImuCalib;
 using usbparsers::SteamConfig;
 using usbparsers::WirelessEvent;
@@ -308,6 +310,21 @@ TEST(KnownDevices, ImportedPs4StickRoutesToDualShock4) {
 TEST(KnownDevices, UnknownModelIsNeitherRecognizedNorFastLane) {
     EXPECT_EQ(nullptr, usbparsers::lookupKnown(0x0000, 0x0000));
     EXPECT_FALSE(usbparsers::isVerifiedFastLane(0x0000, 0x0000));
+}
+
+TEST(ProbeRule, DecodedReportClaimsAtAnyTrustLevel) {
+    EXPECT_TRUE(probePermitsClaim(ProbeOutcome::DECODED, true));
+    EXPECT_TRUE(probePermitsClaim(ProbeOutcome::DECODED, false));
+}
+
+TEST(ProbeRule, SilenceClaimsOnlyVerifiedModels) {
+    EXPECT_TRUE(probePermitsClaim(ProbeOutcome::SILENT, true));
+    EXPECT_FALSE(probePermitsClaim(ProbeOutcome::SILENT, false));
+}
+
+TEST(ProbeRule, UndecodedTrafficNeverClaims) {
+    EXPECT_FALSE(probePermitsClaim(ProbeOutcome::UNDECODED, true));
+    EXPECT_FALSE(probePermitsClaim(ProbeOutcome::UNDECODED, false));
 }
 
 TEST(Decode, SwitchProAveragesImuSubframes) {
