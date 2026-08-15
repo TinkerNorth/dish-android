@@ -52,18 +52,21 @@ jobs:
       - name: Lint metadata before upload
         run: python3 scripts/check_play_metadata.py
 
-      - name: Flatten feature graphics for Supply
+      - name: Flatten feature graphics and icon for Supply
         shell: bash
-        # Supply expects images/featureGraphic.png; the repo keeps the
-        # active graphic as a named file inside images/featureGraphic/.
+        # Supply expects flat images/featureGraphic.png and images/icon.png;
+        # the repo keeps the active file as a named PNG inside
+        # images/featureGraphic/ and images/icon/.
         run: |
           set -euo pipefail
-          for dir in play/metadata/android/*/images/featureGraphic; do
+          for dir in play/metadata/android/*/images/featureGraphic play/metadata/android/*/images/icon; do
             [ -d "$dir" ] || continue
             active=$(find "$dir" -maxdepth 1 -name '*.png' | LC_ALL=C sort | head -1)
-            [ -n "$active" ] && cp "$active" "$(dirname "$dir")/featureGraphic.png"
+            if [ -n "$active" ]; then
+              cp "$active" "$(dirname "$dir")/$(basename "$dir").png"
+            fi
           done
-          find play/metadata -maxdepth 4 -name 'featureGraphic.png'
+          find play/metadata -maxdepth 4 \( -name 'featureGraphic.png' -o -name 'icon.png' \)
 
       - name: Install fastlane
         run: sudo gem install fastlane -N -v "~> 2.226"

@@ -19,7 +19,7 @@ play/
         full_description.txt
         video.txt
         changelogs/
-          10000.txt                  ← versionCode → release notes
+          10001.txt                  ← versionCode → release notes
       de-DE/                         ← German
       es-ES/                         ← Spanish (Spain)
       fr-FR/                         ← French (France)
@@ -37,6 +37,15 @@ fastlane supply --aab path/to/dish-1.0.0.aab --metadata_path play/metadata/andro
 ```
 
 Without Fastlane, the same files can be copy-pasted into the Play Console store-listing pages by hand.
+
+## Release notes
+
+Play keys release notes by versionCode: a tag `X.Y.Z` maps to
+`X*10000 + Y*100 + Z` (1.0.1 = 10001), and Supply ships
+`changelogs/<versionCode>.txt` from each locale for that release. Writing
+those five files is part of cutting a release: the release workflow's
+metadata lint hard-fails the Play upload for a tag whose versionCode has
+no changelog in every locale.
 
 ## Visual assets: status
 
@@ -67,6 +76,13 @@ images/phoneScreenshots/01_dashboard.png
 images/sevenInchScreenshots/01_dashboard.png
 images/tenInchScreenshots/01_dashboard.png
 ```
+
+The repo does not commit the flat `icon.png` / `featureGraphic.png`;
+it keeps the active file as a named PNG inside `images/icon/` and
+`images/featureGraphic/` (first alphabetically wins), and the workflows
+flatten them to Supply's names at upload time. So when the store icon
+gets exported, drop it in `images/icon/` per locale and nothing else
+needs wiring.
 
 ## Locales
 
