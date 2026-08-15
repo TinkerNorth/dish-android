@@ -1,0 +1,6 @@
+Prise en charge du Steam Controller.
+
+• Fonctionne en Mode direct par USB, en filaire ou via le dongle (optionnel).
+• Sticks, gâchettes, boutons, capteurs de mouvement et pavé tactile droit comme stick droit.
+• Pendant que Dish l'utilise, la manette cesse de faire souris et clavier sur le téléphone, puis est rendue telle quelle.
+• Une manette qui décroche du dongle ne garde plus sa dernière entrée, et se reconfigure automatiquement à la reconnexion.

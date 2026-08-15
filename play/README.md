@@ -19,12 +19,13 @@ play/
         full_description.txt
         video.txt
         changelogs/
-          10000.txt                  ← versionCode → release notes
-      bs/                            ← Bosnian
+          10001.txt                  ← versionCode → release notes
       de-DE/                         ← German
       es-ES/                         ← Spanish (Spain)
       fr-FR/                         ← French (France)
       pt-BR/                         ← Brazilian Portuguese
+    unsupported/
+      bs/                            ← Bosnian, parked: Play has no bs listing locale
 ```
 
 ## Tooling
@@ -32,10 +33,19 @@ play/
 The directory layout follows the [Fastlane Supply](https://docs.fastlane.tools/actions/supply/) convention so it can be uploaded with one command once a Play Console API key is configured:
 
 ```bash
-fastlane supply --aab path/to/dish-1.0.0.aab --metadata_path play/metadata
+fastlane supply --aab path/to/dish-1.0.0.aab --metadata_path play/metadata/android
 ```
 
 Without Fastlane, the same files can be copy-pasted into the Play Console store-listing pages by hand.
+
+## Release notes
+
+Play keys release notes by versionCode: a tag `X.Y.Z` maps to
+`X*10000 + Y*100 + Z` (1.0.1 = 10001), and Supply ships
+`changelogs/<versionCode>.txt` from each locale for that release. Writing
+those five files is part of cutting a release: the release workflow's
+metadata lint hard-fails the Play upload for a tag whose versionCode has
+no changelog in every locale.
 
 ## Visual assets: status
 
@@ -47,7 +57,7 @@ note below).
 | Asset | Spec | Status |
 |---|---|---|
 | Store icon | 512x512 PNG, 32-bit, no alpha, 1 MB max | Not exported yet |
-| Feature graphic | 1024x500 PNG or JPG | Present for every locale except `bs` (needs one before submission) |
+| Feature graphic | 1024x500 PNG or JPG | Present for every locale |
 | Phone screenshots | 2 to 8, 16:9 or 9:16, 320 to 3840 px short side | 9 per locale, committed (stale, see note) |
 | 7-inch tablet screenshots | 16:9 or 9:16, recommended for tablet surfacing | 9 per locale, committed (stale, see note) |
 | 10-inch tablet screenshots | 16:9 or 9:16, recommended for foldable/ChromeOS surfacing | 9 per locale, committed (stale, see note) |
@@ -67,9 +77,16 @@ images/sevenInchScreenshots/01_dashboard.png
 images/tenInchScreenshots/01_dashboard.png
 ```
 
+The repo does not commit the flat `icon.png` / `featureGraphic.png`;
+it keeps the active file as a named PNG inside `images/icon/` and
+`images/featureGraphic/` (first alphabetically wins), and the workflows
+flatten them to Supply's names at upload time. So when the store icon
+gets exported, drop it in `images/icon/` per locale and nothing else
+needs wiring.
+
 ## Locales
 
-This listing is localized into the same six languages the app itself supports (`values/`, `values-bs/`, `values-de/`, `values-es/`, `values-fr/`, `values-pt-rBR/`). If you add more in-app locales later, mirror them here.
+This listing is localized into five of the six languages the app itself supports (`values/`, `values-de/`, `values-es/`, `values-fr/`, `values-pt-rBR/`). Bosnian (`values-bs/`) stays in-app only: Google Play does not offer `bs` as a store-listing language, so its translated listing sits parked under `play/metadata/unsupported/bs/` in case Play adds it. If you add more in-app locales later, mirror them here.
 
 Note on Play Console locale codes: `pt-BR` matches Android's `pt-rBR`. German uses `de-DE`. Spanish uses `es-ES`; switch to `es-419` later if Latin-American Spanish coverage matters more than Iberian Spanish.
 

@@ -1,0 +1,6 @@
+Steam Controller support.
+
+• Works in Direct mode over USB, wired or through the dongle (opt-in).
+• Sticks, triggers, buttons, motion, and the right trackpad as a right stick.
+• While Dish uses it, it stops doubling as a mouse and keyboard for the phone, and is handed back exactly as it was.
+• A pad that drops off the dongle no longer holds its last input, and it sets up again automatically when it reconnects.

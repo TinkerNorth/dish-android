@@ -1,0 +1,6 @@
+Steam-Controller-Unterstützung.
+
+• Läuft im Direktmodus über USB, per Kabel oder Dongle (Opt-in).
+• Sticks, Trigger, Tasten, Motion und das rechte Trackpad als rechter Stick.
+• Solange Dish ihn nutzt, wirkt er nicht mehr als Maus und Tastatur am Handy und wird danach unverändert zurückgegeben.
+• Fällt ein Pad vom Dongle, bleibt keine Eingabe mehr hängen; beim Wiederverbinden richtet es sich automatisch neu ein.
