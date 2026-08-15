@@ -20,11 +20,12 @@ play/
         video.txt
         changelogs/
           10000.txt                  ← versionCode → release notes
-      bs/                            ← Bosnian
       de-DE/                         ← German
       es-ES/                         ← Spanish (Spain)
       fr-FR/                         ← French (France)
       pt-BR/                         ← Brazilian Portuguese
+    unsupported/
+      bs/                            ← Bosnian, parked: Play has no bs listing locale
 ```
 
 ## Tooling
@@ -47,7 +48,7 @@ note below).
 | Asset | Spec | Status |
 |---|---|---|
 | Store icon | 512x512 PNG, 32-bit, no alpha, 1 MB max | Not exported yet |
-| Feature graphic | 1024x500 PNG or JPG | Present for every locale except `bs` (needs one before submission) |
+| Feature graphic | 1024x500 PNG or JPG | Present for every locale |
 | Phone screenshots | 2 to 8, 16:9 or 9:16, 320 to 3840 px short side | 9 per locale, committed (stale, see note) |
 | 7-inch tablet screenshots | 16:9 or 9:16, recommended for tablet surfacing | 9 per locale, committed (stale, see note) |
 | 10-inch tablet screenshots | 16:9 or 9:16, recommended for foldable/ChromeOS surfacing | 9 per locale, committed (stale, see note) |
@@ -69,7 +70,7 @@ images/tenInchScreenshots/01_dashboard.png
 
 ## Locales
 
-This listing is localized into the same six languages the app itself supports (`values/`, `values-bs/`, `values-de/`, `values-es/`, `values-fr/`, `values-pt-rBR/`). If you add more in-app locales later, mirror them here.
+This listing is localized into five of the six languages the app itself supports (`values/`, `values-de/`, `values-es/`, `values-fr/`, `values-pt-rBR/`). Bosnian (`values-bs/`) stays in-app only: Google Play does not offer `bs` as a store-listing language, so its translated listing sits parked under `play/metadata/unsupported/bs/` in case Play adds it. If you add more in-app locales later, mirror them here.
 
 Note on Play Console locale codes: `pt-BR` matches Android's `pt-rBR`. German uses `de-DE`. Spanish uses `es-ES`; switch to `es-419` later if Latin-American Spanish coverage matters more than Iberian Spanish.
 
