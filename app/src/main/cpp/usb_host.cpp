@@ -290,10 +290,12 @@ constexpr int kProbeMaxReads = 16;
 constexpr unsigned kProbeReadTimeoutMs = 80;
 constexpr int kProbeMaxTimeouts = 4;
 
-bool probeDecodable(int fd, uint8_t epIn, uint16_t epInMaxPacket, usbparsers::Parser parser) {
+usbparsers::ProbeOutcome probeEndpoint(int fd, uint8_t epIn, uint16_t epInMaxPacket,
+                                       usbparsers::Parser parser) {
     std::vector<uint8_t> buf(epInMaxPacket == 0 ? 64 : epInMaxPacket);
     gamepad::DeviceState scratch{};
     usbparsers::ParserState probeSticks;
+    bool sawTraffic = false;
     int consecutiveTimeouts = 0;
     for (int i = 0; i < kProbeMaxReads; i++) {
         struct usbdevfs_bulktransfer xfer = {};
@@ -307,12 +309,17 @@ bool probeDecodable(int fd, uint8_t epIn, uint16_t epInMaxPacket, usbparsers::Pa
             continue;
         }
         consecutiveTimeouts = 0;
+        sawTraffic = true;
+        if (usbparsers::checkWirelessEvent(parser, buf.data(), (size_t)n) !=
+            usbparsers::WirelessEvent::NONE) {
+            return usbparsers::ProbeOutcome::DECODED;
+        }
         memset(&scratch, 0, sizeof(scratch));
         if (usbparsers::decodeReport(parser, buf.data(), (size_t)n, scratch, &probeSticks)) {
-            return true;
+            return usbparsers::ProbeOutcome::DECODED;
         }
     }
-    return false;
+    return sawTraffic ? usbparsers::ProbeOutcome::UNDECODED : usbparsers::ProbeOutcome::SILENT;
 }
 
 // Best-effort: a failed transfer or unparseable descriptor leaves the layout invalid, so the
@@ -390,13 +397,18 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
         return out;
     }
 
-    if (!probeDecodable(fd, epIn, epInMaxPacket, parser)) {
-        LOGI("attach %04X:%04X (%s): no parseable reports, releasing to framework", vid, pid,
-             modelName.c_str());
+    usbparsers::ProbeOutcome probed = probeEndpoint(fd, epIn, epInMaxPacket, parser);
+    if (!usbparsers::probePermitsClaim(probed, usbparsers::isVerifiedFastLane(vid, pid))) {
+        LOGI("attach %04X:%04X (%s): %s, releasing to framework", vid, pid, modelName.c_str(),
+             probed == usbparsers::ProbeOutcome::SILENT ? "no reports" : "reports did not decode");
         usbparsers::runTeardown(fd, interfaceNumber, parser);
         releaseAndReattach(fd, interfaceNumber);
         ::close(fd);
         return out;
+    }
+    if (probed == usbparsers::ProbeOutcome::SILENT) {
+        LOGI("attach %04X:%04X (%s): silent at rest, claiming verified model", vid, pid,
+             modelName.c_str());
     }
 
     auto ctx = std::make_shared<DeviceCtx>();

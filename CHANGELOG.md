@@ -67,6 +67,10 @@ four repos share a version number.
 - Phantom held inputs (a button, the d-pad, or an off-center stick or
   trigger) no longer linger on the virtual pad after binding a controller,
   before the first real movement.
+- Claiming USB Direct no longer fails on a verified controller that is
+  sitting untouched. Event-driven pads such as the Amazon Luna Controller
+  send no reports at rest, so the switch used to succeed only while a
+  stick or button was moving.
 
 ### Changed: control-plane rewrite (protocol 1) `[wire-coordinated]`
 

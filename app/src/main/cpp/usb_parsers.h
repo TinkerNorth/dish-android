@@ -114,6 +114,14 @@ Classification classifyDevice(uint16_t vid, uint16_t pid, uint8_t ifClass, uint8
 
 bool isVerifiedFastLane(uint16_t vid, uint16_t pid);
 
+enum class ProbeOutcome : uint8_t {
+    DECODED = 0,
+    SILENT = 1,
+    UNDECODED = 2,
+};
+
+bool probePermitsClaim(ProbeOutcome outcome, bool verifiedFastLane);
+
 // Whether releasing this model back to Standard produces a framework gamepad InputDevice. False
 // for the Steam Controller, whose stand-alone identity is a keyboard and mouse: a release that
 // waited for a framework gamepad would always time out into a false "restore stuck".
