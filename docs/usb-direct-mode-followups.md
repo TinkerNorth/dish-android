@@ -126,3 +126,74 @@ counter handling, and sources are in `docs/rumble.md`.
 **Acceptance:** A claimed USB-direct pad of each verified family rumbles on `MSG_RUMBLE` and stops on
 the 0,0 packet (or the safety auto-stop), with no effect on input latency. Unverified families either
 work or stay silent; none receives a malformed report.
+
+---
+
+## 8. Steam Controller (implemented, needs hardware verification)
+
+**Status:** Implemented from SDL and `hid-steam` (see `THIRD_PARTY.md`), never run against the
+hardware. `Parser::STEAM_CONTROLLER` decodes the state packet; `InitKind::STEAM_QUIET` stops the
+firmware's stand-alone keyboard/mouse emulation at attach and `runTeardown` restores it on every
+exit path that still has the device, physical unplug included (the unplug path detaches the native
+device too, so the attempt is made even though an unplugged wired pad has already lost the volatile
+settings with its power). The restore loads the firmware's stand-alone defaults, not a snapshot of
+the pre-claim state; that is deliberate and mirrors SDL's close sequence, and Steam re-pushes its
+own configuration whenever the pad reconnects to it. Listed in `kImported`, so Direct is opt-in and
+never auto-claimed.
+
+Because the released pad re-enumerates as a keyboard and mouse, never as a framework gamepad, the
+path FSM settles Standard immediately on release (`frameworkExpected` in `UsbPathMachine`) instead
+of waiting for a re-enumeration that cannot come and stranding in RestoreStuck. The foreground
+service also stays up while any Direct claim is held, so backgrounding the app does not leave the
+process (and the pending restore) at the mercy of the low-memory killer.
+
+Dongle connect/disconnect events (`ID_CONTROLLER_WIRELESS`, same endpoint as input) are classified
+by `checkWirelessEvent`: a disconnect publishes a neutral state, since a powering-off pad would
+otherwise leave its last input latched on the wire, plausibly the held Steam button of the
+power-off gesture; a connect re-runs the quiet init, since the pad rebooted into stand-alone
+defaults and would stream without motion while its lizard keyboard leaked into the phone.
+
+**Unverified and worth checking first:**
+- IMU axis order and signs. Gyro is mapped pitch/yaw/roll from raw X/Z/Y and accel from X/Z/-Y,
+  following SDL's sensor block; the same signs are unverified for the Switch Pro (item 2).
+- Right pad as right stick. It recentres on lift and carries SDL's 15-degree shell rotation but not
+  SDL's extra +1000 offset, which would park the stick off centre. Feel is untested; an outer
+  radius or response curve may be needed.
+- Whether the settings survive an unplug. They are assumed volatile. A wired pad powers down when
+  unplugged, but a controller left paired to the dongle stays powered, so an app kill between attach
+  and teardown leaves it mute as a desktop mouse until its own power cycle (hold the Steam button)
+  or until the relaunched app re-claims it.
+- The wireless event framing and the reconnect re-init, which follow `hid-steam` but have never
+  seen a real dongle.
+
+**Known limitation, the dongle reaches one slot:** the wired pad enumerates as mouse, keyboard,
+pad; the dongle enumerates as keyboard then four pad interfaces, one per paired controller.
+`findInterruptInPair` breaks a rank tie by taking the first candidate, so only the first slot is
+ever claimed. A pad paired to another slot fails `probeDecodable` and falls back to routed, which
+is safe but looks like "Direct failed". Reaching the others means attaching each candidate in turn
+rather than picking one up front.
+
+The interface pick also assumes the emulated keyboard and mouse declare the HID boot subclass.
+`hid-steam` deliberately does not rely on that, distinguishing the real pad by its report
+descriptor instead. If the assumption is wrong the config packets go to the wrong interface, stall,
+and the claim falls back to routed after roughly a second.
+
+**Deliberately absent:**
+- Rumble. The pad has no motors, only trackpad voice coils driven by `ID_TRIGGER_HAPTIC_PULSE`
+  pulse trains; the simple rumble command is Steam Deck firmware only, and `hid-steam` gates force
+  feedback on the Deck quirk. `parserHasRumble` is false, so nothing is advertised.
+- The grip buttons, which have no XUSB equivalent.
+- Streaming either trackpad over `MSG_TOUCHPAD`, which would double-actuate against the right stick.
+- Bluetooth. The pad speaks Valve's own BLE protocol, not HID over GATT, so it never reaches the
+  framework as a gamepad.
+
+**Where:** `app/src/main/cpp/usb_parsers.cpp` (`decodeSteamController`, `buildSteamConfigPacket`,
+`checkWirelessEvent`, `modelExpectsFrameworkGamepad`, `runInit`, `runTeardown`),
+`app/src/main/cpp/usb_host.cpp` (`attachDevice`, `pollLoop`, `shutdownLocked`),
+`app/src/main/java/.../source/usb/UsbPathMachine.kt` (`frameworkExpected`),
+`app/src/main/java/.../source/usb/UsbGamepadManager.kt` (`gameInterfaceRank`, `releaseAllDirect`),
+`app/src/main/java/.../composer/StreamingServiceController.kt` (claim-hold).
+
+**Acceptance:** A wired Steam Controller picked as Direct streams sticks, triggers, buttons and
+motion, drives nothing on the phone while claimed, and works as a desktop mouse again after being
+unplugged or switched back to Standard.

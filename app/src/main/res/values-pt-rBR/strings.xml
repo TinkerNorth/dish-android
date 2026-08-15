@@ -251,6 +251,7 @@
         <item quantity="many">%1$d controles transmitindo para %2$s</item>
         <item quantity="other">%1$d controles transmitindo para %2$s</item>
     </plurals>
+    <string name="streaming_notification_body_usb_hold">Controle USB mantido no modo direto</string>
     <string name="streaming_notification_stop">Parar</string>
 
     <!-- Tela de fallback quando o carregamento nativo falha. -->

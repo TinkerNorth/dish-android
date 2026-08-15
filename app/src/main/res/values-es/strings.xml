@@ -251,6 +251,7 @@
         <item quantity="many">%1$d mandos transmiten a %2$s</item>
         <item quantity="other">%1$d mandos transmiten a %2$s</item>
     </plurals>
+    <string name="streaming_notification_body_usb_hold">Mando USB retenido en modo directo</string>
     <string name="streaming_notification_stop">Detener</string>
 
     <!-- Pantalla de respaldo cuando falla la carga nativa. -->

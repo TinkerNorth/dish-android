@@ -10,18 +10,37 @@
 using gamepad::DeviceState;
 using gamepad::XUSB_A;
 using gamepad::XUSB_B;
+using gamepad::XUSB_BACK;
+using gamepad::XUSB_DPAD_DOWN;
+using gamepad::XUSB_DPAD_LEFT;
+using gamepad::XUSB_DPAD_RIGHT;
+using gamepad::XUSB_DPAD_UP;
 using gamepad::XUSB_GUIDE;
+using gamepad::XUSB_LB;
+using gamepad::XUSB_RB;
+using gamepad::XUSB_START;
+using gamepad::XUSB_THUMB_L;
+using gamepad::XUSB_THUMB_R;
+using gamepad::XUSB_X;
+using gamepad::XUSB_Y;
 using usbparsers::buildGipInitPacket;
 using usbparsers::buildRumbleReport;
+using usbparsers::buildSteamConfigPacket;
+using usbparsers::checkWirelessEvent;
 using usbparsers::decodeReport;
 using usbparsers::InitKind;
+using usbparsers::isVerifiedFastLane;
+using usbparsers::modelExpectsFrameworkGamepad;
 using usbparsers::parsePsCalibration;
 using usbparsers::Parser;
 using usbparsers::parserFrameworkRumbleUnreliable;
 using usbparsers::parserHasImu;
 using usbparsers::parserHasRumble;
+using usbparsers::parserHasTouchpad;
 using usbparsers::ParserState;
 using usbparsers::PsImuCalib;
+using usbparsers::SteamConfig;
+using usbparsers::WirelessEvent;
 
 namespace {
 
@@ -691,4 +710,392 @@ TEST(ClassifyDevice, HidInterfaceClassifiesAsGenericHid) {
 TEST(ClassifyDevice, UnknownVendorInterfaceFallsBackToGeneric) {
     auto c = usbparsers::classifyDevice(0x1234, 0x5678, 0xFF, 0x99, 0x99);
     EXPECT_EQ(c.parser, Parser::GENERIC_HID_GAMEPAD);
+}
+
+namespace {
+
+constexpr uint32_t kBtnRightBumper = 0x000004;
+constexpr uint32_t kBtnLeftBumper = 0x000008;
+constexpr uint32_t kBtnNorth = 0x000010;
+constexpr uint32_t kBtnEast = 0x000020;
+constexpr uint32_t kBtnWest = 0x000040;
+constexpr uint32_t kBtnSouth = 0x000080;
+constexpr uint32_t kBtnDpadUp = 0x000100;
+constexpr uint32_t kBtnDpadRight = 0x000200;
+constexpr uint32_t kBtnMenu = 0x001000;
+constexpr uint32_t kBtnGuide = 0x002000;
+constexpr uint32_t kBtnEscape = 0x004000;
+constexpr uint32_t kBtnLeftPadClicked = 0x020000;
+constexpr uint32_t kBtnRightPadClicked = 0x040000;
+constexpr uint32_t kBtnLeftPadFinger = 0x080000;
+constexpr uint32_t kBtnRightPadFinger = 0x100000;
+constexpr uint32_t kBtnStickButton = 0x400000;
+constexpr uint32_t kBtnLeftPadAndStick = 0x800000;
+
+std::vector<uint8_t> steamState(uint32_t buttons = 0) {
+    std::vector<uint8_t> r(64, 0);
+    r[0] = 0x01; // report version, u16 LE
+    r[1] = 0x00;
+    r[2] = 0x01; // ID_CONTROLLER_STATE
+    r[3] = 44;   // payload length
+    r[8] = (uint8_t)(buttons & 0xFF);
+    r[9] = (uint8_t)((buttons >> 8) & 0xFF);
+    r[10] = (uint8_t)((buttons >> 16) & 0xFF);
+    return r;
+}
+
+bool decodeSteam(const std::vector<uint8_t>& buf, DeviceState& s, ParserState& st) {
+    return decodeReport(Parser::STEAM_CONTROLLER, buf.data(), buf.size(), s, &st);
+}
+
+} // namespace
+
+TEST(SteamClassify, WiredAndDongleResolveToQuietInit) {
+    auto wired = usbparsers::classifyDevice(0x28DE, 0x1102, 0x03, 0x00, 0x00);
+    EXPECT_EQ(Parser::STEAM_CONTROLLER, wired.parser);
+    EXPECT_EQ(InitKind::STEAM_QUIET, wired.init);
+    EXPECT_STREQ("Valve Steam Controller", wired.name);
+
+    auto dongle = usbparsers::classifyDevice(0x28DE, 0x1142, 0x03, 0x00, 0x00);
+    EXPECT_EQ(Parser::STEAM_CONTROLLER, dongle.parser);
+    EXPECT_EQ(InitKind::STEAM_QUIET, dongle.init);
+}
+
+TEST(SteamClassify, IsNotAVerifiedFastLaneModel) {
+    EXPECT_FALSE(isVerifiedFastLane(0x28DE, 0x1102));
+    EXPECT_FALSE(isVerifiedFastLane(0x28DE, 0x1142));
+}
+
+TEST(SteamClassify, AdvertisesImuButNeitherRumbleNorTouchpad) {
+    EXPECT_TRUE(parserHasImu(Parser::STEAM_CONTROLLER));
+    EXPECT_FALSE(parserHasRumble(Parser::STEAM_CONTROLLER));
+    EXPECT_FALSE(parserHasTouchpad(Parser::STEAM_CONTROLLER));
+    EXPECT_FALSE(parserFrameworkRumbleUnreliable(Parser::STEAM_CONTROLLER));
+
+    uint8_t buf[64];
+    EXPECT_EQ(0u, buildRumbleReport(Parser::STEAM_CONTROLLER, 0xFFFF, 0xFFFF, 0, buf, sizeof(buf)));
+}
+
+TEST(SteamDecode, RejectsShortWrongVersionAndWrongType) {
+    ParserState st;
+    DeviceState s;
+    auto shortPacket = steamState();
+    shortPacket.resize(47);
+    EXPECT_FALSE(decodeSteam(shortPacket, s, st));
+
+    auto badVersion = steamState();
+    badVersion[0] = 0x02;
+    EXPECT_FALSE(decodeSteam(badVersion, s, st));
+
+    // The dongle interleaves wireless connect/disconnect events onto the same endpoint.
+    auto wirelessEvent = steamState();
+    wirelessEvent[2] = 0x03;
+    EXPECT_FALSE(decodeSteam(wirelessEvent, s, st));
+}
+
+TEST(SteamDecode, FaceAndShoulderButtonsMapByPosition) {
+    ParserState st;
+    DeviceState s;
+    ASSERT_TRUE(decodeSteam(steamState(kBtnSouth | kBtnEast | kBtnWest | kBtnNorth), s, st));
+    EXPECT_TRUE(s.wButtons & XUSB_A);
+    EXPECT_TRUE(s.wButtons & XUSB_B);
+    EXPECT_TRUE(s.wButtons & XUSB_X);
+    EXPECT_TRUE(s.wButtons & XUSB_Y);
+
+    DeviceState shoulders;
+    ASSERT_TRUE(decodeSteam(steamState(kBtnLeftBumper | kBtnRightBumper), shoulders, st));
+    EXPECT_TRUE(shoulders.wButtons & XUSB_LB);
+    EXPECT_TRUE(shoulders.wButtons & XUSB_RB);
+}
+
+TEST(SteamDecode, MenuEscapeAndSteamMapToBackStartGuide) {
+    ParserState st;
+    DeviceState s;
+    ASSERT_TRUE(decodeSteam(steamState(kBtnMenu | kBtnEscape | kBtnGuide), s, st));
+    EXPECT_TRUE(s.wButtons & XUSB_BACK);
+    EXPECT_TRUE(s.wButtons & XUSB_START);
+    EXPECT_TRUE(s.wButtons & XUSB_GUIDE);
+}
+
+TEST(SteamDecode, DpadBitsMapDirectly) {
+    ParserState st;
+    DeviceState s;
+    ASSERT_TRUE(decodeSteam(steamState(kBtnDpadUp | kBtnDpadRight), s, st));
+    EXPECT_TRUE(s.wButtons & XUSB_DPAD_UP);
+    EXPECT_TRUE(s.wButtons & XUSB_DPAD_RIGHT);
+    EXPECT_FALSE(s.wButtons & XUSB_DPAD_DOWN);
+    EXPECT_FALSE(s.wButtons & XUSB_DPAD_LEFT);
+}
+
+TEST(SteamDecode, TriggersScaleAndSaturateBeforeTheRawRail) {
+    ParserState st;
+    DeviceState s;
+    auto r = steamState();
+    r[11] = 0;
+    r[12] = 100;
+    ASSERT_TRUE(decodeSteam(r, s, st));
+    EXPECT_EQ(0, s.bLT);
+    EXPECT_EQ(126, s.bRT);
+
+    // Valve's full scale is 26000 of a possible 32895, so the throw tops out before the raw rail.
+    r[11] = 202;
+    r[12] = 255;
+    ASSERT_TRUE(decodeSteam(r, s, st));
+    EXPECT_EQ(255, s.bLT);
+    EXPECT_EQ(255, s.bRT);
+}
+
+TEST(SteamDecode, LeftAxesAreTheStickWhenNoFingerIsOnThePad) {
+    ParserState st;
+    DeviceState s;
+    auto r = steamState();
+    setLe16(r, 16, -8000);
+    setLe16(r, 18, 12000);
+    ASSERT_TRUE(decodeSteam(r, s, st));
+    EXPECT_EQ(-8000, s.sLX);
+    EXPECT_EQ(12000, s.sLY);
+}
+
+TEST(SteamDecode, StickHoldsItsValueAcrossAnInterleavedPadFrame) {
+    ParserState st;
+    DeviceState s;
+    auto stickFrame = steamState();
+    setLe16(stickFrame, 16, 5000);
+    setLe16(stickFrame, 18, -6000);
+    ASSERT_TRUE(decodeSteam(stickFrame, s, st));
+
+    auto padFrame = steamState(kBtnLeftPadFinger | kBtnLeftPadAndStick);
+    setLe16(padFrame, 16, 30000);
+    setLe16(padFrame, 18, 30000);
+    DeviceState next;
+    ASSERT_TRUE(decodeSteam(padFrame, next, st));
+    EXPECT_EQ(5000, next.sLX);
+    EXPECT_EQ(-6000, next.sLY);
+}
+
+TEST(SteamDecode, StickCentresWhenThePadTakesOverWithoutInterleaving) {
+    ParserState st;
+    DeviceState s;
+    auto stickFrame = steamState();
+    setLe16(stickFrame, 16, 5000);
+    ASSERT_TRUE(decodeSteam(stickFrame, s, st));
+
+    auto padFrame = steamState(kBtnLeftPadFinger);
+    setLe16(padFrame, 16, 30000);
+    DeviceState next;
+    ASSERT_TRUE(decodeSteam(padFrame, next, st));
+    EXPECT_EQ(0, next.sLX);
+    EXPECT_EQ(0, next.sLY);
+}
+
+TEST(SteamDecode, LeftPadClickIsAStickClickWhileThePadIsIdle) {
+    ParserState st;
+    DeviceState s;
+    ASSERT_TRUE(decodeSteam(steamState(kBtnLeftPadClicked), s, st));
+    EXPECT_TRUE(s.wButtons & XUSB_THUMB_L);
+
+    // With a finger actually on the pad the click belongs to the pad, not the stick.
+    DeviceState onPad;
+    ASSERT_TRUE(decodeSteam(steamState(kBtnLeftPadClicked | kBtnLeftPadFinger), onPad, st));
+    EXPECT_FALSE(onPad.wButtons & XUSB_THUMB_L);
+}
+
+TEST(SteamDecode, StickAndRightPadClicksMapToThumbButtons) {
+    ParserState st;
+    DeviceState s;
+    ASSERT_TRUE(decodeSteam(steamState(kBtnStickButton | kBtnRightPadClicked), s, st));
+    EXPECT_TRUE(s.wButtons & XUSB_THUMB_L);
+    EXPECT_TRUE(s.wButtons & XUSB_THUMB_R);
+}
+
+TEST(SteamDecode, RightPadDrivesTheRightStickThroughTheShellRotation) {
+    ParserState st;
+    DeviceState s;
+    auto r = steamState(kBtnRightPadFinger);
+    setLe16(r, 20, 10000);
+    setLe16(r, 22, 0);
+    ASSERT_TRUE(decodeSteam(r, s, st));
+    EXPECT_EQ(9659, s.sRX);
+    EXPECT_EQ(2588, s.sRY);
+}
+
+TEST(SteamDecode, RightStickRecentresWhenTheFingerLifts) {
+    ParserState st;
+    DeviceState s;
+    auto held = steamState(kBtnRightPadFinger);
+    setLe16(held, 20, 20000);
+    setLe16(held, 22, 20000);
+    ASSERT_TRUE(decodeSteam(held, s, st));
+    ASSERT_NE(0, s.sRX);
+
+    // Pad coordinates are meaningless once the finger lifts, so the stick must not stay deflected.
+    auto lifted = steamState();
+    setLe16(lifted, 20, 20000);
+    setLe16(lifted, 22, 20000);
+    DeviceState next;
+    ASSERT_TRUE(decodeSteam(lifted, next, st));
+    EXPECT_EQ(0, next.sRX);
+    EXPECT_EQ(0, next.sRY);
+}
+
+TEST(SteamDecode, ImuRotatesOntoTheWireAxisOrderAndScale) {
+    ParserState st;
+    DeviceState s;
+    auto r = steamState();
+    setLe16(r, 28, 1000); // accel x
+    setLe16(r, 30, 2000); // accel y
+    setLe16(r, 32, 3000); // accel z
+    setLe16(r, 34, 4000); // gyro x
+    setLe16(r, 36, 5000); // gyro y
+    setLe16(r, 38, 6000); // gyro z
+    ASSERT_TRUE(decodeSteam(r, s, st));
+    EXPECT_TRUE(s.motionValid);
+    EXPECT_EQ(3999, s.gyroX);
+    EXPECT_EQ(5999, s.gyroY);
+    EXPECT_EQ(4999, s.gyroZ);
+    EXPECT_EQ(499, s.accelX);
+    EXPECT_EQ(1499, s.accelY);
+    EXPECT_EQ(-999, s.accelZ);
+}
+
+TEST(SteamDecode, SilentImuBlockDoesNotPublishMotion) {
+    ParserState st;
+    DeviceState s;
+    ASSERT_TRUE(decodeSteam(steamState(kBtnSouth), s, st));
+    EXPECT_FALSE(s.motionValid);
+}
+
+TEST(SteamConfigPackets, QuietSequenceClearsMappingsThenWritesSettings) {
+    uint8_t buf[16];
+    ASSERT_EQ(2u, buildSteamConfigPacket(SteamConfig::QUIET, 0, buf, sizeof(buf)));
+    EXPECT_EQ(0x81, buf[0]);
+    EXPECT_EQ(0x00, buf[1]);
+
+    ASSERT_EQ(11u, buildSteamConfigPacket(SteamConfig::QUIET, 1, buf, sizeof(buf)));
+    EXPECT_EQ(0x87, buf[0]);
+    EXPECT_EQ(0x09, buf[1]);
+    EXPECT_EQ(0x07, buf[2]); // left trackpad mode
+    EXPECT_EQ(0x07, buf[3]); // = none
+    EXPECT_EQ(0x08, buf[5]); // right trackpad mode
+    EXPECT_EQ(0x07, buf[6]); // = none
+    EXPECT_EQ(0x30, buf[8]); // imu mode
+    EXPECT_EQ(0x18, buf[9]); // = raw accel | raw gyro
+
+    EXPECT_EQ(0u, buildSteamConfigPacket(SteamConfig::QUIET, 2, buf, sizeof(buf)));
+}
+
+TEST(SteamConfigPackets, RestoreSequencePutsTheDeviceBack) {
+    uint8_t buf[16];
+    ASSERT_EQ(2u, buildSteamConfigPacket(SteamConfig::RESTORE, 0, buf, sizeof(buf)));
+    EXPECT_EQ(0x85, buf[0]);
+    ASSERT_EQ(2u, buildSteamConfigPacket(SteamConfig::RESTORE, 1, buf, sizeof(buf)));
+    EXPECT_EQ(0x8E, buf[0]);
+
+    // Loading the defaults leaves the right pad silent, so mouse mode is restored by name.
+    ASSERT_EQ(5u, buildSteamConfigPacket(SteamConfig::RESTORE, 2, buf, sizeof(buf)));
+    EXPECT_EQ(0x87, buf[0]);
+    EXPECT_EQ(0x03, buf[1]);
+    EXPECT_EQ(0x08, buf[2]); // right trackpad mode
+    EXPECT_EQ(0x00, buf[3]); // = absolute mouse
+    EXPECT_EQ(0x00, buf[4]);
+
+    EXPECT_EQ(0u, buildSteamConfigPacket(SteamConfig::RESTORE, 3, buf, sizeof(buf)));
+}
+
+TEST(SteamConfigPackets, RefusesToOverrunACallerBuffer) {
+    uint8_t small[4];
+    EXPECT_EQ(0u, buildSteamConfigPacket(SteamConfig::QUIET, 1, small, sizeof(small)));
+    EXPECT_EQ(0u, buildSteamConfigPacket(SteamConfig::QUIET, -1, small, sizeof(small)));
+}
+
+namespace {
+
+// Dongle wireless event framing per hid-steam: header {version u16, type, payload length},
+// payload byte 0x01 = disconnected, 0x02 = connected.
+std::vector<uint8_t> steamWirelessEvent(uint8_t payload) {
+    std::vector<uint8_t> r(64, 0);
+    r[0] = 0x01;
+    r[1] = 0x00;
+    r[2] = 0x03; // ID_CONTROLLER_WIRELESS
+    r[3] = 0x01; // payload length
+    r[4] = payload;
+    return r;
+}
+
+} // namespace
+
+TEST(SteamWireless, ConnectAndDisconnectEventsClassify) {
+    auto disc = steamWirelessEvent(0x01);
+    EXPECT_EQ(WirelessEvent::DISCONNECT,
+              checkWirelessEvent(Parser::STEAM_CONTROLLER, disc.data(), disc.size()));
+
+    auto conn = steamWirelessEvent(0x02);
+    EXPECT_EQ(WirelessEvent::CONNECT,
+              checkWirelessEvent(Parser::STEAM_CONTROLLER, conn.data(), conn.size()));
+}
+
+// The issue and the fix as a pair: a wireless event never decodes as input (so on its own the last
+// published state would stay latched), and the classifier is what routes it to the host instead.
+TEST(SteamWireless, WirelessEventNeverDecodesAsInputButStillClassifies) {
+    ParserState st;
+    DeviceState s;
+    auto disc = steamWirelessEvent(0x01);
+    EXPECT_FALSE(decodeReport(Parser::STEAM_CONTROLLER, disc.data(), disc.size(), s, &st));
+    EXPECT_NE(WirelessEvent::NONE,
+              checkWirelessEvent(Parser::STEAM_CONTROLLER, disc.data(), disc.size()));
+}
+
+TEST(SteamWireless, InputStateIsNotAWirelessEvent) {
+    ParserState st;
+    DeviceState s;
+    auto state = steamState(kBtnSouth);
+    EXPECT_EQ(WirelessEvent::NONE,
+              checkWirelessEvent(Parser::STEAM_CONTROLLER, state.data(), state.size()));
+    EXPECT_TRUE(decodeReport(Parser::STEAM_CONTROLLER, state.data(), state.size(), s, &st));
+}
+
+TEST(SteamWireless, RejectsMalformedEvents) {
+    auto shortEvent = steamWirelessEvent(0x02);
+    shortEvent.resize(4);
+    EXPECT_EQ(WirelessEvent::NONE,
+              checkWirelessEvent(Parser::STEAM_CONTROLLER, shortEvent.data(), shortEvent.size()));
+
+    auto badVersion = steamWirelessEvent(0x02);
+    badVersion[0] = 0x02;
+    EXPECT_EQ(WirelessEvent::NONE,
+              checkWirelessEvent(Parser::STEAM_CONTROLLER, badVersion.data(), badVersion.size()));
+
+    auto badPayloadLen = steamWirelessEvent(0x02);
+    badPayloadLen[3] = 0x02;
+    EXPECT_EQ(WirelessEvent::NONE, checkWirelessEvent(Parser::STEAM_CONTROLLER,
+                                                      badPayloadLen.data(), badPayloadLen.size()));
+
+    auto unknownPayload = steamWirelessEvent(0x03);
+    EXPECT_EQ(
+        WirelessEvent::NONE,
+        checkWirelessEvent(Parser::STEAM_CONTROLLER, unknownPayload.data(), unknownPayload.size()));
+
+    // ID_CONTROLLER_STATUS (battery) shares the endpoint but is not a connect event.
+    auto battery = steamWirelessEvent(0x02);
+    battery[2] = 0x04;
+    EXPECT_EQ(WirelessEvent::NONE,
+              checkWirelessEvent(Parser::STEAM_CONTROLLER, battery.data(), battery.size()));
+}
+
+TEST(SteamWireless, OtherParsersNeverSeeWirelessEvents) {
+    auto conn = steamWirelessEvent(0x02);
+    EXPECT_EQ(WirelessEvent::NONE,
+              checkWirelessEvent(Parser::XINPUT_360, conn.data(), conn.size()));
+    EXPECT_EQ(WirelessEvent::NONE, checkWirelessEvent(Parser::DUALSENSE, conn.data(), conn.size()));
+    EXPECT_EQ(WirelessEvent::NONE, checkWirelessEvent(Parser::NONE, conn.data(), conn.size()));
+}
+
+// A released Steam Controller settles as a keyboard/mouse, never a framework gamepad; every other
+// model (and anything unknown) keeps the wait-for-re-enumeration contract.
+TEST(SteamClassify, OnlySteamModelsSettleWithoutAFrameworkGamepad) {
+    EXPECT_FALSE(modelExpectsFrameworkGamepad(0x28DE, 0x1102));
+    EXPECT_FALSE(modelExpectsFrameworkGamepad(0x28DE, 0x1142));
+    EXPECT_TRUE(modelExpectsFrameworkGamepad(0x045E, 0x028E));
+    EXPECT_TRUE(modelExpectsFrameworkGamepad(0x054C, 0x05C4));
+    EXPECT_TRUE(modelExpectsFrameworkGamepad(0x1234, 0x5678));
 }
