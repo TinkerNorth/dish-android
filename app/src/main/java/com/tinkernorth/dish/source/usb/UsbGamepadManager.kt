@@ -131,6 +131,14 @@ class UsbGamepadManager
             applyEvent(vpk(vendorId, productId), UsbEvent.Choose(choice, userInitiated = true))
         }
 
+        // The streaming notification's Stop action: release every held claim so each pad gets its
+        // device-side restore and is handed back before the service exits. Main thread only.
+        fun releaseAllDirect() {
+            for ((key, c) in _controllers.value) {
+                if (c.phase == UsbPhase.Direct) applyEvent(key, UsbEvent.Choose(PathChoice.Standard, userInitiated = true))
+            }
+        }
+
         private val receiver =
             object : BroadcastReceiver() {
                 override fun onReceive(
@@ -176,6 +184,7 @@ class UsbGamepadManager
                                     frameworkId = fwId,
                                     hasPermission = usbManager.hasPermission(device),
                                     desired = resolvePath(vid, pid),
+                                    frameworkExpected = native.modelExpectsFrameworkGamepad(vid, pid),
                                 ).withCapturedBinding(fwId)
                         )
                 }
@@ -250,6 +259,9 @@ class UsbGamepadManager
                 UsbEffect.RequestPermission -> usbDevices[key]?.let { requestPermission(it) }
                 is UsbEffect.BindFramework -> bindTo(fx.frameworkId, c.connId, c.type)
                 is UsbEffect.RemoveSynthetic -> {
+                    // Idempotent after a Release already detached; on a physical unplug it is the only
+                    // path that reaps the native poller and its fd instead of stranding them.
+                    native.detachUsbDevice(fx.syntheticId)
                     claimedConns.remove(key)?.let { runCatching { it.connection.close() } }
                     registry.removeUsbSynthetic(fx.syntheticId)
                 }
@@ -495,7 +507,14 @@ class UsbGamepadManager
 
         private fun gameInterfaceRank(intf: UsbInterface): Int {
             val cls = intf.interfaceClass
-            if (cls == UsbConstants.USB_CLASS_HID) return RANK_HID
+            if (cls == UsbConstants.USB_CLASS_HID) {
+                // A pad that also emulates a keyboard/mouse (the Steam Controller does, and lists
+                // them first) is never driven from its boot-protocol interfaces.
+                val bootHumanInterface =
+                    intf.interfaceSubclass == HID_BOOT_SUBCLASS &&
+                        (intf.interfaceProtocol == HID_KEYBOARD_PROTOCOL || intf.interfaceProtocol == HID_MOUSE_PROTOCOL)
+                return if (bootHumanInterface) RANK_HID_BOOT else RANK_HID
+            }
             if (cls != UsbConstants.USB_CLASS_VENDOR_SPEC) return RANK_NONE
             val sub = intf.interfaceSubclass
             val proto = intf.interfaceProtocol
@@ -558,11 +577,16 @@ class UsbGamepadManager
             const val GIP_SUBCLASS = 0x47
             const val GIP_PROTOCOL = 0xD0
 
+            const val HID_BOOT_SUBCLASS = 0x01
+            const val HID_KEYBOARD_PROTOCOL = 0x01
+            const val HID_MOUSE_PROTOCOL = 0x02
+
             const val RANK_NONE = 0
-            const val RANK_VENDOR_FALLBACK = 1
-            const val RANK_HID = 2
-            const val RANK_GIP = 3
-            const val RANK_XINPUT = 4
+            const val RANK_HID_BOOT = 1
+            const val RANK_VENDOR_FALLBACK = 2
+            const val RANK_HID = 3
+            const val RANK_GIP = 4
+            const val RANK_XINPUT = 5
         }
     }
 

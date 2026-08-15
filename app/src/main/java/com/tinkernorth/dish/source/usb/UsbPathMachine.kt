@@ -34,6 +34,10 @@ data class UsbController(
     // Why the last Direct claim failed; remembered between the failure and the Standard re-settle so the
     // re-enumerated framework card can show the cause.
     val failure: DirectClaimFailure? = null,
+    // Whether releasing to Standard re-enumerates a framework gamepad. False for models whose
+    // stand-alone identity is a keyboard/mouse (the Steam Controller): waiting for a framework
+    // device that never comes would strand every release in RestoreStuck, so those settle at once.
+    val frameworkExpected: Boolean = true,
 )
 
 sealed interface UsbEvent {
@@ -228,7 +232,7 @@ private fun reduceClaiming(
                 listOf(UsbEffect.EndHold, UsbEffect.ClearFailure),
             )
         is UsbEvent.ClaimFailed ->
-            if (event.frameworkStolen) {
+            if (event.frameworkStolen && c.frameworkExpected) {
                 // Kernel HID driver was detached by the claim; wait for the framework device to come
                 // back so we can settle on Standard (and surface the reason once it does).
                 Reduction(
@@ -236,10 +240,11 @@ private fun reduceClaiming(
                     listOf(UsbEffect.StartTimeout),
                 )
             } else {
-                // Open/claim was rejected without ever stealing the interface, so the framework slot is
-                // still live; drop straight back to Standard and say why Direct didn't happen. Persist
-                // Standard too, or the failed pick is silently re-attempted on every reconnect (mirrors
-                // the permission-denied path).
+                // Either the open/claim was rejected without ever stealing the interface (the framework
+                // slot is still live), or this model never re-enumerates as a framework gamepad, so there
+                // is nothing to wait for; drop straight back to Standard and say why Direct didn't happen.
+                // Persist Standard too, or the failed pick is silently re-attempted on every reconnect
+                // (mirrors the permission-denied path).
                 Reduction(
                     c.copy(phase = UsbPhase.Routed, desired = PathChoice.Standard, syntheticId = null, failure = event.reason),
                     buildList {
@@ -262,12 +267,33 @@ private fun reduceDirect(
     when (event) {
         is UsbEvent.Choose ->
             if (event.choice == PathChoice.Standard) {
-                // Release the interface but keep the synthetic as a held placeholder while the framework
-                // device comes back; if it doesn't we stop in RestoreStuck and let the user choose.
-                Reduction(
-                    c.copy(phase = UsbPhase.AwaitingFramework, userInitiated = event.userInitiated, failure = null),
-                    listOf(UsbEffect.Release, UsbEffect.StartTimeout),
-                )
+                if (c.frameworkExpected) {
+                    // Release the interface but keep the synthetic as a held placeholder while the framework
+                    // device comes back; if it doesn't we stop in RestoreStuck and let the user choose.
+                    Reduction(
+                        c.copy(phase = UsbPhase.AwaitingFramework, userInitiated = event.userInitiated, failure = null),
+                        listOf(UsbEffect.Release, UsbEffect.StartTimeout),
+                    )
+                } else {
+                    // No framework gamepad follows this release, so there is nothing to wait for:
+                    // the device-side restore in Release is the whole hand-back.
+                    Reduction(
+                        c.copy(
+                            phase = UsbPhase.Routed,
+                            desired = PathChoice.Standard,
+                            frameworkId = null,
+                            syntheticId = null,
+                            userInitiated = event.userInitiated,
+                            failure = null,
+                        ),
+                        buildList {
+                            add(UsbEffect.Release)
+                            c.syntheticId?.let { add(UsbEffect.RemoveSynthetic(it)) }
+                            add(UsbEffect.SetPref(PathChoice.Standard))
+                            add(UsbEffect.ClearFailure)
+                        },
+                    )
+                }
             } else {
                 stay(c.copy(desired = PathChoice.Direct))
             }
@@ -398,3 +424,7 @@ private fun reduceNeedsReplug(
         is UsbEvent.PermissionGranted -> stay(c.copy(hasPermission = true))
         else -> stay(c)
     }
+
+// How many controllers currently hold a Direct claim. The foreground service keys off this so the
+// process (and the device restore a release runs) survives backgrounding while a pad is claimed.
+fun Map<Int, UsbController>.directClaimCount(): Int = values.count { it.phase == UsbPhase.Direct }

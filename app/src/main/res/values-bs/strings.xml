@@ -248,6 +248,7 @@
         <item quantity="few">%1$d kontrolera strimaju na %2$s</item>
         <item quantity="other">%1$d kontrolera strima na %2$s</item>
     </plurals>
+    <string name="streaming_notification_body_usb_hold">USB kontroler zadržan u brzom načinu</string>
     <string name="streaming_notification_stop">Zaustavi</string>
 
     <!-- Rezervni ekran kada nativno učitavanje ne uspije. -->

@@ -22,6 +22,7 @@ enum class Parser : uint8_t {
     GENERIC_HID_GAMEPAD = 7,
     // Same input report as XINPUT_360, but rumble needs the wrapped wireless-receiver frame.
     XINPUT_360_WIRELESS = 8,
+    STEAM_CONTROLLER = 9,
 };
 
 enum class InitKind : uint8_t {
@@ -30,6 +31,25 @@ enum class InitKind : uint8_t {
     SWITCH_PRO_HANDSHAKE = 2,
     // Xbox One S / Elite Series 2 want the GIP set-mode packet on top of the universal sequence.
     XBOX_ONE_S = 3,
+    // Steam Controller: stop the firmware's stand-alone keyboard/mouse emulation and enable the
+    // IMU.
+    STEAM_QUIET = 4,
+};
+
+// Which direction a Steam Controller config sequence runs. QUIET is sent at attach; RESTORE must
+// run on every exit path or the pad stays mute as a desktop mouse after we hand it back.
+enum class SteamConfig : uint8_t {
+    QUIET = 0,
+    RESTORE = 1,
+};
+
+// Wireless dongle connect/disconnect events that arrive on the same endpoint as input reports.
+// They never decode as state, so without them a departed pad would keep its last published input
+// latched and a returning pad (fresh boot, settings gone) would stream without its quiet-mode init.
+enum class WirelessEvent : uint8_t {
+    NONE = 0,
+    CONNECT = 1,
+    DISCONNECT = 2,
 };
 
 struct KnownDevice {
@@ -82,6 +102,9 @@ struct ParserState {
     // Filled at attach for DUALSHOCK4 / DUALSENSE when the calibration report reads; invalid
     // otherwise.
     PsImuCalib psImu;
+    // Steam Controller stick, held across the frames where the shared left axes carry pad data.
+    int16_t steamStickX = 0;
+    int16_t steamStickY = 0;
 };
 
 const KnownDevice* lookupKnown(uint16_t vid, uint16_t pid);
@@ -90,6 +113,11 @@ Classification classifyDevice(uint16_t vid, uint16_t pid, uint8_t ifClass, uint8
                               uint8_t ifProtocol);
 
 bool isVerifiedFastLane(uint16_t vid, uint16_t pid);
+
+// Whether releasing this model back to Standard produces a framework gamepad InputDevice. False
+// for the Steam Controller, whose stand-alone identity is a keyboard and mouse: a release that
+// waited for a framework gamepad would always time out into a false "restore stuck".
+bool modelExpectsFrameworkGamepad(uint16_t vid, uint16_t pid);
 
 const char* parserName(Parser p);
 
@@ -108,7 +136,15 @@ bool parserFrameworkRumbleUnreliable(Parser p);
 // number at byte 2), returns its length or 0 when there are no more. runInit sends them in order.
 size_t buildGipInitPacket(InitKind init, int index, uint8_t seq, uint8_t* out, size_t outCap);
 
-bool runInit(int fd, uint8_t epOut, Parser p, InitKind init);
+// Pure: writes the index-th Steam Controller feature report for a config direction into out,
+// returns its length or 0 when there are no more. Payload only; the caller frames it as a
+// SET_REPORT.
+size_t buildSteamConfigPacket(SteamConfig stage, int index, uint8_t* out, size_t outCap);
+
+bool runInit(int fd, int interfaceNumber, uint8_t epOut, Parser p, InitKind init);
+
+// Undoes runInit's device-side changes. No-op for families that never changed the device.
+void runTeardown(int fd, int interfaceNumber, Parser p);
 
 bool runRumble(int fd, uint8_t epOut, Parser p, uint16_t strong, uint16_t weak, uint8_t seq);
 
@@ -119,6 +155,10 @@ size_t buildRumbleReport(Parser p, uint16_t strong, uint16_t weak, uint8_t seq, 
 
 bool decodeReport(Parser p, const uint8_t* buf, size_t len, gamepad::DeviceState& s,
                   ParserState* sticks);
+
+// Pure: classifies a report as a wireless connect/disconnect event for families that interleave
+// them with input (the Steam Controller dongle). NONE for every other parser and packet.
+WirelessEvent checkWirelessEvent(Parser p, const uint8_t* buf, size_t len);
 
 bool decodeGenericHidGamepad(const uint8_t* buf, size_t len, gamepad::DeviceState& s);
 

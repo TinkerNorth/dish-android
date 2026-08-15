@@ -248,6 +248,7 @@
         <item quantity="one">%1$d Controller streamt an %2$s</item>
         <item quantity="other">%1$d Controller streamen an %2$s</item>
     </plurals>
+    <string name="streaming_notification_body_usb_hold">USB-Controller im Direktmodus gehalten</string>
     <string name="streaming_notification_stop">Stoppen</string>
 
     <!-- Fallback-Bildschirm, wenn das native Laden fehlschlägt. -->

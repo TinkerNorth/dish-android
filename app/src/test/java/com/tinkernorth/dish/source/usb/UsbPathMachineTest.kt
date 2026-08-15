@@ -18,6 +18,7 @@ class UsbPathMachineTest {
         userInitiated: Boolean = false,
         connId: String? = null,
         failure: DirectClaimFailure? = null,
+        frameworkExpected: Boolean = true,
     ) = UsbController(
         vendorId = 0x045E,
         productId = 0x028E,
@@ -30,6 +31,7 @@ class UsbPathMachineTest {
         userInitiated = userInitiated,
         connId = connId,
         failure = failure,
+        frameworkExpected = frameworkExpected,
     )
 
     // ── Routed ───────────────────────────────────────────────────────────────
@@ -160,6 +162,47 @@ class UsbPathMachineTest {
         assertEquals(listOf(UsbEffect.StartTimeout), r.effects)
     }
 
+    // Stealing the interface is irrelevant when no framework gamepad exists to re-enumerate: waiting
+    // would only time out into a false "needs replug", so the failure settles Standard directly.
+    @Test
+    fun `claiming + stolen failure with no framework identity drops straight to standard`() {
+        val r =
+            reduce(
+                controller(UsbPhase.Claiming, userInitiated = true, frameworkExpected = false),
+                UsbEvent.ClaimFailed(DirectClaimFailure.InitFailed, frameworkStolen = true),
+            )
+        assertEquals(UsbPhase.Routed, r.next?.phase)
+        assertEquals(PathChoice.Standard, r.next?.desired)
+        assertEquals(DirectClaimFailure.InitFailed, r.next?.failure)
+        assertEquals(
+            listOf(
+                UsbEffect.EndHold,
+                UsbEffect.SetPref(PathChoice.Standard),
+                UsbEffect.MarkFailure(DirectClaimFailure.InitFailed),
+                UsbEffect.Notify(UsbNotice.SwitchToDirectFailed),
+            ),
+            r.effects,
+        )
+    }
+
+    @Test
+    fun `claiming + auto stolen failure with no framework identity is silent`() {
+        val r =
+            reduce(
+                controller(UsbPhase.Claiming, userInitiated = false, frameworkExpected = false),
+                UsbEvent.ClaimFailed(DirectClaimFailure.InitFailed, frameworkStolen = true),
+            )
+        assertEquals(UsbPhase.Routed, r.next?.phase)
+        assertEquals(
+            listOf(
+                UsbEffect.EndHold,
+                UsbEffect.SetPref(PathChoice.Standard),
+                UsbEffect.MarkFailure(DirectClaimFailure.InitFailed),
+            ),
+            r.effects,
+        )
+    }
+
     // ── Direct ───────────────────────────────────────────────────────────────
 
     @Test
@@ -169,6 +212,58 @@ class UsbPathMachineTest {
         assertEquals(-1000, r.next?.syntheticId)
         assertNull(r.next?.failure)
         assertEquals(listOf(UsbEffect.Release, UsbEffect.StartTimeout), r.effects)
+    }
+
+    // The strand this guards against: a model that never re-enumerates as a framework gamepad (the
+    // Steam Controller settles as keyboard/mouse) would sit in AwaitingFramework until the timeout
+    // dumped every single release into RestoreStuck with a false "restore failed" banner.
+    @Test
+    fun `direct + choose standard with no framework identity settles routed at once`() {
+        val r =
+            reduce(
+                controller(UsbPhase.Direct, syntheticId = -1000, frameworkExpected = false),
+                UsbEvent.Choose(PathChoice.Standard, userInitiated = true),
+            )
+        assertEquals(UsbPhase.Routed, r.next?.phase)
+        assertEquals(PathChoice.Standard, r.next?.desired)
+        assertNull(r.next?.syntheticId)
+        assertNull(r.next?.frameworkId)
+        assertNull(r.next?.failure)
+        assertEquals(
+            listOf(
+                UsbEffect.Release,
+                UsbEffect.RemoveSynthetic(-1000),
+                UsbEffect.SetPref(PathChoice.Standard),
+                UsbEffect.ClearFailure,
+            ),
+            r.effects,
+        )
+    }
+
+    @Test
+    fun `a release with no framework identity never starts the stuck-detection timer`() {
+        val r =
+            reduce(
+                controller(UsbPhase.Direct, syntheticId = -1000, frameworkExpected = false),
+                UsbEvent.Choose(PathChoice.Standard, userInitiated = true),
+            )
+        assertFalse(r.effects.contains(UsbEffect.StartTimeout))
+        // A stray Timeout (a stale timer from an earlier transition) must be a no-op on the settled state.
+        val afterTimeout = reduce(r.next!!, UsbEvent.Timeout)
+        assertEquals(UsbPhase.Routed, afterTimeout.next?.phase)
+        assertTrue(afterTimeout.effects.isEmpty())
+    }
+
+    @Test
+    fun `a released model with no framework identity can opt straight back into direct`() {
+        val released =
+            reduce(
+                controller(UsbPhase.Direct, syntheticId = -1000, hasPermission = true, frameworkExpected = false),
+                UsbEvent.Choose(PathChoice.Standard, userInitiated = true),
+            ).next!!
+        val r = reduce(released, UsbEvent.Choose(PathChoice.Direct, userInitiated = true))
+        assertEquals(UsbPhase.Claiming, r.next?.phase)
+        assertEquals(listOf(UsbEffect.ClearFailure, UsbEffect.BeginHold, UsbEffect.Claim), r.effects)
     }
 
     // ── AwaitingFramework ────────────────────────────────────────────────────
@@ -381,14 +476,34 @@ class UsbPathMachineTest {
                 UsbEvent.ClaimFailed(DirectClaimFailure.InitFailed, frameworkStolen = true),
                 UsbEvent.Timeout,
             )
-        for (phase in UsbPhase.values()) {
-            for (e in events) {
-                val held = phase == UsbPhase.Direct || phase == UsbPhase.RestoreStuck
-                // The assertion is that no (phase x event) throws; a surviving controller keeps a phase.
-                val r = reduce(controller(phase, syntheticId = if (held) -1000 else null), e)
-                assertTrue(r.next == null || r.next.name.isNotEmpty())
+        for (expected in listOf(true, false)) {
+            for (phase in UsbPhase.values()) {
+                for (e in events) {
+                    val held = phase == UsbPhase.Direct || phase == UsbPhase.RestoreStuck
+                    // The assertion is that no (phase x event) throws; a surviving controller keeps a phase.
+                    val r =
+                        reduce(
+                            controller(phase, syntheticId = if (held) -1000 else null, frameworkExpected = expected),
+                            e,
+                        )
+                    assertTrue(r.next == null || r.next.name.isNotEmpty())
+                }
             }
         }
+    }
+
+    @Test
+    fun `direct claim count sees only direct-phase controllers`() {
+        val map =
+            mapOf(
+                1 to controller(UsbPhase.Direct, syntheticId = -1000),
+                2 to controller(UsbPhase.Claiming),
+                3 to controller(UsbPhase.RestoreStuck, syntheticId = -1001),
+                4 to controller(UsbPhase.Routed),
+                5 to controller(UsbPhase.Direct, syntheticId = -1002, frameworkExpected = false),
+            )
+        assertEquals(2, map.directClaimCount())
+        assertEquals(0, emptyMap<Int, UsbController>().directClaimCount())
     }
 
     @Test

@@ -34,6 +34,11 @@ class PhysicalInputNative
             productId: Int,
         ): Boolean = SatelliteNative.modelHasTouchpad(vendorId, productId)
 
+        fun modelExpectsFrameworkGamepad(
+            vendorId: Int,
+            productId: Int,
+        ): Boolean = SatelliteNative.modelExpectsFrameworkGamepad(vendorId, productId)
+
         fun lookupKnownModelName(
             vendorId: Int,
             productId: Int,

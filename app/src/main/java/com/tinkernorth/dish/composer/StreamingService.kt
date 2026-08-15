@@ -18,6 +18,8 @@ import com.tinkernorth.dish.DishApplication
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.usb.UsbGamepadManager
+import com.tinkernorth.dish.source.usb.directClaimCount
 import com.tinkernorth.dish.ui.main.MainActivity
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -37,6 +39,8 @@ class StreamingService : Service() {
 
     @Inject lateinit var btRegistry: BluetoothGamepadRegistry
 
+    @Inject lateinit var usbGamepadManager: UsbGamepadManager
+
     private var observerJob: Job? = null
 
     override fun onCreate() {
@@ -45,9 +49,14 @@ class StreamingService : Service() {
         // Refused foreground start: the service is already stopping, so don't wire observers that would
         // notify for a service that never entered the foreground.
         if (!startForegroundInitial()) return
+        // Held Direct claims keep the service up on their own: WakeState zeroes the slot count when
+        // the app leaves the foreground, but a claimed pad still needs this process alive for its
+        // eventual device-side restore. Collected in the process scope so a background unplug or
+        // release still reaches the stopSelf below.
         observerJob =
-            combine(wakeState.streamingSlotCount, hub.connections) { count, conns -> count to conns }
-                .onEach { (count, conns) -> refresh(count, conns) }
+            combine(wakeState.streamingSlotCount, hub.connections, usbGamepadManager.controllers) { count, conns, controllers ->
+                Triple(count, conns, controllers.directClaimCount())
+            }.onEach { (count, conns, claims) -> refresh(count, conns, claims) }
                 .launchIn(wakeStateScope())
     }
 
@@ -66,7 +75,15 @@ class StreamingService : Service() {
     ): Int {
         if (intent?.action == ACTION_STOP_ALL) {
             stopAllSessions()
+            // Stop means all of it: release held Direct claims too, so each pad gets its
+            // device-side restore instead of staying captured by a process about to idle out.
+            usbGamepadManager.releaseAllDirect()
             stopSelf()
+        } else if (observerJob != null) {
+            // A repeat startForegroundService (the controller re-asserting after a foreground
+            // return) obliges another startForeground call; against a live service it just
+            // refreshes the notification.
+            startForegroundInitial()
         }
         // START_NOT_STICKY: tightly coupled to process state; an OS-respawned bare service helps nobody.
         return START_NOT_STICKY
@@ -89,8 +106,9 @@ class StreamingService : Service() {
     private fun refresh(
         count: Int,
         conns: List<ConnectionSummary>,
+        directClaims: Int,
     ) {
-        if (count <= 0) {
+        if (count <= 0 && directClaims <= 0) {
             // Belt-and-braces against out-of-order emissions so notification never reads "0 streaming".
             stopSelf()
             return
@@ -104,6 +122,8 @@ class StreamingService : Service() {
         nm.notify(NOTIFICATION_ID, notification)
     }
 
+    // With no active stream the service is alive only for held Direct claims, so a zero count
+    // reads as the claim-hold body rather than "0 streaming".
     private fun build(
         count: Int,
         primaryLabel: String?,
@@ -125,7 +145,12 @@ class StreamingService : Service() {
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
         val hostLabel = primaryLabel ?: getString(R.string.satellite_fallback_name)
-        val body = resources.getQuantityString(R.plurals.streaming_notification_body, count, count, hostLabel)
+        val body =
+            if (count > 0) {
+                resources.getQuantityString(R.plurals.streaming_notification_body, count, count, hostLabel)
+            } else {
+                getString(R.string.streaming_notification_body_usb_hold)
+            }
         return NotificationCompat
             .Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_dish_connected)
