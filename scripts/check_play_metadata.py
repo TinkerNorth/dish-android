@@ -3,18 +3,23 @@
 
 Errors (exit 1): text over Play's length caps, screenshot counts outside
 2..8, PNG dimensions outside the allowed range for the form factor,
-wrongly sized feature graphics or icons.
+wrongly sized feature graphics or icons, and, when EXPECTED_VERSION_CODE
+is set (the release workflow passes the code derived from the tag), a
+locale missing changelogs/<code>.txt so a release can never ship without
+its per-locale release notes.
 Warnings (exit 0): assets Play treats as optional-but-recommended that are
 known to be pending (per-locale feature graphic, the 512x512 icon).
 
 Zero dependencies: PNG dimensions come straight from the IHDR chunk.
 """
 
+import os
 import struct
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent / "play" / "metadata" / "android"
+EXPECTED_CODE = os.environ.get("EXPECTED_VERSION_CODE", "").strip()
 
 TEXT_LIMITS = {
     "title.txt": 30,
@@ -61,6 +66,10 @@ def check_locale(locale_dir):
             errors.append(
                 f"{locale}/changelogs/{changelog.name}: {length} chars exceeds Play's {CHANGELOG_LIMIT}"
             )
+    if EXPECTED_CODE and not (locale_dir / "changelogs" / f"{EXPECTED_CODE}.txt").exists():
+        errors.append(
+            f"{locale}: missing changelogs/{EXPECTED_CODE}.txt, write the release notes before tagging"
+        )
     images = locale_dir / "images"
     for dirname, (side_min, side_max) in SCREENSHOT_DIRS.items():
         shots = sorted((images / dirname).glob("*.png"))

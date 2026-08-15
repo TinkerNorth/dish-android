@@ -1,0 +1,6 @@
+Compatibilidad con el Steam Controller.
+
+• Funciona en Modo directo por USB, con cable o mediante el dongle (opcional).
+• Sticks, gatillos, botones, motion y el trackpad derecho como stick derecho.
+• Mientras Dish lo usa, deja de actuar como ratón y teclado del teléfono, y se devuelve tal como estaba.
+• Si un mando se desconecta del dongle ya no deja su última entrada retenida, y al reconectarse se configura de nuevo automáticamente.
