@@ -497,7 +497,8 @@ class PhysicalGamepadRegistry
                 dev.getMotionRange(MotionEvent.AXIS_RZ, src)?.flat ?: 0f,
             )
             val vid = runCatching { dev.vendorId }.getOrDefault(0)
-            native.setDeviceQuirk(dev.id, resolveGamepadQuirk(vid))
+            val pid = runCatching { dev.productId }.getOrDefault(0)
+            native.setDeviceQuirk(dev.id, resolveGamepadQuirk(vid, pid))
             logDeviceCapabilities(dev)
         }
 

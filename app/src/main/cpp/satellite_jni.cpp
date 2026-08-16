@@ -384,14 +384,18 @@ static bool gamepadKeyFilter(const GameActivityKeyEvent* ev) {
                   (source & AINPUT_SOURCE_JOYSTICK) == AINPUT_SOURCE_JOYSTICK;
     if (!isGame) return false;
     int32_t kc = ev->keyCode;
-    bool isMappedKey =
-        (kc == AKEYCODE_BUTTON_L2 || kc == AKEYCODE_BUTTON_R2) || gamepad::keycodeToXusb(kc) != 0;
+    int32_t deviceId = ev->deviceId;
+    std::lock_guard<std::mutex> lock(g_devicesMtx);
+    auto it = g_devices.find(deviceId);
+    uint8_t quirk = it != g_devices.end() ? it->second.quirk : 0;
+    bool isMappedKey = (quirk & gamepad::QUIRK_SWITCH_LAYOUT)
+                           ? gamepad::switchLayoutConsumesKey(kc)
+                           : (kc == AKEYCODE_BUTTON_L2 || kc == AKEYCODE_BUTTON_R2) ||
+                                 gamepad::keycodeToXusb(kc) != 0;
     if (!isMappedKey) return false;
 
     int32_t action = ev->action;
     if (action == AKEY_EVENT_ACTION_DOWN || action == AKEY_EVENT_ACTION_UP) {
-        int32_t deviceId = ev->deviceId;
-        std::lock_guard<std::mutex> lock(g_devicesMtx);
         g_frameworkEventCounts[deviceId]++;
         auto& state = g_devices[deviceId];
         if (gamepad::applyKey(state, kc, action == AKEY_EVENT_ACTION_DOWN)) {
@@ -994,12 +998,16 @@ JNIEXPORT jboolean JNICALL
 Java_com_tinkernorth_dish_core_jni_SatelliteNative_processGamepadKeyEvent(
     JNIEnv*, jobject, jint deviceId, jint /*source*/, jint action, jint keyCode) {
     // Source bits are unreliable; gate on the mapped-keycode check instead.
-    bool isMappedKey = (keyCode == AKEYCODE_BUTTON_L2 || keyCode == AKEYCODE_BUTTON_R2 ||
-                        keyCode == AKEYCODE_BUTTON_7 || keyCode == AKEYCODE_BUTTON_8) ||
-                       gamepad::keycodeToXusb(keyCode) != 0;
+    std::lock_guard<std::mutex> lock(g_devicesMtx);
+    auto it = g_devices.find(deviceId);
+    uint8_t quirk = it != g_devices.end() ? it->second.quirk : 0;
+    bool isMappedKey = (quirk & gamepad::QUIRK_SWITCH_LAYOUT)
+                           ? gamepad::switchLayoutConsumesKey(keyCode)
+                           : (keyCode == AKEYCODE_BUTTON_L2 || keyCode == AKEYCODE_BUTTON_R2 ||
+                              keyCode == AKEYCODE_BUTTON_7 || keyCode == AKEYCODE_BUTTON_8) ||
+                                 gamepad::keycodeToXusb(keyCode) != 0;
     if (!isMappedKey) return JNI_FALSE;
     if (action != AKEY_EVENT_ACTION_DOWN && action != AKEY_EVENT_ACTION_UP) return JNI_FALSE;
-    std::lock_guard<std::mutex> lock(g_devicesMtx);
     g_frameworkEventCounts[deviceId]++;
     auto& state = g_devices[deviceId];
     if (gamepad::applyKey(state, keyCode, action == AKEY_EVENT_ACTION_DOWN)) {
