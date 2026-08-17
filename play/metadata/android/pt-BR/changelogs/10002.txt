@@ -1,6 +1,5 @@
-Suporte ao Steam Controller.
+Suporte ao Steam Controller, e correção para controles PDP de Switch com fio.
 
-• Funciona no Modo direto por USB, com fio ou pelo dongle (opcional).
-• Sticks, gatilhos, botões, sensores de movimento e o trackpad direito como stick direito.
-• Enquanto o Dish o usa, ele deixa de agir como mouse e teclado do celular, e é devolvido exatamente como estava.
-• Um controle que cai do dongle não mantém mais a última entrada, e é configurado de novo automaticamente ao reconectar.
+• Steam Controller no Modo direto por USB, com fio ou dongle (opcional): sticks, gatilhos, botões, movimento e o trackpad direito como stick direito.
+• Enquanto o Dish o usa, ele deixa de agir como mouse do celular, e é devolvido exatamente como estava.
+• Controles PDP de Switch corrigidos (Faceoff, Fight Pad Pro, Rock Candy): cada botão faz o que diz, inclusive o A, e ZL/ZR funcionam como gatilhos.

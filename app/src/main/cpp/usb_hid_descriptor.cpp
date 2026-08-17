@@ -89,6 +89,39 @@ uint16_t buttonBit(uint8_t idx) {
     }
 }
 
+// Switch-order HID pads declare buttons in usage row Y B A X L R ZL ZR Minus Plus L3 R3 Home
+// Capture; remap by position to match decodeSwitchProUsb. ZL/ZR (indices 6/7) fold into the
+// triggers in decodeFromLayout instead of mapping here.
+uint16_t switchOrderButtonBit(uint8_t idx) {
+    using namespace gamepad;
+    switch (idx) {
+    case 0:
+        return XUSB_X;
+    case 1:
+        return XUSB_A;
+    case 2:
+        return XUSB_B;
+    case 3:
+        return XUSB_Y;
+    case 4:
+        return XUSB_LB;
+    case 5:
+        return XUSB_RB;
+    case 8:
+        return XUSB_BACK;
+    case 9:
+        return XUSB_START;
+    case 10:
+        return XUSB_THUMB_L;
+    case 11:
+        return XUSB_THUMB_R;
+    case 12:
+        return XUSB_GUIDE;
+    default:
+        return 0;
+    }
+}
+
 uint16_t dpadBitsForDir(int dir) {
     using namespace gamepad;
     switch (dir) {
@@ -314,9 +347,25 @@ bool decodeFromLayout(const uint8_t* buf, size_t len, DeviceState& s, const HidL
         int range = (int)L.hatLogicalMax - (int)L.hatLogicalMin;
         if (dir >= 0 && dir <= range && dir <= 7) b = (uint16_t)(b | dpadBitsForDir(dir));
     }
-    for (uint8_t i = 0; i < L.buttonCount; i++) {
-        if (extractBits(d, dlen, (uint32_t)L.buttonBitOffset + i, 1)) {
-            b = (uint16_t)(b | buttonBit(i));
+    if (L.switchOrderButtons) {
+        bool zl = false, zr = false;
+        for (uint8_t i = 0; i < L.buttonCount; i++) {
+            if (!extractBits(d, dlen, (uint32_t)L.buttonBitOffset + i, 1)) continue;
+            if (i == 6) {
+                zl = true;
+            } else if (i == 7) {
+                zr = true;
+            } else {
+                b = (uint16_t)(b | switchOrderButtonBit(i));
+            }
+        }
+        s.bLT = zl ? 255 : 0;
+        s.bRT = zr ? 255 : 0;
+    } else {
+        for (uint8_t i = 0; i < L.buttonCount; i++) {
+            if (extractBits(d, dlen, (uint32_t)L.buttonBitOffset + i, 1)) {
+                b = (uint16_t)(b | buttonBit(i));
+            }
         }
     }
     s.wButtons = b;

@@ -10,7 +10,18 @@
 using gamepad::DeviceState;
 using gamepad::XUSB_A;
 using gamepad::XUSB_B;
+using gamepad::XUSB_BACK;
+using gamepad::XUSB_DPAD_DOWN;
+using gamepad::XUSB_DPAD_MASK;
 using gamepad::XUSB_DPAD_RIGHT;
+using gamepad::XUSB_GUIDE;
+using gamepad::XUSB_LB;
+using gamepad::XUSB_RB;
+using gamepad::XUSB_START;
+using gamepad::XUSB_THUMB_L;
+using gamepad::XUSB_THUMB_R;
+using gamepad::XUSB_X;
+using gamepad::XUSB_Y;
 using usbhid::decodeFromLayout;
 using usbhid::HidLayout;
 using usbhid::parseReportDescriptor;
@@ -216,4 +227,195 @@ TEST(HidDescriptor, NarrowHatRejectsOutOfRangeNull) {
     DeviceState s2;
     ASSERT_TRUE(decodeFromLayout(nullDir.data(), nullDir.size(), s2, L));
     EXPECT_EQ(0, s2.wButtons & gamepad::XUSB_DPAD_MASK);
+}
+
+namespace {
+
+// PDP Faceoff Wired Pro (0e6f:0180) report shape: 14 buttons in Switch usage order
+// (Y B A X L R ZL ZR Minus Plus L3 R3 Home Capture) + 2-bit pad, 4-bit hat + 4-bit pad, then
+// X/Y/Z/Rz bytes. 56-bit / 7-byte input report, no report id.
+const uint8_t kSwitchOrderDescriptor[] = {
+    0x05, 0x01,       // Usage Page (Generic Desktop)
+    0x09, 0x05,       // Usage (Game Pad)
+    0xA1, 0x01,       // Collection (Application)
+    0x15, 0x00,       //   Logical Minimum (0)
+    0x25, 0x01,       //   Logical Maximum (1)
+    0x75, 0x01,       //   Report Size (1)
+    0x95, 0x0E,       //   Report Count (14)
+    0x05, 0x09,       //   Usage Page (Button)
+    0x19, 0x01,       //   Usage Minimum (1)
+    0x29, 0x0E,       //   Usage Maximum (14)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0x95, 0x02,       //   Report Count (2)
+    0x81, 0x01,       //   Input (Const)
+    0x05, 0x01,       //   Usage Page (Generic Desktop)
+    0x25, 0x07,       //   Logical Maximum (7)
+    0x75, 0x04,       //   Report Size (4)
+    0x95, 0x01,       //   Report Count (1)
+    0x09, 0x39,       //   Usage (Hat switch)
+    0x81, 0x42,       //   Input (Data,Var,Abs,Null)
+    0x95, 0x01,       //   Report Count (1)
+    0x81, 0x01,       //   Input (Const)
+    0x26, 0xFF, 0x00, //   Logical Maximum (255)
+    0x09, 0x30,       //   Usage (X)
+    0x09, 0x31,       //   Usage (Y)
+    0x09, 0x32,       //   Usage (Z)
+    0x09, 0x35,       //   Usage (Rz)
+    0x75, 0x08,       //   Report Size (8)
+    0x95, 0x04,       //   Report Count (4)
+    0x81, 0x02,       //   Input (Data,Var,Abs)
+    0xC0,             // End Collection
+};
+
+std::vector<uint8_t> switchReport(uint8_t btnLo, uint8_t btnHi, uint8_t hat = 0x08,
+                                  uint8_t x = 0x7F, uint8_t y = 0x7F, uint8_t z = 0x7F,
+                                  uint8_t rz = 0x7F) {
+    return {btnLo, btnHi, hat, x, y, z, rz};
+}
+
+HidLayout switchLayout(bool switchOrder) {
+    HidLayout L;
+    EXPECT_TRUE(parseReportDescriptor(kSwitchOrderDescriptor, sizeof(kSwitchOrderDescriptor), L));
+    L.switchOrderButtons = switchOrder;
+    return L;
+}
+
+} // namespace
+
+TEST(SwitchOrderHid, ParsesTheFaceoffReportShape) {
+    HidLayout L;
+    ASSERT_TRUE(parseReportDescriptor(kSwitchOrderDescriptor, sizeof(kSwitchOrderDescriptor), L));
+    EXPECT_EQ(0, L.reportId);
+    EXPECT_EQ(0, L.buttonBitOffset);
+    EXPECT_EQ(14, L.buttonCount);
+    EXPECT_TRUE(L.hasHat);
+    EXPECT_EQ(16, L.hatBitOffset);
+    EXPECT_EQ(4, L.hatBitSize);
+    EXPECT_EQ(24, L.lx.bitOffset);
+    EXPECT_EQ(32, L.ly.bitOffset);
+    EXPECT_EQ(40, L.rx.bitOffset); // Z
+    EXPECT_EQ(48, L.ry.bitOffset); // Rz
+    EXPECT_FALSE(L.lt.present);
+    EXPECT_FALSE(L.rt.present);
+}
+
+TEST(SwitchOrderHid, ParseResetsTheOrderFlagSoAttachMustSetItAfter) {
+    HidLayout L;
+    L.switchOrderButtons = true;
+    ASSERT_TRUE(parseReportDescriptor(kSwitchOrderDescriptor, sizeof(kSwitchOrderDescriptor), L));
+    EXPECT_FALSE(L.switchOrderButtons);
+}
+
+TEST(SwitchOrderHid, WesternDecodeScramblesTheFaceoffPad) {
+    // Pre-quirk behavior pin: without the catalog flag, physical A (bit 2) lands on X, ZL lands
+    // on Back with no trigger, and R3/Home/Capture vanish.
+    HidLayout L = switchLayout(false);
+
+    DeviceState a;
+    auto physicalA = switchReport(0x04, 0x00);
+    ASSERT_TRUE(decodeFromLayout(physicalA.data(), physicalA.size(), a, L));
+    EXPECT_EQ(XUSB_X, a.wButtons);
+
+    DeviceState zl;
+    auto zlReport = switchReport(0x40, 0x00);
+    ASSERT_TRUE(decodeFromLayout(zlReport.data(), zlReport.size(), zl, L));
+    EXPECT_EQ(XUSB_BACK, zl.wButtons);
+    EXPECT_EQ(0, zl.bLT);
+
+    DeviceState upper;
+    auto upperReport = switchReport(0x00, 0x38);
+    ASSERT_TRUE(decodeFromLayout(upperReport.data(), upperReport.size(), upper, L));
+    EXPECT_EQ(0, upper.wButtons);
+}
+
+TEST(SwitchOrderHid, FaceButtonsRemapByPosition) {
+    HidLayout L = switchLayout(true);
+    struct Case {
+        uint8_t bit;
+        uint16_t expected;
+    };
+    const Case cases[] = {
+        {0x01, XUSB_X}, // Y (west)
+        {0x02, XUSB_A}, // B (south)
+        {0x04, XUSB_B}, // A (east)
+        {0x08, XUSB_Y}, // X (north)
+    };
+    for (const Case& c : cases) {
+        DeviceState s;
+        auto r = switchReport(c.bit, 0x00);
+        ASSERT_TRUE(decodeFromLayout(r.data(), r.size(), s, L));
+        EXPECT_EQ(c.expected, s.wButtons) << (int)c.bit;
+    }
+}
+
+TEST(SwitchOrderHid, BumpersMapAndZlZrDriveTriggers) {
+    HidLayout L = switchLayout(true);
+
+    DeviceState bumpers;
+    auto lr = switchReport(0x30, 0x00);
+    ASSERT_TRUE(decodeFromLayout(lr.data(), lr.size(), bumpers, L));
+    EXPECT_EQ(static_cast<uint16_t>(XUSB_LB | XUSB_RB), bumpers.wButtons);
+    EXPECT_EQ(0, bumpers.bLT);
+    EXPECT_EQ(0, bumpers.bRT);
+
+    DeviceState triggers;
+    auto zlzr = switchReport(0xC0, 0x00);
+    ASSERT_TRUE(decodeFromLayout(zlzr.data(), zlzr.size(), triggers, L));
+    EXPECT_EQ(0, triggers.wButtons);
+    EXPECT_EQ(255, triggers.bLT);
+    EXPECT_EQ(255, triggers.bRT);
+
+    auto released = switchReport(0x00, 0x00);
+    ASSERT_TRUE(decodeFromLayout(released.data(), released.size(), triggers, L));
+    EXPECT_EQ(0, triggers.bLT);
+    EXPECT_EQ(0, triggers.bRT);
+}
+
+TEST(SwitchOrderHid, UpperRowMapsMinusPlusSticksAndHome) {
+    HidLayout L = switchLayout(true);
+    struct Case {
+        uint8_t bit;
+        uint16_t expected;
+    };
+    const Case cases[] = {
+        {0x01, XUSB_BACK},    // Minus
+        {0x02, XUSB_START},   // Plus
+        {0x04, XUSB_THUMB_L}, // L3
+        {0x08, XUSB_THUMB_R}, // R3
+        {0x10, XUSB_GUIDE},   // Home
+        {0x20, 0},            // Capture: no XUSB equivalent
+    };
+    for (const Case& c : cases) {
+        DeviceState s;
+        auto r = switchReport(0x00, c.bit);
+        ASSERT_TRUE(decodeFromLayout(r.data(), r.size(), s, L));
+        EXPECT_EQ(c.expected, s.wButtons) << (int)c.bit;
+    }
+}
+
+TEST(SwitchOrderHid, HatAndSticksAreUntouchedByTheRemap) {
+    HidLayout L = switchLayout(true);
+
+    DeviceState east;
+    auto r = switchReport(0x00, 0x00, 0x02, 0xFF);
+    ASSERT_TRUE(decodeFromLayout(r.data(), r.size(), east, L));
+    EXPECT_TRUE(east.wButtons & XUSB_DPAD_RIGHT);
+    EXPECT_GT(east.sLX, 30000);
+
+    DeviceState neutral;
+    auto n = switchReport(0x00, 0x00);
+    ASSERT_TRUE(decodeFromLayout(n.data(), n.size(), neutral, L));
+    EXPECT_EQ(0, neutral.wButtons & XUSB_DPAD_MASK);
+    EXPECT_EQ(0, neutral.sLX);
+}
+
+TEST(SwitchOrderHid, CombinedReportDecodesAllFields) {
+    HidLayout L = switchLayout(true);
+    DeviceState s;
+    auto r = switchReport(0x44, 0x02, 0x04, 0xFF);
+    ASSERT_TRUE(decodeFromLayout(r.data(), r.size(), s, L));
+    EXPECT_EQ(static_cast<uint16_t>(XUSB_B | XUSB_START | XUSB_DPAD_DOWN), s.wButtons);
+    EXPECT_EQ(255, s.bLT);
+    EXPECT_EQ(0, s.bRT);
+    EXPECT_GT(s.sLX, 30000);
 }

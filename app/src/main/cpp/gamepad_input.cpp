@@ -79,6 +79,49 @@ uint16_t keycodeToXusb(int32_t kc) {
     }
 }
 
+// Switch-order HID pads (usage row Y B A X L R ZL ZR Minus Plus L3 R3 Home Capture) arrive from
+// Generic.kl as BUTTON_A..BUTTON_THUMBL; remap by position to match decodeSwitchProUsb.
+uint16_t switchLayoutKeycodeToXusb(int32_t kc) {
+    switch (kc) {
+    case KC_BUTTON_A:
+        return XUSB_X;
+    case KC_BUTTON_B:
+        return XUSB_A;
+    case KC_BUTTON_C:
+        return XUSB_B;
+    case KC_BUTTON_X:
+        return XUSB_Y;
+    case KC_BUTTON_Y:
+        return XUSB_LB;
+    case KC_BUTTON_Z:
+        return XUSB_RB;
+    case KC_BUTTON_L2:
+        return XUSB_BACK;
+    case KC_BUTTON_R2:
+        return XUSB_START;
+    case KC_BUTTON_SELECT:
+        return XUSB_THUMB_L;
+    case KC_BUTTON_START:
+        return XUSB_THUMB_R;
+    case KC_BUTTON_MODE:
+        return XUSB_GUIDE;
+    case KC_DPAD_UP:
+        return XUSB_DPAD_UP;
+    case KC_DPAD_DOWN:
+        return XUSB_DPAD_DOWN;
+    case KC_DPAD_LEFT:
+        return XUSB_DPAD_LEFT;
+    case KC_DPAD_RIGHT:
+        return XUSB_DPAD_RIGHT;
+    default:
+        return 0;
+    }
+}
+
+bool switchLayoutConsumesKey(int32_t kc) {
+    return kc == KC_BUTTON_L1 || kc == KC_BUTTON_R1 || switchLayoutKeycodeToXusb(kc) != 0;
+}
+
 uint16_t applyButtonQuirk(uint16_t bit, uint8_t quirk) {
     if (quirk & QUIRK_SWAP_AB) {
         if (bit == XUSB_A) return XUSB_B;
@@ -92,6 +135,26 @@ uint16_t applyButtonQuirk(uint16_t bit, uint8_t quirk) {
 }
 
 bool applyKey(DeviceState& s, int32_t kc, bool down) {
+    if (s.quirk & QUIRK_SWITCH_LAYOUT) {
+        if (kc == KC_BUTTON_L1) {
+            s.ltFromKey = down;
+            s.bLT = down ? 255 : 0;
+            return true;
+        }
+        if (kc == KC_BUTTON_R1) {
+            s.rtFromKey = down;
+            s.bRT = down ? 255 : 0;
+            return true;
+        }
+        uint16_t bit = switchLayoutKeycodeToXusb(kc);
+        if (bit == 0) return false;
+        if (down) {
+            s.wButtons = static_cast<uint16_t>(s.wButtons | bit);
+        } else {
+            s.wButtons = static_cast<uint16_t>(s.wButtons & ~bit);
+        }
+        return true;
+    }
     if (kc == KC_BUTTON_L2 || kc == KC_BUTTON_7) {
         s.ltFromKey = down;
         s.bLT = down ? 255 : 0;

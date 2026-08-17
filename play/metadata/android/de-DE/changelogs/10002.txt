@@ -1,6 +1,5 @@
-Steam-Controller-Unterstützung.
+Steam-Controller-Unterstützung und ein Fix für kabelgebundene PDP-Switch-Controller.
 
-• Läuft im Direktmodus über USB, per Kabel oder Dongle (Opt-in).
-• Sticks, Trigger, Tasten, Motion und das rechte Trackpad als rechter Stick.
-• Solange Dish ihn nutzt, wirkt er nicht mehr als Maus und Tastatur am Handy und wird danach unverändert zurückgegeben.
-• Fällt ein Pad vom Dongle, bleibt keine Eingabe mehr hängen; beim Wiederverbinden richtet es sich automatisch neu ein.
+• Steam Controller läuft im Direktmodus über USB, per Kabel oder Dongle (Opt-in): Sticks, Trigger, Tasten, Motion und das rechte Trackpad als rechter Stick.
+• Solange Dish ihn nutzt, wirkt er nicht mehr als Maus am Handy und wird danach unverändert zurückgegeben.
+• PDP-Switch-Pads (Faceoff, Fight Pad Pro, Rock Candy) repariert: Jede Taste tut jetzt, was draufsteht, auch A, und ZL/ZR wirken als Trigger.

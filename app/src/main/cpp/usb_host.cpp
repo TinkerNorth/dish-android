@@ -426,6 +426,8 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
     ctx->parserName = usbparsers::parserName(parser);
     if (parser == usbparsers::Parser::GENERIC_HID_GAMEPAD) {
         fetchHidLayout(fd, interfaceNumber, ctx->stickRange.hidLayout);
+        ctx->stickRange.hidLayout.switchOrderButtons =
+            classification.order == usbparsers::ButtonOrder::SWITCH;
     } else if (parser == usbparsers::Parser::DUALSHOCK4) {
         fetchPsCalibration(fd, interfaceNumber, 0x02, ctx->stickRange.psImu);
     } else if (parser == usbparsers::Parser::DUALSENSE) {
