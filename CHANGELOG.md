@@ -7,7 +7,7 @@ computer. Those lines say "update Satellite too".
 
 ---
 
-## [1.1.0] - 2026-08-17
+## [1.1.1] - 2026-08-17
 
 ### Fixed
 
@@ -62,5 +62,5 @@ The first public release.
 
 Earlier test builds (0.0.x) are only documented in the git history.
 
-[1.1.0]: https://github.com/TinkerNorth/dish-android/releases/tag/1.1.0
+[1.1.1]: https://github.com/TinkerNorth/dish-android/releases/tag/1.1.1
 [1.0.1]: https://github.com/TinkerNorth/dish-android/releases/tag/1.0.1
