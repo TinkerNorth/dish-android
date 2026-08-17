@@ -1,5 +1,5 @@
-Suporte ao Steam Controller, e correção para controles PDP de Switch com fio.
+Suporte ao Steam Controller e ao Amazon Luna, e correção para controles PDP de Switch com fio.
 
 • Steam Controller no Modo direto por USB, com fio ou dongle (opcional): sticks, gatilhos, botões, movimento e o trackpad direito como stick direito.
-• Enquanto o Dish o usa, ele deixa de agir como mouse do celular, e é devolvido exatamente como estava.
+• Controle Amazon Luna com suporte total por USB: todos os botões, os dois sticks, gatilhos e vibração.
 • Controles PDP de Switch corrigidos (Faceoff, Fight Pad Pro, Rock Candy): cada botão faz o que diz, inclusive o A, e ZL/ZR funcionam como gatilhos.

@@ -1,5 +1,5 @@
-Steam Controller pris en charge, plus un correctif pour les manettes PDP Switch filaires.
+Steam Controller et Amazon Luna, plus un correctif pour les manettes PDP Switch filaires.
 
 • Steam Controller en Mode direct par USB, filaire ou dongle (optionnel) : sticks, gâchettes, boutons, mouvement et pavé droit comme stick droit.
-• Pendant que Dish l'utilise, il cesse de faire souris sur le téléphone, puis est rendu tel quel.
+• Manette Amazon Luna prise en charge en USB : tous les boutons, deux sticks, gâchettes et vibrations.
 • Manettes PDP Switch corrigées (Faceoff, Fight Pad Pro, Rock Candy) : chaque bouton fait ce qu'il indique, A compris, et ZL/ZR servent de gâchettes.

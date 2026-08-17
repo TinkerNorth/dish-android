@@ -1,5 +1,5 @@
-Compatibilidad con el Steam Controller y arreglo para mandos PDP de Switch con cable.
+Steam Controller y Amazon Luna, más un arreglo para mandos PDP de Switch con cable.
 
 • Steam Controller funciona en Modo directo por USB, con cable o dongle (opcional): sticks, gatillos, botones, motion y el trackpad derecho como stick derecho.
-• Mientras Dish lo usa, deja de actuar como ratón del teléfono, y se devuelve tal como estaba.
+• Amazon Luna totalmente compatible por USB: todos los botones, ambos sticks, gatillos y vibración.
 • Arreglados los mandos PDP de Switch (Faceoff, Fight Pad Pro, Rock Candy): cada botón hace lo que indica, incluido A, y ZL/ZR funcionan como gatillos.
