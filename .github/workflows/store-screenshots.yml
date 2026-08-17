@@ -7,11 +7,11 @@ name: Store Screenshots
 # Dispatch-only: captures are reviewed by a human before committing.
 #
 # Pin map (verify with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`):
-#   actions/checkout                     @ v7.0.0  → 9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-#   actions/setup-java                   @ v5.5.0  → 0f481fcb613427c0f801b606911222b5b6f3083a
-#   actions/setup-python                 @ v6.3.0  → ece7cb06caefa5fff74198d8649806c4678c61a1
+#   actions/checkout                     @ v7.0.1  → 3d3c42e5aac5ba805825da76410c181273ba90b1
+#   actions/setup-java                   @ v5.7.0  → b6effb05e454b25005698d916606bdc6ffcbf961
+#   actions/setup-python                 @ v7.0.0  → 5fda3b95a4ea91299a34e894583c3862153e4b97
 #   actions/upload-artifact              @ v7.0.1  → 043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-#   gradle/actions/setup-gradle          @ v6.2.0  → 3f131e8634966bd73d06cc69884922b02e6faf92
+#   gradle/actions/setup-gradle          @ v6.3.0  → 9c971963bec38e04b3d30dcc455b5382be2fdbfb
 #   reactivecircus/android-emulator-runner @ v2.38.0 → a421e43855164a8197daf9d8d40fe71c6996bb0d
 
 on:

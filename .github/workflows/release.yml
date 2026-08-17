@@ -51,14 +51,14 @@ on:
 #                                 before the API can publish.
 #
 # Pin map (verify with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`):
-#   actions/checkout                @ v7.0.0  → 9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-#   actions/setup-java              @ v5.5.0  → 0f481fcb613427c0f801b606911222b5b6f3083a
+#   actions/checkout                @ v7.0.1  → 3d3c42e5aac5ba805825da76410c181273ba90b1
+#   actions/setup-java              @ v5.7.0  → b6effb05e454b25005698d916606bdc6ffcbf961
 #   actions/upload-artifact         @ v7.0.1  → 043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
 #   actions/download-artifact       @ v8.0.1  → 3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-#   gradle/actions/setup-gradle     @ v6.2.0  → 3f131e8634966bd73d06cc69884922b02e6faf92
+#   gradle/actions/setup-gradle     @ v6.3.0  → 9c971963bec38e04b3d30dcc455b5382be2fdbfb
 #   anchore/sbom-action             @ v0.24.0 → e22c389904149dbc22b58101806040fa8d37a610
 #   anchore/scan-action             @ v7.4.0  → e1165082ffb1fe366ebaf02d8526e7c4989ea9d2
-#   github/codeql-action/upload-sarif @ v4.37.0 → 99df26d4f13ea111d4ec1a7dddef6063f76b97e9
+#   github/codeql-action/upload-sarif @ v4.37.6 → 5595ccaf912efad79be6eef63a5619ff05969be3
 #   softprops/action-gh-release     @ v3.0.2  → 3d0d9888cb7fd7b750713d6e236d1fcb99157228
 #   slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml
 #                                   @ v2.1.0  → f7dd8c54c2067bafc12ca7a55595d5ee9b75204a
