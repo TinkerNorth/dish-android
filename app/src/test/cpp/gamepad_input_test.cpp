@@ -683,3 +683,179 @@ TEST(DeviceStateJson, TooSmallBufferReturnsZero) {
     char buf[16];
     EXPECT_EQ(0u, formatDeviceStateJson(s, buf, sizeof(buf)));
 }
+
+// ── Switch-layout quirk: Generic.kl hands Switch-order HID buttons over shifted by one row ──
+
+TEST(KeycodeToXusb, SwitchOrderKeycodesAreNotInBaseMap) {
+    // Physical A / R / Home on a Switch-order pad arrive as BUTTON_C / BUTTON_Z / BUTTON_MODE;
+    // the base map drops them (the PDP Faceoff "A does not register" symptom).
+    EXPECT_EQ(0, keycodeToXusb(KC_BUTTON_C));
+    EXPECT_EQ(0, keycodeToXusb(KC_BUTTON_Z));
+    EXPECT_EQ(0, keycodeToXusb(KC_BUTTON_MODE));
+}
+
+TEST(ApplyKey, BaseQuirkIgnoresSwitchOrderKeycodes) {
+    DeviceState s;
+    s.wButtons = XUSB_A;
+    EXPECT_FALSE(applyKey(s, KC_BUTTON_C, true));
+    EXPECT_FALSE(applyKey(s, KC_BUTTON_Z, true));
+    EXPECT_FALSE(applyKey(s, KC_BUTTON_MODE, true));
+    EXPECT_EQ(XUSB_A, s.wButtons);
+}
+
+TEST(SwitchLayout, QuirkBitMatchesTheKotlinContract) { EXPECT_EQ(0x04, QUIRK_SWITCH_LAYOUT); }
+
+TEST(SwitchLayout, FaceRowRemapsByPosition) {
+    EXPECT_EQ(XUSB_X, switchLayoutKeycodeToXusb(KC_BUTTON_A));
+    EXPECT_EQ(XUSB_A, switchLayoutKeycodeToXusb(KC_BUTTON_B));
+    EXPECT_EQ(XUSB_B, switchLayoutKeycodeToXusb(KC_BUTTON_C));
+    EXPECT_EQ(XUSB_Y, switchLayoutKeycodeToXusb(KC_BUTTON_X));
+}
+
+TEST(SwitchLayout, PhysicalBumpersComeFromButtonYAndZ) {
+    EXPECT_EQ(XUSB_LB, switchLayoutKeycodeToXusb(KC_BUTTON_Y));
+    EXPECT_EQ(XUSB_RB, switchLayoutKeycodeToXusb(KC_BUTTON_Z));
+}
+
+TEST(SwitchLayout, MinusPlusBecomeBackStart) {
+    EXPECT_EQ(XUSB_BACK, switchLayoutKeycodeToXusb(KC_BUTTON_L2));
+    EXPECT_EQ(XUSB_START, switchLayoutKeycodeToXusb(KC_BUTTON_R2));
+}
+
+TEST(SwitchLayout, StickClicksComeFromSelectAndStart) {
+    EXPECT_EQ(XUSB_THUMB_L, switchLayoutKeycodeToXusb(KC_BUTTON_SELECT));
+    EXPECT_EQ(XUSB_THUMB_R, switchLayoutKeycodeToXusb(KC_BUTTON_START));
+}
+
+TEST(SwitchLayout, HomeBecomesGuide) {
+    EXPECT_EQ(XUSB_GUIDE, switchLayoutKeycodeToXusb(KC_BUTTON_MODE));
+}
+
+TEST(SwitchLayout, DpadPassesThrough) {
+    EXPECT_EQ(XUSB_DPAD_UP, switchLayoutKeycodeToXusb(KC_DPAD_UP));
+    EXPECT_EQ(XUSB_DPAD_DOWN, switchLayoutKeycodeToXusb(KC_DPAD_DOWN));
+    EXPECT_EQ(XUSB_DPAD_LEFT, switchLayoutKeycodeToXusb(KC_DPAD_LEFT));
+    EXPECT_EQ(XUSB_DPAD_RIGHT, switchLayoutKeycodeToXusb(KC_DPAD_RIGHT));
+}
+
+TEST(SwitchLayout, ZlZrTakeTheTriggerPathNotTheButtonMap) {
+    EXPECT_EQ(0, switchLayoutKeycodeToXusb(KC_BUTTON_L1));
+    EXPECT_EQ(0, switchLayoutKeycodeToXusb(KC_BUTTON_R1));
+}
+
+TEST(SwitchLayout, CaptureAndForeignKeycodesAreUnmapped) {
+    EXPECT_EQ(0, switchLayoutKeycodeToXusb(KC_BUTTON_THUMBL));
+    EXPECT_EQ(0, switchLayoutKeycodeToXusb(KC_BUTTON_THUMBR));
+    EXPECT_EQ(0, switchLayoutKeycodeToXusb(KC_BUTTON_1));
+    EXPECT_EQ(0, switchLayoutKeycodeToXusb(0));
+}
+
+TEST(SwitchLayoutConsumesKey, CoversEveryMappedPadKeycode) {
+    const int32_t mapped[] = {
+        KC_BUTTON_A,    KC_BUTTON_B,  KC_BUTTON_C,  KC_BUTTON_X,  KC_BUTTON_Y,      KC_BUTTON_Z,
+        KC_BUTTON_L1,   KC_BUTTON_R1, KC_BUTTON_L2, KC_BUTTON_R2, KC_BUTTON_SELECT, KC_BUTTON_START,
+        KC_BUTTON_MODE, KC_DPAD_UP,   KC_DPAD_DOWN, KC_DPAD_LEFT, KC_DPAD_RIGHT};
+    for (int32_t kc : mapped) EXPECT_TRUE(switchLayoutConsumesKey(kc)) << kc;
+}
+
+TEST(SwitchLayoutConsumesKey, CaptureAndForeignKeycodesFallThrough) {
+    EXPECT_FALSE(switchLayoutConsumesKey(KC_BUTTON_THUMBL));
+    EXPECT_FALSE(switchLayoutConsumesKey(KC_BUTTON_1));
+    EXPECT_FALSE(switchLayoutConsumesKey(62));
+    EXPECT_FALSE(switchLayoutConsumesKey(0));
+}
+
+TEST(ApplyKey, SwitchLayoutZlDrivesLeftTrigger) {
+    DeviceState s;
+    s.quirk = QUIRK_SWITCH_LAYOUT;
+    EXPECT_TRUE(applyKey(s, KC_BUTTON_L1, true));
+    EXPECT_EQ(255, s.bLT);
+    EXPECT_TRUE(s.ltFromKey);
+    EXPECT_EQ(0, s.wButtons);
+    EXPECT_TRUE(applyKey(s, KC_BUTTON_L1, false));
+    EXPECT_EQ(0, s.bLT);
+    EXPECT_FALSE(s.ltFromKey);
+}
+
+TEST(ApplyKey, SwitchLayoutZrDrivesRightTrigger) {
+    DeviceState s;
+    s.quirk = QUIRK_SWITCH_LAYOUT;
+    EXPECT_TRUE(applyKey(s, KC_BUTTON_R1, true));
+    EXPECT_EQ(255, s.bRT);
+    EXPECT_TRUE(s.rtFromKey);
+    EXPECT_EQ(0, s.wButtons);
+}
+
+TEST(ApplyKey, SwitchLayoutPhysicalAReachesTheWire) {
+    // The bug this quirk exists for: physical A arrives as BUTTON_C and must not be dropped.
+    DeviceState s;
+    s.quirk = QUIRK_SWITCH_LAYOUT;
+    EXPECT_TRUE(applyKey(s, KC_BUTTON_C, true));
+    EXPECT_EQ(XUSB_B, s.wButtons);
+    EXPECT_TRUE(applyKey(s, KC_BUTTON_C, false));
+    EXPECT_EQ(0, s.wButtons);
+}
+
+TEST(ApplyKey, SwitchLayoutMinusPlusAreButtonsNotTriggers) {
+    DeviceState s;
+    s.quirk = QUIRK_SWITCH_LAYOUT;
+    applyKey(s, KC_BUTTON_L2, true);
+    applyKey(s, KC_BUTTON_R2, true);
+    EXPECT_TRUE(s.wButtons & XUSB_BACK);
+    EXPECT_TRUE(s.wButtons & XUSB_START);
+    EXPECT_EQ(0, s.bLT);
+    EXPECT_EQ(0, s.bRT);
+    EXPECT_FALSE(s.ltFromKey);
+    EXPECT_FALSE(s.rtFromKey);
+}
+
+TEST(ApplyKey, SwitchLayoutCaptureIsIgnored) {
+    DeviceState s;
+    s.quirk = QUIRK_SWITCH_LAYOUT;
+    s.wButtons = XUSB_A;
+    EXPECT_FALSE(applyKey(s, KC_BUTTON_THUMBL, true));
+    EXPECT_EQ(XUSB_A, s.wButtons);
+}
+
+TEST(ApplyKey, SwitchLayoutWinsOverStraySwapBits) {
+    DeviceState s;
+    s.quirk = (uint8_t)(QUIRK_SWITCH_LAYOUT | QUIRK_SWAP_AB | QUIRK_SWAP_XY);
+    applyKey(s, KC_BUTTON_C, true);
+    EXPECT_EQ(XUSB_B, s.wButtons);
+}
+
+TEST(ApplyKey, SwitchLayoutFullPadHoldsEveryMappedControl) {
+    DeviceState s;
+    s.quirk = QUIRK_SWITCH_LAYOUT;
+    const int32_t row[] = {KC_BUTTON_A,   KC_BUTTON_B,  KC_BUTTON_C,      KC_BUTTON_X,
+                           KC_BUTTON_Y,   KC_BUTTON_Z,  KC_BUTTON_L1,     KC_BUTTON_R1,
+                           KC_BUTTON_L2,  KC_BUTTON_R2, KC_BUTTON_SELECT, KC_BUTTON_START,
+                           KC_BUTTON_MODE};
+    for (int32_t kc : row) applyKey(s, kc, true);
+    const uint16_t expected =
+        static_cast<uint16_t>(XUSB_A | XUSB_B | XUSB_X | XUSB_Y | XUSB_LB | XUSB_RB | XUSB_BACK |
+                              XUSB_START | XUSB_THUMB_L | XUSB_THUMB_R | XUSB_GUIDE);
+    EXPECT_EQ(expected, s.wButtons);
+    EXPECT_EQ(255, s.bLT);
+    EXPECT_EQ(255, s.bRT);
+}
+
+TEST(ApplyAxes, SwitchLayoutHeldZlSurvivesZeroAxisSamples) {
+    DeviceState s;
+    s.quirk = QUIRK_SWITCH_LAYOUT;
+    applyKey(s, KC_BUTTON_L1, true);
+    applyAxes(s, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f);
+    EXPECT_EQ(255, s.bLT);
+    applyKey(s, KC_BUTTON_L1, false);
+    applyAxes(s, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f);
+    EXPECT_EQ(0, s.bLT);
+}
+
+TEST(ApplyKey, BaseBehaviorUnchangedWithoutTheSwitchQuirk) {
+    DeviceState s;
+    applyKey(s, KC_BUTTON_A, true);
+    EXPECT_EQ(XUSB_A, s.wButtons);
+    applyKey(s, KC_BUTTON_L1, true);
+    EXPECT_TRUE(s.wButtons & XUSB_LB);
+    EXPECT_EQ(0, s.bLT);
+}

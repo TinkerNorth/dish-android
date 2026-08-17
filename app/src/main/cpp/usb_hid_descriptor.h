@@ -31,6 +31,9 @@ struct HidLayout {
     int32_t hatLogicalMax = 0;
     uint16_t buttonBitOffset = 0;
     uint8_t buttonCount = 0;
+    // Set by the attach path from the model catalog, after parseReportDescriptor resets the
+    // struct; never derived from the descriptor itself.
+    bool switchOrderButtons = false;
 };
 
 // Parses a HID report descriptor into the gamepad field map. Pure and defensive: returns false and

@@ -379,6 +379,17 @@ static const KnownDevice kImported[] = {
     {0x3285, 0x0D18, "Nacon Revolution 5 Pro (PS5 dongle)", Parser::DUALSENSE, InitKind::NONE},
     {0x3285, 0x0D19, "Nacon Revolution 5 Pro (PS5 wired)", Parser::DUALSENSE, InitKind::NONE},
 
+    {0x0E6F, 0x0180, "PDP Faceoff Wired Pro Controller (Switch)", Parser::GENERIC_HID_GAMEPAD,
+     InitKind::NONE, ButtonOrder::SWITCH},
+    {0x0E6F, 0x0181, "PDP Faceoff Deluxe Wired Pro Controller (Switch)",
+     Parser::GENERIC_HID_GAMEPAD, InitKind::NONE, ButtonOrder::SWITCH},
+    {0x0E6F, 0x0184, "PDP Faceoff Deluxe+ Audio Controller (Switch)", Parser::GENERIC_HID_GAMEPAD,
+     InitKind::NONE, ButtonOrder::SWITCH},
+    {0x0E6F, 0x0185, "PDP Wired Fight Pad Pro (Switch)", Parser::GENERIC_HID_GAMEPAD,
+     InitKind::NONE, ButtonOrder::SWITCH},
+    {0x0E6F, 0x0187, "PDP Rock Candy Wired Controller (Switch)", Parser::GENERIC_HID_GAMEPAD,
+     InitKind::NONE, ButtonOrder::SWITCH},
+
     {0x28DE, 0x1102, "Valve Steam Controller", Parser::STEAM_CONTROLLER, InitKind::STEAM_QUIET},
     {0x28DE, 0x1142, "Valve Steam Controller (dongle)", Parser::STEAM_CONTROLLER,
      InitKind::STEAM_QUIET},
@@ -428,7 +439,7 @@ constexpr uint8_t kGipProtocol = 0xD0;
 Classification classifyDevice(uint16_t vid, uint16_t pid, uint8_t ifClass, uint8_t ifSubclass,
                               uint8_t ifProtocol) {
     const KnownDevice* known = lookupKnown(vid, pid);
-    if (known != nullptr) { return {known->parser, known->init, known->name}; }
+    if (known != nullptr) { return {known->parser, known->init, known->name, known->order}; }
     // Wired XInput streams unsolicited; GIP needs the power-on packet first.
     if (ifClass == kIfClassVendor && ifSubclass == kXInputSubclass &&
         ifProtocol == kXInputProtocol) {

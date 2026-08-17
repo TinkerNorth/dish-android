@@ -26,6 +26,7 @@ using gamepad::XUSB_Y;
 using usbparsers::buildGipInitPacket;
 using usbparsers::buildRumbleReport;
 using usbparsers::buildSteamConfigPacket;
+using usbparsers::ButtonOrder;
 using usbparsers::checkWirelessEvent;
 using usbparsers::decodeReport;
 using usbparsers::InitKind;
@@ -727,6 +728,77 @@ TEST(ClassifyDevice, HidInterfaceClassifiesAsGenericHid) {
 TEST(ClassifyDevice, UnknownVendorInterfaceFallsBackToGeneric) {
     auto c = usbparsers::classifyDevice(0x1234, 0x5678, 0xFF, 0x99, 0x99);
     EXPECT_EQ(c.parser, Parser::GENERIC_HID_GAMEPAD);
+}
+
+TEST(ClassifyDevice, PdpFaceoffIsGenericHidWithSwitchOrder) {
+    auto c = usbparsers::classifyDevice(0x0E6F, 0x0180, 0x03, 0x00, 0x00);
+    EXPECT_EQ(c.parser, Parser::GENERIC_HID_GAMEPAD);
+    EXPECT_EQ(c.init, InitKind::NONE);
+    EXPECT_EQ(c.order, ButtonOrder::SWITCH);
+    EXPECT_STREQ("PDP Faceoff Wired Pro Controller (Switch)", c.name);
+}
+
+TEST(ClassifyDevice, EveryPdpWiredSwitchPadCarriesSwitchOrder) {
+    const uint16_t pids[] = {0x0180, 0x0181, 0x0184, 0x0185, 0x0187};
+    for (uint16_t pid : pids) {
+        auto c = usbparsers::classifyDevice(0x0E6F, pid, 0x03, 0x00, 0x00);
+        EXPECT_EQ(c.parser, Parser::GENERIC_HID_GAMEPAD) << pid;
+        EXPECT_EQ(c.order, ButtonOrder::SWITCH) << pid;
+        EXPECT_NE(c.name, nullptr) << pid;
+    }
+}
+
+TEST(ClassifyDevice, PdpAfterglowWirelessIsNotSwitchOrder) {
+    // 0e6f:0186 speaks the Switch Pro protocol and its USB port is charge-only (SDL's
+    // controller list); it must not be remapped like the wired Switch-order pads.
+    auto c = usbparsers::classifyDevice(0x0E6F, 0x0186, 0x03, 0x00, 0x00);
+    EXPECT_EQ(c.parser, Parser::GENERIC_HID_GAMEPAD);
+    EXPECT_EQ(c.order, ButtonOrder::WESTERN);
+}
+
+TEST(ClassifyDevice, PdpXboxPadsKeepWesternOrder) {
+    auto x360 = usbparsers::classifyDevice(0x0E6F, 0x0501, 0x00, 0x00, 0x00);
+    EXPECT_EQ(x360.parser, Parser::XINPUT_360);
+    EXPECT_EQ(x360.order, ButtonOrder::WESTERN);
+
+    auto gip = usbparsers::classifyDevice(0x0E6F, 0x013B, 0x00, 0x00, 0x00);
+    EXPECT_EQ(gip.parser, Parser::XBOX_ONE_GIP);
+    EXPECT_EQ(gip.order, ButtonOrder::WESTERN);
+}
+
+TEST(ClassifyDevice, TableAndDescriptorFallbacksAreWesternOrder) {
+    EXPECT_EQ(usbparsers::classifyDevice(0x045E, 0x028E, 0x00, 0x00, 0x00).order,
+              ButtonOrder::WESTERN);
+    EXPECT_EQ(usbparsers::classifyDevice(0x1234, 0x5678, 0x03, 0x00, 0x00).order,
+              ButtonOrder::WESTERN);
+    EXPECT_EQ(usbparsers::classifyDevice(0x1234, 0x5678, 0xFF, 0x5D, 0x01).order,
+              ButtonOrder::WESTERN);
+}
+
+TEST(ClassifyDevice, PdpSwitchPadsAreNotVerifiedFastLane) {
+    EXPECT_FALSE(isVerifiedFastLane(0x0E6F, 0x0180));
+    EXPECT_FALSE(isVerifiedFastLane(0x0E6F, 0x0185));
+}
+
+TEST(GenericHidDecode, SwitchOrderLayoutFlowsThroughDecodeReport) {
+    const uint8_t desc[] = {0x05, 0x01, 0x09, 0x05, 0xA1, 0x01, 0x15, 0x00, 0x25,
+                            0x01, 0x75, 0x01, 0x95, 0x0E, 0x05, 0x09, 0x19, 0x01,
+                            0x29, 0x0E, 0x81, 0x02, 0x95, 0x02, 0x81, 0x01, 0xC0};
+    ParserState st;
+    ASSERT_TRUE(usbhid::parseReportDescriptor(desc, sizeof(desc), st.hidLayout));
+    st.hidLayout.switchOrderButtons = true;
+
+    std::vector<uint8_t> physicalA = {0x04, 0x00};
+    DeviceState s;
+    ASSERT_TRUE(
+        decodeReport(Parser::GENERIC_HID_GAMEPAD, physicalA.data(), physicalA.size(), s, &st));
+    EXPECT_EQ(XUSB_B, s.wButtons);
+
+    std::vector<uint8_t> zl = {0x40, 0x00};
+    DeviceState s2;
+    ASSERT_TRUE(decodeReport(Parser::GENERIC_HID_GAMEPAD, zl.data(), zl.size(), s2, &st));
+    EXPECT_EQ(0, s2.wButtons);
+    EXPECT_EQ(255, s2.bLT);
 }
 
 namespace {

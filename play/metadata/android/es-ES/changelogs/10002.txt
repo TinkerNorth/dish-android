@@ -1,6 +1,5 @@
-Compatibilidad con el Steam Controller.
+Compatibilidad con el Steam Controller y arreglo para mandos PDP de Switch con cable.
 
-• Funciona en Modo directo por USB, con cable o mediante el dongle (opcional).
-• Sticks, gatillos, botones, motion y el trackpad derecho como stick derecho.
-• Mientras Dish lo usa, deja de actuar como ratón y teclado del teléfono, y se devuelve tal como estaba.
-• Si un mando se desconecta del dongle ya no deja su última entrada retenida, y al reconectarse se configura de nuevo automáticamente.
+• Steam Controller funciona en Modo directo por USB, con cable o dongle (opcional): sticks, gatillos, botones, motion y el trackpad derecho como stick derecho.
+• Mientras Dish lo usa, deja de actuar como ratón del teléfono, y se devuelve tal como estaba.
+• Arreglados los mandos PDP de Switch (Faceoff, Fight Pad Pro, Rock Candy): cada botón hace lo que indica, incluido A, y ZL/ZR funcionan como gatillos.

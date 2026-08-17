@@ -52,18 +52,25 @@ enum class WirelessEvent : uint8_t {
     DISCONNECT = 2,
 };
 
+enum class ButtonOrder : uint8_t {
+    WESTERN = 0,
+    SWITCH = 1,
+};
+
 struct KnownDevice {
     uint16_t vid;
     uint16_t pid;
     const char* name;
     Parser parser;
     InitKind init;
+    ButtonOrder order = ButtonOrder::WESTERN;
 };
 
 struct Classification {
     Parser parser = Parser::NONE;
     InitKind init = InitKind::NONE;
     const char* name = nullptr;
+    ButtonOrder order = ButtonOrder::WESTERN;
 };
 
 // Per-device, expand-only auto-range for sticks that report raw ADC values. We don't read the

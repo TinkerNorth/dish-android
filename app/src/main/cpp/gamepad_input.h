@@ -31,8 +31,10 @@ constexpr int32_t KC_DPAD_LEFT = 21;
 constexpr int32_t KC_DPAD_RIGHT = 22;
 constexpr int32_t KC_BUTTON_A = 96;
 constexpr int32_t KC_BUTTON_B = 97;
+constexpr int32_t KC_BUTTON_C = 98;
 constexpr int32_t KC_BUTTON_X = 99;
 constexpr int32_t KC_BUTTON_Y = 100;
+constexpr int32_t KC_BUTTON_Z = 101;
 constexpr int32_t KC_BUTTON_L1 = 102;
 constexpr int32_t KC_BUTTON_R1 = 103;
 constexpr int32_t KC_BUTTON_L2 = 104;
@@ -41,6 +43,7 @@ constexpr int32_t KC_BUTTON_THUMBL = 106;
 constexpr int32_t KC_BUTTON_THUMBR = 107;
 constexpr int32_t KC_BUTTON_START = 108;
 constexpr int32_t KC_BUTTON_SELECT = 109;
+constexpr int32_t KC_BUTTON_MODE = 110;
 
 constexpr int32_t KC_BUTTON_1 = 188;
 constexpr int32_t KC_BUTTON_2 = 189;
@@ -62,6 +65,7 @@ constexpr int32_t KC_BUTTON_16 = 203;
 // Per-device framework-path button quirks (Nintendo and friends sit A/B and X/Y opposite to Xbox).
 constexpr uint8_t QUIRK_SWAP_AB = 0x01;
 constexpr uint8_t QUIRK_SWAP_XY = 0x02;
+constexpr uint8_t QUIRK_SWITCH_LAYOUT = 0x04;
 
 struct DeviceState {
     uint16_t wButtons = 0;
@@ -143,6 +147,10 @@ uint8_t scaleTrigger(float v, float max);
 float deadzone(float v, float flat);
 
 uint16_t keycodeToXusb(int32_t androidKeycode);
+
+uint16_t switchLayoutKeycodeToXusb(int32_t androidKeycode);
+
+bool switchLayoutConsumesKey(int32_t androidKeycode);
 
 uint16_t applyButtonQuirk(uint16_t xusbBit, uint8_t quirk);
 
