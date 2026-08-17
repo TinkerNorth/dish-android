@@ -1,5 +1,5 @@
-Steam Controller support, plus a fix for PDP wired Switch controllers.
+Steam Controller and Amazon Luna support, plus a fix for PDP wired Switch pads.
 
 • Steam Controller works in Direct mode over USB, wired or via the dongle (opt-in): sticks, triggers, buttons, motion, and the right trackpad as a right stick.
-• While Dish uses it, it stops doubling as a mouse for the phone, and is handed back exactly as it was.
+• Amazon Luna Controller fully supported over USB: every button, both sticks, both triggers, and rumble.
 • Fixed PDP wired Switch pads (Faceoff, Fight Pad Pro, Rock Candy): every button now does what it says, including A, and ZL/ZR work as the triggers.
