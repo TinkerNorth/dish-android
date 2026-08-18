@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Play-flavor stub for the docked donate pill. See
+    view_donate_heart_button.xml in this source set for why the Play build
+    ships no donation surface; the same reasoning applies here.
+-->
+<View xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/donatePill"
+    android:layout_width="0dp"
+    android:layout_height="0dp"
+    android:visibility="gone" />

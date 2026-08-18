@@ -11,8 +11,8 @@ adb shell wm size "${CAPTURE_SIZE}"
 adb shell wm density "${CAPTURE_DENSITY}"
 adb shell cmd uimode night yes
 adb shell settings put secure immersive_mode_confirmations confirmed
-adb install -r -g app/build/outputs/apk/debug/app-debug.apk
-adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb install -r -g app/build/outputs/apk/play/debug/app-play-debug.apk
+adb install -r app/build/outputs/apk/androidTest/play/debug/app-play-debug-androidTest.apk
 mkdir -p captures
 
 for LOC in ${CAPTURE_LOCALES}; do

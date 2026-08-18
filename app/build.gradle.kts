@@ -88,6 +88,29 @@ android {
         buildConfigField("boolean", "HOTPATH_BENCH", "false")
     }
 
+    // Distribution channel decides whether the donation surface is compiled in.
+    // Google Play's Payments policy requires in-app donations to run through
+    // Play Billing unless the developer is a verified tax-exempt organization,
+    // so the Play artifact ships without the donate screen, the pill, the
+    // toolbar heart, and the Settings support card. This is a source-set split,
+    // not a runtime flag: the screens, copy, and payment URLs are never
+    // compiled into the Play build. The directly-distributed build (GitHub
+    // Releases, tinkernorth.com) keeps all of it.
+    //
+    // Everything donation-related lives in src/github; src/play holds no-op
+    // twins of the same functions plus two gone-View layout stubs for the
+    // <include>s the shared layouts still carry.
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("github") {
+            dimension = "distribution"
+            isDefault = true
+        }
+        create("play") {
+            dimension = "distribution"
+        }
+    }
+
     signingConfigs {
         val keystoreFile = System.getenv("DISH_KEYSTORE_FILE")?.takeIf { it.isNotBlank() }
         if (keystoreFile != null) {

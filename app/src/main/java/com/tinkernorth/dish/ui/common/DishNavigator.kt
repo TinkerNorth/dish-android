@@ -116,10 +116,6 @@ class DishNavigator(
         go(R.id.helpActivity)
     }
 
-    fun toDonate() {
-        go(R.id.donateActivity)
-    }
-
     fun toDiagnostics() {
         go(R.id.diagnosticsActivity)
     }

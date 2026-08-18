@@ -61,8 +61,8 @@ import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.StaticViewAdapter
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
-import com.tinkernorth.dish.ui.common.attachDonatePill
 import com.tinkernorth.dish.ui.common.setupDishToolbar
+import com.tinkernorth.dish.ui.donate.attachDonatePill
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine

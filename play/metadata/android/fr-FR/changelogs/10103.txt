@@ -1,0 +1,4 @@
+Version d'entretien. La version Play de Dish ne contient plus de liens de don dans l'application.
+
+• L'écran « Soutenir Dish », le bouton cœur et la bannière de don ont été retirés de la version Play, pour respecter la politique de paiements de Google Play.
+• Dish reste gratuite, sans publicité ni analyse, avec toutes les fonctions. Rien d'autre ne change, et Satellite n'a pas besoin d'être mis à jour.

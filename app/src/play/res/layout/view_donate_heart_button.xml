@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Play-flavor stub for the toolbar donate button.
+
+    The donation surface ships only in the `github` flavor: Google Play's
+    Payments policy requires donations to run through Play Billing unless
+    the developer is a verified tax-exempt organization, so the Play build
+    carries no donation UI at all.
+
+    Shared toolbars still <include> this layout, so the file has to exist in
+    both flavors. A gone View is never measured, laid out, or drawn, and
+    keeps @id/btnDonate resolvable for anything that looks it up.
+-->
+<View xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/btnDonate"
+    android:layout_width="0dp"
+    android:layout_height="0dp"
+    android:visibility="gone" />

@@ -55,16 +55,16 @@ step "ktlint + detekt (all source sets incl. test + androidTest)"
 $GRADLE :app:ktlintCheck :app:detekt $GRADLE_ARGS
 
 step "Android lint"
-$GRADLE :app:lint $GRADLE_ARGS
+$GRADLE :app:lintGithubDebug :app:lintPlayDebug $GRADLE_ARGS
 
 step "JVM unit tests"
-$GRADLE :app:testDebugUnitTest $GRADLE_ARGS
+$GRADLE :app:testGithubDebugUnitTest :app:testPlayDebugUnitTest $GRADLE_ARGS
 
 step "Native C++ tests"
 $GRADLE :app:nativeTest $GRADLE_ARGS
 
-step "Assemble debug APK"
-$GRADLE :app:assembleDebug $GRADLE_ARGS
+step "Assemble debug APKs (github + play flavors)"
+$GRADLE :app:assembleGithubDebug :app:assemblePlayDebug $GRADLE_ARGS
 
 if [ "$INSTRUMENTED" -eq 0 ]; then
   echo ""; echo "=== instrumented tests skipped (--no-instrumented) ==="
@@ -74,7 +74,7 @@ fi
 
 if [ "$GMD" -eq 1 ]; then
   step "Instrumented tests (pixel6Api34 managed device)"
-  $GRADLE :app:pixel6Api34DebugAndroidTest $GRADLE_ARGS $INTEGRATION_FILTER
+  $GRADLE :app:pixel6Api34GithubDebugAndroidTest $GRADLE_ARGS $INTEGRATION_FILTER
 else
   ADB="adb"
   command -v adb >/dev/null 2>&1 || {
@@ -86,7 +86,7 @@ else
   DEVICES=$("$ADB" devices 2>/dev/null | grep -c -w device || true)
   if [ "${DEVICES:-0}" -ge 1 ]; then
     step "Instrumented tests (attached device)"
-    $GRADLE :app:connectedDebugAndroidTest $GRADLE_ARGS $INTEGRATION_FILTER
+    $GRADLE :app:connectedGithubDebugAndroidTest $GRADLE_ARGS $INTEGRATION_FILTER
   else
     echo ""; echo "=== instrumented tests skipped (no device) ==="
     echo "Attach a device/emulator, or re-run with --gmd, to run integration tests."

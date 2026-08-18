@@ -1,0 +1,4 @@
+Aufräum-Release. Die Play-Version von Dish enthält keine In-App-Spendenlinks mehr.
+
+• Der Bildschirm „Dish unterstützen“, die Herz-Taste und das Spendenbanner sind aus der Play-Version entfernt, um Googles Zahlungsrichtlinie einzuhalten.
+• Dish bleibt kostenlos, werbefrei und analysefrei, mit allen Funktionen. Sonst ändert sich nichts, und Satellite muss nicht aktualisiert werden.

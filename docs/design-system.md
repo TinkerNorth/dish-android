@@ -379,7 +379,6 @@ nav.toTouchpad(connectionId = cid, slotId = slotId)
 | `setupBluetoothHostActivity` | `SetupBluetoothHostActivity` | `extra_setup_input_type`, `extra_setup_slot_id` |
 | `setupConfigureActivity` | `SetupConfigureActivity` | `extra_setup_slot_id`, `extra_setup_connection_id` |
 | `helpActivity` | `HelpActivity` | none |
-| `donateActivity` | `DonateActivity` | none |
 | `gamepadOverlayActivity` | `GamepadOverlayActivity` | `extra_connection_id`, `extra_use_ps_layout` |
 | `touchpadOverlayActivity` | `TouchpadOverlayActivity` | `extra_connection_id`, `extra_slot_id` |
 | `nativeUnavailableActivity` | `NativeUnavailableActivity` | none |
@@ -395,6 +394,14 @@ destination migration unlocks the navigation runtime's deep-link wiring.
 The current "pairing needed" notification routes through MainActivity's
 in-app callback (`DishNavigator.toConnectionsForPairing`), not a deep
 link, so the lint check stays clean.
+
+**`DonateActivity` is deliberately absent** from the table and the graph.
+It ships only in the `github` product flavor (the Play build carries no
+donation surface — see "Distribution flavors" below), and `NavInflater`
+resolves every `android:name` when the graph inflates, so a destination
+pointing at a class the Play build lacks would break navigation on every
+screen. The github flavor launches it by explicit `Intent` from
+`ui/donate/DonationSurface.kt`.
 
 **What stays outside the graph**: external `startActivity` calls that
 target other apps (browser `ACTION_VIEW`, Bluetooth settings, Wi-Fi
@@ -638,6 +645,42 @@ deeper), the error red can drop below AA. Compute before adopting.
 | Activity transitions | `app/src/main/res/anim/fade_through_enter.xml`, `fade_through_exit.xml` |
 | Navigation graph | `app/src/main/res/navigation/nav_graph.xml` |
 | Navigation wrapper | `app/src/main/java/com/tinkernorth/dish/ui/common/DishNavigator.kt` |
+| Donation surface (github flavor) | `app/src/github/` |
+| Donation no-ops (Play flavor) | `app/src/play/` |
+
+## Distribution flavors
+
+One flavor dimension, `distribution`, with two flavors:
+
+| Flavor | Ships as | Donation surface |
+|---|---|---|
+| `github` (default) | APK on GitHub Releases / tinkernorth.com | Yes |
+| `play` | AAB on Google Play | No |
+
+Google Play's Payments policy requires in-app donations to run through
+Play Billing unless the developer is a verified tax-exempt organization,
+so the Play build carries no donate screen, pill, toolbar heart, or
+Settings support card. This is a source-set split rather than a runtime
+flag: the screens, the copy, and the payment URLs are never compiled into
+the Play artifact.
+
+Everything donation-related lives in `src/github` — `DonateActivity`,
+`DonatePill.kt`, `DonationSurface.kt`, the donate layouts and drawables,
+the pulse-pink color roles, the `donate_*` dimensions, and the `donate_*`
+/ `settings_support_*` / donation-URL strings in all six locales.
+`src/play` holds no-op twins of the three `DonationSurface` entry points
+(`attachDonatePill`, `wireDonateButton`, `bindDonateSettingsCard`) so
+shared activities compile against one API, plus gone-`View` stubs for
+`view_donate_heart_button.xml` and `view_donate_pill.xml`, which shared
+layouts still `<include>`.
+
+Adding a donation touchpoint means adding it to the `github` seam and a
+no-op to the `play` seam — never a call into `src/github` from `src/main`.
+
+Gradle task names carry the flavor: `assembleGithubDebug`,
+`assemblePlayDebug`, `testGithubDebugUnitTest`, `bundlePlayRelease`, and
+so on. Store screenshots are captured from the `play` flavor so listing
+images never show donation UI.
 
 ## Naming
 

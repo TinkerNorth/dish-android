@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Donation surface metrics. `github` flavor only; see res/values/strings.xml
+    in this source set for why the Play build omits the whole surface.
+-->
+<resources>
+    <dimen name="donate_heart_size">@dimen/size_18</dimen>
+    <dimen name="donate_heart_badge_size">@dimen/icon_card_container</dimen>
+    <dimen name="donate_hero_heart_size">@dimen/size_56</dimen>
+    <dimen name="donate_hero_heart_badge_size">@dimen/size_80</dimen>
+    <dimen name="donate_pill_max_width">@dimen/size_280</dimen>
+    <dimen name="donate_content_max_width">@dimen/size_600</dimen>
+</resources>

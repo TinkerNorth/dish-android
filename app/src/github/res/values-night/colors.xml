@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Donation surface palette (pulse pink). `github` flavor only: nothing
+    outside the donate screen, pill, and heart button uses these roles.
+-->
+<resources>
+    <color name="colorPulse">@color/pulse_pink_500</color>
+    <color name="colorOnPulse">@color/navy_900</color>
+    <color name="colorPulseFill">@color/pulse_pink_200</color>
+</resources>

@@ -10,8 +10,8 @@ import com.tinkernorth.dish.databinding.ActivityHelpBinding
 import com.tinkernorth.dish.databinding.HelpFaqRowBinding
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
-import com.tinkernorth.dish.ui.common.attachDonatePill
 import com.tinkernorth.dish.ui.common.setupDishToolbar
+import com.tinkernorth.dish.ui.donate.attachDonatePill
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint

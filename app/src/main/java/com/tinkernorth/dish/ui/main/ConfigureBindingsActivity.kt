@@ -32,7 +32,7 @@ import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
-import com.tinkernorth.dish.ui.common.wireDonateButton
+import com.tinkernorth.dish.ui.donate.wireDonateButton
 import com.tinkernorth.dish.ui.setup.ReviewFlow
 import com.tinkernorth.dish.ui.setup.bindCapabilityRows
 import com.tinkernorth.dish.ui.setup.bindReviewFlows
