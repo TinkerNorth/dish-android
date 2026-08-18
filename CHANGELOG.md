@@ -7,6 +7,16 @@ computer. Those lines say "update Satellite too".
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- The Xbox/Guide button on XInput-style wired USB controllers (Xbox 360
+  and its many licensed clones, plus the Amazon Luna Controller) now
+  works. Before this fix, pressing it did nothing.
+
+---
+
 ## [1.1.1] - 2026-08-17
 
 ### Fixed
