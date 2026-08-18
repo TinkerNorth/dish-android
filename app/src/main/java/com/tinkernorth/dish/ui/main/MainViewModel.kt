@@ -23,6 +23,7 @@ import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.TouchpadModeStore
 import com.tinkernorth.dish.source.store.UsbPathPreferenceStore
 import com.tinkernorth.dish.source.usb.PathChoice
+import com.tinkernorth.dish.source.usb.UsbController
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -115,11 +116,12 @@ class MainViewModel
                 slotsBase,
                 pathPrefs.state,
                 inputRateStore.state,
-            ) { base, _, rates ->
+                usbGamepadManager.controllers,
+            ) { base, _, rates, usbControllers ->
                 val pathCards =
                     base.slots
                         .mapNotNull { slot ->
-                            pathCardFor(slot, base.devices)?.let { slot.id to it }
+                            pathCardFor(slot, base.devices, usbControllers)?.let { slot.id to it }
                         }.toMap()
                 val inputRates =
                     base.slots
@@ -210,6 +212,7 @@ class MainViewModel
         private fun pathCardFor(
             slot: ControllerSlot,
             devices: Map<Int, PhysicalGamepadRegistry.Device>,
+            usbControllers: Map<Int, UsbController>,
         ): PathCard? {
             if (slot.inputType != SlotInputType.PHYSICAL) return null
             val device = devices[slot.physicalDeviceId] ?: return null
@@ -243,6 +246,7 @@ class MainViewModel
                 restoreStuck = device.restoreStuck,
                 directFailure = device.directFailure,
                 padHasTouchpad = native.modelHasTouchpad(vid, pid),
+                wiredUsbPresent = wiredUsbPresentFor(device, usbControllers.values),
             )
         }
 

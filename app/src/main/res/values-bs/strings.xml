@@ -344,6 +344,7 @@
     <string name="binding_link_onscreen">Na ekranu</string>
     <string name="binding_mode_direct">Brzi</string>
     <string name="binding_mode_standard">Standardni</string>
+    <string name="binding_usb_available">USB dostupan</string>
     <string name="binding_func_rumble">Vibracija</string>
     <string name="binding_func_motion">Pokret</string>
     <string name="binding_func_touchpad">Dodirna ploča</string>
@@ -360,6 +361,7 @@
     <string name="binding_card_no_functions">Nijedna</string>
     <string name="binding_action_configure">Podesi povezivanje</string>
     <string name="binding_action_find_hosts">Pronađi hostove</string>
+    <string name="binding_action_use_wired">Koristi kabl</string>
     <string name="binding_activity_title">Podesi povezivanje</string>
     <string name="binding_activity_title_bind">Poveži kontroler</string>
     <string name="binding_activity_apply">Primijeni</string>

@@ -344,6 +344,7 @@
     <string name="binding_link_onscreen">À l\'écran</string>
     <string name="binding_mode_direct">Direct</string>
     <string name="binding_mode_standard">Standard</string>
+    <string name="binding_usb_available">USB disponible</string>
     <string name="binding_func_rumble">Vibration</string>
     <string name="binding_func_motion">Mouvement</string>
     <string name="binding_func_touchpad">Pavé tactile</string>
@@ -360,6 +361,7 @@
     <string name="binding_card_no_functions">Aucune</string>
     <string name="binding_action_configure">Configurer la liaison</string>
     <string name="binding_action_find_hosts">Trouver des hôtes</string>
+    <string name="binding_action_use_wired">Utiliser le câble</string>
     <string name="binding_activity_title">Configurer la liaison</string>
     <string name="binding_activity_title_bind">Lier la manette</string>
     <string name="binding_activity_apply">Appliquer</string>
