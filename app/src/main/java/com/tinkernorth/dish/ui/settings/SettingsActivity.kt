@@ -2,10 +2,8 @@
 
 package com.tinkernorth.dish.ui.settings
 
-import android.content.res.ColorStateList
 import android.os.Bundle
 import android.text.TextUtils
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -17,8 +15,9 @@ import com.tinkernorth.dish.source.store.ThemeMode
 import com.tinkernorth.dish.source.store.ThemePreferenceStore
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
-import com.tinkernorth.dish.ui.common.attachDonatePill
 import com.tinkernorth.dish.ui.common.setupDishToolbar
+import com.tinkernorth.dish.ui.donate.attachDonatePill
+import com.tinkernorth.dish.ui.donate.bindDonateSettingsCard
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -94,12 +93,9 @@ class SettingsActivity : BaseGamepadHostActivity() {
         binding.cardRowOpenSourceLicenses.cardRowSubtitle.setText(R.string.settings_open_source_licenses_body)
         binding.cardOpenSourceLicenses.setOnClickListener { nav.toLicenses() }
 
-        binding.cardRowSupport.cardRowIcon.setImageResource(R.drawable.ic_heart)
-        binding.cardRowSupport.cardRowIcon.imageTintList =
-            ColorStateList.valueOf(ContextCompat.getColor(this, R.color.colorPulse))
-        binding.cardRowSupport.cardRowTitle.setText(R.string.settings_support_title)
-        binding.cardRowSupport.cardRowSubtitle.setText(R.string.settings_support_body)
-        binding.cardSupport.setOnClickListener { nav.toDonate() }
+        // Binds and shows the support card in the github flavor; hides it in
+        // the Play flavor, which ships no donation surface.
+        bindDonateSettingsCard()
 
         // Observe-then-bind: opposite order would re-write the persisted preference on the first frame.
         lifecycleScope.launch {

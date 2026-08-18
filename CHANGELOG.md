@@ -7,6 +7,26 @@ computer. Those lines say "update Satellite too".
 
 ---
 
+## [1.1.3] - 2026-08-18
+
+### Changed
+
+- The Google Play version of Dish no longer has the "Support Dish"
+  screen, the heart button in the toolbar, or the donation banner.
+  Google Play's Payments policy only permits in-app donations through
+  Google Play Billing, which takes a cut of every donation and would
+  mean building a payment system into an app that has never charged for
+  anything. Removing the links was the better trade.
+- The version you download from GitHub or tinkernorth.com keeps all of
+  it, and nothing about it changed. If you would like to support Dish,
+  GitHub Sponsors, Ko-fi, and Buy Me a Coffee are all still there, and
+  dish.tinkernorth.com/donate lists every option.
+- Everything else is identical in both versions: same controllers, same
+  latency, same features, still free, ad-free, and analytics-free with
+  nothing held back. Satellite does not need updating for this release.
+
+---
+
 ## [1.1.2] - 2026-08-18
 
 ### Fixed

@@ -20,15 +20,13 @@ import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
 import com.tinkernorth.dish.source.lowpower.LowPowerSignal
 import com.tinkernorth.dish.source.notification.DishNotifications
+import com.tinkernorth.dish.ui.donate.wireDonateButton
 
 fun AppCompatActivity.setupDishToolbar(toolbar: Toolbar) {
     setSupportActionBar(toolbar)
     toolbar.setNavigationOnClickListener { finish() }
+    // No-op in the Play flavor, which ships no donation surface.
     wireDonateButton()
-}
-
-fun AppCompatActivity.wireDonateButton() {
-    findViewById<View>(R.id.btnDonate)?.setOnClickListener { DishNavigator(this).toDonate() }
 }
 
 fun AppCompatActivity.attachGamepadHost(

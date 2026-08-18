@@ -1,0 +1,4 @@
+Housekeeping release. The Play version of Dish no longer includes the in-app donation links.
+
+• The "Support Dish" screen, the heart button, and the donation banner are gone from the Play build, to comply with Google Play's Payments policy.
+• Dish stays free, ad-free, and analytics-free, with every feature unlocked. Nothing else changed, and Satellite does not need updating.

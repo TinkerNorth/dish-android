@@ -125,7 +125,8 @@ jobs:
     name: Build + sign APK/AAB
     needs: [gates, required-secrets]
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Baseline-profile generation now runs per flavor before two release builds.
+    timeout-minutes: 90
     outputs:
       version_code: ${{ steps.ver.outputs.code }}
     steps:
@@ -214,7 +215,11 @@ jobs:
           DISH_VERSION_NAME: ${{ steps.ver.outputs.name }}
         run: ./gradlew :app:generateBaselineProfile
 
-      - name: Build release APK + AAB
+      # Two distribution flavors: `github` ships the APK published to GitHub
+      # Releases (donation surface included), `play` builds the AAB uploaded to
+      # Google Play (no donation surface, per the Payments policy). Only the
+      # flavor each channel needs is built.
+      - name: Build release APK (github) + AAB (play)
         env:
           DISH_KEYSTORE_FILE: ${{ steps.keystore.outputs.path }}
           DISH_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -224,9 +229,10 @@ jobs:
           DISH_VERSION_NAME: ${{ steps.ver.outputs.name }}
         run: |
           if [ "${{ steps.firebase.outputs.present }}" = "true" ]; then
-            ./gradlew assembleRelease bundleRelease uploadCrashlyticsSymbolFileRelease
+            ./gradlew assembleGithubRelease bundlePlayRelease \
+              uploadCrashlyticsSymbolFileGithubRelease uploadCrashlyticsSymbolFilePlayRelease
           else
-            ./gradlew assembleRelease bundleRelease
+            ./gradlew assembleGithubRelease bundlePlayRelease
           fi
 
       - name: Stage artifacts
@@ -241,21 +247,25 @@ jobs:
           fi
           tag="${TAG_INPUT:-${GITHUB_REF_NAME}}"
 
-          apk=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
+          apk=$(find app/build/outputs/apk/github/release -name '*.apk' | head -1)
           [ -n "$apk" ] && cp "$apk" "dist/dish-${tag}${suffix}.apk"
-          aab=$(find app/build/outputs/bundle/release -name '*.aab' | head -1)
+          aab=$(find app/build/outputs/bundle/playRelease -name '*.aab' | head -1)
           [ -n "$aab" ] && cp "$aab" "dist/dish-${tag}${suffix}.aab"
-          # R8 mapping file for de-obfuscating prod stack traces. Crashlytics
-          # auto-ingests this when google-services.json is present; we also
-          # ship it as a release asset so external consumers (or a future
+          # R8 mapping files for de-obfuscating prod stack traces. Crashlytics
+          # auto-ingests these when google-services.json is present; we also
+          # ship them as release assets so external consumers (or a future
           # Crashlytics replacement) can de-obfuscate without GCP access.
-          mapping=$(find app/build/outputs/mapping/release -name 'mapping.txt' | head -1)
-          [ -n "$mapping" ] && cp "$mapping" "dist/dish-${tag}${suffix}-mapping.txt"
+          # One per flavor, named explicitly: the Play upload below has to pick
+          # the play mapping, and `find | head -1` over two files is arbitrary.
+          mapping=$(find app/build/outputs/mapping/playRelease -name 'mapping.txt' | head -1)
+          [ -n "$mapping" ] && cp "$mapping" "dist/dish-${tag}${suffix}-play-mapping.txt"
+          gh_mapping=$(find app/build/outputs/mapping/githubRelease -name 'mapping.txt' | head -1)
+          [ -n "$gh_mapping" ] && cp "$gh_mapping" "dist/dish-${tag}${suffix}-github-mapping.txt"
           # Native debug symbols for the JNI .so: lets crash reporters
           # symbolize native stack frames from the encrypted-wire / rumble
           # hot path. Shipped as AGP's Play Console zip; dist/ must hold only
           # flat files or the harden job's sign/hash loops break on it.
-          symbols=$(find app/build/outputs/native-debug-symbols/release -name 'native-debug-symbols.zip' 2>/dev/null | head -1)
+          symbols=$(find app/build/outputs/native-debug-symbols/playRelease -name 'native-debug-symbols.zip' 2>/dev/null | head -1)
           [ -n "$symbols" ] && cp "$symbols" "dist/dish-${tag}${suffix}-native-debug-symbols.zip"
           ls -l dist/
 
@@ -317,7 +327,7 @@ jobs:
             exit 1
           fi
           echo "aab=$aab" >> "$GITHUB_OUTPUT"
-          mapping=$(find dist -maxdepth 1 -name '*-mapping.txt' | head -1)
+          mapping=$(find dist -maxdepth 1 -name '*-play-mapping.txt' | head -1)
           echo "mapping=$mapping" >> "$GITHUB_OUTPUT"
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
