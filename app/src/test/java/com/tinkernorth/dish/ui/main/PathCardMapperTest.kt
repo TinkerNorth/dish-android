@@ -24,6 +24,7 @@ class PathCardMapperTest {
         restoreStuck: Boolean = false,
         directFailure: DirectClaimFailure? = null,
         padHasTouchpad: Boolean = false,
+        wiredUsbPresent: Boolean = false,
     ) = PathCardMapper.map(
         isClaimedDirect = isClaimedDirect,
         transport = transport,
@@ -36,6 +37,7 @@ class PathCardMapperTest {
         restoreStuck = restoreStuck,
         directFailure = directFailure,
         padHasTouchpad = padHasTouchpad,
+        wiredUsbPresent = wiredUsbPresent,
     )
 
     @Test
@@ -156,5 +158,38 @@ class PathCardMapperTest {
     @Test
     fun `the direct suggestion defaults off`() {
         assertFalse(map().suggestDirectForTouch)
+    }
+
+    @Test
+    fun `a bluetooth card with a plugged usb twin offers the wired switch`() {
+        assertTrue(map(transport = Transport.Bluetooth, wiredUsbPresent = true).wiredSwitchAvailable)
+    }
+
+    @Test
+    fun `the wired switch never appears on a usb card`() {
+        assertFalse(map(transport = Transport.Usb, wiredUsbPresent = true).wiredSwitchAvailable)
+    }
+
+    @Test
+    fun `a bluetooth card without the cable offers no wired switch`() {
+        assertFalse(map(transport = Transport.Bluetooth).wiredSwitchAvailable)
+    }
+
+    @Test
+    fun `the wired switch defaults off`() {
+        assertFalse(map().wiredSwitchAvailable)
+    }
+
+    @Test
+    fun `the wired switch leaves the direct toggle hidden on bluetooth`() {
+        val card = map(transport = Transport.Bluetooth, wiredUsbPresent = true)
+        assertFalse(card.directAvailable)
+        assertEquals(PathChoice.Standard, card.selected)
+        assertEquals(InputPathMode.Standard, card.currentMode)
+    }
+
+    @Test
+    fun `the wired switch does not wake the touch suggestion on bluetooth`() {
+        assertFalse(map(transport = Transport.Bluetooth, wiredUsbPresent = true, padHasTouchpad = true).suggestDirectForTouch)
     }
 }

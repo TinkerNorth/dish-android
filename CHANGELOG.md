@@ -14,6 +14,11 @@ computer. Those lines say "update Satellite too".
 - The Xbox/Guide button on XInput-style wired USB controllers (Xbox 360
   and its many licensed clones, plus the Amazon Luna Controller) now
   works. Before this fix, pressing it did nothing.
+- Plugging in a controller that is already connected over Bluetooth no
+  longer leaves the cable doing nothing. The controller card now shows
+  "USB available" with a "Use wired" button that walks you through
+  switching to the cable; Dish never switches on its own, so charging
+  while you keep playing over Bluetooth works exactly as before.
 
 ---
 

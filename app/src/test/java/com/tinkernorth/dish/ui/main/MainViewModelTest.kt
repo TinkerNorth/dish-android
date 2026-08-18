@@ -23,7 +23,9 @@ import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.TouchpadModeStore
 import com.tinkernorth.dish.source.store.UsbPathPreferenceStore
 import com.tinkernorth.dish.source.usb.PathChoice
+import com.tinkernorth.dish.source.usb.UsbController
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
+import com.tinkernorth.dish.source.usb.UsbPhase
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -64,6 +66,7 @@ class MainViewModelTest {
     private val connectionsFlow = MutableStateFlow<List<ConnectionSummary>>(emptyList())
     private val bindingsFlow = MutableStateFlow<Map<String, String>>(emptyMap())
     private val devicesFlow = MutableStateFlow<Map<Int, PhysicalGamepadRegistry.Device>>(emptyMap())
+    private val usbControllersFlow = MutableStateFlow<Map<Int, UsbController>>(emptyMap())
     private val capabilityStateFlow = MutableStateFlow<Map<String, SlotCapabilities>>(emptyMap())
     private val satelliteEvents = MutableSharedFlow<ConnectionEvent>(extraBufferCapacity = 8)
 
@@ -90,6 +93,7 @@ class MainViewModelTest {
         native = mockk(relaxed = true)
         pathPrefs = mockk(relaxed = true)
         usbGamepadManager = mockk(relaxed = true)
+        every { usbGamepadManager.controllers } returns usbControllersFlow
         every { hub.connections } returns connectionsFlow
         every { hub.bindings } returns bindingsFlow
         every { gamepadRegistry.devices } returns devicesFlow
@@ -512,6 +516,41 @@ class MainViewModelTest {
 
             val card = vm.uiState.value.pathCards["82"]
             assertEquals(false, card?.suggestDirectForTouch)
+        }
+
+    @Test
+    fun `a bluetooth pad with a plugged usb twin surfaces the wired switch on its card`() =
+        runTest(dispatcher) {
+            devicesFlow.value = mapOf(90 to routed(90, 0x1949, 0x0419, transport = Transport.Bluetooth))
+            usbControllersFlow.value =
+                mapOf(
+                    ((0x1949 shl 16) or 0x041A) to
+                        UsbController(
+                            vendorId = 0x1949,
+                            productId = 0x041A,
+                            name = "Amazon Luna Controller",
+                            phase = UsbPhase.Routed,
+                        ),
+                )
+            dispatcher.scheduler.runCurrent()
+
+            assertTrue(
+                vm.uiState.value.pathCards["90"]
+                    ?.wiredSwitchAvailable == true,
+            )
+        }
+
+    @Test
+    fun `a bluetooth pad with no tracked usb twin gets no wired switch`() =
+        runTest(dispatcher) {
+            devicesFlow.value = mapOf(91 to routed(91, 0x1949, 0x0419, transport = Transport.Bluetooth))
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(
+                false,
+                vm.uiState.value.pathCards["91"]
+                    ?.wiredSwitchAvailable,
+            )
         }
 
     @Test

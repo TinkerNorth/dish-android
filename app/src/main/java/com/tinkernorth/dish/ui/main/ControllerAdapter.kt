@@ -46,6 +46,8 @@ interface SlotActionListener {
 
     fun onSwitchToDirect(slotId: String)
 
+    fun onSetupWired(slotId: String)
+
     fun onManageDestinations()
 
     fun onReconnect(slotId: String)
@@ -264,6 +266,9 @@ class ControllerAdapter(
             val specs = mutableListOf(PillSpec(ctx.getString(label), icon, PillTone.FACT))
             // The Direct/Standard mode chip only applies once a USB controller is on a known path.
             if (isUsb && kind != null) specs.add(usbModeSpec(card))
+            if (isBt && card?.wiredSwitchAvailable == true) {
+                specs.add(PillSpec(ctx.getString(R.string.binding_usb_available), R.drawable.ic_usb, PillTone.WARN))
+            }
             return specs
         }
 
@@ -511,7 +516,9 @@ class ControllerAdapter(
             val slot = row.slot
             val bound = slot.boundStatus
             if (bound == null || slot.boundConnectionId == null) {
-                return listOf(
+                val unboundActions = mutableListOf<CardAction>()
+                if (row.pathCard?.wiredSwitchAvailable == true) unboundActions += setupWiredAction()
+                unboundActions +=
                     if (row.connections.isEmpty()) {
                         CardAction(
                             R.drawable.ic_satellite,
@@ -526,8 +533,8 @@ class ControllerAdapter(
                             outlined = true,
                             kind = ActionKind.CONFIGURE,
                         )
-                    },
-                )
+                    }
+                return unboundActions
             }
             val actions = mutableListOf<CardAction>()
             val connected = bound.live == LinkState.Connected
@@ -561,6 +568,7 @@ class ControllerAdapter(
                         kind = ActionKind.SWITCH_DIRECT,
                     )
             }
+            if (row.pathCard?.wiredSwitchAvailable == true) actions += setupWiredAction()
             actions +=
                 CardAction(
                     R.drawable.ic_tune,
@@ -571,6 +579,14 @@ class ControllerAdapter(
             return actions
         }
 
+        private fun setupWiredAction(): CardAction =
+            CardAction(
+                R.drawable.ic_usb,
+                ctx.getString(R.string.binding_action_use_wired),
+                outlined = false,
+                kind = ActionKind.SETUP_WIRED,
+            )
+
         private fun dispatch(
             kind: ActionKind,
             slotId: String,
@@ -579,6 +595,7 @@ class ControllerAdapter(
                 ActionKind.GAMEPAD -> listener.onOpenGamepad(slotId)
                 ActionKind.TOUCHPAD -> listener.onOpenTouchpad(slotId)
                 ActionKind.SWITCH_DIRECT -> listener.onSwitchToDirect(slotId)
+                ActionKind.SETUP_WIRED -> listener.onSetupWired(slotId)
                 ActionKind.CONFIGURE -> listener.onConfigure(slotId)
                 ActionKind.FIND_HOSTS -> listener.onManageDestinations()
             }
@@ -685,7 +702,7 @@ class ControllerAdapter(
         val kind: ActionKind,
     )
 
-    private enum class ActionKind { GAMEPAD, TOUCHPAD, SWITCH_DIRECT, CONFIGURE, FIND_HOSTS }
+    private enum class ActionKind { GAMEPAD, TOUCHPAD, SWITCH_DIRECT, SETUP_WIRED, CONFIGURE, FIND_HOSTS }
 
     private enum class EdgeState { NONE, HOST_LOST, INPUT_LOST, UNSTEADY }
 

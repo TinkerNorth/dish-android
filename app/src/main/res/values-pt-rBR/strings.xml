@@ -345,6 +345,7 @@
     <string name="binding_link_onscreen">Na tela</string>
     <string name="binding_mode_direct">Direto</string>
     <string name="binding_mode_standard">Padrão</string>
+    <string name="binding_usb_available">USB disponível</string>
     <string name="binding_func_rumble">Vibração</string>
     <string name="binding_func_motion">Movimento</string>
     <string name="binding_func_touchpad">Touchpad</string>
@@ -361,6 +362,7 @@
     <string name="binding_card_no_functions">Nenhuma</string>
     <string name="binding_action_configure">Configurar vínculos</string>
     <string name="binding_action_find_hosts">Encontrar hosts</string>
+    <string name="binding_action_use_wired">Usar cabo</string>
     <string name="binding_activity_title">Configurar vínculos</string>
     <string name="binding_activity_title_bind">Vincular o controle</string>
     <string name="binding_activity_apply">Aplicar</string>
