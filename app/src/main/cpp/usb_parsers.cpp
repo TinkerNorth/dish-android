@@ -720,6 +720,7 @@ bool decodeXInput360(const uint8_t* buf, size_t len, DeviceState& s) {
     if (buf[2] & 0x80) b |= XUSB_THUMB_R;
     if (buf[3] & 0x01) b |= XUSB_LB;
     if (buf[3] & 0x02) b |= XUSB_RB;
+    if (buf[3] & 0x04) b |= XUSB_GUIDE;
     if (buf[3] & 0x10) b |= XUSB_A;
     if (buf[3] & 0x20) b |= XUSB_B;
     if (buf[3] & 0x40) b |= XUSB_X;

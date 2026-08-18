@@ -418,6 +418,16 @@ TEST(Decode, Xbox360WirelessDecodesLikeWired) {
     EXPECT_EQ(wired.sLX, wireless.sLX);
 }
 
+TEST(Decode, Xbox360WiredGuideButtonSetsGuideBit) {
+    std::vector<uint8_t> r(14, 0);
+    r[0] = 0x00;
+    r[3] = 0x04; // Guide (same bit the Amazon Luna Controller's center button reports)
+    DeviceState s;
+    ParserState p;
+    ASSERT_TRUE(decodeReport(Parser::XINPUT_360, r.data(), r.size(), s, &p));
+    EXPECT_TRUE(s.wButtons & XUSB_GUIDE);
+}
+
 TEST(Rumble, Xbox360WirelessWrapsFrame) {
     uint8_t out[64];
     size_t n = buildRumbleReport(Parser::XINPUT_360_WIRELESS, 0xFF00, 0x8000, 7, out, sizeof(out));
