@@ -1,0 +1,4 @@
+Two fixes: the Xbox/Guide button on wired pads, and a clear path to USB when a Bluetooth pad gets plugged in.
+
+• The Xbox/Guide button now works on XInput-style wired USB controllers (Xbox 360 and its clones, Amazon Luna).
+• Plugging in a controller that is already on Bluetooth no longer leaves the cable doing nothing: its card shows "USB available" with a "Use wired" button. Dish never switches on its own, so you can keep playing on Bluetooth while charging.

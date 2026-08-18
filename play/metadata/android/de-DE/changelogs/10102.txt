@@ -1,0 +1,4 @@
+Zwei Fixes: die Xbox/Guide-Taste an Kabel-Pads und ein klarer Weg zu USB, wenn ein Bluetooth-Pad eingesteckt wird.
+
+• Die Xbox/Guide-Taste funktioniert jetzt an XInput-USB-Controllern (Xbox 360 und Klone, Amazon Luna).
+• Wird ein schon per Bluetooth verbundener Controller eingesteckt, bleibt das Kabel nicht mehr wirkungslos: Die Karte zeigt „USB verfügbar“ mit der Taste „Kabel verwenden“. Dish wechselt nie von selbst, Laden beim Spielen über Bluetooth geht wie bisher.

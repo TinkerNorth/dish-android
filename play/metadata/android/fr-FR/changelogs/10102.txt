@@ -1,0 +1,4 @@
+Deux correctifs : le bouton Xbox/Guide des manettes filaires, et un passage clair à l'USB quand une manette Bluetooth est branchée.
+
+• Le bouton Xbox/Guide fonctionne désormais sur les manettes USB de type XInput (Xbox 360 et clones, Amazon Luna).
+• Brancher une manette déjà en Bluetooth ne laisse plus le câble inactif : sa carte affiche « USB disponible » avec un bouton « Utiliser le câble ». Dish ne bascule jamais seul, on peut donc rester en Bluetooth pendant la charge.
