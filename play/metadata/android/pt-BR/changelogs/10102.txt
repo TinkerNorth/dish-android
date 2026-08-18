@@ -1,0 +1,4 @@
+Duas correções: o botão Xbox/Guia em controles com fio e um caminho claro para o USB quando um controle Bluetooth é conectado ao cabo.
+
+• O botão Xbox/Guia agora funciona em controles USB tipo XInput (Xbox 360 e clones, Amazon Luna).
+• Conectar o cabo a um controle que já está no Bluetooth não deixa mais o cabo sem efeito: o cartão dele mostra "USB disponível" com o botão "Usar cabo". O Dish nunca troca sozinho, então dá para seguir no Bluetooth enquanto carrega.

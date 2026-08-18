@@ -1,0 +1,4 @@
+Dos arreglos: el botón Xbox/Guía en mandos con cable y un camino claro al USB cuando enchufas un mando Bluetooth.
+
+• El botón Xbox/Guía ya funciona en mandos USB tipo XInput (Xbox 360 y clones, Amazon Luna).
+• Enchufar un mando que ya está por Bluetooth ya no deja el cable sin hacer nada: su tarjeta muestra "USB disponible" con un botón "Usar cable". Dish nunca cambia por su cuenta, así que puedes seguir jugando por Bluetooth mientras carga.
