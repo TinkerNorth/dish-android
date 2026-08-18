@@ -37,9 +37,9 @@ import com.tinkernorth.dish.ui.common.DishSpinnerDrawable
 import com.tinkernorth.dish.ui.common.GamepadSkin
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
-import com.tinkernorth.dish.ui.common.attachDonatePill
 import com.tinkernorth.dish.ui.common.attachGamepadHost
-import com.tinkernorth.dish.ui.common.wireDonateButton
+import com.tinkernorth.dish.ui.donate.attachDonatePill
+import com.tinkernorth.dish.ui.donate.wireDonateButton
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject

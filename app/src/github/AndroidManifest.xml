@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Directly-distributed (github) flavor overlay.
+
+    DonateActivity is declared here rather than in the main manifest so the
+    Play artifact never carries the donation screen: Google Play's Payments
+    policy requires in-app donations to run through Play Billing unless the
+    developer is a verified tax-exempt organization. See
+    src/play/java/com/tinkernorth/dish/ui/donate/DonationSurface.kt.
+
+    Not a nav_graph destination: the graph is shared by both flavors and
+    NavInflater resolves android:name at inflation time, so a destination
+    pointing at a class the Play build lacks would break navigation app-wide.
+    The github flavor launches it by explicit Intent instead.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application>
+        <activity
+            android:name=".ui.donate.DonateActivity"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:theme="@style/Theme.Dish"
+            android:configChanges="keyboardHidden"
+            android:parentActivityName=".ui.main.MainActivity"
+            tools:targetApi="p" />
+    </application>
+</manifest>

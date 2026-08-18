@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Diagnostics (telemetry) screen. Same chrome as Settings/Donate: toolbar
+    Diagnostics (telemetry) screen. Same chrome as Settings: toolbar
     (chevron + "Diagnostics") over a NestedScrollView. Body is three sections
     populated at runtime by DiagnosticsActivity:
 

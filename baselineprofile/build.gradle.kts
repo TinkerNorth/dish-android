@@ -11,6 +11,11 @@ android {
         minSdk = 28
         targetSdk = 37
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // :app carries a `distribution` flavor dimension (github/play) that this
+        // module has no opinion about; without a strategy the dependency on :app
+        // can't resolve. The profile is generated against the Play build, and the
+        // two flavors differ only in the donation UI, so it applies to both.
+        missingDimensionStrategy("distribution", "play")
     }
 
     compileOptions {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-package com.tinkernorth.dish.ui.common
+package com.tinkernorth.dish.ui.donate
 
 import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
@@ -17,6 +17,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.ui.common.animationsDisabled
 
 private const val DONATE_PILL_PREFS = "user_preferences"
 private const val DONATE_PILL_DISMISSED_AT = "donate_pill_dismissed_at"
@@ -63,7 +64,7 @@ private fun AppCompatActivity.wireDonatePill(
     pill: View,
     onDismiss: () -> Unit,
 ) {
-    pill.setOnClickListener { DishNavigator(this).toDonate() }
+    pill.setOnClickListener { openDonateScreen() }
     pill.findViewById<View>(R.id.donatePillDismiss).setOnClickListener {
         dismissDonatePill(this)
         onDismiss()
