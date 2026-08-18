@@ -341,6 +341,7 @@
     <string name="binding_link_onscreen">Bildschirm</string>
     <string name="binding_mode_direct">Direkt</string>
     <string name="binding_mode_standard">Standard</string>
+    <string name="binding_usb_available">USB verfügbar</string>
     <string name="binding_func_rumble">Vibration</string>
     <string name="binding_func_motion">Bewegung</string>
     <string name="binding_func_touchpad">Touchpad</string>
@@ -357,6 +358,7 @@
     <string name="binding_card_no_functions">Keine</string>
     <string name="binding_action_configure">Zuordnung konfigurieren</string>
     <string name="binding_action_find_hosts">Hosts finden</string>
+    <string name="binding_action_use_wired">Kabel verwenden</string>
     <string name="binding_activity_title">Zuordnung konfigurieren</string>
     <string name="binding_activity_title_bind">Controller zuordnen</string>
     <string name="binding_activity_apply">Übernehmen</string>

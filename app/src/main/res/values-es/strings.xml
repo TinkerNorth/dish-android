@@ -345,6 +345,7 @@
     <string name="binding_link_onscreen">En pantalla</string>
     <string name="binding_mode_direct">Directo</string>
     <string name="binding_mode_standard">Estándar</string>
+    <string name="binding_usb_available">USB disponible</string>
     <string name="binding_func_rumble">Vibración</string>
     <string name="binding_func_motion">Movimiento</string>
     <string name="binding_func_touchpad">Panel táctil</string>
@@ -361,6 +362,7 @@
     <string name="binding_card_no_functions">Ninguna</string>
     <string name="binding_action_configure">Configurar vínculos</string>
     <string name="binding_action_find_hosts">Buscar hosts</string>
+    <string name="binding_action_use_wired">Usar cable</string>
     <string name="binding_activity_title">Configurar vínculos</string>
     <string name="binding_activity_title_bind">Vincular el mando</string>
     <string name="binding_activity_apply">Aplicar</string>

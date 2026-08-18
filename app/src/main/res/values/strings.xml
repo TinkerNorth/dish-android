@@ -489,6 +489,7 @@
     <string name="binding_link_onscreen">On-screen</string>
     <string name="binding_mode_direct">Direct</string>
     <string name="binding_mode_standard">Standard</string>
+    <string name="binding_usb_available">USB available</string>
 
     <string name="binding_func_rumble">Rumble</string>
     <string name="binding_func_motion">Motion</string>
@@ -508,6 +509,7 @@
 
     <string name="binding_action_configure">Configure bindings</string>
     <string name="binding_action_find_hosts">Find hosts</string>
+    <string name="binding_action_use_wired">Use wired</string>
 
     <string name="binding_activity_title">Configure bindings</string>
     <string name="binding_activity_title_bind">Bind controller</string>

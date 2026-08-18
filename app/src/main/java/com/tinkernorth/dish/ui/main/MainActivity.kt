@@ -301,6 +301,10 @@ class MainActivity :
         viewModel.setInputPath(slotId, PathChoice.Direct)
     }
 
+    override fun onSetupWired(slotId: String) {
+        nav.toSetupUsb()
+    }
+
     override fun onOpenGamepad(slotId: String) {
         val state = viewModel.uiState.value
         val slot = state.slots.firstOrNull { it.id == slotId } ?: return

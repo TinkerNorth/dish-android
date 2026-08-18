@@ -39,6 +39,7 @@ data class PathCard(
     // Why the last Direct claim failed, when not already covered by needsReplug/restoreStuck.
     val failure: DirectClaimFailure? = null,
     val suggestDirectForTouch: Boolean = false,
+    val wiredSwitchAvailable: Boolean = false,
 )
 
 object PathCardMapper {
@@ -55,6 +56,7 @@ object PathCardMapper {
         restoreStuck: Boolean = false,
         directFailure: DirectClaimFailure? = null,
         padHasTouchpad: Boolean = false,
+        wiredUsbPresent: Boolean = false,
     ): PathCard {
         // The card reflects the mode the controller is ACTUALLY in: Direct only when a synthetic is live
         // (claimed, not mid-release, not stuck). Badge and toggle both derive from this so they can never
@@ -91,6 +93,7 @@ object PathCardMapper {
             restoreStuck = restoreStuck,
             failure = directFailure,
             suggestDirectForTouch = suggestDirectForTouch,
+            wiredSwitchAvailable = wiredUsbPresent && transport == Transport.Bluetooth,
         )
     }
 }
