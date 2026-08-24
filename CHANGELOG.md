@@ -7,6 +7,17 @@ computer. Those lines say "update Satellite too".
 
 ---
 
+## [1.1.4] - 2026-08-24
+
+### Changed
+
+- The APK on GitHub Releases is now also published under the stable name
+  `dish.apk`, so
+  `github.com/TinkerNorth/dish-android/releases/latest/download/dish.apk`
+  always delivers the newest release. dish.tinkernorth.com links it, which
+  makes the name a public API: do not rename or drop it. Nothing changes
+  inside the app.
+
 ## [1.1.3] - 2026-08-18
 
 ### Changed
@@ -97,5 +108,6 @@ The first public release.
 
 Earlier test builds (0.0.x) are only documented in the git history.
 
+[1.1.4]: https://github.com/TinkerNorth/dish-android/releases/tag/1.1.4
 [1.1.1]: https://github.com/TinkerNorth/dish-android/releases/tag/1.1.1
 [1.0.1]: https://github.com/TinkerNorth/dish-android/releases/tag/1.0.1

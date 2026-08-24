@@ -249,6 +249,11 @@ jobs:
 
           apk=$(find app/build/outputs/apk/github/release -name '*.apk' | head -1)
           [ -n "$apk" ] && cp "$apk" "dist/dish-${tag}${suffix}.apk"
+          # Stable-name copy: releases/latest/download/dish.apk is a permanent
+          # link to the newest sideload build. dish-website links it, so the
+          # name is a public API; it never carries the version or the
+          # -unsigned suffix (tagged builds hard-fail without the keystore).
+          [ -n "$apk" ] && cp "$apk" dist/dish.apk
           aab=$(find app/build/outputs/bundle/playRelease -name '*.aab' | head -1)
           [ -n "$aab" ] && cp "$aab" "dist/dish-${tag}${suffix}.aab"
           # R8 mapping files for de-obfuscating prod stack traces. Crashlytics
@@ -516,8 +521,9 @@ jobs:
       base64-subjects: ${{ needs.harden.outputs.hashes }}
       provenance-name: dish-android.intoto.jsonl
       upload-assets: false
-      # Required while private: signing posts the repo name to the public Rekor log.
-      private-repository: true
+      # The repo is public now; the flag only mattered while it was private
+      # (signing posts the repo name to the public Rekor log).
+      private-repository: false
 
   publish:
     name: Publish to GitHub Releases
