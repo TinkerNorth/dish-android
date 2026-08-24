@@ -1,0 +1,4 @@
+Versión de mantenimiento. Nada cambia dentro de la aplicación.
+
+• La versión de Dish que se descarga fuera de Google Play ahora tiene un enlace de descarga permanente que siempre entrega la versión más reciente.
+• Sin permisos nuevos, sin dependencias nuevas, y no hace falta actualizar Satellite.
