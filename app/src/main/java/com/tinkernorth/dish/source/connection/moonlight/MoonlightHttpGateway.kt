@@ -31,6 +31,11 @@ import javax.net.ssl.X509TrustManager
  * host cert on first use, mirroring the satellite
  * [com.tinkernorth.dish.core.net.SatelliteHttpClient] TOFU verifier.
  *
+ * The two halves use different transports on purpose: HTTPS rides the platform
+ * URL stack, while the protocol-mandated plaintext half rides a raw socket via
+ * [MoonlightPlainHttpClient], since the app denies the URL stack cleartext
+ * app-wide. That class carries the full reasoning.
+ *
  * All methods BLOCK; call from Dispatchers.IO. This is runtime plumbing; the URL
  * building and XML parsing it drives are unit-tested separately.
  */
@@ -49,25 +54,30 @@ class MoonlightHttpGateway
             val ok: Boolean get() = status in 200..299
         }
 
-        /** Plaintext GET (serverinfo / pair phases 1-4). */
-        fun getHttp(url: String): Reply = request(url, secure = false, hostId = null)
+        private val plain = MoonlightPlainHttpClient(TIMEOUT_MS, TIMEOUT_MS)
+
+        /**
+         * Plaintext GET (serverinfo / pair phases 1-4).
+         *
+         * Goes over a raw socket, not the URL stack: those phases are plaintext by
+         * protocol and res/xml/network_security_config.xml denies cleartext to the
+         * URL stack app-wide on purpose. [MoonlightPlainHttpClient] documents why
+         * the carve-out is scoped this way and why it is safe.
+         */
+        fun getHttp(url: String): Reply = plain.get(url)
 
         /** Mutual-TLS GET (serverinfo / pair phase 5 / applist / launch / resume / cancel). */
         fun getHttps(
-            url: String,
-            hostId: String,
-        ): Reply = request(url, secure = true, hostId = hostId)
-
-        private fun request(
             urlString: String,
-            secure: Boolean,
-            hostId: String?,
+            hostId: String,
         ): Reply {
             val url = URL(urlString)
-            var connection: java.net.HttpURLConnection? = null
+            var connection: HttpsURLConnection? = null
             return try {
                 connection =
-                    openConnection(url, secure, hostId).apply {
+                    (url.openConnection() as HttpsURLConnection).apply {
+                        sslSocketFactory = mutualTlsFactory()
+                        hostnameVerifier = tofuVerifier(hostId)
                         requestMethod = "GET"
                         connectTimeout = TIMEOUT_MS
                         readTimeout = TIMEOUT_MS
@@ -78,19 +88,6 @@ class MoonlightHttpGateway
                 Reply(0, "")
             } finally {
                 connection?.disconnect()
-            }
-        }
-
-        private fun openConnection(
-            url: URL,
-            secure: Boolean,
-            hostId: String?,
-        ): java.net.HttpURLConnection {
-            val raw = url.openConnection()
-            if (!secure) return raw as java.net.HttpURLConnection
-            return (raw as HttpsURLConnection).apply {
-                sslSocketFactory = mutualTlsFactory()
-                hostnameVerifier = tofuVerifier(hostId!!)
             }
         }
 
