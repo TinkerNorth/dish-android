@@ -5,13 +5,12 @@ package com.tinkernorth.dish.core.net.moonlight
 
 import com.tinkernorth.dish.core.net.bytesToHex
 import com.tinkernorth.dish.core.net.hexToBytes
+import okhttp3.tls.HeldCertificate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.security.KeyFactory
 import java.security.PrivateKey
-import java.security.spec.PKCS8EncodedKeySpec
 
 /**
  * Exercises the full 5-phase client pairing against a reference server built
@@ -19,19 +18,15 @@ import java.security.spec.PKCS8EncodedKeySpec
  * Both directions are checked: the client authenticates the server, and the
  * server authenticates the client. Randomness is pinned so the exchange is
  * deterministic.
+ *
+ * The two RSA identities are throwaway ones generated when the class loads, the
+ * way the androidTest FakeSatellite mints its cert: no key material is committed
+ * to the repo. Nothing below is pinned to specific key bytes (the assertions are
+ * round-trips through [MoonlightCrypto]), so a fresh pair each run is fine.
  */
 class MoonlightPairingTest {
-    private val clientCertPem = resource("moonlight/client_cert.pem")
-    private val clientKey = privateKey(resource("moonlight/client_key.pem"))
-    private val serverCertPem = resource("moonlight/server_cert.pem")
-    private val serverKey = privateKey(resource("moonlight/server_key.pem"))
-
-    private val clientIdentity =
-        object : MoonlightIdentity {
-            override val certificatePem = clientCertPem
-            override val certificateSignature = MoonlightCert.signatureOf(clientCertPem)
-            override val privateKey = clientKey
-        }
+    private val clientIdentity: MoonlightIdentity = CLIENT
+    private val serverIdentity: MoonlightIdentity = SERVER
 
     // Fixed random material so the exchange is byte-deterministic.
     private val clientSalt = ByteArray(16) { (it + 1).toByte() }
@@ -46,10 +41,12 @@ class MoonlightPairingTest {
 
     private fun newPairing(pin: String) = MoonlightPairing(clientIdentity, pin) { clientRandom.next(it) }
 
+    private fun newServer(pin: String) = ReferenceServer(pin, serverIdentity, clientIdentity.certificatePem)
+
     @Test
     fun `full pairing round-trip authenticates both ends`() {
         val pin = "0451"
-        val server = ReferenceServer(pin, serverCertPem, serverKey, MoonlightCert.signatureOf(serverCertPem))
+        val server = newServer(pin)
         val pairing = newPairing(pin)
 
         // Phase 1.
@@ -69,7 +66,7 @@ class MoonlightPairingTest {
 
     @Test
     fun `wrong PIN derives a different key and fails phase 2`() {
-        val server = ReferenceServer("0451", serverCertPem, serverKey, MoonlightCert.signatureOf(serverCertPem))
+        val server = newServer("0451")
         val pairing = newPairing("9999")
         val p1 = pairing.phase1Params("dish-uid")
         pairing.onPhase1(server.getServerCert(p1.getValue("salt")))
@@ -84,9 +81,8 @@ class MoonlightPairingTest {
     /** A minimal Wolf-equivalent server, driven purely by [MoonlightCrypto]. */
     private class ReferenceServer(
         pin: String,
-        private val serverCertPem: String,
-        private val serverKey: PrivateKey,
-        private val serverCertSignature: ByteArray,
+        private val identity: MoonlightIdentity,
+        private val clientCertPem: String,
     ) {
         private val pinBytes = pin
         private var aesKey = ByteArray(0)
@@ -97,18 +93,18 @@ class MoonlightPairingTest {
 
         fun getServerCert(saltHex: String): String {
             aesKey = MoonlightCrypto.pairingKey(hexToBytes(saltHex), pinBytes)
-            return serverCertPem
+            return identity.certificatePem
         }
 
         fun challengeResponse(clientChallengeHex: String): String {
             clientChallenge = MoonlightCrypto.aesEcbDecrypt(aesKey, hexToBytes(clientChallengeHex))
-            val hash = MoonlightCrypto.sha256(clientChallenge, serverCertSignature, serverSecret)
+            val hash = MoonlightCrypto.sha256(clientChallenge, identity.certificateSignature, serverSecret)
             return bytesToHex(MoonlightCrypto.aesEcbEncrypt(aesKey, hash + serverChallenge))
         }
 
         fun clientHashResponse(serverChallengeRespHex: String): String {
             storedClientHash = MoonlightCrypto.aesEcbDecrypt(aesKey, hexToBytes(serverChallengeRespHex))
-            val signature = MoonlightCrypto.signRsaSha256(serverKey, serverSecret)
+            val signature = MoonlightCrypto.signRsaSha256(identity.privateKey, serverSecret)
             return bytesToHex(serverSecret + signature)
         }
 
@@ -116,7 +112,6 @@ class MoonlightPairingTest {
             val secret = hexToBytes(clientPairingSecretHex)
             val clientSecret = secret.copyOfRange(0, 16)
             val clientSignature = secret.copyOfRange(16, secret.size)
-            val clientCertPem = MoonlightPairingTestCerts.CLIENT_CERT
             val expected =
                 MoonlightCrypto.sha256(serverChallenge, MoonlightCert.signatureOf(clientCertPem), clientSecret)
             if (!MoonlightCrypto.constantTimeEquals(expected, storedClientHash)) return false
@@ -124,28 +119,29 @@ class MoonlightPairingTest {
         }
     }
 
-    private object MoonlightPairingTestCerts {
-        val CLIENT_CERT: String = resource("moonlight/client_cert.pem")
-    }
-
     private companion object {
-        fun resource(path: String): String =
-            MoonlightPairingTest::class.java.classLoader!!
-                .getResourceAsStream(path)!!
-                .use { it.readBytes().toString(Charsets.US_ASCII) }
+        // Minted once for the whole class: JUnit builds a fresh test instance per
+        // method and RSA-2048 keygen is the slowest thing in this file.
+        val CLIENT = throwawayIdentity("dish-pairing-test-client")
+        val SERVER = throwawayIdentity("dish-pairing-test-server")
 
-        fun privateKey(pem: String): PrivateKey {
-            val base64 =
-                pem
-                    .lineSequence()
-                    .filterNot { it.startsWith("-----") }
-                    .joinToString("")
-                    .trim()
-            val der =
-                java.util.Base64
-                    .getDecoder()
-                    .decode(base64)
-            return KeyFactory.getInstance("RSA").generatePrivate(PKCS8EncodedKeySpec(der))
+        /**
+         * A disposable self-signed identity that lives only for this test run.
+         * RSA, not the builder's default ECDSA: Moonlight pairing signs with
+         * SHA256withRSA, and the real client identity is RSA-2048 as well.
+         */
+        fun throwawayIdentity(commonName: String): MoonlightIdentity {
+            val held =
+                HeldCertificate
+                    .Builder()
+                    .commonName(commonName)
+                    .rsa2048()
+                    .build()
+            return object : MoonlightIdentity {
+                override val certificatePem: String = held.certificatePem()
+                override val certificateSignature: ByteArray = held.certificate.signature
+                override val privateKey: PrivateKey = held.keyPair.private
+            }
         }
     }
 }
