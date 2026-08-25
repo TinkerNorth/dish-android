@@ -33,6 +33,7 @@ import org.junit.Test
 class ConnectionCoordinatorTest {
     private lateinit var satellite: SatelliteConnectionManager
     private lateinit var bt: BluetoothGamepadRegistry
+    private lateinit var moonlight: com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
     private lateinit var store: ConnectionStore
     private lateinit var hostFeaturesStore: com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
     private lateinit var hostRuntimeStore: com.tinkernorth.dish.source.store.SatelliteHostRuntimeStore
@@ -57,6 +58,11 @@ class ConnectionCoordinatorTest {
     fun setUp() {
         satellite = mockk(relaxed = true)
         bt = mockk(relaxed = true)
+        moonlight = mockk(relaxed = true)
+        // The composer's moonlightWorld combines these; give it real empty flows so it emits.
+        every { moonlight.connections } returns MutableStateFlow(emptyMap())
+        every { moonlight.discovered } returns MutableStateFlow(emptyList())
+        every { moonlight.remembered } returns MutableStateFlow(emptyList())
         store = mockk(relaxed = true)
         hostFeaturesStore = mockk(relaxed = true)
         hostRuntimeStore = mockk(relaxed = true)
@@ -115,6 +121,7 @@ class ConnectionCoordinatorTest {
                 context = fakeStringContext(),
                 satellite = satellite,
                 bt = bt,
+                moonlight = moonlight,
                 store = store,
                 bindingStore = bindingStore,
                 typeStore = typeStore,
@@ -124,6 +131,7 @@ class ConnectionCoordinatorTest {
             ConnectionCoordinator(
                 satellite = satellite,
                 bt = bt,
+                moonlight = moonlight,
                 store = store,
                 bindingStore = bindingStore,
                 typeStore = typeStore,

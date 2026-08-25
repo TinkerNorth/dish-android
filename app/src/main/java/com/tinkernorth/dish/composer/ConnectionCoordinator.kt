@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
-enum class ConnectionKind { SATELLITE, BLUETOOTH }
+enum class ConnectionKind { SATELLITE, BLUETOOTH, MOONLIGHT }
 
 enum class LinkState { Found, Stale, Saved, Ready, Connecting, Connected, Unstable }
 
@@ -40,10 +40,12 @@ data class ConnectionSummary(
 
 @Singleton
 class ConnectionCoordinator
+    @Suppress("LongParameterList") // hub over every connection source; the extra Moonlight manager is one more sibling
     @Inject
     constructor(
         private val satellite: SatelliteConnectionManager,
         private val bt: BluetoothGamepadRegistry,
+        private val moonlight: com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager,
         private val store: ConnectionStore,
         private val bindingStore: SlotBindingStore,
         private val typeStore: ControllerTypeStore,
@@ -117,10 +119,11 @@ class ConnectionCoordinator
             typeStore.clearConnection(connectionId)
             hostFeaturesStore.clearConnection(connectionId)
             hostRuntimeStore.clearConnection(connectionId)
-            if (store.rememberedBt().any { it.id == connectionId }) {
-                store.forgetBt(connectionId)
-            } else {
-                satellite.forget(connectionId)
+            when {
+                connectionId.startsWith(com.tinkernorth.dish.core.net.moonlight.MoonlightHost.ID_PREFIX) ->
+                    moonlight.forget(connectionId)
+                store.rememberedBt().any { it.id == connectionId } -> store.forgetBt(connectionId)
+                else -> satellite.forget(connectionId)
             }
         }
 

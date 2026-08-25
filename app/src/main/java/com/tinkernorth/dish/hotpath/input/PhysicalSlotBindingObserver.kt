@@ -112,6 +112,11 @@ fun reconcileSlots(
                 } else {
                     ops += BindOp.Unbind(id)
                 }
+            // Moonlight has no native slot table yet, so a PHYSICAL pad bound to a Moonlight host does
+            // not stream through the native capture path; the on-screen controller drives Moonlight
+            // via the overlay Kotlin send path. Emit Unbind (the safe no-op) until the native
+            // SLOT_MOONLIGHT bridge lands. See the PR's known gaps.
+            ConnectionKind.MOONLIGHT -> ops += BindOp.Unbind(id)
         }
     }
     return ops

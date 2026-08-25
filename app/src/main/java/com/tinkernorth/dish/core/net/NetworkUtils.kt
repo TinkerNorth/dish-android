@@ -39,6 +39,18 @@ fun hexToBytes(hex: String): ByteArray {
 
 internal fun Char.isHexDigit(): Boolean = this in '0'..'9' || this in 'a'..'f' || this in 'A'..'F'
 
+private val HEX_DIGITS = "0123456789abcdef".toCharArray()
+
+fun bytesToHex(bytes: ByteArray): String {
+    val out = CharArray(bytes.size * 2)
+    for (i in bytes.indices) {
+        val v = bytes[i].toInt() and 0xFF
+        out[i * 2] = HEX_DIGITS[v ushr 4]
+        out[i * 2 + 1] = HEX_DIGITS[v and 0x0F]
+    }
+    return String(out)
+}
+
 fun parseServers(jsonString: String): List<DiscoveredServer> =
     try {
         json

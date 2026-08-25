@@ -47,6 +47,8 @@ class GamepadOverlayActivity :
     GamepadTouchView.Listener {
     @Inject lateinit var btRegistry: BluetoothGamepadRegistry
 
+    @Inject lateinit var moonlight: com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
+
     @Inject lateinit var capabilityComposer: CapabilityComposer
 
     private lateinit var binding: ActivityGamepadOverlayBinding
@@ -310,7 +312,23 @@ class GamepadOverlayActivity :
                 btRegistry.sendReport(connectionId, report)
             }
             ConnectionKind.SATELLITE -> sendSatelliteReport(state)
+            ConnectionKind.MOONLIGHT -> sendMoonlightReport(state)
         }
+    }
+
+    // Moonlight's low-16 button flags share XInput's bit layout, so the XUSB
+    // wButtons map straight across; sticks (i16) and triggers (u8) match too.
+    private fun sendMoonlightReport(state: GamepadTouchView.GamepadState) {
+        val wButtons = hidToXusb(state.buttons, state.hatSwitch)
+        moonlight.get(connectionId)?.sendControllerState(
+            buttons = wButtons,
+            leftTrigger = state.leftTrigger,
+            rightTrigger = state.rightTrigger,
+            leftX = state.leftX.toInt(),
+            leftY = state.leftY.toInt(),
+            rightX = state.rightX.toInt(),
+            rightY = state.rightY.toInt(),
+        )
     }
 
     // The touch view emits HID-layout button bits + a separate hat-switch; the

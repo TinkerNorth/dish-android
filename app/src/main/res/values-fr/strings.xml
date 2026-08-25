@@ -114,6 +114,7 @@
     <string name="overlay_dialog_motion_title">Mouvement</string>
     <string name="overlay_connection_kind_satellite">Satellite</string>
     <string name="overlay_connection_kind_bluetooth">Bluetooth</string>
+    <string name="overlay_connection_kind_moonlight">Hôte Moonlight</string>
     <string name="overlay_title_gamepad">Manette</string>
     <string name="overlay_title_touchpad">Pavé tactile</string>
     <string name="overlay_rate_touch">Tactile %1$s</string>
@@ -130,6 +131,7 @@
     <!-- Sous-titre des lignes Bluetooth et état transitoire d\'un emplacement
          pendant un appairage en cours. -->
     <string name="bt_row_detail">%1$s • %2$s</string>
+    <string name="moonlight_row_detail">Moonlight • %1$s</string>
     <string name="bt_transient_ready_to_pair">Prête à appairer : repérez cet appareil sur votre hôte</string>
     <string name="bt_transient_acquiring">Acquisition du profil HID…</string>
     <string name="bt_transient_idle">Inactive</string>

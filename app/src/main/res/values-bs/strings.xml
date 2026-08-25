@@ -114,6 +114,7 @@
     <string name="overlay_dialog_motion_title">Pokret</string>
     <string name="overlay_connection_kind_satellite">Satelit</string>
     <string name="overlay_connection_kind_bluetooth">Bluetooth</string>
+    <string name="overlay_connection_kind_moonlight">Moonlight host</string>
     <string name="overlay_title_gamepad">Gamepad</string>
     <string name="overlay_title_touchpad">Dodirna ploča</string>
     <string name="overlay_rate_touch">Dodir %1$s</string>
@@ -129,6 +130,7 @@
 
     <!-- Podnaslov Bluetooth reda i prelazno stanje slota tokom uparivanja. -->
     <string name="bt_row_detail">%1$s • %2$s</string>
+    <string name="moonlight_row_detail">Moonlight • %1$s</string>
     <string name="bt_transient_ready_to_pair">Spreman za uparivanje. Pronađite ovaj uređaj na svom hostu</string>
     <string name="bt_transient_acquiring">Preuzimanje HID profila…</string>
     <string name="bt_transient_idle">Neaktivan</string>

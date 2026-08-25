@@ -290,6 +290,11 @@ class ControllerAdapter(
                     ctx.getString(bundledControllerTypeLabelRes(type))
                 }
                 ConnectionKind.BLUETOOTH -> bound.btProfile
+                // Moonlight names its emulated device the same way the satellite catalog does.
+                ConnectionKind.MOONLIGHT -> {
+                    val type = bound.satelliteControllerTypes[row.slot.id] ?: CONTROLLER_TYPE_XBOX
+                    ctx.getString(bundledControllerTypeLabelRes(type))
+                }
             }
 
         private fun bindFunctionPills(specs: List<PillSpec>) {

@@ -140,6 +140,7 @@
     <string name="overlay_dialog_motion_title">Motion</string>
     <string name="overlay_connection_kind_satellite">Satellite</string>
     <string name="overlay_connection_kind_bluetooth">Bluetooth</string>
+    <string name="overlay_connection_kind_moonlight">Moonlight host</string>
 
     <!-- Shared overlay header titles. Sit next to the back chevron so the
          user always sees which input surface they're on. -->
@@ -167,6 +168,7 @@
     <!-- Bluetooth row subtitle ("<profile> • <MAC>") and transient-slot detail
          text shown while a new pairing is in flight. -->
     <string name="bt_row_detail">%1$s • %2$s</string>
+    <string name="moonlight_row_detail">Moonlight • %1$s</string>
     <string name="bt_transient_ready_to_pair">Ready to pair. Find this device on your host</string>
     <string name="bt_transient_acquiring">Acquiring HID profile…</string>
     <string name="bt_transient_idle">Idle</string>
