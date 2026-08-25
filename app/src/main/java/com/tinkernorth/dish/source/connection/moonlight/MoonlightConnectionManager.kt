@@ -218,8 +218,13 @@ class MoonlightConnectionManager
             _events.emit(MoonlightConnectionEvent.PairingPinReady(host, pin))
             val pairing = MoonlightPairing(identity, pin)
             return runCatching {
-                // Phase 1 (HTTP): the host prompts for the PIN and blocks until entered.
-                val p1 = gateway.getHttp(MoonlightUrls.pairHttp(host.address, host.httpPort, pairing.phase1Params(deviceId)))
+                // Phase 1 (HTTP): the host prompts for the PIN and blocks until
+                // entered, so this one waits on a human rather than on the network.
+                val p1 =
+                    gateway.getHttp(
+                        MoonlightUrls.pairHttp(host.address, host.httpPort, pairing.phase1Params(deviceId)),
+                        MoonlightHttpGateway.PAIR_PIN_TIMEOUT_MS,
+                    )
                 val cert = MoonlightXml.parsePairReply(p1.body)?.plainCert ?: return false
                 pairing.onPhase1(
                     String(

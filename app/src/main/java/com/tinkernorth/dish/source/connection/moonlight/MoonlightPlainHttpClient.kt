@@ -41,17 +41,29 @@ import java.net.URI
  */
 internal class MoonlightPlainHttpClient(
     private val connectTimeoutMs: Int,
-    private val readTimeoutMs: Int,
-    private val openSocket: () -> Socket = { Socket() },
+    private val defaultReadTimeoutMs: Int,
 ) {
-    /** GETs [urlString], or `Reply(0, "")` if the host never answered. */
-    fun get(urlString: String): MoonlightHttpGateway.Reply {
-        val uri = runCatching { URI(urlString) }.getOrNull() ?: return UNREACHABLE
-        val host = uri.host ?: return UNREACHABLE
-        val port = if (uri.port > 0) uri.port else DEFAULT_HTTP_PORT
-        if (port > MAX_PORT) return UNREACHABLE
+    /**
+     * GETs [urlString], or `Reply(0, "")` if the host never answered.
+     *
+     * [readTimeoutMs] overrides the default for requests the host deliberately
+     * holds open, such as the pairing phase that blocks on a human typing the
+     * PIN. The connect timeout is unaffected: an unreachable host still fails
+     * fast.
+     */
+    fun get(
+        urlString: String,
+        readTimeoutMs: Int = defaultReadTimeoutMs,
+    ): MoonlightHttpGateway.Reply {
+        val uri = runCatching { URI(urlString) }.getOrNull()
+        val host = uri?.host
+        val port = if (uri != null && uri.port > 0) uri.port else DEFAULT_HTTP_PORT
+        if (uri == null || host == null || port > MAX_PORT) {
+            Log.w(TAG, "not a usable http url: $urlString")
+            return UNREACHABLE
+        }
         return try {
-            openSocket().use { socket ->
+            Socket().use { socket ->
                 socket.connect(InetSocketAddress(host, port), connectTimeoutMs)
                 socket.soTimeout = readTimeoutMs
                 socket.getOutputStream().apply {
@@ -92,8 +104,16 @@ internal class MoonlightPlainHttpClient(
     }
 
     private fun readReply(input: InputStream): MoonlightHttpGateway.Reply {
-        val lines = readHead(input) ?: return UNREACHABLE
-        val status = parseStatus(lines.firstOrNull()) ?: return UNREACHABLE
+        val lines = readHead(input)
+        if (lines == null) {
+            Log.w(TAG, "host closed before finishing a response head")
+            return UNREACHABLE
+        }
+        val status = parseStatus(lines.firstOrNull())
+        if (status == null) {
+            Log.w(TAG, "host answered but not with HTTP: ${lines.firstOrNull()?.take(STATUS_LOG_LEN)}")
+            return UNREACHABLE
+        }
         return MoonlightHttpGateway.Reply(status, readBody(input, parseHeaders(lines)))
     }
 
@@ -234,6 +254,7 @@ internal class MoonlightPlainHttpClient(
         const val HEX = 16
         const val MIN_STATUS = 100
         const val MAX_STATUS = 599
+        const val STATUS_LOG_LEN = 64
         const val MAX_HEAD_BYTES = 16 * 1024
         const val MAX_LINE_BYTES = 1024
         const val MAX_BODY_BYTES = 1024 * 1024

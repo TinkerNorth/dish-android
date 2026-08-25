@@ -63,8 +63,14 @@ class MoonlightHttpGateway
          * protocol and res/xml/network_security_config.xml denies cleartext to the
          * URL stack app-wide on purpose. [MoonlightPlainHttpClient] documents why
          * the carve-out is scoped this way and why it is safe.
+         *
+         * [readTimeoutMs] is the caller's to raise for a request the host holds
+         * open on purpose; see [PAIR_PIN_TIMEOUT_MS].
          */
-        fun getHttp(url: String): Reply = plain.get(url)
+        fun getHttp(
+            url: String,
+            readTimeoutMs: Int = TIMEOUT_MS,
+        ): Reply = plain.get(url, readTimeoutMs)
 
         /** Mutual-TLS GET (serverinfo / pair phase 5 / applist / launch / resume / cancel). */
         fun getHttps(
@@ -158,8 +164,18 @@ class MoonlightHttpGateway
                 override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
             }
 
-        private companion object {
-            const val TAG = "MoonlightHttpGateway"
-            const val TIMEOUT_MS = 5_000
+        companion object {
+            private const val TAG = "MoonlightHttpGateway"
+            private const val TIMEOUT_MS = 5_000
+
+            /**
+             * Read timeout for pairing phase 1. The host does not answer that one
+             * until a human has typed the displayed PIN into its own web UI
+             * (Sunshine parks the response and only completes it on PIN entry), so
+             * the ordinary 5s probe timeout tears the request down before anybody
+             * could reach a browser, and the host drops its half-open pairing
+             * session with it. This is the human's window, not the network's.
+             */
+            const val PAIR_PIN_TIMEOUT_MS = 120_000
         }
     }

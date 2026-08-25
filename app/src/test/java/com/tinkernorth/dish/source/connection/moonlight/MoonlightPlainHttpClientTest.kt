@@ -207,6 +207,23 @@ class MoonlightPlainHttpClientTest {
     }
 
     @Test
+    fun `a per-call read timeout outlasts a host that answers slowly`() {
+        // Pairing phase 1 is held open until a human types the PIN, so the caller
+        // raises the read timeout for it. The default would give up here.
+        val url =
+            host {
+                Thread.sleep(HELD_MS)
+                it.send("HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\npin!")
+            }
+        val client = MoonlightPlainHttpClient(TIMEOUT, READ_TIMEOUT_SHORT)
+
+        val reply = client.get(url, readTimeoutMs = TIMEOUT)
+
+        assertEquals(200, reply.status)
+        assertEquals("pin!", reply.body)
+    }
+
+    @Test
     fun `a refused connection is unreachable`() {
         // Bind then close, so the port is almost certainly free and refusing.
         val dead = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
@@ -225,5 +242,6 @@ class MoonlightPlainHttpClientTest {
         const val TIMEOUT = 4_000
         const val READ_TIMEOUT_SHORT = 300
         const val SLOW_MS = 3_000L
+        const val HELD_MS = 900L
     }
 }
