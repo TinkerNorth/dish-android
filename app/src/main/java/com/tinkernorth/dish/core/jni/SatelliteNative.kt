@@ -120,6 +120,11 @@ object SatelliteNative {
         connectionId: String,
     )
 
+    external fun bindPhysicalSlotMoonlight(
+        deviceId: Int,
+        connectionId: String,
+    )
+
     external fun unbindPhysicalSlot(deviceId: Int)
 
     external fun clearAllPhysicalSlots()

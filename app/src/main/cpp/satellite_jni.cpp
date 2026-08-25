@@ -125,13 +125,19 @@ static bool sendEncrypted(Session* s, uint16_t msgType, const uint8_t* payload,
 
 using gamepad::DeviceState;
 
-enum SlotKind : uint8_t { SLOT_NONE = 0, SLOT_SATELLITE = 1, SLOT_BLUETOOTH = 2 };
+enum SlotKind : uint8_t {
+    SLOT_NONE = 0,
+    SLOT_SATELLITE = 1,
+    SLOT_BLUETOOTH = 2,
+    SLOT_MOONLIGHT = 3
+};
 
 struct SlotBinding {
     SlotKind kind = SLOT_NONE;
     int sessionHandle = -1;
     int controllerIndex = -1;
-    std::string btConnectionId;
+    // Kotlin-side connection id for the bridge kinds (Bluetooth / Moonlight).
+    std::string bridgeConnectionId;
 };
 
 static std::mutex g_devicesMtx;
@@ -145,68 +151,78 @@ static JavaVM* g_jvm = nullptr;
 static jclass g_btBridgeClass = nullptr;
 static jmethodID g_btDispatchMethod = nullptr;
 
+static jclass g_moonlightBridgeClass = nullptr;
+static jmethodID g_moonlightDispatchMethod = nullptr;
+
 static jclass g_rumbleBridgeClass = nullptr;
 static jmethodID g_rumbleDispatchMethod = nullptr;
 
-// BT path runs off the UI thread because BluetoothHidDevice.sendReport is Binder IPC.
-struct BtReport {
+// Bridge kinds (Bluetooth, Moonlight) run off the UI thread: BluetoothHidDevice.sendReport is
+// Binder IPC, and the Moonlight path encrypts + frames in Kotlin. One queue + thread serves both;
+// the report's kind picks the Kotlin bridge to upcall.
+struct BridgeReport {
+    SlotKind kind;
     std::string connectionId;
     uint16_t wButtons;
     uint8_t bLT, bRT;
     int16_t sLX, sLY, sRX, sRY;
 };
 
-static std::mutex g_btQueueMtx;
-static std::condition_variable g_btQueueCv;
-static std::deque<BtReport> g_btQueue;
-static std::thread g_btDispatchThread;
-static std::atomic<bool> g_btDispatchRunning{false};
-static constexpr size_t BT_QUEUE_MAX = 64;
+static std::mutex g_bridgeQueueMtx;
+static std::condition_variable g_bridgeQueueCv;
+static std::deque<BridgeReport> g_bridgeQueue;
+static std::thread g_bridgeDispatchThread;
+static std::atomic<bool> g_bridgeDispatchRunning{false};
+static constexpr size_t BRIDGE_QUEUE_MAX = 64;
 
-static void enqueueBtReport(BtReport&& r) {
+static void enqueueBridgeReport(BridgeReport&& r) {
     {
-        std::lock_guard<std::mutex> lock(g_btQueueMtx);
-        if (g_btQueue.size() >= BT_QUEUE_MAX) g_btQueue.pop_front();
-        g_btQueue.push_back(std::move(r));
+        std::lock_guard<std::mutex> lock(g_bridgeQueueMtx);
+        if (g_bridgeQueue.size() >= BRIDGE_QUEUE_MAX) g_bridgeQueue.pop_front();
+        g_bridgeQueue.push_back(std::move(r));
     }
-    g_btQueueCv.notify_one();
+    g_bridgeQueueCv.notify_one();
 }
 
-static void btDispatchLoop() {
+static void bridgeDispatchLoop() {
     JNIEnv* env = nullptr;
     if (!g_jvm || g_jvm->AttachCurrentThread(&env, nullptr) != JNI_OK || env == nullptr) {
-        LOGE("btDispatchLoop: AttachCurrentThread failed");
+        LOGE("bridgeDispatchLoop: AttachCurrentThread failed");
         return;
     }
     dish::elevateCurrentThreadToInputPriority();
-    LOGI("BT dispatch thread started");
-    while (g_btDispatchRunning.load(std::memory_order_relaxed)) {
-        BtReport r;
+    LOGI("Bridge dispatch thread started");
+    while (g_bridgeDispatchRunning.load(std::memory_order_relaxed)) {
+        BridgeReport r;
         {
-            std::unique_lock<std::mutex> lock(g_btQueueMtx);
-            g_btQueueCv.wait(lock, [] {
-                return !g_btDispatchRunning.load(std::memory_order_relaxed) || !g_btQueue.empty();
+            std::unique_lock<std::mutex> lock(g_bridgeQueueMtx);
+            g_bridgeQueueCv.wait(lock, [] {
+                return !g_bridgeDispatchRunning.load(std::memory_order_relaxed) ||
+                       !g_bridgeQueue.empty();
             });
-            if (!g_btDispatchRunning.load(std::memory_order_relaxed) && g_btQueue.empty()) break;
-            r = std::move(g_btQueue.front());
-            g_btQueue.pop_front();
+            if (!g_bridgeDispatchRunning.load(std::memory_order_relaxed) && g_bridgeQueue.empty())
+                break;
+            r = std::move(g_bridgeQueue.front());
+            g_bridgeQueue.pop_front();
         }
-        if (g_btBridgeClass == nullptr || g_btDispatchMethod == nullptr) continue;
+        jclass cls = r.kind == SLOT_MOONLIGHT ? g_moonlightBridgeClass : g_btBridgeClass;
+        jmethodID method =
+            r.kind == SLOT_MOONLIGHT ? g_moonlightDispatchMethod : g_btDispatchMethod;
+        if (cls == nullptr || method == nullptr) continue;
         jstring connId = env->NewStringUTF(r.connectionId.c_str());
-        env->CallStaticVoidMethod(g_btBridgeClass, g_btDispatchMethod, connId, (jint)r.wButtons,
-                                  (jint)r.bLT, (jint)r.bRT, (jint)r.sLX, (jint)r.sLY, (jint)r.sRX,
-                                  (jint)r.sRY);
+        env->CallStaticVoidMethod(cls, method, connId, (jint)r.wButtons, (jint)r.bLT, (jint)r.bRT,
+                                  (jint)r.sLX, (jint)r.sLY, (jint)r.sRX, (jint)r.sRY);
         env->DeleteLocalRef(connId);
         if (env->ExceptionCheck()) env->ExceptionClear();
     }
     g_jvm->DetachCurrentThread();
-    LOGI("BT dispatch thread stopped");
+    LOGI("Bridge dispatch thread stopped");
 }
 
-static void startBtDispatchThread() {
-    bool was = g_btDispatchRunning.exchange(true, std::memory_order_relaxed);
+static void startBridgeDispatchThread() {
+    bool was = g_bridgeDispatchRunning.exchange(true, std::memory_order_relaxed);
     if (was) return;
-    g_btDispatchThread = std::thread(btDispatchLoop);
+    g_bridgeDispatchThread = std::thread(bridgeDispatchLoop);
 }
 
 static inline float axisCur(const GameActivityMotionEvent* ev, int axis) {
@@ -239,10 +255,11 @@ static void publishIfChanged(int32_t deviceId, DeviceState& s) {
         r->sThumbRY = s.sRY;
         sendEncrypted(session.get(), MSG_GAMEPAD_DATA, payload, sizeof(payload));
         hotpath::markGamepadSent(); // stage-1 end: the URB-driven packet has left sendto()
-    } else if (binding.kind == SLOT_BLUETOOTH) {
-        if (binding.btConnectionId.empty()) return;
-        enqueueBtReport(BtReport{
-            binding.btConnectionId,
+    } else if (binding.kind == SLOT_BLUETOOTH || binding.kind == SLOT_MOONLIGHT) {
+        if (binding.bridgeConnectionId.empty()) return;
+        enqueueBridgeReport(BridgeReport{
+            binding.kind,
+            binding.bridgeConnectionId,
             s.wButtons,
             s.bLT,
             s.bRT,
@@ -938,25 +955,35 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_bindPh
         b.kind = SLOT_SATELLITE;
         b.sessionHandle = sessionHandle;
         b.controllerIndex = controllerIndex;
-        b.btConnectionId.clear();
+        b.bridgeConnectionId.clear();
     }
     syncSlotBaseline(deviceId);
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_bindPhysicalSlotBluetooth(
-    JNIEnv* env, jobject, jint deviceId, jstring connectionId) {
+static void bindPhysicalSlotBridge(JNIEnv* env, jint deviceId, jstring connectionId,
+                                   SlotKind kind) {
     const char* cstr = env->GetStringUTFChars(connectionId, nullptr);
     std::string copy = cstr ? std::string(cstr) : std::string();
     if (cstr) env->ReleaseStringUTFChars(connectionId, cstr);
     {
         std::lock_guard<std::mutex> lock(g_slotsMtx);
         auto& b = g_slots[deviceId];
-        b.kind = SLOT_BLUETOOTH;
+        b.kind = kind;
         b.sessionHandle = -1;
         b.controllerIndex = -1;
-        b.btConnectionId = std::move(copy);
+        b.bridgeConnectionId = std::move(copy);
     }
     syncSlotBaseline(deviceId);
+}
+
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_bindPhysicalSlotBluetooth(
+    JNIEnv* env, jobject, jint deviceId, jstring connectionId) {
+    bindPhysicalSlotBridge(env, deviceId, connectionId, SLOT_BLUETOOTH);
+}
+
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_bindPhysicalSlotMoonlight(
+    JNIEnv* env, jobject, jint deviceId, jstring connectionId) {
+    bindPhysicalSlotBridge(env, deviceId, connectionId, SLOT_MOONLIGHT);
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_unbindPhysicalSlot(
@@ -1064,7 +1091,23 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_hotpath_input_BluetoothGamepadB
             env->ExceptionClear();
         }
     }
-    startBtDispatchThread();
+    startBridgeDispatchThread();
+}
+
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_hotpath_input_MoonlightGamepadBridge_nativeInstall(
+    JNIEnv* env, jclass bridgeCls) {
+    if (g_moonlightBridgeClass == nullptr) {
+        g_moonlightBridgeClass = (jclass)env->NewGlobalRef(bridgeCls);
+    }
+    if (g_moonlightDispatchMethod == nullptr) {
+        g_moonlightDispatchMethod = env->GetStaticMethodID(g_moonlightBridgeClass, "dispatchReport",
+                                                           "(Ljava/lang/String;IIIIIII)V");
+        if (g_moonlightDispatchMethod == nullptr) {
+            LOGE("MoonlightGamepadBridge.dispatchReport not found");
+            env->ExceptionClear();
+        }
+    }
+    startBridgeDispatchThread();
 }
 
 JNIEXPORT void JNICALL

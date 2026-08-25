@@ -8,6 +8,7 @@ import androidx.core.content.edit
 import com.tinkernorth.dish.core.net.bytesToHex
 import com.tinkernorth.dish.core.net.moonlight.MoonlightControlSession
 import com.tinkernorth.dish.core.net.moonlight.MoonlightCrypto
+import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity
 import com.tinkernorth.dish.core.net.moonlight.MoonlightPairing
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -140,7 +142,12 @@ class MoonlightConnectionManager
                 }[id]!!
         }
 
-        /** Pair with (if needed) and launch [emulatedType] on [host]. */
+        /**
+         * One-tap path: pair (if needed), pick the remembered/first app, and
+         * launch [emulatedType] on [host]. The connections screen drives the
+         * explicit pair/app-pick/type-pick steps via [pairHost], [fetchApps] and
+         * [launch]; this convenience path is kept for a remembered host.
+         */
         fun connect(
             host: MoonlightHost,
             emulatedType: Int,
@@ -149,14 +156,54 @@ class MoonlightConnectionManager
             conn.updateHost(host)
             conn.markLaunching()
             scope.launch(ioDispatcher) {
-                val paired = isPaired(host)
-                if (!paired && !pair(host)) {
+                if (!isPaired(host) && !pair(host)) {
                     conn.markDisconnected()
                     return@launch
                 }
-                launchAndStream(conn, host, emulatedType)
+                val appId = store.get(host.id)?.lastAppId?.takeIf { it.isNotEmpty() } ?: defaultAppId(host)
+                if (appId == null) {
+                    conn.markDisconnected()
+                    _events.emit(MoonlightConnectionEvent.Error("No apps available on ${host.name}."))
+                    return@launch
+                }
+                launchAndStream(conn, host, appId, emulatedType)
             }
         }
+
+        /** Launch a specific [appId] with [emulatedType] (the app-pick path). */
+        fun launch(
+            host: MoonlightHost,
+            appId: String,
+            emulatedType: Int,
+        ) {
+            val conn = findOrCreate(host)
+            conn.updateHost(host)
+            conn.markLaunching()
+            scope.launch(ioDispatcher) { launchAndStream(conn, host, appId, emulatedType) }
+        }
+
+        /**
+         * Pair with [host]: emits [MoonlightConnectionEvent.PairingPinReady] with
+         * the generated PIN, runs the 5 phases, and returns true when paired.
+         * Public so the connections screen can await pairing before fetching the
+         * app list.
+         */
+        suspend fun pairHost(host: MoonlightHost): Boolean =
+            withContext(ioDispatcher) {
+                if (isPaired(host)) {
+                    _events.emit(MoonlightConnectionEvent.Paired(host))
+                    true
+                } else {
+                    pair(host)
+                }
+            }
+
+        /** Fetch the host's app list (empty when unreachable/unpaired). */
+        suspend fun fetchApps(host: MoonlightHost): List<MoonlightXml.App> =
+            withContext(ioDispatcher) {
+                val reply = gateway.getHttps(MoonlightUrls.appList(host.address, host.httpsPort, deviceId), host.id)
+                MoonlightXml.parseAppList(reply.body)
+            }
 
         private fun isPaired(host: MoonlightHost): Boolean {
             val reply = gateway.getHttps(MoonlightUrls.serverInfoHttps(host.address, host.httpsPort, deviceId), host.id)
@@ -208,6 +255,7 @@ class MoonlightConnectionManager
         private suspend fun launchAndStream(
             conn: MoonlightConnection,
             host: MoonlightHost,
+            appId: String,
             emulatedType: Int,
         ) {
             val rikey = MoonlightCrypto.randomBytes(RIKEY_LEN)
@@ -215,12 +263,6 @@ class MoonlightConnectionManager
                 MoonlightCrypto.randomBytes(4).let {
                     (it[0].toInt() and 0xFF) or ((it[1].toInt() and 0xFF) shl 8) or
                         ((it[2].toInt() and 0xFF) shl 16) or ((it[3].toInt() and 0xFF) shl 24)
-                }
-            val appId =
-                store.get(host.id)?.lastAppId?.takeIf { it.isNotEmpty() } ?: defaultAppId(host) ?: run {
-                    conn.markDisconnected()
-                    _events.emit(MoonlightConnectionEvent.Error("No apps available on ${host.name}."))
-                    return
                 }
             val launchUrl =
                 MoonlightUrls.launch(host.address, host.httpsPort, deviceId, appId, bytesToHex(rikey), rikeyId, LAUNCH_MODE)
@@ -257,7 +299,7 @@ class MoonlightConnectionManager
                 MoonlightConnection.BASE_CAPABILITIES,
                 MoonlightConnection.SUPPORTED_BUTTONS,
             )
-            rememberPaired(host, appId)
+            rememberPaired(host, appId, emulatedType)
         }
 
         private fun defaultAppId(host: MoonlightHost): String? {
@@ -278,6 +320,7 @@ class MoonlightConnectionManager
         private fun rememberPaired(
             host: MoonlightHost,
             appId: String = store.get(host.id)?.lastAppId.orEmpty(),
+            emulatedType: Int = store.get(host.id)?.emulatedType ?: MoonlightEmulatedType.AUTO,
         ) {
             store.put(
                 RememberedMoonlight(
@@ -288,9 +331,16 @@ class MoonlightConnectionManager
                     httpsPort = host.httpsPort,
                     uniqueId = host.uniqueId,
                     lastAppId = appId,
+                    emulatedType = emulatedType,
                 ),
             )
         }
+
+        /** The remembered emulated-device pick for [hostId], defaulting to Auto. */
+        fun rememberedEmulatedType(hostId: String): Int = store.get(hostId)?.emulatedType ?: MoonlightEmulatedType.AUTO
+
+        /** The remembered last-launched app id for [hostId], or empty. */
+        fun rememberedAppId(hostId: String): String = store.get(hostId)?.lastAppId.orEmpty()
 
         // The /launch response carries sessionUrl0 = rtsp://ip:port; pull the port.
         private fun parseRtspPort(xml: String): Int? =

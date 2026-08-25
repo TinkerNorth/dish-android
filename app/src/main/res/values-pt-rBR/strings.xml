@@ -133,6 +133,18 @@
          pareamento. -->
     <string name="bt_row_detail">%1$s • %2$s</string>
     <string name="moonlight_row_detail">Moonlight • %1$s</string>
+    <string name="section_moonlight_hosts">HOSTS MOONLIGHT</string>
+    <string name="moonlight_hosts_empty">Nenhum host Moonlight ainda. Busque na rede ou adicione por endereço.</string>
+    <string name="moonlight_pin_title">Parear com %1$s</string>
+    <string name="moonlight_pin_message">No seu host, abra a página do Moonlight/Sunshine e insira este PIN:</string>
+    <string name="moonlight_pin_waiting">Aguardando o host aceitar o PIN…</string>
+    <string name="moonlight_emulated_title">Emular controle</string>
+    <string name="moonlight_emulated_auto">Automático</string>
+    <string name="moonlight_app_title">Escolher um app</string>
+    <string name="moonlight_no_apps">Nenhum app disponível neste host.</string>
+    <string name="action_add_moonlight_host">Adicionar host Moonlight</string>
+    <string name="add_moonlight_host_hint">IP ou nome do host</string>
+    <string name="add_moonlight_error_host">Insira o endereço do host</string>
     <string name="bt_transient_ready_to_pair">Pronto para parear. Procure este dispositivo no seu host</string>
     <string name="bt_transient_acquiring">Adquirindo perfil HID…</string>
     <string name="bt_transient_idle">Inativo</string>

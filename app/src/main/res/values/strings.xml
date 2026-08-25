@@ -169,6 +169,19 @@
          text shown while a new pairing is in flight. -->
     <string name="bt_row_detail">%1$s • %2$s</string>
     <string name="moonlight_row_detail">Moonlight • %1$s</string>
+    <string name="section_moonlight_hosts">MOONLIGHT HOSTS</string>
+    <string name="moonlight_hosts_empty">No Moonlight hosts yet. Scan your network or add one by address.</string>
+    <string name="moonlight_pin_title">Pair with %1$s</string>
+    <string name="moonlight_pin_message">On your host, open the Moonlight/Sunshine page and enter this PIN:</string>
+    <string name="moonlight_pin_waiting">Waiting for the host to accept the PIN…</string>
+    <string name="moonlight_emulated_title">Emulate controller</string>
+    <string name="moonlight_emulated_auto">Auto</string>
+    <string name="moonlight_emulated_nintendo" translatable="false">Nintendo</string>
+    <string name="moonlight_app_title">Choose an app</string>
+    <string name="moonlight_no_apps">No apps are available on this host.</string>
+    <string name="action_add_moonlight_host">Add Moonlight host</string>
+    <string name="add_moonlight_host_hint">Host IP or name</string>
+    <string name="add_moonlight_error_host">Enter the host address</string>
     <string name="bt_transient_ready_to_pair">Ready to pair. Find this device on your host</string>
     <string name="bt_transient_acquiring">Acquiring HID profile…</string>
     <string name="bt_transient_idle">Idle</string>

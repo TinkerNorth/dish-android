@@ -80,6 +80,8 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
 
     @Inject lateinit var hub: ConnectionCoordinator
 
+    @Inject lateinit var moonlight: com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
+
     @Inject lateinit var store: ConnectionStore
 
     @Inject lateinit var btAdapterState: BluetoothAdapterStateObserver
@@ -95,8 +97,10 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
 
     private lateinit var satelliteHeader: SectionHeaderAdapter
     private lateinit var bluetoothHeader: SectionHeaderAdapter
+    private lateinit var moonlightHeader: SectionHeaderAdapter
     private lateinit var satelliteList: SatelliteListAdapter
     private lateinit var bluetoothList: BluetoothListAdapter
+    private lateinit var moonlightList: MoonlightListAdapter
 
     private val satelliteRowListener =
         object : SatelliteRowListener {
@@ -175,6 +179,34 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
 
     private var pairingServer: com.tinkernorth.dish.core.model.DiscoveredServer? = null
 
+    private val moonlightRowListener =
+        object : MoonlightRowListener {
+            override fun onConnectKnown(summary: ConnectionSummary) {
+                val host =
+                    moonlight.get(summary.id)?.host?.value
+                        ?: moonlight.remembered.value
+                            .firstOrNull { it.id == summary.id }
+                            ?.toHost()
+                        ?: moonlight.discovered.value.firstOrNull { it.id == summary.id }
+                        ?: return
+                startMoonlightConnect(host)
+            }
+
+            override fun onConnectDiscovered(host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost) {
+                startMoonlightConnect(host)
+            }
+
+            override fun onDisconnect(id: String) {
+                moonlight.disconnect(id)
+            }
+
+            override fun onForget(id: String) {
+                hub.forgetConnection(id)
+            }
+        }
+
+    private var moonlightPinDialog: AlertDialog? = null
+
     private val btPermissionLauncher =
         registerForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions(),
@@ -217,6 +249,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
             if (granted) {
                 dismissLocalNetworkBanner()
                 satellite.startDiscovery()
+                moonlight.startDiscovery()
             } else {
                 showLocalNetworkBanner()
             }
@@ -246,6 +279,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 viewModel.ui.collect { state ->
                     render(state)
                     satelliteHeader.setLoading(state.scanning, getString(R.string.action_scanning))
+                    moonlightHeader.setLoading(state.moonlightScanning, getString(R.string.action_scanning))
                     // Success path emits no ConnectionEvent, so observe state directly to dismiss PIN dialog.
                     dismissPinDialogIfPaired(state)
                 }
@@ -259,6 +293,28 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                         is ConnectionEvent.PairingRequired -> showPairingDialog(ev.server)
                     }
                 }
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                moonlight.events.collect(::onMoonlightEvent)
+            }
+        }
+    }
+
+    private fun onMoonlightEvent(ev: com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent) {
+        when (ev) {
+            is com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent.PairingPinReady ->
+                showMoonlightPinDialog(ev.host, ev.pin)
+            is com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent.Paired ->
+                moonlightPinDialog?.dismiss()
+            is com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent.Error -> {
+                moonlightPinDialog?.dismiss()
+                notifications.error(
+                    glyph = R.drawable.ic_pc_monitor,
+                    title = getString(R.string.section_moonlight_hosts),
+                    body = ev.message,
+                )
             }
         }
     }
@@ -343,14 +399,26 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 R.string.section_bluetooth_hosts,
                 R.string.action_add,
             ) { requestBtPermissions(continueToAdd = true) }
+        moonlightHeader =
+            SectionHeaderAdapter(
+                R.drawable.ic_pc_monitor,
+                R.string.section_moonlight_hosts,
+                R.string.action_scan,
+                secondaryActionLabel = R.string.action_add,
+                onSecondaryAction = ::showAddMoonlightDialog,
+            ) { ensureLocalNetworkThenDiscover(userInitiated = true) }
         satelliteList = SatelliteListAdapter(satelliteRowListener)
         bluetoothList = BluetoothListAdapter(bluetoothRowListener)
+        moonlightList = MoonlightListAdapter(moonlightRowListener)
         val single = binding.rvConnections
         if (single != null) {
             single.bindConnectionColumn(
                 ConcatAdapter(
                     satelliteHeader,
                     satelliteList,
+                    StaticViewAdapter(R.layout.item_connection_divider),
+                    moonlightHeader,
+                    moonlightList,
                     StaticViewAdapter(R.layout.item_connection_divider),
                     bluetoothHeader,
                     bluetoothList,
@@ -394,6 +462,9 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 )
             }
         bluetoothList.submitList(rows.ifEmpty { listOf(BluetoothRow.Empty(getString(R.string.bt_hosts_empty))) })
+        moonlightList.submitList(
+            state.moonlightRows.ifEmpty { listOf(MoonlightRow.Empty(getString(R.string.moonlight_hosts_empty))) },
+        )
     }
 
     private fun satelliteEmptyMessage(lastScanAtMs: Long?): String {
@@ -742,6 +813,121 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         dialog.show()
     }
 
+    // ── Moonlight host flow ─────────────────────────────────────────────────
+
+    // Tap Connect: pick the emulated device, pair (showing the PIN) if needed,
+    // then pick the app and launch. Each step remembers the user's last choice.
+    private fun startMoonlightConnect(host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost) {
+        val types =
+            intArrayOf(
+                com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType.AUTO,
+                com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType.XBOX,
+                com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType.PLAYSTATION,
+                com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType.NINTENDO,
+            )
+        val labels =
+            arrayOf(
+                getString(R.string.moonlight_emulated_auto),
+                getString(R.string.picker_type_xbox),
+                getString(R.string.picker_type_playstation),
+                getString(R.string.moonlight_emulated_nintendo),
+            )
+        val remembered = moonlight.rememberedEmulatedType(host.id)
+        val checked = types.indexOf(remembered).coerceAtLeast(0)
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.moonlight_emulated_title)
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                dialog.dismiss()
+                pairThenPickApp(host, types[which])
+            }.setNegativeButton(R.string.action_cancel, null)
+            .show()
+    }
+
+    private fun pairThenPickApp(
+        host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost,
+        emulatedType: Int,
+    ) {
+        lifecycleScope.launch {
+            // pairHost returns immediately when already paired; otherwise it emits the PIN
+            // (shown by onMoonlightEvent) and completes when the host accepts it.
+            if (!moonlight.pairHost(host)) return@launch
+            moonlightPinDialog?.dismiss()
+            val apps = moonlight.fetchApps(host)
+            if (apps.isEmpty()) {
+                notifications.error(
+                    glyph = R.drawable.ic_pc_monitor,
+                    title = host.name,
+                    body = getString(R.string.moonlight_no_apps),
+                )
+                return@launch
+            }
+            showMoonlightAppPicker(host, apps, emulatedType)
+        }
+    }
+
+    private fun showMoonlightAppPicker(
+        host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost,
+        apps: List<com.tinkernorth.dish.core.net.moonlight.MoonlightXml.App>,
+        emulatedType: Int,
+    ) {
+        val labels = apps.map { it.title.ifEmpty { it.id } }.toTypedArray()
+        val lastAppId = moonlight.rememberedAppId(host.id)
+        val checked = apps.indexOfFirst { it.id == lastAppId }.coerceAtLeast(0)
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.moonlight_app_title)
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                dialog.dismiss()
+                moonlight.launch(host, apps[which].id, emulatedType)
+            }.setNegativeButton(R.string.action_cancel, null)
+            .show()
+    }
+
+    private fun showMoonlightPinDialog(
+        host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost,
+        pin: String,
+    ) {
+        moonlightPinDialog?.dismiss()
+        val message = getString(R.string.moonlight_pin_message) + "\n\n" + pin + "\n\n" + getString(R.string.moonlight_pin_waiting)
+        moonlightPinDialog =
+            MaterialAlertDialogBuilder(this)
+                .setTitle(getString(R.string.moonlight_pin_title, host.name))
+                .setMessage(message)
+                .setNegativeButton(R.string.action_cancel) { _, _ -> moonlight.disconnect(host.id) }
+                .setOnDismissListener { moonlightPinDialog = null }
+                .show()
+    }
+
+    private fun showAddMoonlightDialog() {
+        val layout = TextInputLayout(this)
+        val input = TextInputEditText(this).apply { hint = getString(R.string.add_moonlight_host_hint) }
+        layout.addView(input)
+        val pad = resources.getDimensionPixelSize(R.dimen.spacing_md)
+        layout.setPadding(pad, pad, pad, 0)
+        val dialog =
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.action_add_moonlight_host)
+                .setView(layout)
+                .setPositiveButton(R.string.action_add, null)
+                .setNegativeButton(R.string.action_cancel, null)
+                .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val address =
+                    input.text
+                        ?.toString()
+                        ?.trim()
+                        .orEmpty()
+                if (address.isEmpty()) {
+                    layout.error = getString(R.string.add_moonlight_error_host)
+                } else {
+                    moonlight.addManualHost(address)
+                    dialog.dismiss()
+                }
+            }
+        }
+        dialog.show()
+    }
+
     private fun parsePort(field: TextInputEditText): Int? {
         val port =
             field.text
@@ -986,6 +1172,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         if (LocalNetworkAccess.isGranted(this)) {
             dismissLocalNetworkBanner()
             satellite.startDiscovery()
+            moonlight.startDiscovery()
             return
         }
         if (userInitiated || !localNetworkPrompted) {

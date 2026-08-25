@@ -131,6 +131,18 @@
          Kopplungsvorgangs. -->
     <string name="bt_row_detail">%1$s • %2$s</string>
     <string name="moonlight_row_detail">Moonlight • %1$s</string>
+    <string name="section_moonlight_hosts">MOONLIGHT-HOSTS</string>
+    <string name="moonlight_hosts_empty">Noch keine Moonlight-Hosts. Netzwerk scannen oder per Adresse hinzufügen.</string>
+    <string name="moonlight_pin_title">Mit %1$s koppeln</string>
+    <string name="moonlight_pin_message">Öffne auf dem Host die Moonlight/Sunshine-Seite und gib diese PIN ein:</string>
+    <string name="moonlight_pin_waiting">Warte auf Bestätigung der PIN durch den Host…</string>
+    <string name="moonlight_emulated_title">Controller emulieren</string>
+    <string name="moonlight_emulated_auto">Automatisch</string>
+    <string name="moonlight_app_title">App auswählen</string>
+    <string name="moonlight_no_apps">Auf diesem Host sind keine Apps verfügbar.</string>
+    <string name="action_add_moonlight_host">Moonlight-Host hinzufügen</string>
+    <string name="add_moonlight_host_hint">Host-IP oder -Name</string>
+    <string name="add_moonlight_error_host">Host-Adresse eingeben</string>
     <string name="bt_transient_ready_to_pair">Bereit zum Koppeln. Suche dieses Gerät auf deinem Host</string>
     <string name="bt_transient_acquiring">HID-Profil wird abgerufen…</string>
     <string name="bt_transient_idle">Inaktiv</string>

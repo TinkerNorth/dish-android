@@ -132,6 +132,18 @@
          pendant un appairage en cours. -->
     <string name="bt_row_detail">%1$s • %2$s</string>
     <string name="moonlight_row_detail">Moonlight • %1$s</string>
+    <string name="section_moonlight_hosts">HÔTES MOONLIGHT</string>
+    <string name="moonlight_hosts_empty">Aucun hôte Moonlight. Scannez le réseau ou ajoutez-en un par adresse.</string>
+    <string name="moonlight_pin_title">Associer à %1$s</string>
+    <string name="moonlight_pin_message">Sur votre hôte, ouvrez la page Moonlight/Sunshine et saisissez ce code PIN :</string>
+    <string name="moonlight_pin_waiting">En attente de l\'acceptation du PIN par l\'hôte…</string>
+    <string name="moonlight_emulated_title">Émuler la manette</string>
+    <string name="moonlight_emulated_auto">Auto</string>
+    <string name="moonlight_app_title">Choisir une app</string>
+    <string name="moonlight_no_apps">Aucune app disponible sur cet hôte.</string>
+    <string name="action_add_moonlight_host">Ajouter un hôte Moonlight</string>
+    <string name="add_moonlight_host_hint">IP ou nom de l\'hôte</string>
+    <string name="add_moonlight_error_host">Saisissez l\'adresse de l\'hôte</string>
     <string name="bt_transient_ready_to_pair">Prête à appairer : repérez cet appareil sur votre hôte</string>
     <string name="bt_transient_acquiring">Acquisition du profil HID…</string>
     <string name="bt_transient_idle">Inactive</string>
