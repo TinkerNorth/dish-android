@@ -4,6 +4,7 @@
 package com.tinkernorth.dish.core.net.moonlight
 
 import org.w3c.dom.Element
+import org.xml.sax.InputSource
 import java.io.ByteArrayInputStream
 import javax.xml.parsers.DocumentBuilderFactory
 
@@ -85,13 +86,43 @@ object MoonlightXml {
         runCatching {
             val factory =
                 DocumentBuilderFactory.newInstance().apply {
-                    // Harden the parser: this input comes off the network.
-                    setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+                    // Harden the parser: this input comes off the network. Each
+                    // switch is best-effort because the two parsers this code runs
+                    // on do not admit the same ones. Android's
+                    // DocumentBuilderFactoryImpl recognizes only the SAX namespaces
+                    // and validation features and throws ParserConfigurationException
+                    // for everything else, so demanding the Apache DTD switch here
+                    // would abort EVERY parse on device (returning null out of this
+                    // runCatching) while still passing on the JVM, where Xerces does
+                    // support it. That is a silent, device-only failure, so the
+                    // portable guarantee is enforced below instead.
+                    harden(DISALLOW_DOCTYPE, true)
+                    harden(EXTERNAL_GENERAL_ENTITIES, false)
+                    harden(EXTERNAL_PARAMETER_ENTITIES, false)
                     isExpandEntityReferences = false
                 }
-            val doc = factory.newDocumentBuilder().parse(ByteArrayInputStream(xml.toByteArray(Charsets.UTF_8)))
-            doc.documentElement
+            val builder =
+                factory.newDocumentBuilder().apply {
+                    // The half that always holds, whatever the factory would admit:
+                    // every external entity resolves to nothing, so no DTD or entity
+                    // in a host's reply can make the parser read a file or open a
+                    // connection. This is the actual XXE gate.
+                    setEntityResolver { _, _ -> InputSource(ByteArrayInputStream(ByteArray(0))) }
+                }
+            builder.parse(ByteArrayInputStream(xml.toByteArray(Charsets.UTF_8))).documentElement
         }.getOrNull()
+
+    /** Applies one parser switch, tolerating a parser that cannot express it. */
+    private fun DocumentBuilderFactory.harden(
+        feature: String,
+        value: Boolean,
+    ) {
+        runCatching { setFeature(feature, value) }
+    }
+
+    private const val DISALLOW_DOCTYPE = "http://apache.org/xml/features/disallow-doctype-decl"
+    private const val EXTERNAL_GENERAL_ENTITIES = "http://xml.org/sax/features/external-general-entities"
+    private const val EXTERNAL_PARAMETER_ENTITIES = "http://xml.org/sax/features/external-parameter-entities"
 
     private fun text(
         root: Element,
