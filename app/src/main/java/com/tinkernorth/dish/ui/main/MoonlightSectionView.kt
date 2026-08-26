@@ -65,12 +65,18 @@ private fun BindingSectionMoonlightBinding.bindApps(
     }
 }
 
+// The state chooses its own format arguments, so the view can fill a string without
+// knowing which state it is drawing; the spread is the price of that indirection.
 @Suppress("SpreadOperator")
 private fun Context.formatted(
     @StringRes res: Int,
     args: List<Any>,
 ): String = getString(res, *args.toTypedArray())
 
+// Rebuilt from scratch on every render rather than toggled, because the number of buttons
+// changes with the state. The first action gets the filled layout and the rest the outlined
+// one, so the ordering in MoonlightSessionUi.actions is what decides which of them reads as
+// the recommendation.
 private fun BindingSectionMoonlightBinding.bindActions(
     session: MoonlightSessionUi,
     hostLabel: String,

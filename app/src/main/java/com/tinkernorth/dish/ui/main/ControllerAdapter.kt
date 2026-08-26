@@ -66,9 +66,7 @@ internal fun LinkState.isAvailableForPicker(): Boolean =
         -> false
     }
 
-// A Moonlight host is always offered. Its session is started BY the binding, so requiring a
-// live link before it can be picked is circular: it can never be live until something binds to
-// it, and nothing can bind to it until it is live.
+// The badge a bound slot's card can wear; NONE is the quiet default.
 internal enum class EdgeState { NONE, HOST_LOST, INPUT_LOST, UNSTEADY }
 
 // A Moonlight host is never "lost": there is no live link to lose, only remembered trust,
@@ -87,6 +85,9 @@ internal fun slotEdgeState(slot: ControllerSlot): EdgeState {
     }
 }
 
+// A Moonlight host is always offered. Its session is started BY the binding, so requiring a
+// live link before it can be picked is circular: it can never be live until something binds to
+// it, and nothing can bind to it until it is live.
 internal fun connectionsVisibleInPicker(
     all: List<ConnectionSummary>,
     boundConnectionId: String?,

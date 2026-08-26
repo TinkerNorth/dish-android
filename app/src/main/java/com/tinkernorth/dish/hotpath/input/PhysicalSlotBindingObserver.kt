@@ -75,8 +75,7 @@ data class SatelliteSlotSnapshot(
 // registry no longer knows: a device that left while the observer was stopped is in neither
 // `present` nor `lastBound`, and without the sweep its slot would be re-declared to the satellite
 // on every reconnect forever. Non-numeric slot ids (the on-screen controller) are never swept.
-// one flat snapshot argument per connection source, mirrored by the tests, and one branch per kind
-@Suppress("LongParameterList", "CyclomaticComplexMethod")
+@Suppress("LongParameterList", "CyclomaticComplexMethod") // one flat snapshot per source, one branch per kind
 fun reconcileSlots(
     present: Set<Int>,
     lastBound: Set<Int>,

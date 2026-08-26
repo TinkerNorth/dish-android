@@ -9,10 +9,24 @@ import androidx.annotation.StringRes
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
 
+// The whole Moonlight session surface as one closed set of states, with the pure
+// projections that turn each into a title, a body, a set of buttons and a tone. The
+// binding screen and the setup wizard both draw it through bindMoonlightSession, so the
+// states live here rather than in either of them: a state added below is a compile error
+// in every `when` until it has been given all four. Nothing here touches a View or a
+// Context, which is what makes the surface testable without a device.
+
+// One session carries four controllers and no more, so a fifth binding on the same host
+// has nowhere to go; that ceiling is what HostFull reports.
 const val MOONLIGHT_MAX_PADS = 4
 
+// Five meanings rather than a colour per state, so a new state has to say which of these
+// it is instead of introducing a shade of its own.
 enum class MoonlightTone { NEUTRAL, PROGRESS, WARN, ERROR, SUCCESS }
 
+// Named for what the user is asking for, not for the work behind it: RETRY, RECONNECT and
+// START_SESSION all restart the session, and stay separate only so the button can read
+// like the state it sits under.
 enum class MoonlightAction {
     PAIR,
     PAIR_AGAIN,
@@ -31,6 +45,10 @@ data class MoonlightAppUi(
     val title: String,
 )
 
+// The four axes below arrive from different places and change independently: pairing from
+// the manager's event stream, apps from a probe, the phase from the live session, failure
+// from whatever the host last refused. They stay apart rather than fold into one enum for
+// that reason, and moonlightSessionUi is the single place their precedence is decided.
 sealed interface MoonlightPairingUi {
     data class Pin(
         val pin: String,
@@ -51,6 +69,8 @@ sealed interface MoonlightApps {
     data object Failed : MoonlightApps
 }
 
+// `controllerNumber` is 1-based for the reader: the wire index is 0..3 and the caller adds
+// one, so "controller 1" on screen is pad 0 in the host's CONTROLLER_ARRIVAL.
 sealed interface MoonlightPhase {
     data object Idle : MoonlightPhase
 
@@ -69,6 +89,9 @@ sealed interface MoonlightPhase {
     data object Ended : MoonlightPhase
 }
 
+// Sticky: a failure is the last thing the host said, and it has to survive the re-probe
+// that follows so the user can still read why the attempt stopped. HostFull is the one
+// exception, re-derived from the live pad count every time.
 sealed interface MoonlightFailure {
     data object HostFull : MoonlightFailure
 
@@ -83,6 +106,9 @@ sealed interface MoonlightFailure {
     data object SetupFailed : MoonlightFailure
 }
 
+// Everything known about the chosen host at one moment. Defaulted throughout because a
+// screen opens before any of it has been answered, and CHECKING is the honest starting
+// point: trust here is remembered locally and only ever confirmed by asking.
 data class MoonlightSessionInput(
     val trust: MoonlightTrustState = MoonlightTrustState.CHECKING,
     val pairing: MoonlightPairingUi? = null,
@@ -92,6 +118,9 @@ data class MoonlightSessionInput(
     val selectedAppId: String? = null,
 )
 
+// The render contract: one state at a time, flat rather than nested, so each projection
+// below is a single exhaustive `when` and no combination can be reached that nobody wrote
+// a string for.
 sealed interface MoonlightSessionUi {
     data object Checking : MoonlightSessionUi
 
@@ -149,9 +178,16 @@ sealed interface MoonlightSessionUi {
     data object EndedByHost : MoonlightSessionUi
 }
 
+// Precedence: pairing > trust > apps > joining > failure > live.
+//
 // The pairing flow is checked before the trust word it supersedes: a probe that
 // answered "not paired" is exactly why a PIN is on screen, so reading the probe
-// first would make the PIN state unreachable.
+// first would make the PIN state unreachable. Joining outranks failure so a fresh
+// attempt is not buried under the previous one's message, and failure outranks live
+// so a host that refused mid-session says so instead of showing a stream that is no
+// longer there. The trailing Checking is not a state anything produces: the apps,
+// joining and live legs cover every phase between them, and it is there to keep the
+// chain total.
 fun moonlightSessionUi(input: MoonlightSessionInput): MoonlightSessionUi =
     pairingUi(input.pairing)
         ?: trustUi(input.trust)
@@ -168,6 +204,10 @@ private fun pairingUi(pairing: MoonlightPairingUi?): MoonlightSessionUi? =
         null -> null
     }
 
+// PAIRED is the only word that falls through, because it is the only one that leaves
+// nothing for the user to do. The rest are walls, and there is no live link to consult
+// behind them: pairing is one-time trust with no liveness in either direction, so it is
+// remembered locally and verified lazily when we ask, never polled.
 private fun trustUi(trust: MoonlightTrustState): MoonlightSessionUi? =
     when (trust) {
         MoonlightTrustState.CHECKING -> MoonlightSessionUi.Checking
@@ -179,6 +219,9 @@ private fun trustUi(trust: MoonlightTrustState): MoonlightSessionUi? =
         MoonlightTrustState.PAIRED -> null
     }
 
+// The app is a question only the session's creator gets asked. It is settled once per
+// host, not per binding, so as soon as a session exists or an attempt has failed the
+// picker would be offering a choice that is no longer there.
 private fun appsUi(input: MoonlightSessionInput): MoonlightSessionUi? {
     if (input.phase != MoonlightPhase.Idle || input.failure != null) return null
     return when (val apps = input.apps) {
@@ -269,6 +312,9 @@ fun MoonlightSessionUi.bodyRes(): Int =
         MoonlightSessionUi.EndedByHost -> R.string.ml_ended_body
     }
 
+// Format arguments travel with the state that carries them, so a string that grows a
+// placeholder cannot quietly be handed the wrong one. A 0 resource means no line at all
+// rather than an empty one, so the view hides the row instead of leaving a gap.
 @StringRes
 fun MoonlightSessionUi.noteRes(): Int =
     when {
@@ -292,6 +338,9 @@ fun MoonlightSessionUi.bodyArgs(hostLabel: String): List<Any> =
         else -> listOf(hostLabel)
     }
 
+// An empty list is a decision, not a gap: NewSession's action is the app row itself,
+// Joining is transient, and the two loading states have nothing to offer until the
+// answer arrives.
 fun MoonlightSessionUi.actions(): List<MoonlightAction> =
     when (this) {
         MoonlightSessionUi.Checking, MoonlightSessionUi.AppsLoading -> emptyList()
@@ -328,6 +377,10 @@ fun MoonlightSessionUi.tone(): MoonlightTone =
 val MoonlightSessionUi.showsSpinner: Boolean
     get() = this is MoonlightSessionUi.Checking || this is MoonlightSessionUi.PairingPin || this is MoonlightSessionUi.AppsLoading
 
+// The only state that stops the binding being saved. Everything else is recoverable
+// afterwards and a binding is a durable intent, so it may be applied against a host that
+// is unpaired, unreachable, or asleep. Four controllers is a protocol ceiling instead:
+// there is no fifth number to hand out.
 val MoonlightSessionUi.blocksApply: Boolean
     get() = this is MoonlightSessionUi.HostFull
 
@@ -362,6 +415,10 @@ fun MoonlightTone.colorRes(): Int =
         MoonlightTone.SUCCESS -> R.color.colorSuccess
     }
 
+// Seven states, three words. Anything outstanding or unanswered reads as remembered,
+// because a stored record with no fresh answer is precisely what we hold; only a
+// completed mutual-TLS call earns "paired", and only a host that answered and said no
+// earns "not paired".
 @StringRes
 fun MoonlightTrustState.chipTextRes(): Int =
     when (this) {

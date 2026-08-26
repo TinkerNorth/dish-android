@@ -41,6 +41,9 @@ internal fun Char.isHexDigit(): Boolean = this in '0'..'9' || this in 'a'..'f' |
 
 private val HEX_DIGITS = "0123456789abcdef".toCharArray()
 
+// The inverse of hexToBytes. Moonlight pairing carries every binary field as hex in the
+// query string (salt, certificate, challenge, secret), and lowercase keeps the crypto and
+// pairing fixtures directly comparable to what goes out.
 fun bytesToHex(bytes: ByteArray): String {
     val out = CharArray(bytes.size * 2)
     for (i in bytes.indices) {
