@@ -56,8 +56,11 @@ sealed class MoonlightConnectionEvent {
  * the same shape (a connections map, a discovered list, an events flow) so the
  * composer and coordinator treat both paths uniformly.
  *
- * The end-to-end launch/stream flow has not been exercised against a live host
- * in this change (see the PR's known gaps); the protocol pieces it composes are
+ * The launch/stream flow has now run against a live Sunshine host as far as the
+ * control channel: /launch, the RTSP handshake, the ENet connect and a gamepad
+ * arrival all land, and the host reports the pad. What it does not yet survive
+ * is the host's media-stream ping timeout, which ends the session about ten
+ * seconds later (see the PR's known gaps). The protocol pieces it composes are
  * unit-tested byte-for-byte against Wolf's vectors.
  */
 @Singleton
@@ -273,20 +276,28 @@ class MoonlightConnectionManager
                 MoonlightUrls.launch(host.address, host.httpsPort, deviceId, appId, bytesToHex(rikey), rikeyId, LAUNCH_MODE)
             val launchReply = gateway.getHttps(launchUrl, host.id)
             val rtspPort = parseRtspPort(launchReply.body)
+            Log.i(TAG, "launch $appId on ${host.address}: status ${launchReply.status}, RTSP port $rtspPort")
             if (!launchReply.ok || rtspPort == null) {
+                Log.w(TAG, "launch refused by ${host.address}: ${launchReply.body.take(BODY_LOG_CHARS)}")
                 conn.markDisconnected()
                 _events.emit(MoonlightConnectionEvent.Error("Couldn't start a session on ${host.name}."))
                 return
             }
             val rtsp = MoonlightRtspClient(host.address, rtspPort).handshake(LAUNCH_WIDTH, LAUNCH_HEIGHT, LAUNCH_FPS)
             if (rtsp == null) {
+                // MoonlightRtspClient has already said which step failed and how.
+                Log.w(TAG, "RTSP setup failed on ${host.address}:$rtspPort")
                 conn.markDisconnected()
                 _events.emit(MoonlightConnectionEvent.Error("Stream setup failed on ${host.name}."))
                 return
             }
-            val transport = runCatching { UdpControlTransport(host.address, rtsp.controlPort) }.getOrNull()
+            val transport =
+                runCatching { UdpControlTransport(host.address, rtsp.controlPort) }
+                    .onFailure { Log.w(TAG, "no control socket to ${host.address}:${rtsp.controlPort}: ${it.message}") }
+                    .getOrNull()
             if (transport == null) {
                 conn.markDisconnected()
+                _events.emit(MoonlightConnectionEvent.Error("Control channel did not connect on ${host.name}."))
                 return
             }
             val session =
@@ -294,10 +305,12 @@ class MoonlightConnectionManager
                     conn.dispatchFeedback(event)
                 }
             if (!session.connect()) {
+                Log.w(TAG, "control channel refused on ${host.address}:${rtsp.controlPort}")
                 conn.markDisconnected()
                 _events.emit(MoonlightConnectionEvent.Error("Control channel did not connect on ${host.name}."))
                 return
             }
+            Log.i(TAG, "live on ${host.address}, control ${rtsp.controlPort}, emulated type $emulatedType")
             conn.markLive(
                 session,
                 emulatedType,
@@ -379,5 +392,6 @@ class MoonlightConnectionManager
             const val LAUNCH_WIDTH = 1280
             const val LAUNCH_HEIGHT = 720
             const val LAUNCH_FPS = 30
+            const val BODY_LOG_CHARS = 256
         }
     }

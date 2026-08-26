@@ -62,6 +62,36 @@ object MoonlightRtsp {
             val digits = transport.substring(start + marker.length).takeWhile { it.isDigit() }
             return digits.toIntOrNull()
         }
+
+        /**
+         * The ENet connect token from the control SETUP reply (rtsp.adoc setup:
+         * X-SS-Connect-Data), as the 32 bits [enet.EnetClient] puts on the wire.
+         *
+         * READ WIDE, THEN NARROW. The token is unsigned 32-bit and a real host's
+         * routinely sits above Int.MAX_VALUE: 4270471497 came off a live Sunshine
+         * host. Parsing it straight into an Int fails for exactly those values
+         * and, defaulted, handed the control stream a token of 0.
+         */
+        fun enetConnectData(): Int? =
+            options[CONNECT_DATA]
+                ?.trim()
+                ?.toLongOrNull()
+                ?.toInt()
+
+        /**
+         * The media-stream ping payload from an audio or video SETUP reply
+         * (rtsp.adoc setup: X-SS-Ping-Payload), hex.
+         *
+         * The host will not wait for media it has not heard from: unless these
+         * bytes reach the ports those replies named, it logs "Initial Ping
+         * Timeout" and ends the session seconds after PLAY, taking the control
+         * channel with it. It is minted per session, so it cannot be carried
+         * over from an earlier launch.
+         */
+        fun pingPayload(): String? =
+            options[PING_PAYLOAD]
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
     }
 
     fun options(
@@ -152,23 +182,73 @@ object MoonlightRtsp {
         return Response(code, message, cseq, options, payload)
     }
 
-    // A minimal SDP-ish config that advertises the lowest video/audio settings.
-    // The host negotiates these; the dish never decodes the resulting streams.
-    fun minimalAnnounceSdp(
+    /**
+     * The ANNOUNCE session description: the lowest video/audio settings the
+     * protocol will express, since the dish negotiates the streams and then
+     * discards their payloads without decoding anything.
+     *
+     * IT HAS TO BE THE WHOLE SET. A host builds its stream configuration by
+     * looking each of these attributes up by name, and a lookup that misses is
+     * a fatal one: measured against a live Sunshine host, an ANNOUNCE carrying
+     * only the seven attributes the dish itself cares about is answered
+     * `400 BAD REQUEST`, while the same handshake carrying this set is answered
+     * `200 OK`, with either line ending. Nothing here is decoration, and an
+     * attribute dropped as unused is a host that stops talking to us.
+     */
+    @Suppress("LongMethod") // one attribute per line; the list is the point
+    fun announceSdp(
         width: Int,
         height: Int,
         fps: Int,
     ): String =
-        buildString {
-            append("v=0").append(CRLF)
-            append("a=x-nv-video[0].clientViewportWd:").append(width).append(CRLF)
-            append("a=x-nv-video[0].clientViewportHt:").append(height).append(CRLF)
-            append("a=x-nv-video[0].maxFPS:").append(fps).append(CRLF)
-            append("a=x-nv-video[0].packetSize:1024").append(CRLF)
-            append("a=x-nv-vqos[0].bitStreamFormat:0").append(CRLF)
-            append("a=x-nv-audio.surround.numChannels:2").append(CRLF)
-            append("t=0 0").append(CRLF)
-        }
+        listOf(
+            "v=0",
+            "o=android 0 14 IN IPv4 0.0.0.0",
+            "s=NVIDIA Streaming Client",
+            "a=x-nv-video[0].clientViewportWd:$width",
+            "a=x-nv-video[0].clientViewportHt:$height",
+            "a=x-nv-video[0].maxFPS:$fps",
+            "a=x-nv-video[0].packetSize:1024",
+            "a=x-nv-video[0].rateControlMode:4",
+            "a=x-nv-video[0].timeoutLengthMs:7000",
+            "a=x-nv-video[0].framesWithInvalidRefThreshold:0",
+            "a=x-nv-video[0].refPicInvalidation:0",
+            "a=x-nv-video[0].encoderCscMode:0",
+            "a=x-nv-video[0].dynamicRangeMode:0",
+            "a=x-nv-video[0].maxNumReferenceFrames:1",
+            "a=x-nv-video[0].videoEncoderSlicesPerFrame:1",
+            "a=x-nv-video[0].clientRefreshRateX100:${fps * FPS_HUNDREDTHS}",
+            "a=x-nv-vqos[0].bitStreamFormat:0",
+            "a=x-nv-vqos[0].bw.minimumBitrateKbps:$MIN_BITRATE_KBPS",
+            "a=x-nv-vqos[0].bw.maximumBitrateKbps:$MIN_BITRATE_KBPS",
+            "a=x-nv-vqos[0].fec.enable:1",
+            "a=x-nv-vqos[0].fec.minRequiredFecPackets:2",
+            "a=x-nv-vqos[0].fec.repairPercent:20",
+            "a=x-nv-vqos[0].drc.enable:0",
+            "a=x-nv-vqos[0].videoQualityScoreUpdateTime:5000",
+            "a=x-nv-vqos[0].qosTrafficType:5",
+            "a=x-nv-aqos.qosTrafficType:4",
+            "a=x-nv-aqos.packetDuration:5",
+            "a=x-nv-audio.surround.numChannels:2",
+            "a=x-nv-audio.surround.channelMask:3",
+            "a=x-nv-audio.surround.enable:0",
+            "a=x-nv-audio.surround.AudioQuality:0",
+            "a=x-nv-general.useReliableUdp:13",
+            "a=x-nv-general.featureFlags:167",
+            "a=x-ml-general.featureFlags:3",
+            "a=x-ss-general.encryptionEnabled:0",
+            "t=0 0",
+        ).joinToString("") { it + CRLF }
+
+    const val CONNECT_DATA = "X-SS-Connect-Data"
+    const val PING_PAYLOAD = "X-SS-Ping-Payload"
 
     private const val CLIENT_VERSION = "14"
+
+    // clientRefreshRateX100 is hundredths of a frame per second.
+    private const val FPS_HUNDREDTHS = 100
+
+    // The floor the protocol lets us ask for: no payload is ever decoded, so
+    // the only thing bitrate buys here is host-side encoder work we throw away.
+    private const val MIN_BITRATE_KBPS = 500
 }
