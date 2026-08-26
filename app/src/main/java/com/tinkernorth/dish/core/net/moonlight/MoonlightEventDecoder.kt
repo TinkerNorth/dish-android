@@ -47,6 +47,14 @@ sealed interface MoonlightEvent {
         val blue: Int,
     ) : MoonlightEvent
 
+    /**
+     * TERMINATION 0x0100 {reason u32 BE}: the host is ending the session. Nothing
+     * is recoverable after it; a new session has to be launched.
+     */
+    data class Termination(
+        val reason: Int,
+    ) : MoonlightEvent
+
     /** A recognized control type this path does not act on (e.g. PERIODIC_PING echo). */
     data class Unknown(
         val type: Int,
@@ -73,6 +81,7 @@ object MoonlightEventDecoder {
             MoonlightControlProtocol.EVENT_RUMBLE_TRIGGERS -> decodeTriggers(buf)
             MoonlightControlProtocol.EVENT_MOTION -> decodeMotion(buf)
             MoonlightControlProtocol.EVENT_RGB_LED -> decodeLed(buf)
+            MoonlightControlProtocol.CTRL_TERMINATION -> decodeTermination(buf)
             else -> MoonlightEvent.Unknown(type)
         }
     }
@@ -111,10 +120,17 @@ object MoonlightEventDecoder {
         return MoonlightEvent.RgbLed(ctrl, r, g, b)
     }
 
+    // The reason is the one big-endian field in this family (Wolf control.hpp).
+    private fun decodeTermination(buf: ByteBuffer): MoonlightEvent? {
+        if (buf.remaining() < TERMINATION_BODY) return null
+        return MoonlightEvent.Termination(buf.order(ByteOrder.BIG_ENDIAN).int)
+    }
+
     private fun u16(buf: ByteBuffer): Int = buf.short.toInt() and 0xFFFF
 
     private const val RUMBLE_BODY = 10
     private const val TRIGGERS_BODY = 6
     private const val MOTION_BODY = 5
     private const val LED_BODY = 5
+    private const val TERMINATION_BODY = 4
 }

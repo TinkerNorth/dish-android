@@ -7,10 +7,13 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.DiscoveredServer
+import com.tinkernorth.dish.core.net.moonlight.RememberedMoonlight
 import com.tinkernorth.dish.source.connection.ConnectIntent
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -34,6 +37,7 @@ import org.junit.Test
 class SetupConnectionViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private lateinit var satellite: SatelliteConnectionManager
+    private lateinit var moonlight: MoonlightConnectionManager
     private lateinit var hub: ConnectionCoordinator
     private lateinit var vm: SetupConnectionViewModel
 
@@ -42,6 +46,8 @@ class SetupConnectionViewModelTest {
     private val summaries = MutableStateFlow<List<ConnectionSummary>>(emptyList())
     private val stale = MutableStateFlow<Set<String>>(emptySet())
     private val scanning = MutableStateFlow(false)
+    private val moonlightScanning = MutableStateFlow(false)
+    private val rememberedMoonlight = MutableStateFlow<List<RememberedMoonlight>>(emptyList())
     private val events = MutableSharedFlow<ConnectionEvent>(extraBufferCapacity = 8)
 
     private val server = DiscoveredServer(name = "Living Room", ip = "10.0.0.5", machineId = "abc123")
@@ -51,6 +57,7 @@ class SetupConnectionViewModelTest {
     fun setUp() {
         Dispatchers.setMain(dispatcher)
         satellite = mockk(relaxed = true)
+        moonlight = mockk(relaxed = true)
         hub = mockk(relaxed = true)
         every { satellite.discoveredServers } returns discovered
         every { satellite.connections } returns connections
@@ -58,7 +65,9 @@ class SetupConnectionViewModelTest {
         every { satellite.isScanning } returns scanning
         every { satellite.events } returns events
         every { hub.connections } returns summaries
-        vm = SetupConnectionViewModel(satellite, hub)
+        every { moonlight.remembered } returns rememberedMoonlight
+        every { moonlight.isScanning } returns moonlightScanning
+        vm = SetupConnectionViewModel(satellite, moonlight, hub)
     }
 
     @After
@@ -72,6 +81,59 @@ class SetupConnectionViewModelTest {
             dispatcher.scheduler.runCurrent()
             assertEquals(SetupConnectionViewModel.Step.PATH, vm.state.value.step)
             assertFalse(vm.state.value.scanning)
+        }
+
+    @Test
+    fun `choosing the Moonlight path lists hosts and starts its own discovery`() =
+        runTest(dispatcher) {
+            vm.chooseMoonlight()
+            dispatcher.scheduler.runCurrent()
+            assertEquals(SetupConnectionViewModel.Step.MOONLIGHT, vm.state.value.step)
+            verify { moonlight.startDiscovery() }
+        }
+
+    // A Moonlight host is picked, not connected: pairing is remembered trust and the
+    // session belongs to the binding, so the pick hands straight off to configure.
+    @Test
+    fun `tapping a Moonlight host hands off to configure without pairing first`() =
+        runTest(dispatcher) {
+            summaries.value = listOf(moonlightSummary())
+            dispatcher.scheduler.runCurrent()
+            val seen = collectEvents()
+
+            vm.onMoonlightHostTapped(MOONLIGHT_ID)
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(listOf<SetupConnectionViewModel.Event>(SetupConnectionViewModel.Event.Connected(MOONLIGHT_ID)), seen)
+        }
+
+    @Test
+    fun `the Moonlight list carries the trust word, remembered hosts included`() =
+        runTest(dispatcher) {
+            summaries.value = listOf(moonlightSummary())
+            dispatcher.scheduler.runCurrent()
+            assertEquals(
+                listOf(MoonlightTrustState.NOT_PAIRED),
+                vm.state.value.moonlightHosts
+                    .map { it.trust },
+            )
+
+            rememberedMoonlight.value = listOf(RememberedMoonlight(id = MOONLIGHT_ID, name = "PC", address = "10.0.0.5"))
+            dispatcher.scheduler.runCurrent()
+            assertEquals(
+                listOf(MoonlightTrustState.REMEMBERED),
+                vm.state.value.moonlightHosts
+                    .map { it.trust },
+            )
+        }
+
+    @Test
+    fun `back from the Moonlight list rewinds to the path pick`() =
+        runTest(dispatcher) {
+            vm.chooseMoonlight()
+            dispatcher.scheduler.runCurrent()
+            assertTrue(vm.back())
+            assertEquals(SetupConnectionViewModel.Step.PATH, vm.state.value.step)
         }
 
     @Test
@@ -221,10 +283,24 @@ class SetupConnectionViewModelTest {
             boundSlotIds = emptyList(),
         )
 
+    private fun moonlightSummary(link: LinkState = LinkState.Saved) =
+        ConnectionSummary(
+            id = MOONLIGHT_ID,
+            kind = ConnectionKind.MOONLIGHT,
+            label = "PC",
+            detail = "",
+            live = link,
+            boundSlotIds = emptyList(),
+        )
+
     private fun presentHost(link: LinkState) {
         discovered.value = listOf(server)
         summaries.value = listOf(summary(link))
         dispatcher.scheduler.runCurrent()
+    }
+
+    private companion object {
+        const val MOONLIGHT_ID = "moonlight:uid:a"
     }
 
     private fun kotlinx.coroutines.test.TestScope.collectEvents(): List<SetupConnectionViewModel.Event> {

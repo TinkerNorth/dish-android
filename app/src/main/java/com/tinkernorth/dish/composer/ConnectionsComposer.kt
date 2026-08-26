@@ -337,6 +337,8 @@ internal data class MoonlightWorld(
 )
 
 // Maps the Moonlight session FSM to the shared UI LinkState (pulled out for testability).
+// A dropped or host-ended session is not a live link and never a degraded one: nothing is
+// routing, so it reads the same as no session at all and the binding screen says which it was.
 internal fun moonlightLinkState(
     state: MoonlightSessionState?,
     discovered: Boolean,
@@ -344,5 +346,9 @@ internal fun moonlightLinkState(
     when (state) {
         MoonlightSessionState.Live -> LinkState.Connected
         MoonlightSessionState.Launching -> LinkState.Connecting
-        MoonlightSessionState.Idle, null -> if (discovered) LinkState.Ready else LinkState.Saved
+        MoonlightSessionState.Idle,
+        MoonlightSessionState.Dropped,
+        MoonlightSessionState.Ended,
+        null,
+        -> if (discovered) LinkState.Ready else LinkState.Saved
     }

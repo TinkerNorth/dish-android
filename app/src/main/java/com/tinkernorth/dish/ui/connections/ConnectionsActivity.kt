@@ -181,23 +181,16 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
 
     private val moonlightRowListener =
         object : MoonlightRowListener {
-            override fun onConnectKnown(summary: ConnectionSummary) {
-                val host =
-                    moonlight.get(summary.id)?.host?.value
-                        ?: moonlight.remembered.value
-                            .firstOrNull { it.id == summary.id }
-                            ?.toHost()
-                        ?: moonlight.discovered.value.firstOrNull { it.id == summary.id }
-                        ?: return
-                startMoonlightConnect(host)
+            override fun onPairKnown(summary: ConnectionSummary) {
+                hostFor(summary.id)?.let(::startMoonlightPairing)
             }
 
-            override fun onConnectDiscovered(host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost) {
-                startMoonlightConnect(host)
+            override fun onPairDiscovered(host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost) {
+                startMoonlightPairing(host)
             }
 
-            override fun onDisconnect(id: String) {
-                moonlight.disconnect(id)
+            override fun onQuitSession(id: String) {
+                hostFor(id)?.let(moonlight::quitHostApp)
             }
 
             override fun onForget(id: String) {
@@ -308,8 +301,14 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 showMoonlightPinDialog(ev.host, ev.pin)
             is com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent.Paired ->
                 moonlightPinDialog?.dismiss()
-            is com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent.AppAlreadyRunning ->
-                showMoonlightBusyDialog(ev.host)
+            is com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent.PairingFailed -> {
+                moonlightPinDialog?.dismiss()
+                notifications.error(
+                    glyph = R.drawable.ic_pc_monitor,
+                    title = getString(R.string.ml_pair_failed_title, ev.host.name),
+                    body = getString(R.string.ml_pair_failed_body),
+                )
+            }
             is com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent.Notice ->
                 notifications.info(
                     glyph = R.drawable.ic_pc_monitor,
@@ -325,21 +324,10 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                     body = ev.message,
                 )
             }
+            // Every remaining event belongs to a session, and a session belongs to a
+            // binding; the binding screen renders them where the user can act on them.
+            else -> Unit
         }
-    }
-
-    /**
-     * The host is holding an app it will not hand over. Offer the protocol's own
-     * way out rather than a dead end: /cancel ends it and the next attempt works.
-     */
-    private fun showMoonlightBusyDialog(host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost) {
-        moonlightPinDialog?.dismiss()
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.moonlight_busy_title)
-            .setMessage(getString(R.string.moonlight_busy_message, host.name))
-            .setPositiveButton(R.string.moonlight_busy_close) { _, _ -> moonlight.quitHostApp(host) }
-            .setNegativeButton(R.string.action_cancel, null)
-            .show()
     }
 
     private fun observeSystemStateBanners() {
@@ -838,79 +826,26 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
 
     // ── Moonlight host flow ─────────────────────────────────────────────────
 
-    // Tap Connect: pick the emulated device, pair (showing the PIN) if needed,
-    // then pick the app and launch. Each step remembers the user's last choice.
-    private fun startMoonlightConnect(host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost) {
-        val types =
-            intArrayOf(
-                com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType.AUTO,
-                com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType.XBOX,
-                com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType.PLAYSTATION,
-                com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType.NINTENDO,
-            )
-        val labels =
-            arrayOf(
-                getString(R.string.moonlight_emulated_auto),
-                getString(R.string.picker_type_xbox),
-                getString(R.string.picker_type_playstation),
-                getString(R.string.moonlight_emulated_nintendo),
-            )
-        val remembered = moonlight.rememberedEmulatedType(host.id)
-        val checked = types.indexOf(remembered).coerceAtLeast(0)
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.moonlight_emulated_title)
-            .setSingleChoiceItems(labels, checked) { dialog, which ->
-                dialog.dismiss()
-                pairThenPickApp(host, types[which])
-            }.setNegativeButton(R.string.action_cancel, null)
-            .show()
+    // The hosts screen owns trust and nothing else: pairing, forgetting, and the
+    // escape hatch that closes an app the host is holding. The controller type,
+    // the app, and the session itself belong to the binding.
+    private fun startMoonlightPairing(host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost) {
+        lifecycleScope.launch { moonlight.pairHost(host) }
     }
 
-    private fun pairThenPickApp(
-        host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost,
-        emulatedType: Int,
-    ) {
-        lifecycleScope.launch {
-            // pairHost returns immediately when already paired; otherwise it emits the PIN
-            // (shown by onMoonlightEvent) and completes when the host accepts it.
-            if (!moonlight.pairHost(host)) return@launch
-            moonlightPinDialog?.dismiss()
-            val apps = moonlight.fetchApps(host)
-            if (apps.isEmpty()) {
-                notifications.error(
-                    glyph = R.drawable.ic_pc_monitor,
-                    title = host.name,
-                    body = getString(R.string.moonlight_no_apps),
-                )
-                return@launch
-            }
-            showMoonlightAppPicker(host, apps, emulatedType)
-        }
-    }
-
-    private fun showMoonlightAppPicker(
-        host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost,
-        apps: List<com.tinkernorth.dish.core.net.moonlight.MoonlightXml.App>,
-        emulatedType: Int,
-    ) {
-        val labels = apps.map { it.title.ifEmpty { it.id } }.toTypedArray()
-        val lastAppId = moonlight.rememberedAppId(host.id)
-        val checked = apps.indexOfFirst { it.id == lastAppId }.coerceAtLeast(0)
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.moonlight_app_title)
-            .setSingleChoiceItems(labels, checked) { dialog, which ->
-                dialog.dismiss()
-                moonlight.launch(host, apps[which].id, emulatedType)
-            }.setNegativeButton(R.string.action_cancel, null)
-            .show()
-    }
+    private fun hostFor(id: String): com.tinkernorth.dish.core.net.moonlight.MoonlightHost? =
+        moonlight.get(id)?.host?.value
+            ?: moonlight.remembered.value
+                .firstOrNull { it.id == id }
+                ?.toHost()
+            ?: moonlight.discovered.value.firstOrNull { it.id == id }
 
     private fun showMoonlightPinDialog(
         host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost,
         pin: String,
     ) {
         moonlightPinDialog?.dismiss()
-        val message = getString(R.string.moonlight_pin_message) + "\n\n" + pin + "\n\n" + getString(R.string.moonlight_pin_waiting)
+        val message = getString(R.string.ml_pair_pin_body, pin, host.name) + "\n\n" + getString(R.string.ml_pair_waiting)
         moonlightPinDialog =
             MaterialAlertDialogBuilder(this)
                 .setTitle(getString(R.string.moonlight_pin_title, host.name))

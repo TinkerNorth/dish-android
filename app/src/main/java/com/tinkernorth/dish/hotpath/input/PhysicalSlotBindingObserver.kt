@@ -42,6 +42,7 @@ sealed interface BindOp {
     data class BindMoonlight(
         val deviceId: Int,
         val connectionId: String,
+        val controllerNumber: Int,
     ) : BindOp
 
     data class Unbind(
@@ -74,7 +75,8 @@ data class SatelliteSlotSnapshot(
 // registry no longer knows: a device that left while the observer was stopped is in neither
 // `present` nor `lastBound`, and without the sweep its slot would be re-declared to the satellite
 // on every reconnect forever. Non-numeric slot ids (the on-screen controller) are never swept.
-@Suppress("LongParameterList") // one flat snapshot argument per connection source, mirrored by the tests
+// one flat snapshot argument per connection source, mirrored by the tests, and one branch per kind
+@Suppress("LongParameterList", "CyclomaticComplexMethod")
 fun reconcileSlots(
     present: Set<Int>,
     lastBound: Set<Int>,
@@ -83,6 +85,7 @@ fun reconcileSlots(
     perConnectionSlotInfo: Map<String, SatelliteSlotSnapshot>,
     btConnectedIds: Set<String>,
     moonlightLiveIds: Set<String> = emptySet(),
+    moonlightPadNumbers: Map<String, Int> = emptyMap(),
 ): List<BindOp> {
     val ops = mutableListOf<BindOp>()
     val staleBound = bindings.keys.mapNotNull { it.toIntOrNull() }.filter { it !in present }
@@ -119,14 +122,18 @@ fun reconcileSlots(
                 } else {
                     ops += BindOp.Unbind(id)
                 }
-            ConnectionKind.MOONLIGHT ->
+            ConnectionKind.MOONLIGHT -> {
                 // Same live re-check discipline as the Bluetooth branch: the summary's Connected is
                 // a composer-snapshot read, so re-check the manager's live session before binding.
-                if (cid in moonlightLiveIds) {
-                    ops += BindOp.BindMoonlight(id, cid)
+                // The pad number comes with it: one session carries four controllers, and a report
+                // that cannot name which one belongs to nobody.
+                val pad = moonlightPadNumbers[slotId]
+                if (cid in moonlightLiveIds && pad != null) {
+                    ops += BindOp.BindMoonlight(id, cid, pad)
                 } else {
                     ops += BindOp.Unbind(id)
                 }
+            }
         }
     }
     return ops
@@ -246,6 +253,16 @@ class PhysicalSlotBindingObserver
                     moonlight.get(it)?.state?.value ==
                         com.tinkernorth.dish.source.connection.moonlight.MoonlightSessionState.Live
                 }
+            val moonlightPadNumbers =
+                moonlightLiveIds
+                    .flatMap { cid ->
+                        moonlight
+                            .get(cid)
+                            ?.pads
+                            ?.value
+                            .orEmpty()
+                            .values
+                    }.associate { it.slotId to it.number }
             val ops =
                 reconcileSlots(
                     present = present,
@@ -255,6 +272,7 @@ class PhysicalSlotBindingObserver
                     perConnectionSlotInfo = slotInfo,
                     btConnectedIds = btConnectedIds,
                     moonlightLiveIds = moonlightLiveIds,
+                    moonlightPadNumbers = moonlightPadNumbers,
                 )
             // A satellite re-bind is not idempotent on the native side: bindPhysicalSlotSatellite
             // re-runs syncSlotBaseline, which resets the device to neutral and publishes it, briefly
@@ -275,7 +293,8 @@ class PhysicalSlotBindingObserver
                 is BindOp.BindSatellite ->
                     SatelliteNative.bindPhysicalSlotSatellite(op.deviceId, op.handle, op.controllerIndex)
                 is BindOp.BindBluetooth -> SatelliteNative.bindPhysicalSlotBluetooth(op.deviceId, op.connectionId)
-                is BindOp.BindMoonlight -> SatelliteNative.bindPhysicalSlotMoonlight(op.deviceId, op.connectionId)
+                is BindOp.BindMoonlight ->
+                    SatelliteNative.bindPhysicalSlotMoonlight(op.deviceId, op.connectionId, op.controllerNumber)
             }
         }
     }

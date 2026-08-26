@@ -4,7 +4,6 @@
 package com.tinkernorth.dish.source.connection.moonlight
 
 import android.util.Log
-import com.tinkernorth.dish.core.net.moonlight.MoonlightControlProtocol
 import com.tinkernorth.dish.core.net.moonlight.MoonlightControlSession
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEvent
@@ -25,6 +24,11 @@ import kotlinx.coroutines.launch
  * control session and forwards the on-screen (and, once bound natively, the
  * physical) controller state to it. The manager owns pairing and launch; this
  * class owns the live-session lifecycle and the hot send path.
+ *
+ * ONE SESSION PER HOST, REFERENCE COUNTED BY THE BINDINGS POINTING AT IT. A
+ * Moonlight session carries up to [MAX_PADS] controllers on one stream, so the
+ * first binding starts (or joins) it and settles the app, later bindings only
+ * announce their own pad, and the last unbind is what tears it down.
  */
 class MoonlightConnection(
     val id: String,
@@ -38,16 +42,24 @@ class MoonlightConnection(
     private val _state = MutableStateFlow(MoonlightSessionState.Idle)
     val state: StateFlow<MoonlightSessionState> = _state.asStateFlow()
 
+    private val _pads = MutableStateFlow<Map<String, MoonlightPad>>(emptyMap())
+    val pads: StateFlow<Map<String, MoonlightPad>> = _pads.asStateFlow()
+
     @Volatile private var session: MoonlightControlSession? = null
     private var pumpJob: Job? = null
 
     @Volatile private var pinger: UdpMediaPinger? = null
     private var pingJob: Job? = null
 
-    // The emulated type chosen for this session and whether the arrival was sent.
-    @Volatile private var emulatedType: Int = MoonlightEmulatedType.AUTO
+    private val padLock = Any()
 
-    @Volatile private var arrivalSent = false
+    // The app the session actually settled on, so a later binding can say what it
+    // is joining instead of guessing from the remembered pick.
+    @Volatile var sessionAppId: String? = null
+        private set
+
+    @Volatile var sessionAppName: String? = null
+        private set
 
     // Inbound feedback (rumble/LED/motion request) surfaced to the same plumbing
     // the satellite path uses; the manager wires the actual sinks.
@@ -61,6 +73,58 @@ class MoonlightConnection(
         if (_state.value == MoonlightSessionState.Live) return
         _state.value = MoonlightSessionState.Launching
     }
+
+    /**
+     * Take the lowest free controller number in `0..3` for [slotId], or null when
+     * the host already carries its four. A slot that already holds one keeps it:
+     * the host skips a CONTROLLER_ARRIVAL for a number it has seen, so a live
+     * index is never handed out twice.
+     */
+    fun acquirePad(
+        slotId: String,
+        emulatedType: Int,
+        capabilities: Int,
+        supportedButtons: Int,
+    ): MoonlightPad? {
+        val pad =
+            synchronized(padLock) {
+                _pads.value[slotId]?.let { return@synchronized it }
+                val taken = _pads.value.values.mapTo(mutableSetOf()) { it.number }
+                val free = (0 until MAX_PADS).firstOrNull { it !in taken } ?: return@synchronized null
+                val fresh =
+                    MoonlightPad(
+                        slotId = slotId,
+                        number = free,
+                        emulatedType = emulatedType,
+                        capabilities = capabilities,
+                        supportedButtons = supportedButtons,
+                    )
+                _pads.value = _pads.value + (slotId to fresh)
+                fresh
+            } ?: return null
+        announce(pad)
+        return pad
+    }
+
+    /** Drop [slotId] from the session and report how many pads remain. */
+    fun releasePad(slotId: String): Int {
+        val remaining =
+            synchronized(padLock) {
+                if (_pads.value[slotId] == null) return@synchronized _pads.value.size
+                _pads.value = _pads.value - slotId
+                _pads.value.size
+            }
+        withdraw()
+        return remaining
+    }
+
+    fun padFor(slotId: String): MoonlightPad? = _pads.value[slotId]
+
+    val padCount: Int get() = _pads.value.size
+
+    val hasRoom: Boolean get() = _pads.value.size < MAX_PADS
+
+    fun activeMask(): Int = _pads.value.values.fold(0) { mask, pad -> mask or (1 shl pad.number) }
 
     /**
      * Start pinging the host's media ports. Runs from the moment the stream
@@ -86,20 +150,18 @@ class MoonlightConnection(
     /**
      * Adopt a connected control session and start the receive/ping pump. The
      * pump owns liveness: when the ENet layer drops, the session flips to Closed
-     * and this connection returns to Idle.
+     * and this connection reports the drop rather than a clean idle.
      */
     fun markLive(
         session: MoonlightControlSession,
-        emulatedType: Int,
-        capabilities: Int,
-        supportedButtons: Int,
+        appId: String?,
+        appName: String?,
     ) {
         this.session = session
-        this.emulatedType = MoonlightEmulatedType.resolve(emulatedType)
-        arrivalSent = false
-        session.sendControllerArrival(0, this.emulatedType, capabilities, supportedButtons)
-        arrivalSent = true
+        sessionAppId = appId
+        sessionAppName = appName
         _state.value = MoonlightSessionState.Live
+        _pads.value.values.forEach(::announce)
         pumpJob =
             scope.launch(ioDispatcher) {
                 // A throw in here would strand the session Live with nothing
@@ -112,9 +174,47 @@ class MoonlightConnection(
                 // app it started for us, but a control stream that drops after
                 // going live is as likely to be a blip as a real end, and closing
                 // somebody's game out from under them is worse than the tidying is
-                // worth. The connections screen offers the cancel explicitly.
-                if (_state.value == MoonlightSessionState.Live) markDisconnected()
+                // worth. The binding screen offers the cancel explicitly.
+                if (_state.value == MoonlightSessionState.Live) markDropped()
             }
+    }
+
+    private fun announce(pad: MoonlightPad) {
+        val live = session ?: return
+        live.sendControllerArrival(pad.number, pad.emulatedType, pad.capabilities, pad.supportedButtons)
+        live.sendControllerState(
+            controllerNumber = pad.number,
+            activeMask = activeMask(),
+            buttons = 0,
+            leftTrigger = 0,
+            rightTrigger = 0,
+            leftStickX = 0,
+            leftStickY = 0,
+            rightStickX = 0,
+            rightStickY = 0,
+        )
+    }
+
+    // Clearing the pad's bit from the active mask is how the host is told to
+    // unplug it; the number is only free once that has gone out.
+    private fun withdraw() {
+        val live = session ?: return
+        val mask = activeMask()
+        val survivor =
+            _pads.value.values
+                .firstOrNull()
+                ?.number ?: 0
+        live.sendControllerState(
+            controllerNumber = survivor,
+            activeMask = mask,
+            buttons = 0,
+            leftTrigger = 0,
+            rightTrigger = 0,
+            leftStickX = 0,
+            leftStickY = 0,
+            rightStickX = 0,
+            rightStickY = 0,
+        )
     }
 
     private suspend fun pumpUntilClosed(session: MoonlightControlSession) {
@@ -123,9 +223,10 @@ class MoonlightConnection(
         }
     }
 
-    /** HOT PATH: forward the current controller state to the live session. */
+    /** HOT PATH: forward one pad's controller state to the live session. */
     @Suppress("LongParameterList")
     fun sendControllerState(
+        controllerNumber: Int,
         buttons: Int,
         leftTrigger: Int,
         rightTrigger: Int,
@@ -136,8 +237,8 @@ class MoonlightConnection(
     ) {
         val live = session ?: return
         live.sendControllerState(
-            controllerNumber = 0,
-            activeMask = 0x0001,
+            controllerNumber = controllerNumber,
+            activeMask = activeMask(),
             buttons = buttons and 0xFFFF,
             leftTrigger = leftTrigger,
             rightTrigger = rightTrigger,
@@ -153,6 +254,21 @@ class MoonlightConnection(
     }
 
     fun markDisconnected() {
+        teardown()
+        _state.value = MoonlightSessionState.Idle
+    }
+
+    fun markDropped() {
+        teardown()
+        _state.value = MoonlightSessionState.Dropped
+    }
+
+    fun markEnded() {
+        teardown()
+        _state.value = MoonlightSessionState.Ended
+    }
+
+    private fun teardown() {
         pumpJob?.cancel()
         pumpJob = null
         pingJob?.cancel()
@@ -161,8 +277,6 @@ class MoonlightConnection(
         pinger = null
         session?.let { s -> scope.launch(ioDispatcher) { runCatching { s.stop() } } }
         session = null
-        arrivalSent = false
-        _state.value = MoonlightSessionState.Idle
     }
 
     companion object {
@@ -173,13 +287,22 @@ class MoonlightConnection(
 
         const val ID_PREFIX = MoonlightHost.ID_PREFIX
 
-        // Capabilities the dish's virtual/physical pad advertises to the host:
-        // analog triggers + rumble (Android has no LED/gyro sink for this path yet).
-        const val BASE_CAPABILITIES = MoonlightControlProtocol.CAP_ANALOG_TRIGGERS or MoonlightControlProtocol.CAP_RUMBLE
+        // The controller number is four bits of a 16-bit active mask, but a
+        // Moonlight session carries four pads and no more.
+        const val MAX_PADS = 4
 
-        // XInput-style buttons the pad supports (low 16 bits, shared layout).
         const val SUPPORTED_BUTTONS = 0xFFFF
+
+        val DEFAULT_TYPE = MoonlightEmulatedType.XBOX
     }
 }
 
-enum class MoonlightSessionState { Idle, Launching, Live }
+data class MoonlightPad(
+    val slotId: String,
+    val number: Int,
+    val emulatedType: Int,
+    val capabilities: Int,
+    val supportedButtons: Int,
+)
+
+enum class MoonlightSessionState { Idle, Launching, Live, Dropped, Ended }

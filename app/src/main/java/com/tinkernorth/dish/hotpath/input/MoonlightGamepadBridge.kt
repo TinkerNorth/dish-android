@@ -32,6 +32,7 @@ object MoonlightGamepadBridge {
     @Suppress("LongParameterList") // fixed native upcall signature, mirrors BluetoothGamepadBridge
     fun dispatchReport(
         connectionId: String,
+        controllerNumber: Int,
         wButtons: Int,
         bLT: Int,
         bRT: Int,
@@ -42,6 +43,7 @@ object MoonlightGamepadBridge {
     ) {
         val m = manager ?: return
         m.get(connectionId)?.sendControllerState(
+            controllerNumber = controllerNumber,
             buttons = wButtons,
             leftTrigger = bLT,
             rightTrigger = bRT,

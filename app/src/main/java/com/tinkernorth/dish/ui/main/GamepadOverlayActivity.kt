@@ -320,7 +320,10 @@ class GamepadOverlayActivity :
     // wButtons map straight across; sticks (i16) and triggers (u8) match too.
     private fun sendMoonlightReport(state: GamepadTouchView.GamepadState) {
         val wButtons = hidToXusb(state.buttons, state.hatSwitch)
-        moonlight.get(connectionId)?.sendControllerState(
+        val conn = moonlight.get(connectionId) ?: return
+        val pad = conn.padFor(VIRTUAL_SLOT_ID) ?: return
+        conn.sendControllerState(
+            controllerNumber = pad.number,
             buttons = wButtons,
             leftTrigger = state.leftTrigger,
             rightTrigger = state.rightTrigger,

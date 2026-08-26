@@ -29,6 +29,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -53,6 +55,11 @@ sealed class MoonlightConnectionEvent {
         val host: MoonlightHost,
     ) : MoonlightConnectionEvent()
 
+    /** Pairing ran and the host would not accept the PIN. */
+    data class PairingFailed(
+        val host: MoonlightHost,
+    ) : MoonlightConnectionEvent()
+
     /**
      * The host refused to start an app because one is already running. When
      * [resumable] the dish can take that session over; when it is not, the app
@@ -63,7 +70,67 @@ sealed class MoonlightConnectionEvent {
         val host: MoonlightHost,
         val resumable: Boolean,
     ) : MoonlightConnectionEvent()
+
+    /** The host said it would hand its session back and then would not. */
+    data class RejoinRefused(
+        val host: MoonlightHost,
+    ) : MoonlightConnectionEvent()
+
+    /** The host refused for a reason of its own; [message] is its own wording. */
+    data class LaunchRefused(
+        val host: MoonlightHost,
+        val message: String,
+    ) : MoonlightConnectionEvent()
+
+    /** The app started and the stream did not come up, so it has been cancelled again. */
+    data class SetupFailed(
+        val host: MoonlightHost,
+    ) : MoonlightConnectionEvent()
+
+    /** The host already carries the four controllers a session can hold. */
+    data class HostFull(
+        val host: MoonlightHost,
+    ) : MoonlightConnectionEvent()
+
+    /** The host answered under a different uniqueid, so the old pairing is dead. */
+    data class HostReplaced(
+        val host: MoonlightHost,
+    ) : MoonlightConnectionEvent()
+
+    /** The host ended the session; nothing is recoverable without starting a new one. */
+    data class EndedByHost(
+        val host: MoonlightHost,
+    ) : MoonlightConnectionEvent()
 }
+
+/** What a host's session must do next, pulled out of the converge for testability. */
+internal enum class MoonlightConverge { OPEN, ANNOUNCE, WAIT, RELEASE, CANCEL }
+
+/**
+ * The reference count, as one rule. The first pad on a host opens the stream, later
+ * pads only announce themselves on the one already up, a launch in flight is left
+ * alone, and losing the last pad releases the host, closing the app it started only
+ * when a session actually came up.
+ */
+internal fun moonlightConverge(
+    state: MoonlightSessionState,
+    wantedPads: Int,
+): MoonlightConverge =
+    when {
+        wantedPads == 0 && state == MoonlightSessionState.Live -> MoonlightConverge.CANCEL
+        wantedPads == 0 -> MoonlightConverge.RELEASE
+        state == MoonlightSessionState.Live -> MoonlightConverge.ANNOUNCE
+        state == MoonlightSessionState.Launching -> MoonlightConverge.WAIT
+        else -> MoonlightConverge.OPEN
+    }
+
+/** One binding's claim on a host session: which slot, and what pad to announce for it. */
+data class MoonlightPadRequest(
+    val slotId: String,
+    val emulatedType: Int,
+    val capabilities: Int,
+    val supportedButtons: Int,
+)
 
 /**
  * Orchestrates the Moonlight host path: discovery, PIN pairing, app launch, the
@@ -71,6 +138,11 @@ sealed class MoonlightConnectionEvent {
  * [com.tinkernorth.dish.source.connection.SatelliteConnectionManager]; it holds
  * the same shape (a connections map, a discovered list, an events flow) so the
  * composer and coordinator treat both paths uniformly.
+ *
+ * ONE SESSION PER HOST, OWNED BY THE BINDINGS. [applyDesired] is the whole
+ * lifecycle: the first pad on a host launches (or resumes) and streams, later
+ * pads only announce themselves on the live stream, and the last pad leaving is
+ * what sends /cancel. Nothing else starts or stops a session.
  *
  * The launch/stream flow runs against a live Sunshine host end to end: /launch
  * (or /resume when the host already has our session), the RTSP handshake, the
@@ -99,6 +171,11 @@ class MoonlightConnectionManager
         private val _isScanning = MutableStateFlow(false)
         val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
 
+        private val _sessionHostIds = MutableStateFlow<Set<String>>(emptySet())
+
+        /** Hosts this device is holding a session open for; the foreground service follows it. */
+        val sessionHostIds: StateFlow<Set<String>> = _sessionHostIds.asStateFlow()
+
         private val _events =
             MutableSharedFlow<MoonlightConnectionEvent>(
                 replay = 0,
@@ -110,6 +187,12 @@ class MoonlightConnectionManager
         val remembered: StateFlow<List<RememberedMoonlight>> get() = store.entries
 
         private val deviceId by lazy { getOrCreateUniqueId() }
+
+        // Serialises the whole converge so two emissions cannot both decide they are
+        // the first pad on a host and launch it twice.
+        private val convergeLock = Mutex()
+
+        @Volatile private var desired: Map<String, List<MoonlightPadRequest>> = emptyMap()
 
         fun get(id: String): MoonlightConnection? = _connections.value[id]
 
@@ -161,50 +244,190 @@ class MoonlightConnectionManager
         }
 
         /**
-         * One-tap path: pair (if needed), pick the remembered/first app, and
-         * launch [emulatedType] on [host]. The connections screen drives the
-         * explicit pair/app-pick/type-pick steps via [pairHost], [fetchApps] and
-         * [launch]; this convenience path is kept for a remembered host.
+         * Re-verify what we know about [host] without touching a session. The
+         * plaintext probe answers reachability and PairStatus; the mutual-TLS probe
+         * is the only proof the pairing still stands, and its own currentgame is
+         * the only thing that tells us whether the session on this host is ours.
          */
-        fun connect(
-            host: MoonlightHost,
-            emulatedType: Int,
-        ) {
-            val conn = findOrCreate(host)
-            conn.updateHost(host)
-            conn.markLaunching()
+        suspend fun probe(host: MoonlightHost): MoonlightProbe =
+            withContext(ioDispatcher) {
+                val plain =
+                    gateway
+                        .getHttp(MoonlightUrls.serverInfoHttp(host.address, host.httpPort, deviceId))
+                        .takeIf { it.ok }
+                        ?.let { MoonlightXml.parseServerInfo(it.body) }
+                val storedId = store.get(host.id)?.uniqueId.orEmpty()
+                if (plain == null) {
+                    return@withContext MoonlightProbe(
+                        trust = if (storedId.isEmpty()) MoonlightTrustState.UNREACHABLE else MoonlightTrustState.REMEMBERED,
+                    )
+                }
+                if (storedId.isNotEmpty() && plain.uniqueId.isNotEmpty() && plain.uniqueId != storedId) {
+                    return@withContext MoonlightProbe(trust = MoonlightTrustState.REPLACED)
+                }
+                if (!plain.paired) {
+                    val trust = if (storedId.isEmpty()) MoonlightTrustState.NOT_PAIRED else MoonlightTrustState.TRUST_LOST
+                    return@withContext MoonlightProbe(trust = trust)
+                }
+                val secure = gateway.getHttps(MoonlightUrls.serverInfoHttps(host.address, host.httpsPort, deviceId), host.id)
+                if (!secure.ok) return@withContext MoonlightProbe(trust = MoonlightTrustState.TRUST_LOST)
+                val info = MoonlightXml.parseServerInfo(secure.body)
+                if (info?.paired != true) return@withContext MoonlightProbe(trust = MoonlightTrustState.TRUST_LOST)
+                val apps = runCatching { fetchAppList(host) }.getOrNull()
+                MoonlightProbe(
+                    trust = MoonlightTrustState.PAIRED,
+                    apps = apps.orEmpty(),
+                    appsFetched = apps != null,
+                    appsFailed = apps == null,
+                    ownSession = info.currentGame != 0,
+                    currentAppId = info.currentGame.takeIf { it != 0 }?.toString(),
+                )
+            }
+
+        /**
+         * Converge every host's session on the pads its bindings ask for. The only
+         * entry point into the session lifecycle: a host that gains its first pad is
+         * launched, a host that keeps pads only gains and loses them on the live
+         * stream, and a host that loses its last pad is cancelled.
+         */
+        fun applyDesired(desired: Map<String, List<MoonlightPadRequest>>) {
+            this.desired = desired
+            converge()
+        }
+
+        /**
+         * Re-run the converge against the pads the bindings already asked for. The
+         * retry behind every failed-session action: nothing about the binding changed,
+         * so nothing new is desired, only another attempt at what already is.
+         */
+        fun retrySessions() = converge()
+
+        private fun converge() {
+            val desired = this.desired
             scope.launch(ioDispatcher) {
-                if (!isPaired(host) && !pair(host)) {
-                    conn.markDisconnected()
-                    return@launch
+                convergeLock.withLock {
+                    for ((hostId, pads) in desired) {
+                        if (pads.isEmpty()) continue
+                        runCatching { convergeHost(hostId, pads) }
+                            .onFailure { Log.w(TAG, "converge failed for $hostId: ${it.message}", it) }
+                    }
+                    for (hostId in _connections.value.keys - desired.filterValues { it.isNotEmpty() }.keys) {
+                        runCatching { releaseHost(hostId) }
+                            .onFailure { Log.w(TAG, "release failed for $hostId: ${it.message}", it) }
+                    }
+                    publishSessionHosts()
                 }
-                val appId = store.get(host.id)?.lastAppId?.takeIf { it.isNotEmpty() } ?: defaultAppId(host)
-                if (appId == null) {
-                    conn.markDisconnected()
-                    _events.emit(MoonlightConnectionEvent.Error("No apps available on ${host.name}."))
-                    return@launch
-                }
-                launchAndStream(conn, host, appId, emulatedType)
             }
         }
 
-        /** Launch a specific [appId] with [emulatedType] (the app-pick path). */
-        fun launch(
-            host: MoonlightHost,
-            appId: String,
-            emulatedType: Int,
+        private suspend fun convergeHost(
+            hostId: String,
+            pads: List<MoonlightPadRequest>,
         ) {
+            val host = hostFor(hostId) ?: return
             val conn = findOrCreate(host)
             conn.updateHost(host)
+            val wanted = pads.associateBy { it.slotId }
+            for (slotId in conn.pads.value.keys - wanted.keys) conn.releasePad(slotId)
+            when (moonlightConverge(conn.state.value, wanted.size)) {
+                MoonlightConverge.WAIT -> Unit
+                MoonlightConverge.OPEN -> {
+                    seedPads(conn, wanted.values)
+                    openStream(conn, host)
+                }
+                MoonlightConverge.ANNOUNCE -> announcePads(conn, host, wanted.values)
+                MoonlightConverge.RELEASE, MoonlightConverge.CANCEL -> releaseHost(hostId)
+            }
+        }
+
+        private suspend fun announcePads(
+            conn: MoonlightConnection,
+            host: MoonlightHost,
+            pads: Collection<MoonlightPadRequest>,
+        ) {
+            for (pad in pads) {
+                if (conn.padFor(pad.slotId) != null) continue
+                if (!conn.hasRoom) {
+                    _events.emit(MoonlightConnectionEvent.HostFull(host))
+                    continue
+                }
+                conn.acquirePad(pad.slotId, pad.emulatedType, pad.capabilities, pad.supportedButtons)
+            }
+        }
+
+        private fun seedPads(
+            conn: MoonlightConnection,
+            pads: Collection<MoonlightPadRequest>,
+        ) {
+            for (pad in pads) {
+                if (!conn.hasRoom) break
+                conn.acquirePad(pad.slotId, pad.emulatedType, pad.capabilities, pad.supportedButtons)
+            }
+        }
+
+        private suspend fun releaseHost(hostId: String) {
+            val conn = _connections.value[hostId] ?: return
+            conn.pads.value.keys
+                .toList()
+                .forEach(conn::releasePad)
+            val cancels = moonlightConverge(conn.state.value, wantedPads = 0) == MoonlightConverge.CANCEL
+            conn.markDisconnected()
+            if (cancels) runCatching { cancelHostApp(conn.host.value) }
+        }
+
+        private fun publishSessionHosts() {
+            _sessionHostIds.value =
+                _connections.value
+                    .filterValues { it.pads.value.isNotEmpty() && it.state.value != MoonlightSessionState.Idle }
+                    .keys
+        }
+
+        private fun hostFor(hostId: String): MoonlightHost? =
+            _connections.value[hostId]?.host?.value
+                ?: store.get(hostId)?.toHost()
+                ?: _discovered.value.firstOrNull { it.id == hostId }
+
+        // Re-probe immediately before starting a session: the pairing is remembered trust
+        // and the host may have dropped it, or come back as a different machine entirely,
+        // since the last time anything asked.
+        private suspend fun openStream(
+            conn: MoonlightConnection,
+            host: MoonlightHost,
+        ) {
             conn.markLaunching()
-            scope.launch(ioDispatcher) { launchAndStream(conn, host, appId, emulatedType) }
+            publishSessionHosts()
+            val probe = probe(host)
+            if (probe.trust != MoonlightTrustState.PAIRED) {
+                conn.markDisconnected()
+                if (probe.trust == MoonlightTrustState.REPLACED) {
+                    _events.emit(MoonlightConnectionEvent.HostReplaced(host))
+                }
+                return
+            }
+            val remembered = store.get(host.id)
+            val appId = remembered?.lastAppId?.takeIf { it.isNotEmpty() } ?: probe.apps.firstOrNull()?.id
+            if (appId == null) {
+                conn.markDisconnected()
+                _events.emit(MoonlightConnectionEvent.Error("No apps available on ${host.name}."))
+                return
+            }
+            val appName =
+                remembered
+                    ?.lastAppName
+                    .orEmpty()
+                    .ifEmpty {
+                        probe.apps
+                            .firstOrNull { it.id == appId }
+                            ?.title
+                            .orEmpty()
+                    }
+            launchAndStream(conn, host, appId, appName)
         }
 
         /**
          * Pair with [host]: emits [MoonlightConnectionEvent.PairingPinReady] with
          * the generated PIN, runs the 5 phases, and returns true when paired.
-         * Public so the connections screen can await pairing before fetching the
-         * app list.
+         * Public so the binding screen can await pairing before fetching the app list.
          */
         suspend fun pairHost(host: MoonlightHost): Boolean =
             withContext(ioDispatcher) {
@@ -217,11 +440,13 @@ class MoonlightConnectionManager
             }
 
         /** Fetch the host's app list (empty when unreachable/unpaired). */
-        suspend fun fetchApps(host: MoonlightHost): List<MoonlightXml.App> =
-            withContext(ioDispatcher) {
-                val reply = gateway.getHttps(MoonlightUrls.appList(host.address, host.httpsPort, deviceId), host.id)
-                MoonlightXml.parseAppList(reply.body)
-            }
+        suspend fun fetchApps(host: MoonlightHost): List<MoonlightXml.App> = withContext(ioDispatcher) { fetchAppList(host) }
+
+        private fun fetchAppList(host: MoonlightHost): List<MoonlightXml.App> {
+            val reply = gateway.getHttps(MoonlightUrls.appList(host.address, host.httpsPort, deviceId), host.id)
+            if (!reply.ok) throw java.io.IOException("applist refused by ${host.address}: HTTP ${reply.status}")
+            return MoonlightXml.parseAppList(reply.body)
+        }
 
         private fun isPaired(host: MoonlightHost): Boolean {
             val reply = gateway.getHttps(MoonlightUrls.serverInfoHttps(host.address, host.httpsPort, deviceId), host.id)
@@ -243,7 +468,7 @@ class MoonlightConnectionManager
                         MoonlightUrls.pairHttp(host.address, host.httpPort, pairing.phase1Params(deviceId)),
                         MoonlightHttpGateway.PAIR_PIN_TIMEOUT_MS,
                     )
-                val cert = MoonlightXml.parsePairReply(p1.body)?.plainCert ?: return false
+                val cert = MoonlightXml.parsePairReply(p1.body)?.plainCert ?: return pairingRefused(host)
                 pairing.onPhase1(
                     String(
                         com.tinkernorth.dish.core.net
@@ -253,15 +478,15 @@ class MoonlightConnectionManager
                 )
 
                 val p2 = gateway.getHttp(MoonlightUrls.pairHttp(host.address, host.httpPort, pairing.phase2Params(deviceId)))
-                val challenge = MoonlightXml.parsePairReply(p2.body)?.challengeResponse ?: return false
-                if (!pairing.onPhase2(challenge)) return false
+                val challenge = MoonlightXml.parsePairReply(p2.body)?.challengeResponse ?: return pairingRefused(host)
+                if (!pairing.onPhase2(challenge)) return pairingRefused(host)
 
                 val p3 = gateway.getHttp(MoonlightUrls.pairHttp(host.address, host.httpPort, pairing.phase3Params(deviceId)))
-                val secret = MoonlightXml.parsePairReply(p3.body)?.pairingSecret ?: return false
-                if (!pairing.onPhase3(secret)) return false
+                val secret = MoonlightXml.parsePairReply(p3.body)?.pairingSecret ?: return pairingRefused(host)
+                if (!pairing.onPhase3(secret)) return pairingRefused(host)
 
                 val p4 = gateway.getHttp(MoonlightUrls.pairHttp(host.address, host.httpPort, pairing.phase4Params(deviceId)))
-                if (MoonlightXml.parsePairReply(p4.body)?.paired != true) return false
+                if (MoonlightXml.parsePairReply(p4.body)?.paired != true) return pairingRefused(host)
 
                 // Phase 5 (HTTPS): confirm the client-cert-authenticated channel.
                 gateway.getHttps(MoonlightUrls.pairHttps(host.address, host.httpsPort, pairing.phase5Params(deviceId)), host.id)
@@ -270,16 +495,20 @@ class MoonlightConnectionManager
                 true
             }.getOrElse {
                 Log.w(TAG, "pairing failed for ${host.address}: ${it.message}")
-                _events.emit(MoonlightConnectionEvent.Error("Pairing failed. Confirm the PIN on the host and try again."))
-                false
+                pairingRefused(host)
             }
+        }
+
+        private suspend fun pairingRefused(host: MoonlightHost): Boolean {
+            _events.emit(MoonlightConnectionEvent.PairingFailed(host))
+            return false
         }
 
         private suspend fun launchAndStream(
             conn: MoonlightConnection,
             host: MoonlightHost,
             appId: String,
-            emulatedType: Int,
+            appName: String,
         ) {
             val rikey = MoonlightCrypto.randomBytes(RIKEY_LEN)
             val rikeyId =
@@ -292,7 +521,7 @@ class MoonlightConnectionManager
             if (rtsp == null) {
                 // MoonlightRtspClient has already said which step failed and how.
                 Log.w(TAG, "RTSP setup failed on ${host.address}:$rtspPort")
-                giveUp(conn, host, "Stream setup failed on ${host.name}.")
+                giveUp(conn, host)
                 return
             }
             // Before the control channel, not after: the host counts its initial
@@ -306,26 +535,40 @@ class MoonlightConnectionManager
                     .onFailure { Log.w(TAG, "no control socket to ${host.address}:${rtsp.controlPort}: ${it.message}") }
                     .getOrNull()
             if (transport == null) {
-                giveUp(conn, host, "Control channel did not connect on ${host.name}.")
+                giveUp(conn, host)
                 return
             }
             val session =
                 MoonlightControlSession(rikey, rtsp.enetConnectData, transport, System::currentTimeMillis) { event ->
+                    if (event is com.tinkernorth.dish.core.net.moonlight.MoonlightEvent.Termination) onHostTerminated(conn, host)
                     conn.dispatchFeedback(event)
                 }
             if (!session.connect()) {
                 Log.w(TAG, "control channel refused on ${host.address}:${rtsp.controlPort}")
-                giveUp(conn, host, "Control channel did not connect on ${host.name}.")
+                giveUp(conn, host)
                 return
             }
-            Log.i(TAG, "live on ${host.address}, control ${rtsp.controlPort}, emulated type $emulatedType")
-            conn.markLive(
-                session,
-                emulatedType,
-                MoonlightConnection.BASE_CAPABILITIES,
-                MoonlightConnection.SUPPORTED_BUTTONS,
-            )
-            rememberPaired(host, appId, emulatedType)
+            val resolvedName = appName.ifEmpty { runCatching { appTitleFor(host, appId) }.getOrNull().orEmpty() }
+            Log.i(TAG, "live on ${host.address}, control ${rtsp.controlPort}, ${conn.padCount} pad(s)")
+            conn.markLive(session, appId, resolvedName)
+            rememberPaired(host, appId, resolvedName)
+            publishSessionHosts()
+        }
+
+        private fun appTitleFor(
+            host: MoonlightHost,
+            appId: String,
+        ): String? = fetchAppList(host).firstOrNull { it.id == appId }?.title
+
+        // The host ended it, so there is nothing to rejoin: the pads stay claimed by
+        // their bindings and the next use starts a new session rather than resuming.
+        private fun onHostTerminated(
+            conn: MoonlightConnection,
+            host: MoonlightHost,
+        ) {
+            conn.markEnded()
+            publishSessionHosts()
+            scope.launch { _events.emit(MoonlightConnectionEvent.EndedByHost(host)) }
         }
 
         /**
@@ -359,7 +602,7 @@ class MoonlightConnectionManager
             if (status?.appAlreadyRunning == true) return resumeSession(conn, host, status, rikeyHex, rikeyId)
             Log.w(TAG, "launch refused by ${host.address}: ${reply.body.take(BODY_LOG_CHARS)}")
             conn.markDisconnected()
-            _events.emit(MoonlightConnectionEvent.Error(refusalMessage(host, status)))
+            _events.emit(MoonlightConnectionEvent.LaunchRefused(host, status?.message.orEmpty()))
             return null
         }
 
@@ -393,25 +636,27 @@ class MoonlightConnectionManager
             if (reply.ok && status?.ok != false && rtspPort != null) return rtspPort
             Log.w(TAG, "resume refused by ${host.address}: ${reply.body.take(BODY_LOG_CHARS)}")
             conn.markDisconnected()
-            _events.emit(MoonlightConnectionEvent.AppAlreadyRunning(host, resumable = true))
+            _events.emit(MoonlightConnectionEvent.RejoinRefused(host))
             return null
         }
 
         /**
          * Tell [host] to end the app it is running. The protocol's own way out of
          * "an app is already running", and the only one when the host will not
-         * resume that session for us.
+         * resume that session for us. /cancel answers 200 whether or not anything
+         * was running, so the caller re-probes rather than believing it.
          */
         fun quitHostApp(host: MoonlightHost) {
             scope.launch(ioDispatcher) {
-                val ended = cancelHostApp(host)
-                _events.emit(
-                    if (ended) {
-                        MoonlightConnectionEvent.Notice("Closed the app running on ${host.name}. Try connecting again.")
-                    } else {
-                        MoonlightConnectionEvent.Error("Couldn't close the app running on ${host.name}.")
-                    },
-                )
+                _connections.value[host.id]?.let { conn ->
+                    conn.pads.value.keys
+                        .toList()
+                        .forEach(conn::releasePad)
+                    conn.markDisconnected()
+                }
+                cancelHostApp(host)
+                publishSessionHosts()
+                _events.emit(MoonlightConnectionEvent.Notice("Asked ${host.name} to close the app it is running."))
             }
         }
 
@@ -434,42 +679,38 @@ class MoonlightConnectionManager
         private suspend fun giveUp(
             conn: MoonlightConnection,
             host: MoonlightHost,
-            message: String,
         ) {
             conn.markDisconnected()
             runCatching { cancelHostApp(host) }
-            _events.emit(MoonlightConnectionEvent.Error(message))
-        }
-
-        private fun refusalMessage(
-            host: MoonlightHost,
-            status: MoonlightXml.Status?,
-        ): String =
-            status
-                ?.message
-                ?.takeIf { it.isNotEmpty() }
-                ?.let { "${host.name} refused the session: $it" }
-                ?: "Couldn't start a session on ${host.name}."
-
-        private fun defaultAppId(host: MoonlightHost): String? {
-            val reply = gateway.getHttps(MoonlightUrls.appList(host.address, host.httpsPort, deviceId), host.id)
-            return MoonlightXml.parseAppList(reply.body).firstOrNull()?.id
+            _events.emit(MoonlightConnectionEvent.SetupFailed(host))
         }
 
         fun disconnect(id: String) {
             _connections.value[id]?.markDisconnected()
+            publishSessionHosts()
         }
 
         fun forget(id: String) {
             disconnect(id)
             store.remove(id)
             _connections.updateAndGet { it - id }
+            publishSessionHosts()
+        }
+
+        /** Remember which app the session settled on so the next binding can say it is joining it. */
+        fun rememberApp(
+            hostId: String,
+            appId: String,
+            appName: String,
+        ) {
+            val entry = store.get(hostId) ?: return
+            store.put(entry.copy(lastAppId = appId, lastAppName = appName))
         }
 
         private fun rememberPaired(
             host: MoonlightHost,
             appId: String = store.get(host.id)?.lastAppId.orEmpty(),
-            emulatedType: Int = store.get(host.id)?.emulatedType ?: MoonlightEmulatedType.AUTO,
+            appName: String = store.get(host.id)?.lastAppName.orEmpty(),
         ) {
             store.put(
                 RememberedMoonlight(
@@ -480,16 +721,23 @@ class MoonlightConnectionManager
                     httpsPort = host.httpsPort,
                     uniqueId = host.uniqueId,
                     lastAppId = appId,
-                    emulatedType = emulatedType,
+                    lastAppName = appName,
+                    emulatedType = rememberedEmulatedType(host.id),
                 ),
             )
         }
 
         /** The remembered emulated-device pick for [hostId], defaulting to Auto. */
-        fun rememberedEmulatedType(hostId: String): Int = store.get(hostId)?.emulatedType ?: MoonlightEmulatedType.AUTO
+        fun rememberedEmulatedType(hostId: String): Int =
+            MoonlightEmulatedType.fromStored(store.get(hostId)?.emulatedType ?: MoonlightEmulatedType.AUTO)
 
         /** The remembered last-launched app id for [hostId], or empty. */
         fun rememberedAppId(hostId: String): String = store.get(hostId)?.lastAppId.orEmpty()
+
+        /** The remembered last-launched app title for [hostId], or empty. */
+        fun rememberedAppName(hostId: String): String = store.get(hostId)?.lastAppName.orEmpty()
+
+        fun rememberedHost(hostId: String): MoonlightHost? = hostFor(hostId)
 
         // The /launch response carries sessionUrl0 = rtsp://ip:port; pull the port.
         private fun parseRtspPort(xml: String): Int? =

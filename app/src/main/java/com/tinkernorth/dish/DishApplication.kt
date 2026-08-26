@@ -10,6 +10,7 @@ import com.tinkernorth.dish.bench.HotPathBenchController
 import com.tinkernorth.dish.composer.CatalogPrewarmer
 import com.tinkernorth.dish.composer.CrashReportingController
 import com.tinkernorth.dish.composer.DiagnosticsLogRecorder
+import com.tinkernorth.dish.composer.MoonlightSessionController
 import com.tinkernorth.dish.composer.SlotTopologyController
 import com.tinkernorth.dish.composer.StreamingServiceController
 import com.tinkernorth.dish.composer.WakeStateController
@@ -69,6 +70,8 @@ class DishApplication : Application() {
     @Inject lateinit var streamingServiceController: StreamingServiceController
 
     @Inject lateinit var slotTopologyController: SlotTopologyController
+
+    @Inject lateinit var moonlightSessionController: MoonlightSessionController
 
     @Inject lateinit var crashReportingController: CrashReportingController
 
@@ -149,6 +152,7 @@ class DishApplication : Application() {
         val lifecycle = ProcessLifecycleOwner.get().lifecycle
         lifecycle.addObserver(connectionForegroundObserver)
         lifecycle.addObserver(slotTopologyController)
+        lifecycle.addObserver(moonlightSessionController)
         // Process-scoped so bindings survive the MainActivity → GamepadOverlayActivity handoff.
         physicalGamepadRegistry.install()
         usbGamepadManager.install()

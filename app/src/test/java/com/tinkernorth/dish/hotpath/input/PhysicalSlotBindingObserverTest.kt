@@ -61,7 +61,17 @@ class PhysicalSlotBindingObserverTest {
         slotInfo: Map<String, SatelliteSlotSnapshot> = emptyMap(),
         btConnectedIds: Set<String> = emptySet(),
         moonlightLiveIds: Set<String> = emptySet(),
-    ) = reconcileSlots(present, lastBound, bindings, summaries, slotInfo, btConnectedIds, moonlightLiveIds)
+        moonlightPadNumbers: Map<String, Int> = emptyMap(),
+    ) = reconcileSlots(
+        present,
+        lastBound,
+        bindings,
+        summaries,
+        slotInfo,
+        btConnectedIds,
+        moonlightLiveIds,
+        moonlightPadNumbers,
+    )
 
     @Test
     fun `a present device binds to a live Moonlight host`() {
@@ -71,8 +81,9 @@ class PhysicalSlotBindingObserverTest {
                 bindings = mapOf("3" to "moonlight:pc"),
                 summaries = listOf(moonlightSummary("moonlight:pc")),
                 moonlightLiveIds = setOf("moonlight:pc"),
+                moonlightPadNumbers = mapOf("3" to 0),
             )
-        assertEquals(listOf(BindOp.BindMoonlight(deviceId = 3, connectionId = "moonlight:pc")), ops)
+        assertEquals(listOf(BindOp.BindMoonlight(deviceId = 3, connectionId = "moonlight:pc", controllerNumber = 0)), ops)
     }
 
     @Test
@@ -90,12 +101,12 @@ class PhysicalSlotBindingObserverTest {
 
     @Test
     fun `an unchanged Moonlight bind is deduped, a changed one is re-applied`() {
-        val op = BindOp.BindMoonlight(deviceId = 3, connectionId = "moonlight:pc")
+        val op = BindOp.BindMoonlight(deviceId = 3, connectionId = "moonlight:pc", controllerNumber = 0)
         val first = dedupeBindOps(listOf(op), emptyMap())
         assertEquals(listOf(op), first.ops)
         val second = dedupeBindOps(listOf(op), first.applied)
         assertEquals(emptyList<BindOp>(), second.ops)
-        val changed = BindOp.BindMoonlight(deviceId = 3, connectionId = "moonlight:other")
+        val changed = BindOp.BindMoonlight(deviceId = 3, connectionId = "moonlight:other", controllerNumber = 0)
         val third = dedupeBindOps(listOf(changed), first.applied)
         assertEquals(listOf(changed), third.ops)
     }

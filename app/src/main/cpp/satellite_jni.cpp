@@ -163,6 +163,7 @@ static jmethodID g_rumbleDispatchMethod = nullptr;
 struct BridgeReport {
     SlotKind kind;
     std::string connectionId;
+    int32_t controllerNumber;
     uint16_t wButtons;
     uint8_t bLT, bRT;
     int16_t sLX, sLY, sRX, sRY;
@@ -210,8 +211,17 @@ static void bridgeDispatchLoop() {
             r.kind == SLOT_MOONLIGHT ? g_moonlightDispatchMethod : g_btDispatchMethod;
         if (cls == nullptr || method == nullptr) continue;
         jstring connId = env->NewStringUTF(r.connectionId.c_str());
-        env->CallStaticVoidMethod(cls, method, connId, (jint)r.wButtons, (jint)r.bLT, (jint)r.bRT,
-                                  (jint)r.sLX, (jint)r.sLY, (jint)r.sRX, (jint)r.sRY);
+        // A Moonlight session carries up to four pads on one stream, so its upcall also
+        // names which pad the report belongs to; the Bluetooth link is one pad by nature.
+        if (r.kind == SLOT_MOONLIGHT) {
+            env->CallStaticVoidMethod(cls, method, connId, (jint)r.controllerNumber,
+                                      (jint)r.wButtons, (jint)r.bLT, (jint)r.bRT, (jint)r.sLX,
+                                      (jint)r.sLY, (jint)r.sRX, (jint)r.sRY);
+        } else {
+            env->CallStaticVoidMethod(cls, method, connId, (jint)r.wButtons, (jint)r.bLT,
+                                      (jint)r.bRT, (jint)r.sLX, (jint)r.sLY, (jint)r.sRX,
+                                      (jint)r.sRY);
+        }
         env->DeleteLocalRef(connId);
         if (env->ExceptionCheck()) env->ExceptionClear();
     }
@@ -260,6 +270,7 @@ static void publishIfChanged(int32_t deviceId, DeviceState& s) {
         enqueueBridgeReport(BridgeReport{
             binding.kind,
             binding.bridgeConnectionId,
+            binding.controllerIndex,
             s.wButtons,
             s.bLT,
             s.bRT,
@@ -960,8 +971,8 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_bindPh
     syncSlotBaseline(deviceId);
 }
 
-static void bindPhysicalSlotBridge(JNIEnv* env, jint deviceId, jstring connectionId,
-                                   SlotKind kind) {
+static void bindPhysicalSlotBridge(JNIEnv* env, jint deviceId, jstring connectionId, SlotKind kind,
+                                   jint controllerIndex) {
     const char* cstr = env->GetStringUTFChars(connectionId, nullptr);
     std::string copy = cstr ? std::string(cstr) : std::string();
     if (cstr) env->ReleaseStringUTFChars(connectionId, cstr);
@@ -970,7 +981,7 @@ static void bindPhysicalSlotBridge(JNIEnv* env, jint deviceId, jstring connectio
         auto& b = g_slots[deviceId];
         b.kind = kind;
         b.sessionHandle = -1;
-        b.controllerIndex = -1;
+        b.controllerIndex = controllerIndex;
         b.bridgeConnectionId = std::move(copy);
     }
     syncSlotBaseline(deviceId);
@@ -978,12 +989,12 @@ static void bindPhysicalSlotBridge(JNIEnv* env, jint deviceId, jstring connectio
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_bindPhysicalSlotBluetooth(
     JNIEnv* env, jobject, jint deviceId, jstring connectionId) {
-    bindPhysicalSlotBridge(env, deviceId, connectionId, SLOT_BLUETOOTH);
+    bindPhysicalSlotBridge(env, deviceId, connectionId, SLOT_BLUETOOTH, -1);
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_bindPhysicalSlotMoonlight(
-    JNIEnv* env, jobject, jint deviceId, jstring connectionId) {
-    bindPhysicalSlotBridge(env, deviceId, connectionId, SLOT_MOONLIGHT);
+    JNIEnv* env, jobject, jint deviceId, jstring connectionId, jint controllerNumber) {
+    bindPhysicalSlotBridge(env, deviceId, connectionId, SLOT_MOONLIGHT, controllerNumber);
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_unbindPhysicalSlot(
@@ -1101,7 +1112,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_hotpath_input_MoonlightGamepadB
     }
     if (g_moonlightDispatchMethod == nullptr) {
         g_moonlightDispatchMethod = env->GetStaticMethodID(g_moonlightBridgeClass, "dispatchReport",
-                                                           "(Ljava/lang/String;IIIIIII)V");
+                                                           "(Ljava/lang/String;IIIIIIII)V");
         if (g_moonlightDispatchMethod == nullptr) {
             LOGE("MoonlightGamepadBridge.dispatchReport not found");
             env->ExceptionClear();

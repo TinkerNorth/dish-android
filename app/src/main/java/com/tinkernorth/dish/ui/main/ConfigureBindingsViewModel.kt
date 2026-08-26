@@ -19,12 +19,18 @@ import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.model.CatalogTypeDto
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.repository.SatelliteCapabilitiesRepository
 import com.tinkernorth.dish.repository.SatelliteCatalogRepository
 import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightProbe
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightSessionState
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
 import com.tinkernorth.dish.source.store.TouchpadModeStore
@@ -32,6 +38,7 @@ import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.source.usb.UsbPhase
 import com.tinkernorth.dish.ui.common.bundledControllerTypeLabelRes
+import com.tinkernorth.dish.ui.common.moonlightTypeLabelRes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -133,6 +140,8 @@ data class ConfigUiState(
     // Set only when a satellite catalog fetch failed with nothing cached, so Loading (fetch in
     // flight) and Error (fetch failed) are distinguishable — neither is derivable from the draft alone.
     val typeFetchFailed: Boolean = false,
+    // What the chosen Moonlight host last told us. Null for every other kind of destination.
+    val moonlight: MoonlightSessionInput? = null,
 ) {
     val selectedHost: BindingHost? get() = hosts.firstOrNull { it.id == draft?.hostId }
     val noHosts: Boolean get() = hosts.isEmpty()
@@ -140,6 +149,8 @@ data class ConfigUiState(
 
     // A Bluetooth host is profile-driven (always Ready); a resolved type (remembered/manual/catalog)
     // is Ready; a failed fetch with nothing cached is Error; otherwise the catalog is still loading.
+    // A Moonlight host has no catalog to fetch: its four types are known here, so it is Ready as soon
+    // as the draft carries one, which is immediately (Auto is the seeded default).
     val typeLoad: TypeLoad
         get() =
             when {
@@ -149,13 +160,26 @@ data class ConfigUiState(
                 else -> TypeLoad.Loading
             }
 
-    // Apply must never send an unresolved type: a satellite host needs its type resolved first.
-    val canApply: Boolean get() = hostChosen && (isBluetoothHost || draft?.type != null)
+    // A binding is a durable intent and pairing is trust verified lazily, so no Moonlight host
+    // state blocks Apply: the session is attempted when the controller is used, not when the
+    // binding is saved. The one exception is a host already carrying its four controllers, which
+    // is a hard protocol limit and says so.
+    val canApply: Boolean get() = hostChosen && (isBluetoothHost || draft?.type != null) && !moonlightBlocked
 
+    // Rendered by the Moonlight session section; every state it can be in is in MoonlightSessionUi.
+    val moonlightSession: MoonlightSessionUi?
+        get() = if (isMoonlightHost) moonlightSessionUi(moonlight ?: MoonlightSessionInput()) else null
+
+    private val moonlightBlocked: Boolean get() = moonlightSession?.blocksApply == true
+
+    // A Moonlight host is never "lost": there is no live link to lose, only remembered trust
+    // that the session section reports honestly. Blocking the screen on it would also block
+    // the very actions that recover it.
     val blocker: BindingBlocker?
         get() {
             if (!loaded) return null
             if (!controllerPresent) return BindingBlocker.InputLost
+            if (isMoonlightHost) return null
             val hostId = draft?.hostId ?: return null
             val summary = connections.firstOrNull { it.id == hostId }
             return when {
@@ -185,6 +209,8 @@ data class ConfigUiState(
         get() = capabilities.isAvailable(Feature.MOUSE)
 
     val isBluetoothHost: Boolean get() = selectedHost?.kind == ConnectionKind.BLUETOOTH
+
+    val isMoonlightHost: Boolean get() = selectedHost?.kind == ConnectionKind.MOONLIGHT
 }
 
 data class ApplyStep(
@@ -221,6 +247,7 @@ class ConfigureBindingsViewModel
         private val capabilityComposer: CapabilityComposer,
         private val touchpadModeStore: TouchpadModeStore,
         private val satellite: SatelliteConnectionManager,
+        private val moonlight: MoonlightConnectionManager,
         private val usbGamepadManager: UsbGamepadManager,
         private val catalogRepo: SatelliteCatalogRepository,
         private val capabilitiesRepo: SatelliteCapabilitiesRepository,
@@ -233,6 +260,10 @@ class ConfigureBindingsViewModel
         val applyState: StateFlow<ApplyState> = _applyState.asStateFlow()
 
         private var loadedSlotId: String? = null
+
+        private var moonlightPairing: MoonlightPairingUi? = null
+        private var moonlightFailure: MoonlightFailure? = null
+        private var pairingJob: kotlinx.coroutines.Job? = null
 
         fun load(slotId: String) {
             if (loadedSlotId == slotId) return
@@ -268,10 +299,11 @@ class ConfigureBindingsViewModel
             gamepadRegistry.devices
                 .onEach { _ui.update { state -> state.copy(controllerPresent = controllerPresent(state.snapshot)).withCapabilities() } }
                 .launchIn(viewModelScope)
+            observeMoonlightEvents()
         }
 
         fun setHost(hostId: String) {
-            _ui.update { it.copy(draft = it.draft?.copy(hostId = hostId)).withCapabilities() }
+            _ui.update { it.copy(draft = it.draft?.copy(hostId = hostId), moonlight = null).withCapabilities() }
             refreshTypeOptions(hostId)
         }
 
@@ -281,6 +313,155 @@ class ConfigureBindingsViewModel
         fun retryTypeLoad() {
             val hostId = _ui.value.draft?.hostId ?: return
             refreshTypeOptions(hostId)
+        }
+
+        /**
+         * Auto is resolved on the client, before the wire: an input with motion asks the host
+         * for a PlayStation pad, which is the only type its emulator gives a gyro to. The Auto
+         * card renders the resolved type's rows for exactly this reason.
+         */
+        fun moonlightResolvedType(type: Int): Int {
+            val picked = MoonlightEmulatedType.fromStored(type)
+            if (picked != MoonlightEmulatedType.AUTO) return picked
+            val slotId = loadedSlotId ?: return MoonlightEmulatedType.XBOX
+            val caps =
+                capabilityComposer.capabilityForCandidate(
+                    slotId = slotId,
+                    candidateType = MoonlightEmulatedType.XBOX,
+                    candidateHostKind = ConnectionKind.MOONLIGHT,
+                    candidateHostId = _ui.value.draft?.hostId,
+                )
+            return MoonlightEmulatedType.resolve(picked, caps.inputOk(Feature.MOTION))
+        }
+
+        /** Re-verify the chosen Moonlight host: on entering the screen, and before a session. */
+        fun refreshMoonlight() {
+            val hostId = _ui.value.draft?.hostId ?: return
+            if (!_ui.value.isMoonlightHost) return
+            val host = moonlight.rememberedHost(hostId) ?: return
+            _ui.update { it.copy(moonlight = MoonlightSessionInput()) }
+            viewModelScope.launch {
+                val probe = moonlight.probe(host)
+                _ui.update { state -> state.copy(moonlight = moonlightInputFrom(probe, hostId)) }
+            }
+        }
+
+        private fun moonlightInputFrom(
+            probe: MoonlightProbe,
+            hostId: String,
+        ): MoonlightSessionInput {
+            val conn = moonlight.get(hostId)
+            val slotId = loadedSlotId
+            val pad = slotId?.let { conn?.padFor(it) }
+            val appName = conn?.sessionAppName?.takeIf { it.isNotBlank() } ?: moonlight.rememberedAppName(hostId)
+            val phase =
+                when {
+                    conn?.state?.value == MoonlightSessionState.Live && pad != null ->
+                        MoonlightPhase.Live(pad.number + 1, appName)
+                    conn?.state?.value == MoonlightSessionState.Live ->
+                        MoonlightPhase.Joining(conn.padCount + 1, appName)
+                    conn?.state?.value == MoonlightSessionState.Dropped -> MoonlightPhase.Dropped
+                    conn?.state?.value == MoonlightSessionState.Ended -> MoonlightPhase.Ended
+                    probe.ownSession -> MoonlightPhase.Joining((conn?.padCount ?: 0) + 1, appName)
+                    else -> MoonlightPhase.Idle
+                }
+            val full = (conn?.padCount ?: 0) >= MOONLIGHT_MAX_PADS && pad == null
+            return MoonlightSessionInput(
+                trust = probe.trust,
+                pairing = moonlightPairing,
+                apps = appsUiFrom(probe),
+                phase = phase,
+                failure = if (full) MoonlightFailure.HostFull else moonlightFailure,
+                selectedAppId = moonlight.rememberedAppId(hostId).takeIf { it.isNotEmpty() },
+            )
+        }
+
+        private fun appsUiFrom(probe: MoonlightProbe): MoonlightApps =
+            when {
+                probe.trust != MoonlightTrustState.PAIRED -> MoonlightApps.Loading
+                probe.appsFailed -> MoonlightApps.Failed
+                !probe.appsFetched -> MoonlightApps.Loading
+                probe.apps.isEmpty() -> MoonlightApps.Empty
+                else -> MoonlightApps.Ready(probe.apps.map { MoonlightAppUi(it.id, it.title.ifEmpty { it.id }) })
+            }
+
+        fun moonlightAddress(hostId: String): String = moonlight.rememberedHost(hostId)?.address.orEmpty()
+
+        /** Persist the app this session will start; the next binding on the host inherits it. */
+        fun selectMoonlightApp(app: MoonlightAppUi) {
+            val hostId = _ui.value.draft?.hostId ?: return
+            moonlight.rememberApp(hostId, app.id, app.title)
+            _ui.update { state ->
+                state.copy(moonlight = state.moonlight?.copy(selectedAppId = app.id))
+            }
+        }
+
+        fun onMoonlightAction(action: MoonlightAction) {
+            val hostId = _ui.value.draft?.hostId ?: return
+            val host = moonlight.rememberedHost(hostId) ?: return
+            when (action) {
+                MoonlightAction.PAIR, MoonlightAction.PAIR_AGAIN, MoonlightAction.TRY_AGAIN,
+                MoonlightAction.NEW_CODE,
+                -> startMoonlightPairing(host)
+                MoonlightAction.CANCEL -> {
+                    moonlightPairing = null
+                    refreshMoonlight()
+                }
+                MoonlightAction.QUIT_APP -> {
+                    moonlight.quitHostApp(host)
+                    moonlightFailure = null
+                    refreshMoonlight()
+                }
+                MoonlightAction.RETRY, MoonlightAction.RECONNECT, MoonlightAction.START_SESSION -> {
+                    moonlightFailure = null
+                    moonlight.disconnect(hostId)
+                    moonlight.retrySessions()
+                    refreshMoonlight()
+                }
+                MoonlightAction.SEE_BINDINGS -> Unit
+            }
+        }
+
+        private fun startMoonlightPairing(host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost) {
+            if (pairingJob?.isActive == true) return
+            pairingJob =
+                viewModelScope.launch {
+                    moonlight.pairHost(host)
+                    refreshMoonlight()
+                }
+        }
+
+        private fun observeMoonlightEvents() {
+            moonlight.events
+                .onEach { event -> onMoonlightEvent(event) }
+                .launchIn(viewModelScope)
+        }
+
+        private fun onMoonlightEvent(event: MoonlightConnectionEvent) {
+            when (event) {
+                is MoonlightConnectionEvent.PairingPinReady -> moonlightPairing = MoonlightPairingUi.Pin(event.pin)
+                is MoonlightConnectionEvent.PairingFailed -> moonlightPairing = MoonlightPairingUi.Failed
+                is MoonlightConnectionEvent.Paired -> moonlightPairing = null
+                is MoonlightConnectionEvent.AppAlreadyRunning ->
+                    if (!event.resumable) moonlightFailure = MoonlightFailure.BusyOther
+                is MoonlightConnectionEvent.RejoinRefused -> moonlightFailure = MoonlightFailure.ResumeFailed
+                is MoonlightConnectionEvent.LaunchRefused -> moonlightFailure = MoonlightFailure.Refused(event.message)
+                is MoonlightConnectionEvent.SetupFailed -> moonlightFailure = MoonlightFailure.SetupFailed
+                is MoonlightConnectionEvent.HostFull -> moonlightFailure = MoonlightFailure.HostFull
+                is MoonlightConnectionEvent.HostReplaced, is MoonlightConnectionEvent.EndedByHost -> Unit
+                is MoonlightConnectionEvent.Error, is MoonlightConnectionEvent.Notice -> Unit
+            }
+            _ui.update { state ->
+                if (!state.isMoonlightHost) {
+                    state
+                } else {
+                    state.copy(
+                        moonlight =
+                            state.moonlight?.copy(pairing = moonlightPairing, failure = moonlightFailure)
+                                ?: MoonlightSessionInput(pairing = moonlightPairing, failure = moonlightFailure),
+                    )
+                }
+            }
         }
 
         fun setDirect(on: Boolean) = _ui.update { it.copy(draft = it.draft?.copy(directOn = on)).withCapabilities() }
@@ -309,12 +490,13 @@ class ConfigureBindingsViewModel
             val slotId = loadedSlotId ?: return copy(capabilities = SlotCapabilities.NONE)
             val d = draft ?: return copy(capabilities = SlotCapabilities.NONE)
             // An unresolved type has no known capabilities yet: the caps rows stay hidden behind the loader.
+            val kind = selectedHost?.kind ?: ConnectionKind.SATELLITE
             val caps =
                 d.type?.let {
                     capabilityComposer.capabilityForCandidate(
                         slotId = slotId,
-                        candidateType = it,
-                        candidateHostKind = selectedHost?.kind ?: ConnectionKind.SATELLITE,
+                        candidateType = if (kind == ConnectionKind.MOONLIGHT) moonlightResolvedType(it) else it,
+                        candidateHostKind = kind,
                         candidateHostId = d.hostId,
                     )
                 } ?: SlotCapabilities.NONE
@@ -506,6 +688,10 @@ class ConfigureBindingsViewModel
             host: BindingHost,
             slotId: String,
         ): Boolean {
+            // A Moonlight binding is a durable intent, not a handshake: the session is started
+            // by the binding itself and is allowed to take its time, so applying never waits
+            // on a link that does not exist yet.
+            if (host.kind == ConnectionKind.MOONLIGHT) return true
             val hostUp =
                 withTimeoutOrNull(CONNECT_TIMEOUT_MS) {
                     hub.connections.first { conns ->
@@ -533,7 +719,30 @@ class ConfigureBindingsViewModel
                 TypeOption(CONTROLLER_TYPE_SWITCHPRO, context.getString(R.string.picker_type_switchpro)),
             )
 
+        // The four types a Moonlight host can be asked to plug in. Hard-coded because no host
+        // reports them: the type byte travels client to host in CONTROLLER_ARRIVAL and nothing
+        // comes back the other way.
+        private fun moonlightTypeOptions(): List<TypeOption> =
+            MoonlightEmulatedType.ORDER.map { TypeOption(it, context.getString(moonlightTypeLabelRes(it))) }
+
+        // A Moonlight host owns its own four types and has no catalog to fetch, so it must be
+        // answered before the satellite lookup: satellite.get() is null for a Moonlight id, which
+        // used to leave the type unresolved forever and Apply disabled with it.
         private fun refreshTypeOptions(hostId: String) {
+            if (hub.summary(hostId)?.kind == ConnectionKind.MOONLIGHT) {
+                val stored = loadedSlotId?.let { hub.satTypes.value[hostId to it] }
+                val seeded = MoonlightEmulatedType.fromStored(stored ?: moonlight.rememberedEmulatedType(hostId))
+                _ui.update { state ->
+                    state
+                        .copy(
+                            typeOptions = moonlightTypeOptions(),
+                            typeFetchFailed = false,
+                            draft = state.draft?.copy(type = state.draft.type ?: seeded),
+                        ).withCapabilities()
+                }
+                refreshMoonlight()
+                return
+            }
             val conn = satellite.get(hostId)
             if (conn == null) {
                 _ui.update { it.copy(typeOptions = bundledTypeOptions()) }

@@ -46,8 +46,10 @@ data class RememberedMoonlight(
     val httpPort: Int = MoonlightHost.DEFAULT_HTTP_PORT,
     val httpsPort: Int = MoonlightHost.DEFAULT_HTTPS_PORT,
     val uniqueId: String = "",
-    // The app id last launched on this host, remembered for one-tap reconnect.
+    // The app id and title the session creator settled on. Per host, not per
+    // binding: every controller on this host shares the one session.
     val lastAppId: String = "",
+    val lastAppName: String = "",
     // The emulated-device pick (CONTROLLER_ARRIVAL type): Auto/Xbox/PS/Nintendo.
     val emulatedType: Int = MoonlightEmulatedType.AUTO,
 ) {
@@ -65,6 +67,9 @@ data class RememberedMoonlight(
  * The user-facing emulated-device picker mapped onto CONTROLLER_ARRIVAL types.
  * AUTO is a client convenience (Wolf control.hpp uses 0xFF): the session resolves
  * it to the type that best matches the local controller before it hits the wire.
+ * It is 0xFF and never 0, because 0 is CONTROLLER_TYPE_UNKNOWN on the wire and
+ * the satellite's own CONTROLLER_TYPE_XBOX as well, so a stored 0 is ambiguous
+ * twice over; [fromStored] migrates one back to Auto on read.
  */
 object MoonlightEmulatedType {
     const val AUTO = 0xFF
@@ -72,6 +77,38 @@ object MoonlightEmulatedType {
     const val PLAYSTATION = MoonlightControlProtocol.CONTROLLER_TYPE_PS
     const val NINTENDO = MoonlightControlProtocol.CONTROLLER_TYPE_NINTENDO
 
-    /** Resolve AUTO to a concrete arrival type; a real pick passes straight through. */
-    fun resolve(picked: Int): Int = if (picked == AUTO) XBOX else picked
+    val ORDER = listOf(AUTO, XBOX, PLAYSTATION, NINTENDO)
+
+    fun fromStored(stored: Int): Int = if (stored == MoonlightControlProtocol.CONTROLLER_TYPE_UNKNOWN) AUTO else stored
+
+    fun resolve(
+        picked: Int,
+        sourceHasMotion: Boolean,
+    ): Int =
+        when {
+            picked != AUTO -> picked
+            sourceHasMotion -> PLAYSTATION
+            else -> XBOX
+        }
+
+    fun typeMaximum(type: Int): Int = if (type == PLAYSTATION) PLAYSTATION_MAXIMUM else BASE_MAXIMUM
+
+    fun capabilityBits(
+        type: Int,
+        sourceBits: Int,
+    ): Int = typeMaximum(type) and sourceBits
+
+    fun supportedButtons(capabilities: Int): Int =
+        if (capabilities and MoonlightControlProtocol.CAP_TOUCHPAD != 0) {
+            BASE_BUTTONS or MoonlightControlProtocol.BTN_TOUCHPAD
+        } else {
+            BASE_BUTTONS
+        }
+
+    private const val BASE_MAXIMUM =
+        MoonlightControlProtocol.CAP_ANALOG_TRIGGERS or MoonlightControlProtocol.CAP_RUMBLE
+
+    private const val PLAYSTATION_MAXIMUM = 0xFF
+
+    private const val BASE_BUTTONS = 0xFFFF
 }

@@ -69,7 +69,7 @@ object MoonlightUrls {
                     "sops" to "0",
                     "rikey" to rikeyHex,
                     "rikeyid" to rikeyId.toString(),
-                    "localAudioPlayMode" to "0",
+                    "localAudioPlayMode" to "1",
                     "surroundAudioInfo" to "65538",
                 ),
             )

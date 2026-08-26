@@ -15,13 +15,16 @@ import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import com.tinkernorth.dish.databinding.RowConnectionBinding
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
 import com.tinkernorth.dish.ui.common.setLoading
-import com.tinkernorth.dish.ui.common.statusChipText
+import com.tinkernorth.dish.ui.main.chipTextRes
 
 /** Rows for the Moonlight-hosts section, the sibling of [SatelliteRow]. */
 sealed interface MoonlightRow {
     data class Known(
         val summary: ConnectionSummary,
+        val trust: MoonlightTrustState,
+        val controllerCount: Int,
     ) : MoonlightRow
 
     data class Discovered(
@@ -34,11 +37,11 @@ sealed interface MoonlightRow {
 }
 
 interface MoonlightRowListener {
-    fun onConnectKnown(summary: ConnectionSummary)
+    fun onPairKnown(summary: ConnectionSummary)
 
-    fun onConnectDiscovered(host: MoonlightHost)
+    fun onPairDiscovered(host: MoonlightHost)
 
-    fun onDisconnect(id: String)
+    fun onQuitSession(id: String)
 
     fun onForget(id: String)
 }
@@ -92,30 +95,39 @@ class MoonlightListAdapter(
             }
         }
 
+        // Pairing is remembered trust, not a live link, so the chip says which of the
+        // three trust words applies and never lights up as though the host were online.
+        // The session lives in the binding; all this screen offers is the way out of one.
         private fun bindKnown(row: MoonlightRow.Known) {
             val c = row.summary
-            b.paintConnection(c.label, c.detail, statusChipText(ctx, c.live), ConnectionKind.MOONLIGHT, c.live)
-            when (c.live) {
-                LinkState.Connected, LinkState.Unstable -> {
-                    b.btnRowAction.setLoading(false, "", ctx.getString(R.string.action_disconnect))
-                    b.btnRowAction.setOnClickListener { listener.onDisconnect(c.id) }
-                }
-                LinkState.Connecting -> {
-                    b.btnRowAction.setLoading(
-                        true,
-                        ctx.getString(R.string.chip_status_connecting),
-                        ctx.getString(R.string.action_connect),
-                    )
-                    b.btnRowAction.setOnClickListener(null)
-                }
-                LinkState.Saved, LinkState.Ready, LinkState.Found, LinkState.Stale -> {
-                    b.btnRowAction.setLoading(false, "", ctx.getString(R.string.action_connect))
-                    b.btnRowAction.setOnClickListener { listener.onConnectKnown(c) }
-                }
+            b.paintConnection(c.label, detailFor(row), ctx.getString(row.trust.chipTextRes()), ConnectionKind.MOONLIGHT, c.live)
+            if (row.controllerCount > 0) {
+                b.btnRowAction.setLoading(false, "", ctx.getString(R.string.ml_action_quit_session))
+                b.btnRowAction.setOnClickListener { listener.onQuitSession(c.id) }
+            } else {
+                val label =
+                    if (row.trust == MoonlightTrustState.PAIRED) {
+                        ctx.getString(R.string.ml_action_pair_again)
+                    } else {
+                        ctx.getString(R.string.ml_action_pair)
+                    }
+                b.btnRowAction.setLoading(false, "", label)
+                b.btnRowAction.setOnClickListener { listener.onPairKnown(c) }
             }
             b.btnRowSecondary.visibility = View.VISIBLE
             b.btnRowSecondary.text = ctx.getString(R.string.action_forget_short)
             b.btnRowSecondary.setOnClickListener { listener.onForget(c.id) }
+        }
+
+        private fun detailFor(row: MoonlightRow.Known): String {
+            if (row.controllerCount == 0) return row.summary.detail
+            val count =
+                ctx.resources.getQuantityString(
+                    R.plurals.ml_host_in_use_count,
+                    row.controllerCount,
+                    row.controllerCount,
+                )
+            return row.summary.detail + " · " + ctx.getString(R.string.ml_host_in_use, count)
         }
 
         private fun bindDiscovered(row: MoonlightRow.Discovered) {
@@ -123,12 +135,12 @@ class MoonlightListAdapter(
             b.paintConnection(
                 h.name.ifEmpty { h.address },
                 ctx.getString(R.string.moonlight_row_detail, h.address),
-                ctx.getString(R.string.discovered_row_status, ctx.getString(R.string.discovery_source_mdns)),
+                ctx.getString(R.string.ml_trust_not_paired),
                 ConnectionKind.MOONLIGHT,
                 LinkState.Found,
             )
-            b.btnRowAction.setLoading(false, "", ctx.getString(R.string.action_connect))
-            b.btnRowAction.setOnClickListener { listener.onConnectDiscovered(h) }
+            b.btnRowAction.setLoading(false, "", ctx.getString(R.string.ml_action_pair))
+            b.btnRowAction.setOnClickListener { listener.onPairDiscovered(h) }
             b.btnRowSecondary.visibility = View.GONE
             b.btnRowSecondary.setOnClickListener(null)
         }
@@ -160,16 +172,38 @@ class MoonlightListAdapter(
 }
 
 // Known hosts first (from the composer summaries), then discovered hosts not already known.
+// The trust word is derived from what we already hold: a session that is up proves the pairing
+// stands, a stored record means the pairing is remembered but unverified this visit, and
+// anything else has never been paired. Nothing here probes; the binding flow does that.
 fun moonlightRows(
     conns: List<ConnectionSummary>,
     discovered: List<MoonlightHost>,
+    rememberedIds: Set<String> = emptySet(),
 ): List<MoonlightRow> {
     val known = conns.filter { it.kind == ConnectionKind.MOONLIGHT }
     val knownIds = known.mapTo(mutableSetOf()) { it.id }
     return buildList {
-        known.forEach { add(MoonlightRow.Known(it)) }
+        known.forEach { summary ->
+            add(
+                MoonlightRow.Known(
+                    summary = summary,
+                    trust = moonlightTrustFor(summary, summary.id in rememberedIds),
+                    controllerCount = summary.boundSlotIds.size,
+                ),
+            )
+        }
         discovered.forEach { host ->
             if (host.id !in knownIds) add(MoonlightRow.Discovered(host))
         }
     }
 }
+
+internal fun moonlightTrustFor(
+    summary: ConnectionSummary,
+    remembered: Boolean,
+): MoonlightTrustState =
+    when {
+        summary.live == LinkState.Connected || summary.live == LinkState.Unstable -> MoonlightTrustState.PAIRED
+        remembered -> MoonlightTrustState.REMEMBERED
+        else -> MoonlightTrustState.NOT_PAIRED
+    }

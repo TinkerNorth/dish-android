@@ -11,9 +11,13 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginTop="@dimen/card_margin_bottom"
+    android:checkable="true"
     android:clickable="true"
     android:focusable="true"
-    android:foreground="?attr/selectableItemBackground">
+    android:foreground="?attr/selectableItemBackground"
+    app:cardBackgroundColor="@color/type_card_background"
+    app:checkedIcon="@null"
+    app:strokeColor="@color/type_card_stroke">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -43,6 +47,21 @@
                 android:layout_marginStart="@dimen/config_row_icon_gap"
                 tools:text="PlayStation" />
 
+            <TextView
+                android:id="@+id/typeBadge"
+                style="@style/TextAppearance.Dish.Caption"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/spacing_md"
+                android:background="@drawable/bg_recommended_pill"
+                android:paddingHorizontal="@dimen/spacing_md"
+                android:paddingVertical="@dimen/recommended_pill_vertical_padding"
+                android:textAllCaps="true"
+                android:textColor="@color/colorOnPrimary"
+                android:visibility="gone"
+                tools:text="PICKED FOR YOU"
+                tools:visibility="visible" />
+
             <ImageView
                 android:id="@+id/typeChevron"
                 android:layout_width="@dimen/icon_chevron_lg"
@@ -51,6 +70,17 @@
                 android:src="@drawable/ic_chevron_right"
                 app:tint="@color/colorMuted" />
         </LinearLayout>
+
+        <TextView
+            android:id="@+id/typeCaption"
+            style="@style/TextAppearance.Dish.Caption"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_xs"
+            android:textColor="@color/colorMuted"
+            android:visibility="gone"
+            tools:text="Auto sends PlayStation for this controller."
+            tools:visibility="visible" />
 
         <View
             style="@style/Widget.Dish.Divider"

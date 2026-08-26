@@ -14,6 +14,9 @@ import com.tinkernorth.dish.source.connection.ConnectIntent
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
+import com.tinkernorth.dish.ui.connections.moonlightTrustFor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,9 +44,10 @@ class SetupConnectionViewModel
     @Inject
     constructor(
         private val satellite: SatelliteConnectionManager,
+        private val moonlight: MoonlightConnectionManager,
         private val hub: ConnectionCoordinator,
     ) : ViewModel() {
-        enum class Step { PATH, SATELLITE }
+        enum class Step { PATH, SATELLITE, MOONLIGHT }
 
         data class Host(
             val id: String,
@@ -52,10 +56,20 @@ class SetupConnectionViewModel
             val server: DiscoveredServer,
         )
 
+        // A Moonlight host is picked, never connected: pairing is remembered trust and the
+        // session belongs to the binding, so the row carries the trust word and nothing live.
+        data class MoonlightRow(
+            val id: String,
+            val name: String,
+            val trust: MoonlightTrustState,
+        )
+
         data class State(
             val step: Step = Step.PATH,
             val scanning: Boolean = false,
             val hosts: List<Host> = emptyList(),
+            val moonlightHosts: List<MoonlightRow> = emptyList(),
+            val moonlightScanning: Boolean = false,
         )
 
         sealed interface Event {
@@ -110,6 +124,15 @@ class SetupConnectionViewModel
             satellite.events
                 .onEach { onConnectionEvent(it) }
                 .launchIn(viewModelScope)
+
+            combine(hub.connections, moonlight.remembered) { summaries, remembered ->
+                buildMoonlightRows(summaries, remembered.mapTo(mutableSetOf()) { it.id })
+            }.onEach { rows -> _state.update { it.copy(moonlightHosts = rows) } }
+                .launchIn(viewModelScope)
+
+            moonlight.isScanning
+                .onEach { scanning -> _state.update { it.copy(moonlightScanning = scanning) } }
+                .launchIn(viewModelScope)
         }
 
         // 3A: Satellite path stays on this screen and starts discovery; the
@@ -121,6 +144,19 @@ class SetupConnectionViewModel
         }
 
         fun startDiscovery() = satellite.startDiscovery()
+
+        // 3A: the Moonlight path lists hosts here and hands the picked one straight to
+        // configure. Pairing is not a gate: a binding is a durable intent and the session
+        // section on the next screen is where trust is verified and repaired.
+        fun chooseMoonlight() {
+            if (_state.value.step == Step.MOONLIGHT) return
+            _state.update { it.copy(step = Step.MOONLIGHT) }
+            startMoonlightDiscovery()
+        }
+
+        fun startMoonlightDiscovery() = moonlight.startDiscovery()
+
+        fun onMoonlightHostTapped(id: String) = emit(Event.Connected(id))
 
         // 3B/3C: a paired/ready host connects; an unpaired one promotes to the
         // PIN dialog. A live host short-circuits straight to the hand-off.
@@ -154,7 +190,7 @@ class SetupConnectionViewModel
         // itself is the screen's root (Activity finishes).
         fun back(): Boolean =
             when (_state.value.step) {
-                Step.SATELLITE -> {
+                Step.SATELLITE, Step.MOONLIGHT -> {
                     _state.update { it.copy(step = Step.PATH) }
                     true
                 }
@@ -217,6 +253,14 @@ class SetupConnectionViewModel
                 )
             }
         }
+
+        private fun buildMoonlightRows(
+            summaries: List<ConnectionSummary>,
+            rememberedIds: Set<String>,
+        ): List<MoonlightRow> =
+            summaries
+                .filter { it.kind == ConnectionKind.MOONLIGHT }
+                .map { MoonlightRow(it.id, it.label, moonlightTrustFor(it, it.id in rememberedIds)) }
 
         private fun emit(event: Event) {
             viewModelScope.launch { _events.emit(event) }

@@ -6,6 +6,7 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -14,7 +15,9 @@ class MoonlightRowsTest {
     private fun summary(
         id: String,
         kind: ConnectionKind = ConnectionKind.MOONLIGHT,
-    ) = ConnectionSummary(id = id, kind = kind, label = id, detail = "", live = LinkState.Saved, boundSlotIds = emptyList())
+        live: LinkState = LinkState.Saved,
+        boundSlotIds: List<String> = emptyList(),
+    ) = ConnectionSummary(id = id, kind = kind, label = id, detail = "", live = live, boundSlotIds = boundSlotIds)
 
     @Test
     fun `known moonlight hosts come first, then discovered hosts not already known`() {
@@ -36,5 +39,38 @@ class MoonlightRowsTest {
     fun `bluetooth and satellite summaries are excluded`() {
         val rows = moonlightRows(listOf(summary("sat:1", ConnectionKind.SATELLITE)), emptyList())
         assertTrue(rows.isEmpty())
+    }
+
+    // The three trust words, and never a liveness light: a live session proves the pairing
+    // stands, a stored record means it is remembered but unverified, anything else is not paired.
+    @Test
+    fun `a live session proves the pairing, a stored record only remembers it`() {
+        val live = summary("moonlight:uid:a", live = LinkState.Connected)
+        assertEquals(MoonlightTrustState.PAIRED, moonlightTrustFor(live, remembered = false))
+        assertEquals(
+            MoonlightTrustState.PAIRED,
+            moonlightTrustFor(summary("moonlight:uid:a", live = LinkState.Unstable), remembered = true),
+        )
+        assertEquals(MoonlightTrustState.REMEMBERED, moonlightTrustFor(summary("moonlight:uid:a"), remembered = true))
+        assertEquals(MoonlightTrustState.NOT_PAIRED, moonlightTrustFor(summary("moonlight:uid:a"), remembered = false))
+    }
+
+    @Test
+    fun `a known row carries its trust word and the controllers bound to it`() {
+        val rows =
+            moonlightRows(
+                conns = listOf(summary("moonlight:uid:a", live = LinkState.Connected, boundSlotIds = listOf("1", "2"))),
+                discovered = emptyList(),
+                rememberedIds = setOf("moonlight:uid:a"),
+            )
+        val known = rows.single() as MoonlightRow.Known
+        assertEquals(MoonlightTrustState.PAIRED, known.trust)
+        assertEquals(2, known.controllerCount)
+    }
+
+    @Test
+    fun `a discovered host is never claimed as remembered`() {
+        val rows = moonlightRows(emptyList(), listOf(MoonlightHost(name = "B", address = "10.0.0.2", uniqueId = "b")))
+        assertTrue(rows.single() is MoonlightRow.Discovered)
     }
 }

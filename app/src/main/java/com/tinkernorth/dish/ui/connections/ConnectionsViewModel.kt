@@ -56,11 +56,17 @@ class ConnectionsViewModel
                 hub.connections,
                 moonlight.discovered,
                 moonlight.isScanning,
-            ) { slice, conns, moonlightDiscovered, moonlightScanning ->
+                moonlight.remembered,
+            ) { slice, conns, moonlightDiscovered, moonlightScanning, moonlightRemembered ->
                 ConnectionsUiState(
                     satelliteRows = slice.satelliteRows,
                     bluetoothSummaries = slice.bluetoothSummaries,
-                    moonlightRows = moonlightRows(conns, moonlightDiscovered),
+                    moonlightRows =
+                        moonlightRows(
+                            conns,
+                            moonlightDiscovered,
+                            moonlightRemembered.mapTo(mutableSetOf()) { it.id },
+                        ),
                     rememberedBtIds = slice.rememberedBtIds,
                     scanning = slice.scanning,
                     moonlightScanning = moonlightScanning,
