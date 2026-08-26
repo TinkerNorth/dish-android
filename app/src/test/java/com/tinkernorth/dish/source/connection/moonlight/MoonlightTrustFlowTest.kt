@@ -13,6 +13,7 @@ import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import io.mockk.verifyOrder
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.toList
@@ -231,6 +232,23 @@ class MoonlightTrustFlowTest {
             dispatcher.scheduler.advanceUntilIdle()
 
             verify(atLeast = 1) { gateway.getHttps(match { it.contains("/cancel") }, any()) }
+        }
+
+    // The cancel rides mutual TLS, so it has to go out while the pin is still there. Drop
+    // the pin first and the handshake trusts the host on first use and writes a new pin
+    // straight back over the forget.
+    @Test
+    fun `the app is closed before the pin that authenticates the closing is dropped`() =
+        runTest(dispatcher) {
+            openLiveSession()
+
+            manager.forget(host.id)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            verifyOrder {
+                gateway.getHttps(match { it.contains("/cancel") }, any())
+                gateway.forgetPin(host.id)
+            }
         }
 
     @Test

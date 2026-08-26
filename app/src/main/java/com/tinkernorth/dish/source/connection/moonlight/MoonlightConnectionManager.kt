@@ -226,7 +226,10 @@ class MoonlightConnectionManager
                         .onFailure { Log.w(TAG, "discovery failed: ${it.message}", it) }
                         .getOrDefault(emptyList())
                 Log.i(TAG, "discovery found ${found.size} host(s), had ${_discovered.value.size}")
-                found.forEach { _discovered.mergeHost(it) }
+                // One emission for the whole scan: every downstream composer re-derives
+                // the connection list per emission, so merging host by host would rebuild
+                // it once per host found.
+                _discovered.value = _discovered.value.filterNot { old -> found.any { it.id == old.id } } + found
                 _isScanning.value = false
             }
         }
@@ -262,7 +265,7 @@ class MoonlightConnectionManager
         }
 
         private fun MutableStateFlow<List<MoonlightHost>>.mergeHost(host: MoonlightHost) {
-            value = (value.filterNot { it.id == host.id } + host)
+            value = value.filterNot { it.id == host.id } + host
         }
 
         private fun externalPortOr(info: MoonlightXml.ServerInfo): Int = info.externalPort ?: MoonlightHost.DEFAULT_HTTP_PORT
@@ -794,17 +797,22 @@ class MoonlightConnectionManager
          * there. The confirmation copy says so.
          */
         fun forget(id: String) {
-            val host = hostFor(id)
-            Log.i(TAG, "forgetting ${host?.address ?: id}")
-            // Cancel before the credentials go: afterwards there is nothing left to
-            // authenticate one with, and the host keeps running the app regardless.
-            releaseSessionFor(id, host)
-            store.remove(id)
-            gateway.forgetPin(id)
-            _connections.updateAndGet { it - id }
-            _discovered.value = _discovered.value.filterNot { it.id == id }
-            _verifiedHostIds.value = _verifiedHostIds.value - id
-            publishSessionHosts()
+            // Off the caller's thread because the /cancel below is a blocking mutual-TLS
+            // call and this is reached straight from a row tap. The ORDER inside is what
+            // makes it one step and not three: the cancel has to go before the pin does,
+            // or the handshake it needs finds no pin, trusts the host on first use, and
+            // writes a new one over the top of the forget.
+            scope.launch(ioDispatcher) {
+                val host = hostFor(id)
+                Log.i(TAG, "forgetting ${host?.address ?: id}")
+                releaseSessionFor(id, host)
+                store.remove(id)
+                gateway.forgetPin(id)
+                _connections.updateAndGet { it - id }
+                _discovered.value = _discovered.value.filterNot { it.id == id }
+                _verifiedHostIds.value = _verifiedHostIds.value - id
+                publishSessionHosts()
+            }
         }
 
         private fun markVerified(hostId: String) {
