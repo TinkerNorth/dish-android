@@ -15,6 +15,7 @@ import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import javax.inject.Inject
 import javax.inject.Singleton
+import javax.net.ssl.KeyManager
 import javax.net.ssl.KeyManagerFactory
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLPeerUnverifiedException
@@ -57,13 +58,12 @@ class MoonlightHttpGateway
         private val plain = MoonlightHttp11Client(TIMEOUT_MS, TIMEOUT_MS)
 
         /**
-         * Present the client certificate; the host authorises by it after pairing.
-         *
-         * Built once. It is what a TLS connection is keyed on, it is not cheap
-         * (a keystore load and a KeyManagerFactory per call), and the identity
-         * behind it never changes for the life of the process.
+         * The dish's client credential, resolved once: a keystore load and a
+         * KeyManagerFactory init are not cheap, and the identity behind them
+         * never changes for the life of the process. The SSLContext that
+         * presents them is deliberately not cached; see [openTls].
          */
-        private val tlsFactory: SSLSocketFactory by lazy { mutualTlsFactory() }
+        private val clientCredential: Array<KeyManager> by lazy { clientKeyManagers() }
 
         /**
          * Plaintext GET (serverinfo / pair phases 1-4).
@@ -101,6 +101,9 @@ class MoonlightHttpGateway
          * [MoonlightHttp11Client] already sends, leaves the host holding nothing
          * of ours between calls, which is how the plaintext half has always
          * behaved and the half that never had this problem.
+         *
+         * Holding nothing of ours has to include the TLS session itself, which
+         * is what [openTls] is careful about.
          */
         fun getHttps(
             urlString: String,
@@ -115,6 +118,22 @@ class MoonlightHttpGateway
          * certificate, or throws once the host's certificate fails the pin.
          * Throwing is the rejection: [MoonlightHttp11Client] never writes a
          * request through a socket it did not get back.
+         *
+         * A FRESH SSLContext PER CONNECTION, and that is the whole point of
+         * building it here rather than once. An SSLContext owns the client
+         * session cache, so a cached factory hands every call after the first
+         * one a session to resume, and a resumed session is the one thing a
+         * Moonlight host cannot survive: it carries the peer identity forward
+         * instead of asking for the certificate again, so the host's verify
+         * callback never runs and Sunshine answers with a fatal
+         * `internal_error` alert (RFC 8446 alert 80) and logs nothing at all.
+         * Measured against a live Sunshine 2026.x host, at TLS 1.2 as well as
+         * TLS 1.3: a full handshake is served, a resumed one is killed. The
+         * gateway is a singleton and the identity outlives the process, so
+         * without this every mutual-TLS call but the very first one failed.
+         * (The HttpsURLConnection version this replaced never hit it only by
+         * accident: it built a whole SSLContext per call.) Cheap, too, since
+         * [clientCredential] carries the part that is not.
          */
         private fun openTls(
             socket: Socket,
@@ -122,7 +141,7 @@ class MoonlightHttpGateway
             port: Int,
             hostId: String,
         ): Socket {
-            val tls = tlsFactory.createSocket(socket, host, port, true) as SSLSocket
+            val tls = mutualTlsFactory().createSocket(socket, host, port, true) as SSLSocket
             tls.startHandshake()
             val presented =
                 tls.session
@@ -136,8 +155,15 @@ class MoonlightHttpGateway
             return tls
         }
 
+        /** A context of its own, and with it a session cache that is always empty. */
+        private fun mutualTlsFactory(): SSLSocketFactory =
+            SSLContext
+                .getInstance("TLS")
+                .apply { init(clientCredential, arrayOf(trustAll), SecureRandom()) }
+                .socketFactory
+
         // Present the client certificate; the host authorises by it after pairing.
-        private fun mutualTlsFactory(): SSLSocketFactory {
+        private fun clientKeyManagers(): Array<KeyManager> {
             val keyStore =
                 KeyStore.getInstance(KeyStore.getDefaultType()).apply {
                     load(null)
@@ -151,14 +177,10 @@ class MoonlightHttpGateway
                         ),
                     )
                 }
-            val kmf =
-                KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm()).apply {
-                    init(keyStore, CharArray(0))
-                }
-            return SSLContext
-                .getInstance("TLS")
-                .apply { init(kmf.keyManagers, arrayOf(trustAll), SecureRandom()) }
-                .socketFactory
+            return KeyManagerFactory
+                .getInstance(KeyManagerFactory.getDefaultAlgorithm())
+                .apply { init(keyStore, CharArray(0)) }
+                .keyManagers
         }
 
         // TOFU: accept any self-signed host cert on first contact and pin it, then

@@ -17,11 +17,17 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.net.InetAddress
+import java.security.cert.X509Certificate
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import javax.net.ssl.KeyManager
+import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLServerSocket
 import javax.net.ssl.SSLSocket
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
 /**
  * Drives [MoonlightHttpGateway.getHttps] against a real loopback TLS host that
@@ -29,10 +35,12 @@ import javax.net.ssl.SSLSocket
  * socket lifecycle are all real.
  *
  * What this pins down is the shape the gateway has to keep: one connection per
- * request, closed once the host has answered, and a host certificate that has
- * to survive the TOFU pin before any request is written. The previous
- * HttpsURLConnection version failed all three, which is what wedged real
- * Sunshine hosts after the first call.
+ * request, closed once the host has answered; a full handshake on every one of
+ * them, never a resumed session; and a host certificate that has to survive the
+ * TOFU pin before any request is written. Real Sunshine hosts have broken on
+ * each of the first two in turn, the pooled HttpsURLConnection version by
+ * leaking a live session per call and the cached-factory version by offering
+ * one to resume.
  */
 class MoonlightHttpGatewayTest {
     private val clientHeld = ThrowawayIdentity.heldCertificate("dish-gateway-test-client")
@@ -90,13 +98,30 @@ class MoonlightHttpGatewayTest {
     @Test
     fun `every call gets its own connection, and closes it before returning`() {
         val base = start()
+        val gateway = gateway()
 
-        repeat(CALLS) { assertEquals(200, gateway().getHttps("$base/serverinfo?uniqueid=abc", HOST_ID).status) }
+        repeat(CALLS) { assertEquals(200, gateway.getHttps("$base/serverinfo?uniqueid=abc", HOST_ID).status) }
 
         // One accept per call, and the host read EOF on each: nothing of ours is
         // still open, which is exactly what the pooled URL-stack version leaked.
         assertEquals(CALLS, host.awaitHeads(CALLS).size)
         assertEquals(CALLS, host.closedByPeer.size)
+    }
+
+    @Test
+    fun `handshakes from scratch every call, never offering a session to resume`() {
+        val base = start()
+        val gateway = gateway()
+
+        repeat(CALLS) { assertEquals(200, gateway.getHttps("$base/serverinfo?uniqueid=abc", HOST_ID).status) }
+
+        assertEquals(CALLS, host.awaitHeads(CALLS).size)
+        // One client-certificate check per call. A resumed session skips the
+        // client's Certificate message altogether, so a host that authorises by
+        // that certificate never sees it: Sunshine answers such a connection
+        // with a fatal internal_error alert and logs nothing at all. The gateway
+        // must therefore never carry a session cache from one call to the next.
+        assertEquals(CALLS, host.clientChecks.get())
     }
 
     @Test
@@ -138,16 +163,28 @@ class MoonlightHttpGatewayTest {
      */
     private class TlsHost(
         held: HeldCertificate,
-        trustedClient: java.security.cert.X509Certificate,
+        trustedClient: X509Certificate,
     ) {
-        private val server: SSLServerSocket =
+        private val credentials =
             HandshakeCertificates
                 .Builder()
                 .heldCertificate(held)
                 .addTrustedCertificate(trustedClient)
                 .build()
-                .sslContext()
-                .serverSocketFactory
+
+        /** One per full handshake, none on a resumed session. See [CountingTrustManager]. */
+        val clientChecks = AtomicInteger()
+
+        private val server: SSLServerSocket =
+            SSLContext
+                .getInstance("TLS")
+                .apply {
+                    init(
+                        arrayOf<KeyManager>(credentials.keyManager),
+                        arrayOf<TrustManager>(CountingTrustManager(credentials.trustManager, clientChecks)),
+                        null,
+                    )
+                }.serverSocketFactory
                 .createServerSocket(0, BACKLOG, InetAddress.getByName("127.0.0.1")) as SSLServerSocket
 
         val heads = CopyOnWriteArrayList<String>()
@@ -223,6 +260,25 @@ class MoonlightHttpGatewayTest {
 
         fun close() {
             runCatching { server.close() }
+        }
+    }
+
+    /**
+     * Counts what a Moonlight host's own verify callback counts: JSSE runs one
+     * client-certificate check per full handshake and none at all on a resumed
+     * session, because a resumed session carries the peer identity forward
+     * instead of asking for the certificate again.
+     */
+    private class CountingTrustManager(
+        private val delegate: X509TrustManager,
+        private val checks: AtomicInteger,
+    ) : X509TrustManager by delegate {
+        override fun checkClientTrusted(
+            chain: Array<out X509Certificate>,
+            authType: String,
+        ) {
+            checks.incrementAndGet()
+            delegate.checkClientTrusted(chain, authType)
         }
     }
 
