@@ -308,6 +308,8 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 showMoonlightPinDialog(ev.host, ev.pin)
             is com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent.Paired ->
                 moonlightPinDialog?.dismiss()
+            is com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent.AppAlreadyRunning ->
+                showMoonlightBusyDialog(ev.host)
             is com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent.Error -> {
                 moonlightPinDialog?.dismiss()
                 notifications.error(
@@ -317,6 +319,20 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 )
             }
         }
+    }
+
+    /**
+     * The host is holding an app it will not hand over. Offer the protocol's own
+     * way out rather than a dead end: /cancel ends it and the next attempt works.
+     */
+    private fun showMoonlightBusyDialog(host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost) {
+        moonlightPinDialog?.dismiss()
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.moonlight_busy_title)
+            .setMessage(getString(R.string.moonlight_busy_message, host.name))
+            .setPositiveButton(R.string.moonlight_busy_close) { _, _ -> moonlight.quitHostApp(host) }
+            .setNegativeButton(R.string.action_cancel, null)
+            .show()
     }
 
     private fun observeSystemStateBanners() {

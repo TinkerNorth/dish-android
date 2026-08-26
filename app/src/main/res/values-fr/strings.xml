@@ -141,6 +141,9 @@
     <string name="moonlight_emulated_auto">Auto</string>
     <string name="moonlight_app_title">Choisir une app</string>
     <string name="moonlight_no_apps">Aucune app disponible sur cet hôte.</string>
+    <string name="moonlight_busy_title">Une app est déjà en cours</string>
+    <string name="moonlight_busy_message">%1$s exécute déjà une app et ne cédera pas cette session. Fermez-la pour en démarrer une nouvelle.</string>
+    <string name="moonlight_busy_close">La fermer</string>
     <string name="action_add_moonlight_host">Ajouter un hôte Moonlight</string>
     <string name="add_moonlight_host_hint">IP ou nom de l\'hôte</string>
     <string name="add_moonlight_error_host">Saisissez l\'adresse de l\'hôte</string>

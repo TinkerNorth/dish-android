@@ -3,6 +3,7 @@
 
 package com.tinkernorth.dish.source.connection.moonlight
 
+import android.util.Log
 import com.tinkernorth.dish.core.net.moonlight.MoonlightControlProtocol
 import com.tinkernorth.dish.core.net.moonlight.MoonlightControlSession
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
@@ -10,6 +11,8 @@ import com.tinkernorth.dish.core.net.moonlight.MoonlightEvent
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,6 +41,18 @@ class MoonlightConnection(
     @Volatile private var session: MoonlightControlSession? = null
     private var pumpJob: Job? = null
 
+    @Volatile private var pinger: UdpMediaPinger? = null
+    private var pingJob: Job? = null
+
+    /**
+     * Set when this connection gave up on its own (the control stream died, or
+     * the stream setup never completed) rather than being closed by the user.
+     * The manager reads it to decide whether to tell the host to drop the app it
+     * launched for us.
+     */
+    @Volatile var gaveUp: Boolean = false
+        private set
+
     // The emulated type chosen for this session and whether the arrival was sent.
     @Volatile private var emulatedType: Int = MoonlightEmulatedType.AUTO
 
@@ -52,8 +67,30 @@ class MoonlightConnection(
     }
 
     fun markLaunching() {
+        gaveUp = false
         if (_state.value == MoonlightSessionState.Live) return
         _state.value = MoonlightSessionState.Launching
+    }
+
+    /**
+     * Start pinging the host's media ports. Runs from the moment the stream
+     * setup names them, because the host's initial-ping deadline is counted from
+     * its own session start and not from when our control channel comes up.
+     */
+    fun startMediaPings(pinger: UdpMediaPinger) {
+        this.pinger?.let { old -> old.close() }
+        this.pinger = pinger
+        Log.i(TAG, "media pings for $id as ${pinger.mode} from ${pinger.localPorts}")
+        pingJob =
+            scope.launch(ioDispatcher) {
+                while (isActive) {
+                    runCatching {
+                        pinger.ping()
+                        pinger.drain()
+                    }
+                    delay(MEDIA_PING_INTERVAL_MS)
+                }
+            }
     }
 
     /**
@@ -75,11 +112,23 @@ class MoonlightConnection(
         _state.value = MoonlightSessionState.Live
         pumpJob =
             scope.launch(ioDispatcher) {
-                while (isActive && session.state == MoonlightControlSession.State.CONNECTED) {
-                    session.pump()
+                // A throw in here would strand the session Live with nothing
+                // acknowledging the host, so it is caught and reported rather
+                // than left to kill the coroutine silently.
+                val failure = runCatching { pumpUntilClosed(session) }.exceptionOrNull()
+                if (failure != null) Log.w(TAG, "control pump for $id stopped: ${failure.message}", failure)
+                Log.i(TAG, "control link for $id ended: ${session.disconnectReason ?: "closed"} (${session.linkStats()})")
+                if (_state.value == MoonlightSessionState.Live) {
+                    gaveUp = true
+                    markDisconnected()
                 }
-                if (_state.value == MoonlightSessionState.Live) markDisconnected()
             }
+    }
+
+    private suspend fun pumpUntilClosed(session: MoonlightControlSession) {
+        while (currentCoroutineContext().isActive && session.state == MoonlightControlSession.State.CONNECTED) {
+            session.pump()
+        }
     }
 
     /** HOT PATH: forward the current controller state to the live session. */
@@ -111,9 +160,19 @@ class MoonlightConnection(
         onFeedback(event)
     }
 
+    /** Give up on this session ourselves (as opposed to the user closing it). */
+    fun markFailed() {
+        gaveUp = true
+        markDisconnected()
+    }
+
     fun markDisconnected() {
         pumpJob?.cancel()
         pumpJob = null
+        pingJob?.cancel()
+        pingJob = null
+        pinger?.close()
+        pinger = null
         session?.let { s -> scope.launch(ioDispatcher) { runCatching { s.stop() } } }
         session = null
         arrivalSent = false
@@ -121,6 +180,11 @@ class MoonlightConnection(
     }
 
     companion object {
+        private const val TAG = "MoonlightConnection"
+
+        // Comfortably inside every host deadline we have measured, and cheap.
+        private const val MEDIA_PING_INTERVAL_MS = 500L
+
         const val ID_PREFIX = MoonlightHost.ID_PREFIX
 
         // Capabilities the dish's virtual/physical pad advertises to the host:

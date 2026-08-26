@@ -47,6 +47,17 @@ sealed class MoonlightConnectionEvent {
     data class Paired(
         val host: MoonlightHost,
     ) : MoonlightConnectionEvent()
+
+    /**
+     * The host refused to start an app because one is already running. When
+     * [resumable] the dish can take that session over; when it is not, the app
+     * belongs to somebody else and the only way forward is to quit it (see
+     * [MoonlightConnectionManager.quitHostApp]).
+     */
+    data class AppAlreadyRunning(
+        val host: MoonlightHost,
+        val resumable: Boolean,
+    ) : MoonlightConnectionEvent()
 }
 
 /**
@@ -56,12 +67,11 @@ sealed class MoonlightConnectionEvent {
  * the same shape (a connections map, a discovered list, an events flow) so the
  * composer and coordinator treat both paths uniformly.
  *
- * The launch/stream flow has now run against a live Sunshine host as far as the
- * control channel: /launch, the RTSP handshake, the ENet connect and a gamepad
- * arrival all land, and the host reports the pad. What it does not yet survive
- * is the host's media-stream ping timeout, which ends the session about ten
- * seconds later (see the PR's known gaps). The protocol pieces it composes are
- * unit-tested byte-for-byte against Wolf's vectors.
+ * The launch/stream flow runs against a live Sunshine host end to end: /launch
+ * (or /resume when the host already has our session), the RTSP handshake, the
+ * media-port pings that stop the host's initial-ping deadline, the ENet connect
+ * and the live control stream. The protocol pieces it composes are unit-tested
+ * byte-for-byte against Wolf's vectors.
  */
 @Singleton
 class MoonlightConnectionManager
@@ -272,32 +282,26 @@ class MoonlightConnectionManager
                     (it[0].toInt() and 0xFF) or ((it[1].toInt() and 0xFF) shl 8) or
                         ((it[2].toInt() and 0xFF) shl 16) or ((it[3].toInt() and 0xFF) shl 24)
                 }
-            val launchUrl =
-                MoonlightUrls.launch(host.address, host.httpsPort, deviceId, appId, bytesToHex(rikey), rikeyId, LAUNCH_MODE)
-            val launchReply = gateway.getHttps(launchUrl, host.id)
-            val rtspPort = parseRtspPort(launchReply.body)
-            Log.i(TAG, "launch $appId on ${host.address}: status ${launchReply.status}, RTSP port $rtspPort")
-            if (!launchReply.ok || rtspPort == null) {
-                Log.w(TAG, "launch refused by ${host.address}: ${launchReply.body.take(BODY_LOG_CHARS)}")
-                conn.markDisconnected()
-                _events.emit(MoonlightConnectionEvent.Error("Couldn't start a session on ${host.name}."))
-                return
-            }
+            val rtspPort = openSession(conn, host, appId, bytesToHex(rikey), rikeyId) ?: return
             val rtsp = MoonlightRtspClient(host.address, rtspPort).handshake(LAUNCH_WIDTH, LAUNCH_HEIGHT, LAUNCH_FPS)
             if (rtsp == null) {
                 // MoonlightRtspClient has already said which step failed and how.
                 Log.w(TAG, "RTSP setup failed on ${host.address}:$rtspPort")
-                conn.markDisconnected()
-                _events.emit(MoonlightConnectionEvent.Error("Stream setup failed on ${host.name}."))
+                giveUp(conn, host, "Stream setup failed on ${host.name}.")
                 return
             }
+            // Before the control channel, not after: the host counts its initial
+            // ping deadline from its own session start, so the media ports get
+            // their first datagram at the earliest moment we know their numbers.
+            runCatching { UdpMediaPinger(host.address, rtsp.videoPort, rtsp.audioPort, rtsp.pingPayload) }
+                .onSuccess(conn::startMediaPings)
+                .onFailure { Log.w(TAG, "no media ping sockets for ${host.address}: ${it.message}") }
             val transport =
                 runCatching { UdpControlTransport(host.address, rtsp.controlPort) }
                     .onFailure { Log.w(TAG, "no control socket to ${host.address}:${rtsp.controlPort}: ${it.message}") }
                     .getOrNull()
             if (transport == null) {
-                conn.markDisconnected()
-                _events.emit(MoonlightConnectionEvent.Error("Control channel did not connect on ${host.name}."))
+                giveUp(conn, host, "Control channel did not connect on ${host.name}.")
                 return
             }
             val session =
@@ -306,8 +310,7 @@ class MoonlightConnectionManager
                 }
             if (!session.connect()) {
                 Log.w(TAG, "control channel refused on ${host.address}:${rtsp.controlPort}")
-                conn.markDisconnected()
-                _events.emit(MoonlightConnectionEvent.Error("Control channel did not connect on ${host.name}."))
+                giveUp(conn, host, "Control channel did not connect on ${host.name}.")
                 return
             }
             Log.i(TAG, "live on ${host.address}, control ${rtsp.controlPort}, emulated type $emulatedType")
@@ -319,6 +322,129 @@ class MoonlightConnectionManager
             )
             rememberPaired(host, appId, emulatedType)
         }
+
+        /**
+         * Ask the host to start [appId] and hand back the RTSP port it named, or
+         * null when it would not.
+         *
+         * A MOONLIGHT HOST REFUSES IN THE BODY, NOT IN THE STATUS LINE. Sunshine
+         * answers a second /launch with HTTP 200 carrying
+         * `status_code="400" status_message="An app is already running on this
+         * host"`, so the transport succeeded and the call did not. Reading only
+         * the HTTP status turned that into "RTSP port null" and a generic
+         * failure, which named the symptom and hid the cause.
+         */
+        private suspend fun openSession(
+            conn: MoonlightConnection,
+            host: MoonlightHost,
+            appId: String,
+            rikeyHex: String,
+            rikeyId: Int,
+        ): Int? {
+            val url = MoonlightUrls.launch(host.address, host.httpsPort, deviceId, appId, rikeyHex, rikeyId, LAUNCH_MODE)
+            val reply = gateway.getHttps(url, host.id)
+            val status = MoonlightXml.parseStatus(reply.body)
+            val rtspPort = parseRtspPort(reply.body)
+            Log.i(
+                TAG,
+                "launch $appId on ${host.address}: HTTP ${reply.status}, " +
+                    "host ${status?.code ?: "?"} ${status?.message.orEmpty()}, RTSP port $rtspPort",
+            )
+            if (reply.ok && status?.ok != false && rtspPort != null) return rtspPort
+            if (status?.appAlreadyRunning == true) return resumeSession(conn, host, status, rikeyHex, rikeyId)
+            Log.w(TAG, "launch refused by ${host.address}: ${reply.body.take(BODY_LOG_CHARS)}")
+            conn.markFailed()
+            _events.emit(MoonlightConnectionEvent.Error(refusalMessage(host, status)))
+            return null
+        }
+
+        /**
+         * Take over the session the host already has, when it says we may. A host
+         * that says we may not is holding somebody else's app and the only way
+         * past it is [quitHostApp], so say so instead of failing vaguely.
+         */
+        private suspend fun resumeSession(
+            conn: MoonlightConnection,
+            host: MoonlightHost,
+            launchStatus: MoonlightXml.Status,
+            rikeyHex: String,
+            rikeyId: Int,
+        ): Int? {
+            if (!launchStatus.resume) {
+                Log.i(TAG, "${host.address} has an app running and will not resume it")
+                conn.markFailed()
+                _events.emit(MoonlightConnectionEvent.AppAlreadyRunning(host, resumable = false))
+                return null
+            }
+            val reply =
+                gateway.getHttps(MoonlightUrls.resume(host.address, host.httpsPort, deviceId, rikeyHex, rikeyId), host.id)
+            val status = MoonlightXml.parseStatus(reply.body)
+            val rtspPort = parseRtspPort(reply.body)
+            Log.i(
+                TAG,
+                "resume on ${host.address}: HTTP ${reply.status}, " +
+                    "host ${status?.code ?: "?"} ${status?.message.orEmpty()}, RTSP port $rtspPort",
+            )
+            if (reply.ok && status?.ok != false && rtspPort != null) return rtspPort
+            Log.w(TAG, "resume refused by ${host.address}: ${reply.body.take(BODY_LOG_CHARS)}")
+            conn.markFailed()
+            _events.emit(MoonlightConnectionEvent.AppAlreadyRunning(host, resumable = true))
+            return null
+        }
+
+        /**
+         * Tell [host] to end the app it is running. The protocol's own way out of
+         * "an app is already running", and the only one when the host will not
+         * resume that session for us.
+         */
+        fun quitHostApp(host: MoonlightHost) {
+            scope.launch(ioDispatcher) {
+                val ended = cancelHostApp(host)
+                _events.emit(
+                    if (ended) {
+                        MoonlightConnectionEvent.Error("Closed the app running on ${host.name}. Try again.")
+                    } else {
+                        MoonlightConnectionEvent.Error("Couldn't close the app running on ${host.name}.")
+                    },
+                )
+            }
+        }
+
+        private fun cancelHostApp(host: MoonlightHost): Boolean {
+            val reply = gateway.getHttps(MoonlightUrls.cancel(host.address, host.httpsPort, deviceId), host.id)
+            val status = MoonlightXml.parseStatus(reply.body)
+            Log.i(TAG, "cancel on ${host.address}: HTTP ${reply.status}, host ${status?.code ?: "?"}")
+            return reply.ok && status?.ok != false
+        }
+
+        /**
+         * Abandon a launch we asked for and could not use. The host started an app
+         * on our behalf, so we take it back down rather than strand it: every later
+         * attempt would otherwise be refused by the app we ourselves left running.
+         *
+         * Only for the setup path. A control stream that drops after going live is
+         * left alone, because the host will let us /resume it and the user would
+         * rather have that than have their game closed under them.
+         */
+        private suspend fun giveUp(
+            conn: MoonlightConnection,
+            host: MoonlightHost,
+            message: String,
+        ) {
+            conn.markFailed()
+            runCatching { cancelHostApp(host) }
+            _events.emit(MoonlightConnectionEvent.Error(message))
+        }
+
+        private fun refusalMessage(
+            host: MoonlightHost,
+            status: MoonlightXml.Status?,
+        ): String =
+            status
+                ?.message
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { "${host.name} refused the session: $it" }
+                ?: "Couldn't start a session on ${host.name}."
 
         private fun defaultAppId(host: MoonlightHost): String? {
             val reply = gateway.getHttps(MoonlightUrls.appList(host.address, host.httpsPort, deviceId), host.id)

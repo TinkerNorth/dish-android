@@ -27,6 +27,13 @@ internal object EnetProtocol {
     const val COMMAND_DISCONNECT = 4
     const val COMMAND_PING = 5
     const val COMMAND_SEND_RELIABLE = 6
+    const val COMMAND_SEND_UNRELIABLE = 7
+    const val COMMAND_SEND_FRAGMENT = 8
+    const val COMMAND_SEND_UNSEQUENCED = 9
+    const val COMMAND_BANDWIDTH_LIMIT = 10
+    const val COMMAND_THROTTLE_CONFIGURE = 11
+    const val COMMAND_SEND_UNRELIABLE_FRAGMENT = 12
+    const val COMMAND_COUNT = 13
     const val COMMAND_MASK = 0x0F
 
     // Command flags (protocol.h ENetProtocolFlag).
@@ -59,6 +66,11 @@ internal object EnetProtocol {
     const val DISCONNECT_LEN = 8
     const val PING_LEN = 4
     const val SEND_RELIABLE_HEADER_LEN = 6
+    const val SEND_UNRELIABLE_HEADER_LEN = 8
+    const val SEND_UNSEQUENCED_HEADER_LEN = 8
+    const val SEND_FRAGMENT_HEADER_LEN = 24
+    const val BANDWIDTH_LIMIT_LEN = 12
+    const val THROTTLE_CONFIGURE_LEN = 16
 
     // Default peer parameters (enet.h ENET_PEER_* / peer.c enet_peer_reset).
     const val DEFAULT_MTU = 1400
@@ -66,6 +78,14 @@ internal object EnetProtocol {
     const val PACKET_THROTTLE_ACCELERATION = 2
     const val PACKET_THROTTLE_DECELERATION = 2
     const val PING_INTERVAL_MS = 500
+
+    // Peer liveness (enet.h ENET_PEER_*). These are the numbers the host on the
+    // other end is using, so the client has to keep to the same clock or one
+    // side gives up while the other still thinks the session is healthy.
+    const val DEFAULT_ROUND_TRIP_TIME_MS = 500
+    const val TIMEOUT_LIMIT = 32
+    const val TIMEOUT_MINIMUM_MS = 5000
+    const val TIMEOUT_MAXIMUM_MS = 30000
 
     data class CommandHeader(
         val command: Int,
@@ -128,6 +148,16 @@ internal object EnetProtocol {
         w.u16(reliableSequenceNumber and 0xFFFF)
     }
 
+    /**
+     * The fixed on-wire size of one command, mirroring protocol.c's
+     * `commandSizes` table exactly. For the SEND_* commands this is the header
+     * only: a `dataLength` payload follows it.
+     *
+     * EVERY COMMAND NUMBER HAS TO BE IN HERE, including the ones this client
+     * never sends. A peer bundles several commands into one datagram, so a
+     * command whose size we do not know is not one command lost, it is the rest
+     * of that datagram lost, acknowledgements included. See [EnetClient.onDatagram].
+     */
     fun sizeForCommand(commandNumber: Int): Int =
         when (commandNumber) {
             COMMAND_ACKNOWLEDGE -> ACKNOWLEDGE_LEN
@@ -136,6 +166,24 @@ internal object EnetProtocol {
             COMMAND_DISCONNECT -> DISCONNECT_LEN
             COMMAND_PING -> PING_LEN
             COMMAND_SEND_RELIABLE -> SEND_RELIABLE_HEADER_LEN
+            COMMAND_SEND_UNRELIABLE -> SEND_UNRELIABLE_HEADER_LEN
+            COMMAND_SEND_FRAGMENT -> SEND_FRAGMENT_HEADER_LEN
+            COMMAND_SEND_UNSEQUENCED -> SEND_UNSEQUENCED_HEADER_LEN
+            COMMAND_BANDWIDTH_LIMIT -> BANDWIDTH_LIMIT_LEN
+            COMMAND_THROTTLE_CONFIGURE -> THROTTLE_CONFIGURE_LEN
+            COMMAND_SEND_UNRELIABLE_FRAGMENT -> SEND_FRAGMENT_HEADER_LEN
             else -> 0
+        }
+
+    /**
+     * Whether a command carries a `dataLength`-counted payload after its fixed
+     * header, and at what offset within that header the count sits.
+     */
+    fun dataLengthOffset(commandNumber: Int): Int =
+        when (commandNumber) {
+            COMMAND_SEND_RELIABLE -> COMMAND_HEADER_LEN
+            COMMAND_SEND_UNRELIABLE, COMMAND_SEND_UNSEQUENCED -> COMMAND_HEADER_LEN + 2
+            COMMAND_SEND_FRAGMENT, COMMAND_SEND_UNRELIABLE_FRAGMENT -> COMMAND_HEADER_LEN + 2
+            else -> -1
         }
 }

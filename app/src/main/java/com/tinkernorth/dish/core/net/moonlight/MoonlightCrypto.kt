@@ -129,14 +129,30 @@ object MoonlightCrypto {
             block(this)
         }
 
+    /**
+     * The control-stream GCM IV: sixteen zero bytes with the LOW BYTE of [seq]
+     * in byte 0, and nothing else.
+     *
+     * ONLY THE LOW BYTE, however wrong that looks. The host builds the same IV
+     * with `std::array<std::uint8_t, 16> iv_data = {0}; iv_data[0] = seq;`
+     * (Wolf control.hpp encrypt_packet and decrypt_packet), where assigning a
+     * u32 into a u8 element drops the top three bytes. The packet header still
+     * carries the full 32-bit sequence, so only the IV wraps. Writing all four
+     * bytes here, as this used to, agrees with the host for the first 256
+     * packets and disagrees forever after: a live Sunshine host accepted 256
+     * sealed control packets and answered the 257th with "Failed to verify tag",
+     * then ended the session. At two packets a second that is a session that
+     * dies after about two minutes, every time, which is exactly why it hid
+     * behind the faults that used to end the session in six.
+     *
+     * The IV therefore repeats every 256 packets on one session key. That is the
+     * protocol's property and not a choice available to a client that wants to
+     * interoperate. What limits it is that the key is the rikey, minted fresh
+     * for every /launch and never reused across sessions.
+     */
     private fun controlIv(seq: Int): ByteArray {
         val iv = ByteArray(CONTROL_IV_LEN)
-        // Little-endian seq in the low 4 bytes; Wolf only ever populates byte 0
-        // for small seqs but keeps the full 32-bit LE value here for parity.
         iv[0] = (seq and 0xFF).toByte()
-        iv[1] = ((seq ushr 8) and 0xFF).toByte()
-        iv[2] = ((seq ushr 16) and 0xFF).toByte()
-        iv[3] = ((seq ushr 24) and 0xFF).toByte()
         return iv
     }
 

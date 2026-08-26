@@ -111,6 +111,69 @@ class MoonlightXmlTest {
     }
 
     /**
+     * Byte for byte what a live Sunshine host answered a second /launch with,
+     * over an HTTP 200. Reading only the HTTP status called this a success and
+     * then failed downstream on the missing sessionUrl0.
+     */
+    @Test
+    fun `an app-already-running refusal is read out of the body, not the status line`() {
+        val xml =
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                "<root status_code=\"400\" status_message=\"An app is already running on this host\">" +
+                "<resume>0</resume></root>"
+
+        val status = MoonlightXml.parseStatus(xml)!!
+
+        assertEquals(400, status.code)
+        assertEquals("An app is already running on this host", status.message)
+        assertFalse(status.ok)
+        assertTrue(status.appAlreadyRunning)
+        assertFalse(status.resume)
+    }
+
+    @Test
+    fun `a resumable session is flagged so the client takes it over instead of failing`() {
+        val xml =
+            "<root status_code=\"400\" status_message=\"An app is already running on this host\">" +
+                "<resume>1</resume></root>"
+
+        val status = MoonlightXml.parseStatus(xml)!!
+
+        assertTrue(status.appAlreadyRunning)
+        assertTrue(status.resume)
+    }
+
+    @Test
+    fun `a successful launch reads as ok`() {
+        val xml =
+            "<root status_code=\"200\"><sessionUrl0>rtsp://192.168.68.98:48010</sessionUrl0>" +
+                "<gamesession>1</gamesession></root>"
+
+        val status = MoonlightXml.parseStatus(xml)!!
+
+        assertTrue(status.ok)
+        assertFalse(status.appAlreadyRunning)
+    }
+
+    @Test
+    fun `a reply naming no status code at all is a plain success`() {
+        // Wolf answers /applist this way.
+        assertTrue(MoonlightXml.parseStatus("<root><App><ID>1</ID></App></root>")!!.ok)
+    }
+
+    @Test
+    fun `an unparsable reply has no status`() {
+        assertNull(MoonlightXml.parseStatus("not xml at all"))
+    }
+
+    @Test
+    fun `a refusal that is not about a running app is not mistaken for one`() {
+        val status = MoonlightXml.parseStatus("<root status_code=\"401\" status_message=\"Unauthorized\"></root>")!!
+        assertFalse(status.ok)
+        assertFalse(status.appAlreadyRunning)
+    }
+
+    /**
      * The parser is hardened best-effort, because Android's DOM factory rejects
      * most feature switches and the old code let that abort every parse on
      * device. Whatever the factory admits, no external entity may ever be

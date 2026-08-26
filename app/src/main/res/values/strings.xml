@@ -179,6 +179,9 @@
     <string name="moonlight_emulated_nintendo" translatable="false">Nintendo</string>
     <string name="moonlight_app_title">Choose an app</string>
     <string name="moonlight_no_apps">No apps are available on this host.</string>
+    <string name="moonlight_busy_title">An app is already running</string>
+    <string name="moonlight_busy_message">%1$s is already running an app and will not hand that session over. Close it to start a new one.</string>
+    <string name="moonlight_busy_close">Close it</string>
     <string name="action_add_moonlight_host">Add Moonlight host</string>
     <string name="add_moonlight_host_hint">Host IP or name</string>
     <string name="add_moonlight_error_host">Enter the host address</string>

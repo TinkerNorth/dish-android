@@ -46,11 +46,10 @@ class MoonlightRtspClient(
         val audioPort: Int,
         val enetConnectData: Int,
         /**
-         * Hex, per session; see [MoonlightRtsp.Response.pingPayload]. Carried,
-         * not yet acted on: a live host still ends the session on "Initial Ping
-         * Timeout" roughly ten seconds after PLAY, and echoing these bytes to
-         * the media ports has not been shown to prevent it. It is per session,
-         * so whatever does fix it has to read it from this handshake.
+         * The host's per-session media-ping secret, 16 raw characters and NOT
+         * hex however much it looks like it. It goes back to the host verbatim
+         * inside a 20-byte datagram; see
+         * [com.tinkernorth.dish.core.net.moonlight.MoonlightMediaPing].
          */
         val pingPayload: String,
     )
@@ -87,8 +86,12 @@ class MoonlightRtspClient(
         if (send(MoonlightRtsp.announce(target, nextCseq(), sdp)) == null) return null
         if (send(MoonlightRtsp.play(target, nextCseq())) == null) return null
 
-        Log.i(TAG, "negotiated: control $controlPort, video $video, audio $audio, connect-data $connectData")
-        if (ping.isEmpty()) Log.w(TAG, "host named no ping payload; its media streams will time the session out")
+        Log.i(
+            TAG,
+            "negotiated ports on $address: control $controlPort, video $video, audio $audio; " +
+                "connect-data $connectData, ping payload ${ping.length} chars",
+        )
+        if (ping.isEmpty()) Log.w(TAG, "host named no ping payload; falling back to the legacy 4-byte media ping")
         return StreamPorts(controlPort, video, audio, connectData, ping)
     }
 

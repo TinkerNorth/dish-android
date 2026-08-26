@@ -99,13 +99,18 @@ class MoonlightInputEncoderTest {
         val buf = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
         assertEquals(MoonlightControlProtocol.CTRL_INPUT_DATA, buf.short.toInt() and 0xFFFF)
         buf.short // plen
-        // input size is big-endian and counts type + the 7-byte arrival body.
-        assertEquals(11, ByteBuffer.wrap(bytes, 4, 4).order(ByteOrder.BIG_ENDIAN).int)
+        // input size is big-endian and counts type + the 8-byte arrival body.
+        assertEquals(12, ByteBuffer.wrap(bytes, 4, 4).order(ByteOrder.BIG_ENDIAN).int)
         buf.position(8)
         assertEquals(MoonlightControlProtocol.INPUT_CONTROLLER_ARRIVAL, buf.int)
         assertEquals(0, buf.get().toInt())
         assertEquals(MoonlightControlProtocol.CONTROLLER_TYPE_XBOX, buf.get().toInt())
         assertEquals(0x03, buf.get().toInt())
+        // The reserved byte the host's struct alignment puts here. Omitting it
+        // shifted the button mask a byte left and left the host reading our
+        // capabilities as 0xFF03.
+        assertEquals(0, buf.get().toInt())
+        assertEquals(0xFFFF, buf.int)
     }
 
     @Test

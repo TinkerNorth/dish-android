@@ -140,6 +140,9 @@
     <string name="moonlight_emulated_auto">Automatski</string>
     <string name="moonlight_app_title">Odaberi aplikaciju</string>
     <string name="moonlight_no_apps">Na ovom hostu nema dostupnih aplikacija.</string>
+    <string name="moonlight_busy_title">Aplikacija je već pokrenuta</string>
+    <string name="moonlight_busy_message">%1$s već ima pokrenutu aplikaciju i neće ustupiti tu sesiju. Zatvorite je da biste pokrenuli novu.</string>
+    <string name="moonlight_busy_close">Zatvori je</string>
     <string name="action_add_moonlight_host">Dodaj Moonlight host</string>
     <string name="add_moonlight_host_hint">IP ili naziv hosta</string>
     <string name="add_moonlight_error_host">Unesite adresu hosta</string>

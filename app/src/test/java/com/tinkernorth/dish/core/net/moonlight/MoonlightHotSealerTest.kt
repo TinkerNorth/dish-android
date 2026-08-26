@@ -40,4 +40,47 @@ class MoonlightHotSealerTest {
             bytesToHex(decoded),
         )
     }
+
+    /**
+     * The 257th packet of a session is where the control stream used to die: the
+     * IV wraps at 256 on the host and the hot path has to wrap with it. Two
+     * packets a second made that a session that ended after about two minutes.
+     */
+    @Test
+    fun `the hot path keeps opening past the 256-packet IV wrap`() {
+        val key = ByteArray(16) { it.toByte() }
+        val sealer = MoonlightHotSealer(key)
+        val receiver = MoonlightControlPacket(key)
+        var last = ByteArray(0)
+        repeat(PAST_THE_WRAP) {
+            last = sealer.sealControllerMulti(0, 1, MoonlightControlProtocol.BTN_A, 0, 0, 0, 0, 0, 0)
+        }
+        assertEquals(PAST_THE_WRAP, sealer.nextSeq)
+        assertEquals(
+            bytesToHex(MoonlightInputEncoder.controllerMulti(0, 1, MoonlightControlProtocol.BTN_A, 0, 0, 0, 0, 0, 0)),
+            bytesToHex(receiver.open(last)!!),
+        )
+    }
+
+    /**
+     * The periodic ping rides the same seq as the hot path, and it is the packet
+     * that actually reaches 256 on an idle session. It has to survive the wrap
+     * too.
+     */
+    @Test
+    fun `the periodic ping keeps opening past the wrap`() {
+        val key = ByteArray(16) { it.toByte() }
+        val sealer = MoonlightHotSealer(key)
+        val receiver = MoonlightControlPacket(key)
+        var last = ByteArray(0)
+        repeat(PAST_THE_WRAP) {
+            last = sealer.seal(MoonlightInputEncoder.periodicPing())
+        }
+        assertEquals(PAST_THE_WRAP, sealer.nextSeq)
+        assertEquals(bytesToHex(MoonlightInputEncoder.periodicPing()), bytesToHex(receiver.open(last)!!))
+    }
+
+    private companion object {
+        const val PAST_THE_WRAP = 257
+    }
 }

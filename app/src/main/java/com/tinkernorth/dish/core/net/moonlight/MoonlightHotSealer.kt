@@ -113,12 +113,10 @@ class MoonlightHotSealer(
         return out.array()
     }
 
+    /** The low byte of the seq and nothing else; see MoonlightCrypto.controlIv. */
     private fun writeIv(currentSeq: Int) {
         iv.fill(0)
         iv[0] = (currentSeq and 0xFF).toByte()
-        iv[1] = ((currentSeq ushr 8) and 0xFF).toByte()
-        iv[2] = ((currentSeq ushr 16) and 0xFF).toByte()
-        iv[3] = ((currentSeq ushr 24) and 0xFF).toByte()
     }
 
     private companion object {

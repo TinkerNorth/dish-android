@@ -71,6 +71,35 @@ class MoonlightCryptoTest {
         }
     }
 
+    /**
+     * The host derives the IV from the LOW BYTE of the sequence number alone
+     * (Wolf control.hpp assigns a u32 seq into a u8 array element). A client
+     * that uses the whole 32 bits agrees for 256 packets and then diverges: a
+     * live Sunshine host accepted 256 sealed control packets and answered the
+     * 257th with "Failed to verify tag", ending the session about two minutes
+     * in. These two tests pin the wrap so that can never come back.
+     */
+    @Test
+    fun `the control IV wraps every 256 packets, as the host's does`() {
+        val key = hexToBytes("edf04a215c4fbea20934120c8480d855")
+        val plaintext = "keepalive".toByteArray()
+        assertEquals(
+            bytesToHex(MoonlightCrypto.controlSeal(key, seq = 0, plaintext = plaintext)),
+            bytesToHex(MoonlightCrypto.controlSeal(key, seq = 256, plaintext = plaintext)),
+        )
+        assertEquals(
+            bytesToHex(MoonlightCrypto.controlSeal(key, seq = 7, plaintext = plaintext)),
+            bytesToHex(MoonlightCrypto.controlSeal(key, seq = 0x0A0B0C07, plaintext = plaintext)),
+        )
+    }
+
+    @Test
+    fun `a packet sealed past the wrap still opens`() {
+        val key = hexToBytes("edf04a215c4fbea20934120c8480d855")
+        val sealed = MoonlightCrypto.controlSeal(key, seq = 257, plaintext = "past the wrap".toByteArray())
+        assertEquals("past the wrap", String(MoonlightCrypto.controlOpen(key, seq = 257, tagThenCiphertext = sealed)))
+    }
+
     @Test
     fun `RSA sign and verify round-trip with a generated key`() {
         val kp =

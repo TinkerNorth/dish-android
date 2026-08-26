@@ -35,6 +35,45 @@ object MoonlightXml {
         val hdrSupported: Boolean,
     )
 
+    /**
+     * The application-level result every Moonlight XML reply carries on its root
+     * element, independent of the HTTP status the transport reported.
+     *
+     * A HOST SAYS NO IN THE BODY, NOT IN THE STATUS LINE. Measured against a
+     * live Sunshine host: asking /launch to start a second app answers HTTP 200
+     * with `<root status_code="400" status_message="An app is already running on
+     * this host"><resume>0</resume></root>`. Code that reads only the HTTP status
+     * treats that refusal as a success and then fails further downstream on the
+     * missing sessionUrl0, naming the wrong thing. Read this instead.
+     */
+    data class Status(
+        val code: Int,
+        val message: String,
+        val resume: Boolean,
+    ) {
+        val ok: Boolean get() = code in 200..299
+
+        /**
+         * The host already has an app running, so it will not start another.
+         * Either /resume that session (when [resume] is set) or /cancel it.
+         */
+        val appAlreadyRunning: Boolean get() = !ok && message.contains(ALREADY_RUNNING, ignoreCase = true)
+    }
+
+    /**
+     * The root element's status, or null when the reply is not parsable XML. A
+     * reply with no status_code attribute at all is read as success, which is
+     * what a host that answers plainly (Wolf's /applist) sends.
+     */
+    fun parseStatus(xml: String): Status? {
+        val root = rootOf(xml) ?: return null
+        return Status(
+            code = root.getAttribute("status_code").toIntOrNull() ?: DEFAULT_OK,
+            message = root.getAttribute("status_message").orEmpty(),
+            resume = (intText(root, "resume") ?: 0) == 1,
+        )
+    }
+
     /** A /pair phase reply: `paired` plus whichever field that phase carries. */
     data class PairReply(
         val paired: Boolean,
@@ -119,6 +158,10 @@ object MoonlightXml {
     ) {
         runCatching { setFeature(feature, value) }
     }
+
+    // A reply that names no status_code is a plain success.
+    private const val DEFAULT_OK = 200
+    private const val ALREADY_RUNNING = "already running"
 
     private const val DISALLOW_DOCTYPE = "http://apache.org/xml/features/disallow-doctype-decl"
     private const val EXTERNAL_GENERAL_ENTITIES = "http://xml.org/sax/features/external-general-entities"

@@ -26,7 +26,10 @@ object MoonlightInputEncoder {
     // Full plaintext length of a CONTROLLER_MULTI message: 4 control header + 8
     // wrapper + 26 struct body.
     const val CONTROLLER_MULTI_LEN = 38
-    const val CONTROLLER_ARRIVAL_LEN = 19
+
+    // 4 control header + 8 wrapper + 8 arrival body. See [controllerArrival] for
+    // why the body is 8 bytes and not the 7 its fields add up to.
+    const val CONTROLLER_ARRIVAL_LEN = 20
     const val MOUSE_MOVE_REL_LEN = 16
     const val PERIODIC_PING_LEN = 8
     const val TERMINATION_LEN = 8
@@ -34,7 +37,7 @@ object MoonlightInputEncoder {
     // data_size (the INPUT wrapper's big-endian size) counts from the input-type
     // field to the end of the message.
     private const val MULTI_DATA_SIZE = 30
-    private const val ARRIVAL_DATA_SIZE = 11
+    private const val ARRIVAL_DATA_SIZE = 12
     private const val MOUSE_REL_DATA_SIZE = 8
 
     /**
@@ -116,6 +119,20 @@ object MoonlightInputEncoder {
         return buf.toByteArray()
     }
 
+    /**
+     * CONTROLLER_ARRIVAL: which pad turned up, what it should be emulated as,
+     * and what it can do.
+     *
+     * THE BODY IS EIGHT BYTES, NOT SEVEN. Its fields are a u8 number, a u8 type,
+     * a u8 capabilities bitfield and a u32 button mask, which add up to seven;
+     * but the host reads them out of a naturally aligned struct, so the u32
+     * starts at offset 4 and there is a reserved byte at offset 3. Sending seven
+     * shifts everything after the type by one: a live Sunshine host read our
+     * capabilities 0x03 as 0xFF03, claiming a touchpad, gyro, accelerometer,
+     * battery and RGB LED this pad does not have, and read our 0xFFFF button
+     * mask as 0x000000FF. Its log said `capabilities [FF03] supportedButtonFlags
+     * [000000FF]` and that is exactly the tell.
+     */
     fun controllerArrival(
         controllerNumber: Int,
         controllerType: Int,
@@ -130,6 +147,7 @@ object MoonlightInputEncoder {
         buf.put((controllerNumber and 0xFF).toByte())
         buf.put((controllerType and 0xFF).toByte())
         buf.put((capabilities and 0xFF).toByte())
+        buf.put(0) // reserved, and the struct's alignment padding
         // supportedButtons is little-endian in the arrival struct.
         buf.putInt(supportedButtons)
         return buf.toByteArray()
