@@ -306,20 +306,25 @@ class MoonlightConnectionManager
                     Log.i(TAG, "${host.address} answers as ${plain.uniqueId}, remembered as $storedId: host replaced")
                     return@withContext MoonlightProbe(trust = MoonlightTrustState.REPLACED)
                 }
-                if (!plain.paired) {
-                    val trust = if (record == null) MoonlightTrustState.NOT_PAIRED else MoonlightTrustState.TRUST_LOST
-                    Log.i(TAG, "${host.address} reports unpaired over plaintext: $trust")
-                    return@withContext MoonlightProbe(trust = trust)
-                }
+                // THE PLAINTEXT PairStatus IS NOT AN ANSWER ABOUT PAIRING, so nothing may
+                // be gated on it. Sunshine computes that field only on the mutual-TLS
+                // route and hands every plaintext caller a 0: measured against the live
+                // host, which reports 0 for this device's own uniqueid and 0 for one it
+                // has never seen, while answering the same device's mutual-TLS call with
+                // a 1. Treating the 0 as "not paired" made the probe unable to return
+                // PAIRED at all, and openStream only launches on PAIRED, so no session
+                // could ever start. The mutual-TLS call is the only thing that can say.
                 val secure = gateway.getHttps(MoonlightUrls.serverInfoHttps(host.address, host.httpsPort, deviceId), host.id)
                 if (!secure.ok) {
-                    Log.i(TAG, "${host.address} refused mutual TLS (HTTP ${secure.status}): trust lost")
-                    return@withContext MoonlightProbe(trust = MoonlightTrustState.TRUST_LOST)
+                    val trust = if (record == null) MoonlightTrustState.NOT_PAIRED else MoonlightTrustState.TRUST_LOST
+                    Log.i(TAG, "${host.address} refused mutual TLS (HTTP ${secure.status}): $trust")
+                    return@withContext MoonlightProbe(trust = trust)
                 }
                 val info = MoonlightXml.parseServerInfo(secure.body)
                 if (info?.paired != true) {
-                    Log.i(TAG, "${host.address} answered mutual TLS unpaired: trust lost")
-                    return@withContext MoonlightProbe(trust = MoonlightTrustState.TRUST_LOST)
+                    val trust = if (record == null) MoonlightTrustState.NOT_PAIRED else MoonlightTrustState.TRUST_LOST
+                    Log.i(TAG, "${host.address} answered mutual TLS unpaired: $trust")
+                    return@withContext MoonlightProbe(trust = trust)
                 }
                 val apps = runCatching { fetchAppList(host) }.getOrNull()
                 markVerified(host.id)

@@ -454,21 +454,47 @@ class MoonlightTrustFlowTest {
         }
 
     @Test
-    fun `a host that answers unpaired with a pairing stored has lost trust`() =
+    fun `a host that answers unpaired over mutual TLS with a pairing stored has lost trust`() =
         runTest(dispatcher) {
             manager.pairHost(host)
             dispatcher.scheduler.advanceUntilIdle()
-            every { gateway.getHttp(match { it.contains("/serverinfo") }, any()) } returns reply(unpairedInfo)
+            every { gateway.getHttps(match { it.contains("/serverinfo") }, any()) } returns reply(unpairedInfo)
 
             assertEquals(MoonlightTrustState.TRUST_LOST, manager.probe(host).trust)
         }
 
     @Test
-    fun `a host that answers unpaired with nothing stored has simply never paired`() =
+    fun `a host that answers unpaired over mutual TLS with nothing stored has never paired`() =
         runTest(dispatcher) {
-            every { gateway.getHttp(match { it.contains("/serverinfo") }, any()) } returns reply(unpairedInfo)
+            every { gateway.getHttps(match { it.contains("/serverinfo") }, any()) } returns reply(unpairedInfo)
 
             assertEquals(MoonlightTrustState.NOT_PAIRED, manager.probe(host).trust)
+        }
+
+    // THE ONE THAT MATTERS. The live host answers every plaintext caller PairStatus 0,
+    // including for a device it is holding a pairing for, and only tells the truth over
+    // mutual TLS. Gating the probe on the plaintext field meant it could never return
+    // PAIRED, and openStream only launches on PAIRED, so no session could ever start.
+    @Test
+    fun `a plaintext PairStatus of zero does not stop a paired host being paired`() =
+        runTest(dispatcher) {
+            every { gateway.getHttp(match { it.contains("/serverinfo") }, any()) } returns reply(unpairedInfo)
+            every { gateway.getHttps(match { it.contains("/serverinfo") }, any()) } returns reply(pairedInfo)
+
+            val probe = manager.probe(host)
+
+            assertEquals(MoonlightTrustState.PAIRED, probe.trust)
+            assertTrue(probe.appsFetched)
+        }
+
+    @Test
+    fun `a host that will not answer plaintext at all is never asked over mutual TLS`() =
+        runTest(dispatcher) {
+            every { gateway.getHttp(match { it.contains("/serverinfo") }, any()) } returns unreachable()
+
+            manager.probe(host)
+
+            verify(exactly = 0) { gateway.getHttps(match { it.contains("/serverinfo") }, any()) }
         }
 
     @Test
@@ -488,13 +514,21 @@ class MoonlightTrustFlowTest {
         }
 
     @Test
-    fun `a host that will not answer mutual TLS has lost trust`() =
+    fun `a host that will not answer mutual TLS has lost trust once it was paired`() =
         runTest(dispatcher) {
             manager.pairHost(host)
             dispatcher.scheduler.advanceUntilIdle()
             every { gateway.getHttps(match { it.contains("/serverinfo") }, any()) } returns unreachable()
 
             assertEquals(MoonlightTrustState.TRUST_LOST, manager.probe(host).trust)
+        }
+
+    @Test
+    fun `a host that will not answer mutual TLS and never was paired is simply not paired`() =
+        runTest(dispatcher) {
+            every { gateway.getHttps(match { it.contains("/serverinfo") }, any()) } returns unreachable()
+
+            assertEquals(MoonlightTrustState.NOT_PAIRED, manager.probe(host).trust)
         }
 
     @Test
