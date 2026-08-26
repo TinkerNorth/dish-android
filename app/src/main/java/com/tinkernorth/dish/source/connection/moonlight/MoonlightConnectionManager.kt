@@ -44,6 +44,11 @@ sealed class MoonlightConnectionEvent {
         val message: String,
     ) : MoonlightConnectionEvent()
 
+    /** Something went right and the user should hear about it. */
+    data class Notice(
+        val message: String,
+    ) : MoonlightConnectionEvent()
+
     data class Paired(
         val host: MoonlightHost,
     ) : MoonlightConnectionEvent()
@@ -402,7 +407,7 @@ class MoonlightConnectionManager
                 val ended = cancelHostApp(host)
                 _events.emit(
                     if (ended) {
-                        MoonlightConnectionEvent.Error("Closed the app running on ${host.name}. Try again.")
+                        MoonlightConnectionEvent.Notice("Closed the app running on ${host.name}. Try connecting again.")
                     } else {
                         MoonlightConnectionEvent.Error("Couldn't close the app running on ${host.name}.")
                     },

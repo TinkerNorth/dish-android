@@ -60,7 +60,12 @@ class UdpMediaPinger(
         send(audio, audioPort, datagram)
     }
 
-    /** Read and discard anything the host has sent us. */
+    /**
+     * Read and discard what the host has sent us, up to a bounded number of
+     * datagrams per stream. The bound is the point: once the host is streaming,
+     * an unbounded drain would keep finding more and the next ping would never
+     * go out.
+     */
     fun drain() {
         drain(video)
         drain(audio)
@@ -92,11 +97,11 @@ class UdpMediaPinger(
     private fun drain(socket: DatagramSocket) {
         try {
             socket.soTimeout = 1
-            while (true) {
+            repeat(DRAIN_BUDGET) {
                 socket.receive(DatagramPacket(drainBuffer, drainBuffer.size))
             }
         } catch (timeout: SocketTimeoutException) {
-            // Nothing left this round; that is the loop's exit.
+            // Nothing left this round; that is the normal exit.
         } catch (e: java.io.IOException) {
             // Closed underneath us, or nothing listening. Either way we discard.
         }
@@ -115,5 +120,9 @@ class UdpMediaPinger(
     private companion object {
         const val TAG = "MoonlightMediaPing"
         const val MAX_DATAGRAM = 2048
+
+        // Enough to keep the receive buffer from filling between pings, few
+        // enough that a host mid-stream cannot hold the ping loop here.
+        const val DRAIN_BUDGET = 64
     }
 }

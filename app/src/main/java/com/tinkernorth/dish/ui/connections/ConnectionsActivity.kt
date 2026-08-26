@@ -310,6 +310,13 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 moonlightPinDialog?.dismiss()
             is com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent.AppAlreadyRunning ->
                 showMoonlightBusyDialog(ev.host)
+            is com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent.Notice ->
+                notifications.info(
+                    glyph = R.drawable.ic_pc_monitor,
+                    title = getString(R.string.section_moonlight_hosts),
+                    body = ev.message,
+                    key = "moonlight-notice",
+                )
             is com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent.Error -> {
                 moonlightPinDialog?.dismiss()
                 notifications.error(
