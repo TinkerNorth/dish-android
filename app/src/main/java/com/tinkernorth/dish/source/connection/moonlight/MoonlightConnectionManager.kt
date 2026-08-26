@@ -358,7 +358,7 @@ class MoonlightConnectionManager
             if (reply.ok && status?.ok != false && rtspPort != null) return rtspPort
             if (status?.appAlreadyRunning == true) return resumeSession(conn, host, status, rikeyHex, rikeyId)
             Log.w(TAG, "launch refused by ${host.address}: ${reply.body.take(BODY_LOG_CHARS)}")
-            conn.markFailed()
+            conn.markDisconnected()
             _events.emit(MoonlightConnectionEvent.Error(refusalMessage(host, status)))
             return null
         }
@@ -377,7 +377,7 @@ class MoonlightConnectionManager
         ): Int? {
             if (!launchStatus.resume) {
                 Log.i(TAG, "${host.address} has an app running and will not resume it")
-                conn.markFailed()
+                conn.markDisconnected()
                 _events.emit(MoonlightConnectionEvent.AppAlreadyRunning(host, resumable = false))
                 return null
             }
@@ -392,7 +392,7 @@ class MoonlightConnectionManager
             )
             if (reply.ok && status?.ok != false && rtspPort != null) return rtspPort
             Log.w(TAG, "resume refused by ${host.address}: ${reply.body.take(BODY_LOG_CHARS)}")
-            conn.markFailed()
+            conn.markDisconnected()
             _events.emit(MoonlightConnectionEvent.AppAlreadyRunning(host, resumable = true))
             return null
         }
@@ -436,7 +436,7 @@ class MoonlightConnectionManager
             host: MoonlightHost,
             message: String,
         ) {
-            conn.markFailed()
+            conn.markDisconnected()
             runCatching { cancelHostApp(host) }
             _events.emit(MoonlightConnectionEvent.Error(message))
         }

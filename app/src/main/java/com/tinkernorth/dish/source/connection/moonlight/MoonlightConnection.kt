@@ -44,15 +44,6 @@ class MoonlightConnection(
     @Volatile private var pinger: UdpMediaPinger? = null
     private var pingJob: Job? = null
 
-    /**
-     * Set when this connection gave up on its own (the control stream died, or
-     * the stream setup never completed) rather than being closed by the user.
-     * The manager reads it to decide whether to tell the host to drop the app it
-     * launched for us.
-     */
-    @Volatile var gaveUp: Boolean = false
-        private set
-
     // The emulated type chosen for this session and whether the arrival was sent.
     @Volatile private var emulatedType: Int = MoonlightEmulatedType.AUTO
 
@@ -67,7 +58,6 @@ class MoonlightConnection(
     }
 
     fun markLaunching() {
-        gaveUp = false
         if (_state.value == MoonlightSessionState.Live) return
         _state.value = MoonlightSessionState.Launching
     }
@@ -118,10 +108,12 @@ class MoonlightConnection(
                 val failure = runCatching { pumpUntilClosed(session) }.exceptionOrNull()
                 if (failure != null) Log.w(TAG, "control pump for $id stopped: ${failure.message}", failure)
                 Log.i(TAG, "control link for $id ended: ${session.disconnectReason ?: "closed"} (${session.linkStats()})")
-                if (_state.value == MoonlightSessionState.Live) {
-                    gaveUp = true
-                    markDisconnected()
-                }
+                // Deliberately no /cancel here. The host will be left holding the
+                // app it started for us, but a control stream that drops after
+                // going live is as likely to be a blip as a real end, and closing
+                // somebody's game out from under them is worse than the tidying is
+                // worth. The connections screen offers the cancel explicitly.
+                if (_state.value == MoonlightSessionState.Live) markDisconnected()
             }
     }
 
@@ -158,12 +150,6 @@ class MoonlightConnection(
 
     fun dispatchFeedback(event: MoonlightEvent) {
         onFeedback(event)
-    }
-
-    /** Give up on this session ourselves (as opposed to the user closing it). */
-    fun markFailed() {
-        gaveUp = true
-        markDisconnected()
     }
 
     fun markDisconnected() {
