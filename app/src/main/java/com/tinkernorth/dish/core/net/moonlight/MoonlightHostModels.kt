@@ -52,6 +52,11 @@ data class RememberedMoonlight(
     val lastAppName: String = "",
     // The emulated-device pick (CONTROLLER_ARRIVAL type): Auto/Xbox/PS/Nintendo.
     val emulatedType: Int = MoonlightEmulatedType.AUTO,
+    // Whether the host has ever accepted this device, as opposed to one the user has
+    // only shown durable interest in (added by address, or bound to). Both belong in
+    // this list; only the first is trust. Defaults true because every record written
+    // before this field existed was written by a completed pairing.
+    val paired: Boolean = true,
 ) {
     fun toHost(): MoonlightHost =
         MoonlightHost(

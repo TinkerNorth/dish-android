@@ -3,6 +3,7 @@
 package com.tinkernorth.dish.ui.main
 
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tinkernorth.dish.R
@@ -338,7 +339,15 @@ class ConfigureBindingsViewModel
         fun refreshMoonlight() {
             val hostId = _ui.value.draft?.hostId ?: return
             if (!_ui.value.isMoonlightHost) return
-            val host = moonlight.rememberedHost(hostId) ?: return
+            val host = moonlight.rememberedHost(hostId)
+            if (host == null) {
+                // A destination that resolves to nothing leaves the section stuck on its
+                // spinner forever, which is the shape of every silent failure on this
+                // path. Unreachable is the honest word and it carries a Retry.
+                Log.w(TAG, "no Moonlight host behind $hostId; rendering it unreachable")
+                _ui.update { it.copy(moonlight = MoonlightSessionInput(trust = MoonlightTrustState.UNREACHABLE)) }
+                return
+            }
             _ui.update { it.copy(moonlight = MoonlightSessionInput()) }
             viewModelScope.launch {
                 val probe = moonlight.probe(host)
@@ -397,13 +406,24 @@ class ConfigureBindingsViewModel
         }
 
         fun onMoonlightAction(action: MoonlightAction) {
-            val hostId = _ui.value.draft?.hostId ?: return
-            val host = moonlight.rememberedHost(hostId) ?: return
+            val hostId = _ui.value.draft?.hostId
+            if (hostId == null) {
+                Log.w(TAG, "Moonlight action $action with no destination chosen")
+                return
+            }
+            val host = moonlight.rememberedHost(hostId)
+            if (host == null) {
+                Log.w(TAG, "Moonlight action $action for unknown host $hostId")
+                refreshMoonlight()
+                return
+            }
+            Log.i(TAG, "Moonlight action $action on ${host.address}")
             when (action) {
                 MoonlightAction.PAIR, MoonlightAction.PAIR_AGAIN, MoonlightAction.TRY_AGAIN,
                 MoonlightAction.NEW_CODE,
                 -> startMoonlightPairing(host)
                 MoonlightAction.CANCEL -> {
+                    cancelMoonlightPairing()
                     moonlightPairing = null
                     refreshMoonlight()
                 }
@@ -422,13 +442,21 @@ class ConfigureBindingsViewModel
             }
         }
 
+        // A live job is REPLACED, not a reason to do nothing. New code is only ever offered
+        // while a pairing is in flight, so the old guard made the one button that state
+        // exists to offer unreachable by construction.
         private fun startMoonlightPairing(host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost) {
-            if (pairingJob?.isActive == true) return
+            cancelMoonlightPairing()
             pairingJob =
                 viewModelScope.launch {
                     moonlight.pairHost(host)
                     refreshMoonlight()
                 }
+        }
+
+        private fun cancelMoonlightPairing() {
+            pairingJob?.cancel()
+            pairingJob = null
         }
 
         private fun observeMoonlightEvents() {
@@ -440,7 +468,10 @@ class ConfigureBindingsViewModel
         private fun onMoonlightEvent(event: MoonlightConnectionEvent) {
             when (event) {
                 is MoonlightConnectionEvent.PairingPinReady -> moonlightPairing = MoonlightPairingUi.Pin(event.pin)
-                is MoonlightConnectionEvent.PairingFailed -> moonlightPairing = MoonlightPairingUi.Failed
+                is MoonlightConnectionEvent.PairingFailed -> {
+                    Log.w(TAG, "pairing with ${event.host.address} failed: ${event.reason}")
+                    moonlightPairing = MoonlightPairingUi.Failed
+                }
                 is MoonlightConnectionEvent.Paired -> moonlightPairing = null
                 is MoonlightConnectionEvent.AppAlreadyRunning ->
                     if (!event.resumable) moonlightFailure = MoonlightFailure.BusyOther
@@ -552,11 +583,21 @@ class ConfigureBindingsViewModel
          */
         fun apply() {
             val state = _ui.value
-            val snapshot = state.snapshot ?: return
-            val draft = state.draft ?: return
-            // Apply is gated on canApply (a resolved type); guard defensively so an unresolved type never ships.
-            val type = draft.type ?: return
-            val host = state.hosts.firstOrNull { it.id == draft.hostId } ?: return
+            val snapshot = state.snapshot
+            val draft = state.draft
+            // Apply is gated on canApply (a resolved type); guard defensively so an unresolved
+            // type never ships. Every one of these used to return without a word, so a Bind
+            // button that could not act was indistinguishable from one that had not been pressed.
+            val type = draft?.type
+            val host = state.hosts.firstOrNull { it.id == draft?.hostId }
+            if (snapshot == null || draft == null || type == null || host == null) {
+                Log.w(
+                    TAG,
+                    "apply refused: snapshot=${snapshot != null} draft=${draft != null} " +
+                        "type=$type host=${draft?.hostId}",
+                )
+                return
+            }
             val hostId = host.id
             if (_applyState.value is ApplyState.Running) return
 
@@ -868,6 +909,7 @@ class ConfigureBindingsViewModel
         private fun vpKey(device: PhysicalGamepadRegistry.Device): Int = (device.vendorId shl 16) or device.productId
 
         private companion object {
+            const val TAG = "ConfigureBindingsVM"
             const val DIRECT_TIMEOUT_MS = 20_000L
             const val CONNECT_TIMEOUT_MS = 8_000L
             const val APPLY_TIMEOUT_MS = 8_000L

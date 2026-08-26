@@ -170,6 +170,74 @@ class ConnectionCoordinatorTest {
         verify { hostRuntimeStore.clearConnection("sat:1") }
     }
 
+    // A host known only from a discovery result vanishes on the next browse, which is how a
+    // bind came to do nothing and take its own configuration with it.
+    @Test
+    fun `binding a Moonlight host records it so the binding cannot outlive its destination`() {
+        val hub = buildHub()
+
+        hub.bind("slot-A", "moonlight:192.168.68.98", CONTROLLER_TYPE_XBOX)
+        scope.testScheduler.runCurrent()
+
+        verify { moonlight.rememberInterest("moonlight:192.168.68.98") }
+        assertEquals("moonlight:192.168.68.98", hub.bindings.value["slot-A"])
+    }
+
+    @Test
+    fun `binding a satellite host never reaches the Moonlight store`() {
+        val hub = buildHub()
+
+        hub.bind("slot-A", "satellite:10.0.0.1:9876", CONTROLLER_TYPE_XBOX)
+        scope.testScheduler.runCurrent()
+
+        verify(exactly = 0) { moonlight.rememberInterest(any<String>()) }
+    }
+
+    @Test
+    fun `forgetConnection unbinds every slot before it forgets the Moonlight host`() {
+        val hub = buildHub()
+        hub.bind("slot-A", "moonlight:192.168.68.98", CONTROLLER_TYPE_PLAYSTATION)
+        hub.bind("slot-B", "moonlight:192.168.68.98", CONTROLLER_TYPE_XBOX)
+        scope.testScheduler.runCurrent()
+
+        hub.forgetConnection("moonlight:192.168.68.98")
+        scope.testScheduler.runCurrent()
+
+        assertNull(hub.bindings.value["slot-A"])
+        assertNull(hub.bindings.value["slot-B"])
+        assertNull(hub.satTypes.value["moonlight:192.168.68.98" to "slot-A"])
+        assertNull(hub.satTypes.value["moonlight:192.168.68.98" to "slot-B"])
+        verify { moonlight.forget("moonlight:192.168.68.98") }
+    }
+
+    // Type is per binding, host is per session: two pads on one host keep their own picks,
+    // and a rebind must not leak the old host's row.
+    @Test
+    fun `two Moonlight bindings on one host keep their own controller types`() {
+        val hub = buildHub()
+
+        hub.bind("slot-A", "moonlight:192.168.68.98", CONTROLLER_TYPE_PLAYSTATION)
+        hub.bind("slot-B", "moonlight:192.168.68.98", CONTROLLER_TYPE_XBOX)
+        scope.testScheduler.runCurrent()
+
+        assertEquals(CONTROLLER_TYPE_PLAYSTATION, hub.satTypes.value["moonlight:192.168.68.98" to "slot-A"])
+        assertEquals(CONTROLLER_TYPE_XBOX, hub.satTypes.value["moonlight:192.168.68.98" to "slot-B"])
+    }
+
+    @Test
+    fun `moving a binding from one Moonlight host to another drops the prior type`() {
+        val hub = buildHub()
+        hub.bind("slot-A", "moonlight:10.0.0.1", CONTROLLER_TYPE_PLAYSTATION)
+        scope.testScheduler.runCurrent()
+
+        hub.bind("slot-A", "moonlight:10.0.0.2", CONTROLLER_TYPE_XBOX)
+        scope.testScheduler.runCurrent()
+
+        assertNull(hub.satTypes.value["moonlight:10.0.0.1" to "slot-A"])
+        assertEquals(CONTROLLER_TYPE_XBOX, hub.satTypes.value["moonlight:10.0.0.2" to "slot-A"])
+        assertEquals("moonlight:10.0.0.2", hub.bindings.value["slot-A"])
+    }
+
     @Test
     fun `forgetConnection forgets a remembered bluetooth host`() {
         btEntriesFlow.value =

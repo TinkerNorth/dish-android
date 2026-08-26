@@ -2,6 +2,7 @@
 
 package com.tinkernorth.dish.composer
 
+import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
@@ -84,6 +85,9 @@ class ConnectionCoordinator
             controllerType: Int,
         ): Boolean {
             if (!slotExists(slotId)) return false
+            // A binding cannot be allowed to outlive its destination; rememberInterest
+            // carries the reasoning.
+            if (connectionId.startsWith(MoonlightHost.ID_PREFIX)) moonlight.rememberInterest(connectionId)
             val priorConnId = bindingStore.connectionFor(slotId)
 
             // Android HID Device profile allows only one active host; release prior slot first.
@@ -120,7 +124,7 @@ class ConnectionCoordinator
             hostFeaturesStore.clearConnection(connectionId)
             hostRuntimeStore.clearConnection(connectionId)
             when {
-                connectionId.startsWith(com.tinkernorth.dish.core.net.moonlight.MoonlightHost.ID_PREFIX) ->
+                connectionId.startsWith(MoonlightHost.ID_PREFIX) ->
                     moonlight.forget(connectionId)
                 store.rememberedBt().any { it.id == connectionId } -> store.forgetBt(connectionId)
                 else -> satellite.forget(connectionId)

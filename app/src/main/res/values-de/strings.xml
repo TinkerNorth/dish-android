@@ -208,6 +208,12 @@
     <string name="ml_action_reconnect">Neu verbinden</string>
     <string name="ml_action_start_session">Sitzung starten</string>
     <string name="ml_action_see_bindings">Controller auf %1$s ansehen</string>
+
+    <string name="ml_paired_title">Mit %1$s gekoppelt</string>
+    <string name="ml_paired_body">Dish startet auf diesem Host eine Sitzung, sobald ein Controller damit verbunden ist.</string>
+    <string name="ml_host_gone_body">Dish findet diesen Host nicht mehr. Erneut suchen oder per Adresse hinzufügen.</string>
+    <string name="dialog_forget_moonlight_title">%1$s entfernen?</string>
+    <string name="dialog_forget_moonlight_message">Dish löscht die Kopplung und du brauchst die PIN erneut. %1$s behält seinen eigenen Eintrag für dieses Gerät, bis du ihn dort entfernst.</string>
     <string name="ml_service_channel_name">Moonlight-Sitzung</string>
     <string name="ml_service_channel_description">Hält eine Moonlight-Sitzung aktiv, solange ein Controller damit verknüpft ist.</string>
     <string name="ml_service_title">Dish · Moonlight</string>

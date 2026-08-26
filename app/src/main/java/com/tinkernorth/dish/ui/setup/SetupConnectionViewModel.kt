@@ -125,8 +125,12 @@ class SetupConnectionViewModel
                 .onEach { onConnectionEvent(it) }
                 .launchIn(viewModelScope)
 
-            combine(hub.connections, moonlight.remembered) { summaries, remembered ->
-                buildMoonlightRows(summaries, remembered.mapTo(mutableSetOf()) { it.id })
+            combine(
+                hub.connections,
+                moonlight.remembered,
+                moonlight.verifiedHostIds,
+            ) { summaries, remembered, verified ->
+                buildMoonlightRows(summaries, remembered.filter { it.paired }.mapTo(mutableSetOf()) { it.id }, verified)
             }.onEach { rows -> _state.update { it.copy(moonlightHosts = rows) } }
                 .launchIn(viewModelScope)
 
@@ -254,13 +258,16 @@ class SetupConnectionViewModel
             }
         }
 
+        // Only a record that says paired is trust; the same list also carries hosts the
+        // user added or bound to so a binding cannot lose its host underneath it.
         private fun buildMoonlightRows(
             summaries: List<ConnectionSummary>,
-            rememberedIds: Set<String>,
+            pairedIds: Set<String>,
+            verifiedIds: Set<String>,
         ): List<MoonlightRow> =
             summaries
                 .filter { it.kind == ConnectionKind.MOONLIGHT }
-                .map { MoonlightRow(it.id, it.label, moonlightTrustFor(it, it.id in rememberedIds)) }
+                .map { MoonlightRow(it.id, it.label, moonlightTrustFor(it, it.id in pairedIds, it.id in verifiedIds)) }
 
         private fun emit(event: Event) {
             viewModelScope.launch { _events.emit(event) }

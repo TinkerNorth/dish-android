@@ -41,18 +41,28 @@ class MoonlightRowsTest {
         assertTrue(rows.isEmpty())
     }
 
-    // The three trust words, and never a liveness light: a live session proves the pairing
-    // stands, a stored record means it is remembered but unverified, anything else is not paired.
+    // The three trust words, and never a liveness light: a live session or a call the host
+    // authorised this visit proves the pairing stands, a stored record only remembers it,
+    // anything else is not paired.
     @Test
     fun `a live session proves the pairing, a stored record only remembers it`() {
         val live = summary("moonlight:uid:a", live = LinkState.Connected)
-        assertEquals(MoonlightTrustState.PAIRED, moonlightTrustFor(live, remembered = false))
+        assertEquals(MoonlightTrustState.PAIRED, moonlightTrustFor(live, paired = false))
         assertEquals(
             MoonlightTrustState.PAIRED,
-            moonlightTrustFor(summary("moonlight:uid:a", live = LinkState.Unstable), remembered = true),
+            moonlightTrustFor(summary("moonlight:uid:a", live = LinkState.Unstable), paired = true),
         )
-        assertEquals(MoonlightTrustState.REMEMBERED, moonlightTrustFor(summary("moonlight:uid:a"), remembered = true))
-        assertEquals(MoonlightTrustState.NOT_PAIRED, moonlightTrustFor(summary("moonlight:uid:a"), remembered = false))
+        assertEquals(MoonlightTrustState.REMEMBERED, moonlightTrustFor(summary("moonlight:uid:a"), paired = true))
+        assertEquals(MoonlightTrustState.NOT_PAIRED, moonlightTrustFor(summary("moonlight:uid:a"), paired = false))
+    }
+
+    // The hosts screen never probes, so without this a pairing the user just watched
+    // succeed still read as merely remembered.
+    @Test
+    fun `a host verified this visit reads as paired without a session`() {
+        val idle = summary("moonlight:uid:a")
+        assertEquals(MoonlightTrustState.PAIRED, moonlightTrustFor(idle, paired = true, verified = true))
+        assertEquals(MoonlightTrustState.PAIRED, moonlightTrustFor(idle, paired = false, verified = true))
     }
 
     @Test
@@ -61,11 +71,23 @@ class MoonlightRowsTest {
             moonlightRows(
                 conns = listOf(summary("moonlight:uid:a", live = LinkState.Connected, boundSlotIds = listOf("1", "2"))),
                 discovered = emptyList(),
-                rememberedIds = setOf("moonlight:uid:a"),
+                pairedIds = setOf("moonlight:uid:a"),
             )
         val known = rows.single() as MoonlightRow.Known
         assertEquals(MoonlightTrustState.PAIRED, known.trust)
         assertEquals(2, known.controllerCount)
+    }
+
+    // A record written for a binding has never been accepted by the host it names.
+    @Test
+    fun `a host remembered as interest only is not paired`() {
+        val rows =
+            moonlightRows(
+                conns = listOf(summary("moonlight:10.0.0.9")),
+                discovered = emptyList(),
+                pairedIds = emptySet(),
+            )
+        assertEquals(MoonlightTrustState.NOT_PAIRED, (rows.single() as MoonlightRow.Known).trust)
     }
 
     @Test

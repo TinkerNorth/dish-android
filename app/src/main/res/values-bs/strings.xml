@@ -209,6 +209,12 @@
     <string name="ml_action_reconnect">Ponovo poveži</string>
     <string name="ml_action_start_session">Pokreni sesiju</string>
     <string name="ml_action_see_bindings">Prikaži kontrolere na %1$s</string>
+
+    <string name="ml_paired_title">Uparen sa %1$s</string>
+    <string name="ml_paired_body">Dish pokreće sesiju na ovom hostu čim se kontroler poveže s njim.</string>
+    <string name="ml_host_gone_body">Dish više ne pronalazi ovaj host. Skenirajte ponovo ili ga dodajte po adresi.</string>
+    <string name="dialog_forget_moonlight_title">Zaboraviti %1$s?</string>
+    <string name="dialog_forget_moonlight_message">Dish briše svoje uparivanje i PIN će vam ponovo trebati. %1$s zadržava vlastiti zapis o ovom uređaju dok ga tamo ne uklonite.</string>
     <string name="ml_service_channel_name">Moonlight sesija</string>
     <string name="ml_service_channel_description">Održava Moonlight sesiju dok je kontroler vezan za nju.</string>
     <string name="ml_service_title">Dish · Moonlight</string>

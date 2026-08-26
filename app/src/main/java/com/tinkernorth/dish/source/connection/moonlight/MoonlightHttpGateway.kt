@@ -114,6 +114,18 @@ class MoonlightHttpGateway
             }.get(urlString)
 
         /**
+         * Drop the pinned certificate for [hostId], re-arming TOFU for it. Lives
+         * here because the thing that reads a pin should be the thing that clears
+         * one. Both callers are moments the user authorised: forgetting the host,
+         * and a PIN-confirmed pairing, which is a stronger claim than the pin.
+         */
+        fun forgetPin(hostId: String) {
+            if (pins.pinnedFingerprint(hostId) == null) return
+            Log.i(TAG, "dropping pinned cert for $hostId")
+            pins.forget(hostId)
+        }
+
+        /**
          * Hands back a handshaken TLS socket that presents the dish's client
          * certificate, or throws once the host's certificate fails the pin.
          * Throwing is the rejection: [MoonlightHttp11Client] never writes a

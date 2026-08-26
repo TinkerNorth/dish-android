@@ -210,6 +210,12 @@
     <string name="ml_action_reconnect">Reconnecter</string>
     <string name="ml_action_start_session">Lancer une session</string>
     <string name="ml_action_see_bindings">Voir les manettes sur %1$s</string>
+
+    <string name="ml_paired_title">Associé à %1$s</string>
+    <string name="ml_paired_body">Dish démarre une session sur cet hôte dès que vous y associez une manette.</string>
+    <string name="ml_host_gone_body">Dish ne trouve plus cet hôte. Relancez la recherche ou ajoutez-le par adresse.</string>
+    <string name="dialog_forget_moonlight_title">Oublier %1$s ?</string>
+    <string name="dialog_forget_moonlight_message">Dish supprime son association et le code vous sera redemandé. %1$s conserve sa propre fiche pour cet appareil tant que vous ne la supprimez pas sur cet hôte.</string>
     <string name="ml_service_channel_name">Session Moonlight</string>
     <string name="ml_service_channel_description">Maintient une session Moonlight active tant qu\'une manette y est liée.</string>
     <string name="ml_service_title">Dish · Moonlight</string>

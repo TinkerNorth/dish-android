@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.util.Log
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -64,6 +65,7 @@ import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.donate.attachDonatePill
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.isActive
@@ -179,10 +181,17 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
 
     private var pairingServer: com.tinkernorth.dish.core.model.DiscoveredServer? = null
 
+    // Nothing the user presses here may end in a shrug: a row whose button does nothing
+    // is indistinguishable from a broken app, and used to be exactly that.
     private val moonlightRowListener =
         object : MoonlightRowListener {
             override fun onPairKnown(summary: ConnectionSummary) {
-                hostFor(summary.id)?.let(::startMoonlightPairing)
+                val host = hostFor(summary.id)
+                if (host == null) {
+                    reportMoonlightHostGone(summary.label, summary.id)
+                    return
+                }
+                startMoonlightPairing(host)
             }
 
             override fun onPairDiscovered(host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost) {
@@ -190,15 +199,24 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
             }
 
             override fun onQuitSession(id: String) {
-                hostFor(id)?.let(moonlight::quitHostApp)
+                val host = hostFor(id)
+                if (host == null) {
+                    reportMoonlightHostGone(id, id)
+                    return
+                }
+                moonlight.quitHostApp(host)
             }
 
             override fun onForget(id: String) {
-                hub.forgetConnection(id)
+                confirmForgetMoonlight(id)
             }
         }
 
     private var moonlightPinDialog: AlertDialog? = null
+
+    // Held so Cancel actually cancels. Without it the dialog closed and phase 1 kept
+    // its socket open for the whole two-minute PIN window.
+    private var moonlightPairingJob: Job? = null
 
     private val btPermissionLauncher =
         registerForActivityResult(
@@ -299,10 +317,23 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         when (ev) {
             is com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent.PairingPinReady ->
                 showMoonlightPinDialog(ev.host, ev.pin)
-            is com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent.Paired ->
+            // A pairing that succeeds has to LOOK like it succeeded. A host that already
+            // trusts this device answers without a PIN, so there is no dialog to dismiss
+            // and the row's chip is the only other feedback there would be.
+            is com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent.Paired -> {
+                cancelMoonlightPairing()
                 moonlightPinDialog?.dismiss()
+                notifications.info(
+                    glyph = R.drawable.ic_pc_monitor,
+                    title = getString(R.string.ml_paired_title, ev.host.name),
+                    body = getString(R.string.ml_paired_body),
+                    key = "moonlight-paired",
+                )
+            }
             is com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent.PairingFailed -> {
+                cancelMoonlightPairing()
                 moonlightPinDialog?.dismiss()
+                Log.w(TAG, "pairing with ${ev.host.address} failed: ${ev.reason}")
                 notifications.error(
                     glyph = R.drawable.ic_pc_monitor,
                     title = getString(R.string.ml_pair_failed_title, ev.host.name),
@@ -830,7 +861,38 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     // escape hatch that closes an app the host is holding. The controller type,
     // the app, and the session itself belong to the binding.
     private fun startMoonlightPairing(host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost) {
-        lifecycleScope.launch { moonlight.pairHost(host) }
+        moonlightPairingJob?.cancel()
+        moonlightPairingJob = lifecycleScope.launch { moonlight.pairHost(host) }
+    }
+
+    private fun cancelMoonlightPairing() {
+        moonlightPairingJob?.cancel()
+        moonlightPairingJob = null
+    }
+
+    private fun reportMoonlightHostGone(
+        label: String,
+        id: String,
+    ) {
+        Log.w(TAG, "no Moonlight host behind $id; the row is stale")
+        notifications.error(
+            glyph = R.drawable.ic_pc_monitor,
+            title = getString(R.string.ml_state_unreachable_title, label),
+            body = getString(R.string.ml_host_gone_body),
+        )
+    }
+
+    // Forget is UNILATERAL: the protocol has no unpair verb, so the host keeps its own
+    // record of this device until a human removes it there. The confirmation says so,
+    // mirroring the Bluetooth one, which has the same shape of half-truth to tell.
+    private fun confirmForgetMoonlight(id: String) {
+        val label = hub.summary(id)?.label ?: id
+        MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.dialog_forget_moonlight_title, label))
+            .setMessage(getString(R.string.dialog_forget_moonlight_message, label))
+            .setPositiveButton(R.string.action_forget_short) { _, _ -> hub.forgetConnection(id) }
+            .setNegativeButton(R.string.dialog_forget_bt_negative, null)
+            .show()
     }
 
     private fun hostFor(id: String): com.tinkernorth.dish.core.net.moonlight.MoonlightHost? =
@@ -850,21 +912,19 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
             MaterialAlertDialogBuilder(this)
                 .setTitle(getString(R.string.moonlight_pin_title, host.name))
                 .setMessage(message)
-                .setNegativeButton(R.string.action_cancel) { _, _ -> moonlight.disconnect(host.id) }
+                .setNegativeButton(R.string.action_cancel) { _, _ -> cancelMoonlightPairing() }
                 .setOnDismissListener { moonlightPinDialog = null }
                 .show()
     }
 
     private fun showAddMoonlightDialog() {
-        val layout = TextInputLayout(this)
-        val input = TextInputEditText(this).apply { hint = getString(R.string.add_moonlight_host_hint) }
-        layout.addView(input)
-        val pad = resources.getDimensionPixelSize(R.dimen.spacing_md)
-        layout.setPadding(pad, pad, pad, 0)
+        val view = layoutInflater.inflate(R.layout.dialog_add_moonlight, null)
+        val layout = view.findViewById<TextInputLayout>(R.id.tilMoonlightHost)
+        val input = view.findViewById<TextInputEditText>(R.id.etMoonlightHost)
         val dialog =
             MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.action_add_moonlight_host)
-                .setView(layout)
+                .setView(view)
                 .setPositiveButton(R.string.action_add, null)
                 .setNegativeButton(R.string.action_cancel, null)
                 .create()
@@ -1224,6 +1284,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     companion object {
         const val EXTRA_PAIR_PROMPT_FOR_ID = "extra_pair_prompt_for_id"
 
+        private const val TAG = "ConnectionsActivity"
         private const val DISCOVERABLE_SECONDS = 120
         private const val COUNTDOWN_TICK_MS = 500L
         private const val DEFAULT_HTTPS_PORT = 9443

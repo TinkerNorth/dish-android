@@ -50,26 +50,44 @@ class ConnectionsViewModel
                 )
             }
 
+        // The Moonlight half, folded so the whole state still fits one combine. Only a record
+        // that says paired counts as trust; the list also carries hosts the user merely added
+        // or bound to.
+        private data class MoonlightSlice(
+            val discovered: List<com.tinkernorth.dish.core.net.moonlight.MoonlightHost>,
+            val scanning: Boolean,
+            val pairedIds: Set<String>,
+            val verifiedIds: Set<String>,
+        )
+
+        private val moonlightSlice =
+            combine(
+                moonlight.discovered,
+                moonlight.isScanning,
+                moonlight.remembered,
+                moonlight.verifiedHostIds,
+            ) { discovered, scanning, remembered, verified ->
+                MoonlightSlice(
+                    discovered = discovered,
+                    scanning = scanning,
+                    pairedIds = remembered.filter { it.paired }.mapTo(mutableSetOf()) { it.id },
+                    verifiedIds = verified,
+                )
+            }
+
         val ui: StateFlow<ConnectionsUiState> =
             combine(
                 satBt,
                 hub.connections,
-                moonlight.discovered,
-                moonlight.isScanning,
-                moonlight.remembered,
-            ) { slice, conns, moonlightDiscovered, moonlightScanning, moonlightRemembered ->
+                moonlightSlice,
+            ) { slice, conns, ml ->
                 ConnectionsUiState(
                     satelliteRows = slice.satelliteRows,
                     bluetoothSummaries = slice.bluetoothSummaries,
-                    moonlightRows =
-                        moonlightRows(
-                            conns,
-                            moonlightDiscovered,
-                            moonlightRemembered.mapTo(mutableSetOf()) { it.id },
-                        ),
+                    moonlightRows = moonlightRows(conns, ml.discovered, ml.pairedIds, ml.verifiedIds),
                     rememberedBtIds = slice.rememberedBtIds,
                     scanning = slice.scanning,
-                    moonlightScanning = moonlightScanning,
+                    moonlightScanning = ml.scanning,
                     lastScanAtMs = slice.lastScanAtMs,
                 )
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), ConnectionsUiState.Empty)

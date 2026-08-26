@@ -172,13 +172,15 @@ class MoonlightListAdapter(
 }
 
 // Known hosts first (from the composer summaries), then discovered hosts not already known.
-// The trust word is derived from what we already hold: a session that is up proves the pairing
-// stands, a stored record means the pairing is remembered but unverified this visit, and
-// anything else has never been paired. Nothing here probes; the binding flow does that.
+// The trust word is derived from what we already hold: a session that is up or a mutual-TLS
+// call that went through proves the pairing stands, a stored record means it is remembered but
+// unverified this visit, and anything else has never been paired. Nothing here probes; the
+// binding flow does that, and hands the result back through [verifiedIds].
 fun moonlightRows(
     conns: List<ConnectionSummary>,
     discovered: List<MoonlightHost>,
-    rememberedIds: Set<String> = emptySet(),
+    pairedIds: Set<String> = emptySet(),
+    verifiedIds: Set<String> = emptySet(),
 ): List<MoonlightRow> {
     val known = conns.filter { it.kind == ConnectionKind.MOONLIGHT }
     val knownIds = known.mapTo(mutableSetOf()) { it.id }
@@ -187,7 +189,7 @@ fun moonlightRows(
             add(
                 MoonlightRow.Known(
                     summary = summary,
-                    trust = moonlightTrustFor(summary, summary.id in rememberedIds),
+                    trust = moonlightTrustFor(summary, summary.id in pairedIds, summary.id in verifiedIds),
                     controllerCount = summary.boundSlotIds.size,
                 ),
             )
@@ -198,12 +200,16 @@ fun moonlightRows(
     }
 }
 
+// "Paired" is the word that wants proof, so it is reserved for a session that is up or a host
+// that authorised a call this visit. A host the user only added or bound to is remembered at most.
 internal fun moonlightTrustFor(
     summary: ConnectionSummary,
-    remembered: Boolean,
+    paired: Boolean,
+    verified: Boolean = false,
 ): MoonlightTrustState =
     when {
         summary.live == LinkState.Connected || summary.live == LinkState.Unstable -> MoonlightTrustState.PAIRED
-        remembered -> MoonlightTrustState.REMEMBERED
+        verified -> MoonlightTrustState.PAIRED
+        paired -> MoonlightTrustState.REMEMBERED
         else -> MoonlightTrustState.NOT_PAIRED
     }

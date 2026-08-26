@@ -211,6 +211,12 @@
     <string name="ml_action_reconnect">Reconectar</string>
     <string name="ml_action_start_session">Iniciar uma sessão</string>
     <string name="ml_action_see_bindings">Ver controles em %1$s</string>
+
+    <string name="ml_paired_title">Pareado com %1$s</string>
+    <string name="ml_paired_body">O Dish inicia uma sessão neste host assim que um controle for vinculado a ele.</string>
+    <string name="ml_host_gone_body">O Dish não encontra mais este host. Busque novamente ou adicione pelo endereço.</string>
+    <string name="dialog_forget_moonlight_title">Esquecer %1$s?</string>
+    <string name="dialog_forget_moonlight_message">O Dish apaga o pareamento e o PIN será necessário de novo. %1$s mantém o próprio registro deste dispositivo até você removê-lo por lá.</string>
     <string name="ml_service_channel_name">Sessão do Moonlight</string>
     <string name="ml_service_channel_description">Mantém uma sessão do Moonlight ativa enquanto houver um controle vinculado a ela.</string>
     <string name="ml_service_title">Dish · Moonlight</string>

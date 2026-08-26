@@ -211,6 +211,12 @@
     <string name="ml_action_reconnect">Reconectar</string>
     <string name="ml_action_start_session">Iniciar una sesión</string>
     <string name="ml_action_see_bindings">Ver mandos en %1$s</string>
+
+    <string name="ml_paired_title">Vinculado con %1$s</string>
+    <string name="ml_paired_body">Dish inicia una sesión en este host en cuanto le asignas un mando.</string>
+    <string name="ml_host_gone_body">Dish ya no encuentra este host. Vuelve a buscar o añádelo por dirección.</string>
+    <string name="dialog_forget_moonlight_title">¿Olvidar %1$s?</string>
+    <string name="dialog_forget_moonlight_message">Dish borra su vinculación y volverás a necesitar el PIN. %1$s conserva su propio registro de este dispositivo hasta que lo elimines allí.</string>
     <string name="ml_service_channel_name">Sesión de Moonlight</string>
     <string name="ml_service_channel_description">Mantiene viva una sesión de Moonlight mientras haya un mando vinculado.</string>
     <string name="ml_service_title">Dish · Moonlight</string>

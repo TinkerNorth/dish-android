@@ -48,6 +48,7 @@ class SetupConnectionViewModelTest {
     private val scanning = MutableStateFlow(false)
     private val moonlightScanning = MutableStateFlow(false)
     private val rememberedMoonlight = MutableStateFlow<List<RememberedMoonlight>>(emptyList())
+    private val verifiedMoonlight = MutableStateFlow<Set<String>>(emptySet())
     private val events = MutableSharedFlow<ConnectionEvent>(extraBufferCapacity = 8)
 
     private val server = DiscoveredServer(name = "Living Room", ip = "10.0.0.5", machineId = "abc123")
@@ -66,6 +67,7 @@ class SetupConnectionViewModelTest {
         every { satellite.events } returns events
         every { hub.connections } returns summaries
         every { moonlight.remembered } returns rememberedMoonlight
+        every { moonlight.verifiedHostIds } returns verifiedMoonlight
         every { moonlight.isScanning } returns moonlightScanning
         vm = SetupConnectionViewModel(satellite, moonlight, hub)
     }
@@ -122,6 +124,30 @@ class SetupConnectionViewModelTest {
             dispatcher.scheduler.runCurrent()
             assertEquals(
                 listOf(MoonlightTrustState.REMEMBERED),
+                vm.state.value.moonlightHosts
+                    .map { it.trust },
+            )
+        }
+
+    // A record written because the user bound to the host is not a pairing, and the list
+    // must not promote it to one; a mutual-TLS call the host authorised is what does.
+    @Test
+    fun `a host remembered without a pairing stays not paired until it is verified`() =
+        runTest(dispatcher) {
+            summaries.value = listOf(moonlightSummary())
+            rememberedMoonlight.value =
+                listOf(RememberedMoonlight(id = MOONLIGHT_ID, name = "PC", address = "10.0.0.5", paired = false))
+            dispatcher.scheduler.runCurrent()
+            assertEquals(
+                listOf(MoonlightTrustState.NOT_PAIRED),
+                vm.state.value.moonlightHosts
+                    .map { it.trust },
+            )
+
+            verifiedMoonlight.value = setOf(MOONLIGHT_ID)
+            dispatcher.scheduler.runCurrent()
+            assertEquals(
+                listOf(MoonlightTrustState.PAIRED),
                 vm.state.value.moonlightHosts
                     .map { it.trust },
             )

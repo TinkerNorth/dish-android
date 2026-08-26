@@ -255,6 +255,12 @@
     <string name="ml_action_start_session">Start a session</string>
     <string name="ml_action_see_bindings">See controllers on %1$s</string>
 
+    <string name="ml_paired_title">Paired with %1$s</string>
+    <string name="ml_paired_body">Dish starts a session on this host as soon as a controller is bound to it.</string>
+    <string name="ml_host_gone_body">Dish can no longer find this host. Scan again, or add it by address.</string>
+    <string name="dialog_forget_moonlight_title">Forget %1$s?</string>
+    <string name="dialog_forget_moonlight_message">Dish deletes its pairing and you will need the PIN again. %1$s keeps its own record of this device until you remove it there.</string>
+
     <string name="ml_service_channel_name">Moonlight session</string>
     <string name="ml_service_channel_description">Keeps a Moonlight session alive while a controller is bound to it.</string>
     <string name="ml_service_title">Dish · Moonlight</string>
