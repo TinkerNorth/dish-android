@@ -13,13 +13,14 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLPeerUnverifiedException
 
 /**
- * Drives [MoonlightPlainHttpClient] against a loopback [ServerSocket] so the
+ * Drives [MoonlightHttp11Client] against a loopback [ServerSocket] so the
  * request bytes it puts on the wire and the responses it accepts are both real.
  * The fixture answers one request and records what it was asked.
  */
-class MoonlightPlainHttpClientTest {
+class MoonlightHttp11ClientTest {
     private lateinit var server: ServerSocket
     private var serverThread: Thread? = null
 
@@ -64,7 +65,7 @@ class MoonlightPlainHttpClientTest {
         return head.toString()
     }
 
-    private fun client() = MoonlightPlainHttpClient(TIMEOUT, TIMEOUT)
+    private fun client() = MoonlightHttp11Client(TIMEOUT, TIMEOUT)
 
     private fun OutputStream.send(text: String) = write(text.toByteArray(Charsets.ISO_8859_1))
 
@@ -196,7 +197,7 @@ class MoonlightPlainHttpClientTest {
         // Accept the connection and hold it: the read timeout must fire, and it
         // must surface as Reply(0, "") rather than a SocketTimeoutException.
         val url = host { Thread.sleep(SLOW_MS) }
-        val client = MoonlightPlainHttpClient(TIMEOUT, READ_TIMEOUT_SHORT)
+        val client = MoonlightHttp11Client(TIMEOUT, READ_TIMEOUT_SHORT)
 
         val started = System.nanoTime()
         val reply = client.get(url)
@@ -215,7 +216,7 @@ class MoonlightPlainHttpClientTest {
                 Thread.sleep(HELD_MS)
                 it.send("HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\npin!")
             }
-        val client = MoonlightPlainHttpClient(TIMEOUT, READ_TIMEOUT_SHORT)
+        val client = MoonlightHttp11Client(TIMEOUT, READ_TIMEOUT_SHORT)
 
         val reply = client.get(url, readTimeoutMs = TIMEOUT)
 
@@ -238,10 +239,45 @@ class MoonlightPlainHttpClientTest {
         assertEquals(0, client().get("http://[not a url/pair").status)
     }
 
+    @Test
+    fun `hands the connected socket to the upgrade hook with the host it dialled`() {
+        val url = host { it.send("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi") }
+        var seen: Pair<String, Int>? = null
+        val client =
+            MoonlightHttp11Client(TIMEOUT, TIMEOUT) { socket, host, port ->
+                seen = host to port
+                socket
+            }
+
+        val reply = client.get(url)
+
+        assertEquals(200, reply.status)
+        assertEquals("127.0.0.1" to server.localPort, seen)
+    }
+
+    @Test
+    fun `an upgrade that rejects the host is unreachable, and the host is never asked`() {
+        // How the gateway refuses a certificate that fails its pin: it throws out
+        // of the hook, so the request must never reach the wire.
+        val url = host { it.send("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi") }
+        val client =
+            MoonlightHttp11Client(TIMEOUT, TIMEOUT) { _, _, _ ->
+                throw SSLPeerUnverifiedException("cert pin mismatch")
+            }
+
+        val reply = client.get(url)
+
+        served.await(SETTLE_MS, TimeUnit.MILLISECONDS)
+        assertEquals(0, reply.status)
+        assertTrue(reply.unreachable)
+        assertEquals("", requestHead)
+    }
+
     private companion object {
         const val TIMEOUT = 4_000
         const val READ_TIMEOUT_SHORT = 300
         const val SLOW_MS = 3_000L
         const val HELD_MS = 900L
+        const val SETTLE_MS = 500L
     }
 }

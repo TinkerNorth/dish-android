@@ -5,12 +5,10 @@ package com.tinkernorth.dish.core.net.moonlight
 
 import com.tinkernorth.dish.core.net.bytesToHex
 import com.tinkernorth.dish.core.net.hexToBytes
-import okhttp3.tls.HeldCertificate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.security.PrivateKey
 
 /**
  * Exercises the full 5-phase client pairing against a reference server built
@@ -125,23 +123,7 @@ class MoonlightPairingTest {
         val CLIENT = throwawayIdentity("dish-pairing-test-client")
         val SERVER = throwawayIdentity("dish-pairing-test-server")
 
-        /**
-         * A disposable self-signed identity that lives only for this test run.
-         * RSA, not the builder's default ECDSA: Moonlight pairing signs with
-         * SHA256withRSA, and the real client identity is RSA-2048 as well.
-         */
-        fun throwawayIdentity(commonName: String): MoonlightIdentity {
-            val held =
-                HeldCertificate
-                    .Builder()
-                    .commonName(commonName)
-                    .rsa2048()
-                    .build()
-            return object : MoonlightIdentity {
-                override val certificatePem: String = held.certificatePem()
-                override val certificateSignature: ByteArray = held.certificate.signature
-                override val privateKey: PrivateKey = held.keyPair.private
-            }
-        }
+        /** A disposable self-signed identity that lives only for this test run. */
+        fun throwawayIdentity(commonName: String): MoonlightIdentity = ThrowawayIdentity.named(commonName)
     }
 }

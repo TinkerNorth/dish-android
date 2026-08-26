@@ -12,18 +12,31 @@ import java.net.Socket
 import java.net.URI
 
 /**
- * A minimal blocking HTTP/1.1 GET spoken over a raw [Socket], used ONLY for
- * Moonlight's plaintext pairing phases on port 47989.
+ * A minimal blocking HTTP/1.1 GET spoken over a raw [Socket], one socket per
+ * request. Carries both Moonlight halves: the plaintext pairing phases on port
+ * 47989 and, once [upgrade] wraps the socket in TLS, the mutual-TLS calls on
+ * 47984.
  *
- * WHY NOT HttpURLConnection. res/xml/network_security_config.xml denies
- * cleartext app-wide and that denial is deliberate: it is the signal Play's
- * pre-launch security checks and Android's PlatformVal validator read, and
- * every URL-stack request the app makes really must be TLS. Relaxing it (or
- * carving out a per-domain exception, which cannot be done anyway for a
- * user-typed LAN address) would trade a real app-wide guarantee for one
- * protocol's needs. Raw sockets are not gated by that config, the same way the
- * encrypted UDP gamepad wire and the LAN discovery beacons already are not, so
- * the exception stays scoped to exactly the four requests that need it.
+ * WHY NOT HttpURLConnection. Two independent reasons, one per half.
+ *
+ * Plaintext: res/xml/network_security_config.xml denies cleartext app-wide and
+ * that denial is deliberate. It is the signal Play's pre-launch security checks
+ * and Android's PlatformVal validator read, and every URL-stack request the app
+ * makes really must be TLS. Relaxing it (or carving out a per-domain exception,
+ * which cannot be done anyway for a user-typed LAN address) would trade a real
+ * app-wide guarantee for one protocol's needs. Raw sockets are not gated by
+ * that config, the same way the encrypted UDP gamepad wire and the LAN
+ * discovery beacons already are not, so the exception stays scoped to exactly
+ * the four requests that need it.
+ *
+ * TLS: the URL stack pools connections and decides reuse from an Address that
+ * includes the SSLSocketFactory and HostnameVerifier instances. The gateway
+ * necessarily supplies a per-host verifier, so no two calls ever shared a
+ * pooled connection; every call dialled a new TLS connection and `disconnect()`
+ * parked the old one in the pool instead of closing it, leaving the host a
+ * growing pile of open sessions (see [MoonlightHttpGateway.getHttps]). A socket
+ * this class opens is a socket it closes, and the `Connection: close` below
+ * makes the host drop its half as soon as it has answered.
  *
  * WHY CLEARTEXT IS SAFE HERE. Pairing phases 1-4 are plaintext by protocol
  * (Wolf http-pairing.adoc): NVIDIA's GameStream protocol fixes them on the
@@ -32,16 +45,25 @@ import java.net.URI
  * AES challenges and signatures over them. The PIN itself is never sent: it is
  * shown on the dish and typed into the host's own UI, and both ends only prove
  * knowledge of it through the challenge exchange. Everything from phase 5 on
- * (pairchallenge, /applist, /launch) runs over the pinned mutual TLS channel in
- * [MoonlightHttpGateway]. A LAN eavesdropper learns nothing it can replay, and
- * an active attacker cannot complete the exchange without the PIN.
+ * (pairchallenge, /applist, /launch) runs over the pinned mutual TLS channel
+ * [MoonlightHttpGateway] builds with [upgrade]. A LAN eavesdropper learns
+ * nothing it can replay, and an active attacker cannot complete the exchange
+ * without the PIN.
  *
- * Blocking; call from Dispatchers.IO. Never throws: transport failures come
- * back as `Reply(0, "")`, matching the gateway's HTTPS path.
+ * Blocking; call from Dispatchers.IO. Never throws: transport failures, TLS
+ * handshake failures and a refused certificate pin all come back as
+ * `Reply(0, "")`.
  */
-internal class MoonlightPlainHttpClient(
+internal class MoonlightHttp11Client(
     private val connectTimeoutMs: Int,
     private val defaultReadTimeoutMs: Int,
+    /**
+     * Wraps the connected socket before the request goes out, and returns the
+     * socket to speak HTTP over. Null leaves the request in cleartext. The
+     * gateway passes the mutual-TLS handshake plus its certificate pin check,
+     * which rejects by throwing, so a refused host never sees a request.
+     */
+    private val upgrade: ((socket: Socket, host: String, port: Int) -> Socket)? = null,
 ) {
     /**
      * GETs [urlString], or `Reply(0, "")` if the host never answered.
@@ -63,8 +85,32 @@ internal class MoonlightPlainHttpClient(
             return UNREACHABLE
         }
         return try {
-            Socket().use { socket ->
-                socket.connect(InetSocketAddress(host, port), connectTimeoutMs)
+            exchange(uri, host, port, readTimeoutMs)
+        } catch (e: IOException) {
+            // Connect refused, DNS failure, both timeouts (SocketTimeoutException
+            // is an IOException), and every TLS failure including the pin
+            // mismatch [MoonlightHttpGateway] throws, all land here.
+            Log.w(TAG, "GET failed for ${uri.path}: ${e.message}")
+            UNREACHABLE
+        }
+    }
+
+    /**
+     * One request over one socket: connect, hand it to [upgrade], ask, read the
+     * answer, close. Nested `use` on purpose, so the close that reaches the host
+     * first is the TLS one and it gets a close_notify before the socket under it
+     * goes away.
+     */
+    private fun exchange(
+        uri: URI,
+        host: String,
+        port: Int,
+        readTimeoutMs: Int,
+    ): MoonlightHttpGateway.Reply =
+        Socket().use { raw ->
+            raw.connect(InetSocketAddress(host, port), connectTimeoutMs)
+            raw.soTimeout = readTimeoutMs
+            (upgrade?.invoke(raw, host, port) ?: raw).use { socket ->
                 socket.soTimeout = readTimeoutMs
                 socket.getOutputStream().apply {
                     write(head(uri, host, port).toByteArray(Charsets.ISO_8859_1))
@@ -72,13 +118,7 @@ internal class MoonlightPlainHttpClient(
                 }
                 readReply(socket.getInputStream().buffered())
             }
-        } catch (e: IOException) {
-            // Mirrors the gateway's HTTPS catch: connect refused, DNS failure and
-            // both timeouts (SocketTimeoutException is an IOException) land here.
-            Log.w(TAG, "plain GET failed for ${uri.path}: ${e.message}")
-            UNREACHABLE
         }
-    }
 
     /** The request line and headers, CRLF-terminated per RFC 9112. */
     private fun head(
@@ -245,7 +285,7 @@ internal class MoonlightPlainHttpClient(
     }
 
     private companion object {
-        const val TAG = "MoonlightPlainHttp"
+        const val TAG = "MoonlightHttp11"
         const val USER_AGENT = "Dish/1.0"
         const val DEFAULT_HTTP_PORT = 80
         const val MAX_PORT = 65535
