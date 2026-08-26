@@ -416,9 +416,9 @@ fun MoonlightTone.colorRes(): Int =
     }
 
 // Seven states, three words. Anything outstanding or unanswered reads as remembered,
-// because a stored record with no fresh answer is precisely what we hold; only a
-// completed mutual-TLS call earns "paired", and only a host that answered and said no
-// earns "not paired".
+// because a stored record with no fresh answer is precisely what we hold. "Paired" wants
+// proof, which is either a session that is up or a mutual-TLS call that went through, and
+// whatever has neither a record nor proof reads as not paired.
 @StringRes
 fun MoonlightTrustState.chipTextRes(): Int =
     when (this) {
