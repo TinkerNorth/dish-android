@@ -99,8 +99,14 @@ of the ENet reliable-UDP client subset the Moonlight control stream needs (the c
 handshake, reliable send/receive on one channel, acknowledgements, ping and disconnect). It was
 ported from the MIT-licensed C source of the cgutman/enet fork (the fork and commit Wolf pins,
 `44c85e16279553d9c052e572bcbfcd745fb74abf`): `host.c`, `peer.c`, `protocol.c`, and
-`include/enet/protocol.h`. Only the needed subset is reproduced; fragmentation, unsequenced
-delivery, throttling, bandwidth and compression commands are not. ENet is licensed MIT.
+`include/enet/protocol.h`. Also ported: the peer liveness rules, meaning the round-trip
+estimate and retransmission timeout of `enet_protocol_handle_acknowledge` and the give-up
+conditions of `enet_protocol_check_timeouts`, along with `protocol.c`'s `commandSizes` table.
+
+Only the needed subset is reproduced. This client never *sends* a fragmented, unsequenced,
+throttle or bandwidth command, and does not compress; it does measure and acknowledge all of
+them on receive, because a peer packs several commands into one datagram and a command whose
+size is unknown costs every command behind it. ENet is licensed MIT.
 
 ```
 Copyright (c) 2002-2020 Lee Salzman
