@@ -4,7 +4,6 @@
 package com.tinkernorth.dish.core.net.moonlight
 
 import com.tinkernorth.dish.core.net.bytesToHex
-import com.tinkernorth.dish.core.net.hexToBytes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -39,7 +38,7 @@ class MoonlightPairingTest {
 
     private fun newPairing(pin: String) = MoonlightPairing(clientIdentity, pin) { clientRandom.next(it) }
 
-    private fun newServer(pin: String) = ReferenceServer(pin, serverIdentity, clientIdentity.certificatePem)
+    private fun newServer(pin: String) = MoonlightReferenceServer(pin, serverIdentity, clientIdentity.certificatePem)
 
     @Test
     fun `full pairing round-trip authenticates both ends`() {
@@ -74,47 +73,6 @@ class MoonlightPairingTest {
         pairing.onPhase2(response)
         // onPhase3 is where the server-authentication check fails on a wrong key.
         assertFalse(pairing.onPhase3(server.clientHashResponse(pairing.phase3Params("dish-uid").getValue("serverchallengeresp"))))
-    }
-
-    /** A minimal Wolf-equivalent server, driven purely by [MoonlightCrypto]. */
-    private class ReferenceServer(
-        pin: String,
-        private val identity: MoonlightIdentity,
-        private val clientCertPem: String,
-    ) {
-        private val pinBytes = pin
-        private var aesKey = ByteArray(0)
-        private val serverSecret = ByteArray(16) { (0x10 + it).toByte() }
-        private val serverChallenge = ByteArray(16) { (0x20 + it).toByte() }
-        private var storedClientHash = ByteArray(0)
-        private var clientChallenge = ByteArray(0)
-
-        fun getServerCert(saltHex: String): String {
-            aesKey = MoonlightCrypto.pairingKey(hexToBytes(saltHex), pinBytes)
-            return identity.certificatePem
-        }
-
-        fun challengeResponse(clientChallengeHex: String): String {
-            clientChallenge = MoonlightCrypto.aesEcbDecrypt(aesKey, hexToBytes(clientChallengeHex))
-            val hash = MoonlightCrypto.sha256(clientChallenge, identity.certificateSignature, serverSecret)
-            return bytesToHex(MoonlightCrypto.aesEcbEncrypt(aesKey, hash + serverChallenge))
-        }
-
-        fun clientHashResponse(serverChallengeRespHex: String): String {
-            storedClientHash = MoonlightCrypto.aesEcbDecrypt(aesKey, hexToBytes(serverChallengeRespHex))
-            val signature = MoonlightCrypto.signRsaSha256(identity.privateKey, serverSecret)
-            return bytesToHex(serverSecret + signature)
-        }
-
-        fun verifyClient(clientPairingSecretHex: String): Boolean {
-            val secret = hexToBytes(clientPairingSecretHex)
-            val clientSecret = secret.copyOfRange(0, 16)
-            val clientSignature = secret.copyOfRange(16, secret.size)
-            val expected =
-                MoonlightCrypto.sha256(serverChallenge, MoonlightCert.signatureOf(clientCertPem), clientSecret)
-            if (!MoonlightCrypto.constantTimeEquals(expected, storedClientHash)) return false
-            return MoonlightCrypto.verifyRsaSha256(MoonlightCert.publicKeyOf(clientCertPem), clientSecret, clientSignature)
-        }
     }
 
     private companion object {

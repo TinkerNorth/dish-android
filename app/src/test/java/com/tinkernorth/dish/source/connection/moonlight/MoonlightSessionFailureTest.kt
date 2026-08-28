@@ -126,6 +126,9 @@ class MoonlightSessionFailureTest {
             val busy = seen.filterIsInstance<MoonlightConnectionEvent.AppAlreadyRunning>().single()
             assertTrue("somebody else holds it, so there is nothing to resume", !busy.resumable)
             verify(exactly = 0) { gateway.getHttps(match { it.contains("/resume") }, any()) }
+            // The binding is a durable intent, so a host somebody else is using does not
+            // undo it: the pad stays claimed and the offer to close that app is the way out.
+            assertEquals(1, manager.get(remembered.id)?.padCount)
             collector.cancel()
         }
 
@@ -224,9 +227,12 @@ class MoonlightSessionFailureTest {
     @Test
     fun `quitting the app on a host drops its pads and says so`() =
         runTest(dispatcher) {
+            // Refused in the body, so the setup path has not cancelled anything of its own
+            // and the cancel this asserts can only have come from the quit.
             every { gateway.getHttps(match { it.contains("/launch") }, any()) } returns
-                reply("""<root status_code="200"><sessionUrl0>rtsp://10.0.0.5:48010</sessionUrl0></root>""")
+                reply("""<root status_code="401" status_message="Unauthorized"/>""")
             bindOnePad()
+            verify(exactly = 0) { gateway.getHttps(match { it.contains("/cancel") }, any()) }
             val seen = mutableListOf<MoonlightConnectionEvent>()
             val collector = collectEvents(seen)
 
@@ -235,7 +241,7 @@ class MoonlightSessionFailureTest {
 
             assertEquals(0, manager.get(remembered.id)?.padCount)
             assertTrue(seen.any { it is MoonlightConnectionEvent.Notice })
-            verify(atLeast = 1) { gateway.getHttps(match { it.contains("/cancel") }, any()) }
+            verify(exactly = 1) { gateway.getHttps(match { it.contains("/cancel") }, any()) }
             collector.cancel()
         }
 

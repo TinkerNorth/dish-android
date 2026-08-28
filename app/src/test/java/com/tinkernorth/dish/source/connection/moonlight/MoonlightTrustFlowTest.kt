@@ -5,11 +5,13 @@ package com.tinkernorth.dish.source.connection.moonlight
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.tinkernorth.dish.core.net.moonlight.MoonlightControlSession
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity
 import com.tinkernorth.dish.core.net.moonlight.RememberedMoonlight
 import com.tinkernorth.dish.repository.RememberedMoonlightRepository
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -218,6 +220,7 @@ class MoonlightTrustFlowTest {
             assertNull("the record must go", rows[host.id])
             assertFalse("the verification must go", host.id in manager.verifiedHostIds.value)
             assertTrue("the discovery row must go", manager.discovered.value.none { it.id == host.id })
+            assertNull("the connection must go", manager.get(host.id))
             // The pin used to survive a forget, so a host that rotated its certificate
             // afterwards was refused with no way past it from inside the app.
             verify { gateway.forgetPin(host.id) }
@@ -226,12 +229,13 @@ class MoonlightTrustFlowTest {
     @Test
     fun `forgetting a host with a live session closes the app it is running`() =
         runTest(dispatcher) {
-            openLiveSession()
+            bindOnePad()
 
             manager.forget(host.id)
+            goLive()
             dispatcher.scheduler.advanceUntilIdle()
 
-            verify(atLeast = 1) { gateway.getHttps(match { it.contains("/cancel") }, any()) }
+            verify(exactly = 1) { gateway.getHttps(match { it.contains("/cancel") }, any()) }
         }
 
     // The cancel rides mutual TLS, so it has to go out while the pin is still there. Drop
@@ -240,9 +244,10 @@ class MoonlightTrustFlowTest {
     @Test
     fun `the app is closed before the pin that authenticates the closing is dropped`() =
         runTest(dispatcher) {
-            openLiveSession()
+            bindOnePad()
 
             manager.forget(host.id)
+            goLive()
             dispatcher.scheduler.advanceUntilIdle()
 
             verifyOrder {
@@ -317,6 +322,42 @@ class MoonlightTrustFlowTest {
             dispatcher.scheduler.advanceUntilIdle()
 
             assertEquals(listOf(host.id), manager.discovered.value.map { it.id })
+        }
+
+    // The scan is a bounded browse and not a subscription: it ends on its own, and a
+    // second press while one is in flight is the state the user already asked for.
+    @Test
+    fun `a scan runs for a bounded time and only one at a time`() =
+        runTest(dispatcher) {
+            coEvery { discovery.discover(any()) } returns listOf(host)
+
+            manager.startDiscovery()
+            manager.startDiscovery()
+            assertTrue("the header spins while the browse runs", manager.isScanning.value)
+            dispatcher.scheduler.advanceUntilIdle()
+
+            coVerify(exactly = 1) { discovery.discover(match { it in 1..MAX_SCAN_MS }) }
+            assertFalse("the scan has to end on its own", manager.isScanning.value)
+        }
+
+    // Typing an address is durable interest, and a browse that misses it afterwards is
+    // not evidence of anything: the record and the row both have to outlive one.
+    @Test
+    fun `a manually added host outlives a scan that does not find it`() =
+        runTest(dispatcher) {
+            manager.addManualHost("192.168.68.98")
+            dispatcher.scheduler.advanceUntilIdle()
+            val id =
+                manager.discovered.value
+                    .single()
+                    .id
+
+            coEvery { discovery.discover(any()) } returns emptyList()
+            manager.startDiscovery()
+            dispatcher.scheduler.advanceUntilIdle()
+
+            assertNotNull("the record is the durable copy", rows[id])
+            assertEquals(listOf(id), manager.discovered.value.map { it.id })
         }
 
     @Test
@@ -544,9 +585,12 @@ class MoonlightTrustFlowTest {
             assertFalse(probe.appsFetched)
         }
 
-    private suspend fun openLiveSession() {
+    // Pair and claim a pad, with a launch the host refuses in the body so nothing reaches
+    // a socket and NOTHING has cancelled anything yet. The stream itself arrives from
+    // [goLive], because a cancel sent by the setup path would answer these tests for them.
+    private suspend fun bindOnePad() {
         every { gateway.getHttps(match { it.contains("/launch") }, any()) } returns
-            reply("""<root status_code="200"><sessionUrl0>rtsp://192.168.68.98:48010</sessionUrl0></root>""")
+            reply("""<root status_code="401" status_message="Unauthorized"/>""")
         manager.pairHost(host)
         dispatcher.scheduler.advanceUntilIdle()
         manager.applyDesired(
@@ -558,5 +602,18 @@ class MoonlightTrustFlowTest {
             ),
         )
         dispatcher.scheduler.advanceUntilIdle()
+        verify(exactly = 0) { gateway.getHttps(match { it.contains("/cancel") }, any()) }
+    }
+
+    // The same seam the stream setup uses once the control channel answers. Queued after
+    // whatever the caller asked for, so the receive pump cannot end the session first.
+    private fun goLive() {
+        manager.get(host.id)!!.markLive(mockk<MoonlightControlSession>(relaxed = true), "1", "Desktop")
+        assertEquals(MoonlightSessionState.Live, manager.get(host.id)?.state?.value)
+    }
+
+    private companion object {
+        // Anything longer than this is a subscription, not a scan.
+        const val MAX_SCAN_MS = 10_000
     }
 }

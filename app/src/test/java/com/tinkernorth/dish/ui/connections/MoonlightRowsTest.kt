@@ -2,11 +2,13 @@
 
 package com.tinkernorth.dish.ui.connections
 
+import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
+import com.tinkernorth.dish.ui.main.chipTextRes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -63,6 +65,29 @@ class MoonlightRowsTest {
         val idle = summary("moonlight:uid:a")
         assertEquals(MoonlightTrustState.PAIRED, moonlightTrustFor(idle, paired = true, verified = true))
         assertEquals(MoonlightTrustState.PAIRED, moonlightTrustFor(idle, paired = false, verified = true))
+    }
+
+    // Three words and no fourth. The hosts screen never probes, so every state the
+    // rest of the app can be in still has to land on one of these, and none of them
+    // may read as a liveness light.
+    @Test
+    fun `every row a scan can produce says exactly one of the three trust words`() {
+        val words = setOf(R.string.ml_trust_paired, R.string.ml_trust_remembered, R.string.ml_trust_not_paired)
+        val states = mutableSetOf<MoonlightTrustState>()
+        for (live in LinkState.entries) {
+            for (paired in listOf(false, true)) {
+                for (verified in listOf(false, true)) {
+                    states += moonlightTrustFor(summary("moonlight:uid:a", live = live), paired, verified)
+                }
+            }
+        }
+        assertEquals(
+            setOf(MoonlightTrustState.PAIRED, MoonlightTrustState.REMEMBERED, MoonlightTrustState.NOT_PAIRED),
+            states,
+        )
+        MoonlightTrustState.entries.forEach { state ->
+            assertTrue(state.name, state.chipTextRes() in words)
+        }
     }
 
     @Test
