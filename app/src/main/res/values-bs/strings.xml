@@ -105,6 +105,10 @@
     <string name="chip_status_online">Na vezi</string>
     <string name="chip_status_unstable">Nestabilan</string>
 
+    <string name="link_tier_fastest">Najbrži</string>
+    <string name="link_tier_fast">Brz</string>
+    <string name="link_tier_basic">Osnovni</string>
+
     <!-- Sloj kontrolera (activity_gamepad_overlay.xml + GamepadOverlayActivity). -->
     <string name="overlay_status_unknown">Nepoznata veza</string>
     <string name="overlay_status_not_connected">Nije povezan</string>

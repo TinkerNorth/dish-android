@@ -131,6 +131,11 @@
     <string name="chip_status_online">Online</string>
     <string name="chip_status_unstable">Unsteady</string>
 
+    <!-- LinkTier vocabulary: the speed/stability ladder of the connection kinds. -->
+    <string name="link_tier_fastest">Fastest</string>
+    <string name="link_tier_fast">Fast</string>
+    <string name="link_tier_basic">Basic</string>
+
     <!-- Overlay screens (gamepad + touchpad): toolbar action icons + their info-dialog content. -->
     <string name="overlay_status_unknown">Unknown connection</string>
     <string name="overlay_status_not_connected">Not connected</string>

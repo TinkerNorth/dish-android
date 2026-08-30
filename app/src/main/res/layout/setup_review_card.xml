@@ -60,6 +60,14 @@
                     android:textColor="@color/colorOnSurfaceVariant"
                     tools:text="USB / Direct" />
             </LinearLayout>
+
+            <include
+                android:id="@+id/reviewTierPill"
+                layout="@layout/binding_pill"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/spacing_md"
+                android:visibility="gone" />
         </LinearLayout>
 
         <LinearLayout

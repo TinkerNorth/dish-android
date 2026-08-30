@@ -34,6 +34,7 @@ import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.moonlightTypeLabelRes
+import com.tinkernorth.dish.ui.common.tierPillSpec
 import com.tinkernorth.dish.ui.donate.wireDonateButton
 import com.tinkernorth.dish.ui.setup.ReviewFlow
 import com.tinkernorth.dish.ui.setup.bindCapabilityRows
@@ -429,6 +430,8 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
             card.reviewKind.setText(R.string.binding_label_destination)
             card.reviewName.text = host.label
             card.reviewSublabel.text = destinationSublabel(host)
+            card.reviewTierPill.bindPill(tierPillSpec(host.kind))
+            card.reviewTierPill.root.visibility = View.VISIBLE
             bindReviewFlows(card.reviewSendsRow, card.reviewSendsChips, destinationSends(caps))
             bindReviewFlows(card.reviewGetsRow, card.reviewGetsChips, destinationGets(caps))
             card.reviewCard.isClickable = true

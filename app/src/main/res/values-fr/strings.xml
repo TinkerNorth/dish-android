@@ -105,6 +105,10 @@
     <string name="chip_status_online">En ligne</string>
     <string name="chip_status_unstable">Instable</string>
 
+    <string name="link_tier_fastest">La plus rapide</string>
+    <string name="link_tier_fast">Rapide</string>
+    <string name="link_tier_basic">Basique</string>
+
     <!-- Superposition manette (activity_gamepad_overlay.xml + GamepadOverlayActivity). -->
     <string name="overlay_status_unknown">Connexion inconnue</string>
     <string name="overlay_status_not_connected">Non connectée</string>

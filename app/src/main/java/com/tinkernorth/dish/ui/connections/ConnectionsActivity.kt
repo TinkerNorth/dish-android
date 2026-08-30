@@ -32,8 +32,10 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionCoordinator
+import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
+import com.tinkernorth.dish.composer.LinkTiers
 import com.tinkernorth.dish.core.input.BluetoothGamepad
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.DiscoverySource
@@ -433,6 +435,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 R.string.section_satellites,
                 R.string.action_scan,
                 secondaryActionLabel = R.string.action_add,
+                tier = LinkTiers.forKind(ConnectionKind.SATELLITE),
                 onSecondaryAction = ::showAddSatelliteDialog,
             ) { ensureLocalNetworkThenDiscover(userInitiated = true) }
         bluetoothHeader =
@@ -440,6 +443,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 R.drawable.ic_bluetooth,
                 R.string.section_bluetooth_hosts,
                 R.string.action_add,
+                tier = LinkTiers.forKind(ConnectionKind.BLUETOOTH),
             ) { requestBtPermissions(continueToAdd = true) }
         moonlightHeader =
             SectionHeaderAdapter(
@@ -447,6 +451,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 R.string.section_moonlight_hosts,
                 R.string.action_scan,
                 secondaryActionLabel = R.string.action_add,
+                tier = LinkTiers.forKind(ConnectionKind.MOONLIGHT),
                 onSecondaryAction = ::showAddMoonlightDialog,
             ) { ensureLocalNetworkThenDiscover(userInitiated = true) }
         satelliteList = SatelliteListAdapter(satelliteRowListener)

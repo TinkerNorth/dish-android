@@ -10,14 +10,18 @@ import androidx.annotation.StringRes
 import androidx.core.view.updateLayoutParams
 import androidx.recyclerview.widget.RecyclerView
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.composer.LinkTier
 import com.tinkernorth.dish.databinding.SectionHeaderBinding
 import com.tinkernorth.dish.ui.common.setLoading
+import com.tinkernorth.dish.ui.common.tierPillSpec
+import com.tinkernorth.dish.ui.main.bindPill
 
 class SectionHeaderAdapter(
     @DrawableRes private val icon: Int,
     @StringRes private val label: Int,
     @StringRes private val actionLabel: Int,
     @StringRes private val secondaryActionLabel: Int? = null,
+    private val tier: LinkTier? = null,
     private val onSecondaryAction: (() -> Unit)? = null,
     private val onAction: () -> Unit,
 ) : RecyclerView.Adapter<SectionHeaderAdapter.VH>() {
@@ -57,6 +61,13 @@ class SectionHeaderAdapter(
         b.iconSection.visibility = View.VISIBLE
         b.iconSection.setImageResource(icon)
         b.labelSection.setText(label)
+        val tier = tier
+        if (tier != null) {
+            b.pillSectionTier.bindPill(b.root.context.tierPillSpec(tier))
+            b.pillSectionTier.root.visibility = View.VISIBLE
+        } else {
+            b.pillSectionTier.root.visibility = View.GONE
+        }
         b.btnSectionAction.visibility = View.VISIBLE
         b.btnSectionAction.setLoading(loading, loadingText, b.root.context.getString(actionLabel))
         b.btnSectionAction.setOnClickListener { onAction() }
