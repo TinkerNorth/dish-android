@@ -19,6 +19,7 @@ import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.core.model.Feature
+import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.databinding.ActivitySetupConfigureBinding
 import com.tinkernorth.dish.databinding.SetupReviewCardBinding
 import com.tinkernorth.dish.databinding.SetupTypeCardBinding
@@ -26,13 +27,16 @@ import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.ui.common.moonlightTypeLabelRes
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.main.ApplyState
 import com.tinkernorth.dish.ui.main.BindingLink
 import com.tinkernorth.dish.ui.main.BindingSnapshot
 import com.tinkernorth.dish.ui.main.ConfigUiState
 import com.tinkernorth.dish.ui.main.ConfigureBindingsViewModel
+import com.tinkernorth.dish.ui.main.MoonlightAction
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
+import com.tinkernorth.dish.ui.main.bindMoonlightSession
 import com.tinkernorth.dish.ui.main.iconRes
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -61,7 +65,9 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
     // step); the type cards resolve their candidate capabilities against this same id.
     private var resolvedSlotId = VIRTUAL_SLOT_ID
 
-    private enum class Step { TYPE, FEEL, REVIEW }
+    // SESSION only exists for a Moonlight destination: it is where the app that host will
+    // run is settled, which is a different question from how the pad feels.
+    private enum class Step { TYPE, SESSION, FEEL, REVIEW }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -95,6 +101,11 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         binding.cardTypeDualsense.typeCard.setOnClickListener { pickType(CONTROLLER_TYPE_DUALSENSE) }
         binding.cardTypeSwitchpro.typeCard.setOnClickListener { pickType(CONTROLLER_TYPE_SWITCHPRO) }
 
+        binding.cardMlAuto.typeCard.setOnClickListener { pickType(MoonlightEmulatedType.AUTO) }
+        binding.cardMlXbox.typeCard.setOnClickListener { pickType(MoonlightEmulatedType.XBOX) }
+        binding.cardMlPlaystation.typeCard.setOnClickListener { pickType(MoonlightEmulatedType.PLAYSTATION) }
+        binding.cardMlNintendo.typeCard.setOnClickListener { pickType(MoonlightEmulatedType.NINTENDO) }
+
         binding.segOff.setOnClickListener { viewModel.setTouchpad(TouchpadModeValue.OFF) }
         binding.segPad.setOnClickListener { viewModel.setTouchpad(TouchpadModeValue.DS4) }
         binding.segMouse.setOnClickListener { viewModel.setTouchpad(TouchpadModeValue.MOUSE) }
@@ -119,10 +130,12 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
     private fun render(state: ConfigUiState) {
         val snapshot = state.snapshot ?: return
         binding.groupType.visibility = visibleIf(step == Step.TYPE)
+        binding.groupMoonlightSession.root.visibility = visibleIf(step == Step.SESSION)
         binding.groupFeel.visibility = visibleIf(step == Step.FEEL)
         binding.groupReview.visibility = visibleIf(step == Step.REVIEW)
         when (step) {
             Step.TYPE -> renderType(state)
+            Step.SESSION -> renderSession(state)
             Step.FEEL -> renderFeel(state)
             Step.REVIEW -> renderReview(state, snapshot)
         }
@@ -133,10 +146,14 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
     // pick. A Bluetooth host has its type fixed upstream, so only the chosen one
     // shows and the cards stop being tappable.
     private fun renderType(state: ConfigUiState) {
-        binding.tvTitle.setText(R.string.setup_cfg_type_title)
-        binding.tvSubtitle.setText(
-            if (state.isBluetoothHost) R.string.setup_cfg_type_locked_subtitle else R.string.setup_cfg_type_subtitle,
-        )
+        val moonlight = state.isMoonlightHost
+        binding.tvTitle.setText(if (moonlight) R.string.ml_type_title else R.string.setup_cfg_type_title)
+        binding.tvSubtitle.text =
+            when {
+                moonlight -> getString(R.string.ml_type_caption, state.selectedHost?.label.orEmpty())
+                state.isBluetoothHost -> getString(R.string.setup_cfg_type_locked_subtitle)
+                else -> getString(R.string.setup_cfg_type_subtitle)
+            }
         binding.btnContinue.setText(R.string.setup_cfg_continue)
         // Tapping a type commits and advances; only the locked Bluetooth-host case,
         // where the cards aren't tappable, needs the Next button.
@@ -149,10 +166,18 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         bindTypeCard(binding.cardTypeDualsense, state, CONTROLLER_TYPE_DUALSENSE, locked)
         bindTypeCard(binding.cardTypeSwitchpro, state, CONTROLLER_TYPE_SWITCHPRO, locked)
         // A Bluetooth host locks to Xbox/PlayStation, so its other cards never show.
-        binding.cardTypeXbox.typeCard.visibility = visibleIf(!locked || selectedType == CONTROLLER_TYPE_XBOX)
-        binding.cardTypePlaystation.typeCard.visibility = visibleIf(!locked || selectedType == CONTROLLER_TYPE_PLAYSTATION)
-        binding.cardTypeDualsense.typeCard.visibility = visibleIf(!locked || selectedType == CONTROLLER_TYPE_DUALSENSE)
-        binding.cardTypeSwitchpro.typeCard.visibility = visibleIf(!locked || selectedType == CONTROLLER_TYPE_SWITCHPRO)
+        binding.cardTypeXbox.typeCard.visibility = visibleIf(!moonlight && (!locked || selectedType == CONTROLLER_TYPE_XBOX))
+        binding.cardTypePlaystation.typeCard.visibility =
+            visibleIf(!moonlight && (!locked || selectedType == CONTROLLER_TYPE_PLAYSTATION))
+        binding.cardTypeDualsense.typeCard.visibility =
+            visibleIf(!moonlight && (!locked || selectedType == CONTROLLER_TYPE_DUALSENSE))
+        binding.cardTypeSwitchpro.typeCard.visibility =
+            visibleIf(!moonlight && (!locked || selectedType == CONTROLLER_TYPE_SWITCHPRO))
+
+        bindMoonlightTypeCard(binding.cardMlAuto, state, MoonlightEmulatedType.AUTO, moonlight)
+        bindMoonlightTypeCard(binding.cardMlXbox, state, MoonlightEmulatedType.XBOX, moonlight)
+        bindMoonlightTypeCard(binding.cardMlPlaystation, state, MoonlightEmulatedType.PLAYSTATION, moonlight)
+        bindMoonlightTypeCard(binding.cardMlNintendo, state, MoonlightEmulatedType.NINTENDO, moonlight)
     }
 
     private fun bindTypeCard(
@@ -164,6 +189,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         card.typeTitle.text = viewModel.typeLabel(candidateType)
         card.typeChevron.visibility = visibleIf(!locked)
         card.typeCard.isClickable = !locked
+        card.typeCard.isChecked = state.draft?.type == candidateType
         card.capabilityContainer.bindCapabilityRows(
             capabilityRows(
                 viewModel.capabilityForCandidate(
@@ -174,6 +200,59 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                 ),
             ),
         )
+    }
+
+    // The Moonlight type table is the host emulator's, not the satellite catalog's, and
+    // Auto resolves here on the client so its card can show the rows it will really send.
+    private fun bindMoonlightTypeCard(
+        card: SetupTypeCardBinding,
+        state: ConfigUiState,
+        candidateType: Int,
+        visible: Boolean,
+    ) {
+        card.typeCard.visibility = visibleIf(visible)
+        if (!visible) return
+        val resolved = viewModel.moonlightResolvedType(candidateType)
+        card.typeTitle.setText(moonlightTypeLabelRes(candidateType))
+        card.typeChevron.visibility = View.GONE
+        card.typeCard.isClickable = true
+        card.typeCard.isChecked = state.draft?.type == candidateType
+        val auto = candidateType == MoonlightEmulatedType.AUTO
+        card.typeBadge.visibility = visibleIf(auto)
+        card.typeCaption.visibility = visibleIf(auto)
+        if (auto) {
+            card.typeBadge.setText(R.string.ml_type_auto_badge)
+            card.typeCaption.text =
+                getString(R.string.ml_type_auto_resolved, getString(moonlightTypeLabelRes(resolved)))
+        }
+        card.capabilityContainer.bindCapabilityRows(
+            capabilityRows(
+                viewModel.capabilityForCandidate(
+                    slotId = resolvedSlotId,
+                    candidateType = resolved,
+                    candidateHostKind = ConnectionKind.MOONLIGHT,
+                    candidateHostId = state.draft?.hostId,
+                ),
+            ),
+        )
+    }
+
+    // The app the host will run is settled once per session, so this step is the same
+    // section the binding screen draws and it never blocks the wizard: with nothing
+    // picked the session starts whatever the host lists first.
+    private fun renderSession(state: ConfigUiState) {
+        binding.tvTitle.setText(R.string.setup_cfg_session_title)
+        binding.tvSubtitle.setText(R.string.setup_cfg_session_subtitle)
+        binding.btnContinue.setText(R.string.setup_cfg_continue)
+        binding.btnContinue.visibility = View.VISIBLE
+        val session = state.moonlightSession ?: return
+        binding.groupMoonlightSession.bindMoonlightSession(
+            session = session,
+            hostLabel = state.selectedHost?.label.orEmpty(),
+            onPickApp = viewModel::selectMoonlightApp,
+        ) { action ->
+            if (action == MoonlightAction.SEE_BINDINGS) nav.toConnections() else viewModel.onMoonlightAction(action)
+        }
     }
 
     // 4B mirrors ConfigureBindingsActivity.bindBindingSection gating exactly: only
@@ -347,6 +426,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                 ),
             )
         }
+        if (state.isMoonlightHost) return moonlightDestinationNodes(state, model)
         // Satellite injects the mouse itself; the virtual pad it creates carries the
         // gamepad, motion, DS4 touchpad, and the rumble it sends back.
         val mouse = ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse)
@@ -366,6 +446,42 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                 name = viewModel.typeLabel(state.draft?.type ?: CONTROLLER_TYPE_XBOX),
                 sublabel = getString(R.string.setup_cfg_virtual_sublabel),
                 sends = rumbleBack,
+                gets =
+                    buildList {
+                        add(gamepad)
+                        if (model.motionOn) add(motion)
+                        if (model.padMode) add(touchpad)
+                    },
+            ),
+        )
+    }
+
+    // The host runs an emulated pad of its own, so it reads like the satellite pair: the
+    // PC itself, then the controller it plugs in for us and the feedback that comes back.
+    private fun moonlightDestinationNodes(
+        state: ConfigUiState,
+        model: ReviewModel,
+    ): List<ReviewNode> {
+        val gamepad = ReviewFlow(R.drawable.ic_gamepad, R.string.setup_cfg_flow_controller)
+        val motion = ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro)
+        val rumble = ReviewFlow(R.drawable.ic_rumble, R.string.binding_func_rumble)
+        val touchpad = ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad)
+        val stored = state.draft?.type ?: MoonlightEmulatedType.AUTO
+        return listOf(
+            ReviewNode(
+                kind = R.string.binding_label_destination,
+                icon = R.drawable.ic_pc_monitor,
+                name = state.selectedHost?.label.orEmpty(),
+                sublabel = getString(R.string.ml_dest_sublabel, viewModel.moonlightAddress(state.draft?.hostId.orEmpty())),
+                sends = emptyList(),
+                gets = emptyList(),
+            ),
+            ReviewNode(
+                kind = R.string.binding_label_destination,
+                icon = R.drawable.ic_gamepad,
+                name = getString(moonlightTypeLabelRes(viewModel.moonlightResolvedType(stored))),
+                sublabel = getString(R.string.setup_cfg_virtual_sublabel),
+                sends = if (model.rumbleOn) listOf(rumble) else emptyList(),
                 gets =
                     buildList {
                         add(gamepad)
@@ -442,12 +558,13 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
     // (its cards aren't tappable), so it advances via the Next button instead.
     private fun pickType(type: Int) {
         viewModel.setType(type)
-        if (!current.isBluetoothHost) goTo(Step.FEEL)
+        if (!current.isBluetoothHost) goTo(afterType())
     }
 
     private fun advance() {
         when (step) {
-            Step.TYPE -> goTo(Step.FEEL)
+            Step.TYPE -> goTo(afterType())
+            Step.SESSION -> goTo(Step.FEEL)
             Step.FEEL -> goTo(Step.REVIEW)
             Step.REVIEW -> viewModel.apply()
         }
@@ -456,10 +573,15 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
     private fun handleBack() {
         when (step) {
             Step.REVIEW -> goTo(Step.FEEL)
-            Step.FEEL -> goTo(Step.TYPE)
+            Step.FEEL -> goTo(if (current.isMoonlightHost) Step.SESSION else Step.TYPE)
+            Step.SESSION -> goTo(Step.TYPE)
             Step.TYPE -> finish()
         }
     }
+
+    // Only a Moonlight destination has a session to settle, so every other host walks
+    // straight from the type to the feel step as it always did.
+    private fun afterType(): Step = if (current.isMoonlightHost) Step.SESSION else Step.FEEL
 
     private fun goTo(next: Step) {
         step = next

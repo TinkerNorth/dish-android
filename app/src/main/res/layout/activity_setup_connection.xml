@@ -66,8 +66,62 @@
                     layout="@layout/setup_choice_row" />
 
                 <include
+                    android:id="@+id/cardMoonlight"
+                    layout="@layout/setup_choice_row" />
+
+                <include
                     android:id="@+id/cardBluetoothHost"
                     layout="@layout/setup_choice_row" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/groupMoonlight"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="@dimen/spacing_xl"
+                android:visibility="gone"
+                tools:visibility="gone">
+
+                <TextView
+                    android:id="@+id/tvMoonlightEyebrow"
+                    style="@style/TextAppearance.Dish.Label.Accent"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/setup_conn_scanning_eyebrow"
+                    android:visibility="gone"
+                    tools:visibility="visible" />
+
+                <LinearLayout
+                    android:id="@+id/moonlightList"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="@dimen/spacing_md" />
+
+                <LinearLayout
+                    android:id="@+id/groupNoMoonlight"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:layout_marginTop="@dimen/spacing_2xl"
+                    android:background="@drawable/bg_setup_callout_warning"
+                    android:padding="@dimen/card_padding">
+
+                    <TextView
+                        style="@style/TextAppearance.Dish.Title"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/ml_dest_empty_title" />
+
+                    <TextView
+                        style="@style/TextAppearance.Dish.BodySmall"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_xs"
+                        android:textColor="@color/colorOnTertiaryContainer"
+                        android:text="@string/ml_dest_empty_body" />
+                </LinearLayout>
             </LinearLayout>
 
             <LinearLayout

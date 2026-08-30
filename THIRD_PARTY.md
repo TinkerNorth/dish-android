@@ -70,3 +70,61 @@ project's parsers:
 
 The Linux kernel is licensed GPL-2.0-only. Upstream:
 https://github.com/torvalds/linux
+
+## Wolf (Games on Whales): Moonlight protocol facts
+
+The Moonlight (GameStream) client path in `app/src/main/java/com/tinkernorth/dish/core/net/moonlight/`
+and `app/src/main/java/com/tinkernorth/dish/source/connection/moonlight/` derives its wire
+formats, struct layouts, pairing crypto steps, control-stream packet framing, and RTSP handshake
+from Wolf's documentation and its host-side (server) implementation:
+
+- Control packet framing and AES-GCM sealing, plus the input/event struct layouts, follow
+  `src/moonlight-protocol/moonlight/control.hpp` and `docs/.../control-specs.adoc` /
+  `input-data.adoc`. The unit tests pin our encoder and sealer byte-for-byte against Wolf's
+  captured vectors in `tests/testControl.cpp` and `tests/testCrypto.cpp`.
+- The 5-phase PIN pairing crypto (AES key derivation, ECB challenge exchange, SHA-256 hashes,
+  RSA signatures) mirrors Wolf's server logic in `src/moonlight-protocol/moonlight.cpp` and
+  `src/moonlight-server/rest/endpoints.hpp`, implemented as the client counterpart.
+- The RTSP request/response shapes follow `docs/.../rtsp.adoc` and
+  `src/moonlight-protocol/rtsp/parser.hpp`.
+
+No Wolf code is compiled into this project; only protocol facts and struct layouts were reused
+and reimplemented in Kotlin. Wolf is licensed MIT. Upstream:
+https://github.com/games-on-whales/wolf
+
+## cgutman/enet: ENet client subset (ported to Kotlin)
+
+`app/src/main/java/com/tinkernorth/dish/core/net/moonlight/enet/` is a minimal pure-Kotlin port
+of the ENet reliable-UDP client subset the Moonlight control stream needs (the connect
+handshake, reliable send/receive on one channel, acknowledgements, ping and disconnect). It was
+ported from the MIT-licensed C source of the cgutman/enet fork (the fork and commit Wolf pins,
+`44c85e16279553d9c052e572bcbfcd745fb74abf`): `host.c`, `peer.c`, `protocol.c`, and
+`include/enet/protocol.h`. Also ported: the peer liveness rules, meaning the round-trip
+estimate and retransmission timeout of `enet_protocol_handle_acknowledge` and the give-up
+conditions of `enet_protocol_check_timeouts`, along with `protocol.c`'s `commandSizes` table.
+
+Only the needed subset is reproduced. This client never *sends* a fragmented, unsequenced,
+throttle or bandwidth command, and does not compress; it does measure and acknowledge all of
+them on receive, because a peer packs several commands into one datagram and a command whose
+size is unknown costs every command behind it. ENet is licensed MIT.
+
+```
+Copyright (c) 2002-2020 Lee Salzman
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software
+and associated documentation files (the "Software"), to deal in the Software without
+restriction, including without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or
+substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
+Upstream: https://github.com/cgutman/enet

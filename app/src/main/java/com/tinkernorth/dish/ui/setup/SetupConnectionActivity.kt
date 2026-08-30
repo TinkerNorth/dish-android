@@ -27,6 +27,7 @@ import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.connections.PairPinDialog
+import com.tinkernorth.dish.ui.main.chipTextRes
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -85,6 +86,13 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
             R.string.setup_conn_satellite_badge,
         ) { withLocalNetwork { viewModel.chooseSatellite() } }
         bindChoice(
+            binding.cardMoonlight,
+            R.drawable.ic_pc_monitor,
+            R.string.ml_dest_section,
+            R.string.setup_conn_moonlight_body,
+            badge = null,
+        ) { withLocalNetwork { viewModel.chooseMoonlight() } }
+        bindChoice(
             binding.cardBluetoothHost,
             R.drawable.ic_bluetooth,
             R.string.setup_conn_bt_host_title,
@@ -93,7 +101,7 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
         ) { nav.toSetupBluetoothHost(inputType, slotId) }
 
         binding.btnBack.setOnClickListener { handleBack() }
-        binding.btnRescan.setOnClickListener { withLocalNetwork { viewModel.startDiscovery() } }
+        binding.btnRescan.setOnClickListener { withLocalNetwork { rescan() } }
         binding.btnGetSatellite.setOnClickListener { openGitHub() }
 
         onBackPressedDispatcher.addCallback(this) { handleBack() }
@@ -129,14 +137,47 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
 
     private fun render(state: SetupConnectionViewModel.State) {
         val onSatellite = state.step == SetupConnectionViewModel.Step.SATELLITE
-        binding.loader.visibility = if (state.scanning) View.VISIBLE else View.INVISIBLE
-        binding.groupPath.visibility = visibleIf(!onSatellite)
+        val onMoonlight = state.step == SetupConnectionViewModel.Step.MOONLIGHT
+        val scanning = if (onMoonlight) state.moonlightScanning else state.scanning
+        binding.loader.visibility = if (scanning) View.VISIBLE else View.INVISIBLE
+        binding.groupPath.visibility = visibleIf(!onSatellite && !onMoonlight)
         binding.groupSatellite.visibility = visibleIf(onSatellite)
-        binding.btnRescan.visibility = visibleIf(onSatellite)
+        binding.groupMoonlight.visibility = visibleIf(onMoonlight)
+        binding.btnRescan.visibility = visibleIf(onSatellite || onMoonlight)
         binding.tvTitle.setText(
-            if (onSatellite) R.string.setup_conn_satellite_pick_title else R.string.setup_conn_path_title,
+            when {
+                onSatellite -> R.string.setup_conn_satellite_pick_title
+                onMoonlight -> R.string.ml_dest_section
+                else -> R.string.setup_conn_path_title
+            },
         )
         if (onSatellite) renderHosts(state)
+        if (onMoonlight) renderMoonlightHosts(state)
+    }
+
+    private fun rescan() {
+        if (viewModel.state.value.step == SetupConnectionViewModel.Step.MOONLIGHT) {
+            viewModel.startMoonlightDiscovery()
+        } else {
+            viewModel.startDiscovery()
+        }
+    }
+
+    // The row says which of the three trust words applies and never a live link: a
+    // Moonlight host has no way to tell us it is up, and the binding is what starts a session.
+    private fun renderMoonlightHosts(state: SetupConnectionViewModel.State) {
+        binding.tvMoonlightEyebrow.visibility = visibleIf(state.moonlightScanning)
+        binding.groupNoMoonlight.visibility = visibleIf(state.moonlightHosts.isEmpty())
+
+        val list = binding.moonlightList
+        list.removeAllViews()
+        state.moonlightHosts.forEach { host ->
+            val row = SetupHostRowBinding.inflate(layoutInflater, list, false)
+            row.hostName.text = host.name.ifBlank { getString(R.string.setup_conn_host_unnamed) }
+            row.hostStatus.setText(host.trust.chipTextRes())
+            row.hostCard.setOnClickListener { viewModel.onMoonlightHostTapped(host.id) }
+            list.addView(row.root)
+        }
     }
 
     private fun renderHosts(state: SetupConnectionViewModel.State) {

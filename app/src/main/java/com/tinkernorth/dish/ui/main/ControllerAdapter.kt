@@ -26,6 +26,7 @@ import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.databinding.BindingDecisionRowBinding
 import com.tinkernorth.dish.databinding.BindingPillBinding
 import com.tinkernorth.dish.databinding.BindingValueMonoBinding
@@ -36,6 +37,7 @@ import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
 import com.tinkernorth.dish.ui.common.bundledControllerTypeLabelRes
+import com.tinkernorth.dish.ui.common.moonlightTypeLabelRes
 
 interface SlotActionListener {
     fun onConfigure(slotId: String)
@@ -64,10 +66,35 @@ internal fun LinkState.isAvailableForPicker(): Boolean =
         -> false
     }
 
+// The badge a bound slot's card can wear; NONE is the quiet default.
+internal enum class EdgeState { NONE, HOST_LOST, INPUT_LOST, UNSTEADY }
+
+// A Moonlight host is never "lost": there is no live link to lose, only remembered trust,
+// and the session is started by the binding itself. Its state is reported in the binding
+// screen where the actions that recover it live, so the dashboard stays quiet.
+internal fun slotEdgeState(slot: ControllerSlot): EdgeState {
+    val bound = slot.boundStatus
+    if (bound == null || slot.boundConnectionId == null) return EdgeState.NONE
+    if (slot.isDisconnecting) return EdgeState.INPUT_LOST
+    if (bound.kind == ConnectionKind.MOONLIGHT) return EdgeState.NONE
+    return when (bound.live) {
+        LinkState.Unstable -> EdgeState.UNSTEADY
+        LinkState.Connected -> EdgeState.NONE
+        // Connecting (incl. a global reconnect in flight) keeps showing "lost" so the badge doesn't flicker off.
+        else -> EdgeState.HOST_LOST
+    }
+}
+
+// A Moonlight host is always offered. Its session is started BY the binding, so requiring a
+// live link before it can be picked is circular: it can never be live until something binds to
+// it, and nothing can bind to it until it is live.
 internal fun connectionsVisibleInPicker(
     all: List<ConnectionSummary>,
     boundConnectionId: String?,
-): List<ConnectionSummary> = all.filter { it.live.isAvailableForPicker() || it.id == boundConnectionId }
+): List<ConnectionSummary> =
+    all.filter {
+        it.live.isAvailableForPicker() || it.kind == ConnectionKind.MOONLIGHT || it.id == boundConnectionId
+    }
 
 // Unstable is degraded but still routing, so it counts as live alongside Connected.
 internal fun LinkState.isLiveLink(): Boolean = this == LinkState.Connected || this == LinkState.Unstable
@@ -190,7 +217,7 @@ class ControllerAdapter(
             b.tvControllerName.text = slot.name
             bindBattery(slot.battery)
 
-            val edge = edgeOf(slot)
+            val edge = slotEdgeState(slot)
             if (edge != EdgeState.UNSTEADY) dismissedUnsteady.remove(slot.id)
             val showEdge =
                 edge != EdgeState.NONE && !(edge == EdgeState.UNSTEADY && slot.id in dismissedUnsteady)
@@ -290,6 +317,12 @@ class ControllerAdapter(
                     ctx.getString(bundledControllerTypeLabelRes(type))
                 }
                 ConnectionKind.BLUETOOTH -> bound.btProfile
+                // A Moonlight host has its own type table; its ids overlap the catalog's, so
+                // the label comes from the Moonlight mapper and never the bundled one.
+                ConnectionKind.MOONLIGHT -> {
+                    val stored = bound.satelliteControllerTypes[row.slot.id]
+                    ctx.getString(moonlightTypeLabelRes(MoonlightEmulatedType.fromStored(stored ?: MoonlightEmulatedType.AUTO)))
+                }
             }
 
         private fun bindFunctionPills(specs: List<PillSpec>) {
@@ -601,18 +634,6 @@ class ControllerAdapter(
             }
         }
 
-        private fun edgeOf(slot: ControllerSlot): EdgeState {
-            val bound = slot.boundStatus
-            if (bound == null || slot.boundConnectionId == null) return EdgeState.NONE
-            if (slot.isDisconnecting) return EdgeState.INPUT_LOST
-            return when (bound.live) {
-                LinkState.Unstable -> EdgeState.UNSTEADY
-                LinkState.Connected -> EdgeState.NONE
-                // Connecting (incl. a global reconnect in flight) keeps showing "lost" so the badge doesn't flicker off.
-                else -> EdgeState.HOST_LOST
-            }
-        }
-
         private fun bindEdge(
             edge: EdgeState,
             row: Row,
@@ -703,8 +724,6 @@ class ControllerAdapter(
     )
 
     private enum class ActionKind { GAMEPAD, TOUCHPAD, SWITCH_DIRECT, SETUP_WIRED, CONFIGURE, FIND_HOSTS }
-
-    private enum class EdgeState { NONE, HOST_LOST, INPUT_LOST, UNSTEADY }
 
     override fun onCreateViewHolder(
         parent: ViewGroup,

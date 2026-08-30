@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Accent fill behind the picked card, the surface colour otherwise. Reuses the
+     icon-container fill so no new palette entry enters the theme. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_checked="true" android:color="@color/colorIconContainerFill" />
+    <item android:color="@color/colorSurface" />
+</selector>

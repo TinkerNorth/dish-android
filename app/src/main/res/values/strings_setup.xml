@@ -66,6 +66,7 @@
     <string name="setup_conn_satellite_title">Satellite over Wi-Fi</string>
     <string name="setup_conn_satellite_body">Lowest latency, full features. Needs the free PC app.</string>
     <string name="setup_conn_satellite_badge">Best</string>
+    <string name="setup_conn_moonlight_body">Stream to a PC running Sunshine, Apollo or Wolf. Dish plugs a controller into the session.</string>
     <string name="setup_conn_bt_host_title">Bluetooth host</string>
     <string name="setup_conn_bt_host_body">Phone pairs to the PC as a pad. No PC app.</string>
     <string name="setup_conn_satellite_pick_title">Pick your PC</string>
@@ -122,6 +123,8 @@
     <string name="setup_cfg_type_title">How should the PC see it?</string>
     <string name="setup_cfg_type_subtitle">Pick the controller the PC should report. Each one unlocks different extras.</string>
     <string name="setup_cfg_type_locked_subtitle">Over Bluetooth the type is fixed. Here is what it carries.</string>
+    <string name="setup_cfg_session_title">What runs on the host?</string>
+    <string name="setup_cfg_session_subtitle">Every controller bound to this host shares one session.</string>
     <string name="setup_cfg_feel_title">How should it feel?</string>
     <string name="setup_cfg_feel_subtitle">Only the extras your input and destination both support are shown.</string>
     <string name="setup_cfg_feel_motion_body">Tilt and gyro aiming on the PC.</string>

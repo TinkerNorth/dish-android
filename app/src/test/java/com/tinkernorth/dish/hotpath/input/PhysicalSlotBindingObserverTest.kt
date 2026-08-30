@@ -41,6 +41,18 @@ class PhysicalSlotBindingObserverTest {
         registered: Boolean = true,
     ) = SatelliteConnection.SlotBinding(controllerIndex = index, controllerType = 0, registered = registered)
 
+    private fun moonlightSummary(
+        id: String,
+        live: LinkState = LinkState.Connected,
+    ) = ConnectionSummary(
+        id = id,
+        kind = ConnectionKind.MOONLIGHT,
+        label = id,
+        detail = "",
+        live = live,
+        boundSlotIds = emptyList(),
+    )
+
     private fun reconcile(
         present: Set<Int> = emptySet(),
         lastBound: Set<Int> = emptySet(),
@@ -48,7 +60,56 @@ class PhysicalSlotBindingObserverTest {
         summaries: List<ConnectionSummary> = emptyList(),
         slotInfo: Map<String, SatelliteSlotSnapshot> = emptyMap(),
         btConnectedIds: Set<String> = emptySet(),
-    ) = reconcileSlots(present, lastBound, bindings, summaries, slotInfo, btConnectedIds)
+        moonlightLiveIds: Set<String> = emptySet(),
+        moonlightPadNumbers: Map<String, Int> = emptyMap(),
+    ) = reconcileSlots(
+        present,
+        lastBound,
+        bindings,
+        summaries,
+        slotInfo,
+        btConnectedIds,
+        moonlightLiveIds,
+        moonlightPadNumbers,
+    )
+
+    @Test
+    fun `a present device binds to a live Moonlight host`() {
+        val ops =
+            reconcile(
+                present = setOf(3),
+                bindings = mapOf("3" to "moonlight:pc"),
+                summaries = listOf(moonlightSummary("moonlight:pc")),
+                moonlightLiveIds = setOf("moonlight:pc"),
+                moonlightPadNumbers = mapOf("3" to 0),
+            )
+        assertEquals(listOf(BindOp.BindMoonlight(deviceId = 3, connectionId = "moonlight:pc", controllerNumber = 0)), ops)
+    }
+
+    @Test
+    fun `a Moonlight host whose session is not live yet unbinds instead of binding`() {
+        // The composer summary says Connected, but the manager re-check says the session is not live.
+        val ops =
+            reconcile(
+                present = setOf(3),
+                bindings = mapOf("3" to "moonlight:pc"),
+                summaries = listOf(moonlightSummary("moonlight:pc")),
+                moonlightLiveIds = emptySet(),
+            )
+        assertEquals(listOf(BindOp.Unbind(3)), ops)
+    }
+
+    @Test
+    fun `an unchanged Moonlight bind is deduped, a changed one is re-applied`() {
+        val op = BindOp.BindMoonlight(deviceId = 3, connectionId = "moonlight:pc", controllerNumber = 0)
+        val first = dedupeBindOps(listOf(op), emptyMap())
+        assertEquals(listOf(op), first.ops)
+        val second = dedupeBindOps(listOf(op), first.applied)
+        assertEquals(emptyList<BindOp>(), second.ops)
+        val changed = BindOp.BindMoonlight(deviceId = 3, connectionId = "moonlight:other", controllerNumber = 0)
+        val third = dedupeBindOps(listOf(changed), first.applied)
+        assertEquals(listOf(changed), third.ops)
+    }
 
     @Test
     fun `a departed device is unbound then forgotten then released, before any binds`() {

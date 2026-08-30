@@ -120,6 +120,14 @@ object SatelliteNative {
         connectionId: String,
     )
 
+    // One Moonlight session carries up to four pads, so unlike the Bluetooth bind the
+    // binding has to name which of them this device drives.
+    external fun bindPhysicalSlotMoonlight(
+        deviceId: Int,
+        connectionId: String,
+        controllerNumber: Int,
+    )
+
     external fun unbindPhysicalSlot(deviceId: Int)
 
     external fun clearAllPhysicalSlots()

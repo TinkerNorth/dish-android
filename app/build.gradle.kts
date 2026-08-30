@@ -247,6 +247,9 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.turbine)
     testImplementation(libs.kotlinx.coroutines.test)
+    // Mints the throwaway self-signed certs the Moonlight pairing test pairs
+    // against, so no key material is committed to the repo.
+    testImplementation(libs.okhttp.tls)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.test.core)

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A picked controller-type card takes the accent stroke; every other state
+     keeps the card stroke it always had, so the unchecked look is unchanged. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_checked="true" android:color="@color/colorPrimary" />
+    <item android:color="@color/colorCardStroke" />
+</selector>
