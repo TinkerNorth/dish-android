@@ -31,6 +31,7 @@
     <string name="action_scan">Scan</string>
     <string name="action_scanning">Scanning…</string>
     <string name="action_add">Add</string>
+    <string name="scan_all_hint">One scan finds satellites and Moonlight hosts</string>
     <string name="bt_hosts_empty">No remembered hosts. Tap Add to register a new one</string>
 
     <!-- row_connection.xml + ConnectionsActivity dynamic row labels. -->
@@ -205,7 +206,6 @@
     <string name="ml_session_live_body">%1$s · controller %2$d of 4</string>
 
     <string name="ml_trust_paired">Paired</string>
-    <string name="ml_trust_remembered">Remembered</string>
     <string name="ml_trust_not_paired">Not paired</string>
     <string name="ml_host_in_use">In use by %1$s</string>
     <plurals name="ml_host_in_use_count">
@@ -249,7 +249,6 @@
     <string name="ml_ended_body">The app closed on the host. Start a new session to keep using this controller.</string>
 
     <string name="ml_action_pair">Pair now</string>
-    <string name="ml_action_pair_again">Pair again</string>
     <string name="ml_action_new_code">New code</string>
     <string name="ml_action_cancel">Cancel</string>
     <string name="ml_action_try_again">Try again</string>

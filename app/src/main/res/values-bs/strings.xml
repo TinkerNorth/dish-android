@@ -27,6 +27,7 @@
     <string name="action_scan">Skeniraj</string>
     <string name="action_scanning">Skeniranje…</string>
     <string name="action_add">Dodaj</string>
+    <string name="scan_all_hint">Jedno skeniranje pronalazi satelite i Moonlight hostove</string>
     <string name="bt_hosts_empty">Nema zapamćenih hostova. Dodirnite Dodaj da registrujete novi</string>
 
     <!-- row_connection.xml + dinamičke oznake redova u ConnectionsActivity. -->
@@ -161,7 +162,6 @@
     <string name="ml_session_live_title">Strimuje na %1$s</string>
     <string name="ml_session_live_body">%1$s · kontroler %2$d od 4</string>
     <string name="ml_trust_paired">Upareno</string>
-    <string name="ml_trust_remembered">Zapamćeno</string>
     <string name="ml_trust_not_paired">Nije upareno</string>
     <string name="ml_host_in_use">Koristi ga %1$s</string>
     <plurals name="ml_host_in_use_count">
@@ -203,7 +203,6 @@
     <string name="ml_ended_title">%1$s je završio sesiju</string>
     <string name="ml_ended_body">Aplikacija je zatvorena na hostu. Pokrenite novu sesiju da nastavite koristiti ovaj kontroler.</string>
     <string name="ml_action_pair">Upari sada</string>
-    <string name="ml_action_pair_again">Upari ponovo</string>
     <string name="ml_action_new_code">Novi kod</string>
     <string name="ml_action_cancel">Otkaži</string>
     <string name="ml_action_try_again">Pokušaj ponovo</string>

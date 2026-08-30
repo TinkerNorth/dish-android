@@ -12,7 +12,6 @@ import androidx.recyclerview.widget.RecyclerView
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.LinkTier
 import com.tinkernorth.dish.databinding.SectionHeaderBinding
-import com.tinkernorth.dish.ui.common.setLoading
 import com.tinkernorth.dish.ui.common.tierPillSpec
 import com.tinkernorth.dish.ui.main.bindPill
 
@@ -20,24 +19,9 @@ class SectionHeaderAdapter(
     @DrawableRes private val icon: Int,
     @StringRes private val label: Int,
     @StringRes private val actionLabel: Int,
-    @StringRes private val secondaryActionLabel: Int? = null,
     private val tier: LinkTier? = null,
-    private val onSecondaryAction: (() -> Unit)? = null,
     private val onAction: () -> Unit,
 ) : RecyclerView.Adapter<SectionHeaderAdapter.VH>() {
-    private var loading = false
-    private var loadingText = ""
-
-    fun setLoading(
-        loading: Boolean,
-        loadingText: String,
-    ) {
-        if (this.loading == loading && this.loadingText == loadingText) return
-        this.loading = loading
-        this.loadingText = loadingText
-        notifyItemChanged(0)
-    }
-
     class VH(
         val binding: SectionHeaderBinding,
     ) : RecyclerView.ViewHolder(binding.root)
@@ -69,16 +53,8 @@ class SectionHeaderAdapter(
             b.pillSectionTier.root.visibility = View.GONE
         }
         b.btnSectionAction.visibility = View.VISIBLE
-        b.btnSectionAction.setLoading(loading, loadingText, b.root.context.getString(actionLabel))
+        b.btnSectionAction.setText(actionLabel)
         b.btnSectionAction.setOnClickListener { onAction() }
-        val secondary = secondaryActionLabel
-        if (secondary != null && onSecondaryAction != null) {
-            b.btnSectionSecondary.visibility = View.VISIBLE
-            b.btnSectionSecondary.setText(secondary)
-            b.btnSectionSecondary.setOnClickListener { onSecondaryAction() }
-        } else {
-            b.btnSectionSecondary.visibility = View.GONE
-        }
     }
 
     override fun getItemCount(): Int = 1

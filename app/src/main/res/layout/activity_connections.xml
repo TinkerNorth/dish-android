@@ -27,6 +27,34 @@
                 android:layout_gravity="end" />
         </com.google.android.material.appbar.MaterialToolbar>
 
+        <!-- Pinned page action: one scan covers satellites and Moonlight hosts,
+             so the button lives here instead of repeating per section. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="@dimen/spacing_5xl"
+            android:paddingTop="@dimen/spacing_3xl">
+
+            <TextView
+                android:id="@+id/tvScanHint"
+                style="@style/TextAppearance.Dish.BodySmall"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="@dimen/spacing_md"
+                android:textColor="@color/colorOnSurfaceVariant"
+                android:text="@string/scan_all_hint" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnScanAll"
+                style="@style/Widget.Dish.Button.Outlined"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/action_scan" />
+        </LinearLayout>
+
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/rvConnections"
             android:layout_width="match_parent"
@@ -34,7 +62,7 @@
             android:layout_weight="1"
             android:clipToPadding="false"
             android:paddingHorizontal="@dimen/spacing_5xl"
-            android:paddingTop="@dimen/spacing_3xl"
+            android:paddingTop="@dimen/spacing_lg"
             android:paddingBottom="@dimen/low_power_chip_scroll_clearance" />
     </LinearLayout>
 

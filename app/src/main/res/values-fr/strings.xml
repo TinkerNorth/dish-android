@@ -27,6 +27,7 @@
     <string name="action_scan">Scanner</string>
     <string name="action_scanning">Recherche…</string>
     <string name="action_add">Ajouter</string>
+    <string name="scan_all_hint">Un scan trouve les satellites et les hôtes Moonlight</string>
     <string name="bt_hosts_empty">Aucun hôte mémorisé : touchez Ajouter pour en enregistrer un</string>
 
     <!-- row_connection.xml + libellés dynamiques des lignes dans ConnectionsActivity. -->
@@ -162,7 +163,6 @@
     <string name="ml_session_live_title">Diffusion vers %1$s</string>
     <string name="ml_session_live_body">%1$s · manette %2$d sur 4</string>
     <string name="ml_trust_paired">Appairé</string>
-    <string name="ml_trust_remembered">Mémorisé</string>
     <string name="ml_trust_not_paired">Non appairé</string>
     <string name="ml_host_in_use">Utilisé par %1$s</string>
     <plurals name="ml_host_in_use_count">
@@ -204,7 +204,6 @@
     <string name="ml_ended_title">%1$s a mis fin à la session</string>
     <string name="ml_ended_body">L\'appli s\'est fermée sur l\'hôte. Lancez une nouvelle session pour continuer à utiliser cette manette.</string>
     <string name="ml_action_pair">Appairer maintenant</string>
-    <string name="ml_action_pair_again">Appairer à nouveau</string>
     <string name="ml_action_new_code">Nouveau code</string>
     <string name="ml_action_cancel">Annuler</string>
     <string name="ml_action_try_again">Réessayer</string>

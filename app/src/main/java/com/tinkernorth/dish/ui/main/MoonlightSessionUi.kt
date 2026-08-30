@@ -388,7 +388,7 @@ val MoonlightSessionUi.blocksApply: Boolean
 fun MoonlightAction.labelRes(): Int =
     when (this) {
         MoonlightAction.PAIR -> R.string.ml_action_pair
-        MoonlightAction.PAIR_AGAIN -> R.string.ml_action_pair_again
+        MoonlightAction.PAIR_AGAIN -> R.string.action_repair_short
         MoonlightAction.NEW_CODE -> R.string.ml_action_new_code
         MoonlightAction.CANCEL -> R.string.ml_action_cancel
         MoonlightAction.TRY_AGAIN -> R.string.ml_action_try_again
@@ -415,15 +415,15 @@ fun MoonlightTone.colorRes(): Int =
         MoonlightTone.SUCCESS -> R.color.colorSuccess
     }
 
-// Seven states, three words. Anything outstanding or unanswered reads as remembered,
-// because a stored record with no fresh answer is precisely what we hold. "Paired" wants
-// proof, which is either a session that is up or a mutual-TLS call that went through, and
-// whatever has neither a record nor proof reads as not paired.
+// Seven states, two words. Holding a pairing record reads as paired, whether or not
+// this visit has re-proven it; only a state with no usable record reads as not paired.
 @StringRes
 fun MoonlightTrustState.chipTextRes(): Int =
     when (this) {
-        MoonlightTrustState.PAIRED -> R.string.ml_trust_paired
-        MoonlightTrustState.REMEMBERED, MoonlightTrustState.CHECKING -> R.string.ml_trust_remembered
-        MoonlightTrustState.UNREACHABLE -> R.string.ml_trust_remembered
+        MoonlightTrustState.PAIRED, MoonlightTrustState.REMEMBERED,
+        MoonlightTrustState.CHECKING, MoonlightTrustState.UNREACHABLE,
+        -> R.string.ml_trust_paired
         MoonlightTrustState.NOT_PAIRED, MoonlightTrustState.TRUST_LOST, MoonlightTrustState.REPLACED -> R.string.ml_trust_not_paired
     }
+
+fun MoonlightTrustState.holdsPairing(): Boolean = chipTextRes() == R.string.ml_trust_paired

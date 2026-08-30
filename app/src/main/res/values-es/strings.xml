@@ -28,6 +28,7 @@
     <string name="action_scan">Buscar</string>
     <string name="action_scanning">Buscando…</string>
     <string name="action_add">Añadir</string>
+    <string name="scan_all_hint">Una búsqueda encuentra satélites y hosts Moonlight</string>
     <string name="bt_hosts_empty">No hay hosts recordados. Toca Añadir para registrar uno nuevo</string>
 
     <!-- row_connection.xml + etiquetas dinámicas de fila en ConnectionsActivity. -->
@@ -163,7 +164,6 @@
     <string name="ml_session_live_title">Transmitiendo a %1$s</string>
     <string name="ml_session_live_body">%1$s · mando %2$d de 4</string>
     <string name="ml_trust_paired">Emparejado</string>
-    <string name="ml_trust_remembered">Recordado</string>
     <string name="ml_trust_not_paired">Sin emparejar</string>
     <string name="ml_host_in_use">En uso por %1$s</string>
     <plurals name="ml_host_in_use_count">
@@ -205,7 +205,6 @@
     <string name="ml_ended_title">%1$s terminó la sesión</string>
     <string name="ml_ended_body">La app se cerró en el host. Inicia una sesión nueva para seguir usando este mando.</string>
     <string name="ml_action_pair">Emparejar ahora</string>
-    <string name="ml_action_pair_again">Emparejar de nuevo</string>
     <string name="ml_action_new_code">Código nuevo</string>
     <string name="ml_action_cancel">Cancelar</string>
     <string name="ml_action_try_again">Intentar de nuevo</string>

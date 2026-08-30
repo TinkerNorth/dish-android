@@ -26,6 +26,7 @@
     <string name="action_scan">Suchen</string>
     <string name="action_scanning">Suche läuft…</string>
     <string name="action_add">Hinzufügen</string>
+    <string name="scan_all_hint">Ein Suchlauf findet Satelliten und Moonlight-Hosts</string>
     <string name="bt_hosts_empty">Keine gemerkten Hosts. Auf Hinzufügen tippen, um einen neuen zu registrieren</string>
 
     <!-- row_connection.xml + dynamische Zeilenbeschriftungen in ConnectionsActivity. -->
@@ -161,7 +162,6 @@
     <string name="ml_session_live_title">Streamt an %1$s</string>
     <string name="ml_session_live_body">%1$s · Controller %2$d von 4</string>
     <string name="ml_trust_paired">Gekoppelt</string>
-    <string name="ml_trust_remembered">Gemerkt</string>
     <string name="ml_trust_not_paired">Nicht gekoppelt</string>
     <string name="ml_host_in_use">Genutzt von %1$s</string>
     <plurals name="ml_host_in_use_count">
@@ -202,7 +202,6 @@
     <string name="ml_ended_title">%1$s hat die Sitzung beendet</string>
     <string name="ml_ended_body">Die App wurde auf dem Host geschlossen. Starte eine neue Sitzung, um diesen Controller weiter zu nutzen.</string>
     <string name="ml_action_pair">Jetzt koppeln</string>
-    <string name="ml_action_pair_again">Erneut koppeln</string>
     <string name="ml_action_new_code">Neuer Code</string>
     <string name="ml_action_cancel">Abbrechen</string>
     <string name="ml_action_try_again">Erneut versuchen</string>
