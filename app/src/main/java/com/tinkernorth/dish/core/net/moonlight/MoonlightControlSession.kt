@@ -220,7 +220,10 @@ class MoonlightControlSession(
     }
 
     private companion object {
-        const val DEFAULT_HANDSHAKE_TIMEOUT_MS = 3000
+        // Room for two CONNECT retransmits on a busy link. Giving up sooner ends in
+        // a /cancel that burns the launch, so a blip reads as a host that refused.
+        // The three clients wait the same five seconds.
+        const val DEFAULT_HANDSHAKE_TIMEOUT_MS = 5000
         const val HANDSHAKE_POLL_MS = 100
         const val RECEIVE_POLL_MS = 50
         const val RECEIVE_BUDGET = 16

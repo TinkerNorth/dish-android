@@ -24,6 +24,8 @@ class MoonlightUrlsTest {
         assertTrue(url.contains("rikey=00112233"))
         assertTrue(url.contains("rikeyid=42"))
         assertTrue(url.contains("mode=1280x720x30"))
+        // Stereo as every client spells it: mask 3 << 16 | 2 channels.
+        assertTrue(url.contains("surroundAudioInfo=196610"))
     }
 
     @Test

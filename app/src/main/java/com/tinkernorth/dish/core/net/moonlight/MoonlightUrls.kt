@@ -70,7 +70,11 @@ object MoonlightUrls {
                     "rikey" to rikeyHex,
                     "rikeyid" to rikeyId.toString(),
                     "localAudioPlayMode" to "1",
-                    "surroundAudioInfo" to "65538",
+                    // Stereo: channel mask 0x3 (front left and right) in the high
+                    // half, channel count 2 in the low. 65538 named a mask of 1,
+                    // a single front-left channel two speakers wide, which no
+                    // real client sends; the other two Dish clients send this.
+                    "surroundAudioInfo" to "196610",
                 ),
             )
 
