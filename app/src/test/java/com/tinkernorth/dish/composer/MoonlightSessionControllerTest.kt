@@ -9,6 +9,10 @@ import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.net.moonlight.MoonlightEvent
+import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
+import com.tinkernorth.dish.hotpath.input.RumbleRouter
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightPadRequest
 import io.mockk.every
@@ -63,12 +67,15 @@ class MoonlightSessionControllerTest {
         kind: ConnectionKind = ConnectionKind.MOONLIGHT,
     ) = ConnectionSummary(id = id, kind = kind, label = id, detail = "", live = LinkState.Saved, boundSlotIds = emptyList())
 
+    private val rumble: RumbleRouter = mockk(relaxed = true)
+
     private fun controller() =
         MoonlightSessionController(
             context = context,
             hub = hub,
             moonlight = moonlight,
             capabilities = capabilities,
+            rumble = rumble,
             scope = TestScope(dispatcher),
         )
 
@@ -78,6 +85,9 @@ class MoonlightSessionControllerTest {
         context = mockk(relaxed = true)
         hub = mockk(relaxed = true)
         moonlight = mockk(relaxed = true)
+        // A relaxed mock cannot stand in for a StateFlow's collect, which never
+        // returns; the feedback wiring collects it, so it has to be a real flow.
+        every { moonlight.connections } returns MutableStateFlow(emptyMap())
         capabilities = mockk(relaxed = true)
         owner = mockk(relaxed = true)
         every { hub.bindings } returns bindings
@@ -274,5 +284,30 @@ class MoonlightSessionControllerTest {
                 moonlight.applyDesired(match { pads -> pads.values.none { it.isNotEmpty() } })
                 context.stopService(any())
             }
+        }
+
+    @Test
+    fun `host rumble reaches the pad bound to that controller number`() =
+        runTest(dispatcher) {
+            // The host names a pad by controller number; the connection is what knows
+            // which slot took that number, and the router is what knows the slot's
+            // actuator. Nothing here needed a satellite session handle.
+            val conn =
+                MoonlightConnection(
+                    id = "moonlight:uid:abc",
+                    host = MoonlightHost(name = "PC", address = "10.0.0.5", uniqueId = "abc"),
+                    scope = TestScope(dispatcher),
+                    ioDispatcher = dispatcher,
+                )
+            conn.acquirePad("pad-a", MoonlightEmulatedType.XBOX, 0x03, 0xFFFF)
+            conn.acquirePad("pad-b", MoonlightEmulatedType.XBOX, 0x03, 0xFFFF)
+            every { moonlight.connections } returns MutableStateFlow(mapOf(conn.id to conn))
+            controller()
+            dispatcher.scheduler.advanceUntilIdle()
+
+            conn.dispatchFeedback(MoonlightEvent.Rumble(controllerNumber = 1, lowFrequency = 65535, highFrequency = 1000))
+
+            verify(exactly = 1) { rumble.dispatchToSlot("pad-b", 65535, 1000, any()) }
+            verify(exactly = 0) { rumble.dispatchToSlot("pad-a", any(), any(), any()) }
         }
 }

@@ -10,6 +10,9 @@ import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.architecture.abstracts.AbstractController
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.net.moonlight.MoonlightEvent
+import com.tinkernorth.dish.hotpath.input.RumbleRouter
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightPadRequest
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -17,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -42,9 +46,22 @@ class MoonlightSessionController
         private val hub: ConnectionCoordinator,
         private val moonlight: MoonlightConnectionManager,
         private val capabilities: CapabilityComposer,
+        private val rumble: RumbleRouter,
         scope: CoroutineScope,
     ) : AbstractController<MoonlightDesiredPads>(scope) {
         private var serviceRunning = false
+
+        init {
+            // What comes back from the host. A session drives up to four pads and
+            // names the one it means by controller number; the connection is what
+            // knows which slot holds that number. Every connection the manager
+            // makes gets its sink here, before anything can be live on it.
+            scope.launch {
+                moonlight.connections.collect { conns ->
+                    conns.values.forEach { conn -> conn.onFeedback = { event -> onHostFeedback(conn, event) } }
+                }
+            }
+        }
 
         override fun upstream(): Flow<MoonlightDesiredPads> =
             combine(hub.bindings, hub.connections, hub.satTypes) { bindings, conns, types ->
@@ -64,6 +81,22 @@ class MoonlightSessionController
         // from the post-start emission rather than from what was recorded before it.
         override fun onStarting() {
             serviceRunning = false
+        }
+
+        private fun onHostFeedback(
+            conn: MoonlightConnection,
+            event: MoonlightEvent,
+        ) {
+            if (event !is MoonlightEvent.Rumble) return
+            val slotId =
+                conn.pads.value.values
+                    .firstOrNull { it.number == event.controllerNumber }
+                    ?.slotId ?: return
+            // Low frequency is the large motor, which the routers call strong. A
+            // Moonlight rumble has no duration: it holds until the host sends the
+            // next one, so each is delivered for as long as the router allows
+            // and a session that drops mid-buzz stops buzzing on its own.
+            rumble.dispatchToSlot(slotId, event.lowFrequency, event.highFrequency, RUMBLE_HOLD_MS)
         }
 
         override fun onStop(owner: LifecycleOwner) = Unit
@@ -147,5 +180,6 @@ class MoonlightSessionController
 
         private companion object {
             const val TAG = "MoonlightSessionCtl"
+            const val RUMBLE_HOLD_MS = 1500
         }
     }
