@@ -1,24 +1,59 @@
 # gitleaks configuration for dish-android.
+#
+# Default rule set is inherited from gitleaks 8.x. Each `[[allowlists]]` block
+# is a separate OR'd exemption; criteria WITHIN a block combine per its
+# `condition` (gitleaks defaults to "OR"). The singular `[allowlist]` table
+# this file used to carry is deprecated in gitleaks 8.30 and cannot coexist
+# with `[[allowlists]]`; the blocks below are a behaviour-preserving split of
+# it, with the paths and regexes anchored the way the sibling dish-windows
+# config anchors them: gitleaks treats these as unanchored regexes, so a bare
+# `LICENSE` also exempted anything with LICENSE anywhere in its path, and a
+# port number exempted any secret that merely CONTAINED those four digits.
+#
+# Reference: https://github.com/gitleaks/gitleaks#configuration
 
 title = "dish-android gitleaks config"
 
 [extend]
 useDefault = true
 
-[allowlist]
-description = "Allowlist for known non-secret strings in dish-android."
+[[allowlists]]
+description = "License texts (LGPL header boilerplate scans as key material)."
 paths = [
-    '''COPYING\.GPL3''',
-    '''LICENSE''',
-    # Gradle wrapper SHA-256 in gradle-wrapper.properties is a content
-    # hash, not a secret.
-    '''gradle/wrapper/gradle-wrapper\.properties''',
-    # The verification metadata file is intentionally a list of pinned
-    # JAR digests.
-    '''gradle/verification-metadata\.xml''',
+    '''^COPYING\.GPL3$''',
+    '''^LICENSE$''',
 ]
 
+[[allowlists]]
+description = "Pinned content digests, not secrets."
+paths = [
+    # Gradle wrapper SHA-256 in gradle-wrapper.properties is a content
+    # hash, not a secret.
+    '''^gradle/wrapper/gradle-wrapper\.properties$''',
+    # The verification metadata file is intentionally a list of pinned
+    # JAR digests.
+    '''^gradle/verification-metadata\.xml$''',
+]
+
+[[allowlists]]
+description = "Wire-protocol port numbers (documented in CONTRIBUTING.md)."
 regexes = [
-    # Wire-protocol port numbers documented in CONTRIBUTING.md.
-    '''9876|9877|9878|9879''',
+    '''^(9876|9877|9878|9879)$''',
+]
+
+# Two throwaway RSA-2048 TEST keys that briefly lived at
+# app/src/test/resources/moonlight/{server,client}_key.pem. They protected
+# nothing (fixtures for MoonlightPairingTest, which now mints disposable
+# identities at runtime via okhttp-tls HeldCertificate); the follow-up commit
+# a00046c deleted all four PEM fixtures, but `gitleaks detect` scans full
+# history and the ADD diff still exists in this one commit.
+#
+# Scoped to the COMMIT, not the paths: a path allowlist would permanently
+# exempt those locations, so a real key dropped there later would sail
+# through. Pinning the one historical commit exempts exactly the two findings
+# that exist and nothing that could ever be added.
+[[allowlists]]
+description = "Deleted throwaway Moonlight test keys (history-only, one commit)."
+commits = [
+    '''7563dd10bee33b15354df8df61052b997c3b3d89''',
 ]
