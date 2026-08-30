@@ -89,7 +89,29 @@ class RumbleRouter
             weakMagnitude: Int,
             durationMs: Int,
         ) {
-            val target = resolveTarget(sessionHandle, controllerIndex)
+            deliver(resolveTarget(sessionHandle, controllerIndex), strongMagnitude, weakMagnitude, durationMs)
+        }
+
+        /**
+         * The same delivery for a path that already knows the slot. A Moonlight
+         * session names its pads by controller number and the connection resolves
+         * that to the slot bound to it, so there is no satellite handle to look up.
+         */
+        fun dispatchToSlot(
+            slotId: String,
+            strongMagnitude: Int,
+            weakMagnitude: Int,
+            durationMs: Int,
+        ) {
+            deliver(classifyTarget(slotId), strongMagnitude, weakMagnitude, durationMs)
+        }
+
+        private fun deliver(
+            target: RumbleTarget,
+            strongMagnitude: Int,
+            weakMagnitude: Int,
+            durationMs: Int,
+        ) {
             if (target is RumbleTarget.None) return
             if (!rumbleEnabled.isEnabled(slotIdOf(target))) return
             if (isRumbleStop(strongMagnitude, weakMagnitude, durationMs)) {

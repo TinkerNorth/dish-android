@@ -13,7 +13,10 @@
     android:layout_marginTop="@dimen/card_margin_bottom"
     android:clickable="true"
     android:focusable="true"
-    android:foreground="?attr/selectableItemBackground">
+    android:foreground="?attr/selectableItemBackground"
+    app:cardBackgroundColor="@color/type_card_background"
+    app:checkedIcon="@null"
+    app:strokeColor="@color/type_card_stroke">
 
     <LinearLayout
         style="@style/Widget.Dish.Card.RowContainer"

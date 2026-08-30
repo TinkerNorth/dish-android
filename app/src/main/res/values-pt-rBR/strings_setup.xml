@@ -60,6 +60,7 @@
     <string name="setup_conn_satellite_title">Satellite por Wi-Fi</string>
     <string name="setup_conn_satellite_body">Menor latência, recursos completos. Precisa do app gratuito para PC.</string>
     <string name="setup_conn_satellite_badge">Melhor</string>
+    <string name="setup_conn_moonlight_body">Transmita para um PC com Sunshine, Apollo ou Wolf. O Dish conecta um controle na sessão.</string>
     <string name="setup_conn_bt_host_title">Host Bluetooth</string>
     <string name="setup_conn_bt_host_body">O celular pareia com o PC como um controle. Sem app no PC.</string>
     <string name="setup_conn_satellite_pick_title">Escolha seu PC</string>
@@ -113,6 +114,8 @@
     <string name="setup_cfg_type_title">Como o PC deve vê-lo?</string>
     <string name="setup_cfg_type_subtitle">Escolha o controle que o PC deve reportar. Cada um libera extras diferentes.</string>
     <string name="setup_cfg_type_locked_subtitle">Por Bluetooth o tipo é fixo. Aqui está o que ele carrega.</string>
+    <string name="setup_cfg_session_title">O que roda no host?</string>
+    <string name="setup_cfg_session_subtitle">Todos os controles vinculados a este host compartilham uma sessão.</string>
     <string name="setup_cfg_feel_title">Como ele deve se comportar?</string>
     <string name="setup_cfg_feel_subtitle">Só são mostrados os extras que sua entrada e seu destino suportam juntos.</string>
     <string name="setup_cfg_feel_motion_body">Inclinação e mira por giroscópio no PC.</string>

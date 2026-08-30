@@ -21,6 +21,7 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.databinding.ActivityConfigureBindingsBinding
 import com.tinkernorth.dish.databinding.BindingApplyStepBinding
 import com.tinkernorth.dish.databinding.BindingValueNoneBinding
@@ -32,6 +33,7 @@ import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
+import com.tinkernorth.dish.ui.common.moonlightTypeLabelRes
 import com.tinkernorth.dish.ui.donate.wireDonateButton
 import com.tinkernorth.dish.ui.setup.ReviewFlow
 import com.tinkernorth.dish.ui.setup.bindCapabilityRows
@@ -73,6 +75,13 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
         observe()
     }
 
+    // Re-verify on entering the screen: a Moonlight pairing is remembered trust, and the
+    // only way to learn the host revoked it is to ask.
+    override fun onStart() {
+        super.onStart()
+        viewModel.refreshMoonlight()
+    }
+
     private fun observe() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -102,8 +111,24 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
 
         bindInputSection(state, snapshot)
         bindDestinationSection(state, snapshot)
+        val session = state.moonlightSession
+        binding.sectionMoonlight.root.visibility = if (session == null) View.GONE else View.VISIBLE
+        if (session != null) bindMoonlightSection(state, session)
         binding.sectionBinding.root.visibility = if (state.hostChosen) View.VISIBLE else View.GONE
         if (state.hostChosen) bindBindingSection(state)
+    }
+
+    private fun bindMoonlightSection(
+        state: ConfigUiState,
+        session: MoonlightSessionUi,
+    ) {
+        binding.sectionMoonlight.bindMoonlightSession(
+            session = session,
+            hostLabel = state.selectedHost?.label.orEmpty(),
+            onPickApp = viewModel::selectMoonlightApp,
+        ) { action ->
+            if (action == MoonlightAction.SEE_BINDINGS) nav.toConnections() else viewModel.onMoonlightAction(action)
+        }
     }
 
     private fun bindInputSection(
@@ -160,7 +185,7 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
         snapshot: BindingSnapshot,
     ) {
         val d = binding.sectionDestination
-        d.ivDestIcon.setImageResource(if (state.isBluetoothHost) R.drawable.ic_bluetooth else R.drawable.ic_satellite)
+        d.ivDestIcon.setImageResource(destinationGlyph(state.selectedHost?.kind))
         d.tvDestLabel.text = getString(R.string.binding_label_destination)
 
         val noHosts = state.noHosts
@@ -171,7 +196,8 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
             d.hostDropdown.setTextColor(getColor(if (host != null) R.color.colorOnSurface else R.color.colorMuted))
             d.hostDropdown.setOnClickListener { showHostMenu() }
         }
-        d.legendSatellite.visibility = if (state.hostChosen && !state.isBluetoothHost) View.VISIBLE else View.GONE
+        val plainSatellite = state.hostChosen && !state.isBluetoothHost && !state.isMoonlightHost
+        d.legendSatellite.visibility = if (plainSatellite) View.VISIBLE else View.GONE
         d.legendBt.visibility = if (state.hostChosen && state.isBluetoothHost) View.VISIBLE else View.GONE
         d.noHostsGroup.visibility = if (noHosts) View.VISIBLE else View.GONE
         if (noHosts) {
@@ -396,15 +422,13 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
                 .setNegativeButton(android.R.string.cancel, null)
                 .create()
         state.hosts.forEach { host ->
-            val caps = viewModel.capabilityForCandidate(snapshot.slotId, type, host.kind, host.id)
-            val bt = host.kind == ConnectionKind.BLUETOOTH
+            val candidate = if (host.kind == ConnectionKind.MOONLIGHT) viewModel.moonlightResolvedType(type) else type
+            val caps = viewModel.capabilityForCandidate(snapshot.slotId, candidate, host.kind, host.id)
             val card = SetupReviewCardBinding.inflate(layoutInflater, container, false)
-            card.reviewIcon.setImageResource(if (bt) R.drawable.ic_bluetooth else R.drawable.ic_satellite)
+            card.reviewIcon.setImageResource(destinationGlyph(host.kind))
             card.reviewKind.setText(R.string.binding_label_destination)
             card.reviewName.text = host.label
-            card.reviewSublabel.setText(
-                if (bt) R.string.setup_cfg_dest_bluetooth else R.string.setup_cfg_dest_satellite,
-            )
+            card.reviewSublabel.text = destinationSublabel(host)
             bindReviewFlows(card.reviewSendsRow, card.reviewSendsChips, destinationSends(caps))
             bindReviewFlows(card.reviewGetsRow, card.reviewGetsChips, destinationGets(caps))
             card.reviewCard.isClickable = true
@@ -416,6 +440,22 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
         }
         dialog.show()
     }
+
+    // One silhouette per destination kind, everywhere the destination is drawn.
+    @DrawableRes
+    private fun destinationGlyph(kind: ConnectionKind?): Int =
+        when (kind) {
+            ConnectionKind.BLUETOOTH -> R.drawable.ic_bluetooth
+            ConnectionKind.MOONLIGHT -> R.drawable.ic_pc_monitor
+            else -> R.drawable.ic_satellite
+        }
+
+    private fun destinationSublabel(host: BindingHost): String =
+        when (host.kind) {
+            ConnectionKind.BLUETOOTH -> getString(R.string.setup_cfg_dest_bluetooth)
+            ConnectionKind.MOONLIGHT -> getString(R.string.ml_dest_sublabel, viewModel.moonlightAddress(host.id))
+            ConnectionKind.SATELLITE -> getString(R.string.setup_cfg_dest_satellite)
+        }
 
     // A destination gets the inputs the path can carry; what is shown is gated by what
     // is actually deliverable end to end for the current type.
@@ -450,12 +490,25 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
                 .setView(list.root)
                 .setNegativeButton(android.R.string.cancel, null)
                 .create()
+        val moonlight = host.kind == ConnectionKind.MOONLIGHT
         state.typeOptions.forEach { option ->
             val card = SetupTypeCardBinding.inflate(layoutInflater, container, false)
+            val candidate = if (moonlight) viewModel.moonlightResolvedType(option.id) else option.id
             card.typeTitle.text = option.label
             card.typeChevron.visibility = View.GONE
+            card.typeCard.isChecked = option.id == state.draft?.type
+            // Auto is resolved here, on the client: the card shows the rows of the type it
+            // will actually send, and says which one that is rather than implying a fifth type.
+            val isAuto = moonlight && option.id == MoonlightEmulatedType.AUTO
+            card.typeBadge.visibility = if (isAuto) View.VISIBLE else View.GONE
+            if (isAuto) card.typeBadge.setText(R.string.ml_type_auto_badge)
+            card.typeCaption.visibility = if (isAuto) View.VISIBLE else View.GONE
+            if (isAuto) {
+                card.typeCaption.text =
+                    getString(R.string.ml_type_auto_resolved, getString(moonlightTypeLabelRes(candidate)))
+            }
             card.capabilityContainer.bindCapabilityRows(
-                capabilityRows(viewModel.capabilityForCandidate(snapshot.slotId, option.id, host.kind, host.id)),
+                capabilityRows(viewModel.capabilityForCandidate(snapshot.slotId, candidate, host.kind, host.id)),
             )
             card.typeCard.setOnClickListener {
                 viewModel.setType(option.id)

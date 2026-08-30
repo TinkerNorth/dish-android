@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Add a Moonlight host by address. The sibling of dialog_add_satellite.xml and
+     deliberately the same shape: one field, the same styles, the same paddings.
+     Only the address is asked for, because the HTTP and HTTPS ports come back
+     from the host's own /serverinfo rather than being guessed here. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingHorizontal="@dimen/spacing_4xl"
+    android:paddingTop="@dimen/spacing_lg">
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/tilMoonlightHost"
+        style="@style/Widget.Dish.TextInputLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="@string/add_moonlight_host_hint">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etMoonlightHost"
+            style="@style/Widget.Dish.EditText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textUri"
+            android:singleLine="true"
+            android:imeOptions="actionDone"
+            android:importantForAutofill="no"
+            tools:targetApi="26" />
+    </com.google.android.material.textfield.TextInputLayout>
+</LinearLayout>

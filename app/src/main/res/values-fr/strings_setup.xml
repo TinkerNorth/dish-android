@@ -65,6 +65,7 @@
     <string name="setup_conn_satellite_title">Satellite par Wi-Fi</string>
     <string name="setup_conn_satellite_body">Latence minimale, toutes les fonctionnalités. Nécessite l\'app PC gratuite.</string>
     <string name="setup_conn_satellite_badge">Meilleur</string>
+    <string name="setup_conn_moonlight_body">Diffusez vers un PC avec Sunshine, Apollo ou Wolf. Dish branche une manette dans la session.</string>
     <string name="setup_conn_bt_host_title">Hôte Bluetooth</string>
     <string name="setup_conn_bt_host_body">Le téléphone s\'appaire au PC comme une manette. Sans app PC.</string>
     <string name="setup_conn_satellite_pick_title">Choisissez votre PC</string>
@@ -121,6 +122,8 @@
     <string name="setup_cfg_type_title">Comment le PC doit-il la voir ?</string>
     <string name="setup_cfg_type_subtitle">Choisissez la manette que le PC doit signaler. Chacune débloque des extras différents.</string>
     <string name="setup_cfg_type_locked_subtitle">Par Bluetooth, le type est fixe. Voici ce qu\'il transporte.</string>
+    <string name="setup_cfg_session_title">Que lance l\'hôte ?</string>
+    <string name="setup_cfg_session_subtitle">Toutes les manettes liées à cet hôte partagent une seule session.</string>
     <string name="setup_cfg_feel_title">Quel ressenti voulez-vous ?</string>
     <string name="setup_cfg_feel_subtitle">Seuls les extras pris en charge à la fois par votre entrée et votre destination sont affichés.</string>
     <string name="setup_cfg_feel_motion_body">Visée par inclinaison et gyro sur le PC.</string>

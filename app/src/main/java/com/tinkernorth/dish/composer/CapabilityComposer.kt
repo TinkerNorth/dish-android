@@ -9,6 +9,7 @@ import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.HostFeatureSet
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.core.net.ControllerDescriptor
+import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.repository.SatelliteCatalogRepository
 import com.tinkernorth.dish.repository.TouchpadModeValue
@@ -154,6 +155,9 @@ class CapabilityComposer
                     typeCapabilitiesFor(
                         hub.satTypes.value[connId to slotId] ?: CONTROLLER_TYPE_XBOX,
                         connId,
+                        hub.connections.value
+                            .firstOrNull { it.id == connId }
+                            ?.kind ?: ConnectionKind.SATELLITE,
                     ),
                 host = (hostFeatures.featuresFor(connId) ?: HostFeatureSet.SATELLITE_DEFAULT).toCapabilitySet(),
             )
@@ -173,7 +177,7 @@ class CapabilityComposer
             CapabilityResolver.resolve(
                 controller = liveControllerLayer(slotId),
                 transport = TransportProfiles.forKind(candidateHostKind),
-                type = typeCapabilitiesFor(candidateType, candidateHostId),
+                type = typeCapabilitiesFor(candidateType, candidateHostId, candidateHostKind),
                 host = candidateHostLayer(candidateHostKind, candidateHostId),
                 userEnabled = ALL,
                 // Pre-bind runtime probe: lets the report show a feature present-but-down
@@ -276,17 +280,28 @@ class CapabilityComposer
             summary: ConnectionSummary?,
         ): CapabilitySet {
             if (summary == null) return ALL
-            if (summary.kind != ConnectionKind.SATELLITE) return ALL
+            if (summary.kind == ConnectionKind.BLUETOOTH) return ALL
             val typeId = summary.satelliteControllerTypes[slotId] ?: return ALL
-            return typeCapabilitiesFor(typeId, summary.id)
+            return typeCapabilitiesFor(typeId, summary.id, summary.kind)
         }
 
         // The satellite's own per-type features from its cached catalog are the source
         // of truth; the bundled set covers an unfetched catalog or the slugs we ship.
+        // A Moonlight host has no catalog at all and its own table of types, so it never
+        // reads either: the two type systems share names and nothing else.
         private fun typeCapabilitiesFor(
             typeId: Int,
             connId: String?,
+            kind: ConnectionKind,
         ): CapabilitySet {
+            if (kind == ConnectionKind.MOONLIGHT) {
+                return MoonlightCatalog.typeCapabilities(
+                    MoonlightEmulatedType.resolve(
+                        MoonlightEmulatedType.fromStored(typeId),
+                        sourceHasMotion = false,
+                    ),
+                )
+            }
             val catalogType =
                 connId
                     ?.let { catalogRepo.cached(it) }
@@ -296,13 +311,15 @@ class CapabilityComposer
                 ?: BundledCatalog.typeCapabilitiesById(typeId)
         }
 
-        // BLUETOOTH limits via transport, so its host layer is permissive; an unbound slot is too.
+        // BLUETOOTH limits via transport, so its host layer is permissive; an unbound slot is
+        // too. A Moonlight host exposes no capability API, so nothing about it can be crossed out.
         private fun hostLayer(
             connId: String?,
             summary: ConnectionSummary?,
             hostMap: Map<String, HostFeatureSet>,
         ): CapabilitySet {
             if (summary == null || connId == null) return ALL
+            if (summary.kind == ConnectionKind.MOONLIGHT) return MoonlightCatalog.HOST_LAYER
             if (summary.kind != ConnectionKind.SATELLITE) return ALL
             return (hostMap[connId] ?: HostFeatureSet.SATELLITE_DEFAULT).toCapabilitySet()
         }
@@ -311,6 +328,7 @@ class CapabilityComposer
             kind: ConnectionKind,
             hostId: String?,
         ): CapabilitySet {
+            if (kind == ConnectionKind.MOONLIGHT) return MoonlightCatalog.HOST_LAYER
             if (kind != ConnectionKind.SATELLITE) return ALL
             val features = hostId?.let { hostFeatures.featuresFor(it) } ?: HostFeatureSet.SATELLITE_DEFAULT
             return features.toCapabilitySet()

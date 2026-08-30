@@ -114,6 +114,7 @@
     <string name="overlay_dialog_motion_title">Mouvement</string>
     <string name="overlay_connection_kind_satellite">Satellite</string>
     <string name="overlay_connection_kind_bluetooth">Bluetooth</string>
+    <string name="overlay_connection_kind_moonlight">Hôte Moonlight</string>
     <string name="overlay_title_gamepad">Manette</string>
     <string name="overlay_title_touchpad">Pavé tactile</string>
     <string name="overlay_rate_touch">Tactile %1$s</string>
@@ -130,6 +131,105 @@
     <!-- Sous-titre des lignes Bluetooth et état transitoire d\'un emplacement
          pendant un appairage en cours. -->
     <string name="bt_row_detail">%1$s • %2$s</string>
+    <string name="moonlight_row_detail">Moonlight • %1$s</string>
+    <string name="section_moonlight_hosts">HÔTES MOONLIGHT</string>
+    <string name="moonlight_hosts_empty">Aucun hôte Moonlight. Scannez le réseau ou ajoutez-en un par adresse.</string>
+    <string name="moonlight_pin_title">Associer à %1$s</string>
+    <string name="action_add_moonlight_host">Ajouter un hôte Moonlight</string>
+    <string name="add_moonlight_host_hint">IP ou nom de l\'hôte</string>
+    <string name="add_moonlight_error_host">Saisissez l\'adresse de l\'hôte</string>
+
+    <!-- Flux de liaison Moonlight. Un appairage est une confiance mémorisée vérifiée
+         seulement quand nous la demandons, donc rien ici ne prétend à un lien en
+         direct ; la session appartient à la liaison et tous les états ci-dessous
+         laissent Appliquer accessible, sauf un hôte portant déjà quatre manettes. -->
+    <string name="ml_type_title">Comment l\'hôte doit-il la voir ?</string>
+    <string name="ml_type_caption">Dish demande à %1$s de brancher cette manette. Certains hôtes remplacent ce choix.</string>
+    <string name="ml_type_auto">Automatique</string>
+    <string name="ml_type_auto_badge">Choisi pour vous</string>
+    <string name="ml_type_auto_resolved">Automatique envoie %1$s pour cette manette.</string>
+    <string name="ml_session_eyebrow">Session</string>
+    <string name="ml_session_new_title">Nouvelle session</string>
+    <string name="ml_session_new_body">C\'est la première manette sur %1$s, elle choisit donc ce que l\'hôte lance.</string>
+    <string name="ml_session_default_note">Sans choix, Dish lance ce que %1$s liste en premier.</string>
+    <string name="ml_session_join_title">Rejoint %1$s</string>
+    <string name="ml_session_join_title_unnamed">Rejoint la session sur %1$s</string>
+    <string name="ml_session_join_body">%1$s exécute déjà une session pour cet appareil. Cette manette la rejoint en tant que manette %2$d.</string>
+    <string name="ml_session_live_title">Diffusion vers %1$s</string>
+    <string name="ml_session_live_body">%1$s · manette %2$d sur 4</string>
+    <string name="ml_trust_paired">Appairé</string>
+    <string name="ml_trust_remembered">Mémorisé</string>
+    <string name="ml_trust_not_paired">Non appairé</string>
+    <string name="ml_host_in_use">Utilisé par %1$s</string>
+    <plurals name="ml_host_in_use_count">
+        <item quantity="one">%1$d manette</item>
+        <item quantity="many">%1$d manettes</item>
+        <item quantity="other">%1$d manettes</item>
+    </plurals>
+    <string name="ml_state_checking">Vérification de %1$s…</string>
+    <string name="ml_state_unpaired_title">Pas encore appairé</string>
+    <string name="ml_state_unpaired_body">%1$s a besoin d\'un code PIN à usage unique avant que Dish puisse lancer une session. Appairez maintenant, ou ajoutez la manette et appairez plus tard.</string>
+    <string name="ml_pair_pin_body">Saisissez %1$s sur la page Moonlight ou Sunshine de %2$s.</string>
+    <string name="ml_pair_waiting">En attente de la validation du code par l\'hôte…</string>
+    <string name="ml_pair_failed_title">%1$s n\'a pas accepté le code</string>
+    <string name="ml_pair_failed_body">Vérifiez que le code a bien été saisi sur le bon hôte, puis réessayez.</string>
+    <string name="ml_state_unreachable_title">%1$s ne répond pas</string>
+    <string name="ml_state_unreachable_body">Vérifiez que l\'hôte est allumé et sur ce réseau, puis réessayez.</string>
+    <string name="ml_state_remembered_body">Dish garde l\'appairage avec %1$s en mémoire et lancera une session dès le retour de l\'hôte.</string>
+    <string name="ml_state_trust_lost_title">%1$s ne reconnaît plus cet appareil</string>
+    <string name="ml_state_trust_lost_body">L\'hôte a supprimé l\'appairage. Appairez à nouveau pour lancer une session.</string>
+    <string name="ml_state_replaced_title">%1$s a été réinitialisé</string>
+    <string name="ml_state_replaced_body">Cet hôte a une nouvelle identité, l\'ancien appairage ne fonctionne donc plus. Appairez à nouveau pour lancer une session.</string>
+    <string name="ml_apps_loading">Lecture de la liste des applis de %1$s…</string>
+    <string name="ml_apps_empty_title">Aucune appli sur cet hôte</string>
+    <string name="ml_apps_empty_body">%1$s n\'a encore aucune appli configurée. Ajoutez-en une sur l\'hôte, ou ajoutez la manette et Dish lancera ce que l\'hôte liste en premier.</string>
+    <string name="ml_apps_failed_title">Impossible de lire la liste des applis de %1$s</string>
+    <string name="ml_apps_failed_body">Dish lancera ce que l\'hôte liste en premier. Réessayez quand %1$s sera joignable.</string>
+    <string name="ml_full_title">%1$s est complet</string>
+    <string name="ml_full_body">Une session porte quatre manettes au maximum, et %1$s en a déjà quatre. Déliez-en une pour faire de la place.</string>
+    <string name="ml_busy_other_title">Un autre appareil utilise %1$s</string>
+    <string name="ml_busy_other_body">%1$s exécute une appli pour un autre appareil et ne cédera pas cette session. Fermez-la pour en lancer une nouvelle, ou ajoutez la manette et réessayez plus tard.</string>
+    <string name="ml_resume_failed_title">Impossible de rejoindre la session sur %1$s</string>
+    <string name="ml_resume_failed_body">L\'hôte a une session mais refuse de la rendre. Fermez l\'appli sur %1$s et lancez-en une nouvelle.</string>
+    <string name="ml_refused_title">%1$s a refusé la session : %2$s</string>
+    <string name="ml_refused_body">Ajoutez quand même la manette, Dish réessaiera à la prochaine utilisation.</string>
+    <string name="ml_setup_failed_title">Impossible de finaliser la session sur %1$s</string>
+    <string name="ml_setup_failed_body">L\'appli a démarré mais le flux ne s\'est pas établi, alors Dish l\'a refermée.</string>
+    <string name="ml_dropped_title">La session sur %1$s est terminée</string>
+    <string name="ml_dropped_body">Le lien est tombé. Dish rejoindra la session à la prochaine utilisation de cette manette.</string>
+    <string name="ml_ended_title">%1$s a mis fin à la session</string>
+    <string name="ml_ended_body">L\'appli s\'est fermée sur l\'hôte. Lancez une nouvelle session pour continuer à utiliser cette manette.</string>
+    <string name="ml_action_pair">Appairer maintenant</string>
+    <string name="ml_action_pair_again">Appairer à nouveau</string>
+    <string name="ml_action_new_code">Nouveau code</string>
+    <string name="ml_action_cancel">Annuler</string>
+    <string name="ml_action_try_again">Réessayer</string>
+    <string name="ml_action_retry">Relancer</string>
+    <string name="ml_action_quit_app">Fermer l\'appli sur %1$s</string>
+    <string name="ml_action_quit_session">Terminer la session</string>
+    <string name="ml_action_reconnect">Reconnecter</string>
+    <string name="ml_action_start_session">Lancer une session</string>
+    <string name="ml_action_see_bindings">Voir les manettes sur %1$s</string>
+
+    <string name="ml_paired_title">Associé à %1$s</string>
+    <string name="ml_paired_body">Dish démarre une session sur cet hôte dès que vous y associez une manette.</string>
+    <string name="ml_host_gone_body">Dish ne trouve plus cet hôte. Relancez la recherche ou ajoutez-le par adresse.</string>
+    <string name="dialog_forget_moonlight_title">Oublier %1$s ?</string>
+    <string name="dialog_forget_moonlight_message">Dish supprime son association et le code vous sera redemandé. %1$s conserve sa propre fiche pour cet appareil tant que vous ne la supprimez pas sur cet hôte.</string>
+    <string name="ml_service_channel_name">Session Moonlight</string>
+    <string name="ml_service_channel_description">Maintient une session Moonlight active tant qu\'une manette y est liée.</string>
+    <string name="ml_service_title">Dish · Moonlight</string>
+    <plurals name="ml_service_body">
+        <item quantity="one">%1$d manette sur %2$s</item>
+        <item quantity="many">%1$d manettes sur %2$s</item>
+        <item quantity="other">%1$d manettes sur %2$s</item>
+    </plurals>
+    <string name="ml_service_body_starting">Lancement d\'une session sur %1$s…</string>
+    <string name="ml_service_body_idle">Lancement d\'une session…</string>
+    <string name="ml_dest_section">Hôtes Moonlight</string>
+    <string name="ml_dest_sublabel">Hôte Moonlight · %1$s</string>
+    <string name="ml_dest_empty_title">Aucun hôte Moonlight trouvé</string>
+    <string name="ml_dest_empty_body">Un PC apparaît ici dès que Sunshine, Apollo ou Wolf y tourne et que les deux machines sont sur le même réseau. Vous pouvez aussi en ajouter un par adresse.</string>
     <string name="bt_transient_ready_to_pair">Prête à appairer : repérez cet appareil sur votre hôte</string>
     <string name="bt_transient_acquiring">Acquisition du profil HID…</string>
     <string name="bt_transient_idle">Inactive</string>

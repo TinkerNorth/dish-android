@@ -10,11 +10,13 @@ import com.tinkernorth.dish.bench.HotPathBenchController
 import com.tinkernorth.dish.composer.CatalogPrewarmer
 import com.tinkernorth.dish.composer.CrashReportingController
 import com.tinkernorth.dish.composer.DiagnosticsLogRecorder
+import com.tinkernorth.dish.composer.MoonlightSessionController
 import com.tinkernorth.dish.composer.SlotTopologyController
 import com.tinkernorth.dish.composer.StreamingServiceController
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.hotpath.input.BluetoothGamepadBridge
+import com.tinkernorth.dish.hotpath.input.MoonlightGamepadBridge
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.PhysicalSlotBindingObserver
 import com.tinkernorth.dish.hotpath.input.RumbleBridge
@@ -69,6 +71,8 @@ class DishApplication : Application() {
 
     @Inject lateinit var slotTopologyController: SlotTopologyController
 
+    @Inject lateinit var moonlightSessionController: MoonlightSessionController
+
     @Inject lateinit var crashReportingController: CrashReportingController
 
     @Inject lateinit var themePreferenceStore: ThemePreferenceStore
@@ -80,6 +84,8 @@ class DishApplication : Application() {
     @Inject lateinit var inputRateStore: InputRateStore
 
     @Inject lateinit var rumbleRouter: RumbleRouter
+
+    @Inject lateinit var moonlightManager: com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
 
     @Inject lateinit var physicalInputNative: PhysicalInputNative
 
@@ -146,6 +152,7 @@ class DishApplication : Application() {
         val lifecycle = ProcessLifecycleOwner.get().lifecycle
         lifecycle.addObserver(connectionForegroundObserver)
         lifecycle.addObserver(slotTopologyController)
+        lifecycle.addObserver(moonlightSessionController)
         // Process-scoped so bindings survive the MainActivity → GamepadOverlayActivity handoff.
         physicalGamepadRegistry.install()
         usbGamepadManager.install()
@@ -157,6 +164,7 @@ class DishApplication : Application() {
         lifecycle.addObserver(physicalMotionSource)
         lifecycle.addObserver(wakeStateController)
         BluetoothGamepadBridge.install(btRegistry)
+        MoonlightGamepadBridge.install(moonlightManager)
         lifecycle.addObserver(bluetoothBondMonitor)
         lifecycle.addObserver(bluetoothAdapterStateObserver)
         lifecycle.addObserver(bluetoothPermissionStateObserver)

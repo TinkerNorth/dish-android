@@ -7,6 +7,7 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_SWITCHPRO
+import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 
 // Bundled label for a catalog id; the live catalog name wins where available
 // (ConfigureBindingsViewModel.typeLabel), this is the offline/diagnostic fallback.
@@ -17,4 +18,15 @@ fun bundledControllerTypeLabelRes(type: Int): Int =
         CONTROLLER_TYPE_DUALSENSE -> R.string.picker_type_dualsense
         CONTROLLER_TYPE_SWITCHPRO -> R.string.picker_type_switchpro
         else -> R.string.picker_type_xbox
+    }
+
+// A Moonlight host runs its own type table whose ids overlap the catalog's, so the two
+// never share a label mapper: CONTROLLER_TYPE_XBOX is 1 here and 0 there.
+@StringRes
+fun moonlightTypeLabelRes(type: Int): Int =
+    when (type) {
+        MoonlightEmulatedType.XBOX -> R.string.ml_type_xbox
+        MoonlightEmulatedType.PLAYSTATION -> R.string.ml_type_playstation
+        MoonlightEmulatedType.NINTENDO -> R.string.ml_type_nintendo
+        else -> R.string.ml_type_auto
     }

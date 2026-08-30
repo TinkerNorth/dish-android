@@ -34,6 +34,8 @@ fun glyphForConnection(
                 LinkState.Saved, LinkState.Stale -> R.drawable.ic_bluetooth_off
                 else -> R.drawable.ic_bluetooth
             }
+        // The Moonlight host is a PC; one glyph across states (no per-state art yet).
+        ConnectionKind.MOONLIGHT -> R.drawable.ic_pc_monitor
     }
 
 @androidx.annotation.ColorRes
@@ -79,6 +81,7 @@ fun AppCompatActivity.showConnectionDialog(summary: ConnectionSummary?) {
         when (summary?.kind) {
             ConnectionKind.SATELLITE -> getString(R.string.overlay_connection_kind_satellite)
             ConnectionKind.BLUETOOTH -> getString(R.string.overlay_connection_kind_bluetooth)
+            ConnectionKind.MOONLIGHT -> getString(R.string.overlay_connection_kind_moonlight)
             null -> getString(R.string.overlay_status_unknown)
         }
     val stateLabel =

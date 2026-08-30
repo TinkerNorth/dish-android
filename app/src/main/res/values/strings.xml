@@ -140,6 +140,7 @@
     <string name="overlay_dialog_motion_title">Motion</string>
     <string name="overlay_connection_kind_satellite">Satellite</string>
     <string name="overlay_connection_kind_bluetooth">Bluetooth</string>
+    <string name="overlay_connection_kind_moonlight">Moonlight host</string>
 
     <!-- Shared overlay header titles. Sit next to the back chevron so the
          user always sees which input surface they're on. -->
@@ -167,6 +168,114 @@
     <!-- Bluetooth row subtitle ("<profile> • <MAC>") and transient-slot detail
          text shown while a new pairing is in flight. -->
     <string name="bt_row_detail">%1$s • %2$s</string>
+    <string name="moonlight_row_detail">Moonlight • %1$s</string>
+    <string name="section_moonlight_hosts">MOONLIGHT HOSTS</string>
+    <string name="moonlight_hosts_empty">No Moonlight hosts yet. Scan your network or add one by address.</string>
+    <string name="moonlight_pin_title">Pair with %1$s</string>
+    <string name="action_add_moonlight_host">Add Moonlight host</string>
+    <string name="add_moonlight_host_hint">Host IP or name</string>
+    <string name="add_moonlight_error_host">Enter the host address</string>
+
+    <!-- Moonlight binding flow. Pairing is host-level trust checked only when we
+         ask, so these never claim a live link; the session lives in the binding
+         and every state below keeps Apply reachable except a host already
+         carrying its four controllers. -->
+    <string name="ml_type_title">How should the host see it?</string>
+    <string name="ml_type_caption">Dish asks %1$s to plug in this controller. Some hosts override the choice.</string>
+    <string name="ml_type_auto">Auto</string>
+    <string name="ml_type_xbox" translatable="false">Xbox</string>
+    <string name="ml_type_playstation" translatable="false">PlayStation</string>
+    <string name="ml_type_nintendo" translatable="false">Nintendo</string>
+    <string name="ml_type_auto_badge">Picked for you</string>
+    <string name="ml_type_auto_resolved">Auto sends %1$s for this controller.</string>
+
+    <string name="ml_session_eyebrow">Session</string>
+    <string name="ml_session_new_title">New session</string>
+    <string name="ml_session_new_body">This is the first controller on %1$s, so it picks what the host runs.</string>
+    <string name="ml_session_default_note">Without a pick, Dish starts whatever %1$s lists first.</string>
+    <string name="ml_session_join_title">Joining %1$s</string>
+    <string name="ml_session_join_title_unnamed">Joining the session on %1$s</string>
+    <string name="ml_session_join_body">%1$s is already running a session for this device. This controller joins it as controller %2$d.</string>
+    <string name="ml_session_live_title">Streaming to %1$s</string>
+    <string name="ml_session_live_body">%1$s · controller %2$d of 4</string>
+
+    <string name="ml_trust_paired">Paired</string>
+    <string name="ml_trust_remembered">Remembered</string>
+    <string name="ml_trust_not_paired">Not paired</string>
+    <string name="ml_host_in_use">In use by %1$s</string>
+    <plurals name="ml_host_in_use_count">
+        <item quantity="one">%1$d controller</item>
+        <item quantity="other">%1$d controllers</item>
+    </plurals>
+    <string name="ml_state_checking">Checking %1$s…</string>
+    <string name="ml_state_unpaired_title">Not paired yet</string>
+    <string name="ml_state_unpaired_body">%1$s needs a one time PIN before Dish can start a session. Pair now, or add the controller and pair later.</string>
+    <string name="ml_pair_pin_body">Type %1$s into the Moonlight or Sunshine page on %2$s.</string>
+    <string name="ml_pair_waiting">Waiting for the host to accept the PIN…</string>
+    <string name="ml_pair_failed_title">%1$s did not accept the PIN</string>
+    <string name="ml_pair_failed_body">Check that the code went into the right host, then try again.</string>
+    <string name="ml_state_unreachable_title">%1$s is not answering</string>
+    <string name="ml_state_unreachable_body">Check that the host is switched on and on this network, then try again.</string>
+    <string name="ml_state_remembered_body">Dish remembers the pairing with %1$s and will start a session when the host is back.</string>
+    <string name="ml_state_trust_lost_title">%1$s no longer recognises this device</string>
+    <string name="ml_state_trust_lost_body">The host removed the pairing. Pair again to start a session.</string>
+    <string name="ml_state_replaced_title">%1$s was reset</string>
+    <string name="ml_state_replaced_body">This host has a new identity, so the old pairing no longer works. Pair again to start a session.</string>
+
+    <string name="ml_apps_loading">Reading the app list from %1$s…</string>
+    <string name="ml_apps_empty_title">No apps on this host</string>
+    <string name="ml_apps_empty_body">%1$s has no apps set up yet. Add one on the host, or add the controller and Dish will start whatever the host lists first.</string>
+    <string name="ml_apps_failed_title">Could not read the app list from %1$s</string>
+    <string name="ml_apps_failed_body">Dish will start whatever the host lists first. Retry once %1$s is reachable.</string>
+
+    <string name="ml_full_title">%1$s is full</string>
+    <string name="ml_full_body">A session carries four controllers at most, and %1$s already has four. Unbind one to make room.</string>
+    <string name="ml_busy_other_title">Another device is using %1$s</string>
+    <string name="ml_busy_other_body">%1$s is running an app for a different device and will not hand that session over. Close it to start a new one, or add the controller and try again later.</string>
+    <string name="ml_resume_failed_title">Could not rejoin the session on %1$s</string>
+    <string name="ml_resume_failed_body">The host has a session but would not hand it back. Close the app on %1$s and start a new one.</string>
+    <string name="ml_refused_title">%1$s refused the session: %2$s</string>
+    <string name="ml_refused_body">Add the controller anyway and Dish will try again the next time you use it.</string>
+    <string name="ml_setup_failed_title">Could not finish the session on %1$s</string>
+    <string name="ml_setup_failed_body">The app started but the stream did not come up, so Dish closed it again.</string>
+    <string name="ml_dropped_title">Session on %1$s ended</string>
+    <string name="ml_dropped_body">The link dropped. Dish will rejoin the next time you use this controller.</string>
+    <string name="ml_ended_title">%1$s ended the session</string>
+    <string name="ml_ended_body">The app closed on the host. Start a new session to keep using this controller.</string>
+
+    <string name="ml_action_pair">Pair now</string>
+    <string name="ml_action_pair_again">Pair again</string>
+    <string name="ml_action_new_code">New code</string>
+    <string name="ml_action_cancel">Cancel</string>
+    <string name="ml_action_try_again">Try again</string>
+    <string name="ml_action_retry">Retry</string>
+    <string name="ml_action_quit_app">Close the app on %1$s</string>
+    <string name="ml_action_quit_session">Quit session</string>
+    <string name="ml_action_reconnect">Reconnect</string>
+    <string name="ml_action_start_session">Start a session</string>
+    <string name="ml_action_see_bindings">See controllers on %1$s</string>
+
+    <string name="ml_paired_title">Paired with %1$s</string>
+    <string name="ml_paired_body">Dish starts a session on this host as soon as a controller is bound to it.</string>
+    <string name="ml_host_gone_body">Dish can no longer find this host. Scan again, or add it by address.</string>
+    <string name="dialog_forget_moonlight_title">Forget %1$s?</string>
+    <string name="dialog_forget_moonlight_message">Dish deletes its pairing and you will need the PIN again. %1$s keeps its own record of this device until you remove it there.</string>
+
+    <string name="ml_service_channel_name">Moonlight session</string>
+    <string name="ml_service_channel_description">Keeps a Moonlight session alive while a controller is bound to it.</string>
+    <string name="ml_service_title">Dish · Moonlight</string>
+    <plurals name="ml_service_body">
+        <item quantity="one">%1$d controller on %2$s</item>
+        <item quantity="other">%1$d controllers on %2$s</item>
+    </plurals>
+    <string name="ml_service_body_starting">Starting a session on %1$s…</string>
+    <string name="ml_service_body_idle">Starting a session…</string>
+
+    <string name="ml_dest_section">Moonlight hosts</string>
+    <string name="ml_dest_sublabel">Moonlight host · %1$s</string>
+    <string name="ml_dest_empty_title">No Moonlight hosts found</string>
+    <string name="ml_dest_empty_body">A PC appears here once Sunshine, Apollo or Wolf is running on it and both machines are on the same network. You can also add one by address.</string>
+
     <string name="bt_transient_ready_to_pair">Ready to pair. Find this device on your host</string>
     <string name="bt_transient_acquiring">Acquiring HID profile…</string>
     <string name="bt_transient_idle">Idle</string>

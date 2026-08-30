@@ -60,6 +60,7 @@
     <string name="setup_conn_satellite_title">Satellite preko Wi-Fi-ja</string>
     <string name="setup_conn_satellite_body">Najmanja latencija, sve funkcije. Treba besplatnu PC aplikaciju.</string>
     <string name="setup_conn_satellite_badge">Najbolje</string>
+    <string name="setup_conn_moonlight_body">Strimujte na PC s Sunshine, Apollo ili Wolf. Dish priključuje kontroler u sesiju.</string>
     <string name="setup_conn_bt_host_title">Bluetooth host</string>
     <string name="setup_conn_bt_host_body">Telefon se uparuje s PC-om kao pad. Bez PC aplikacije.</string>
     <string name="setup_conn_satellite_pick_title">Odaberite svoj PC</string>
@@ -113,6 +114,8 @@
     <string name="setup_cfg_type_title">Kako PC treba da ga vidi?</string>
     <string name="setup_cfg_type_subtitle">Odaberite kontroler koji PC treba da prijavi. Svaki otključava drugačije dodatke.</string>
     <string name="setup_cfg_type_locked_subtitle">Preko Bluetooth-a tip je fiksan. Evo šta nosi.</string>
+    <string name="setup_cfg_session_title">Šta se pokreće na hostu?</string>
+    <string name="setup_cfg_session_subtitle">Svi kontroleri vezani za ovaj host dijele jednu sesiju.</string>
     <string name="setup_cfg_feel_title">Kakav osjećaj treba da ima?</string>
     <string name="setup_cfg_feel_subtitle">Prikazani su samo dodaci koje podržavaju i vaš unos i odredište.</string>
     <string name="setup_cfg_feel_motion_body">Nagib i žiro nišanjenje na PC-u.</string>

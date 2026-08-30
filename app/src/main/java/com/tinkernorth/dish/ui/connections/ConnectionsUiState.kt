@@ -10,8 +10,10 @@ import com.tinkernorth.dish.source.connection.SatelliteConnection
 data class ConnectionsUiState(
     val satelliteRows: List<SatelliteRow>,
     val bluetoothSummaries: List<ConnectionSummary>,
+    val moonlightRows: List<MoonlightRow>,
     val rememberedBtIds: Set<String>,
     val scanning: Boolean,
+    val moonlightScanning: Boolean,
     val lastScanAtMs: Long?,
 ) {
     companion object {
@@ -19,8 +21,10 @@ data class ConnectionsUiState(
             ConnectionsUiState(
                 satelliteRows = emptyList(),
                 bluetoothSummaries = emptyList(),
+                moonlightRows = emptyList(),
                 rememberedBtIds = emptySet(),
                 scanning = false,
+                moonlightScanning = false,
                 lastScanAtMs = null,
             )
     }

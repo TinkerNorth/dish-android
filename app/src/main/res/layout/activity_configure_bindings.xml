@@ -75,6 +75,13 @@
                     android:layout_marginTop="@dimen/config_section_gap" />
 
                 <include
+                    android:id="@+id/sectionMoonlight"
+                    layout="@layout/binding_section_moonlight"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/config_section_gap" />
+
+                <include
                     android:id="@+id/sectionBinding"
                     layout="@layout/binding_section_binding"
                     android:layout_width="match_parent"

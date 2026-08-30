@@ -80,6 +80,14 @@ object AppModule {
     @Singleton
     fun provideBluetoothHidSession(factory: @JvmSuppressWildcards () -> HidProxyClient): BluetoothHidSession = BluetoothHidSession(factory)
 
+    // The Moonlight client identity is keystore-backed; bind the interface the
+    // pairing/gateway code depends on to the concrete provider.
+    @Provides
+    @Singleton
+    fun provideMoonlightIdentity(
+        provider: com.tinkernorth.dish.source.connection.moonlight.MoonlightIdentityProvider,
+    ): com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity = provider
+
     // Adapter resolved per call so a runtime BT toggle is reflected without re-injection.
     @Provides
     @Singleton

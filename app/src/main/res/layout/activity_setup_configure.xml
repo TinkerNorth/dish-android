@@ -79,7 +79,30 @@
                 <include
                     android:id="@+id/cardTypeSwitchpro"
                     layout="@layout/setup_type_card" />
+
+                <include
+                    android:id="@+id/cardMlAuto"
+                    layout="@layout/setup_type_card" />
+
+                <include
+                    android:id="@+id/cardMlXbox"
+                    layout="@layout/setup_type_card" />
+
+                <include
+                    android:id="@+id/cardMlPlaystation"
+                    layout="@layout/setup_type_card" />
+
+                <include
+                    android:id="@+id/cardMlNintendo"
+                    layout="@layout/setup_type_card" />
             </LinearLayout>
+
+            <include
+                android:id="@+id/groupMoonlightSession"
+                layout="@layout/binding_section_moonlight"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xl" />
 
             <LinearLayout
                 android:id="@+id/groupFeel"

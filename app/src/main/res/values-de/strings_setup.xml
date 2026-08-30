@@ -66,6 +66,7 @@
     <string name="setup_conn_satellite_title">Satellite über WLAN</string>
     <string name="setup_conn_satellite_body">Geringste Latenz, voller Funktionsumfang. Braucht die kostenlose PC-App.</string>
     <string name="setup_conn_satellite_badge">Am besten</string>
+    <string name="setup_conn_moonlight_body">Stream an einen PC mit Sunshine, Apollo oder Wolf. Dish schließt einen Controller an die Sitzung an.</string>
     <string name="setup_conn_bt_host_title">Bluetooth-Host</string>
     <string name="setup_conn_bt_host_body">Das Handy koppelt sich als Pad mit dem PC. Keine PC-App.</string>
     <string name="setup_conn_satellite_pick_title">Wähle deinen PC</string>
@@ -122,6 +123,8 @@
     <string name="setup_cfg_type_title">Wie soll der PC ihn sehen?</string>
     <string name="setup_cfg_type_subtitle">Wähle den Controller, den der PC melden soll. Jeder schaltet andere Extras frei.</string>
     <string name="setup_cfg_type_locked_subtitle">Über Bluetooth ist der Typ festgelegt. Das ist enthalten.</string>
+    <string name="setup_cfg_session_title">Was läuft auf dem Host?</string>
+    <string name="setup_cfg_session_subtitle">Alle mit diesem Host verknüpften Controller teilen sich eine Sitzung.</string>
     <string name="setup_cfg_feel_title">Wie soll es sich anfühlen?</string>
     <string name="setup_cfg_feel_subtitle">Es werden nur die Extras gezeigt, die deine Eingabe und dein Ziel beide unterstützen.</string>
     <string name="setup_cfg_feel_motion_body">Neigungs- und Gyro-Zielen am PC.</string>

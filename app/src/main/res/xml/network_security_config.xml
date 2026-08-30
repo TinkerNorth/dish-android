@@ -1,13 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Explicit deny-cleartext config. All HTTP traffic the app makes (the
-    HTTPS satellite client API and any future telemetry endpoint) MUST be
-    TLS. The encrypted UDP gamepad wire and LAN discovery beacons are raw
-    sockets and are not gated by this config; they carry their own AEAD.
+    Explicit deny-cleartext config. Every request the app makes through
+    the platform URL stack (the HTTPS satellite client API, any future
+    telemetry endpoint) MUST be TLS.
 
     This is a belt-and-braces signal to Android's PlatformVal validator
     and to Play's pre-launch security checks: even if a future PR forgets
     to set `usesCleartextTraffic="false"`, this config still wins.
+
+    NOT everything the app sends is TLS, because this config only gates
+    the URL stack. Raw sockets are outside it, and these use them:
+
+      - the encrypted UDP gamepad wire and the LAN discovery beacons,
+        which carry their own AEAD;
+      - Moonlight pairing phases 1-4 and the /serverinfo probe, which the
+        GameStream protocol fixes as plaintext HTTP on port 47989 because
+        no shared secret exists yet. MoonlightHttp11Client speaks that by
+        hand over a Socket for exactly those requests, and its KDoc
+        carries why it is safe (no PIN on the wire; phase 5 onwards is
+        pinned mutual TLS);
+      - the Moonlight mutual-TLS endpoints on 47984. Those ARE TLS, with
+        a client certificate and the host's certificate pinned on first
+        use; they simply do not ride the URL stack either, because its
+        connection pool could never reuse a connection keyed on a
+        per-host verifier and left every one of them open on the host.
+        MoonlightHttpGateway carries that reasoning.
+
+    So do not read this file as "the app never sends cleartext". Read it
+    as "nothing that can go through the URL stack is allowed to."
 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="false">

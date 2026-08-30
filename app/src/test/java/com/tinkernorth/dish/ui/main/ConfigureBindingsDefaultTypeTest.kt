@@ -21,6 +21,7 @@ import com.tinkernorth.dish.repository.SatelliteCatalogRepository
 import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
 import com.tinkernorth.dish.source.store.TouchpadModeStore
@@ -60,6 +61,7 @@ class ConfigureBindingsDefaultTypeTest {
     private lateinit var capabilityComposer: CapabilityComposer
     private lateinit var touchpadModeStore: TouchpadModeStore
     private lateinit var satellite: SatelliteConnectionManager
+    private lateinit var moonlight: MoonlightConnectionManager
     private lateinit var usbGamepadManager: UsbGamepadManager
     private lateinit var catalogRepo: SatelliteCatalogRepository
     private lateinit var capabilitiesRepo: SatelliteCapabilitiesRepository
@@ -101,6 +103,7 @@ class ConfigureBindingsDefaultTypeTest {
         touchpadModeStore = mockk(relaxed = true)
         capabilityComposer = mockk(relaxed = true)
         satellite = mockk(relaxed = true)
+        moonlight = mockk(relaxed = true)
         usbGamepadManager = mockk(relaxed = true)
         catalogRepo = mockk(relaxed = true)
         capabilitiesRepo = mockk(relaxed = true)
@@ -131,6 +134,7 @@ class ConfigureBindingsDefaultTypeTest {
                 capabilityComposer,
                 touchpadModeStore,
                 satellite,
+                moonlight,
                 usbGamepadManager,
                 catalogRepo,
                 capabilitiesRepo,
