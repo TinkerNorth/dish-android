@@ -181,25 +181,30 @@ class ControllerAdapter(
 
         private val connectionRow = decisionRow(R.string.binding_label_connection)
         private val destinationRow = decisionRow(R.string.binding_label_destination)
+
+        // The compat chip needs the full value width on its own line: squeezed beside
+        // the host name it would wrap into a column and blow the card's height.
+        private val compatRow = decisionRow(null)
         private val emulateRow = decisionRow(R.string.binding_label_emulate)
         private val functionRow = decisionRow(null)
         private val rateRow = decisionRow(null)
 
         private val connectionPills = PillPool(connectionRow.valueContainer)
+        private val compatPills = PillPool(compatRow.valueContainer)
         private val emulatePills = PillPool(emulateRow.valueContainer)
         private val functionPills = PillPool(functionRow.valueContainer)
         private val ratePills = PillPool(rateRow.valueContainer)
 
         private val destinationMono = BindingValueMonoBinding.inflate(inflater, destinationRow.valueContainer, true)
         private val destinationNotBound = BindingValueNotBoundBinding.inflate(inflater, destinationRow.valueContainer, true)
-        private val destinationPills = PillPool(destinationRow.valueContainer)
         private val functionNone = BindingValueNoneBinding.inflate(inflater, functionRow.valueContainer, true)
 
         private val filledActions: List<MaterialButton>
         private val outlinedAction: MaterialButton?
 
         init {
-            listOf(connectionRow, destinationRow, emulateRow, functionRow, rateRow).forEach { b.llDecisions.addView(it.root) }
+            listOf(connectionRow, destinationRow, compatRow, emulateRow, functionRow, rateRow)
+                .forEach { b.llDecisions.addView(it.root) }
             inflater.inflate(actionsLayoutRes, b.llActions, true)
             filledActions =
                 listOfNotNull(
@@ -254,7 +259,9 @@ class ControllerAdapter(
 
             destinationRow.root.visibility = View.VISIBLE
             showDestination(bound.label)
-            destinationPills.bind(listOfNotNull(compatPillSpec(ctx, row.hostCompat)))
+            val compatSpecs = listOfNotNull(compatPillSpec(ctx, row.hostCompat))
+            compatRow.root.visibility = if (compatSpecs.isEmpty()) View.GONE else View.VISIBLE
+            compatPills.bind(compatSpecs)
 
             val emulate = typePillLabel(row, bound)
             if (emulate != null) {
@@ -274,7 +281,7 @@ class ControllerAdapter(
             connectionPills.bind(connectionSpecs(row, kind = null))
             destinationRow.root.visibility = View.VISIBLE
             showDestination(null)
-            destinationPills.hideAll()
+            compatRow.root.visibility = View.GONE
             emulateRow.root.visibility = View.GONE
             functionRow.root.visibility = View.GONE
         }

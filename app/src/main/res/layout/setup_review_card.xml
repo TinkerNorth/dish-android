@@ -68,15 +68,15 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="@dimen/spacing_md"
                 android:visibility="gone" />
-
-            <include
-                android:id="@+id/reviewCompatPill"
-                layout="@layout/binding_pill"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="@dimen/spacing_md"
-                android:visibility="gone" />
         </LinearLayout>
+
+        <include
+            android:id="@+id/reviewCompatPill"
+            layout="@layout/binding_pill"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_md"
+            android:visibility="gone" />
 
         <LinearLayout
             android:id="@+id/reviewSendsRow"

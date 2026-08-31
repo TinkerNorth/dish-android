@@ -339,6 +339,9 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:textAppearance">@style/TextAppearance.Dish.BodySmall</item>
         <item name="android:includeFontPadding">false</item>
+        <!-- Pills are one-line labels: a squeezed pill must trim, never wrap into a column. -->
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
     </style>
 
     <style name="Widget.Dish.MicroLabel" parent="">
