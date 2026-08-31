@@ -6,6 +6,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
@@ -134,6 +135,16 @@ class GamepadTouchView
                 invalidate()
             }
 
+        // Emulated types without analog triggers (Switch Pro) keep the plain
+        // full-press rails; everything else gets the slide-to-pull rail.
+        var analogTriggers: Boolean = true
+            set(value) {
+                if (field == value) return
+                field = value
+                recognizer.analogTriggers = value
+                invalidate()
+            }
+
         // Host-driven feedback rendered on the skin (VirtualPadFeedbackStore): the
         // phone has no lightbar, player-LED or adaptive-trigger hardware, so the
         // on-screen pad shows them the way the real controller would.
@@ -246,6 +257,31 @@ class GamepadTouchView
                 style = Paint.Style.STROKE
                 color = ContextCompat.getColor(context, R.color.colorPrimary)
             }
+
+        // Rail fill under the finger; same translucent primary the pressed
+        // overlays use, clipped to the pill shape.
+        private val paintTriggerFill =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color =
+                    ColorUtils.setAlphaComponent(
+                        ContextCompat.getColor(context, R.color.colorPrimary),
+                        0x40,
+                    )
+            }
+
+        // Full-zone divider, drawn in every state so the tap boundary reads
+        // before, during and after a pull.
+        private val paintTriggerDivider =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                strokeCap = Paint.Cap.ROUND
+                color =
+                    ColorUtils.setAlphaComponent(
+                        ContextCompat.getColor(context, R.color.colorOnSurfaceVariant),
+                        0xB0,
+                    )
+            }
+
+        private val triggerClipPath = Path()
 
         private val safeInsets = Rect()
 
@@ -668,10 +704,43 @@ class GamepadTouchView
             l: GamepadLayout,
             s: GamepadState,
         ) {
-            drawPillButton(c, l.ltRect, icLT, s.leftTrigger > 0)
-            drawPillButton(c, l.rtRect, icRT, s.rightTrigger > 0)
+            drawTriggerRail(c, l.ltRect, icLT, s.leftTrigger)
+            drawTriggerRail(c, l.rtRect, icRT, s.rightTrigger)
             if (leftTriggerEffect) drawTriggerEffectRing(c, l.ltRect)
             if (rightTriggerEffect) drawTriggerEffectRing(c, l.rtRect)
+        }
+
+        // Analog rail: a partial pull fills the rail from the bottom up to the
+        // finger; a full pull (or a tap in the full zone) lights the whole pill
+        // like any pressed button. The divider marks where full starts, in both
+        // the pressed and idle states. Digital-trigger types keep the old
+        // binary pill.
+        private fun drawTriggerRail(
+            c: Canvas,
+            rect: RectF,
+            d: Drawable?,
+            value: Int,
+        ) {
+            if (!analogTriggers) {
+                drawPillButton(c, rect, d, value > 0)
+                return
+            }
+            val full = value >= GamepadConstants.TRIGGER_MAX
+            drawPillButton(c, rect, d, full)
+            val boundaryY = rect.top + rect.height() * GamepadConstants.TRIGGER_FULL_ZONE_FRACTION
+            if (!full && value > 0) {
+                val r = min(rect.width(), rect.height()) * PILL_CORNER_RADIUS_FRACTION
+                val fillTop = rect.bottom - (rect.bottom - boundaryY) * (value / GamepadConstants.TRIGGER_MAX.toFloat())
+                triggerClipPath.reset()
+                triggerClipPath.addRoundRect(rect, r, r, Path.Direction.CW)
+                c.save()
+                c.clipPath(triggerClipPath)
+                c.drawRect(rect.left, fillTop, rect.right, rect.bottom, paintTriggerFill)
+                c.restore()
+            }
+            val inset = GamepadConstants.TRIGGER_ZONE_DIVIDER_INSET_DP * density
+            paintTriggerDivider.strokeWidth = GamepadConstants.TRIGGER_ZONE_DIVIDER_STROKE_DP * density
+            c.drawLine(rect.left + inset, boundaryY, rect.right - inset, boundaryY, paintTriggerDivider)
         }
 
         // An adaptive-trigger effect has no on-screen force to render, so the pill

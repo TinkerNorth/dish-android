@@ -23,6 +23,10 @@ internal class GamepadGestureRecognizer {
 
     var trackpadMode: GamepadTouchView.TrackpadMode = GamepadTouchView.TrackpadMode.NONE
 
+    // False for emulated types without analog triggers (Switch Pro): a rail
+    // touch is then a plain full press, the way it always was.
+    var analogTriggers: Boolean = true
+
     var trackpadTapSlopPx: Float = 0f
 
     // Wire-shaped trackpad snapshot, mutated in place like [state]; the view forwards it
@@ -218,12 +222,12 @@ internal class GamepadGestureRecognizer {
         }
         if (l.ltRect.contains(x, y)) {
             ltPointerId = pid
-            state.leftTrigger = TRIGGER_MAX
+            state.leftTrigger = triggerRailValue(y, l.ltRect.top, l.ltRect.bottom, analogTriggers)
             return
         }
         if (l.rtRect.contains(x, y)) {
             rtPointerId = pid
-            state.rightTrigger = TRIGGER_MAX
+            state.rightTrigger = triggerRailValue(y, l.rtRect.top, l.rtRect.bottom, analogTriggers)
             return
         }
         if (l.lbRect.contains(x, y)) {
@@ -352,6 +356,14 @@ internal class GamepadGestureRecognizer {
             r3StickDy = r.dy
             state.rightX = r.axisX
             state.rightY = r.axisY
+        }
+        // A claimed trigger rail keeps following the finger for the whole gesture,
+        // clamped to the rail's span, so a slide off the edge holds its value.
+        if (pid == ltPointerId) {
+            state.leftTrigger = triggerRailValue(y, l.ltRect.top, l.ltRect.bottom, analogTriggers)
+        }
+        if (pid == rtPointerId) {
+            state.rightTrigger = triggerRailValue(y, l.rtRect.top, l.rtRect.bottom, analogTriggers)
         }
         // Once a pointer claims the d-pad, the angle from its centre drives the hat for the
         // rest of the gesture, even when dragged outside the rect.
@@ -574,4 +586,24 @@ internal class GamepadGestureRecognizer {
     companion object {
         private const val INVALID_POINTER = -1
     }
+}
+
+// Analog trigger rail value for a finger at [y]: the top TRIGGER_FULL_ZONE_FRACTION
+// of the rail is full pull (and a plain tap target); below it the value ramps from
+// 0 at the rail's bottom edge to TRIGGER_MAX at the zone boundary, so the fill
+// under the finger reads as "this far in". Clamped, so a drag past either edge
+// pins to that edge's value.
+internal fun triggerRailValue(
+    y: Float,
+    top: Float,
+    bottom: Float,
+    analog: Boolean,
+): Int {
+    if (!analog) return TRIGGER_MAX
+    if (bottom <= top) return TRIGGER_MAX
+    val clamped = y.coerceIn(top, bottom)
+    val boundary = top + (bottom - top) * GamepadConstants.TRIGGER_FULL_ZONE_FRACTION
+    if (clamped <= boundary) return TRIGGER_MAX
+    val ramp = (bottom - clamped) / (bottom - boundary)
+    return (ramp * TRIGGER_MAX).toInt().coerceIn(0, TRIGGER_MAX)
 }

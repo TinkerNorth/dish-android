@@ -86,6 +86,14 @@ internal object GamepadConstants {
 
     const val TRIGGER_MAX = 255
 
+    // Analog trigger rails: the top fraction of each rail is the full/tap zone;
+    // below it the rail ramps 0 (bottom edge) to TRIGGER_MAX (zone boundary).
+    const val TRIGGER_FULL_ZONE_FRACTION = 0.25f
+
+    const val TRIGGER_ZONE_DIVIDER_STROKE_DP = 1.5f
+
+    const val TRIGGER_ZONE_DIVIDER_INSET_DP = 6f
+
     const val TRACKPAD_WIDTH_FRACTION = 0.3f
 
     // The DS4/DualSense trackpad is roughly 2:1.

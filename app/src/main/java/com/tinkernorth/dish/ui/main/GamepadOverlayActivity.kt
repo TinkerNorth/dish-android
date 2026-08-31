@@ -254,6 +254,9 @@ class GamepadOverlayActivity :
     private fun repaintFrom(paint: OverlayMotionPaint) {
         currentPaint.value = paint
         binding.gamepadTouchView.trackpadMode = trackpadModeFor(paint.summary, paint.capability)
+        // Slide-to-pull rails only for emulated types with analog triggers; a
+        // Switch-typed pad keeps plain full-press rails.
+        binding.gamepadTouchView.analogTriggers = paint.capability.typeOk(Feature.ANALOG_TRIGGERS)
         paintMenu(paint)
     }
 

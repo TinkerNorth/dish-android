@@ -25,6 +25,11 @@ computer. Those lines say "update Satellite too".
   USB-connected DualSense (update Satellite too).
 - Trigger rumble on Xbox One / Series pads over Moonlight: the impulse
   motors in the triggers now fire when the host asks.
+- The on-screen triggers are analog now, like the real thing: slide your
+  finger along the trigger rail for a partial pull (the rail fills to show
+  how far in you are), or tap the marked top zone for an instant full press.
+  A divider line shows where the full zone starts. Pads emulating a type
+  without analog triggers (Switch Pro) keep the plain press.
 - Moonlight hosts now receive controller motion (when the game asks for it),
   the DualShock/DualSense touchpad — from the pad itself in Direct mode or
   from the phone screen — and battery levels, the same telemetry the
