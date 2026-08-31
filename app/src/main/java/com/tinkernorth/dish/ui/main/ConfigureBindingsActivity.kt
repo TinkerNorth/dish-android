@@ -18,9 +18,9 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionKind
+import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.core.model.Feature
-import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.core.net.DishProtocol
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.databinding.ActivityConfigureBindingsBinding
@@ -396,12 +396,12 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
     }
 
     // The destination picker shows each host as the setup flow's destination card: the
-    // host, its transport, and the features it gets and sends. (A destination is not the
-    // controller/type card, which the emulate picker uses.)
+    // host, its transport, and every flow it COULD get and send at its best emulated
+    // type. The current input/type picks do not gate this card (that narrowing belongs
+    // to the type picker and the review); the picker's job is comparing hosts.
     private fun showHostMenu() {
         val state = viewModel.ui.value
         val snapshot = state.snapshot ?: return
-        val type = state.draft?.type ?: CONTROLLER_TYPE_XBOX
         val list = DialogCardListBinding.inflate(layoutInflater)
         val container = list.dialogCardList
         val dialog =
@@ -411,8 +411,7 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
                 .setNegativeButton(android.R.string.cancel, null)
                 .create()
         state.hosts.forEach { host ->
-            val candidate = if (host.kind == ConnectionKind.MOONLIGHT) viewModel.moonlightResolvedType(type) else type
-            val caps = viewModel.capabilityForCandidate(snapshot.slotId, candidate, host.kind, host.id)
+            val potential = viewModel.destinationPotential(snapshot.slotId, host.kind, host.id)
             val card = SetupReviewCardBinding.inflate(layoutInflater, container, false)
             card.reviewIcon.setImageResource(destinationGlyph(host.kind))
             card.reviewKind.setText(R.string.binding_label_destination)
@@ -421,8 +420,8 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
             card.reviewTierPill.bindPill(tierPillSpec(host.kind))
             card.reviewTierPill.root.visibility = View.VISIBLE
             card.reviewCompatPill.bindCompat(state.hostCompat[host.id] ?: DishProtocol.Compat.UNKNOWN)
-            bindReviewFlows(card.reviewSendsRow, card.reviewSendsChips, destinationSends(caps))
-            bindReviewFlows(card.reviewGetsRow, card.reviewGetsChips, destinationGets(caps))
+            bindReviewFlows(card.reviewSendsRow, card.reviewSendsChips, destinationSends(potential))
+            bindReviewFlows(card.reviewGetsRow, card.reviewGetsChips, destinationGets(potential))
             card.reviewCard.isClickable = true
             card.reviewCard.setOnClickListener {
                 viewModel.setHost(host.id)
@@ -449,19 +448,18 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
             ConnectionKind.SATELLITE -> getString(R.string.setup_cfg_dest_satellite)
         }
 
-    // A destination gets the inputs the path can carry; what is shown is gated by what
-    // is actually deliverable end to end for the current type.
-    private fun destinationGets(caps: SlotCapabilities): List<ReviewFlow> =
+    // A destination gets every input some emulated type can land on it.
+    private fun destinationGets(potential: CapabilitySet): List<ReviewFlow> =
         buildList {
             add(ReviewFlow(R.drawable.ic_gamepad, R.string.setup_cfg_flow_controller))
-            if (caps.isAvailable(Feature.MOTION)) add(ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro))
-            if (caps.isAvailable(Feature.TOUCHPAD)) add(ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad))
-            if (caps.isAvailable(Feature.MOUSE)) add(ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse))
+            if (Feature.MOTION in potential) add(ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro))
+            if (Feature.TOUCHPAD in potential) add(ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad))
+            if (Feature.MOUSE in potential) add(ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse))
         }
 
     // Rumble flows back only where the path carries a return channel.
-    private fun destinationSends(caps: SlotCapabilities): List<ReviewFlow> =
-        if (caps.isAvailable(Feature.RUMBLE)) {
+    private fun destinationSends(potential: CapabilitySet): List<ReviewFlow> =
+        if (Feature.RUMBLE in potential) {
             listOf(ReviewFlow(R.drawable.ic_rumble, R.string.binding_func_rumble))
         } else {
             emptyList()

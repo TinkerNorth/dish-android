@@ -18,6 +18,7 @@ import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.LinkTiers
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
+import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.CatalogTypeDto
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
@@ -72,6 +73,14 @@ data class BindingHost(
 )
 
 internal fun List<BindingHost>.orderedForPicker(): List<BindingHost> = sortedWith(LinkTiers.byTier(BindingHost::kind))
+
+// The host side of each candidate resolution (transport ∩ type ∩ host), unioned across
+// the candidate types. The input's controller layer deliberately stays out: the card
+// describes the destination, not the pad currently in hand.
+internal fun destinationPotential(candidates: List<SlotCapabilities>): CapabilitySet =
+    candidates.fold(CapabilitySet.EMPTY) { acc, c ->
+        CapabilitySet(acc.features + (c.transport intersect c.type intersect c.host).features)
+    }
 
 data class BindingSnapshot(
     val slotId: String,
@@ -313,6 +322,32 @@ class ConfigureBindingsViewModel
         fun retryTypeLoad() {
             val hostId = _ui.value.draft?.hostId ?: return
             refreshTypeOptions(hostId)
+        }
+
+        /**
+         * What the destination card advertises: every flow this host could carry at its
+         * best emulated type, independent of the current input device and type pick. The
+         * picker compares HOSTS; the type picker and the review narrow to actual choices.
+         */
+        fun destinationPotential(
+            slotId: String,
+            hostKind: ConnectionKind,
+            hostId: String?,
+        ): CapabilitySet {
+            val candidateTypes =
+                if (hostKind == ConnectionKind.MOONLIGHT) {
+                    listOf(MoonlightEmulatedType.XBOX, MoonlightEmulatedType.PLAYSTATION, MoonlightEmulatedType.NINTENDO)
+                } else {
+                    listOf(
+                        CONTROLLER_TYPE_XBOX,
+                        CONTROLLER_TYPE_PLAYSTATION,
+                        CONTROLLER_TYPE_DUALSENSE,
+                        CONTROLLER_TYPE_SWITCHPRO,
+                    )
+                }
+            return destinationPotential(
+                candidateTypes.map { capabilityComposer.capabilityForCandidate(slotId, it, hostKind, hostId) },
+            )
         }
 
         /**
