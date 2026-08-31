@@ -27,8 +27,16 @@ object MoonlightControlProtocol {
     // INPUT_DATA sub-types (input-data.adoc). The wrapper's input-type field is
     // little-endian; these are the host-order values.
     const val INPUT_MOUSE_MOVE_REL = 0x00000007
+    const val INPUT_MOUSE_BUTTON_DOWN = 0x00000008
+    const val INPUT_MOUSE_BUTTON_UP = 0x00000009
+    const val INPUT_MOUSE_SCROLL = 0x0000000A
     const val INPUT_CONTROLLER_MULTI = 0x0000000C
     const val INPUT_CONTROLLER_ARRIVAL = 0x55000004
+
+    // MOUSE_BUTTON_DOWN/UP button ids (Wolf control.hpp MOUSE_BUTTON_*).
+    const val MOUSE_BUTTON_LEFT = 0x01
+    const val MOUSE_BUTTON_MIDDLE = 0x02
+    const val MOUSE_BUTTON_RIGHT = 0x03
 
     // Graceful termination reason (Wolf control.hpp TERMINATE_REASON_GRACEFULL,
     // big-endian on the wire).

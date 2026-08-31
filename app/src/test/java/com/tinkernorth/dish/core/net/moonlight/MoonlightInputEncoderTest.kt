@@ -87,6 +87,28 @@ class MoonlightInputEncoderTest {
     }
 
     @Test
+    fun `MOUSE_BUTTON_DOWN carries the one-byte button id`() {
+        val bytes = MoonlightInputEncoder.mouseButton(down = true, button = MoonlightControlProtocol.MOUSE_BUTTON_LEFT)
+        assertEquals(MoonlightInputEncoder.MOUSE_BUTTON_LEN, bytes.size)
+        assertEquals("0602" + "0900" + "00000005" + "08000000" + "01", bytesToHex(bytes))
+    }
+
+    @Test
+    fun `MOUSE_BUTTON_UP flips only the wrapped input type`() {
+        val bytes = MoonlightInputEncoder.mouseButton(down = false, button = MoonlightControlProtocol.MOUSE_BUTTON_RIGHT)
+        assertEquals("0602" + "0900" + "00000005" + "09000000" + "03", bytesToHex(bytes))
+    }
+
+    @Test
+    fun `MOUSE_SCROLL duplicates the big-endian amount and pads a zero i16`() {
+        val up = MoonlightInputEncoder.mouseScroll(120)
+        assertEquals(MoonlightInputEncoder.MOUSE_SCROLL_LEN, up.size)
+        assertEquals("0602" + "0e00" + "0000000a" + "0a000000" + "0078" + "0078" + "0000", bytesToHex(up))
+        val down = MoonlightInputEncoder.mouseScroll(-120)
+        assertEquals("0602" + "0e00" + "0000000a" + "0a000000" + "ff88" + "ff88" + "0000", bytesToHex(down))
+    }
+
+    @Test
     fun `CONTROLLER_ARRIVAL carries type and capabilities`() {
         val bytes =
             MoonlightInputEncoder.controllerArrival(

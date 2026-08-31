@@ -81,6 +81,10 @@ class SatelliteConnection(
     @Volatile var mouseControlGranted: Boolean = false
         private set
 
+    // The wire version this session settled on (contract §versioning). Drives the
+    // pointer frame the JNI sender emits and the extended-mouse UI gate.
+    @Volatile var protocolVersion: Int = 1
+
     data class SlotBinding(
         val controllerIndex: Int,
         val controllerType: Int,

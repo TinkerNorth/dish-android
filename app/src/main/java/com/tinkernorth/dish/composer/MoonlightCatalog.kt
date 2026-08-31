@@ -13,12 +13,14 @@ import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 object MoonlightCatalog {
     // A Moonlight host never says what it cannot do, so its host layer crosses nothing out.
     // The type ceiling and what the local input can actually feed are what narrow the set.
+    // Mouse is native to the control stream (no advertisement), so it always passes.
     val HOST_LAYER =
         CapabilitySet.of(
             Feature.GAMEPAD,
             Feature.ANALOG_TRIGGERS,
             Feature.MOTION,
             Feature.TOUCHPAD,
+            Feature.MOUSE,
             Feature.RUMBLE,
             Feature.LIGHTBAR,
         )
@@ -55,8 +57,9 @@ object MoonlightCatalog {
         caps: CapabilitySet,
     ): Int = MoonlightEmulatedType.capabilityBits(type, sourceBits(caps))
 
-    // Every emulated pad carries the gamepad axes and analog triggers. Mouse and keyboard are
-    // deliberately absent: that is the satellite's host-injection surface, with no equivalent here.
+    // Every emulated pad carries the gamepad axes and analog triggers. Mouse is not a pad
+    // property: it rides the control stream beside the pad, so the type layer passes it
+    // through. Keyboard stays absent until the client has code for it.
     private fun padType(vararg padFeatures: Feature): CapabilitySet =
-        CapabilitySet(setOf(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS) + padFeatures)
+        CapabilitySet(setOf(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.MOUSE) + padFeatures)
 }

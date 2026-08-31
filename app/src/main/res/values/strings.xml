@@ -173,6 +173,11 @@
     <string name="pointer_scroll_strip">Scroll strip. Drag to scroll, tap for middle click.</string>
     <string name="mouse_basic_hint">Right click and scroll need a newer Satellite.</string>
 
+    <!-- Protocol compat chip on satellite rows: soft = still works, hard = blocked. -->
+    <string name="chip_satellite_update_available">Satellite update recommended</string>
+    <string name="chip_satellite_update_required">Satellite update required</string>
+    <string name="chip_app_update_required">Dish update required</string>
+
     <!-- Default slot / connection labels. -->
     <string name="default_virtual_controller_name">Virtual Controller</string>
     <string name="default_bluetooth_gamepad_label">Bluetooth gamepad</string>

@@ -250,6 +250,24 @@ class MoonlightConnection(
         )
     }
 
+    fun sendMouseMoveRel(
+        deltaX: Int,
+        deltaY: Int,
+    ) {
+        session?.sendMouseMoveRel(deltaX, deltaY)
+    }
+
+    fun sendMouseButton(
+        down: Boolean,
+        button: Int,
+    ) {
+        session?.sendMouseButton(down, button)
+    }
+
+    fun sendMouseScroll(amount: Int) {
+        session?.sendMouseScroll(amount)
+    }
+
     fun dispatchFeedback(event: MoonlightEvent) {
         onFeedback(event)
     }

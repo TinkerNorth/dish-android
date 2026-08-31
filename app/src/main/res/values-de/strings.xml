@@ -139,6 +139,9 @@
     <string name="pointer_button_right">Rechts</string>
     <string name="pointer_scroll_strip">Scrollleiste. Ziehen zum Scrollen, Tippen für Mittelklick.</string>
     <string name="mouse_basic_hint">Rechtsklick und Scrollen brauchen einen neueren Satellite.</string>
+    <string name="chip_satellite_update_available">Satellite-Update empfohlen</string>
+    <string name="chip_satellite_update_required">Satellite-Update erforderlich</string>
+    <string name="chip_app_update_required">Dish-Update erforderlich</string>
 
     <!-- Standardbezeichnungen für Slot/Verbindung. -->
     <string name="default_virtual_controller_name">Virtueller Controller</string>

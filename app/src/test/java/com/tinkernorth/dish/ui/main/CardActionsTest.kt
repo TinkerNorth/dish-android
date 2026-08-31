@@ -104,20 +104,40 @@ class CardActionsTest {
     }
 
     @Test
-    fun `pointer surfaces need a connected satellite`() {
+    fun `a moonlight slot offers the mouse but never the satellite touchpad surface`() {
         val moonlight = summary(kind = ConnectionKind.MOONLIGHT)
         val actions =
             computeCardActions(
                 row(slot(SlotInputType.PHYSICAL, bound = moonlight), pointer = pointer(touchpad = true, mouse = true)),
             )
-        assertEquals(emptyList<CardActionKind>(), kinds(actions))
+        assertEquals(listOf(CardActionKind.MOUSE), kinds(actions))
+    }
 
+    @Test
+    fun `a bound virtual moonlight slot reads like the satellite one, gamepad plus mouse`() {
+        val moonlight = summary(kind = ConnectionKind.MOONLIGHT)
+        val actions =
+            computeCardActions(
+                row(slot(SlotInputType.VIRTUAL, bound = moonlight), pointer = pointer(touchpad = true, mouse = true)),
+            )
+        assertEquals(listOf(CardActionKind.GAMEPAD, CardActionKind.MOUSE), kinds(actions))
+    }
+
+    @Test
+    fun `pointer surfaces need a connected host`() {
         val disconnected = summary(live = LinkState.Connecting)
         val offline =
             computeCardActions(
                 row(slot(SlotInputType.PHYSICAL, bound = disconnected), pointer = pointer(touchpad = true, mouse = true)),
             )
         assertEquals(emptyList<CardActionKind>(), kinds(offline))
+
+        val moonlightDown = summary(kind = ConnectionKind.MOONLIGHT, live = LinkState.Connecting)
+        val moonlightOffline =
+            computeCardActions(
+                row(slot(SlotInputType.PHYSICAL, bound = moonlightDown), pointer = pointer(touchpad = true, mouse = true)),
+            )
+        assertEquals(emptyList<CardActionKind>(), kinds(moonlightOffline))
     }
 
     @Test

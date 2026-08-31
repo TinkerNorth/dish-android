@@ -145,11 +145,11 @@ class InputWireTest {
             },
         )
         val frame =
-            satellite.touchpadPayloads.firstOrNull { it.size >= 18 && it[1].toInt() and 0x18 == 0x18 }
-        assertNotNull("a frame carrying the right+middle flag bits must arrive", frame)
-        val flags = frame!![1].toInt() and 0xFF
-        assertEquals("finger0 + click + right + middle", 0x1D, flags)
-        val scroll = ((frame[16].toInt() and 0xFF) or (frame[17].toInt() shl 8)).toShort()
+            satellite.touchpadPayloads.firstOrNull { it.size == 19 && it[2].toInt() and 0x06 == 0x06 }
+        assertNotNull("a v2 pointer frame carrying the right+middle button bits must arrive", frame)
+        assertEquals("finger0 active only", 0x01, frame!![1].toInt() and 0xFF)
+        assertEquals("left + right + middle buttons", 0x07, frame[2].toInt() and 0xFF)
+        val scroll = ((frame[17].toInt() and 0xFF) or (frame[18].toInt() shl 8)).toShort()
         assertEquals((-240).toShort(), scroll)
     }
 

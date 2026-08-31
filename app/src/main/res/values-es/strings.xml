@@ -141,6 +141,9 @@
     <string name="pointer_button_right">Derecho</string>
     <string name="pointer_scroll_strip">Tira de desplazamiento. Arrastra para desplazar, toca para clic central.</string>
     <string name="mouse_basic_hint">El clic derecho y el desplazamiento necesitan un Satellite más reciente.</string>
+    <string name="chip_satellite_update_available">Actualización de Satellite recomendada</string>
+    <string name="chip_satellite_update_required">Actualización de Satellite obligatoria</string>
+    <string name="chip_app_update_required">Actualización de Dish obligatoria</string>
 
     <!-- Etiquetas por defecto de slot/conexión. -->
     <string name="default_virtual_controller_name">Mando virtual</string>

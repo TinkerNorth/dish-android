@@ -19,6 +19,7 @@ object SatelliteNative {
         handle: Int,
         token: ByteArray,
         key: ByteArray,
+        protocolVersion: Int,
     )
 
     external fun sendReport(

@@ -22,8 +22,9 @@ class ControllerRepository
             handle: Int,
             token: ByteArray,
             key: ByteArray,
+            protocolVersion: Int,
         ) {
-            SatelliteNative.setConnectionParams(handle, token, key)
+            SatelliteNative.setConnectionParams(handle, token, key, protocolVersion)
         }
 
         fun sendReport(

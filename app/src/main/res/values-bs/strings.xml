@@ -140,6 +140,9 @@
     <string name="pointer_button_right">Desno</string>
     <string name="pointer_scroll_strip">Traka za pomicanje. Povucite za pomicanje, dodirnite za srednji klik.</string>
     <string name="mouse_basic_hint">Desni klik i pomicanje trebaju noviji Satellite.</string>
+    <string name="chip_satellite_update_available">Preporučeno ažuriranje Satellitea</string>
+    <string name="chip_satellite_update_required">Obavezno ažuriranje Satellitea</string>
+    <string name="chip_app_update_required">Obavezno ažuriranje Disha</string>
 
     <!-- Podrazumijevane oznake za slot/vezu. -->
     <string name="default_virtual_controller_name">Virtuelni kontroler</string>

@@ -28,13 +28,17 @@ import javax.net.ssl.SSLServerSocket
 import javax.net.ssl.SSLSocket
 
 /**
- * In-process satellite implementing the protocol-1 contract surface the
- * client exercises (satellite docs/contract.md): PIN pairing, hmacProof
+ * In-process satellite implementing the contract surface the client
+ * exercises (satellite docs/contract.md): PIN pairing, hmacProof
  * validation, the declarative session PUT/GET, self-unpair, catalog and
  * capabilities probes, and the encrypted UDP data plane with heartbeat
- * acks. Each instance mints its own self-signed cert at runtime (no
- * committed keys), so two instances present different certs: pin one,
- * then connect the other on the same identity to exercise TOFU rejection.
+ * acks. Mirrors the real satellite's version negotiation: accepts the
+ * whole [PROTOCOL_VERSION_MIN, PROTOCOL_VERSION] range (absent counts
+ * as 1), settles the session on the offer and echoes it; only an
+ * out-of-range offer gets 409 + the `supported` echo. Each instance
+ * mints its own self-signed cert at runtime (no committed keys), so two
+ * instances present different certs: pin one, then connect the other on
+ * the same identity to exercise TOFU rejection.
  */
 class FakeSatellite(
     private val operatorPin: String = "1234",
@@ -272,12 +276,15 @@ class FakeSatellite(
 
     private fun pair(body: String): Pair<String, String> {
         val json = JSONObject(body)
+        protocolReject(json)?.let { return it }
+        val negotiated = json.optInt("protocolVersion", 1)
         val pin = json.optString("pin")
         val clientPin = json.optString("clientPin")
         return when {
             pin.isNotEmpty() && pin == operatorPin -> {
                 pairingKeyHex = randomHex(32)
-                "200 OK" to """{"ok":true,"message":"paired","sharedKey":"$pairingKeyHex","protocolVersion":1}"""
+                "200 OK" to
+                    """{"ok":true,"message":"paired","sharedKey":"$pairingKeyHex","protocolVersion":$negotiated}"""
             }
             pin.isNotEmpty() -> "200 OK" to """{"ok":false,"error":"invalid pin"}"""
             clientPin.isNotEmpty() -> {
@@ -286,6 +293,14 @@ class FakeSatellite(
             }
             else -> "200 OK" to """{"ok":false,"error":"pairing required"}"""
         }
+    }
+
+    private fun protocolReject(json: JSONObject): Pair<String, String>? {
+        val offered = json.optInt("protocolVersion", 1)
+        if (offered in PROTOCOL_VERSION_MIN..PROTOCOL_VERSION) return null
+        return "409 Conflict" to
+            """{"error":"protocol version unsupported","supported":$PROTOCOL_VERSION,""" +
+            """"supportedMin":$PROTOCOL_VERSION_MIN}"""
     }
 
     private fun authorized(headers: Map<String, String>): Boolean {
@@ -309,6 +324,7 @@ class FakeSatellite(
         force401Code?.let { return "401 Unauthorized" to """{"error":"unauthorized","code":"$it"}""" }
         if (!authorized(headers)) return UNAUTHORIZED
         val json = JSONObject(body)
+        protocolReject(json)?.let { return it }
         sessionPuts += json
         lastControllers = json.optJSONArray("controllers") ?: JSONArray()
         tokenCounter += 1
@@ -341,7 +357,7 @@ class FakeSatellite(
                 .put("sessionSalt", saltHex)
                 .put("epoch", epoch)
                 .put("maxControllers", 16)
-                .put("protocolVersion", 1)
+                .put("protocolVersion", json.optInt("protocolVersion", 1))
                 .put("controllers", applied)
                 .put("hostFeatures", JSONObject().put("mouseControl", JSONObject().put("granted", wantsMouse)))
         return "200 OK" to response.toString()
@@ -491,6 +507,9 @@ class FakeSatellite(
     private companion object {
         val INSTANCES = AtomicInteger(0)
 
+        const val PROTOCOL_VERSION = 2
+        const val PROTOCOL_VERSION_MIN = 1
+
         const val OP_HEARTBEAT = 0x0002
         const val OP_HEARTBEAT_ACK = 0x0003
         const val OP_TOUCHPAD = 0x000C
@@ -501,18 +520,18 @@ class FakeSatellite(
 
         val CAPABILITIES_JSON =
             """
-            {"protocolVersion":1,"serverVersion":"1.6.0","maxControllers":16,
+            {"protocolVersion":$PROTOCOL_VERSION,"serverVersion":"1.6.0","maxControllers":16,
              "backend":{"id":"fake","supported":true,"available":true,"errorCode":null},
              "motion":{"available":true},
              "host":{"catalog":{"supported":true},
-                     "mouseControl":{"supported":true,"available":true,"buttons":true,"scroll":true},
+                     "mouseControl":{"supported":true,"available":true},
                      "keyboardControl":{"supported":false},
                      "rumble":{"supported":true,"available":true}}}
             """.trimIndent()
 
         val CATALOG_JSON =
             """
-            {"locale":"en","protocolVersion":1,"serverVersion":"1.6.0","catalogVersion":2,
+            {"locale":"en","protocolVersion":$PROTOCOL_VERSION,"serverVersion":"1.6.0","catalogVersion":2,
              "controllerTypes":[
                {"id":0,"slug":"xbox360","name":"Xbox 360 Controller","shortName":"Xbox",
                 "description":"Best compatibility.",
@@ -538,7 +557,7 @@ class FakeSatellite(
                 "features":{"rumble":{"supported":true},"analogTriggers":{"supported":false},
                             "motion":{"supported":true},"lightbar":{"supported":false},
                             "touchpad":{"supported":false}}}],
-             "hostFeatures":{"mouseControl":{"supported":true,"modes":["off","ds4","mouse"],"buttons":true,"scroll":true},
+             "hostFeatures":{"mouseControl":{"supported":true,"modes":["off","ds4","mouse"]},
                              "keyboardControl":{"supported":false},
                              "rumble":{"supported":true}}}
             """.trimIndent()

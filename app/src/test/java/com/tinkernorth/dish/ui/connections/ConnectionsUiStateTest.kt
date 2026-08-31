@@ -6,6 +6,8 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.DiscoveredServer
+import com.tinkernorth.dish.core.model.HostFeatureSet
+import com.tinkernorth.dish.core.net.DishProtocol
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -57,5 +59,42 @@ class ConnectionsUiStateTest {
     @Test
     fun `no connections and no discoveries produce no rows`() {
         assertEquals(emptyList<SatelliteRow>(), satelliteRows(emptyList(), emptyList()))
+    }
+
+    @Test
+    fun `a never-probed satellite shows no compat verdict`() {
+        val rows = satelliteRows(listOf(summary("satellite:mid:aa")), emptyList())
+        assertEquals(DishProtocol.Compat.UNKNOWN, (rows[0] as SatelliteRow.Known).compat)
+    }
+
+    @Test
+    fun `the compat chip follows the advertised protocol version`() {
+        val features =
+            mapOf(
+                "old" to HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DishProtocol.CURRENT - 1),
+                "current" to HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DishProtocol.CURRENT),
+                "future" to HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DishProtocol.CURRENT + 1),
+            )
+        val rows =
+            satelliteRows(
+                conns = listOf(summary("old"), summary("current"), summary("future")),
+                discovered = emptyList(),
+                features = features,
+            )
+        val compats = rows.filterIsInstance<SatelliteRow.Known>().associate { it.summary.id to it.compat }
+        assertEquals(DishProtocol.Compat.SATELLITE_UPDATE_AVAILABLE, compats["old"])
+        assertEquals(DishProtocol.Compat.CURRENT, compats["current"])
+        assertEquals(DishProtocol.Compat.APP_UPDATE_REQUIRED, compats["future"])
+    }
+
+    @Test
+    fun `a default host feature entry without a version read stays unknown`() {
+        val rows =
+            satelliteRows(
+                conns = listOf(summary("satellite:mid:aa")),
+                discovered = emptyList(),
+                features = mapOf("satellite:mid:aa" to HostFeatureSet.SATELLITE_DEFAULT),
+            )
+        assertEquals(DishProtocol.Compat.UNKNOWN, (rows[0] as SatelliteRow.Known).compat)
     }
 }

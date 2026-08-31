@@ -449,7 +449,8 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
     }
 
     // The host runs an emulated pad of its own, so it reads like the satellite pair: the
-    // PC itself, then the controller it plugs in for us and the feedback that comes back.
+    // PC itself (which also takes the mouse, straight over the control stream), then the
+    // controller it plugs in for us and the feedback that comes back.
     private fun moonlightDestinationNodes(
         state: ConfigUiState,
         model: ReviewModel,
@@ -458,6 +459,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         val motion = ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro)
         val rumble = ReviewFlow(R.drawable.ic_rumble, R.string.binding_func_rumble)
         val touchpad = ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad)
+        val mouse = ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse)
         val stored = state.draft?.type ?: MoonlightEmulatedType.AUTO
         return listOf(
             ReviewNode(
@@ -466,7 +468,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                 name = state.selectedHost?.label.orEmpty(),
                 sublabel = getString(R.string.ml_dest_sublabel, viewModel.moonlightAddress(state.draft?.hostId.orEmpty())),
                 sends = emptyList(),
-                gets = emptyList(),
+                gets = if (model.mouseMode) listOf(mouse) else emptyList(),
             ),
             ReviewNode(
                 kind = R.string.binding_label_destination,

@@ -742,6 +742,7 @@ internal fun computeCardActions(row: ControllerAdapter.Row): CardActions {
     val filled = mutableListOf<CardActionSpec>()
     val connected = bound.live == LinkState.Connected
     val satellite = bound.kind == ConnectionKind.SATELLITE
+    val pointerHost = satellite || bound.kind == ConnectionKind.MOONLIGHT
     if (slot.inputType == SlotInputType.VIRTUAL && connected) {
         filled += CardActionSpec(R.drawable.ic_open_gamepad, R.string.action_open_gamepad, CardActionKind.GAMEPAD)
     }
@@ -752,7 +753,7 @@ internal fun computeCardActions(row: ControllerAdapter.Row): CardActions {
     if (satellite && connected && slot.inputType != SlotInputType.VIRTUAL && row.pointer?.touchpadOpenable == true) {
         filled += CardActionSpec(R.drawable.ic_open_touchpad, R.string.action_open_touchpad, CardActionKind.TOUCHPAD)
     }
-    if (satellite && connected && row.pointer?.mouseOpenable == true) {
+    if (pointerHost && connected && row.pointer?.mouseOpenable == true) {
         filled += CardActionSpec(R.drawable.ic_mouse, R.string.action_open_mouse, CardActionKind.MOUSE)
     }
     if (satellite && connected && row.pathCard?.suggestDirectForTouch == true) {

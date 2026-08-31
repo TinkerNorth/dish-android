@@ -140,6 +140,9 @@
     <string name="pointer_button_right">Droite</string>
     <string name="pointer_scroll_strip">Bande de défilement. Glissez pour défiler, touchez pour un clic du milieu.</string>
     <string name="mouse_basic_hint">Le clic droit et le défilement nécessitent un Satellite plus récent.</string>
+    <string name="chip_satellite_update_available">Mise à jour de Satellite recommandée</string>
+    <string name="chip_satellite_update_required">Mise à jour de Satellite requise</string>
+    <string name="chip_app_update_required">Mise à jour de Dish requise</string>
 
     <!-- Libellés par défaut pour les emplacements / connexions. -->
     <string name="default_virtual_controller_name">Manette virtuelle</string>

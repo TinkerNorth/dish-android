@@ -46,6 +46,8 @@ data class PairResponse(
     val ok: Boolean = false,
     val error: String? = null,
     val sharedKey: String? = null,
+    // 409 protocol rejection echo: the ONE version this satellite speaks.
+    val supported: Int = 0,
 )
 
 // Wire DTOs for the declarative session contract (satellite docs/contract.md).
@@ -105,6 +107,8 @@ data class SessionResponse(
     // Machine-readable 401 cause: NOT_PAIRED | BAD_PROOF. Either is terminal:
     // stop retrying and surface "re-pair needed".
     val code: String? = null,
+    // 409 protocol rejection echo: the ONE version this satellite speaks.
+    val supported: Int = 0,
 ) {
     val unauthorized: Boolean get() = code == CODE_NOT_PAIRED || code == CODE_BAD_PROOF
 
@@ -178,11 +182,6 @@ data class CatalogTypeDto(
 data class CatalogHostFeatureDto(
     val supported: Boolean = false,
     val modes: List<String> = emptyList(),
-    // mouseControl only, opt-in like keyboardControl: a satellite that can inject the
-    // right/middle buttons and the wheel says so; absent means an older receiver that
-    // ignores those wire fields, so the client must not offer them.
-    val buttons: Boolean = false,
-    val scroll: Boolean = false,
 )
 
 @Serializable
@@ -224,9 +223,6 @@ data class ServerHostFeatureDto(
     // Runtime read: present (`supported`) but currently down (e.g. backend driver
     // missing). Absent on features with no runtime distinction (catalog, keyboard).
     val available: Boolean = false,
-    // mouseControl only, opt-in: see CatalogHostFeatureDto.
-    val buttons: Boolean = false,
-    val scroll: Boolean = false,
 )
 
 @Serializable

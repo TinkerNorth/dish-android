@@ -167,72 +167,58 @@ class CapabilityTest {
     }
 
     @Test
-    fun `extended mouse is opt-in, so absent flags verifiably mean a basic mouse`() {
+    fun `extended mouse needs a v2 protocol read, so an unversioned document means basic`() {
         assertFalse(HostFeatureSet.SATELLITE_DEFAULT.extendedMouse)
-        val fromBareCatalog =
+        val fromV1Catalog =
             HostFeatureSet.fromCatalog(
                 CatalogDto(hostFeatures = mapOf("mouseControl" to CatalogHostFeatureDto(supported = true))),
             )
-        assertFalse(fromBareCatalog.extendedMouse)
-        val fromBareCaps =
+        assertFalse(fromV1Catalog.extendedMouse)
+        val fromV1Caps =
             HostFeatureSet.fromServerCapabilities(
                 ServerCapabilitiesDto(host = ServerHostDto(mouseControl = ServerHostFeatureDto(supported = true))),
             )
-        assertFalse(fromBareCaps.extendedMouse)
+        assertFalse(fromV1Caps.extendedMouse)
     }
 
     @Test
-    fun `fromCatalog reads the extended mouse advertisement`() {
+    fun `fromCatalog carries the protocol version into extended mouse`() {
         val features =
             HostFeatureSet.fromCatalog(
                 CatalogDto(
-                    hostFeatures =
-                        mapOf(
-                            "mouseControl" to
-                                CatalogHostFeatureDto(supported = true, buttons = true, scroll = true),
-                        ),
+                    protocolVersion = 2,
+                    hostFeatures = mapOf("mouseControl" to CatalogHostFeatureDto(supported = true)),
                 ),
             )
-        assertTrue(features.mouseButtons)
-        assertTrue(features.mouseScroll)
+        assertEquals(2, features.protocolVersion)
         assertTrue(features.extendedMouse)
     }
 
     @Test
-    fun `fromServerCapabilities reads the extended mouse advertisement`() {
+    fun `fromServerCapabilities carries the protocol version into extended mouse`() {
         val features =
             HostFeatureSet.fromServerCapabilities(
                 ServerCapabilitiesDto(
-                    host =
-                        ServerHostDto(
-                            mouseControl =
-                                ServerHostFeatureDto(supported = true, available = true, buttons = true, scroll = true),
-                        ),
+                    protocolVersion = 2,
+                    host = ServerHostDto(mouseControl = ServerHostFeatureDto(supported = true, available = true)),
                 ),
             )
+        assertEquals(2, features.protocolVersion)
         assertTrue(features.extendedMouse)
     }
 
     @Test
-    fun `extended mouse requires the whole trio, including mouse control itself`() {
-        val buttonsOnly =
+    fun `extended mouse needs both the version and mouse control itself`() {
+        val versionWithoutMouse =
+            HostFeatureSet.fromCatalog(CatalogDto(protocolVersion = 2))
+        assertFalse(versionWithoutMouse.extendedMouse)
+        val futureVersion =
             HostFeatureSet.fromCatalog(
                 CatalogDto(
-                    hostFeatures =
-                        mapOf("mouseControl" to CatalogHostFeatureDto(supported = true, buttons = true)),
+                    protocolVersion = 3,
+                    hostFeatures = mapOf("mouseControl" to CatalogHostFeatureDto(supported = true)),
                 ),
             )
-        assertFalse(buttonsOnly.extendedMouse)
-        val withheldMouse =
-            HostFeatureSet.fromCatalog(
-                CatalogDto(
-                    hostFeatures =
-                        mapOf(
-                            "mouseControl" to
-                                CatalogHostFeatureDto(supported = false, buttons = true, scroll = true),
-                        ),
-                ),
-            )
-        assertFalse(withheldMouse.extendedMouse)
+        assertTrue(futureVersion.extendedMouse)
     }
 }
