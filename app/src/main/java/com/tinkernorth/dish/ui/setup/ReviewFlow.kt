@@ -4,7 +4,7 @@ package com.tinkernorth.dish.ui.setup
 
 import android.content.res.ColorStateList
 import android.view.View
-import android.widget.LinearLayout
+import android.view.ViewGroup
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatActivity
@@ -23,7 +23,7 @@ data class ReviewFlow(
 // Fills a sends/gets chip row, hiding the whole row when there is nothing to show.
 fun AppCompatActivity.bindReviewFlows(
     row: View,
-    chips: LinearLayout,
+    chips: ViewGroup,
     flows: List<ReviewFlow>,
 ) {
     row.isVisible = flows.isNotEmpty()

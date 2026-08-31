@@ -65,7 +65,6 @@
     <string name="setup_conn_path_subtitle">Wähle, wie dieses Handy mit deinem PC spricht.</string>
     <string name="setup_conn_satellite_title">Satellite über WLAN</string>
     <string name="setup_conn_satellite_body">Geringste Latenz, voller Funktionsumfang. Braucht die kostenlose PC-App.</string>
-    <string name="setup_conn_satellite_badge">Am besten</string>
     <string name="setup_conn_moonlight_body">Stream an einen PC mit Sunshine, Apollo oder Wolf. Dish schließt einen Controller an die Sitzung an.</string>
     <string name="setup_conn_bt_host_title">Bluetooth-Host</string>
     <string name="setup_conn_bt_host_body">Das Handy koppelt sich als Pad mit dem PC. Keine PC-App.</string>

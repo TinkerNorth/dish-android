@@ -6,6 +6,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.annotation.ColorRes
+import androidx.annotation.StringRes
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -18,6 +20,7 @@ import com.tinkernorth.dish.databinding.RowConnectionBinding
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
 import com.tinkernorth.dish.ui.common.setLoading
 import com.tinkernorth.dish.ui.main.chipTextRes
+import com.tinkernorth.dish.ui.main.holdsPairing
 
 /** Rows for the Moonlight-hosts section, the sibling of [SatelliteRow]. */
 sealed interface MoonlightRow {
@@ -95,23 +98,18 @@ class MoonlightListAdapter(
             }
         }
 
-        // Pairing is remembered trust, not a live link, so the chip says which of the
-        // three trust words applies and never lights up as though the host were online.
-        // The session lives in the binding; all this screen offers is the way out of one.
+        // Pairing is remembered trust, not a live link, so the chip carries the trust word
+        // and never lights up as though the host were online. The session lives in the
+        // binding; all this screen offers is the way out of one.
         private fun bindKnown(row: MoonlightRow.Known) {
             val c = row.summary
             b.paintConnection(c.label, detailFor(row), ctx.getString(row.trust.chipTextRes()), ConnectionKind.MOONLIGHT, c.live)
+            b.tvRowStatus.setTextColor(ctx.getColor(moonlightTrustColorRes(row.trust)))
             if (row.controllerCount > 0) {
                 b.btnRowAction.setLoading(false, "", ctx.getString(R.string.ml_action_quit_session))
                 b.btnRowAction.setOnClickListener { listener.onQuitSession(c.id) }
             } else {
-                val label =
-                    if (row.trust == MoonlightTrustState.PAIRED) {
-                        ctx.getString(R.string.ml_action_pair_again)
-                    } else {
-                        ctx.getString(R.string.ml_action_pair)
-                    }
-                b.btnRowAction.setLoading(false, "", label)
+                b.btnRowAction.setLoading(false, "", ctx.getString(moonlightPairActionRes(row.trust)))
                 b.btnRowAction.setOnClickListener { listener.onPairKnown(c) }
             }
             b.btnRowSecondary.visibility = View.VISIBLE
@@ -139,6 +137,7 @@ class MoonlightListAdapter(
                 ConnectionKind.MOONLIGHT,
                 LinkState.Found,
             )
+            b.tvRowStatus.setTextColor(ctx.getColor(R.color.colorMuted))
             b.btnRowAction.setLoading(false, "", ctx.getString(R.string.ml_action_pair))
             b.btnRowAction.setOnClickListener { listener.onPairDiscovered(h) }
             b.btnRowSecondary.visibility = View.GONE
@@ -200,8 +199,17 @@ fun moonlightRows(
     }
 }
 
-// "Paired" is the word that wants proof, so it is reserved for a session that is up or a host
-// that authorised a call this visit. A host the user only added or bound to is remembered at most.
+@StringRes
+internal fun moonlightPairActionRes(trust: MoonlightTrustState): Int =
+    if (trust.holdsPairing()) R.string.action_repair_short else R.string.ml_action_pair
+
+@ColorRes
+internal fun moonlightTrustColorRes(trust: MoonlightTrustState): Int =
+    if (trust.holdsPairing()) R.color.colorSuccess else R.color.colorMuted
+
+// PAIRED is proven this visit (live session or an authorised mutual-TLS call); REMEMBERED
+// holds a stored record without fresh proof. Both wear the "Paired" chip; the split still
+// decides nothing user-visible here beyond being available to callers that probe.
 internal fun moonlightTrustFor(
     summary: ConnectionSummary,
     paired: Boolean,

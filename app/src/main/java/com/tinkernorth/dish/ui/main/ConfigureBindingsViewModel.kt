@@ -16,6 +16,7 @@ import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
+import com.tinkernorth.dish.composer.LinkTiers
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.model.CatalogTypeDto
 import com.tinkernorth.dish.core.model.Feature
@@ -69,6 +70,8 @@ data class BindingHost(
     val label: String,
     val kind: ConnectionKind,
 )
+
+internal fun List<BindingHost>.orderedForPicker(): List<BindingHost> = sortedWith(LinkTiers.byTier(BindingHost::kind))
 
 data class BindingSnapshot(
     val slotId: String,
@@ -885,6 +888,7 @@ class ConfigureBindingsViewModel
         private fun buildHosts(): List<BindingHost> =
             connectionsVisibleInPicker(hub.connections.value, loadedSlotId?.let { hub.bindings.value[it] })
                 .map { BindingHost(it.id, it.label, it.kind) }
+                .orderedForPicker()
 
         private fun buildSeedDraft(slotId: String): BindingDraft {
             val hostId = hub.bindings.value[slotId]

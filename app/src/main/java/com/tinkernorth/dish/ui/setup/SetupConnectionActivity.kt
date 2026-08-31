@@ -15,7 +15,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.LinkState
+import com.tinkernorth.dish.composer.LinkTier
+import com.tinkernorth.dish.composer.LinkTiers
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.databinding.ActivitySetupConnectionBinding
 import com.tinkernorth.dish.databinding.SetupChoiceRowBinding
@@ -25,6 +28,7 @@ import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.source.system.LocalNetworkAccess
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.ui.common.paintTierBadge
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.connections.PairPinDialog
 import com.tinkernorth.dish.ui.main.chipTextRes
@@ -83,21 +87,21 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
             R.drawable.ic_satellite,
             R.string.setup_conn_satellite_title,
             R.string.setup_conn_satellite_body,
-            R.string.setup_conn_satellite_badge,
+            LinkTiers.forKind(ConnectionKind.SATELLITE),
         ) { withLocalNetwork { viewModel.chooseSatellite() } }
         bindChoice(
             binding.cardMoonlight,
             R.drawable.ic_pc_monitor,
             R.string.ml_dest_section,
             R.string.setup_conn_moonlight_body,
-            badge = null,
+            LinkTiers.forKind(ConnectionKind.MOONLIGHT),
         ) { withLocalNetwork { viewModel.chooseMoonlight() } }
         bindChoice(
             binding.cardBluetoothHost,
             R.drawable.ic_bluetooth,
             R.string.setup_conn_bt_host_title,
             R.string.setup_conn_bt_host_body,
-            badge = null,
+            LinkTiers.forKind(ConnectionKind.BLUETOOTH),
         ) { nav.toSetupBluetoothHost(inputType, slotId) }
 
         binding.btnBack.setOnClickListener { handleBack() }
@@ -282,18 +286,14 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
         @DrawableRes icon: Int,
         @StringRes title: Int,
         @StringRes body: Int,
-        @StringRes badge: Int?,
+        tier: LinkTier,
         onClick: () -> Unit,
     ) {
         row.choiceIcon.setImageResource(icon)
         row.choiceTitle.setText(title)
         row.choiceBody.setText(body)
-        if (badge == null) {
-            row.choiceBadge.visibility = View.GONE
-        } else {
-            row.choiceBadge.visibility = View.VISIBLE
-            row.choiceBadge.setText(badge)
-        }
+        row.choiceBadge.visibility = View.VISIBLE
+        row.choiceBadge.paintTierBadge(tier)
         row.choiceCard.setOnClickListener { onClick() }
     }
 

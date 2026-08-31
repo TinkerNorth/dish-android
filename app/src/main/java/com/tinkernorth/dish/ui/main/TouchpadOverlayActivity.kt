@@ -9,7 +9,6 @@ import android.view.View
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
-import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.databinding.ActivityTouchpadOverlayBinding
 import com.tinkernorth.dish.ui.common.TouchpadPadCoordinator
 import com.tinkernorth.dish.ui.common.TouchpadSurfaceView
@@ -17,6 +16,9 @@ import com.tinkernorth.dish.ui.common.paintConnectionMenuItem
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.common.showConnectionDialog
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 
 @AndroidEntryPoint
 class TouchpadOverlayActivity : BaseInputOverlayActivity() {
@@ -36,6 +38,21 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
 
     override val resendIntervalNs: Long = BaseInputOverlayActivity.RESEND_INTERVAL_NS_DEFAULT
 
+    override val guardSlotId: String get() = slotId
+
+    override fun slotDeviceStates(): Flow<SlotDeviceState?> {
+        val deviceId = slotId.toIntOrNull() ?: return flowOf(null)
+        return gamepadRegistry.devices.map { devices ->
+            val device = devices[deviceId] ?: return@map SlotDeviceState(present = false)
+            SlotDeviceState(
+                present = true,
+                disconnectingSecLeft = device.disconnectingTimeLeftSec,
+                transitioning = device.transitioning,
+                needsReplug = device.needsReplug,
+            )
+        }
+    }
+
     // Resend-thread-only (single-threaded Handler dispatcher).
     private var lastResentSnapshot: TouchpadSurfaceView.TouchpadState? = null
 
@@ -43,8 +60,8 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityTouchpadOverlayBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        installBaseScaffolding()
         slotId = intent.getStringExtra(EXTRA_SLOT_ID) ?: VIRTUAL_SLOT_ID
+        installBaseScaffolding()
 
         setupDishToolbar(binding.overlayToolbar)
         binding.overlayToolbar.setTitle(R.string.overlay_title_touchpad)
@@ -86,7 +103,7 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
                     inputRateStore.recordScreenSample()
                     lastReportedState = state
                     val summary = hub.summary(connectionId) ?: return
-                    if (summary.live != LinkState.Connected) return
+                    if (!summary.live.isLiveLink()) return
                     if (summary.kind != ConnectionKind.SATELLITE) return
                     sendSatelliteTouchpadReport(state)
                 }
@@ -109,7 +126,7 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
         val state = lastReportedState ?: return
         val summary = hub.summary(connectionId) ?: return
         if (summary.kind != ConnectionKind.SATELLITE) return
-        if (summary.live != LinkState.Connected) return
+        if (!summary.live.isLiveLink()) return
         // The live state object mutates on the UI thread: copy() is the
         // stable comparison base (a torn read just costs one extra burst).
         val changed = state != lastResentSnapshot

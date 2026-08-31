@@ -54,10 +54,24 @@
     <TextView
         android:id="@+id/labelSection"
         style="@style/TextAppearance.Dish.Label.Accent"
-        android:layout_width="0dp"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
         tools:text="SECTION" />
+
+    <!-- Optional link-tier pill next to the label (Connections section headers).
+         Defaults to `gone`; SectionHeaderAdapter binds it when a tier is given. -->
+    <include
+        android:id="@+id/pillSectionTier"
+        layout="@layout/binding_pill"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/spacing_sm"
+        android:visibility="gone" />
+
+    <Space
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnSectionSecondary"

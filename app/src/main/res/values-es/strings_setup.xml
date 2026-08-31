@@ -59,7 +59,6 @@
     <string name="setup_conn_path_subtitle">Elige cómo habla este teléfono con tu PC.</string>
     <string name="setup_conn_satellite_title">Satellite por Wi-Fi</string>
     <string name="setup_conn_satellite_body">La menor latencia, todas las funciones. Necesita la app gratuita para PC.</string>
-    <string name="setup_conn_satellite_badge">La mejor</string>
     <string name="setup_conn_moonlight_body">Transmite a un PC con Sunshine, Apollo o Wolf. Dish conecta un mando a la sesión.</string>
     <string name="setup_conn_bt_host_title">Host Bluetooth</string>
     <string name="setup_conn_bt_host_body">El teléfono se empareja con el PC como un mando. Sin app para PC.</string>

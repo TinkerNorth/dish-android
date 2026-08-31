@@ -28,6 +28,7 @@
     <string name="action_scan">Buscar</string>
     <string name="action_scanning">Buscando…</string>
     <string name="action_add">Adicionar</string>
+    <string name="scan_all_hint">Uma busca encontra satélites e hosts Moonlight</string>
     <string name="bt_hosts_empty">Nenhum host lembrado. Toque em Adicionar para registrar um novo</string>
 
     <!-- row_connection.xml + rótulos dinâmicos de linha no ConnectionsActivity. -->
@@ -106,6 +107,10 @@
     <string name="chip_status_online">On-line</string>
     <string name="chip_status_unstable">Instável</string>
 
+    <string name="link_tier_fastest">Mais rápida</string>
+    <string name="link_tier_fast">Rápida</string>
+    <string name="link_tier_basic">Básica</string>
+
     <!-- Superposição do controle (activity_gamepad_overlay.xml + GamepadOverlayActivity). -->
     <string name="overlay_status_unknown">Conexão desconhecida</string>
     <string name="overlay_status_not_connected">Não conectado</string>
@@ -120,6 +125,15 @@
     <string name="overlay_title_touchpad">Touchpad</string>
     <string name="overlay_rate_touch">Toque %1$s</string>
     <string name="overlay_rate_motion">Movimento %1$s</string>
+    <string name="overlay_guard_wifi_detail">O Wi-Fi está desligado ou em outra rede. Volte para a rede do host.</string>
+    <string name="overlay_guard_bt_detail">Reconecte pelas configurações Bluetooth do host.</string>
+    <string name="overlay_guard_ml_detail">A sessão Moonlight terminou. Vincule o controle de novo para iniciar outra.</string>
+    <string name="overlay_guard_replug_detail">Conecte o controle de novo para continuar usando esta tela.</string>
+    <string name="overlay_guard_departed_detail">O controle não voltou. Esta tela vai fechar.</string>
+    <string name="overlay_guard_unbound_title">Controle desvinculado</string>
+    <string name="overlay_guard_unbound_detail">Este slot não está mais vinculado a %1$s. Esta tela vai fechar.</string>
+    <string name="overlay_guard_gone_title">Conexão removida</string>
+    <string name="overlay_guard_gone_detail">A conexão foi esquecida. Esta tela vai fechar.</string>
     <string name="touchpad_pad_click_label">Clique + Mover</string>
     <string name="touchpad_pad_move_label">Mover</string>
     <string name="touchpad_pad_click_hint">Arraste para clicar e mover</string>
@@ -159,7 +173,6 @@
     <string name="ml_session_live_title">Transmitindo para %1$s</string>
     <string name="ml_session_live_body">%1$s · controle %2$d de 4</string>
     <string name="ml_trust_paired">Pareado</string>
-    <string name="ml_trust_remembered">Lembrado</string>
     <string name="ml_trust_not_paired">Não pareado</string>
     <string name="ml_host_in_use">Em uso por %1$s</string>
     <plurals name="ml_host_in_use_count">
@@ -201,7 +214,6 @@
     <string name="ml_ended_title">%1$s encerrou a sessão</string>
     <string name="ml_ended_body">O app foi fechado no host. Inicie uma nova sessão para continuar usando este controle.</string>
     <string name="ml_action_pair">Parear agora</string>
-    <string name="ml_action_pair_again">Parear de novo</string>
     <string name="ml_action_new_code">Novo código</string>
     <string name="ml_action_cancel">Cancelar</string>
     <string name="ml_action_try_again">Tentar de novo</string>

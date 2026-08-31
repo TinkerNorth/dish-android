@@ -289,12 +289,24 @@ class MoonlightSessionUiTest {
     }
 
     @Test
-    fun `the trust chip says one of three words and never lights up`() {
+    fun `the trust chip says one of two words and never lights up`() {
         assertEquals(R.string.ml_trust_paired, MoonlightTrustState.PAIRED.chipTextRes())
-        assertEquals(R.string.ml_trust_remembered, MoonlightTrustState.REMEMBERED.chipTextRes())
-        assertEquals(R.string.ml_trust_remembered, MoonlightTrustState.UNREACHABLE.chipTextRes())
+        assertEquals(R.string.ml_trust_paired, MoonlightTrustState.REMEMBERED.chipTextRes())
+        assertEquals(R.string.ml_trust_paired, MoonlightTrustState.CHECKING.chipTextRes())
+        assertEquals(R.string.ml_trust_paired, MoonlightTrustState.UNREACHABLE.chipTextRes())
         assertEquals(R.string.ml_trust_not_paired, MoonlightTrustState.NOT_PAIRED.chipTextRes())
         assertEquals(R.string.ml_trust_not_paired, MoonlightTrustState.TRUST_LOST.chipTextRes())
         assertEquals(R.string.ml_trust_not_paired, MoonlightTrustState.REPLACED.chipTextRes())
+    }
+
+    @Test
+    fun `holdsPairing tracks the chip word exactly`() {
+        for (state in MoonlightTrustState.entries) {
+            assertEquals(
+                state.name,
+                state.chipTextRes() == R.string.ml_trust_paired,
+                state.holdsPairing(),
+            )
+        }
     }
 }

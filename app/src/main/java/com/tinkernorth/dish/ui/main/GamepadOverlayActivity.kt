@@ -19,7 +19,6 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
-import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.input.hidToXusb
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
@@ -125,7 +124,7 @@ class GamepadOverlayActivity :
         val state = lastReportedState ?: return
         val summary = hub.summary(connectionId) ?: return
         if (summary.kind != ConnectionKind.SATELLITE) return
-        if (summary.live != LinkState.Connected) return
+        if (!summary.live.isLiveLink()) return
         // The live state object mutates on the UI thread: copy() is the
         // stable comparison base (a torn read just costs one extra burst).
         val changed = state != lastResentSnapshot
@@ -183,7 +182,7 @@ class GamepadOverlayActivity :
             capability.inputOk(Feature.MOTION) &&
                 capability.userWants(Feature.MOTION) &&
                 summary?.kind == ConnectionKind.SATELLITE &&
-                summary.live == LinkState.Connected
+                summary.live.isLiveLink()
         if (effective && !motionSource.isStreaming) {
             motionSource.start { sample, deltaUs ->
                 inputRateStore.recordMotionSample(VIRTUAL_SLOT_ID)
@@ -294,7 +293,7 @@ class GamepadOverlayActivity :
         // moment it flips to Connected.
         lastReportedState = state
         val summary = hub.summary(connectionId) ?: return
-        if (summary.live != LinkState.Connected) return
+        if (!summary.live.isLiveLink()) return
         when (summary.kind) {
             ConnectionKind.BLUETOOTH -> {
                 val report =

@@ -27,6 +27,7 @@
     <string name="action_scan">Scanner</string>
     <string name="action_scanning">Recherche…</string>
     <string name="action_add">Ajouter</string>
+    <string name="scan_all_hint">Un scan trouve les satellites et les hôtes Moonlight</string>
     <string name="bt_hosts_empty">Aucun hôte mémorisé : touchez Ajouter pour en enregistrer un</string>
 
     <!-- row_connection.xml + libellés dynamiques des lignes dans ConnectionsActivity. -->
@@ -105,6 +106,10 @@
     <string name="chip_status_online">En ligne</string>
     <string name="chip_status_unstable">Instable</string>
 
+    <string name="link_tier_fastest">La plus rapide</string>
+    <string name="link_tier_fast">Rapide</string>
+    <string name="link_tier_basic">Basique</string>
+
     <!-- Superposition manette (activity_gamepad_overlay.xml + GamepadOverlayActivity). -->
     <string name="overlay_status_unknown">Connexion inconnue</string>
     <string name="overlay_status_not_connected">Non connectée</string>
@@ -119,6 +124,15 @@
     <string name="overlay_title_touchpad">Pavé tactile</string>
     <string name="overlay_rate_touch">Tactile %1$s</string>
     <string name="overlay_rate_motion">Mouvement %1$s</string>
+    <string name="overlay_guard_wifi_detail">Le Wi-Fi est désactivé ou sur un autre réseau. Rejoignez le réseau de l\'hôte.</string>
+    <string name="overlay_guard_bt_detail">Reconnectez depuis les réglages Bluetooth de l\'hôte.</string>
+    <string name="overlay_guard_ml_detail">La session Moonlight est terminée. Associez à nouveau la manette pour en démarrer une nouvelle.</string>
+    <string name="overlay_guard_replug_detail">Rebranchez la manette pour continuer à utiliser cet écran.</string>
+    <string name="overlay_guard_departed_detail">La manette n\'est pas revenue. Cet écran va se fermer.</string>
+    <string name="overlay_guard_unbound_title">Manette dissociée</string>
+    <string name="overlay_guard_unbound_detail">Cet emplacement n\'est plus associé à %1$s. Cet écran va se fermer.</string>
+    <string name="overlay_guard_gone_title">Connexion supprimée</string>
+    <string name="overlay_guard_gone_detail">La connexion a été oubliée. Cet écran va se fermer.</string>
     <string name="touchpad_pad_click_label">Clic + Déplacer</string>
     <string name="touchpad_pad_move_label">Déplacer</string>
     <string name="touchpad_pad_click_hint">Glissez pour cliquer et déplacer</string>
@@ -158,7 +172,6 @@
     <string name="ml_session_live_title">Diffusion vers %1$s</string>
     <string name="ml_session_live_body">%1$s · manette %2$d sur 4</string>
     <string name="ml_trust_paired">Appairé</string>
-    <string name="ml_trust_remembered">Mémorisé</string>
     <string name="ml_trust_not_paired">Non appairé</string>
     <string name="ml_host_in_use">Utilisé par %1$s</string>
     <plurals name="ml_host_in_use_count">
@@ -200,7 +213,6 @@
     <string name="ml_ended_title">%1$s a mis fin à la session</string>
     <string name="ml_ended_body">L\'appli s\'est fermée sur l\'hôte. Lancez une nouvelle session pour continuer à utiliser cette manette.</string>
     <string name="ml_action_pair">Appairer maintenant</string>
-    <string name="ml_action_pair_again">Appairer à nouveau</string>
     <string name="ml_action_new_code">Nouveau code</string>
     <string name="ml_action_cancel">Annuler</string>
     <string name="ml_action_try_again">Réessayer</string>

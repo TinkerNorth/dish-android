@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Link-guard scrim for the input overlays (gamepad + touchpad). Same visual
+     language as item_controller's edge overlay: scrim, state icon, title,
+     optional countdown, detail, primary/secondary actions. Sits over the
+     input surface so dead input can't be mashed into the void. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/colorOverlayScrim"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="@dimen/binding_edge_padding"
+    android:visibility="gone">
+
+    <ImageView
+        android:id="@+id/ivGuardIcon"
+        android:layout_width="@dimen/binding_edge_icon_size"
+        android:layout_height="@dimen/binding_edge_icon_size"
+        android:importantForAccessibility="no" />
+
+    <TextView
+        android:id="@+id/tvGuardTitle"
+        style="@style/TextAppearance.Dish.Title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/binding_edge_gap"
+        android:gravity="center" />
+
+    <LinearLayout
+        android:id="@+id/guardCountdownRow"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/binding_edge_gap"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tvGuardCountdown"
+            style="@style/TextAppearance.Dish.Display"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/colorWarning" />
+
+        <TextView
+            style="@style/TextAppearance.Dish.Body.Mono"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/spacing_xs"
+            android:text="@string/binding_edge_seconds"
+            android:textColor="@color/colorOnSurfaceVariant" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvGuardDetail"
+        style="@style/TextAppearance.Dish.BodySmall"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/binding_edge_gap"
+        android:gravity="center"
+        android:maxWidth="@dimen/guard_detail_max_width"
+        android:textColor="@color/colorOnSurfaceVariant" />
+
+    <ProgressBar
+        android:id="@+id/pbGuardSpinner"
+        android:layout_width="@dimen/binding_edge_spinner_size"
+        android:layout_height="@dimen/binding_edge_spinner_size"
+        android:layout_marginTop="@dimen/binding_edge_actions_gap"
+        android:indeterminate="true"
+        android:indeterminateTint="@color/colorPrimary"
+        android:visibility="gone" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnGuardPrimary"
+        style="@style/Widget.Dish.Button.Tonal"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/binding_edge_actions_gap"
+        android:visibility="gone"
+        app:iconGravity="textStart" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnGuardSecondary"
+        style="@style/Widget.Dish.Button.Text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:visibility="gone" />
+</LinearLayout>

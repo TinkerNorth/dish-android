@@ -2,6 +2,7 @@
 
 package com.tinkernorth.dish.ui.main
 
+import android.content.res.ColorStateList
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
@@ -22,17 +23,21 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.core.model.DishNotification
+import com.tinkernorth.dish.databinding.OverlayLinkGuardBinding
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.inputrate.InputRateStore
+import com.tinkernorth.dish.source.system.NetworkStateObserver
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.FoldAwareSession
 import com.tinkernorth.dish.ui.common.Posture
 import com.tinkernorth.dish.ui.common.ResendPacer
 import com.tinkernorth.dish.ui.common.hingeInsetsFor
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.android.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
@@ -48,6 +53,8 @@ abstract class BaseInputOverlayActivity : BaseGamepadHostActivity() {
     @Inject lateinit var satellite: SatelliteConnectionManager
 
     @Inject lateinit var inputRateStore: InputRateStore
+
+    @Inject lateinit var networkState: NetworkStateObserver
 
     protected var connectionId: String = ""
 
@@ -69,6 +76,12 @@ abstract class BaseInputOverlayActivity : BaseGamepadHostActivity() {
     protected open fun onConnectionSummaryChanged(summary: ConnectionSummary?) = Unit
 
     protected open fun onConnectionEvent(event: ConnectionEvent) = Unit
+
+    // The slot this overlay drives; the link guard watches its binding and its controller.
+    protected open val guardSlotId: String get() = VIRTUAL_SLOT_ID
+
+    // Physical-controller presence behind the slot; null for slots with no controller.
+    protected open fun slotDeviceStates(): Flow<SlotDeviceState?> = flowOf(null)
 
     protected fun installBaseScaffolding() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -119,6 +132,131 @@ abstract class BaseInputOverlayActivity : BaseGamepadHostActivity() {
                 runResendLoop()
             }
         }
+
+        installLinkGuard()
+    }
+
+    private var guardCloseJob: Job? = null
+
+    private fun installLinkGuard() {
+        val guardRoot = rootView().findViewById<View>(R.id.linkGuard) ?: return
+        val guard = OverlayLinkGuardBinding.bind(guardRoot)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                combine(
+                    hub.connections.map { conns -> conns.firstOrNull { it.id == connectionId } },
+                    hub.bindings.map { it[guardSlotId] },
+                    slotDeviceStates(),
+                    networkState.state,
+                ) { summary, bound, device, network ->
+                    overlayGuardFor(summary, bound, connectionId, device, network)
+                }.distinctUntilChanged().collectLatest { ui ->
+                    // A link blip settles before the scrim appears; recovery paints instantly.
+                    if (ui.kind == GuardKind.RECONNECTING || ui.kind == GuardKind.HOST_LOST) {
+                        delay(LINK_GUARD_GRACE_MS)
+                    }
+                    renderLinkGuard(guard, ui)
+                }
+            }
+        }
+    }
+
+    private fun renderLinkGuard(
+        g: OverlayLinkGuardBinding,
+        ui: OverlayGuardUi,
+    ) {
+        if (!ui.autoClose) {
+            guardCloseJob?.cancel()
+            guardCloseJob = null
+        }
+        g.root.visibility = if (ui.kind == GuardKind.NONE) View.GONE else View.VISIBLE
+        if (ui.kind == GuardKind.NONE) return
+        paintGuardHeader(g, ui)
+        paintGuardActions(g, ui)
+        g.pbGuardSpinner.visibility = if (ui.kind == GuardKind.RECONNECTING) View.VISIBLE else View.GONE
+        val graceSec = ui.countdownSec
+        if (graceSec != null) {
+            g.guardCountdownRow.visibility = View.VISIBLE
+            g.tvGuardCountdown.text = graceSec.toString()
+        } else if (!ui.autoClose) {
+            g.guardCountdownRow.visibility = View.GONE
+        }
+        if (ui.autoClose && guardCloseJob == null) {
+            guardCloseJob =
+                lifecycleScope.launch {
+                    var left = GUARD_AUTO_CLOSE_SEC
+                    g.guardCountdownRow.visibility = View.VISIBLE
+                    while (left > 0) {
+                        g.tvGuardCountdown.text = left.toString()
+                        delay(1000L)
+                        left--
+                    }
+                    finish()
+                }
+        }
+    }
+
+    private fun paintGuardHeader(
+        g: OverlayLinkGuardBinding,
+        ui: OverlayGuardUi,
+    ) {
+        val (icon, color) =
+            when (ui.kind) {
+                GuardKind.HOST_LOST, GuardKind.GONE -> R.drawable.ic_error to R.color.colorError
+                GuardKind.RECONNECTING -> R.drawable.ic_refresh to R.color.colorPrimary
+                GuardKind.UNBOUND -> R.drawable.ic_link_off to R.color.colorWarning
+                else -> R.drawable.ic_gamepad to R.color.colorWarning
+            }
+        g.ivGuardIcon.setImageResource(icon)
+        g.ivGuardIcon.imageTintList = ColorStateList.valueOf(getColor(color))
+        g.tvGuardTitle.setText(guardTitleRes(ui.kind))
+        g.tvGuardDetail.text = guardDetailText(ui)
+    }
+
+    private fun guardTitleRes(kind: GuardKind): Int =
+        when (kind) {
+            GuardKind.HOST_LOST -> R.string.binding_edge_host_lost_title
+            GuardKind.RECONNECTING -> R.string.chip_status_connecting
+            GuardKind.UNPLUGGED, GuardKind.DEPARTED -> R.string.binding_edge_input_lost_title
+            GuardKind.UNBOUND -> R.string.overlay_guard_unbound_title
+            else -> R.string.overlay_guard_gone_title
+        }
+
+    private fun guardDetailText(ui: OverlayGuardUi): String =
+        when (ui.kind) {
+            GuardKind.HOST_LOST, GuardKind.RECONNECTING ->
+                when (ui.detail) {
+                    GuardDetail.WIFI_DOWN -> getString(R.string.overlay_guard_wifi_detail)
+                    GuardDetail.BLUETOOTH_HOST -> getString(R.string.overlay_guard_bt_detail)
+                    GuardDetail.MOONLIGHT_SESSION -> getString(R.string.overlay_guard_ml_detail)
+                    GuardDetail.GENERIC -> getString(R.string.binding_edge_host_lost_detail, ui.hostLabel)
+                }
+            GuardKind.UNPLUGGED -> getString(R.string.overlay_guard_replug_detail)
+            GuardKind.DEPARTED -> getString(R.string.overlay_guard_departed_detail)
+            GuardKind.UNBOUND -> getString(R.string.overlay_guard_unbound_detail, ui.hostLabel)
+            else -> getString(R.string.overlay_guard_gone_detail)
+        }
+
+    private fun paintGuardActions(
+        g: OverlayLinkGuardBinding,
+        ui: OverlayGuardUi,
+    ) {
+        if (ui.showReconnect) {
+            g.btnGuardPrimary.visibility = View.VISIBLE
+            g.btnGuardPrimary.setIconResource(R.drawable.ic_refresh)
+            g.btnGuardPrimary.setText(R.string.binding_edge_action_reconnect)
+            g.btnGuardPrimary.setOnClickListener { hub.autoReconnectAll() }
+        } else if (ui.autoClose) {
+            g.btnGuardPrimary.visibility = View.VISIBLE
+            g.btnGuardPrimary.setIconResource(R.drawable.ic_link_off)
+            g.btnGuardPrimary.setText(R.string.action_close)
+            g.btnGuardPrimary.setOnClickListener { finish() }
+        } else {
+            g.btnGuardPrimary.visibility = View.GONE
+        }
+        g.btnGuardSecondary.visibility = if (ui.autoClose) View.GONE else View.VISIBLE
+        g.btnGuardSecondary.setText(R.string.action_close)
+        g.btnGuardSecondary.setOnClickListener { finish() }
     }
 
     private suspend fun runResendLoop() {
@@ -285,5 +423,8 @@ abstract class BaseInputOverlayActivity : BaseGamepadHostActivity() {
         const val RESEND_INTERVAL_NS_DEFAULT = RESEND_INTERVAL_MS_DEFAULT * 1_000_000L
 
         const val MAX_BACKLOG_FACTOR = 5L
+
+        const val LINK_GUARD_GRACE_MS = 1500L
+        const val GUARD_AUTO_CLOSE_SEC = 8
     }
 }
