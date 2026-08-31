@@ -57,6 +57,7 @@ class DiscoveryGateway
         // satelliteId is an optional trailing param (constant "" default, resolved to the host
         // in-body) so existing positional callers stay source-compatible. The cert pin protects
         // "the box at this address", which is the right key for TLS pinning on a CA-less LAN.
+        @Suppress("LongParameterList")
         suspend fun pair(
             ip: String,
             port: Int,
@@ -65,9 +66,20 @@ class DiscoveryGateway
             pin: String,
             clientPin: String = "",
             satelliteId: String = "",
+            protocolVersion: Int = DishProtocol.CURRENT,
         ): HttpReply =
             withContext(ioDispatcher) {
-                SatelliteHttpClient.pair(ip, port, deviceId, deviceName, pin, pinId(satelliteId, ip), pins, clientPin)
+                SatelliteHttpClient.pair(
+                    ip,
+                    port,
+                    deviceId,
+                    deviceName,
+                    pin,
+                    pinId(satelliteId, ip),
+                    pins,
+                    clientPin,
+                    protocolVersion,
+                )
             }
 
         suspend fun pairStatus(
@@ -89,6 +101,7 @@ class DiscoveryGateway
             hmacProof: String,
             descriptorsJson: String,
             requestMouseControl: Boolean,
+            protocolVersion: Int = DishProtocol.CURRENT,
             satelliteId: String = "",
         ): HttpReply =
             withContext(ioDispatcher) {
@@ -100,6 +113,7 @@ class DiscoveryGateway
                     hmacProof,
                     descriptorsJson,
                     requestMouseControl,
+                    protocolVersion,
                     pinId(satelliteId, ip),
                     pins,
                 )

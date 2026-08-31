@@ -89,6 +89,15 @@
             tools:ignore="DiscouragedApi" />
 
         <activity
+            android:name=".ui.main.MouseOverlayActivity"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:theme="@style/Theme.Dish"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
+            tools:ignore="DiscouragedApi" />
+
+        <activity
             android:name=".ui.connections.ConnectionsActivity"
             android:exported="false"
             android:resizeableActivity="true"

@@ -156,6 +156,12 @@ class SetupBluetoothHostActivity : BaseGamepadHostActivity() {
         profile: BluetoothGamepad.GamepadProfile,
     ) {
         card.typeTitle.setText(typeTitleRes(profile))
+        card.typeGlyph.setImageResource(
+            when (profile) {
+                BluetoothGamepad.GamepadProfile.XBOX -> R.drawable.ic_ctrl_xbox
+                BluetoothGamepad.GamepadProfile.PLAYSTATION -> R.drawable.ic_ctrl_ds4
+            },
+        )
         card.typeCard.setOnClickListener { viewModel.onTypeChosen(profile) }
     }
 

@@ -143,6 +143,19 @@
     </activity>
 
     <activity
+        android:id="@+id/mouseOverlayActivity"
+        android:name="com.tinkernorth.dish.ui.main.MouseOverlayActivity"
+        android:label="@string/overlay_title_mouse">
+
+        <argument
+            android:name="extra_connection_id"
+            app:argType="string" />
+        <argument
+            android:name="extra_slot_id"
+            app:argType="string" />
+    </activity>
+
+    <activity
         android:id="@+id/gamepadOverlayActivity"
         android:name="com.tinkernorth.dish.ui.main.GamepadOverlayActivity"
         android:label="@string/overlay_title_gamepad">

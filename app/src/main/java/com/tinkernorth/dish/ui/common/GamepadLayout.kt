@@ -12,6 +12,7 @@ import com.tinkernorth.dish.ui.common.GamepadConstants.CLUSTER_HEIGHT_FRACTION
 import com.tinkernorth.dish.ui.common.GamepadConstants.CLUSTER_X_FRACTION_OF_QUARTER
 import com.tinkernorth.dish.ui.common.GamepadConstants.CONTENT_GAP_DP
 import com.tinkernorth.dish.ui.common.GamepadConstants.DPAD_INNER_PAD_DP
+import com.tinkernorth.dish.ui.common.GamepadConstants.HOME_VERTICAL_OFFSET_FACTOR
 import com.tinkernorth.dish.ui.common.GamepadConstants.L3_STICK_GAP_DP
 import com.tinkernorth.dish.ui.common.GamepadConstants.L3_STICK_RADIUS_FRACTION
 import com.tinkernorth.dish.ui.common.GamepadConstants.SAFE_AREA_CUSHION_DP
@@ -23,6 +24,11 @@ import com.tinkernorth.dish.ui.common.GamepadConstants.STICK_RADIUS_H_FRACTION
 import com.tinkernorth.dish.ui.common.GamepadConstants.STICK_RADIUS_QW_FRACTION
 import com.tinkernorth.dish.ui.common.GamepadConstants.STICK_X_FRACTION_OF_QUARTER
 import com.tinkernorth.dish.ui.common.GamepadConstants.TOP_ROW_Y_FRACTION
+import com.tinkernorth.dish.ui.common.GamepadConstants.TRACKPAD_ASPECT
+import com.tinkernorth.dish.ui.common.GamepadConstants.TRACKPAD_FLANK_BTN_GAP_DP
+import com.tinkernorth.dish.ui.common.GamepadConstants.TRACKPAD_HOME_GAP_DP
+import com.tinkernorth.dish.ui.common.GamepadConstants.TRACKPAD_MAX_HEIGHT_FRACTION
+import com.tinkernorth.dish.ui.common.GamepadConstants.TRACKPAD_WIDTH_FRACTION
 import com.tinkernorth.dish.ui.common.GamepadConstants.TRIGGER_WIDTH_DP
 import kotlin.math.min
 
@@ -48,7 +54,9 @@ internal data class GamepadLayout(
     val selectCx: Float,
     val startCx: Float,
     val homeCx: Float,
+    val homeCy: Float,
     val centerBtnCy: Float,
+    val trackpadRect: RectF? = null,
 )
 
 @Suppress("LongMethod")
@@ -58,9 +66,10 @@ internal fun computeGamepadLayout(
     density: Float,
     safeInsets: Rect,
     skin: GamepadSkin,
+    trackpad: Boolean = false,
 ): GamepadLayout {
-    // Only PlayStation flips the d-pad above the left stick; Switch keeps the Xbox arrangement.
-    val psLayout = skin == GamepadSkin.PlayStation
+    // Only the PlayStation family flips the d-pad above the left stick; Switch keeps the Xbox arrangement.
+    val psLayout = skin == GamepadSkin.PlayStation || skin == GamepadSkin.DualSense
     val cushion = SAFE_AREA_CUSHION_DP * density
     val safeTop = safeInsets.top + cushion
     val safeLeft = safeInsets.left + cushion
@@ -122,6 +131,23 @@ internal fun computeGamepadLayout(
     val centerCx = (contentLeft + contentRight) / 2f
     val centerHalfGap = CENTER_BTN_HALF_GAP_DP * density
 
+    // The trackpad sits where the real DS4/DualSense carries it: top centre, with the
+    // Share/Create and Options buttons flanking it and the PS button dropping below.
+    val trackpadRect =
+        if (psLayout && trackpad) {
+            val padH = min(contentW * TRACKPAD_WIDTH_FRACTION / TRACKPAD_ASPECT, contentH * TRACKPAD_MAX_HEIGHT_FRACTION)
+            val padW = padH * TRACKPAD_ASPECT
+            RectF(centerCx - padW / 2, contentTop, centerCx + padW / 2, contentTop + padH)
+        } else {
+            null
+        }
+    val flankGap = TRACKPAD_FLANK_BTN_GAP_DP * density
+    val selectCx = trackpadRect?.let { it.left - flankGap - smallBtnRadius } ?: (centerCx - centerHalfGap)
+    val startCx = trackpadRect?.let { it.right + flankGap + smallBtnRadius } ?: (centerCx + centerHalfGap)
+    val homeCy =
+        trackpadRect?.let { it.bottom + TRACKPAD_HOME_GAP_DP * density + smallBtnRadius }
+            ?: (centerBtnCy + smallBtnRadius * HOME_VERTICAL_OFFSET_FACTOR)
+
     return GamepadLayout(
         dpadRect = dpadRect,
         abxyRect = abxyRect,
@@ -141,9 +167,11 @@ internal fun computeGamepadLayout(
         l3StickRadius = l3StickRadius,
         btnRadius = btnRadius,
         smallBtnRadius = smallBtnRadius,
-        selectCx = centerCx - centerHalfGap,
-        startCx = centerCx + centerHalfGap,
+        selectCx = selectCx,
+        startCx = startCx,
         homeCx = centerCx,
+        homeCy = homeCy,
         centerBtnCy = centerBtnCy,
+        trackpadRect = trackpadRect,
     )
 }

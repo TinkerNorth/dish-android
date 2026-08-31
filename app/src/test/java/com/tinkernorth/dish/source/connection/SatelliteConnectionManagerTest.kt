@@ -8,9 +8,12 @@ import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.core.jni.ControllerRepository
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.net.DiscoveryGateway
+import com.tinkernorth.dish.core.net.DishProtocol
 import com.tinkernorth.dish.core.net.HttpReply
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedSatellite
+import com.tinkernorth.dish.source.store.MouseSurfaceStore
+import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
 import com.tinkernorth.dish.source.system.LocalNetworkAccess
 import io.mockk.coEvery
@@ -108,6 +111,10 @@ class SatelliteConnectionManagerTest {
 
     private val motionBackendStatusStore = SatelliteMotionBackendStatusStore()
 
+    private val mouseSurfaceStore = MouseSurfaceStore()
+
+    private val hostFeaturesStore = SatelliteHostFeaturesStore()
+
     private fun manager(): SatelliteConnectionManager =
         SatelliteConnectionManager(
             context = context,
@@ -119,6 +126,8 @@ class SatelliteConnectionManagerTest {
             ioDispatcher = ioDispatcher,
             capabilityProvider = capabilityProvider,
             motionBackendStatusStore = motionBackendStatusStore,
+            mouseSurfaceStore = mouseSurfaceStore,
+            hostFeaturesStore = hostFeaturesStore,
         )
 
     private fun runMgrTest(block: suspend (SatelliteConnectionManager, MutableList<ConnectionEvent>) -> Unit) =
@@ -256,12 +265,12 @@ class SatelliteConnectionManagerTest {
             } returns
                 ok(
                     """{"connectionId":"conn_1","token":"00000001","sessionSalt":"0102030405060708",""" +
-                        """"epoch":1,"maxControllers":16,"protocolVersion":1,"controllers":[],""" +
+                        """"epoch":1,"maxControllers":16,"protocolVersion":2,"controllers":[],""" +
                         """"hostFeatures":{"mouseControl":{"granted":false}}}""",
                 )
             every { controllerRepo.openSocket(any(), any()) } returns 5
             val keySlot = io.mockk.slot<ByteArray>()
-            every { controllerRepo.setConnectionParams(5, any(), capture(keySlot)) } returns Unit
+            every { controllerRepo.setConnectionParams(5, any(), capture(keySlot), any()) } returns Unit
 
             mgr.connect(server)
             // NOT advanceUntilIdle: the session is Live here, and its
@@ -663,7 +672,7 @@ class SatelliteConnectionManagerTest {
             } returns
                 ok(
                     """{"connectionId":"conn_1","token":"00000001","sessionSalt":"0102030405060708",""" +
-                        """"epoch":1,"controllers":[],"hostFeatures":{"mouseControl":{"granted":false}}}""",
+                        """"epoch":1,"protocolVersion":2,"controllers":[],"hostFeatures":{"mouseControl":{"granted":false}}}""",
                 )
             every { controllerRepo.openSocket(any(), any()) } returns 5
             coEvery {
@@ -708,13 +717,13 @@ class SatelliteConnectionManagerTest {
             } returns
                 ok(
                     """{"connectionId":"conn_1","token":"00000001","sessionSalt":"0102030405060708",""" +
-                        """"epoch":1,"controllers":[],"hostFeatures":{"mouseControl":{"granted":false}}}""",
+                        """"epoch":1,"protocolVersion":2,"controllers":[],"hostFeatures":{"mouseControl":{"granted":false}}}""",
                 )
             every { controllerRepo.openSocket(any(), any()) } returns 5
             // Mirror the native contract: installing fresh params restarts the counter.
             var sendCounter = 1L
             every { controllerRepo.getSendCounter(any()) } answers { sendCounter }
-            every { controllerRepo.setConnectionParams(any(), any(), any()) } answers { sendCounter = 1L }
+            every { controllerRepo.setConnectionParams(any(), any(), any(), any()) } answers { sendCounter = 1L }
 
             mgr.connect(server)
             scope.testScheduler.runCurrent()
@@ -727,7 +736,7 @@ class SatelliteConnectionManagerTest {
 
             // Exactly one full re-PUT: fresh token/salt/key installed, session Live again.
             coVerify(exactly = 2) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any()) }
-            verify(exactly = 2) { controllerRepo.setConnectionParams(5, any(), any()) }
+            verify(exactly = 2) { controllerRepo.setConnectionParams(5, any(), any(), any()) }
             assertEquals(SatelliteSessionState.Live, mgr.get(serverId)?.state?.value)
 
             // The rotated counter sits back under the threshold: no re-PUT storm.
@@ -745,7 +754,7 @@ class SatelliteConnectionManagerTest {
             } returns
                 ok(
                     """{"connectionId":"conn_1","token":"00000001","sessionSalt":"0102030405060708",""" +
-                        """"epoch":1,"controllers":[],"hostFeatures":{"mouseControl":{"granted":false}}}""",
+                        """"epoch":1,"protocolVersion":2,"controllers":[],"hostFeatures":{"mouseControl":{"granted":false}}}""",
                 )
             every { controllerRepo.openSocket(any(), any()) } returns 5
             var closeReason = -1
@@ -783,7 +792,7 @@ class SatelliteConnectionManagerTest {
                 // The grant is computed ONLY here, and this server keeps denying it.
                 ok(
                     """{"connectionId":"conn_1","token":"00000001","sessionSalt":"0102030405060708",""" +
-                        """"epoch":1,"controllers":[{"ctrlIdx":0,"result":"ok","appliedType":1,""" +
+                        """"epoch":1,"protocolVersion":2,"controllers":[{"ctrlIdx":0,"result":"ok","appliedType":1,""" +
                         """"motion":{"sinkSupportedForType":false,"backendOk":true}}],""" +
                         """"hostFeatures":{"mouseControl":{"granted":false}}}""",
                 )
@@ -865,44 +874,148 @@ class SatelliteConnectionManagerTest {
         }
 
     @Test
-    fun `pair 409 surfaces a protocol mismatch instead of the PIN dialog`() =
+    fun `pair 409 from a newer satellite says update the app, not the PIN dialog`() =
         runMgrTest { mgr, events ->
             coEvery { discoveryRepo.pair(any(), any(), any(), any(), any()) } returns
-                reply(409, """{"error":"protocol version unsupported","supported":2}""")
+                reply(409, """{"error":"protocol version unsupported","supported":9}""")
 
             mgr.connect(server, ConnectIntent.USER_INITIATED)
             scope.testScheduler.advanceUntilIdle()
 
             assertTrue(events.none { it is ConnectionEvent.PairingRequired })
             assertTrue(
-                events.any { it is ConnectionEvent.Error && it.message.contains("protocol", ignoreCase = true) },
+                events.any { it is ConnectionEvent.Error && it.message.contains("Update Dish") },
             )
             assertTrue(serverId !in mgr.staleSatelliteIds.value)
         }
 
     @Test
-    fun `session PUT 409 on a user tap explains the version mismatch`() =
+    fun `pair 409 with a speakable version retries once at that version`() =
         runMgrTest { mgr, events ->
-            every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
-            } returns reply(409, """{"error":"protocol version unsupported","supported":2}""")
+                discoveryRepo.pair(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.CURRENT))
+            } returns reply(409, """{"error":"protocol version unsupported","supported":1}""")
+            coEvery {
+                discoveryRepo.pair(any(), any(), any(), any(), any(), any(), any(), eq(1))
+            } returns ok("""{"ok":false,"error":"PIN required"}""")
 
             mgr.connect(server, ConnectIntent.USER_INITIATED)
             scope.testScheduler.advanceUntilIdle()
 
             assertTrue(
-                events.any { it is ConnectionEvent.Error && it.message.contains("protocol", ignoreCase = true) },
+                "the downgraded retry should reach the PIN dialog, got $events",
+                events.any { it is ConnectionEvent.PairingRequired },
             )
+            coVerify(exactly = 1) {
+                discoveryRepo.pair(any(), any(), any(), any(), any(), any(), any(), eq(1))
+            }
         }
 
     @Test
-    fun `session PUT 409 does not ride the silent retry curve`() =
+    fun `session PUT 409 from a newer satellite tells the user to update the app`() =
         runMgrTest { mgr, events ->
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             coEvery {
                 discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
-            } returns reply(409, """{"error":"protocol version unsupported","supported":2}""")
+            } returns reply(409, """{"error":"protocol version unsupported","supported":9}""")
+
+            mgr.connect(server, ConnectIntent.USER_INITIATED)
+            scope.testScheduler.advanceUntilIdle()
+
+            assertTrue(
+                events.any { it is ConnectionEvent.Error && it.message.contains("Update Dish") },
+            )
+        }
+
+    @Test
+    fun `session PUT 409 with a speakable version settles in one retry and keys the wire to it`() =
+        runMgrTest { mgr, _ ->
+            every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
+            coEvery {
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.CURRENT))
+            } returns reply(409, """{"error":"protocol version unsupported","supported":1}""")
+            coEvery {
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(1))
+            } returns
+                ok(
+                    """{"connectionId":"conn_1","token":"00000001","sessionSalt":"0102030405060708",""" +
+                        """"epoch":1,"maxControllers":16,"protocolVersion":1,"controllers":[],""" +
+                        """"hostFeatures":{"mouseControl":{"granted":false}}}""",
+                )
+            every { controllerRepo.openSocket(any(), any()) } returns 5
+
+            mgr.connect(server, ConnectIntent.USER_INITIATED)
+            scope.testScheduler.runCurrent()
+
+            assertEquals(SatelliteSessionState.Live, mgr.get(serverId)?.state?.value)
+            assertEquals(1, mgr.get(serverId)?.protocolVersion)
+            verify { controllerRepo.setConnectionParams(5, any(), any(), 1) }
+            assertEquals(1, hostFeaturesStore.featuresFor(serverId)?.protocolVersion)
+        }
+
+    @Test
+    fun `the settled version is remembered so the next session offers it directly`() =
+        runMgrTest { mgr, _ ->
+            every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
+            coEvery {
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.CURRENT))
+            } returns reply(409, """{"error":"protocol version unsupported","supported":1}""")
+            coEvery {
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(1))
+            } returns
+                ok(
+                    """{"connectionId":"conn_1","token":"00000001","sessionSalt":"0102030405060708",""" +
+                        """"epoch":1,"maxControllers":16,"protocolVersion":1,"controllers":[],""" +
+                        """"hostFeatures":{"mouseControl":{"granted":false}}}""",
+                )
+            every { controllerRepo.openSocket(any(), any()) } returns 5
+
+            mgr.connect(server, ConnectIntent.USER_INITIATED)
+            scope.testScheduler.runCurrent()
+            mgr.disconnect(serverId)
+            scope.testScheduler.runCurrent()
+            mgr.connect(server, ConnectIntent.USER_INITIATED)
+            scope.testScheduler.runCurrent()
+
+            coVerify(exactly = 1) {
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.CURRENT))
+            }
+            coVerify(exactly = 2) {
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(1))
+            }
+        }
+
+    @Test
+    fun `a store advertisement seeds the first offer without a 409 round trip`() =
+        runMgrTest { mgr, _ ->
+            hostFeaturesStore.noteProtocolVersion(serverId, 1)
+            every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
+            coEvery {
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(1))
+            } returns
+                ok(
+                    """{"connectionId":"conn_1","token":"00000001","sessionSalt":"0102030405060708",""" +
+                        """"epoch":1,"maxControllers":16,"protocolVersion":1,"controllers":[],""" +
+                        """"hostFeatures":{"mouseControl":{"granted":false}}}""",
+                )
+            every { controllerRepo.openSocket(any(), any()) } returns 5
+
+            mgr.connect(server, ConnectIntent.USER_INITIATED)
+            scope.testScheduler.runCurrent()
+
+            assertEquals(SatelliteSessionState.Live, mgr.get(serverId)?.state?.value)
+            coVerify(exactly = 0) {
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.CURRENT))
+            }
+        }
+
+    @Test
+    fun `session PUT 409 from a newer satellite does not ride the silent retry curve`() =
+        runMgrTest { mgr, events ->
+            every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
+            coEvery {
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+            } returns reply(409, """{"error":"protocol version unsupported","supported":9}""")
 
             mgr.connect(server, ConnectIntent.AUTO_RECONNECT)
             scope.testScheduler.advanceTimeBy(120_000)
@@ -1019,7 +1132,7 @@ class SatelliteConnectionManagerTest {
             } returns
                 ok(
                     """{"connectionId":"conn_1","token":"00000001","sessionSalt":"0102030405060708",""" +
-                        """"epoch":1,"controllers":[],"hostFeatures":{"mouseControl":{"granted":false}}}""",
+                        """"epoch":1,"protocolVersion":2,"controllers":[],"hostFeatures":{"mouseControl":{"granted":false}}}""",
                 )
             every { controllerRepo.openSocket(any(), any()) } returns 5
 
@@ -1089,7 +1202,7 @@ class SatelliteConnectionManagerTest {
                 gate.await()
                 ok(
                     """{"connectionId":"conn_1","token":"00000001","sessionSalt":"0102030405060708",""" +
-                        """"epoch":1,"controllers":[],"hostFeatures":{"mouseControl":{"granted":false}}}""",
+                        """"epoch":1,"protocolVersion":2,"controllers":[],"hostFeatures":{"mouseControl":{"granted":false}}}""",
                 )
             }
             every { controllerRepo.openSocket(any(), any()) } returns 5
@@ -1134,7 +1247,7 @@ class SatelliteConnectionManagerTest {
             } returns
                 ok(
                     """{"connectionId":"conn_1","token":"00000001","sessionSalt":"0102030405060708",""" +
-                        """"epoch":1,"controllers":[],"hostFeatures":{"mouseControl":{"granted":false}}}""",
+                        """"epoch":1,"protocolVersion":2,"controllers":[],"hostFeatures":{"mouseControl":{"granted":false}}}""",
                 )
             every { controllerRepo.openSocket(any(), any()) } returns 5
             coEvery {
@@ -1169,7 +1282,7 @@ class SatelliteConnectionManagerTest {
                 gate.await()
                 ok(
                     """{"connectionId":"conn_2","token":"00000002","sessionSalt":"0102030405060708",""" +
-                        """"epoch":4,"controllers":[{"ctrlIdx":0,"result":"ok","appliedType":1,""" +
+                        """"epoch":4,"protocolVersion":2,"controllers":[{"ctrlIdx":0,"result":"ok","appliedType":1,""" +
                         """"motion":{"sinkSupportedForType":false,"backendOk":true}}],""" +
                         """"hostFeatures":{"mouseControl":{"granted":false}}}""",
                 )
@@ -1202,7 +1315,7 @@ class SatelliteConnectionManagerTest {
                 gate.await()
                 ok(
                     """{"connectionId":"conn_1","token":"00000001","sessionSalt":"0102030405060708",""" +
-                        """"epoch":1,"controllers":[],"hostFeatures":{"mouseControl":{"granted":false}}}""",
+                        """"epoch":1,"protocolVersion":2,"controllers":[],"hostFeatures":{"mouseControl":{"granted":false}}}""",
                 )
             }
             every { controllerRepo.openSocket(any(), any()) } returns 5

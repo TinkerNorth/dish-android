@@ -8,6 +8,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GamepadGestureRecognizerTest {
@@ -39,8 +40,12 @@ class GamepadGestureRecognizerTest {
             selectCx = FAR,
             startCx = FAR,
             homeCx = FAR,
+            homeCy = FAR,
             centerBtnCy = FAR,
         )
+
+    // Trackpad zone spanning x 400..600, y 0..100: centre maps to a (0,0) wire frame.
+    private val trackpadLayout = layout.copy(trackpadRect = fakeRect(400f, 0f, 600f, 100f))
 
     private fun fakeRect(
         left: Float,
@@ -52,10 +57,12 @@ class GamepadGestureRecognizerTest {
         val cx = (left + right) / 2f
         val cy = (top + bottom) / 2f
         val width = right - left
+        val height = bottom - top
         return mockk {
             every { centerX() } returns cx
             every { centerY() } returns cy
             every { this@mockk.width() } returns width
+            every { this@mockk.height() } returns height
             val xSlot = slot<Float>()
             val ySlot = slot<Float>()
             every { contains(capture(xSlot), capture(ySlot)) } answers {
@@ -381,6 +388,122 @@ class GamepadGestureRecognizerTest {
 
         recognizer.onTouchEvent(event(MotionEvent.ACTION_CANCEL, x = 1007.5f, y = 1007.5f), layout)
         assertEquals(0, recognizer.state.buttons and ABXY_MASK)
+    }
+
+    private fun eventAt(
+        actionMasked: Int,
+        x: Float,
+        y: Float,
+        timeMs: Long,
+        pid: Int = POINTER_0,
+    ): MotionEvent =
+        mockk {
+            every { this@mockk.actionMasked } returns actionMasked
+            every { actionIndex } returns 0
+            every { pointerCount } returns 1
+            every { getPointerId(0) } returns pid
+            every { getX(0) } returns x
+            every { getY(0) } returns y
+            every { historySize } returns 0
+            every { eventTime } returns timeMs
+        }
+
+    @Test
+    fun `trackpad touch streams rect-normalised finger frames for two fingers`() {
+        recognizer.trackpadMode = GamepadTouchView.TrackpadMode.TOUCH
+        recognizer.onTouchEvent(eventAt(MotionEvent.ACTION_DOWN, x = 400f, y = 0f, timeMs = 1000L), trackpadLayout)
+
+        assertTrue(recognizer.consumeTrackpadDirty())
+        assertTrue(recognizer.trackpadState.finger0Active)
+        assertEquals(Short.MIN_VALUE, recognizer.trackpadState.finger0X)
+        assertEquals(Short.MIN_VALUE, recognizer.trackpadState.finger0Y)
+        assertEquals(1000L, recognizer.trackpadState.eventTimeMs)
+
+        recognizer.onTouchEvent(
+            eventAt(MotionEvent.ACTION_POINTER_DOWN, x = 600f, y = 100f, timeMs = 1010L, pid = POINTER_1),
+            trackpadLayout,
+        )
+        assertTrue(recognizer.consumeTrackpadDirty())
+        assertTrue(recognizer.trackpadState.finger1Active)
+        assertEquals(Short.MAX_VALUE, recognizer.trackpadState.finger1X)
+        assertEquals(Short.MAX_VALUE, recognizer.trackpadState.finger1Y)
+    }
+
+    @Test
+    fun `a quick still tap queues a click pulse at the touch position`() {
+        recognizer.trackpadMode = GamepadTouchView.TrackpadMode.TOUCH
+        recognizer.trackpadTapSlopPx = 10f
+        recognizer.onTouchEvent(eventAt(MotionEvent.ACTION_DOWN, x = 450f, y = 25f, timeMs = 1000L), trackpadLayout)
+        recognizer.onTouchEvent(eventAt(MotionEvent.ACTION_UP, x = 450f, y = 25f, timeMs = 1120L), trackpadLayout)
+
+        assertEquals(false, recognizer.trackpadState.finger0Active)
+        val tap = recognizer.takePendingTrackpadTap()
+        assertEquals((-16384).toShort(), tap?.x)
+        assertEquals((-16384).toShort(), tap?.y)
+        assertEquals(null, recognizer.takePendingTrackpadTap())
+    }
+
+    @Test
+    fun `a drag past the slop never queues a click`() {
+        recognizer.trackpadMode = GamepadTouchView.TrackpadMode.TOUCH
+        recognizer.trackpadTapSlopPx = 10f
+        recognizer.onTouchEvent(eventAt(MotionEvent.ACTION_DOWN, x = 450f, y = 50f, timeMs = 1000L), trackpadLayout)
+        recognizer.onTouchEvent(eventAt(MotionEvent.ACTION_MOVE, x = 480f, y = 50f, timeMs = 1050L), trackpadLayout)
+        recognizer.onTouchEvent(eventAt(MotionEvent.ACTION_UP, x = 480f, y = 50f, timeMs = 1100L), trackpadLayout)
+
+        assertEquals(null, recognizer.takePendingTrackpadTap())
+    }
+
+    @Test
+    fun `a slow press never queues a click`() {
+        recognizer.trackpadMode = GamepadTouchView.TrackpadMode.TOUCH
+        recognizer.trackpadTapSlopPx = 10f
+        recognizer.onTouchEvent(eventAt(MotionEvent.ACTION_DOWN, x = 450f, y = 50f, timeMs = 1000L), trackpadLayout)
+        recognizer.onTouchEvent(eventAt(MotionEvent.ACTION_UP, x = 450f, y = 50f, timeMs = 1300L), trackpadLayout)
+
+        assertEquals(null, recognizer.takePendingTrackpadTap())
+    }
+
+    @Test
+    fun `click mode holds the touchpad button for the touch duration and emits no frames`() {
+        recognizer.trackpadMode = GamepadTouchView.TrackpadMode.CLICK
+        recognizer.onTouchEvent(eventAt(MotionEvent.ACTION_DOWN, x = 500f, y = 50f, timeMs = 1000L), trackpadLayout)
+
+        assertEquals(GamepadTouchView.BTN_TOUCHPAD_CLICK, recognizer.state.buttons and GamepadTouchView.BTN_TOUCHPAD_CLICK)
+        assertEquals(false, recognizer.consumeTrackpadDirty())
+
+        recognizer.onTouchEvent(eventAt(MotionEvent.ACTION_UP, x = 500f, y = 50f, timeMs = 1100L), trackpadLayout)
+        assertEquals(0, recognizer.state.buttons and GamepadTouchView.BTN_TOUCHPAD_CLICK)
+    }
+
+    @Test
+    fun `a trackpad lift never drops held centre buttons`() {
+        val withSelect = trackpadLayout.copy(selectCx = 700f, centerBtnCy = 50f, smallBtnRadius = 10f)
+        recognizer.trackpadMode = GamepadTouchView.TrackpadMode.TOUCH
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 700f, y = 50f, pid = POINTER_0), withSelect)
+        assertEquals(GamepadTouchView.BTN_SELECT, recognizer.state.buttons and GamepadTouchView.BTN_SELECT)
+
+        recognizer.onTouchEvent(
+            eventAt(MotionEvent.ACTION_POINTER_DOWN, x = 500f, y = 50f, timeMs = 1000L, pid = POINTER_1),
+            withSelect,
+        )
+        recognizer.onTouchEvent(
+            eventAt(MotionEvent.ACTION_POINTER_UP, x = 500f, y = 50f, timeMs = 1050L, pid = POINTER_1),
+            withSelect,
+        )
+
+        assertEquals(GamepadTouchView.BTN_SELECT, recognizer.state.buttons and GamepadTouchView.BTN_SELECT)
+    }
+
+    @Test
+    fun `cancel lifts trackpad fingers with a dirty clean frame`() {
+        recognizer.trackpadMode = GamepadTouchView.TrackpadMode.TOUCH
+        recognizer.onTouchEvent(eventAt(MotionEvent.ACTION_DOWN, x = 500f, y = 50f, timeMs = 1000L), trackpadLayout)
+        assertTrue(recognizer.consumeTrackpadDirty())
+
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_CANCEL, x = 500f, y = 50f), trackpadLayout)
+        assertTrue(recognizer.consumeTrackpadDirty())
+        assertEquals(false, recognizer.trackpadState.anyFingerDown())
     }
 
     private companion object {

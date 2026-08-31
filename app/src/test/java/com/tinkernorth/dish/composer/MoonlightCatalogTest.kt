@@ -64,13 +64,21 @@ class MoonlightCatalogTest {
 
     @Test
     fun `the host layer crosses nothing out, because no host reports its capabilities`() {
-        listOf(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.MOTION, Feature.TOUCHPAD, Feature.RUMBLE, Feature.LIGHTBAR)
-            .forEach { assertTrue(it.name, it in MoonlightCatalog.HOST_LAYER) }
+        listOf(
+            Feature.GAMEPAD,
+            Feature.ANALOG_TRIGGERS,
+            Feature.MOTION,
+            Feature.TOUCHPAD,
+            Feature.MOUSE,
+            Feature.RUMBLE,
+            Feature.LIGHTBAR,
+        ).forEach { assertTrue(it.name, it in MoonlightCatalog.HOST_LAYER) }
     }
 
     @Test
-    fun `the host layer does not claim the satellites mouse or keyboard injection`() {
-        assertFalse(Feature.MOUSE in MoonlightCatalog.HOST_LAYER)
+    fun `mouse rides the control stream on every type, keyboard stays out until implemented`() {
+        listOf(MoonlightEmulatedType.XBOX, MoonlightEmulatedType.PLAYSTATION, MoonlightEmulatedType.NINTENDO)
+            .forEach { type -> assertTrue(Feature.MOUSE in MoonlightCatalog.typeCapabilities(type)) }
         assertFalse(Feature.KEYBOARD in MoonlightCatalog.HOST_LAYER)
     }
 

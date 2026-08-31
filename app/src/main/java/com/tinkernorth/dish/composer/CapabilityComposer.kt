@@ -15,12 +15,12 @@ import com.tinkernorth.dish.repository.SatelliteCatalogRepository
 import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.sensor.PhoneMotionAvailability
 import com.tinkernorth.dish.source.store.MotionEnabledStore
+import com.tinkernorth.dish.source.store.MouseSurfaceStore
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.store.SatelliteHostRuntimeStore
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatus
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
-import com.tinkernorth.dish.source.store.TouchpadModeStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -30,7 +30,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Suppress("UNCHECKED_CAST", "LongParameterList")
-private inline fun <T1, T2, T3, T4, T5, T6, T7, T8, R> combine8(
+private inline fun <T1, T2, T3, T4, T5, T6, T7, R> combine7(
     f1: Flow<T1>,
     f2: Flow<T2>,
     f3: Flow<T3>,
@@ -38,10 +38,9 @@ private inline fun <T1, T2, T3, T4, T5, T6, T7, T8, R> combine8(
     f5: Flow<T5>,
     f6: Flow<T6>,
     f7: Flow<T7>,
-    f8: Flow<T8>,
-    crossinline transform: suspend (T1, T2, T3, T4, T5, T6, T7, T8) -> R,
+    crossinline transform: suspend (T1, T2, T3, T4, T5, T6, T7) -> R,
 ): Flow<R> =
-    combine(f1, f2, f3, f4, f5, f6, f7, f8) { args ->
+    combine(f1, f2, f3, f4, f5, f6, f7) { args ->
         transform(
             args[0] as T1,
             args[1] as T2,
@@ -50,7 +49,6 @@ private inline fun <T1, T2, T3, T4, T5, T6, T7, T8, R> combine8(
             args[4] as T5,
             args[5] as T6,
             args[6] as T7,
-            args[7] as T8,
         )
     }
 
@@ -65,7 +63,7 @@ class CapabilityComposer
         private val native: PhysicalInputNative,
         private val motionEnabled: MotionEnabledStore,
         private val rumbleEnabled: RumbleEnabledStore,
-        private val touchpadMode: TouchpadModeStore,
+        private val mouseSurface: MouseSurfaceStore,
         private val hostFeatures: SatelliteHostFeaturesStore,
         private val motionBackend: SatelliteMotionBackendStatusStore,
         private val hostRuntime: SatelliteHostRuntimeStore,
@@ -76,16 +74,15 @@ class CapabilityComposer
         private val phoneHasGyro: Boolean = phoneAvailability.hasGyro
 
         override fun upstream(): Flow<Map<String, SlotCapabilities>> =
-            combine8(
+            combine7(
                 registry.devices,
                 hub.bindings,
                 hub.connections,
                 motionEnabled.state,
                 rumbleEnabled.state,
-                touchpadMode.state,
                 hostFeatures.state,
                 motionBackend.state,
-            ) { devices, bindings, summaries, motionMap, rumbleMap, touchpadMap, hostMap, backendMap ->
+            ) { devices, bindings, summaries, motionMap, rumbleMap, hostMap, backendMap ->
                 val summariesById = summaries.associateBy { it.id }
                 val out = HashMap<String, SlotCapabilities>(devices.size + 1)
 
@@ -97,7 +94,6 @@ class CapabilityComposer
                         summariesById = summariesById,
                         motionMap = motionMap,
                         rumbleMap = rumbleMap,
-                        touchpadMap = touchpadMap,
                         hostMap = hostMap,
                         backendMap = backendMap,
                     )
@@ -112,7 +108,6 @@ class CapabilityComposer
                             summariesById = summariesById,
                             motionMap = motionMap,
                             rumbleMap = rumbleMap,
-                            touchpadMap = touchpadMap,
                             hostMap = hostMap,
                             backendMap = backendMap,
                         )
@@ -149,7 +144,7 @@ class CapabilityComposer
         fun touchpadWireMode(slotId: String): String {
             val connId = hub.bindings.value[slotId] ?: return TouchpadModeValue.OFF
             return TouchpadRouting.wireMode(
-                pick = touchpadMode.state.value[connId],
+                mouseSurfaceOpen = mouseSurface.isOpen(slotId),
                 controller = liveControllerLayer(slotId),
                 type =
                     typeCapabilitiesFor(
@@ -193,7 +188,6 @@ class CapabilityComposer
             summariesById: Map<String, ConnectionSummary>,
             motionMap: Map<String, Boolean>,
             rumbleMap: Map<String, Boolean>,
-            touchpadMap: Map<String, String>,
             hostMap: Map<String, HostFeatureSet>,
             backendMap: Map<Pair<String, String>, SatelliteMotionBackendStatus>,
         ): SlotCapabilities {
@@ -201,13 +195,12 @@ class CapabilityComposer
             val summary = connId?.let { summariesById[it] }
             val motionOn = motionMap[slotId] ?: MotionEnabledStore.DEFAULT_ENABLED
             val rumbleOn = rumbleMap[slotId] ?: RumbleEnabledStore.DEFAULT_ENABLED
-            val touchpad = connId?.let { touchpadMap[it] } ?: TouchpadModeValue.OFF
             return CapabilityResolver.resolve(
                 controller = controller,
                 transport = transportLayer(summary),
                 type = typeLayer(slotId, summary),
                 host = hostLayer(connId, summary, hostMap),
-                userEnabled = CapabilityResolver.userEnabledCapabilities(motionOn, rumbleOn, touchpad),
+                userEnabled = CapabilityResolver.userEnabledCapabilities(motionOn, rumbleOn),
                 runtimeDown = runtimeDownLayer(connId, slotId, backendMap),
             )
         }

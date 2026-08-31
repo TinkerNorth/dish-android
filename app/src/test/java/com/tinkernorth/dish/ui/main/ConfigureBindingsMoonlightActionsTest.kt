@@ -16,7 +16,6 @@ import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.repository.SatelliteCapabilitiesRepository
 import com.tinkernorth.dish.repository.SatelliteCatalogRepository
-import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent
@@ -25,7 +24,7 @@ import com.tinkernorth.dish.source.connection.moonlight.MoonlightProbe
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
-import com.tinkernorth.dish.source.store.TouchpadModeStore
+import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -105,8 +104,6 @@ class ConfigureBindingsMoonlightActionsTest {
         every { capabilities.capabilityForCandidate(any(), any(), any(), any()) } returns SlotCapabilities.NONE
         val registry = mockk<PhysicalGamepadRegistry>(relaxed = true)
         every { registry.devices } returns MutableStateFlow(emptyMap())
-        val touchpad = mockk<TouchpadModeStore>(relaxed = true)
-        every { touchpad.modeFor(any()) } returns TouchpadModeValue.OFF
         val usb = mockk<UsbGamepadManager>(relaxed = true)
         every { usb.controllers } returns MutableStateFlow(emptyMap())
 
@@ -118,13 +115,13 @@ class ConfigureBindingsMoonlightActionsTest {
                 motionEnabledStore = mockk<MotionEnabledStore>(relaxed = true),
                 rumbleEnabledStore = mockk<RumbleEnabledStore>(relaxed = true),
                 capabilityComposer = capabilities,
-                touchpadModeStore = touchpad,
                 satellite = mockk<SatelliteConnectionManager>(relaxed = true),
                 moonlight = moonlight,
                 usbGamepadManager = usb,
                 catalogRepo = mockk<SatelliteCatalogRepository>(relaxed = true),
                 capabilitiesRepo = mockk<SatelliteCapabilitiesRepository>(relaxed = true),
                 native = mockk<PhysicalInputNative>(relaxed = true),
+                hostFeaturesStore = SatelliteHostFeaturesStore(),
             )
     }
 

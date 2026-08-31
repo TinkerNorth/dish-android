@@ -18,7 +18,6 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.ConcatAdapter
 import com.google.androidgamesdk.GameActivity
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.model.DishNotification
@@ -34,7 +33,6 @@ import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.DishSpinnerDrawable
-import com.tinkernorth.dish.ui.common.GamepadSkin
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachGamepadHost
@@ -240,10 +238,11 @@ class MainActivity :
             s.slots,
             s.connections,
             s.motionCapabilities,
-            s.touchpadBySlot,
+            s.pointerBySlot,
             s.pathCards,
             s.inputRates,
             s.screenPeakHz,
+            s.hostCompat,
         )
     }
 
@@ -293,8 +292,16 @@ class MainActivity :
         val state = viewModel.uiState.value
         val slot = state.slots.firstOrNull { it.id == slotId } ?: return
         val cid = slot.boundConnectionId ?: return
-        if (state.touchpadBySlot[slotId]?.openable != true) return
+        if (state.pointerBySlot[slotId]?.touchpadOpenable != true) return
         nav.toTouchpad(connectionId = cid, slotId = slotId)
+    }
+
+    override fun onOpenMouse(slotId: String) {
+        val state = viewModel.uiState.value
+        val slot = state.slots.firstOrNull { it.id == slotId } ?: return
+        val cid = slot.boundConnectionId ?: return
+        if (state.pointerBySlot[slotId]?.mouseOpenable != true) return
+        nav.toMouse(connectionId = cid, slotId = slotId)
     }
 
     override fun onSwitchToDirect(slotId: String) {
@@ -317,15 +324,7 @@ class MainActivity :
                 )
                 return
             }
-        val summary = slot.boundStatus
-        // Bluetooth carries its skin in the profile name; a satellite carries it in the per-slot type.
-        val skin =
-            when (summary?.btProfile) {
-                "PlayStation" -> GamepadSkin.PlayStation
-                "Xbox" -> GamepadSkin.Xbox
-                else -> GamepadSkin.forControllerType(summary?.satelliteControllerTypes?.get(slotId) ?: CONTROLLER_TYPE_XBOX)
-            }
-        nav.toGamepad(connectionId = cid, skin = skin)
+        nav.toGamepad(connectionId = cid, skin = viewModel.gamepadSkinFor(slotId))
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean = gamepadHost.dispatchKeyEvent(event) || super.dispatchKeyEvent(event)

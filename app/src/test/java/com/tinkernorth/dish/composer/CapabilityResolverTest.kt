@@ -9,7 +9,6 @@ import com.tinkernorth.dish.core.model.Direction
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.core.net.ControllerDescriptor
-import com.tinkernorth.dish.repository.TouchpadModeValue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -71,7 +70,7 @@ class CapabilityResolverTest {
 
     @Test
     fun `userEnabledCapabilities always carries GAMEPAD and ANALOG_TRIGGERS`() {
-        val caps = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = false, touchpadMode = TouchpadModeValue.OFF)
+        val caps = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = false)
         assertTrue(Feature.GAMEPAD in caps)
         assertTrue(Feature.ANALOG_TRIGGERS in caps)
         assertFalse(Feature.MOTION in caps)
@@ -80,23 +79,16 @@ class CapabilityResolverTest {
 
     @Test
     fun `userEnabledCapabilities reflects motion and rumble toggles`() {
-        val caps = CapabilityResolver.userEnabledCapabilities(motionOn = true, rumbleOn = true, touchpadMode = TouchpadModeValue.OFF)
+        val caps = CapabilityResolver.userEnabledCapabilities(motionOn = true, rumbleOn = true)
         assertTrue(Feature.MOTION in caps)
         assertTrue(Feature.RUMBLE in caps)
     }
 
     @Test
-    fun `userEnabledCapabilities maps ds4 touchpad mode to TOUCHPAD`() {
-        val caps = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = false, touchpadMode = TouchpadModeValue.DS4)
+    fun `touch and mouse have no user toggle and always ride userEnabled`() {
+        val caps = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = false)
         assertTrue(Feature.TOUCHPAD in caps)
-        assertFalse(Feature.MOUSE in caps)
-    }
-
-    @Test
-    fun `userEnabledCapabilities maps mouse touchpad mode to MOUSE`() {
-        val caps = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = false, touchpadMode = TouchpadModeValue.MOUSE)
         assertTrue(Feature.MOUSE in caps)
-        assertFalse(Feature.TOUCHPAD in caps)
     }
 
     @Test

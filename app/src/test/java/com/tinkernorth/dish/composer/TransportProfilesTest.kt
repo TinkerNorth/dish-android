@@ -24,4 +24,14 @@ class TransportProfilesTest {
         assertFalse(Feature.RUMBLE in caps)
         assertFalse(Feature.TOUCHPAD in caps)
     }
+
+    @Test
+    fun `moonlight carries the pad, the pointer surfaces and feedback, but no keyboard`() {
+        val caps = TransportProfiles.forKind(ConnectionKind.MOONLIGHT)
+        assertTrue(Feature.GAMEPAD in caps)
+        assertTrue(Feature.TOUCHPAD in caps)
+        assertTrue(Feature.MOUSE in caps)
+        assertTrue(Feature.RUMBLE in caps)
+        assertFalse(Feature.KEYBOARD in caps)
+    }
 }

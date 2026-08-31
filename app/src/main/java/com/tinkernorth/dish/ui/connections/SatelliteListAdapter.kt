@@ -14,6 +14,7 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.DiscoveredServer
+import com.tinkernorth.dish.core.net.DishProtocol
 import com.tinkernorth.dish.databinding.RowConnectionBinding
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.ui.common.setLoading
@@ -22,6 +23,7 @@ import com.tinkernorth.dish.ui.common.statusChipText
 sealed interface SatelliteRow {
     data class Known(
         val summary: ConnectionSummary,
+        val compat: DishProtocol.Compat = DishProtocol.Compat.UNKNOWN,
     ) : SatelliteRow
 
     data class Discovered(
@@ -120,6 +122,29 @@ class SatelliteListAdapter(
             b.btnRowSecondary.visibility = View.VISIBLE
             b.btnRowSecondary.text = ctx.getString(R.string.action_forget_short)
             b.btnRowSecondary.setOnClickListener { listener.onForget(c.id) }
+            paintCompat(row.compat)
+        }
+
+        private fun paintCompat(compat: DishProtocol.Compat) {
+            val spec =
+                when (compat) {
+                    DishProtocol.Compat.SATELLITE_UPDATE_AVAILABLE ->
+                        Triple(R.string.chip_satellite_update_available, R.drawable.bg_binding_pill_warn, R.color.colorTertiary)
+                    DishProtocol.Compat.SATELLITE_UPDATE_REQUIRED ->
+                        Triple(R.string.chip_satellite_update_required, R.drawable.bg_binding_pill_error, R.color.colorError)
+                    DishProtocol.Compat.APP_UPDATE_REQUIRED ->
+                        Triple(R.string.chip_app_update_required, R.drawable.bg_binding_pill_error, R.color.colorError)
+                    DishProtocol.Compat.UNKNOWN, DishProtocol.Compat.CURRENT -> null
+                }
+            if (spec == null) {
+                b.tvRowUpdate.visibility = View.GONE
+                return
+            }
+            val (text, background, color) = spec
+            b.tvRowUpdate.visibility = View.VISIBLE
+            b.tvRowUpdate.setText(text)
+            b.tvRowUpdate.setBackgroundResource(background)
+            b.tvRowUpdate.setTextColor(ctx.getColor(color))
         }
 
         private fun bindDiscovered(row: SatelliteRow.Discovered) {
@@ -135,6 +160,7 @@ class SatelliteListAdapter(
             b.btnRowAction.setOnClickListener { listener.onConnect(row) }
             b.btnRowSecondary.visibility = View.GONE
             b.btnRowSecondary.setOnClickListener(null)
+            b.tvRowUpdate.visibility = View.GONE
         }
     }
 

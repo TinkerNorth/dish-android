@@ -24,7 +24,6 @@ import com.tinkernorth.dish.source.sensor.BatteryValidator
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import com.tinkernorth.dish.source.store.ControllerTypeStore
 import com.tinkernorth.dish.source.store.SlotBindingStore
-import com.tinkernorth.dish.source.store.TouchpadModeStore
 import com.tinkernorth.dish.ui.connections.ConnectionsActivity
 import com.tinkernorth.dish.ui.main.BatteryUi
 import com.tinkernorth.dish.ui.main.GamepadOverlayActivity
@@ -60,7 +59,6 @@ class DishScreenshots {
     private lateinit var bindingStore: SlotBindingStore
     private lateinit var typeStore: ControllerTypeStore
     private lateinit var batteryStore: BatteryStatusStore
-    private lateinit var touchpadStore: TouchpadModeStore
     private lateinit var registry: PhysicalGamepadRegistry
 
     @Before
@@ -79,7 +77,6 @@ class DishScreenshots {
                 val vm =
                     androidx.lifecycle.ViewModelProvider(activity)[MainViewModel::class.java]
                 batteryStore = vm.fieldValue("batteryStatusStore") as BatteryStatusStore
-                touchpadStore = vm.fieldValue("touchpadModeStore") as TouchpadModeStore
             }
         }
         bindingStore = hub.fieldValue("bindingStore") as SlotBindingStore
@@ -129,7 +126,6 @@ class DishScreenshots {
         store.rememberSatellite(gamingServer)
         store.rememberSatellite(officeServer)
         pushFlow(satellite, "_connections", mapOf(gamingId to liveSession(gamingServer)))
-        touchpadStore.setMode(gamingId, "ds4")
         bindingStore.bind("virtual", gamingId)
         bindingStore.bind("1001", gamingId)
         typeStore.setType(gamingId, "1001", CONTROLLER_TYPE_PLAYSTATION)
@@ -159,7 +155,6 @@ class DishScreenshots {
     private fun seedInGame() {
         store.rememberSatellite(gamingServer)
         pushFlow(satellite, "_connections", mapOf(gamingId to liveSession(gamingServer)))
-        touchpadStore.setMode(gamingId, "ds4")
         bindingStore.bind("virtual", gamingId)
         batteryPut("virtual", 91, BatteryValidator.STATUS_DISCHARGING)
         pushFlow(app.wakeStateController, "_streamingSlotCount", 1)

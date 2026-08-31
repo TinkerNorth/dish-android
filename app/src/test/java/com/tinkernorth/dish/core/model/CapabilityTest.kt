@@ -2,6 +2,7 @@
 
 package com.tinkernorth.dish.core.model
 
+import com.tinkernorth.dish.core.net.DishProtocol
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -164,5 +165,78 @@ class CapabilityTest {
         assertFalse(features.rumbleReturn)
         assertTrue(Feature.MOUSE in features.toCapabilitySet())
         assertFalse(Feature.RUMBLE in features.toCapabilitySet())
+    }
+
+    @Test
+    fun `extended mouse needs a v2 protocol read, so an unversioned document means basic`() {
+        assertFalse(HostFeatureSet.SATELLITE_DEFAULT.extendedMouse)
+        val fromV1Catalog =
+            HostFeatureSet.fromCatalog(
+                CatalogDto(hostFeatures = mapOf("mouseControl" to CatalogHostFeatureDto(supported = true))),
+            )
+        assertFalse(fromV1Catalog.extendedMouse)
+        val fromV1Caps =
+            HostFeatureSet.fromServerCapabilities(
+                ServerCapabilitiesDto(host = ServerHostDto(mouseControl = ServerHostFeatureDto(supported = true))),
+            )
+        assertFalse(fromV1Caps.extendedMouse)
+    }
+
+    @Test
+    fun `fromCatalog carries the protocol version into extended mouse`() {
+        val features =
+            HostFeatureSet.fromCatalog(
+                CatalogDto(
+                    protocolVersion = 2,
+                    hostFeatures = mapOf("mouseControl" to CatalogHostFeatureDto(supported = true)),
+                ),
+            )
+        assertEquals(2, features.protocolVersion)
+        assertTrue(features.extendedMouse)
+    }
+
+    @Test
+    fun `fromServerCapabilities carries the protocol version into extended mouse`() {
+        val features =
+            HostFeatureSet.fromServerCapabilities(
+                ServerCapabilitiesDto(
+                    protocolVersion = 2,
+                    host = ServerHostDto(mouseControl = ServerHostFeatureDto(supported = true, available = true)),
+                ),
+            )
+        assertEquals(2, features.protocolVersion)
+        assertTrue(features.extendedMouse)
+    }
+
+    @Test
+    fun `compat mirrors the advertised version, with zero reading as unknown`() {
+        assertEquals(DishProtocol.Compat.UNKNOWN, HostFeatureSet.SATELLITE_DEFAULT.compat)
+        assertEquals(
+            DishProtocol.Compat.SATELLITE_UPDATE_AVAILABLE,
+            HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DishProtocol.CURRENT - 1).compat,
+        )
+        assertEquals(
+            DishProtocol.Compat.CURRENT,
+            HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DishProtocol.CURRENT).compat,
+        )
+        assertEquals(
+            DishProtocol.Compat.APP_UPDATE_REQUIRED,
+            HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DishProtocol.CURRENT + 1).compat,
+        )
+    }
+
+    @Test
+    fun `extended mouse needs both the version and mouse control itself`() {
+        val versionWithoutMouse =
+            HostFeatureSet.fromCatalog(CatalogDto(protocolVersion = 2))
+        assertFalse(versionWithoutMouse.extendedMouse)
+        val futureVersion =
+            HostFeatureSet.fromCatalog(
+                CatalogDto(
+                    protocolVersion = 3,
+                    hostFeatures = mapOf("mouseControl" to CatalogHostFeatureDto(supported = true)),
+                ),
+            )
+        assertTrue(futureVersion.extendedMouse)
     }
 }

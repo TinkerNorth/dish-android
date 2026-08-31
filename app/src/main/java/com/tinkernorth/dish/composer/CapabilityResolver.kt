@@ -66,16 +66,15 @@ object CapabilityResolver {
         return caps
     }
 
+    // Touch and mouse have no user toggle: whatever the path can carry is simply on,
+    // so both ride here unconditionally and the layer intersection does the gating.
     fun userEnabledCapabilities(
         motionOn: Boolean,
         rumbleOn: Boolean,
-        touchpadMode: String,
     ): CapabilitySet {
-        val out = mutableSetOf(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS)
+        val out = mutableSetOf(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.TOUCHPAD, Feature.MOUSE)
         if (motionOn) out += Feature.MOTION
         if (rumbleOn) out += Feature.RUMBLE
-        if (touchpadMode == TouchpadModeValue.DS4) out += Feature.TOUCHPAD
-        if (touchpadMode == TouchpadModeValue.MOUSE) out += Feature.MOUSE
         return CapabilitySet(out)
     }
 }

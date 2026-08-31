@@ -159,6 +159,19 @@ class DishNavigator(
         )
     }
 
+    fun toMouse(
+        connectionId: String,
+        slotId: String,
+    ) {
+        go(
+            R.id.mouseOverlayActivity,
+            Bundle().apply {
+                putString("extra_connection_id", connectionId)
+                putString("extra_slot_id", slotId)
+            },
+        )
+    }
+
     fun toGamepad(
         connectionId: String,
         skin: GamepadSkin,

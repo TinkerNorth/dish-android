@@ -8,6 +8,7 @@ import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
+import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -23,10 +24,11 @@ class ConnectionsViewModel
         satellite: SatelliteConnectionManager,
         moonlight: MoonlightConnectionManager,
         store: ConnectionStore,
+        hostFeatures: SatelliteHostFeaturesStore,
     ) : ViewModel() {
         // The satellite/BT half of the state, so the Moonlight flows fit in one more combine.
         private data class SatBtSlice(
-            val satelliteRows: List<SatelliteRow>,
+            val discovered: List<com.tinkernorth.dish.core.model.DiscoveredServer>,
             val bluetoothSummaries: List<com.tinkernorth.dish.composer.ConnectionSummary>,
             val rememberedBtIds: Set<String>,
             val scanning: Boolean,
@@ -42,7 +44,7 @@ class ConnectionsViewModel
                 store.rememberedBtFlow,
             ) { conns, discovered, scanning, lastScan, rememberedBt ->
                 SatBtSlice(
-                    satelliteRows = satelliteRows(conns, discovered),
+                    discovered = discovered,
                     bluetoothSummaries = bluetoothSummaries(conns),
                     rememberedBtIds = rememberedBt.mapTo(mutableSetOf()) { it.id },
                     scanning = scanning,
@@ -80,9 +82,10 @@ class ConnectionsViewModel
                 satBt,
                 hub.connections,
                 moonlightSlice,
-            ) { slice, conns, ml ->
+                hostFeatures.state,
+            ) { slice, conns, ml, features ->
                 ConnectionsUiState(
-                    satelliteRows = slice.satelliteRows,
+                    satelliteRows = satelliteRows(conns, slice.discovered, features),
                     bluetoothSummaries = slice.bluetoothSummaries,
                     moonlightRows = moonlightRows(conns, ml.discovered, ml.pairedIds, ml.verifiedIds),
                     rememberedBtIds = slice.rememberedBtIds,

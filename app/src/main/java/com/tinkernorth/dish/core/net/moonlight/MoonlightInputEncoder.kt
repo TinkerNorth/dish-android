@@ -31,6 +31,8 @@ object MoonlightInputEncoder {
     // why the body is 8 bytes and not the 7 its fields add up to.
     const val CONTROLLER_ARRIVAL_LEN = 20
     const val MOUSE_MOVE_REL_LEN = 16
+    const val MOUSE_BUTTON_LEN = 13
+    const val MOUSE_SCROLL_LEN = 18
     const val PERIODIC_PING_LEN = 8
     const val TERMINATION_LEN = 8
 
@@ -39,6 +41,8 @@ object MoonlightInputEncoder {
     private const val MULTI_DATA_SIZE = 30
     private const val ARRIVAL_DATA_SIZE = 12
     private const val MOUSE_REL_DATA_SIZE = 8
+    private const val MOUSE_BUTTON_DATA_SIZE = 5
+    private const val MOUSE_SCROLL_DATA_SIZE = 10
 
     /**
      * Encode a CONTROLLER_MULTI packet into [dst] starting at position 0 and
@@ -169,6 +173,42 @@ object MoonlightInputEncoder {
         buf.putInt(MoonlightControlProtocol.INPUT_MOUSE_MOVE_REL)
         putShortBE(buf, deltaX)
         putShortBE(buf, deltaY)
+        return buf.toByteArray()
+    }
+
+    /** MOUSE_BUTTON_DOWN/UP: one u8 button id after the wrapper (Wolf control.hpp). */
+    fun mouseButton(
+        down: Boolean,
+        button: Int,
+    ): ByteArray {
+        val buf = ByteBuffer.allocate(MOUSE_BUTTON_LEN).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putShort(MoonlightControlProtocol.CTRL_INPUT_DATA.toShort())
+        buf.putShort((MOUSE_BUTTON_LEN - CONTROL_HEADER_LEN).toShort())
+        putIntBE(buf, MOUSE_BUTTON_DATA_SIZE)
+        buf.putInt(
+            if (down) {
+                MoonlightControlProtocol.INPUT_MOUSE_BUTTON_DOWN
+            } else {
+                MoonlightControlProtocol.INPUT_MOUSE_BUTTON_UP
+            },
+        )
+        buf.put(button.toByte())
+        return buf.toByteArray()
+    }
+
+    /**
+     * MOUSE_SCROLL: big-endian scroll_amt1 duplicated as scroll_amt2 plus a zero
+     * i16 (Wolf control.hpp MOUSE_SCROLL_PACKET). 120 per wheel notch, sign = up.
+     */
+    fun mouseScroll(amount: Int): ByteArray {
+        val buf = ByteBuffer.allocate(MOUSE_SCROLL_LEN).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putShort(MoonlightControlProtocol.CTRL_INPUT_DATA.toShort())
+        buf.putShort((MOUSE_SCROLL_LEN - CONTROL_HEADER_LEN).toShort())
+        putIntBE(buf, MOUSE_SCROLL_DATA_SIZE)
+        buf.putInt(MoonlightControlProtocol.INPUT_MOUSE_SCROLL)
+        putShortBE(buf, amount)
+        putShortBE(buf, amount)
+        putShortBE(buf, 0)
         return buf.toByteArray()
     }
 

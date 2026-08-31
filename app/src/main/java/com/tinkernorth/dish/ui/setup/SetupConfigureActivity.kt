@@ -19,14 +19,16 @@ import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.core.model.Feature
+import com.tinkernorth.dish.core.net.DishProtocol
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.databinding.ActivitySetupConfigureBinding
 import com.tinkernorth.dish.databinding.SetupReviewCardBinding
 import com.tinkernorth.dish.databinding.SetupTypeCardBinding
-import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.ui.common.bundledControllerTypeGlyphRes
+import com.tinkernorth.dish.ui.common.moonlightTypeGlyphRes
 import com.tinkernorth.dish.ui.common.moonlightTypeLabelRes
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.main.ApplyState
@@ -36,6 +38,7 @@ import com.tinkernorth.dish.ui.main.ConfigUiState
 import com.tinkernorth.dish.ui.main.ConfigureBindingsViewModel
 import com.tinkernorth.dish.ui.main.MoonlightAction
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
+import com.tinkernorth.dish.ui.main.bindCompat
 import com.tinkernorth.dish.ui.main.bindMoonlightSession
 import com.tinkernorth.dish.ui.main.iconRes
 import dagger.hilt.android.AndroidEntryPoint
@@ -105,10 +108,6 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         binding.cardMlXbox.typeCard.setOnClickListener { pickType(MoonlightEmulatedType.XBOX) }
         binding.cardMlPlaystation.typeCard.setOnClickListener { pickType(MoonlightEmulatedType.PLAYSTATION) }
         binding.cardMlNintendo.typeCard.setOnClickListener { pickType(MoonlightEmulatedType.NINTENDO) }
-
-        binding.segOff.setOnClickListener { viewModel.setTouchpad(TouchpadModeValue.OFF) }
-        binding.segPad.setOnClickListener { viewModel.setTouchpad(TouchpadModeValue.DS4) }
-        binding.segMouse.setOnClickListener { viewModel.setTouchpad(TouchpadModeValue.MOUSE) }
     }
 
     private fun observe() {
@@ -187,6 +186,15 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         locked: Boolean,
     ) {
         card.typeTitle.text = viewModel.typeLabel(candidateType)
+        // A Bluetooth host's Xbox is the generic pad the phone advertises, not the
+        // satellite's emulated Xbox 360, so its card wears the modern silhouette.
+        card.typeGlyph.setImageResource(
+            if (state.isBluetoothHost && candidateType == CONTROLLER_TYPE_XBOX) {
+                R.drawable.ic_ctrl_xbox
+            } else {
+                bundledControllerTypeGlyphRes(candidateType)
+            },
+        )
         card.typeChevron.visibility = visibleIf(!locked)
         card.typeCard.isClickable = !locked
         card.typeCard.isChecked = state.draft?.type == candidateType
@@ -214,6 +222,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         if (!visible) return
         val resolved = viewModel.moonlightResolvedType(candidateType)
         card.typeTitle.setText(moonlightTypeLabelRes(candidateType))
+        card.typeGlyph.setImageResource(moonlightTypeGlyphRes(candidateType))
         card.typeChevron.visibility = View.GONE
         card.typeCard.isClickable = true
         card.typeCard.isChecked = state.draft?.type == candidateType
@@ -264,21 +273,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         binding.btnContinue.setText(R.string.setup_cfg_continue)
         binding.btnContinue.visibility = View.VISIBLE
 
-        val touchpadVisible = state.touchpadAvailable
-        binding.touchpadRow.visibility = visibleIf(touchpadVisible)
-        if (touchpadVisible) {
-            // Each segment shows only when its routing can carry; the draft itself is
-            // capability-sanitized in the ViewModel, so the selection needs no coercion here.
-            binding.segPad.visibility = visibleIf(state.padModeAvailable)
-            binding.segMouse.visibility = visibleIf(state.mouseModeAvailable)
-            val selected = state.draft?.touchpadMode ?: TouchpadModeValue.OFF
-            binding.segOff.isSelected = selected == TouchpadModeValue.OFF
-            binding.segPad.isSelected = selected == TouchpadModeValue.DS4
-            binding.segMouse.isSelected = selected == TouchpadModeValue.MOUSE
-        }
-
         val motionVisible = state.motionAvailable
-        binding.motionDivider.visibility = visibleIf(motionVisible && touchpadVisible)
         binding.motionRow.visibility = visibleIf(motionVisible)
         if (motionVisible) {
             binding.swMotion.setOnCheckedChangeListener(null)
@@ -289,7 +284,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         // Rumble shows when the path can carry it: a Satellite host returns it, the phone
         // vibrates as a fallback for the on-screen pad, and a physical pad needs its own motor.
         val rumbleVisible = state.capabilities.isAvailable(Feature.RUMBLE)
-        binding.rumbleDivider.visibility = visibleIf(rumbleVisible && (motionVisible || touchpadVisible))
+        binding.rumbleDivider.visibility = visibleIf(rumbleVisible && motionVisible)
         binding.rumbleRow.visibility = visibleIf(rumbleVisible)
         if (rumbleVisible) {
             binding.swRumble.setOnCheckedChangeListener(null)
@@ -297,7 +292,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
             binding.swRumble.setOnCheckedChangeListener { _, isChecked -> viewModel.setRumble(isChecked) }
         }
 
-        binding.tvFeelEmpty.visibility = visibleIf(!touchpadVisible && !motionVisible && !rumbleVisible)
+        binding.tvFeelEmpty.visibility = visibleIf(!motionVisible && !rumbleVisible)
     }
 
     // 4C: one card per source and destination, each showing what it sends (up)
@@ -319,6 +314,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
             card.reviewKind.setText(node.kind)
             card.reviewName.text = node.name
             card.reviewSublabel.text = node.sublabel
+            card.reviewCompatPill.bindCompat(node.compat)
             bindReviewFlows(card.reviewSendsRow, card.reviewSendsChips, node.sends)
             bindReviewFlows(card.reviewGetsRow, card.reviewGetsChips, node.gets)
             container.addView(card.root)
@@ -330,11 +326,11 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         snapshot: BindingSnapshot,
     ): List<ReviewNode> {
         val caps = state.capabilities
-        val touchpadMode = state.draft?.touchpadMode ?: TouchpadModeValue.OFF
-        // Each mode rides its own capability: the DS4 pad needs a touchpad-bearing type,
-        // the mouse needs a host that accepts mouse control. The user's chosen mode picks which.
-        val padMode = touchpadMode == TouchpadModeValue.DS4 && caps.isAvailable(Feature.TOUCHPAD)
-        val mouseMode = touchpadMode == TouchpadModeValue.MOUSE && caps.isAvailable(Feature.MOUSE)
+        // Routing is derived, not picked, and the two surfaces coexist: the emulated pad's
+        // touchpad streams by default and the mouse surface flips the slot over while open,
+        // so the summary shows every pointer flow the path can carry.
+        val padMode = caps.isAvailable(Feature.TOUCHPAD)
+        val mouseMode = caps.isAvailable(Feature.MOUSE)
         val model =
             ReviewModel(
                 motionOn = caps.isAvailable(Feature.MOTION) && state.draft?.motionOn == true,
@@ -360,11 +356,10 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         val gamepad = ReviewFlow(R.drawable.ic_gamepad, R.string.setup_cfg_flow_controller)
         val motion = ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro)
         val rumble = ReviewFlow(R.drawable.ic_rumble, R.string.binding_func_rumble)
-        val pointer =
-            if (model.mouseMode) {
-                ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse)
-            } else {
-                ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad)
+        val pointerFlows =
+            buildList {
+                if (model.padMode) add(ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad))
+                if (model.mouseMode) add(ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse))
             }
         val gets = if (model.rumbleOn) listOf(rumble) else emptyList()
         val virtual =
@@ -373,7 +368,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                 icon = R.drawable.ic_gamepad_virtual,
                 name = getString(R.string.default_virtual_controller_name),
                 sublabel = getString(R.string.binding_link_onscreen),
-                sends = listOf(pointer),
+                sends = pointerFlows,
                 gets = emptyList(),
             )
 
@@ -384,7 +379,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                         buildList {
                             add(gamepad)
                             if (model.motionOn) add(motion)
-                            if (model.touchpadOn) add(pointer)
+                            addAll(pointerFlows)
                         },
                     gets = gets,
                 ),
@@ -439,6 +434,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                 sublabel = getString(R.string.setup_cfg_dest_satellite),
                 sends = emptyList(),
                 gets = if (model.mouseMode) listOf(mouse) else emptyList(),
+                compat = state.draft?.hostId?.let { state.hostCompat[it] } ?: DishProtocol.Compat.UNKNOWN,
             ),
             ReviewNode(
                 kind = R.string.binding_label_destination,
@@ -457,7 +453,8 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
     }
 
     // The host runs an emulated pad of its own, so it reads like the satellite pair: the
-    // PC itself, then the controller it plugs in for us and the feedback that comes back.
+    // PC itself (which also takes the mouse, straight over the control stream), then the
+    // controller it plugs in for us and the feedback that comes back.
     private fun moonlightDestinationNodes(
         state: ConfigUiState,
         model: ReviewModel,
@@ -466,6 +463,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         val motion = ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro)
         val rumble = ReviewFlow(R.drawable.ic_rumble, R.string.binding_func_rumble)
         val touchpad = ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad)
+        val mouse = ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse)
         val stored = state.draft?.type ?: MoonlightEmulatedType.AUTO
         return listOf(
             ReviewNode(
@@ -474,7 +472,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                 name = state.selectedHost?.label.orEmpty(),
                 sublabel = getString(R.string.ml_dest_sublabel, viewModel.moonlightAddress(state.draft?.hostId.orEmpty())),
                 sends = emptyList(),
-                gets = emptyList(),
+                gets = if (model.mouseMode) listOf(mouse) else emptyList(),
             ),
             ReviewNode(
                 kind = R.string.binding_label_destination,
@@ -507,6 +505,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         val sublabel: String,
         val sends: List<ReviewFlow>,
         val gets: List<ReviewFlow>,
+        val compat: DishProtocol.Compat = DishProtocol.Compat.UNKNOWN,
     )
 
     private fun renderApplyState(state: ApplyState) {

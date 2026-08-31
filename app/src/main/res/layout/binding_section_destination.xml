@@ -46,6 +46,14 @@
             app:iconGravity="end"
             app:iconTint="@color/colorMuted" />
 
+        <include
+            android:id="@+id/destCompatPill"
+            layout="@layout/binding_pill"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_md"
+            android:visibility="gone" />
+
         <LinearLayout
             android:id="@+id/legendSatellite"
             android:layout_width="match_parent"

@@ -9,8 +9,7 @@
 namespace {
 
 int16_t readLe16(const uint8_t* p) {
-    return static_cast<int16_t>(static_cast<uint16_t>(p[0]) |
-                                (static_cast<uint16_t>(p[1]) << 8));
+    return static_cast<int16_t>(static_cast<uint16_t>(p[0]) | (static_cast<uint16_t>(p[1]) << 8));
 }
 
 uint32_t readLe32(const uint8_t* p) {
@@ -18,7 +17,7 @@ uint32_t readLe32(const uint8_t* p) {
            (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
 }
 
-}
+} // namespace
 
 TEST(EncodeMotionPayload, CtrlIdxAtByteZero) {
     uint8_t out[17]{};
@@ -28,8 +27,7 @@ TEST(EncodeMotionPayload, CtrlIdxAtByteZero) {
 
 TEST(EncodeMotionPayload, GyroAndAccelAsLittleEndianInt16) {
     uint8_t out[17]{};
-    dish_wire::encodeMotionPayload(out, 0, 0x0102, 0x0304, 0x0506,
-                                   0x0708, 0x090A, 0x0B0C, 0);
+    dish_wire::encodeMotionPayload(out, 0, 0x0102, 0x0304, 0x0506, 0x0708, 0x090A, 0x0B0C, 0);
     EXPECT_EQ(readLe16(&out[1]), 0x0102);
     EXPECT_EQ(readLe16(&out[3]), 0x0304);
     EXPECT_EQ(readLe16(&out[5]), 0x0506);
@@ -46,8 +44,7 @@ TEST(EncodeMotionPayload, TimestampDeltaUsAsLittleEndianUint32) {
 
 TEST(EncodeMotionPayload, FullInt16RangeWithoutOverflow) {
     uint8_t out[17]{};
-    dish_wire::encodeMotionPayload(out, 0xFF, -32768, 32767, 0,
-                                   -32768, 32767, -1, 0);
+    dish_wire::encodeMotionPayload(out, 0xFF, -32768, 32767, 0, -32768, 32767, -1, 0);
     EXPECT_EQ(out[0], 0xFF);
     EXPECT_EQ(readLe16(&out[1]), -32768);
     EXPECT_EQ(readLe16(&out[3]), 32767);
@@ -63,7 +60,8 @@ TEST(EncodeMotionPayload, Uint32MaxDelta) {
 }
 
 TEST(EncodeMotionPayload, ZeroDeltaIsFourZeroBytes) {
-    // Receiver expects exactly 0 (not a sentinel) so the inter-arrival timer can detect session start.
+    // Receiver expects exactly 0 (not a sentinel) so the inter-arrival timer can detect session
+    // start.
     uint8_t out[17]{};
     dish_wire::encodeMotionPayload(out, 0, 0, 0, 0, 0, 0, 0, 0);
     EXPECT_EQ(out[13], 0);
@@ -115,91 +113,51 @@ TEST(DecodeLightbarPayload, DistinctChannelsAreNotAliased) {
     EXPECT_NE(lb.g, lb.b);
 }
 
-TEST(EncodeTouchpadPayload, CtrlIdxAtByteZero) {
+TEST(EncodeTouchpadPayloadV1, CtrlIdxAtByteZero) {
     uint8_t out[16]{};
-    dish_wire::encodeTouchpadPayload(out, 9, false, false, false, 0, 0, 0, 0, 0, 0, 0);
+    dish_wire::encodeTouchpadPayloadV1(out, 9, false, false, false, 0, 0, 0, 0, 0, 0, 0);
     EXPECT_EQ(out[0], 9);
 }
 
-TEST(EncodeTouchpadPayload, FlagsBit0IsFinger0Active) {
+TEST(EncodeTouchpadPayloadV1, FlagBitsAreFinger0Finger1Button) {
     uint8_t out[16]{};
-    dish_wire::encodeTouchpadPayload(out, 0, true, false,
-                                     false, 0, 0, 0, 0, 0, 0, 0);
-    EXPECT_EQ(out[1] & 0x01, 0x01);
-    EXPECT_EQ(out[1] & 0x02, 0);
-    EXPECT_EQ(out[1] & 0x04, 0);
-}
-
-TEST(EncodeTouchpadPayload, FlagsBit1IsFinger1Active) {
-    uint8_t out[16]{};
-    dish_wire::encodeTouchpadPayload(out, 0, false, true,
-                                     false, 0, 0, 0, 0, 0, 0, 0);
-    EXPECT_EQ(out[1] & 0x01, 0);
-    EXPECT_EQ(out[1] & 0x02, 0x02);
-    EXPECT_EQ(out[1] & 0x04, 0);
-}
-
-TEST(EncodeTouchpadPayload, FlagsBit2IsButtonPressed) {
-    uint8_t out[16]{};
-    dish_wire::encodeTouchpadPayload(out, 0, false, false,
-                                     true, 0, 0, 0, 0, 0, 0, 0);
-    EXPECT_EQ(out[1] & 0x04, 0x04);
-}
-
-TEST(EncodeTouchpadPayload, AllFlagsSetTogether) {
-    uint8_t out[16]{};
-    dish_wire::encodeTouchpadPayload(out, 0, true, true, true, 0, 0, 0, 0, 0, 0, 0);
+    dish_wire::encodeTouchpadPayloadV1(out, 0, true, false, false, 0, 0, 0, 0, 0, 0, 0);
+    EXPECT_EQ(out[1], 0x01);
+    dish_wire::encodeTouchpadPayloadV1(out, 0, false, true, false, 0, 0, 0, 0, 0, 0, 0);
+    EXPECT_EQ(out[1], 0x02);
+    dish_wire::encodeTouchpadPayloadV1(out, 0, false, false, true, 0, 0, 0, 0, 0, 0, 0);
+    EXPECT_EQ(out[1], 0x04);
+    dish_wire::encodeTouchpadPayloadV1(out, 0, true, true, true, 0, 0, 0, 0, 0, 0, 0);
     EXPECT_EQ(out[1], 0x07);
 }
 
-TEST(EncodeTouchpadPayload, Finger0TrackingIdAtByte2) {
+TEST(EncodeTouchpadPayloadV1, FingerSlotsAndLittleEndianCoords) {
     uint8_t out[16]{};
-    dish_wire::encodeTouchpadPayload(out, 0, false, false, false,
-                                     0x42, 0, 0, 0, 0, 0, 0);
-    EXPECT_EQ(out[2], 0x42);
+    dish_wire::encodeTouchpadPayloadV1(out, 0, true, true, false, 0x10, 100, 200, 0x20, 300, 400,
+                                       0);
+    EXPECT_EQ(out[2], 0x10);
+    EXPECT_EQ(readLe16(out + 3), 100);
+    EXPECT_EQ(readLe16(out + 5), 200);
+    EXPECT_EQ(out[7], 0x20);
+    EXPECT_EQ(readLe16(out + 8), 300);
+    EXPECT_EQ(readLe16(out + 10), 400);
 }
 
-TEST(EncodeTouchpadPayload, Finger1TrackingIdAtByte7) {
+TEST(EncodeTouchpadPayloadV1, CoordExtrema) {
     uint8_t out[16]{};
-    dish_wire::encodeTouchpadPayload(out, 0, false, false, false,
-                                     0, 0, 0, 0xAB, 0, 0, 0);
-    EXPECT_EQ(out[7], 0xAB);
-}
-
-TEST(EncodeTouchpadPayload, Finger0CoordsAreLittleEndianInt16) {
-    uint8_t out[16]{};
-    dish_wire::encodeTouchpadPayload(out, 0, true, false, false, 0,
-                                     0x1234, static_cast<int16_t>(0xFEDC),
-                                     0, 0, 0, 0);
-    EXPECT_EQ(readLe16(out + 3), 0x1234);
-    EXPECT_EQ(readLe16(out + 5), static_cast<int16_t>(0xFEDC));
-}
-
-TEST(EncodeTouchpadPayload, Finger1CoordsAreLittleEndianInt16) {
-    uint8_t out[16]{};
-    dish_wire::encodeTouchpadPayload(out, 0, false, true, false, 0, 0, 0,
-                                     0, 0x4321, static_cast<int16_t>(0x8765), 0);
-    EXPECT_EQ(readLe16(out + 8), 0x4321);
-    EXPECT_EQ(readLe16(out + 10), static_cast<int16_t>(0x8765));
-}
-
-TEST(EncodeTouchpadPayload, CoordExtrema) {
-    uint8_t out[16]{};
-    dish_wire::encodeTouchpadPayload(out, 0, true, true, false, 0,
-                                     INT16_MIN, INT16_MAX,
-                                     0, INT16_MAX, INT16_MIN, 0);
+    dish_wire::encodeTouchpadPayloadV1(out, 0, true, true, false, 0, INT16_MIN, INT16_MAX, 0,
+                                       INT16_MAX, INT16_MIN, 0);
     EXPECT_EQ(readLe16(out + 3), INT16_MIN);
     EXPECT_EQ(readLe16(out + 5), INT16_MAX);
     EXPECT_EQ(readLe16(out + 8), INT16_MAX);
     EXPECT_EQ(readLe16(out + 10), INT16_MIN);
 }
 
-TEST(EncodeTouchpadPayload, EmptyStateProducesAllZeroFlagsAndZeroCoords) {
+TEST(EncodeTouchpadPayloadV1, EmptyStateProducesAllZeroFlagsAndZeroCoords) {
     // Receiver uses the all-zero shape to detect clean lift-off rather than a smear.
     uint8_t out[16];
     for (int i = 0; i < 16; ++i) out[i] = 0xCC;
-    dish_wire::encodeTouchpadPayload(out, 5, false, false, false,
-                                     0, 0, 0, 0, 0, 0, 0);
+    dish_wire::encodeTouchpadPayloadV1(out, 5, false, false, false, 0, 0, 0, 0, 0, 0, 0);
     EXPECT_EQ(out[0], 5);
     EXPECT_EQ(out[1], 0);
     EXPECT_EQ(out[2], 0);
@@ -211,36 +169,123 @@ TEST(EncodeTouchpadPayload, EmptyStateProducesAllZeroFlagsAndZeroCoords) {
     EXPECT_EQ(readLe32(out + 12), 0u);
 }
 
-TEST(EncodeTouchpadPayload, IndependentFingerSlots) {
+TEST(EncodeTouchpadPayloadV1, EventTimeMsAtBytes12to15LittleEndian) {
     uint8_t out[16]{};
-    dish_wire::encodeTouchpadPayload(out, 0, true, true, false,
-                                     0x10, 100, 200,
-                                     0x20, 300, 400, 0);
-    EXPECT_EQ(out[2], 0x10);
-    EXPECT_EQ(readLe16(out + 3), 100);
-    EXPECT_EQ(readLe16(out + 5), 200);
-    EXPECT_EQ(out[7], 0x20);
-    EXPECT_EQ(readLe16(out + 8), 300);
-    EXPECT_EQ(readLe16(out + 10), 400);
-}
-
-TEST(EncodeTouchpadPayload, EventTimeMsAtBytes12to15LittleEndian) {
-    uint8_t out[16]{};
-    dish_wire::encodeTouchpadPayload(out, 0, true, false, false, 0, 0, 0, 0, 0, 0,
-                                     0x12345678u);
+    dish_wire::encodeTouchpadPayloadV1(out, 0, true, false, false, 0, 0, 0, 0, 0, 0, 0x12345678u);
     EXPECT_EQ(out[12], 0x78);
     EXPECT_EQ(out[13], 0x56);
     EXPECT_EQ(out[14], 0x34);
     EXPECT_EQ(out[15], 0x12);
     EXPECT_EQ(readLe32(out + 12), 0x12345678u);
+    dish_wire::encodeTouchpadPayloadV1(out, 0, true, false, false, 0, 0, 0, 0, 0, 0, UINT32_MAX);
+    EXPECT_EQ(readLe32(out + 12), UINT32_MAX);
 }
 
-TEST(EncodeTouchpadPayload, EventTimeMsExtrema) {
-    uint8_t out[16]{};
-    dish_wire::encodeTouchpadPayload(out, 0, true, false, false, 0, 0, 0, 0, 0, 0,
-                                     UINT32_MAX);
-    EXPECT_EQ(readLe32(out + 12), UINT32_MAX);
-    dish_wire::encodeTouchpadPayload(out, 0, true, false, false, 0, 0, 0, 0, 0, 0,
-                                     0u);
-    EXPECT_EQ(readLe32(out + 12), 0u);
+TEST(EncodeTouchpadPayloadV2, CtrlIdxAtByteZero) {
+    uint8_t out[19]{};
+    dish_wire::encodeTouchpadPayloadV2(out, 9, false, false, false, false, false, 0, 0, 0, 0, 0, 0,
+                                       0, 0);
+    EXPECT_EQ(out[0], 9);
+}
+
+TEST(EncodeTouchpadPayloadV2, FingerFlagsCarryOnlyFingers) {
+    uint8_t out[19]{};
+    dish_wire::encodeTouchpadPayloadV2(out, 0, true, false, true, true, true, 0, 0, 0, 0, 0, 0, 0,
+                                       0);
+    EXPECT_EQ(out[1], 0x01);
+    dish_wire::encodeTouchpadPayloadV2(out, 0, false, true, true, true, true, 0, 0, 0, 0, 0, 0, 0,
+                                       0);
+    EXPECT_EQ(out[1], 0x02);
+    dish_wire::encodeTouchpadPayloadV2(out, 0, true, true, false, false, false, 0, 0, 0, 0, 0, 0, 0,
+                                       0);
+    EXPECT_EQ(out[1], 0x03);
+}
+
+TEST(EncodeTouchpadPayloadV2, ButtonsByteIsLeftRightMiddle) {
+    uint8_t out[19]{};
+    dish_wire::encodeTouchpadPayloadV2(out, 0, false, false, true, false, false, 0, 0, 0, 0, 0, 0,
+                                       0, 0);
+    EXPECT_EQ(out[2], 0x01);
+    dish_wire::encodeTouchpadPayloadV2(out, 0, false, false, false, true, false, 0, 0, 0, 0, 0, 0,
+                                       0, 0);
+    EXPECT_EQ(out[2], 0x02);
+    dish_wire::encodeTouchpadPayloadV2(out, 0, false, false, false, false, true, 0, 0, 0, 0, 0, 0,
+                                       0, 0);
+    EXPECT_EQ(out[2], 0x04);
+    dish_wire::encodeTouchpadPayloadV2(out, 0, false, false, true, true, true, 0, 0, 0, 0, 0, 0, 0,
+                                       0);
+    EXPECT_EQ(out[2], 0x07);
+    EXPECT_EQ(out[1], 0x00);
+}
+
+TEST(EncodeTouchpadPayloadV2, FingerSlotsAndLittleEndianCoords) {
+    uint8_t out[19]{};
+    dish_wire::encodeTouchpadPayloadV2(out, 0, true, true, false, false, false, 0x10, 100, 200,
+                                       0x20, 300, 400, 0, 0);
+    EXPECT_EQ(out[3], 0x10);
+    EXPECT_EQ(readLe16(out + 4), 100);
+    EXPECT_EQ(readLe16(out + 6), 200);
+    EXPECT_EQ(out[8], 0x20);
+    EXPECT_EQ(readLe16(out + 9), 300);
+    EXPECT_EQ(readLe16(out + 11), 400);
+}
+
+TEST(EncodeTouchpadPayloadV2, CoordExtrema) {
+    uint8_t out[19]{};
+    dish_wire::encodeTouchpadPayloadV2(out, 0, true, true, false, false, false, 0, INT16_MIN,
+                                       INT16_MAX, 0, INT16_MAX, INT16_MIN, 0, 0);
+    EXPECT_EQ(readLe16(out + 4), INT16_MIN);
+    EXPECT_EQ(readLe16(out + 6), INT16_MAX);
+    EXPECT_EQ(readLe16(out + 9), INT16_MAX);
+    EXPECT_EQ(readLe16(out + 11), INT16_MIN);
+}
+
+TEST(EncodeTouchpadPayloadV2, EmptyStateProducesAllZeroBytes) {
+    uint8_t out[19];
+    for (int i = 0; i < 19; ++i) out[i] = 0xCC;
+    dish_wire::encodeTouchpadPayloadV2(out, 5, false, false, false, false, false, 0, 0, 0, 0, 0, 0,
+                                       0, 0);
+    EXPECT_EQ(out[0], 5);
+    for (int i = 1; i < 19; ++i) EXPECT_EQ(out[i], 0) << "byte " << i;
+}
+
+TEST(EncodeTouchpadPayloadV2, EventTimeMsAtBytes13to16LittleEndian) {
+    uint8_t out[19]{};
+    dish_wire::encodeTouchpadPayloadV2(out, 0, true, false, false, false, false, 0, 0, 0, 0, 0, 0,
+                                       0x12345678u, 0);
+    EXPECT_EQ(out[13], 0x78);
+    EXPECT_EQ(out[14], 0x56);
+    EXPECT_EQ(out[15], 0x34);
+    EXPECT_EQ(out[16], 0x12);
+    EXPECT_EQ(readLe32(out + 13), 0x12345678u);
+    dish_wire::encodeTouchpadPayloadV2(out, 0, true, false, false, false, false, 0, 0, 0, 0, 0, 0,
+                                       UINT32_MAX, 0);
+    EXPECT_EQ(readLe32(out + 13), UINT32_MAX);
+}
+
+TEST(EncodeTouchpadPayloadV2, ScrollAtBytes17to18LittleEndianSigned) {
+    uint8_t out[19]{};
+    dish_wire::encodeTouchpadPayloadV2(out, 0, false, false, false, false, false, 0, 0, 0, 0, 0, 0,
+                                       0, 0x0178);
+    EXPECT_EQ(out[17], 0x78);
+    EXPECT_EQ(out[18], 0x01);
+    EXPECT_EQ(readLe16(out + 17), 0x0178);
+    dish_wire::encodeTouchpadPayloadV2(out, 0, false, false, false, false, false, 0, 0, 0, 0, 0, 0,
+                                       0, static_cast<int16_t>(-120));
+    EXPECT_EQ(readLe16(out + 17), static_cast<int16_t>(-120));
+    dish_wire::encodeTouchpadPayloadV2(out, 0, false, false, false, false, false, 0, 0, 0, 0, 0, 0,
+                                       0, INT16_MIN);
+    EXPECT_EQ(readLe16(out + 17), INT16_MIN);
+    dish_wire::encodeTouchpadPayloadV2(out, 0, false, false, false, false, false, 0, 0, 0, 0, 0, 0,
+                                       0, INT16_MAX);
+    EXPECT_EQ(readLe16(out + 17), INT16_MAX);
+}
+
+TEST(EncodeTouchpadPayloadV2, ButtonsRideOnFingerlessFrames) {
+    // A click with no finger down is a valid mouse frame.
+    uint8_t out[19]{};
+    dish_wire::encodeTouchpadPayloadV2(out, 0, false, false, true, true, true, 0, 0, 0, 0, 0, 0, 0,
+                                       0);
+    EXPECT_EQ(out[1], 0x00);
+    EXPECT_EQ(out[2], 0x07);
 }

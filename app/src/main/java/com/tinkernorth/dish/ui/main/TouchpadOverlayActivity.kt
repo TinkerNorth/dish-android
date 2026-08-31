@@ -3,6 +3,7 @@
 package com.tinkernorth.dish.ui.main
 
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
@@ -10,7 +11,6 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.databinding.ActivityTouchpadOverlayBinding
-import com.tinkernorth.dish.ui.common.TouchpadPadCoordinator
 import com.tinkernorth.dish.ui.common.TouchpadSurfaceView
 import com.tinkernorth.dish.ui.common.paintConnectionMenuItem
 import com.tinkernorth.dish.ui.common.setupDishToolbar
@@ -28,8 +28,7 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
     @Volatile private var lastReportedState: TouchpadSurfaceView.TouchpadState? = null
 
     private var slotId: String = VIRTUAL_SLOT_ID
-
-    private val padCoordinator = TouchpadPadCoordinator<TouchpadSurfaceView>()
+    private var clickHeld = false
 
     private var optionsMenu: Menu? = null
     private var currentSummary: ConnectionSummary? = null
@@ -70,56 +69,39 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
             motionOn = null,
         ) { binding.overlayToolbar.subtitle = it }
 
-        bindPad(
-            pad = binding.touchpadClickPad,
-            other = binding.touchpadMovePad,
-            clickWhenTouched = true,
-            labelRes = R.string.touchpad_pad_click_label,
-            hintRes = R.string.touchpad_pad_click_hint,
-        )
-        bindPad(
-            pad = binding.touchpadMovePad,
-            other = binding.touchpadClickPad,
-            clickWhenTouched = false,
-            labelRes = R.string.touchpad_pad_move_label,
-            hintRes = R.string.touchpad_pad_move_hint,
-        )
-    }
-
-    private fun bindPad(
-        pad: TouchpadSurfaceView,
-        other: TouchpadSurfaceView,
-        clickWhenTouched: Boolean,
-        labelRes: Int,
-        hintRes: Int,
-    ) {
-        pad.clickWhenTouched = clickWhenTouched
-        pad.label = getString(labelRes)
-        pad.hint = getString(hintRes)
-        pad.listener =
+        binding.btnPadClick.onHeldChanged = { held ->
+            clickHeld = held
+            report(latestFrame())
+        }
+        binding.touchpadMovePad.clickWhenTouched = false
+        binding.touchpadMovePad.label = getString(R.string.touchpad_pad_move_label)
+        binding.touchpadMovePad.hint = getString(R.string.touchpad_pad_move_hint)
+        binding.touchpadMovePad.listener =
             object : TouchpadSurfaceView.Listener {
                 override fun onTouchpadStateChanged(state: TouchpadSurfaceView.TouchpadState) {
-                    if (!padCoordinator.mayWrite(pad)) return
-                    inputRateStore.recordScreenSample()
-                    lastReportedState = state
-                    val summary = hub.summary(connectionId) ?: return
-                    if (!summary.live.isLiveLink()) return
-                    if (summary.kind != ConnectionKind.SATELLITE) return
-                    sendSatelliteTouchpadReport(state)
-                }
-
-                override fun onTouchActivityChanged(active: Boolean) {
-                    if (active) {
-                        if (padCoordinator.onTouchStart(pad)) {
-                            other.accepting = false
-                        }
-                    } else {
-                        if (padCoordinator.onTouchEnd(pad)) {
-                            other.accepting = true
-                        }
-                    }
+                    state.buttonPressed = clickHeld
+                    report(state)
                 }
             }
+    }
+
+    // The click button and the move surface merge into the slot's single frame stream:
+    // fingers come from the surface, the pad click from the button, so a click with no
+    // finger down is still a valid frame.
+    private fun latestFrame(): TouchpadSurfaceView.TouchpadState {
+        val frame = lastReportedState?.copy() ?: TouchpadSurfaceView.TouchpadState()
+        frame.buttonPressed = clickHeld
+        frame.eventTimeMs = SystemClock.uptimeMillis()
+        return frame
+    }
+
+    private fun report(state: TouchpadSurfaceView.TouchpadState) {
+        inputRateStore.recordScreenSample()
+        lastReportedState = state
+        val summary = hub.summary(connectionId) ?: return
+        if (!summary.live.isLiveLink()) return
+        if (summary.kind != ConnectionKind.SATELLITE) return
+        sendSatelliteTouchpadReport(state)
     }
 
     override fun resendOneIfReady() {
@@ -163,6 +145,8 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
             state.finger0Active,
             state.finger1Active,
             state.buttonPressed,
+            rightPressed = false,
+            middlePressed = false,
             state.finger0TrackingId,
             state.finger0X,
             state.finger0Y,
@@ -170,6 +154,7 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
             state.finger1X,
             state.finger1Y,
             state.eventTimeMs,
+            scrollDelta = 0,
         )
     }
 

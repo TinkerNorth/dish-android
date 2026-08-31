@@ -1,6 +1,7 @@
 param(
-    [string]$SrcDir = "$env:TEMP\kenney-prompts\svg",
-    [string]$DstDir = "$PSScriptRoot\..\app\src\main\res\drawable"
+    [string]$SrcDir = "$env:TEMP\kenney-prompts",
+    [string]$DstDir = "$PSScriptRoot\..\app\src\main\res\drawable",
+    [string[]]$Only = @()
 )
 
 $files = @{
@@ -22,6 +23,8 @@ $files = @{
     "xbox_button_view"        = "ic_gp_xbox_view"
     "xbox_button_menu"        = "ic_gp_xbox_menu"
     "xbox_guide"              = "ic_gp_xbox_guide"
+    "xbox_button_back_icon"   = "ic_gp_xbox_back"
+    "xbox_button_start_icon"  = "ic_gp_xbox_start"
     "playstation_button_color_cross"    = "ic_gp_ps_cross"
     "playstation_button_color_circle"   = "ic_gp_ps_circle"
     "playstation_button_color_square"   = "ic_gp_ps_square"
@@ -38,16 +41,25 @@ $files = @{
     "playstation_stick_l"               = "ic_gp_ps_stick_l"
     "playstation_stick_r"               = "ic_gp_ps_stick_r"
     "playstation_button_analog"         = "ic_gp_ps_analog"
+    "playstation5_button_create"        = "ic_gp_ps5_create"
+    "playstation5_button_options"       = "ic_gp_ps5_options"
+    "controller_xbox360"                = "ic_ctrl_xbox360"
+    "controller_xboxseries"             = "ic_ctrl_xbox"
+    "controller_playstation4"           = "ic_ctrl_ds4"
+    "controller_playstation5"           = "ic_ctrl_dualsense"
+    "controller_switch_pro"             = "ic_ctrl_switchpro"
 }
 
 foreach ($kv in $files.GetEnumerator()) {
-    $svgPath = Join-Path $SrcDir "$($kv.Key).svg"
-    $outPath = Join-Path $DstDir "$($kv.Value).xml"
-    if (-not (Test-Path $svgPath)) { Write-Warning "Missing: $svgPath"; continue }
+    if ($Only.Count -gt 0 -and $Only -notcontains $kv.Value) { continue }
 
-    $svg = Get-Content $svgPath -Raw
+    $svgFile = Get-ChildItem -Path $SrcDir -Recurse -File -Filter "$($kv.Key).svg" | Select-Object -First 1
+    $outPath = Join-Path $DstDir "$($kv.Value).xml"
+    if ($null -eq $svgFile) { Write-Warning "Missing: $($kv.Key).svg"; continue }
+
+    $svg = Get-Content $svgFile.FullName -Raw
     $paths = [regex]::Matches($svg, '<path\s+stroke="[^"]*"\s+fill="([^"]*)"\s+d="([^"]*)"')
-    if ($paths.Count -eq 0) { Write-Warning "No paths in $svgPath"; continue }
+    if ($paths.Count -eq 0) { Write-Warning "No paths in $($svgFile.FullName)"; continue }
 
     $vdPaths = ""
     foreach ($m in $paths) {
