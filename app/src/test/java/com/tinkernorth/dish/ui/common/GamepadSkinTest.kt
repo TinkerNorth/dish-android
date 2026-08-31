@@ -48,6 +48,14 @@ class GamepadSkinTest {
     }
 
     @Test
+    fun `only the PlayStation-family skins carry a lightbar`() {
+        assertEquals(
+            setOf(GamepadSkin.PlayStation, GamepadSkin.DualSense),
+            GamepadSkin.entries.filter { it.hasLightbar }.toSet(),
+        )
+    }
+
+    @Test
     fun `every skin name round-trips through the intent extra`() {
         GamepadSkin.entries.forEach { skin ->
             assertEquals(skin, GamepadSkin.fromName(skin.name))

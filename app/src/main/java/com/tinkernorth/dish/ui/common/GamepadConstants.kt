@@ -117,8 +117,11 @@ internal object GamepadConstants {
 
     const val TRACKPAD_CLICK_PULSE_MS = 70L
 
-    // Host-driven feedback rendering (lightbar ring, player-LED row, trigger-effect accents).
+    // Host-driven feedback rendering (lightbar ring + background wash, player-LED row,
+    // trigger-effect accents).
     const val LIGHTBAR_STROKE_DP = 3f
+
+    const val LIGHTBAR_BG_BLEND_FRACTION = 0.25f
 
     const val PLAYER_LED_COUNT = 5
 
