@@ -39,16 +39,21 @@ inline void encodeBatteryPayload(uint8_t out[3], uint8_t ctrlIdx, uint8_t level,
     out[2] = status;
 }
 
-// MSG_TOUCHPAD 0x000C inner, 16B: ctrlIdx, flags(f0|f1|btn), f0Id, f0xy i16 LE, f1Id, f1xy i16 LE,
-// eventTimeMs u32 LE.
-inline void encodeTouchpadPayload(uint8_t out[16], uint8_t ctrlIdx, bool f0Active, bool f1Active,
-                                  bool buttonPressed, uint8_t f0Id, int16_t f0x, int16_t f0y,
-                                  uint8_t f1Id, int16_t f1x, int16_t f1y, uint32_t eventTimeMs) {
+// MSG_TOUCHPAD 0x000C inner, 18B: ctrlIdx, flags(f0|f1|btn|right|middle), f0Id, f0xy i16 LE,
+// f1Id, f1xy i16 LE, eventTimeMs u32 LE, scrollDelta i16 LE (120 = one wheel notch).
+// A satellite predating the last two bytes and the high flag bits ignores them (its
+// decoder masks flags to bits 0-2 and its length check is a minimum, not an equality).
+inline void encodeTouchpadPayload(uint8_t out[18], uint8_t ctrlIdx, bool f0Active, bool f1Active,
+                                  bool buttonPressed, bool rightPressed, bool middlePressed,
+                                  uint8_t f0Id, int16_t f0x, int16_t f0y, uint8_t f1Id, int16_t f1x,
+                                  int16_t f1y, uint32_t eventTimeMs, int16_t scrollDelta) {
     out[0] = ctrlIdx;
     uint8_t flags = 0;
     if (f0Active) flags |= 0x01;
     if (f1Active) flags |= 0x02;
     if (buttonPressed) flags |= 0x04;
+    if (rightPressed) flags |= 0x08;
+    if (middlePressed) flags |= 0x10;
     out[1] = flags;
     out[2] = f0Id;
     putLE16(out + 3, static_cast<uint16_t>(f0x));
@@ -57,6 +62,7 @@ inline void encodeTouchpadPayload(uint8_t out[16], uint8_t ctrlIdx, bool f0Activ
     putLE16(out + 8, static_cast<uint16_t>(f1x));
     putLE16(out + 10, static_cast<uint16_t>(f1y));
     putLE32(out + 12, eventTimeMs);
+    putLE16(out + 16, static_cast<uint16_t>(scrollDelta));
 }
 
 // MSG_LIGHTBAR 0x000D inner, 4B: ctrlIdx, R, G, B. Decode-only on dish-android (no LED API).

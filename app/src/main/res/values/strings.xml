@@ -88,10 +88,10 @@
     <string name="action_open_gamepad">Open Gamepad</string>
     <string name="desc_open_gamepad">Open gamepad</string>
     <string name="action_open_touchpad">Open Touchpad</string>
+    <string name="action_open_mouse">Open Mouse</string>
     <string name="desc_expand">Expand</string>
 
-    <!-- Touchpad mode picker, client-side. Wire values match satellite/src/core/types.h. -->
-    <string name="touchpad_mode_label">Touchpad mode</string>
+    <!-- Touchpad routing values, client-side. Wire values match satellite/src/core/types.h. -->
     <string name="touchpad_mode_off">Off</string>
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Mouse</string>
@@ -152,6 +152,7 @@
          user always sees which input surface they're on. -->
     <string name="overlay_title_gamepad">Gamepad</string>
     <string name="overlay_title_touchpad">Touchpad</string>
+    <string name="overlay_title_mouse">Mouse</string>
     <string name="overlay_rate_touch">Touch %1$s</string>
     <string name="overlay_rate_motion">Motion %1$s</string>
     <string name="overlay_guard_wifi_detail">Wi-Fi is off or on a different network. Rejoin the host\'s network.</string>
@@ -164,17 +165,13 @@
     <string name="overlay_guard_gone_title">Connection removed</string>
     <string name="overlay_guard_gone_detail">The connection was forgotten. This screen will close.</string>
 
-    <!-- Labels for the two side-by-side trackpads in the touchpad overlay.
-         The "click" pad routes touches as click+position (drag, text
-         select); the "move" pad sends position only. Mutually exclusive
-         under the hood: once one pad has an active finger the other is
-         locked out until release. -->
-    <string name="touchpad_pad_click_label">Click + Move</string>
+    <!-- Pointer overlays: the move surface plus its button column. -->
     <string name="touchpad_pad_move_label">Move</string>
-    <!-- Subtitle under each pad's label hinting at what it does. Two lines
-         of caption type, short enough not to crowd the surface. -->
-    <string name="touchpad_pad_click_hint">Drag to click and move</string>
     <string name="touchpad_pad_move_hint">Drag to move cursor</string>
+    <string name="pointer_button_click">Click</string>
+    <string name="pointer_button_left">Left</string>
+    <string name="pointer_button_right">Right</string>
+    <string name="pointer_scroll_strip">Scroll strip. Drag to scroll, tap for middle click.</string>
 
     <!-- Default slot / connection labels. -->
     <string name="default_virtual_controller_name">Virtual Controller</string>

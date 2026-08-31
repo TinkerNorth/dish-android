@@ -23,7 +23,6 @@ import com.tinkernorth.dish.source.sensor.BatteryValidator
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
-import com.tinkernorth.dish.source.store.TouchpadModeStore
 import com.tinkernorth.dish.source.store.UsbPathPreferenceStore
 import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbController
@@ -60,7 +59,6 @@ class MainViewModelTest {
     private lateinit var batteryStore: BatteryStatusStore
     private lateinit var motionEnabledStore: MotionEnabledStore
     private lateinit var capabilityComposer: CapabilityComposer
-    private lateinit var touchpadModeStore: TouchpadModeStore
     private lateinit var native: PhysicalInputNative
     private lateinit var pathPrefs: UsbPathPreferenceStore
     private lateinit var usbGamepadManager: UsbGamepadManager
@@ -90,10 +88,6 @@ class MainViewModelTest {
             mockk(relaxed = true) {
                 every { state } returns capabilityStateFlow
             }
-        touchpadModeStore =
-            TouchpadModeStore(
-                mockk(relaxed = true) { every { all() } returns emptyList() },
-            )
         native = mockk(relaxed = true)
         pathPrefs = mockk(relaxed = true)
         usbGamepadManager = mockk(relaxed = true)
@@ -121,7 +115,6 @@ class MainViewModelTest {
                 batteryStore,
                 motionEnabledStore,
                 capabilityComposer,
-                touchpadModeStore,
                 native,
                 pathPrefs,
                 usbGamepadManager,
@@ -239,25 +232,82 @@ class MainViewModelTest {
         verify { hub.unbind("slot-X") }
     }
 
+    private fun capsAvailable(vararg features: Feature): SlotCapabilities =
+        SlotCapabilities(
+            controller = CapabilitySet.of(*features),
+            transport = CapabilitySet.of(*features),
+            type = CapabilitySet.of(*features),
+            host = CapabilitySet.of(*features),
+            userEnabled = CapabilitySet.EMPTY,
+            runtimeDown = CapabilitySet.EMPTY,
+        )
+
     @Test
-    fun `touchpad ui reads the wire projection per slot and blocks the overlay for a pad source`() =
+    fun `pointer ui offers the virtual slot only the mouse surface`() =
         runTest(dispatcher) {
             every { capabilityComposer.touchpadWireMode(VIRTUAL_SLOT_ID) } returns "ds4"
             every { capabilityComposer.touchpadSource(VIRTUAL_SLOT_ID) } returns
                 com.tinkernorth.dish.composer.TouchpadSource.PHONE
+            capabilityStateFlow.value =
+                mapOf(VIRTUAL_SLOT_ID to capsAvailable(Feature.TOUCHPAD, Feature.MOUSE))
+            dispatcher.scheduler.runCurrent()
+
+            val ui =
+                vm.uiState.value.pointerBySlot
+                    .getValue(VIRTUAL_SLOT_ID)
+            assertEquals("ds4", ui.mode)
+            assertEquals(false, ui.touchpadOpenable)
+            assertTrue(ui.mouseOpenable)
+        }
+
+    @Test
+    fun `pointer ui offers a phone-sourced physical slot both surfaces the path carries`() =
+        runTest(dispatcher) {
+            every { capabilityComposer.touchpadWireMode("9") } returns "ds4"
+            every { capabilityComposer.touchpadSource("9") } returns
+                com.tinkernorth.dish.composer.TouchpadSource.PHONE
+            capabilityStateFlow.value = mapOf("9" to capsAvailable(Feature.TOUCHPAD, Feature.MOUSE))
+            dispatcher.scheduler.runCurrent()
+
+            val ui =
+                vm.uiState.value.pointerBySlot
+                    .getValue("9")
+            assertTrue(ui.touchpadOpenable)
+            assertTrue(ui.mouseOpenable)
+            assertTrue(ui.anyOpenable)
+        }
+
+    @Test
+    fun `pointer ui blocks both surfaces for a pad that streams its own trackpad`() =
+        runTest(dispatcher) {
             every { capabilityComposer.touchpadWireMode("9") } returns "ds4"
             every { capabilityComposer.touchpadSource("9") } returns
                 com.tinkernorth.dish.composer.TouchpadSource.PAD
-            capabilityStateFlow.value =
-                mapOf(VIRTUAL_SLOT_ID to SlotCapabilities.NONE, "9" to SlotCapabilities.NONE)
+            capabilityStateFlow.value = mapOf("9" to capsAvailable(Feature.TOUCHPAD, Feature.MOUSE))
             dispatcher.scheduler.runCurrent()
 
-            val map = vm.uiState.value.touchpadBySlot
-            assertEquals(TouchpadSlotUi(mode = "ds4", phoneSourced = true), map[VIRTUAL_SLOT_ID])
-            assertTrue(map.getValue(VIRTUAL_SLOT_ID).openable)
-            assertEquals(TouchpadSlotUi(mode = "ds4", phoneSourced = false), map["9"])
-            // The pad streams its own trackpad: no phone overlay for the slot.
-            assertEquals(false, map.getValue("9").openable)
+            val ui =
+                vm.uiState.value.pointerBySlot
+                    .getValue("9")
+            assertEquals(false, ui.touchpadOpenable)
+            assertEquals(false, ui.mouseOpenable)
+            assertEquals(false, ui.anyOpenable)
+        }
+
+    @Test
+    fun `pointer ui never offers a mouse the host withholds`() =
+        runTest(dispatcher) {
+            every { capabilityComposer.touchpadWireMode("9") } returns "off"
+            every { capabilityComposer.touchpadSource("9") } returns
+                com.tinkernorth.dish.composer.TouchpadSource.PHONE
+            capabilityStateFlow.value = mapOf("9" to capsAvailable(Feature.GAMEPAD))
+            dispatcher.scheduler.runCurrent()
+
+            val ui =
+                vm.uiState.value.pointerBySlot
+                    .getValue("9")
+            assertEquals(false, ui.touchpadOpenable)
+            assertEquals(false, ui.mouseOpenable)
         }
 
     @Test

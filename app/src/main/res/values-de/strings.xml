@@ -66,10 +66,10 @@
     <string name="action_open_gamepad">Controller öffnen</string>
     <string name="desc_open_gamepad">Controller öffnen</string>
     <string name="action_open_touchpad">Touchpad öffnen</string>
+    <string name="action_open_mouse">Maus öffnen</string>
     <string name="desc_expand">Aufklappen</string>
 
     <!-- Touchpad-Modus-Picker. -->
-    <string name="touchpad_mode_label">Touchpad-Modus</string>
     <string name="touchpad_mode_off">Aus</string>
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Maus</string>
@@ -121,6 +121,7 @@
     <string name="overlay_connection_kind_moonlight">Moonlight-Host</string>
     <string name="overlay_title_gamepad">Gamepad</string>
     <string name="overlay_title_touchpad">Touchpad</string>
+    <string name="overlay_title_mouse">Maus</string>
     <string name="overlay_rate_touch">Touch %1$s</string>
     <string name="overlay_rate_motion">Bewegung %1$s</string>
     <string name="overlay_guard_wifi_detail">WLAN ist aus oder in einem anderen Netzwerk. Verbinde dich wieder mit dem Netzwerk des Hosts.</string>
@@ -132,10 +133,12 @@
     <string name="overlay_guard_unbound_detail">Dieser Slot ist nicht mehr mit %1$s verknüpft. Dieser Bildschirm wird geschlossen.</string>
     <string name="overlay_guard_gone_title">Verbindung entfernt</string>
     <string name="overlay_guard_gone_detail">Die Verbindung wurde entfernt. Dieser Bildschirm wird geschlossen.</string>
-    <string name="touchpad_pad_click_label">Klicken + Bewegen</string>
     <string name="touchpad_pad_move_label">Bewegen</string>
-    <string name="touchpad_pad_click_hint">Ziehen zum Klicken und Bewegen</string>
     <string name="touchpad_pad_move_hint">Ziehen zum Bewegen des Cursors</string>
+    <string name="pointer_button_click">Klick</string>
+    <string name="pointer_button_left">Links</string>
+    <string name="pointer_button_right">Rechts</string>
+    <string name="pointer_scroll_strip">Scrollleiste. Ziehen zum Scrollen, Tippen für Mittelklick.</string>
 
     <!-- Standardbezeichnungen für Slot/Verbindung. -->
     <string name="default_virtual_controller_name">Virtueller Controller</string>

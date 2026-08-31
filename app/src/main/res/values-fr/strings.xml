@@ -67,10 +67,10 @@
     <string name="action_open_gamepad">Ouvrir la manette</string>
     <string name="desc_open_gamepad">Ouvrir la manette</string>
     <string name="action_open_touchpad">Ouvrir le pavé tactile</string>
+    <string name="action_open_mouse">Ouvrir la souris</string>
     <string name="desc_expand">Développer</string>
 
     <!-- Sélecteur du mode pavé tactile. -->
-    <string name="touchpad_mode_label">Mode pavé tactile</string>
     <string name="touchpad_mode_off">Désactivé</string>
     <string name="touchpad_mode_pad">Pavé</string>
     <string name="touchpad_mode_mouse">Souris</string>
@@ -122,6 +122,7 @@
     <string name="overlay_connection_kind_moonlight">Hôte Moonlight</string>
     <string name="overlay_title_gamepad">Manette</string>
     <string name="overlay_title_touchpad">Pavé tactile</string>
+    <string name="overlay_title_mouse">Souris</string>
     <string name="overlay_rate_touch">Tactile %1$s</string>
     <string name="overlay_rate_motion">Mouvement %1$s</string>
     <string name="overlay_guard_wifi_detail">Le Wi-Fi est désactivé ou sur un autre réseau. Rejoignez le réseau de l\'hôte.</string>
@@ -133,10 +134,12 @@
     <string name="overlay_guard_unbound_detail">Cet emplacement n\'est plus associé à %1$s. Cet écran va se fermer.</string>
     <string name="overlay_guard_gone_title">Connexion supprimée</string>
     <string name="overlay_guard_gone_detail">La connexion a été oubliée. Cet écran va se fermer.</string>
-    <string name="touchpad_pad_click_label">Clic + Déplacer</string>
     <string name="touchpad_pad_move_label">Déplacer</string>
-    <string name="touchpad_pad_click_hint">Glissez pour cliquer et déplacer</string>
     <string name="touchpad_pad_move_hint">Glissez pour déplacer le curseur</string>
+    <string name="pointer_button_click">Clic</string>
+    <string name="pointer_button_left">Gauche</string>
+    <string name="pointer_button_right">Droite</string>
+    <string name="pointer_scroll_strip">Bande de défilement. Glissez pour défiler, touchez pour un clic du milieu.</string>
 
     <!-- Libellés par défaut pour les emplacements / connexions. -->
     <string name="default_virtual_controller_name">Manette virtuelle</string>

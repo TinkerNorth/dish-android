@@ -67,10 +67,10 @@
     <string name="action_open_gamepad">Otvori kontroler</string>
     <string name="desc_open_gamepad">Otvori kontroler</string>
     <string name="action_open_touchpad">Otvori dodirnu ploču</string>
+    <string name="action_open_mouse">Otvori miš</string>
     <string name="desc_expand">Proširi</string>
 
     <!-- Birač režima dodirne ploče. -->
-    <string name="touchpad_mode_label">Režim dodirne ploče</string>
     <string name="touchpad_mode_off">Isključeno</string>
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Miš</string>
@@ -122,6 +122,7 @@
     <string name="overlay_connection_kind_moonlight">Moonlight host</string>
     <string name="overlay_title_gamepad">Gamepad</string>
     <string name="overlay_title_touchpad">Dodirna ploča</string>
+    <string name="overlay_title_mouse">Miš</string>
     <string name="overlay_rate_touch">Dodir %1$s</string>
     <string name="overlay_rate_motion">Pokret %1$s</string>
     <string name="overlay_guard_wifi_detail">Wi-Fi je isključen ili na drugoj mreži. Vratite se na mrežu hosta.</string>
@@ -133,10 +134,12 @@
     <string name="overlay_guard_unbound_detail">Ovaj slot više nije povezan sa %1$s. Ovaj ekran će se zatvoriti.</string>
     <string name="overlay_guard_gone_title">Veza uklonjena</string>
     <string name="overlay_guard_gone_detail">Veza je zaboravljena. Ovaj ekran će se zatvoriti.</string>
-    <string name="touchpad_pad_click_label">Klik + Pomak</string>
     <string name="touchpad_pad_move_label">Pomak</string>
-    <string name="touchpad_pad_click_hint">Povucite za klik i pomak</string>
     <string name="touchpad_pad_move_hint">Povucite za pomak kursora</string>
+    <string name="pointer_button_click">Klik</string>
+    <string name="pointer_button_left">Lijevo</string>
+    <string name="pointer_button_right">Desno</string>
+    <string name="pointer_scroll_strip">Traka za pomicanje. Povucite za pomicanje, dodirnite za srednji klik.</string>
 
     <!-- Podrazumijevane oznake za slot/vezu. -->
     <string name="default_virtual_controller_name">Virtuelni kontroler</string>

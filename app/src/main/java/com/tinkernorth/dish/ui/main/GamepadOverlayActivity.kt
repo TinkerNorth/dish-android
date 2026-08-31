@@ -385,6 +385,8 @@ class GamepadOverlayActivity :
             state.finger0Active,
             state.finger1Active,
             state.buttonPressed,
+            rightPressed = false,
+            middlePressed = false,
             state.finger0TrackingId,
             state.finger0X,
             state.finger0Y,
@@ -392,6 +394,7 @@ class GamepadOverlayActivity :
             state.finger1X,
             state.finger1Y,
             state.eventTimeMs,
+            scrollDelta = 0,
         )
     }
 

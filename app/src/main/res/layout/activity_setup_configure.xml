@@ -114,64 +114,6 @@
                 tools:visibility="gone">
 
                 <LinearLayout
-                    android:id="@+id/touchpadRow"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:visibility="gone"
-                    tools:visibility="visible">
-
-                    <ImageView
-                        android:layout_width="@dimen/config_row_icon_size"
-                        android:layout_height="@dimen/config_row_icon_size"
-                        android:layout_marginEnd="@dimen/config_row_icon_gap"
-                        android:importantForAccessibility="no"
-                        android:src="@drawable/ic_touchpad"
-                        app:tint="@color/colorPrimary" />
-
-                    <TextView
-                        style="@style/TextAppearance.Dish.Body"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/binding_func_touchpad"
-                        android:textColor="@color/colorOnSurface" />
-
-                    <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:background="@drawable/bg_binding_segmented"
-                        android:divider="@drawable/binding_segment_divider"
-                        android:orientation="horizontal"
-                        android:showDividers="middle">
-
-                        <TextView
-                            android:id="@+id/segOff"
-                            style="@style/Widget.Dish.Segment"
-                            android:text="@string/touchpad_mode_off" />
-
-                        <TextView
-                            android:id="@+id/segPad"
-                            style="@style/Widget.Dish.Segment"
-                            android:text="@string/touchpad_mode_pad" />
-
-                        <TextView
-                            android:id="@+id/segMouse"
-                            style="@style/Widget.Dish.Segment"
-                            android:text="@string/touchpad_mode_mouse" />
-                    </LinearLayout>
-                </LinearLayout>
-
-                <View
-                    android:id="@+id/motionDivider"
-                    style="@style/Widget.Dish.Divider"
-                    android:layout_marginTop="@dimen/config_row_gap"
-                    android:layout_marginBottom="@dimen/config_row_gap"
-                    android:visibility="gone"
-                    tools:visibility="visible" />
-
-                <LinearLayout
                     android:id="@+id/motionRow"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

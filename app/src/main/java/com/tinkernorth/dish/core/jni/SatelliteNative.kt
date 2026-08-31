@@ -56,6 +56,8 @@ object SatelliteNative {
     )
 
     // Coords are normalized int16 (-32768..32767); receiver maps to active touchpad mode space.
+    // rightPressed/middlePressed/scrollDelta only mean anything in mouse mode; scrollDelta is
+    // signed with 120 per wheel notch and older satellites ignore all three.
     @Suppress("LongParameterList")
     external fun sendTouchpad(
         handle: Int,
@@ -63,6 +65,8 @@ object SatelliteNative {
         finger0Active: Boolean,
         finger1Active: Boolean,
         buttonPressed: Boolean,
+        rightPressed: Boolean,
+        middlePressed: Boolean,
         finger0TrackingId: Int,
         finger0X: Short,
         finger0Y: Short,
@@ -70,6 +74,7 @@ object SatelliteNative {
         finger1X: Short,
         finger1Y: Short,
         eventTimeMs: Long,
+        scrollDelta: Short,
     )
 
     external fun startHeartbeat(handle: Int)

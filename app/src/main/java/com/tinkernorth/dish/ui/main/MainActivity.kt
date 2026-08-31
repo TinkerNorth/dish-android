@@ -238,7 +238,7 @@ class MainActivity :
             s.slots,
             s.connections,
             s.motionCapabilities,
-            s.touchpadBySlot,
+            s.pointerBySlot,
             s.pathCards,
             s.inputRates,
             s.screenPeakHz,
@@ -291,8 +291,16 @@ class MainActivity :
         val state = viewModel.uiState.value
         val slot = state.slots.firstOrNull { it.id == slotId } ?: return
         val cid = slot.boundConnectionId ?: return
-        if (state.touchpadBySlot[slotId]?.openable != true) return
+        if (state.pointerBySlot[slotId]?.touchpadOpenable != true) return
         nav.toTouchpad(connectionId = cid, slotId = slotId)
+    }
+
+    override fun onOpenMouse(slotId: String) {
+        val state = viewModel.uiState.value
+        val slot = state.slots.firstOrNull { it.id == slotId } ?: return
+        val cid = slot.boundConnectionId ?: return
+        if (state.pointerBySlot[slotId]?.mouseOpenable != true) return
+        nav.toMouse(connectionId = cid, slotId = slotId)
     }
 
     override fun onSwitchToDirect(slotId: String) {

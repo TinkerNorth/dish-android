@@ -40,7 +40,6 @@ class ConfigUiStateMoonlightTest {
                 type = type,
                 directOn = false,
                 motionOn = false,
-                touchpadMode = "off",
             ),
         controllerPresent = true,
         moonlight = moonlight,

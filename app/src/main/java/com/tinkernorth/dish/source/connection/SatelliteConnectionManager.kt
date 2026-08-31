@@ -21,6 +21,7 @@ import com.tinkernorth.dish.core.net.isPrivateHostLiteral
 import com.tinkernorth.dish.di.IoDispatcher
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedSatellite
+import com.tinkernorth.dish.source.store.MouseSurfaceStore
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
 import com.tinkernorth.dish.source.system.LocalNetworkAccess
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -34,6 +35,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -78,6 +80,7 @@ internal fun lateSlotConverge(
 @Singleton
 class SatelliteConnectionManager
     @Inject
+    @Suppress("LongParameterList")
     constructor(
         @ApplicationContext private val context: Context,
         private val scope: CoroutineScope,
@@ -89,6 +92,7 @@ class SatelliteConnectionManager
         // Provider (not direct injection) breaks the Hilt cycle: composer → hub → this manager.
         private val capabilityProvider: Provider<CapabilityComposer>,
         private val motionBackendStatusStore: SatelliteMotionBackendStatusStore,
+        private val mouseSurfaceStore: MouseSurfaceStore,
     ) {
         private val _connections = MutableStateFlow<Map<String, SatelliteConnection>>(emptyMap())
         val connections: StateFlow<Map<String, SatelliteConnection>> = _connections.asStateFlow()
@@ -133,18 +137,19 @@ class SatelliteConnectionManager
         init {
             // Project to the per-slot wire view (caps bits + touchpad mode) so unrelated composer
             // emissions (host/type/runtime changes that don't move the descriptor) don't fire
-            // no-op wire updates. The touchpad mode rides the same projection so a per-satellite
-            // pick converges EVERY bound slot, not just the one a screen re-declared.
+            // no-op wire updates. The mouse-surface store rides the combine because opening the
+            // mouse overlay flips a slot's derived mode without moving any capability, and the
+            // descriptor must still converge EVERY bound slot.
             scope.launch {
-                capabilityProvider
-                    .get()
-                    .state
-                    .map { caps ->
-                        val composer = capabilityProvider.get()
-                        caps.mapValues { (slotId, slot) ->
-                            CapabilityResolver.wireCaps(slot) to composer.touchpadWireMode(slotId)
-                        }
-                    }.distinctUntilChanged()
+                combine(
+                    capabilityProvider.get().state,
+                    mouseSurfaceStore.state,
+                ) { caps, _ ->
+                    val composer = capabilityProvider.get()
+                    caps.mapValues { (slotId, slot) ->
+                        CapabilityResolver.wireCaps(slot) to composer.touchpadWireMode(slotId)
+                    }
+                }.distinctUntilChanged()
                     .collect {
                         _connections.value.values.forEach { conn ->
                             conn.refreshCapsIfChanged()

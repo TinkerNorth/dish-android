@@ -396,10 +396,10 @@ void applyUsbTouchpad(int32_t deviceId, const gamepad::TouchpadState& t, uint32_
     if (binding.kind != SLOT_SATELLITE) return;
     auto session = getSession(binding.sessionHandle);
     if (!session) return;
-    uint8_t payload[16];
+    uint8_t payload[18];
     dish_wire::encodeTouchpadPayload(payload, (uint8_t)(binding.controllerIndex & 0xFF), t.f0Active,
-                                     t.f1Active, t.clickDown, t.f0Id, t.f0X, t.f0Y, t.f1Id, t.f1X,
-                                     t.f1Y, eventTimeMs);
+                                     t.f1Active, t.clickDown, false, false, t.f0Id, t.f0X, t.f0Y,
+                                     t.f1Id, t.f1X, t.f1Y, eventTimeMs, 0);
     sendEncrypted(session.get(), MSG_TOUCHPAD, payload, sizeof(payload));
 }
 
@@ -732,16 +732,17 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendBa
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendTouchpad(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jboolean f0Active, jboolean f1Active,
-    jboolean buttonPressed, jint f0TrackingId, jshort f0x, jshort f0y, jint f1TrackingId,
-    jshort f1x, jshort f1y, jlong eventTimeMs) {
+    jboolean buttonPressed, jboolean rightPressed, jboolean middlePressed, jint f0TrackingId,
+    jshort f0x, jshort f0y, jint f1TrackingId, jshort f1x, jshort f1y, jlong eventTimeMs,
+    jshort scrollDelta) {
     auto s = getSession(handle);
     if (!s) return;
-    uint8_t payload[16];
+    uint8_t payload[18];
     dish_wire::encodeTouchpadPayload(
         payload, (uint8_t)(controllerIndex & 0xFF), f0Active == JNI_TRUE, f1Active == JNI_TRUE,
-        buttonPressed == JNI_TRUE, (uint8_t)(f0TrackingId & 0xFF), (int16_t)f0x, (int16_t)f0y,
-        (uint8_t)(f1TrackingId & 0xFF), (int16_t)f1x, (int16_t)f1y,
-        (uint32_t)(eventTimeMs & 0xFFFFFFFFLL));
+        buttonPressed == JNI_TRUE, rightPressed == JNI_TRUE, middlePressed == JNI_TRUE,
+        (uint8_t)(f0TrackingId & 0xFF), (int16_t)f0x, (int16_t)f0y, (uint8_t)(f1TrackingId & 0xFF),
+        (int16_t)f1x, (int16_t)f1y, (uint32_t)(eventTimeMs & 0xFFFFFFFFLL), (int16_t)scrollDelta);
     sendEncrypted(s.get(), MSG_TOUCHPAD, payload, sizeof(payload));
 }
 

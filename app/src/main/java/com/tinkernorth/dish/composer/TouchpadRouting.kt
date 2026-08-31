@@ -30,25 +30,27 @@ object TouchpadRouting {
         }
 
     /**
-     * The descriptor's touchpadMode for one slot: the per-satellite pick gated by what the path
-     * can actually carry. DS4 pad routing needs a touch source and a type that advertises the
-     * mode; mouse routing needs a touch source and a host that grants mouse control. A pick the
-     * path cannot carry declares "off" rather than a request the satellite would dead-letter.
-     * No transport layer here: only satellite slots declare descriptors at all.
+     * The descriptor's touchpadMode for one slot, derived from the path rather than picked:
+     * whatever the route can carry is simply on. The emulated pad's own surface wins when the
+     * type has one; otherwise the touch source drives the host mouse where the host grants it.
+     * An open mouse overlay flips a DS4-routable slot to mouse for as long as it is up, since
+     * the two routings share one MSG_TOUCHPAD stream. A path that can carry neither declares
+     * "off" rather than a request the satellite would dead-letter. No transport layer here:
+     * only satellite slots declare descriptors at all.
      */
     fun wireMode(
-        pick: String?,
+        mouseSurfaceOpen: Boolean,
         controller: CapabilitySet,
         type: CapabilitySet,
         host: CapabilitySet,
-    ): String =
-        when {
-            pick == TouchpadModeValue.DS4 &&
-                Feature.TOUCHPAD in controller &&
-                Feature.TOUCHPAD in type -> TouchpadModeValue.DS4
-            pick == TouchpadModeValue.MOUSE &&
-                Feature.MOUSE in controller &&
-                Feature.MOUSE in host -> TouchpadModeValue.MOUSE
+    ): String {
+        val padRoute = Feature.TOUCHPAD in controller && Feature.TOUCHPAD in type
+        val mouseRoute = Feature.MOUSE in controller && Feature.MOUSE in host
+        return when {
+            mouseSurfaceOpen && mouseRoute -> TouchpadModeValue.MOUSE
+            padRoute -> TouchpadModeValue.DS4
+            mouseRoute -> TouchpadModeValue.MOUSE
             else -> TouchpadModeValue.OFF
         }
+    }
 }

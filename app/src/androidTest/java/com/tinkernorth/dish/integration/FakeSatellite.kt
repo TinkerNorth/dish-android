@@ -70,6 +70,7 @@ class FakeSatellite(
     val reconcileGets = CopyOnWriteArrayList<String>()
     val unpairCalls = CopyOnWriteArrayList<String>()
     val udpOpcodes = CopyOnWriteArrayList<Int>()
+    val touchpadPayloads = CopyOnWriteArrayList<ByteArray>()
 
     @Volatile var heartbeatCount = 0
         private set
@@ -420,6 +421,7 @@ class FakeSatellite(
         if (inner.size < 4) return
         val opcode = ((inner[0].toInt() and 0xFF) shl 8) or (inner[1].toInt() and 0xFF)
         udpOpcodes += opcode
+        if (opcode == OP_TOUCHPAD && inner.size > 4) touchpadPayloads += inner.copyOfRange(4, inner.size)
         lastClientAddress = packet.socketAddress
         if (opcode == OP_HEARTBEAT) {
             heartbeatCount += 1
@@ -491,6 +493,7 @@ class FakeSatellite(
 
         const val OP_HEARTBEAT = 0x0002
         const val OP_HEARTBEAT_ACK = 0x0003
+        const val OP_TOUCHPAD = 0x000C
 
         const val CATALOG_ETAG = "\"1.7.0+en\""
 

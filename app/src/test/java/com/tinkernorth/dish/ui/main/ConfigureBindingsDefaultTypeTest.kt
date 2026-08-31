@@ -18,13 +18,11 @@ import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.repository.LegacyCatalogTranslator
 import com.tinkernorth.dish.repository.SatelliteCapabilitiesRepository
 import com.tinkernorth.dish.repository.SatelliteCatalogRepository
-import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
-import com.tinkernorth.dish.source.store.TouchpadModeStore
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import io.mockk.coEvery
 import io.mockk.every
@@ -59,7 +57,6 @@ class ConfigureBindingsDefaultTypeTest {
     private lateinit var motionEnabledStore: MotionEnabledStore
     private lateinit var rumbleEnabledStore: RumbleEnabledStore
     private lateinit var capabilityComposer: CapabilityComposer
-    private lateinit var touchpadModeStore: TouchpadModeStore
     private lateinit var satellite: SatelliteConnectionManager
     private lateinit var moonlight: MoonlightConnectionManager
     private lateinit var usbGamepadManager: UsbGamepadManager
@@ -100,7 +97,6 @@ class ConfigureBindingsDefaultTypeTest {
         gamepadRegistry = mockk(relaxed = true)
         motionEnabledStore = mockk(relaxed = true)
         rumbleEnabledStore = mockk(relaxed = true)
-        touchpadModeStore = mockk(relaxed = true)
         capabilityComposer = mockk(relaxed = true)
         satellite = mockk(relaxed = true)
         moonlight = mockk(relaxed = true)
@@ -114,7 +110,6 @@ class ConfigureBindingsDefaultTypeTest {
         every { hub.connections } returns connectionsFlow
         every { gamepadRegistry.devices } returns devicesFlow
         every { usbGamepadManager.controllers } returns MutableStateFlow(emptyMap())
-        every { touchpadModeStore.modeFor(any()) } returns TouchpadModeValue.OFF
         every { capabilityComposer.capabilityFor(any()) } returns SlotCapabilities.NONE
         every { capabilityComposer.capabilityForCandidate(any(), any(), any(), any()) } returns SlotCapabilities.NONE
 
@@ -132,7 +127,6 @@ class ConfigureBindingsDefaultTypeTest {
                 motionEnabledStore,
                 rumbleEnabledStore,
                 capabilityComposer,
-                touchpadModeStore,
                 satellite,
                 moonlight,
                 usbGamepadManager,

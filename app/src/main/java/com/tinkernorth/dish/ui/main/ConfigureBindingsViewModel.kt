@@ -26,7 +26,6 @@ import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.repository.SatelliteCapabilitiesRepository
 import com.tinkernorth.dish.repository.SatelliteCatalogRepository
-import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
@@ -35,7 +34,6 @@ import com.tinkernorth.dish.source.connection.moonlight.MoonlightSessionState
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
-import com.tinkernorth.dish.source.store.TouchpadModeStore
 import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.source.usb.UsbPhase
@@ -104,7 +102,6 @@ data class BindingDraft(
     val type: Int?,
     val directOn: Boolean,
     val motionOn: Boolean,
-    val touchpadMode: String,
     val rumbleOn: Boolean = true,
 )
 
@@ -198,19 +195,10 @@ data class ConfigUiState(
         }
 
     // The capability layers decide what carries: motion needs an input gyro, a motion-bearing
-    // type (PlayStation), and a satellite destination; the touchpad SECTION shows if either the
-    // DS4 pad or the mouse mode is possible; the DS4 "Pad" mode needs a touchpad-bearing type.
+    // type (PlayStation), and a satellite destination. Touch and mouse have no toggle at all:
+    // whatever the path can carry is simply on, so the screen only reads their availability.
     val motionAvailable: Boolean
         get() = capabilities.isAvailable(Feature.MOTION)
-
-    val touchpadAvailable: Boolean
-        get() = capabilities.isAvailable(Feature.MOUSE) || capabilities.isAvailable(Feature.TOUCHPAD)
-
-    val padModeAvailable: Boolean
-        get() = capabilities.isAvailable(Feature.TOUCHPAD)
-
-    val mouseModeAvailable: Boolean
-        get() = capabilities.isAvailable(Feature.MOUSE)
 
     val isBluetoothHost: Boolean get() = selectedHost?.kind == ConnectionKind.BLUETOOTH
 
@@ -249,7 +237,6 @@ class ConfigureBindingsViewModel
         private val motionEnabledStore: MotionEnabledStore,
         private val rumbleEnabledStore: RumbleEnabledStore,
         private val capabilityComposer: CapabilityComposer,
-        private val touchpadModeStore: TouchpadModeStore,
         private val satellite: SatelliteConnectionManager,
         private val moonlight: MoonlightConnectionManager,
         private val usbGamepadManager: UsbGamepadManager,
@@ -504,8 +491,6 @@ class ConfigureBindingsViewModel
 
         fun setRumble(on: Boolean) = _ui.update { it.copy(draft = it.draft?.copy(rumbleOn = on)).withCapabilities() }
 
-        fun setTouchpad(mode: String) = _ui.update { it.copy(draft = it.draft?.copy(touchpadMode = mode)).withCapabilities() }
-
         // Inherent path capability for the current draft, used by the screen's gates and the
         // setup type cards. Keyed by the loaded slot so a USB path switch is reflected on reload.
         fun capabilityForCandidate(
@@ -517,9 +502,6 @@ class ConfigureBindingsViewModel
 
         // Re-resolves the path capabilities from the current draft/host so the gates stay in sync.
         // userEnabled is forced full inside the composer, so these are the inherent "available" layers.
-        // The touchpad pick is sanitized against them IN THE DRAFT, not just in the rendering:
-        // apply() persists the draft, so a display-only coercion would let a pick the user saw as
-        // "Off" ship (and later resurrect) as ds4/mouse.
         private fun ConfigUiState.withCapabilities(): ConfigUiState {
             val slotId = loadedSlotId ?: return copy(capabilities = SlotCapabilities.NONE)
             val d = draft ?: return copy(capabilities = SlotCapabilities.NONE)
@@ -534,10 +516,7 @@ class ConfigureBindingsViewModel
                         candidateHostId = d.hostId,
                     )
                 } ?: SlotCapabilities.NONE
-            return copy(
-                draft = d.copy(touchpadMode = sanitizedTouchpadMode(d.touchpadMode, caps)),
-                capabilities = caps,
-            )
+            return copy(capabilities = caps)
         }
 
         // The label for a controller type from the live catalog, falling back to the
@@ -626,9 +605,6 @@ class ConfigureBindingsViewModel
                 // Rumble is a local delivery gate (the phone vibrates as a fallback),
                 // so it applies regardless of the controller's own motor.
                 rumbleEnabledStore.setEnabled(slotId, draft.rumbleOn)
-                // Store BEFORE bind: the descriptor pulls the pick synchronously at declareSlot.
-                // The draft is already capability-sanitized by withCapabilities().
-                if (state.touchpadAvailable) touchpadModeStore.setMode(hostId, draft.touchpadMode)
                 val bound = hub.bind(slotId, hostId, type)
                 if (!bound) {
                     _applyState.value =
@@ -894,8 +870,6 @@ class ConfigureBindingsViewModel
             val hostId = hub.bindings.value[slotId]
             val remembered = hostId?.let { hub.satTypes.value[it to slotId] }
             val device = slotId.toIntOrNull()?.let { gamepadRegistry.devices.value[it] }
-            // Raw store pick; withCapabilities() sanitizes it against the candidate path.
-            val touchpad = hostId?.let { touchpadModeStore.modeFor(it) } ?: TouchpadModeValue.OFF
             return BindingDraft(
                 hostId = hostId,
                 // No guessed default: unresolved (null) until the catalog (or a remembered pick) sets it.
@@ -903,7 +877,6 @@ class ConfigureBindingsViewModel
                 directOn = seedDirectOn(device, desiredUsbPathFor(device)),
                 motionOn = motionEnabledStore.isEnabled(slotId),
                 rumbleOn = rumbleEnabledStore.isEnabled(slotId),
-                touchpadMode = touchpad,
             )
         }
 
@@ -935,18 +908,4 @@ internal fun seedDirectOn(
         device.isUsbSynthetic -> true
         device.transport == Transport.Bluetooth -> false
         else -> desired == PathChoice.Direct
-    }
-
-// A pick the candidate path cannot carry collapses to Off IN THE DRAFT: apply() persists the
-// draft, so display-only coercion would let a mode the user saw as "Off" ship and later
-// resurrect when the type or host changes underneath the store.
-internal fun sanitizedTouchpadMode(
-    mode: String,
-    caps: SlotCapabilities,
-): String =
-    when {
-        !TouchpadModeValue.isValid(mode) -> TouchpadModeValue.OFF
-        mode == TouchpadModeValue.DS4 && !caps.isAvailable(Feature.TOUCHPAD) -> TouchpadModeValue.OFF
-        mode == TouchpadModeValue.MOUSE && !caps.isAvailable(Feature.MOUSE) -> TouchpadModeValue.OFF
-        else -> mode
     }

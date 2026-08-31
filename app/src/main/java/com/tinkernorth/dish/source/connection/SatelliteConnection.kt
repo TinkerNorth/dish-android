@@ -510,6 +510,8 @@ class SatelliteConnection(
         finger0Active: Boolean,
         finger1Active: Boolean,
         buttonPressed: Boolean,
+        rightPressed: Boolean,
+        middlePressed: Boolean,
         finger0TrackingId: Int,
         finger0X: Short,
         finger0Y: Short,
@@ -517,6 +519,7 @@ class SatelliteConnection(
         finger1X: Short,
         finger1Y: Short,
         eventTimeMs: Long,
+        scrollDelta: Short,
     ) {
         val snap = live ?: return
         val info = _slots.value[slotId] ?: return
@@ -527,6 +530,8 @@ class SatelliteConnection(
             finger0Active,
             finger1Active,
             buttonPressed,
+            rightPressed,
+            middlePressed,
             finger0TrackingId,
             finger0X,
             finger0Y,
@@ -534,6 +539,7 @@ class SatelliteConnection(
             finger1X,
             finger1Y,
             eventTimeMs,
+            scrollDelta,
         )
     }
 

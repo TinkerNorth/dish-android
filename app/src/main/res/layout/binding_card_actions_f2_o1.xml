@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <include
+        android:id="@+id/btnCardAction1"
+        layout="@layout/binding_action_button" />
+
+    <include
+        android:id="@+id/btnCardAction2"
+        layout="@layout/binding_action_button" />
+
+    <include
+        android:id="@+id/btnCardActionOutlined"
+        layout="@layout/binding_action_button_outlined" />
+</merge>

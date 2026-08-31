@@ -68,10 +68,10 @@
     <string name="action_open_gamepad">Abrir el mando</string>
     <string name="desc_open_gamepad">Abrir el mando</string>
     <string name="action_open_touchpad">Abrir el panel táctil</string>
+    <string name="action_open_mouse">Abrir el ratón</string>
     <string name="desc_expand">Expandir</string>
 
     <!-- Selector de modo del panel táctil. -->
-    <string name="touchpad_mode_label">Modo del panel táctil</string>
     <string name="touchpad_mode_off">Apagado</string>
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Ratón</string>
@@ -123,6 +123,7 @@
     <string name="overlay_connection_kind_moonlight">Host Moonlight</string>
     <string name="overlay_title_gamepad">Mando</string>
     <string name="overlay_title_touchpad">Panel táctil</string>
+    <string name="overlay_title_mouse">Ratón</string>
     <string name="overlay_rate_touch">Táctil %1$s</string>
     <string name="overlay_rate_motion">Movimiento %1$s</string>
     <string name="overlay_guard_wifi_detail">El Wi-Fi está apagado o en otra red. Vuelve a la red del host.</string>
@@ -134,10 +135,12 @@
     <string name="overlay_guard_unbound_detail">Esta ranura ya no está vinculada a %1$s. Esta pantalla se cerrará.</string>
     <string name="overlay_guard_gone_title">Conexión eliminada</string>
     <string name="overlay_guard_gone_detail">La conexión fue olvidada. Esta pantalla se cerrará.</string>
-    <string name="touchpad_pad_click_label">Clic + Mover</string>
     <string name="touchpad_pad_move_label">Mover</string>
-    <string name="touchpad_pad_click_hint">Arrastra para hacer clic y mover</string>
     <string name="touchpad_pad_move_hint">Arrastra para mover el cursor</string>
+    <string name="pointer_button_click">Clic</string>
+    <string name="pointer_button_left">Izquierdo</string>
+    <string name="pointer_button_right">Derecho</string>
+    <string name="pointer_scroll_strip">Tira de desplazamiento. Arrastra para desplazar, toca para clic central.</string>
 
     <!-- Etiquetas por defecto de slot/conexión. -->
     <string name="default_virtual_controller_name">Mando virtual</string>

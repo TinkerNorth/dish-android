@@ -23,7 +23,6 @@ import com.tinkernorth.dish.source.inputrate.InputRateStore
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
-import com.tinkernorth.dish.source.store.TouchpadModeStore
 import com.tinkernorth.dish.source.store.UsbPathPreferenceStore
 import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbController
@@ -55,7 +54,6 @@ class MainViewModel
         private val batteryStatusStore: BatteryStatusStore,
         private val motionEnabledStore: MotionEnabledStore,
         private val capabilityComposer: CapabilityComposer,
-        private val touchpadModeStore: TouchpadModeStore,
         private val native: PhysicalInputNative,
         private val pathPrefs: UsbPathPreferenceStore,
         private val usbGamepadManager: UsbGamepadManager,
@@ -160,20 +158,24 @@ class MainViewModel
                     }
                 }.launchIn(viewModelScope)
 
-            // The pill and the launcher read the SAME projection the descriptor declares
-            // (CapabilityComposer.touchpadWireMode), so the dashboard can never claim a routing
-            // the satellite doesn't have. Store/bindings/type changes all funnel through the
-            // composer's emissions; the store is combined in for the pre-first-emission window.
-            combine(capabilityComposer.state, touchpadModeStore.state) { caps, _ ->
-                caps.keys.associateWith { slotId ->
-                    TouchpadSlotUi(
-                        mode = capabilityComposer.touchpadWireMode(slotId),
-                        phoneSourced = capabilityComposer.touchpadSource(slotId) == TouchpadSource.PHONE,
-                    )
-                }
-            }.onEach { map ->
-                _uiState.update { it.copy(touchpadBySlot = map) }
-            }.launchIn(viewModelScope)
+            // The buttons and the wire read the SAME capability projection, so a card can
+            // never offer a surface the satellite would dead-letter: touch needs the type
+            // to carry a trackpad, mouse needs the host grant, and both need the phone to
+            // be the slot's touch source.
+            capabilityComposer.state
+                .onEach { caps ->
+                    val map =
+                        caps.mapValues { (slotId, cap) ->
+                            val phoneSourced = capabilityComposer.touchpadSource(slotId) == TouchpadSource.PHONE
+                            PointerSlotUi(
+                                mode = capabilityComposer.touchpadWireMode(slotId),
+                                touchpadOpenable =
+                                    phoneSourced && slotId != VIRTUAL_SLOT_ID && cap.isAvailable(Feature.TOUCHPAD),
+                                mouseOpenable = phoneSourced && cap.isAvailable(Feature.MOUSE),
+                            )
+                        }
+                    _uiState.update { it.copy(pointerBySlot = map) }
+                }.launchIn(viewModelScope)
         }
 
         fun bindSlot(

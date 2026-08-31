@@ -5,7 +5,6 @@ package com.tinkernorth.dish.ui.main
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.SlotCapabilities
-import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
 import com.tinkernorth.dish.source.sensor.BatteryValidator
 
@@ -48,14 +47,17 @@ data class ControllerSlot(
     val disconnectTimeLeft: Int = 0,
 )
 
-// One slot's effective touchpad routing, as the wire declares it. phoneSourced gates the
-// on-screen overlay: a pad that streams its own trackpad must not share the slot's stream
-// with the phone surface.
-data class TouchpadSlotUi(
+// One slot's derived pointer routing (the wire's own mode string) plus which phone
+// surfaces can open for it. Both surfaces require the phone to be the touch source: a pad
+// that streams its own trackpad must not share the slot's stream with a phone surface.
+// The virtual slot never offers the touchpad surface here because its trackpad lives
+// inside the on-screen pad itself.
+data class PointerSlotUi(
     val mode: String,
-    val phoneSourced: Boolean,
+    val touchpadOpenable: Boolean,
+    val mouseOpenable: Boolean,
 ) {
-    val openable: Boolean get() = phoneSourced && mode != TouchpadModeValue.OFF
+    val anyOpenable: Boolean get() = touchpadOpenable || mouseOpenable
 }
 
 data class MainUiState(
@@ -66,7 +68,7 @@ data class MainUiState(
         ),
     val connections: List<ConnectionSummary> = emptyList(),
     val motionCapabilities: Map<String, SlotCapabilities> = emptyMap(),
-    val touchpadBySlot: Map<String, TouchpadSlotUi> = emptyMap(),
+    val pointerBySlot: Map<String, PointerSlotUi> = emptyMap(),
     val pathCards: Map<String, PathCard> = emptyMap(),
     val inputRates: Map<String, SlotInputRates> = emptyMap(),
     val screenPeakHz: Int = 0,

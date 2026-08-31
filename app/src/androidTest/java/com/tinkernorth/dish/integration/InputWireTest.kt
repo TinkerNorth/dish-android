@@ -9,6 +9,8 @@ import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -100,6 +102,8 @@ class InputWireTest {
                     finger0Active = true,
                     finger1Active = false,
                     buttonPressed = false,
+                    rightPressed = false,
+                    middlePressed = false,
                     finger0TrackingId = 1,
                     finger0X = 500,
                     finger0Y = 300,
@@ -107,9 +111,46 @@ class InputWireTest {
                     finger1X = 0,
                     finger1Y = 0,
                     eventTimeMs = 1_000,
+                    scrollDelta = 0,
                 )
             },
         )
+    }
+
+    @Test
+    fun mouseButtonsAndScroll_rideTheTouchpadFrameBytes() {
+        val server = bindVirtualAndGoLive()
+        val conn = manager.get(SatelliteConnection.idFor(server))!!
+        val satellite = fake!!
+
+        assertTrue(
+            "a mouse frame with right+middle held and a scroll delta must decrypt at the satellite",
+            pollSend(satellite, 0x000C) {
+                conn.sendTouchpad(
+                    VIRTUAL_SLOT_ID,
+                    finger0Active = true,
+                    finger1Active = false,
+                    buttonPressed = true,
+                    rightPressed = true,
+                    middlePressed = true,
+                    finger0TrackingId = 3,
+                    finger0X = -1200,
+                    finger0Y = 900,
+                    finger1TrackingId = 0,
+                    finger1X = 0,
+                    finger1Y = 0,
+                    eventTimeMs = 2_000,
+                    scrollDelta = -240,
+                )
+            },
+        )
+        val frame =
+            satellite.touchpadPayloads.firstOrNull { it.size >= 18 && it[1].toInt() and 0x18 == 0x18 }
+        assertNotNull("a frame carrying the right+middle flag bits must arrive", frame)
+        val flags = frame!![1].toInt() and 0xFF
+        assertEquals("finger0 + click + right + middle", 0x1D, flags)
+        val scroll = ((frame[16].toInt() and 0xFF) or (frame[17].toInt() shl 8)).toShort()
+        assertEquals((-240).toShort(), scroll)
     }
 
     @Test

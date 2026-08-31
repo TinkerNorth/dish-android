@@ -29,22 +29,46 @@
                 android:paddingBottom="@dimen/spacing_2xl"
                 android:weightSum="3">
 
-                <com.tinkernorth.dish.ui.common.HoldButtonView
-                    android:id="@+id/btnPadClick"
-                    style="@style/Widget.Dish.Button.Tonal"
+                <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
                     android:layout_marginEnd="@dimen/spacing_md"
                     android:layout_weight="1"
-                    android:gravity="center"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    android:text="@string/pointer_button_click"
-                    app:icon="@drawable/ic_touchpad"
-                    app:iconGravity="textTop" />
+                    android:orientation="vertical">
+
+                    <com.tinkernorth.dish.ui.common.HoldButtonView
+                        android:id="@+id/btnMouseLeft"
+                        style="@style/Widget.Dish.Button.Tonal"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:text="@string/pointer_button_left" />
+
+                    <com.tinkernorth.dish.ui.common.ScrollStripView
+                        android:id="@+id/scrollStrip"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_marginVertical="@dimen/spacing_md"
+                        android:layout_weight="1"
+                        android:contentDescription="@string/pointer_scroll_strip" />
+
+                    <com.tinkernorth.dish.ui.common.HoldButtonView
+                        android:id="@+id/btnMouseRight"
+                        style="@style/Widget.Dish.Button.Tonal"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:text="@string/pointer_button_right" />
+                </LinearLayout>
 
                 <com.tinkernorth.dish.ui.common.TouchpadSurfaceView
-                    android:id="@+id/touchpadMovePad"
+                    android:id="@+id/mouseMovePad"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
                     android:layout_marginStart="@dimen/spacing_md"

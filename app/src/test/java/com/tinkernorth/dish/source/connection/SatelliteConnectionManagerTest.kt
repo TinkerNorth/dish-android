@@ -11,6 +11,7 @@ import com.tinkernorth.dish.core.net.DiscoveryGateway
 import com.tinkernorth.dish.core.net.HttpReply
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedSatellite
+import com.tinkernorth.dish.source.store.MouseSurfaceStore
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
 import com.tinkernorth.dish.source.system.LocalNetworkAccess
 import io.mockk.coEvery
@@ -108,6 +109,8 @@ class SatelliteConnectionManagerTest {
 
     private val motionBackendStatusStore = SatelliteMotionBackendStatusStore()
 
+    private val mouseSurfaceStore = MouseSurfaceStore()
+
     private fun manager(): SatelliteConnectionManager =
         SatelliteConnectionManager(
             context = context,
@@ -119,6 +122,7 @@ class SatelliteConnectionManagerTest {
             ioDispatcher = ioDispatcher,
             capabilityProvider = capabilityProvider,
             motionBackendStatusStore = motionBackendStatusStore,
+            mouseSurfaceStore = mouseSurfaceStore,
         )
 
     private fun runMgrTest(block: suspend (SatelliteConnectionManager, MutableList<ConnectionEvent>) -> Unit) =

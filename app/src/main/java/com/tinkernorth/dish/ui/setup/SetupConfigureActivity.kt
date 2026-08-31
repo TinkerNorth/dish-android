@@ -23,7 +23,6 @@ import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.databinding.ActivitySetupConfigureBinding
 import com.tinkernorth.dish.databinding.SetupReviewCardBinding
 import com.tinkernorth.dish.databinding.SetupTypeCardBinding
-import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
@@ -107,10 +106,6 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         binding.cardMlXbox.typeCard.setOnClickListener { pickType(MoonlightEmulatedType.XBOX) }
         binding.cardMlPlaystation.typeCard.setOnClickListener { pickType(MoonlightEmulatedType.PLAYSTATION) }
         binding.cardMlNintendo.typeCard.setOnClickListener { pickType(MoonlightEmulatedType.NINTENDO) }
-
-        binding.segOff.setOnClickListener { viewModel.setTouchpad(TouchpadModeValue.OFF) }
-        binding.segPad.setOnClickListener { viewModel.setTouchpad(TouchpadModeValue.DS4) }
-        binding.segMouse.setOnClickListener { viewModel.setTouchpad(TouchpadModeValue.MOUSE) }
     }
 
     private fun observe() {
@@ -276,21 +271,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         binding.btnContinue.setText(R.string.setup_cfg_continue)
         binding.btnContinue.visibility = View.VISIBLE
 
-        val touchpadVisible = state.touchpadAvailable
-        binding.touchpadRow.visibility = visibleIf(touchpadVisible)
-        if (touchpadVisible) {
-            // Each segment shows only when its routing can carry; the draft itself is
-            // capability-sanitized in the ViewModel, so the selection needs no coercion here.
-            binding.segPad.visibility = visibleIf(state.padModeAvailable)
-            binding.segMouse.visibility = visibleIf(state.mouseModeAvailable)
-            val selected = state.draft?.touchpadMode ?: TouchpadModeValue.OFF
-            binding.segOff.isSelected = selected == TouchpadModeValue.OFF
-            binding.segPad.isSelected = selected == TouchpadModeValue.DS4
-            binding.segMouse.isSelected = selected == TouchpadModeValue.MOUSE
-        }
-
         val motionVisible = state.motionAvailable
-        binding.motionDivider.visibility = visibleIf(motionVisible && touchpadVisible)
         binding.motionRow.visibility = visibleIf(motionVisible)
         if (motionVisible) {
             binding.swMotion.setOnCheckedChangeListener(null)
@@ -301,7 +282,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         // Rumble shows when the path can carry it: a Satellite host returns it, the phone
         // vibrates as a fallback for the on-screen pad, and a physical pad needs its own motor.
         val rumbleVisible = state.capabilities.isAvailable(Feature.RUMBLE)
-        binding.rumbleDivider.visibility = visibleIf(rumbleVisible && (motionVisible || touchpadVisible))
+        binding.rumbleDivider.visibility = visibleIf(rumbleVisible && motionVisible)
         binding.rumbleRow.visibility = visibleIf(rumbleVisible)
         if (rumbleVisible) {
             binding.swRumble.setOnCheckedChangeListener(null)
@@ -309,7 +290,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
             binding.swRumble.setOnCheckedChangeListener { _, isChecked -> viewModel.setRumble(isChecked) }
         }
 
-        binding.tvFeelEmpty.visibility = visibleIf(!touchpadVisible && !motionVisible && !rumbleVisible)
+        binding.tvFeelEmpty.visibility = visibleIf(!motionVisible && !rumbleVisible)
     }
 
     // 4C: one card per source and destination, each showing what it sends (up)
@@ -342,11 +323,10 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         snapshot: BindingSnapshot,
     ): List<ReviewNode> {
         val caps = state.capabilities
-        val touchpadMode = state.draft?.touchpadMode ?: TouchpadModeValue.OFF
-        // Each mode rides its own capability: the DS4 pad needs a touchpad-bearing type,
-        // the mouse needs a host that accepts mouse control. The user's chosen mode picks which.
-        val padMode = touchpadMode == TouchpadModeValue.DS4 && caps.isAvailable(Feature.TOUCHPAD)
-        val mouseMode = touchpadMode == TouchpadModeValue.MOUSE && caps.isAvailable(Feature.MOUSE)
+        // Routing is derived, not picked: the emulated pad's own surface wins when the type
+        // carries one, otherwise the touch source drives the host mouse where the host grants it.
+        val padMode = caps.isAvailable(Feature.TOUCHPAD)
+        val mouseMode = !padMode && caps.isAvailable(Feature.MOUSE)
         val model =
             ReviewModel(
                 motionOn = caps.isAvailable(Feature.MOTION) && state.draft?.motionOn == true,

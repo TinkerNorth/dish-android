@@ -28,7 +28,6 @@ import com.tinkernorth.dish.databinding.BindingValueNoneBinding
 import com.tinkernorth.dish.databinding.DialogCardListBinding
 import com.tinkernorth.dish.databinding.SetupReviewCardBinding
 import com.tinkernorth.dish.databinding.SetupTypeCardBinding
-import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
@@ -218,23 +217,6 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
             bz.swMotion.setOnCheckedChangeListener(null)
             bz.swMotion.isChecked = state.draft?.motionOn == true
             bz.swMotion.setOnCheckedChangeListener { _, isChecked -> viewModel.setMotion(isChecked) }
-        }
-
-        val touchpadVisible = state.touchpadAvailable
-        bz.touchpadDivider.visibility = if (touchpadVisible) View.VISIBLE else View.GONE
-        bz.touchpadRow.visibility = if (touchpadVisible) View.VISIBLE else View.GONE
-        if (touchpadVisible) {
-            // Each segment shows only when its routing can carry; the draft itself is
-            // capability-sanitized in the ViewModel, so the selection needs no coercion here.
-            bz.segPad.visibility = if (state.padModeAvailable) View.VISIBLE else View.GONE
-            bz.segMouse.visibility = if (state.mouseModeAvailable) View.VISIBLE else View.GONE
-            val selected = state.draft?.touchpadMode ?: TouchpadModeValue.OFF
-            bz.segOff.isSelected = selected == TouchpadModeValue.OFF
-            bz.segPad.isSelected = selected == TouchpadModeValue.DS4
-            bz.segMouse.isSelected = selected == TouchpadModeValue.MOUSE
-            bz.segOff.setOnClickListener { viewModel.setTouchpad(TouchpadModeValue.OFF) }
-            bz.segPad.setOnClickListener { viewModel.setTouchpad(TouchpadModeValue.DS4) }
-            bz.segMouse.setOnClickListener { viewModel.setTouchpad(TouchpadModeValue.MOUSE) }
         }
 
         // Rumble shows when the path can carry it: the phone vibrates as a fallback for the
