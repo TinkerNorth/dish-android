@@ -9,7 +9,10 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
+import com.tinkernorth.dish.core.model.CapabilitySet
+import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.connection.ConnectionEvent
@@ -26,6 +29,7 @@ import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbController
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.source.usb.UsbPhase
+import com.tinkernorth.dish.ui.common.GamepadSkin
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -346,6 +350,105 @@ class MainViewModelTest {
             assertNull(virtual.boundConnectionId)
             assertNull(virtual.boundStatus)
         }
+
+    @Test
+    fun `gamepadSkinFor maps each satellite type to its own skin`() =
+        runTest(dispatcher) {
+            bindToKind(
+                ConnectionKind.SATELLITE,
+                mapOf(VIRTUAL_SLOT_ID to com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE),
+            )
+            assertEquals(GamepadSkin.DualSense, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
+
+            bindToKind(
+                ConnectionKind.SATELLITE,
+                mapOf(VIRTUAL_SLOT_ID to com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX),
+            )
+            assertEquals(GamepadSkin.Xbox360, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
+        }
+
+    @Test
+    fun `gamepadSkinFor maps a moonlight Xbox pick to the Xbox skin despite the id collision`() =
+        runTest(dispatcher) {
+            bindToKind(ConnectionKind.MOONLIGHT, mapOf(VIRTUAL_SLOT_ID to MoonlightEmulatedType.XBOX))
+            assertEquals(GamepadSkin.Xbox, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
+
+            bindToKind(ConnectionKind.MOONLIGHT, mapOf(VIRTUAL_SLOT_ID to MoonlightEmulatedType.NINTENDO))
+            assertEquals(GamepadSkin.Switch, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
+        }
+
+    @Test
+    fun `gamepadSkinFor resolves moonlight Auto by whether the source has motion`() =
+        runTest(dispatcher) {
+            every {
+                capabilityComposer.capabilityForCandidate(
+                    VIRTUAL_SLOT_ID,
+                    MoonlightEmulatedType.XBOX,
+                    ConnectionKind.MOONLIGHT,
+                    "c:1",
+                )
+            } returns SlotCapabilities.NONE.copy(controller = CapabilitySet.of(Feature.MOTION))
+            bindToKind(ConnectionKind.MOONLIGHT, emptyMap())
+            assertEquals(GamepadSkin.PlayStation, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
+
+            every {
+                capabilityComposer.capabilityForCandidate(
+                    VIRTUAL_SLOT_ID,
+                    MoonlightEmulatedType.XBOX,
+                    ConnectionKind.MOONLIGHT,
+                    "c:1",
+                )
+            } returns SlotCapabilities.NONE
+            assertEquals(GamepadSkin.Xbox, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
+        }
+
+    @Test
+    fun `gamepadSkinFor reads a bluetooth host's skin from the profile name`() =
+        runTest(dispatcher) {
+            connectionsFlow.value =
+                listOf(
+                    ConnectionSummary(
+                        id = "c:1",
+                        kind = ConnectionKind.BLUETOOTH,
+                        label = "PC",
+                        detail = "",
+                        live = LinkState.Connected,
+                        boundSlotIds = listOf(VIRTUAL_SLOT_ID),
+                        btProfile = "PlayStation",
+                    ),
+                )
+            bindingsFlow.value = mapOf(VIRTUAL_SLOT_ID to "c:1")
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(GamepadSkin.PlayStation, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
+        }
+
+    @Test
+    fun `gamepadSkinFor falls back to the satellite default skin for an unbound slot`() =
+        runTest(dispatcher) {
+            dispatcher.scheduler.runCurrent()
+            assertEquals(GamepadSkin.Xbox360, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
+        }
+
+    private fun bindToKind(
+        kind: ConnectionKind,
+        types: Map<String, Int>,
+    ) {
+        connectionsFlow.value =
+            listOf(
+                ConnectionSummary(
+                    id = "c:1",
+                    kind = kind,
+                    label = "Host",
+                    detail = "",
+                    live = LinkState.Connected,
+                    boundSlotIds = listOf(VIRTUAL_SLOT_ID),
+                    satelliteControllerTypes = types,
+                ),
+            )
+        bindingsFlow.value = mapOf(VIRTUAL_SLOT_ID to "c:1")
+        dispatcher.scheduler.runCurrent()
+    }
 
     private fun synthetic(
         id: Int,

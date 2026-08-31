@@ -27,6 +27,8 @@ import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.ui.common.bundledControllerTypeGlyphRes
+import com.tinkernorth.dish.ui.common.moonlightTypeGlyphRes
 import com.tinkernorth.dish.ui.common.moonlightTypeLabelRes
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.main.ApplyState
@@ -187,6 +189,15 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         locked: Boolean,
     ) {
         card.typeTitle.text = viewModel.typeLabel(candidateType)
+        // A Bluetooth host's Xbox is the generic pad the phone advertises, not the
+        // satellite's emulated Xbox 360, so its card wears the modern silhouette.
+        card.typeGlyph.setImageResource(
+            if (state.isBluetoothHost && candidateType == CONTROLLER_TYPE_XBOX) {
+                R.drawable.ic_ctrl_xbox
+            } else {
+                bundledControllerTypeGlyphRes(candidateType)
+            },
+        )
         card.typeChevron.visibility = visibleIf(!locked)
         card.typeCard.isClickable = !locked
         card.typeCard.isChecked = state.draft?.type == candidateType
@@ -214,6 +225,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         if (!visible) return
         val resolved = viewModel.moonlightResolvedType(candidateType)
         card.typeTitle.setText(moonlightTypeLabelRes(candidateType))
+        card.typeGlyph.setImageResource(moonlightTypeGlyphRes(candidateType))
         card.typeChevron.visibility = View.GONE
         card.typeCard.isClickable = true
         card.typeCard.isChecked = state.draft?.type == candidateType

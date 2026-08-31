@@ -128,3 +128,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SO
 ```
 
 Upstream: https://github.com/cgutman/enet
+
+## Kenney Input Prompts: controller glyphs and silhouettes
+
+The on-screen virtual pad's button glyphs (`app/src/main/res/drawable/ic_gp_*.xml`, except
+the hand-drawn `ic_gp_ps_logo`) and the controller-type silhouettes (`ic_ctrl_*.xml`) are
+converted from the SVGs in Kenney's "Input Prompts" asset pack (the Xbox Series,
+PlayStation Series, and Nintendo Switch sets) by `tools/svg2vd.ps1`. The pack is dedicated
+to the public domain under Creative Commons CC0 1.0, so no attribution is required; it is
+credited here because the art is bundled material, not a build dependency.
+
+Upstream: https://kenney.nl/assets/input-prompts

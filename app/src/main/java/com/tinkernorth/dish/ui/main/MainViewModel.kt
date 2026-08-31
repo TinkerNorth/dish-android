@@ -9,10 +9,13 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionCoordinator
+import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.TouchpadSource
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
+import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
@@ -25,6 +28,7 @@ import com.tinkernorth.dish.source.store.UsbPathPreferenceStore
 import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbController
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
+import com.tinkernorth.dish.ui.common.GamepadSkin
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -208,6 +212,38 @@ class MainViewModel
 
         // Use this in render code: absence and `false` differ in the store but mean the same to the user.
         fun isMotionEnabled(slotId: String): Boolean = motionEnabledStore.isEnabled(slotId)
+
+        // The skin the on-screen pad opens with, matching the pad the host really builds:
+        // a Bluetooth host carries it in the profile name, a Moonlight host in its own type
+        // table (Auto resolved the same way the session resolves it), a satellite in the
+        // per-slot catalog type.
+        fun gamepadSkinFor(slotId: String): GamepadSkin {
+            val summary =
+                uiState.value.slots
+                    .firstOrNull { it.id == slotId }
+                    ?.boundStatus
+            return when (summary?.kind) {
+                ConnectionKind.BLUETOOTH -> GamepadSkin.forBtProfile(summary.btProfile)
+                ConnectionKind.MOONLIGHT -> GamepadSkin.forMoonlightType(resolvedMoonlightType(slotId, summary))
+                else -> GamepadSkin.forControllerType(summary?.satelliteControllerTypes?.get(slotId) ?: CONTROLLER_TYPE_XBOX)
+            }
+        }
+
+        private fun resolvedMoonlightType(
+            slotId: String,
+            summary: ConnectionSummary,
+        ): Int {
+            val picked = MoonlightEmulatedType.fromStored(summary.satelliteControllerTypes[slotId] ?: MoonlightEmulatedType.AUTO)
+            if (picked != MoonlightEmulatedType.AUTO) return picked
+            val source =
+                capabilityComposer.capabilityForCandidate(
+                    slotId = slotId,
+                    candidateType = MoonlightEmulatedType.XBOX,
+                    candidateHostKind = ConnectionKind.MOONLIGHT,
+                    candidateHostId = summary.id,
+                )
+            return MoonlightEmulatedType.resolve(picked, source.inputOk(Feature.MOTION))
+        }
 
         private fun pathCardFor(
             slot: ControllerSlot,

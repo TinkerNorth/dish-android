@@ -59,8 +59,8 @@ internal fun computeGamepadLayout(
     safeInsets: Rect,
     skin: GamepadSkin,
 ): GamepadLayout {
-    // Only PlayStation flips the d-pad above the left stick; Switch keeps the Xbox arrangement.
-    val psLayout = skin == GamepadSkin.PlayStation
+    // Only the PlayStation family flips the d-pad above the left stick; Switch keeps the Xbox arrangement.
+    val psLayout = skin == GamepadSkin.PlayStation || skin == GamepadSkin.DualSense
     val cushion = SAFE_AREA_CUSHION_DP * density
     val safeTop = safeInsets.top + cushion
     val safeLeft = safeInsets.left + cushion
