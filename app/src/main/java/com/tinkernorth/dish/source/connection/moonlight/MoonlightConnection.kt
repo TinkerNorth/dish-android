@@ -9,6 +9,10 @@ import com.tinkernorth.dish.core.net.moonlight.MoonlightControlSession
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEvent
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
+import com.tinkernorth.dish.core.net.moonlight.MoonlightMotionGate
+import com.tinkernorth.dish.core.net.moonlight.MoonlightTelemetry
+import com.tinkernorth.dish.core.net.moonlight.MoonlightTouchDiffer
+import com.tinkernorth.dish.source.connection.TelemetrySink
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
@@ -36,7 +40,7 @@ class MoonlightConnection(
     host: MoonlightHost,
     private val scope: CoroutineScope,
     private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher,
-) {
+) : TelemetrySink {
     private val _host = MutableStateFlow(host)
     val host: StateFlow<MoonlightHost> = _host.asStateFlow()
 
@@ -109,12 +113,20 @@ class MoonlightConnection(
 
     /** Drop [slotId] from the session and report how many pads remain. */
     fun releasePad(slotId: String): Int {
+        val released: MoonlightPad?
         val remaining =
             synchronized(padLock) {
-                if (_pads.value[slotId] == null) return@synchronized _pads.value.size
+                released = _pads.value[slotId]
+                if (released == null) return@synchronized _pads.value.size
                 _pads.value = _pads.value - slotId
                 _pads.value.size
             }
+        released?.let { pad ->
+            motionGate.clear(pad.number)
+            touchDiffers.remove(slotId)
+            lastPadFrames.remove(pad.number)
+            touchClickByNumber.remove(pad.number)
+        }
         withdraw()
         return remaining
     }
@@ -237,10 +249,16 @@ class MoonlightConnection(
         rightY: Int,
     ) {
         val live = session ?: return
+        // Cache the frame so a touchpad-click edge (which arrives on the touch
+        // stream, not the pad report) can replay it with the click bit merged.
+        val frame = PadFrame(buttons, leftTrigger, rightTrigger, leftX, leftY, rightX, rightY)
+        lastPadFrames[controllerNumber] = frame
+        val clickBit =
+            if (touchClickByNumber[controllerNumber] == true) MoonlightControlProtocol.BTN_TOUCHPAD else 0
         live.sendControllerState(
             controllerNumber = controllerNumber,
             activeMask = activeMask(),
-            buttons = buttons and WIRE_BUTTONS_MASK,
+            buttons = (buttons or clickBit) and WIRE_BUTTONS_MASK,
             leftTrigger = leftTrigger,
             rightTrigger = rightTrigger,
             leftStickX = leftX,
@@ -249,6 +267,12 @@ class MoonlightConnection(
             rightStickY = rightY,
         )
     }
+
+    /** Resolve a wire controller number back to the slot bound to it, if any. */
+    fun slotIdForNumber(controllerNumber: Int): String? =
+        _pads.value.values
+            .firstOrNull { it.number == controllerNumber }
+            ?.slotId
 
     fun sendMouseMoveRel(
         deltaX: Int,
@@ -268,7 +292,142 @@ class MoonlightConnection(
         session?.sendMouseScroll(amount)
     }
 
+    // Host-requested motion state + per-slot touch differs (TelemetrySink below).
+    private val motionGate = MoonlightMotionGate()
+    private val touchDiffers = java.util.concurrent.ConcurrentHashMap<String, MoonlightTouchDiffer>()
+
+    private data class PadFrame(
+        val buttons: Int,
+        val leftTrigger: Int,
+        val rightTrigger: Int,
+        val leftX: Int,
+        val leftY: Int,
+        val rightX: Int,
+        val rightY: Int,
+    )
+
+    private val lastPadFrames = java.util.concurrent.ConcurrentHashMap<Int, PadFrame>()
+    private val touchClickByNumber = java.util.concurrent.ConcurrentHashMap<Int, Boolean>()
+
+    override fun motionWanted(slotId: String): Boolean {
+        val pad = padFor(slotId) ?: return false
+        return motionGate.wanted(pad.number)
+    }
+
+    /**
+     * One satellite-scaled IMU sample, split into the per-type Moonlight
+     * packets the host asked for (accel and gyro are independent MOTION_EVENT
+     * subscriptions) and paced to each requested rate.
+     */
+    @Suppress("LongParameterList")
+    override fun sendMotion(
+        slotId: String,
+        gyroX: Short,
+        gyroY: Short,
+        gyroZ: Short,
+        accelX: Short,
+        accelY: Short,
+        accelZ: Short,
+        timestampDeltaUs: Int,
+    ) {
+        val live = session ?: return
+        val pad = padFor(slotId) ?: return
+        val nowNs = System.nanoTime()
+        if (motionGate.shouldSend(pad.number, MoonlightControlProtocol.MOTION_TYPE_GYRO, nowNs)) {
+            live.sendControllerMotion(
+                controllerNumber = pad.number,
+                motionType = MoonlightControlProtocol.MOTION_TYPE_GYRO,
+                x = MoonlightTelemetry.gyroDegS(gyroX),
+                y = MoonlightTelemetry.gyroDegS(gyroY),
+                z = MoonlightTelemetry.gyroDegS(gyroZ),
+            )
+        }
+        if (motionGate.shouldSend(pad.number, MoonlightControlProtocol.MOTION_TYPE_ACCEL, nowNs)) {
+            live.sendControllerMotion(
+                controllerNumber = pad.number,
+                motionType = MoonlightControlProtocol.MOTION_TYPE_ACCEL,
+                x = MoonlightTelemetry.accelMs2(accelX),
+                y = MoonlightTelemetry.accelMs2(accelY),
+                z = MoonlightTelemetry.accelMs2(accelZ),
+            )
+        }
+    }
+
+    override fun sendBattery(
+        slotId: String,
+        level: Int,
+        status: Int,
+    ) {
+        val live = session ?: return
+        val pad = padFor(slotId) ?: return
+        live.sendControllerBattery(
+            controllerNumber = pad.number,
+            batteryState = MoonlightTelemetry.batteryState(status),
+            percentage = MoonlightTelemetry.batteryPercentage(level),
+        )
+    }
+
+    /**
+     * Full-state touch snapshot -> per-pointer events. The click button does
+     * not ride here: BTN_TOUCHPAD travels inside CONTROLLER_MULTI's button
+     * flags, and the mouse-mode buttons/wheel ride the native mouse packets,
+     * so this carries contacts only.
+     */
+    @Suppress("LongParameterList")
+    override fun sendTouchpad(
+        slotId: String,
+        finger0Active: Boolean,
+        finger1Active: Boolean,
+        buttonPressed: Boolean,
+        rightPressed: Boolean,
+        middlePressed: Boolean,
+        finger0TrackingId: Int,
+        finger0X: Short,
+        finger0Y: Short,
+        finger1TrackingId: Int,
+        finger1X: Short,
+        finger1Y: Short,
+        eventTimeMs: Long,
+        scrollDelta: Short,
+    ) {
+        val live = session ?: return
+        val pad = padFor(slotId) ?: return
+        // The pad-surface click has no packet of its own: it is BTN_TOUCHPAD in
+        // the pad report. On an edge, replay the last cached frame with the bit
+        // merged so a click with no stick/button change still reaches the host.
+        if (touchClickByNumber[pad.number] != buttonPressed) {
+            touchClickByNumber[pad.number] = buttonPressed
+            val f = lastPadFrames[pad.number] ?: PadFrame(0, 0, 0, 0, 0, 0, 0)
+            sendControllerState(pad.number, f.buttons, f.leftTrigger, f.rightTrigger, f.leftX, f.leftY, f.rightX, f.rightY)
+        }
+        val differ = touchDiffers.getOrPut(slotId) { MoonlightTouchDiffer() }
+        val events =
+            differ.diff(
+                finger0Active = finger0Active,
+                finger0Id = finger0TrackingId,
+                finger0X = MoonlightTelemetry.touchNorm(finger0X),
+                finger0Y = MoonlightTelemetry.touchNorm(finger0Y),
+                finger1Active = finger1Active,
+                finger1Id = finger1TrackingId,
+                finger1X = MoonlightTelemetry.touchNorm(finger1X),
+                finger1Y = MoonlightTelemetry.touchNorm(finger1Y),
+            )
+        for (e in events) {
+            live.sendControllerTouch(
+                controllerNumber = pad.number,
+                eventType = e.eventType,
+                pointerId = e.pointerId,
+                x = e.x,
+                y = e.y,
+                pressure = e.pressure,
+            )
+        }
+    }
+
     fun dispatchFeedback(event: MoonlightEvent) {
+        if (event is MoonlightEvent.MotionRequest) {
+            motionGate.onMotionRequest(event.controllerNumber, event.reportRateHz, event.motionType)
+        }
         onFeedback(event)
     }
 
@@ -288,6 +447,10 @@ class MoonlightConnection(
     }
 
     private fun teardown() {
+        motionGate.clearAll()
+        touchDiffers.clear()
+        lastPadFrames.clear()
+        touchClickByNumber.clear()
         pumpJob?.cancel()
         pumpJob = null
         pingJob?.cancel()

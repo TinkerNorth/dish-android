@@ -229,13 +229,66 @@ class CapabilityResolverTest {
     }
 
     @Test
-    fun `wireCaps never carries CAP_LIGHTBAR`() {
+    fun `wireCaps carries the feedback caps only when the input can actuate them`() {
+        // The motion-only slots above have no LED/trigger surfaces: nothing rides.
         for (gyro in listOf(true, false)) {
             for (userMotion in listOf(true, false)) {
                 val caps = CapabilityResolver.wireCaps(slot(gyro = gyro, userMotion = userMotion))
                 assertEquals(0, caps and ControllerDescriptor.CAP_LIGHTBAR)
+                assertEquals(0, caps and ControllerDescriptor.CAP_TRIGGER_EFFECTS)
+                assertEquals(0, caps and ControllerDescriptor.CAP_PLAYER_LEDS)
             }
         }
+        // A Direct-claimed DualSense (lightbar + trigger effects + player LEDs in its
+        // controller layer) advertises all three, independent of type and toggles.
+        val ds5 =
+            SlotCapabilities(
+                controller =
+                    CapabilitySet.of(
+                        Feature.GAMEPAD,
+                        Feature.LIGHTBAR,
+                        Feature.TRIGGER_EFFECTS,
+                        Feature.PLAYER_LEDS,
+                    ),
+                transport = CapabilitySet(Feature.entries.toSet()),
+                type = CapabilitySet.of(Feature.GAMEPAD),
+                host = CapabilitySet(Feature.entries.toSet()),
+                userEnabled = CapabilitySet.EMPTY,
+                runtimeDown = CapabilitySet.EMPTY,
+            )
+        val caps = CapabilityResolver.wireCaps(ds5)
+        assertEquals(ControllerDescriptor.CAP_LIGHTBAR, caps and ControllerDescriptor.CAP_LIGHTBAR)
+        assertEquals(
+            ControllerDescriptor.CAP_TRIGGER_EFFECTS,
+            caps and ControllerDescriptor.CAP_TRIGGER_EFFECTS,
+        )
+        assertEquals(
+            ControllerDescriptor.CAP_PLAYER_LEDS,
+            caps and ControllerDescriptor.CAP_PLAYER_LEDS,
+        )
+    }
+
+    @Test
+    fun `battery and trigger rumble pass the type layer without a catalog slug`() {
+        // A catalog type that advertises nothing still lets the slug-less
+        // features through; the transport/host layers are their real gates.
+        val bare = CapabilityResolver.typeCapabilities(CatalogTypeDto(features = emptyMap()))
+        assertTrue(Feature.BATTERY in bare)
+        assertTrue(Feature.TRIGGER_RUMBLE in bare)
+        assertFalse(Feature.TRIGGER_EFFECTS in bare)
+        assertFalse(Feature.PLAYER_LEDS in bare)
+    }
+
+    @Test
+    fun `trigger rumble follows the rumble toggle, the feedback surfaces have none`() {
+        val off = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = false)
+        assertFalse(Feature.TRIGGER_RUMBLE in off)
+        assertTrue(Feature.LIGHTBAR in off)
+        assertTrue(Feature.TRIGGER_EFFECTS in off)
+        assertTrue(Feature.PLAYER_LEDS in off)
+        assertTrue(Feature.BATTERY in off)
+        val on = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = true)
+        assertTrue(Feature.TRIGGER_RUMBLE in on)
     }
 
     @Test

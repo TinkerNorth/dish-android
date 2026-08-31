@@ -18,8 +18,9 @@ import com.tinkernorth.dish.composer.PhysicalReachability
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
-import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.connection.TelemetrySink
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
 import com.tinkernorth.dish.source.inputrate.InputRateStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -36,6 +37,7 @@ class PhysicalMotionSource
         private val registry: PhysicalGamepadRegistry,
         private val hub: ConnectionCoordinator,
         private val satellite: SatelliteConnectionManager,
+        private val moonlight: MoonlightConnectionManager,
         private val capabilityComposer: CapabilityComposer,
         private val scope: CoroutineScope,
         private val inputRateStore: InputRateStore,
@@ -108,6 +110,9 @@ class PhysicalMotionSource
                 if (values.size < 3) return
                 if (!shouldEmitGyro(accel != null, accelSeen)) return
                 val conn = reachable[slotId] ?: return
+                // A Moonlight host consumes motion only after MOTION_EVENT asked for
+                // it; a satellite sink always wants it (descriptor-advertised).
+                if (!conn.motionWanted(slotId)) return
                 val sample =
                     convertControllerSample(
                         gyroX = values[0],
@@ -135,7 +140,7 @@ class PhysicalMotionSource
 
         private var bindingsJob: Job? = null
 
-        @Volatile private var reachable: Map<String, SatelliteConnection> = emptyMap()
+        @Volatile private var reachable: Map<String, TelemetrySink> = emptyMap()
 
         // Guarded by listenersLock: a final reachability update racing onStop could leak a listener.
         private val listeners = HashMap<String, PadListener>()
@@ -155,6 +160,7 @@ class PhysicalMotionSource
                         hub.bindings,
                         hub.connections,
                         satellite.connections,
+                        moonlight.connections,
                     ).combine(capabilityComposer.state, ::filterByCapability)
                     .onEach(::onReachableChanged)
                     .launchIn(scope)
@@ -173,7 +179,7 @@ class PhysicalMotionSource
             sensorHandler = null
         }
 
-        private fun onReachableChanged(next: Map<String, SatelliteConnection>) {
+        private fun onReachableChanged(next: Map<String, TelemetrySink>) {
             reachable = next
             synchronized(listenersLock) {
                 val gone = listeners.keys - next.keys
@@ -216,9 +222,9 @@ class PhysicalMotionSource
             ): Boolean = !hasAccelSensor || accelSeen
 
             internal fun filterByCapability(
-                reachable: Map<String, com.tinkernorth.dish.source.connection.SatelliteConnection>,
+                reachable: Map<String, TelemetrySink>,
                 caps: Map<String, SlotCapabilities>,
-            ): Map<String, com.tinkernorth.dish.source.connection.SatelliteConnection> =
+            ): Map<String, TelemetrySink> =
                 reachable.filterKeys { slotId ->
                     val cap = caps[slotId] ?: return@filterKeys false
                     cap.inputOk(Feature.MOTION) && cap.userWants(Feature.MOTION)

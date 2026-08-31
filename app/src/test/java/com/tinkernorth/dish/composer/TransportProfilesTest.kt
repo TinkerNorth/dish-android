@@ -10,9 +10,11 @@ import org.junit.Test
 
 class TransportProfilesTest {
     @Test
-    fun `satellite carries every feature`() {
+    fun `satellite carries every feature except trigger rumble`() {
+        // Trigger rumble has no satellite wire message: no virtual-pad backend
+        // has trigger motors to source it from.
         val caps = TransportProfiles.forKind(ConnectionKind.SATELLITE)
-        assertEquals(Feature.entries.toSet(), caps.features)
+        assertEquals(Feature.entries.toSet() - Feature.TRIGGER_RUMBLE, caps.features)
     }
 
     @Test

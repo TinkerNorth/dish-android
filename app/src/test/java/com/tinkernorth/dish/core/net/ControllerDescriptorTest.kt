@@ -22,7 +22,7 @@ class ControllerDescriptorTest {
             )
         assertEquals(
             """{"ctrlIdx":2,"type":1,"caps":{"rumble":true,"motion":true,"analogTriggers":true,""" +
-                """"lightbar":false},"touchpadMode":"ds4"}""",
+                """"lightbar":false,"triggerEffects":false,"playerLeds":false},"touchpadMode":"ds4"}""",
             d.toJson(),
         )
     }

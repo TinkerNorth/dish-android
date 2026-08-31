@@ -7,6 +7,24 @@ computer. Those lines say "update Satellite too".
 
 ---
 
+## Unreleased
+
+### Added
+
+- Controller lights follow the game. On a USB-connected (Direct mode)
+  DualShock 4 or DualSense, the light bar now shows the color the game picks;
+  a DualSense's player lights and a Switch Pro's player LEDs light up too.
+  Works over Satellite (update Satellite too) and over Moonlight hosts.
+- DualSense adaptive triggers, end to end: a game driving the virtual
+  DualSense's trigger effects on the PC now shapes the real triggers of a
+  USB-connected DualSense (update Satellite too).
+- Trigger rumble on Xbox One / Series pads over Moonlight: the impulse
+  motors in the triggers now fire when the host asks.
+- Moonlight hosts now receive controller motion (when the game asks for it),
+  the DualShock/DualSense touchpad — from the pad itself in Direct mode or
+  from the phone screen — and battery levels, the same telemetry the
+  Satellite path already carried.
+
 ## [1.1.4] - 2026-08-24
 
 ### Changed

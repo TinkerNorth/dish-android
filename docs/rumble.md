@@ -79,16 +79,17 @@ stop and clamps duration to 1500 ms, so a ~1000 ms re-send under the
 1500 ms cap sustains cleanly with no wire change. If instead the
 satellite can know the true effect length, send that as `durationMs`.
 
-### FR-2: Trigger (impulse) rumble fields
+### FR-2: Trigger (impulse) rumble fields — Moonlight side DONE
 
-Xbox One / Series controllers have left and right trigger haptic
-motors. `MSG_RUMBLE` carries only strong + weak, so trigger haptics
-cannot be expressed. Request: either extend `MSG_RUMBLE` to 11 B with
-`leftTrigger u16 BE` and `rightTrigger u16 BE`, or add a new
-`MSG_RUMBLE_TRIGGERS` opcode, plus a `CAP_TRIGGER_RUMBLE` capability bit
-the client sets only for a bound device that can actuate triggers. This
-is only actuatable on USB-direct Xbox pads via GIP output reports, so it
-should land after the USB-direct rumble follow-up below.
+Delivered for the Moonlight transport: `RUMBLE_TRIGGERS` (0x5500) events
+now actuate the trigger motors of a USB-direct Xbox One / Series pad
+(`FeedbackRouter.dispatchTriggerRumbleToSlot` → merged GIP report), and
+the arrival advertisement claims `CAP_TRIGGER_RUMBLE` only when the
+bound pad really has the motors (`Feature.TRIGGER_RUMBLE`). The
+satellite protocol still has no trigger-rumble message because no
+virtual-pad backend (X360 XUSB, DS4/DS5, Switch) exposes trigger motors
+to source it from; the request stands only for a future backend that
+does.
 
 ### FR-3: Per-slot rumble capability (nice to have)
 
@@ -99,13 +100,18 @@ can skip rumble that would be dropped. Harmless if omitted (the host
 simply sends rumble that no-ops), so this is a refinement, not a
 blocker.
 
-### FR-4 (adjacent, not rumble): Lightbar over USB-direct
+### FR-4 (adjacent, not rumble): Lightbar over USB-direct — DONE
 
-`MSG_LIGHTBAR` (0x000D) already exists but Android drops it (no
-framework LED API). A claimed USB-direct DualShock / DualSense could
-drive its lightbar through the same OUT endpoint used for rumble. If
-wanted, the client would advertise `CAP_LIGHTBAR` only for those slots.
-Out of scope here; noted so the OUT-endpoint work is costed once.
+`MSG_LIGHTBAR` (0x000D) now routes through `FeedbackBridge` /
+`FeedbackRouter` onto a claimed DualShock 4 / DualSense's OUT endpoint
+(`usbparsers::buildLightbarReport`; the DualSense write includes the
+one-time LIGHTBAR_SETUP light-out handoff). `CAP_LIGHTBAR` is advertised
+only for those slots. The same plumbing carries the protocol-2 additions
+`MSG_TRIGGER_EFFECTS` (0x0010, raw DualSense adaptive-trigger blocks
+replayed verbatim) and `MSG_PLAYER_LEDS` (0x0011, DualSense bar / Switch
+Pro player lights), gated on the `triggerEffects` / `playerLeds`
+descriptor caps. Moonlight `RGB_LED` events land on the same lightbar
+writer.
 
 ## USB-direct rumble output reports
 

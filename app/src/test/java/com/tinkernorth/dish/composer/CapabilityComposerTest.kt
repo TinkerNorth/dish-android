@@ -82,6 +82,10 @@ class CapabilityComposerTest {
         modelHasImu: Boolean = false,
         modelHasRumble: Boolean = false,
         modelHasTouchpad: Boolean = false,
+        modelHasLightbar: Boolean = false,
+        modelHasPlayerLeds: Boolean = false,
+        modelHasTriggerEffects: Boolean = false,
+        modelHasTriggerRumble: Boolean = false,
         satTypes: MutableStateFlow<Map<Pair<String, String>, Int>> = MutableStateFlow(emptyMap()),
     ): CapabilityComposer {
         val availability: PhoneMotionAvailability = mockk { every { hasGyro } returns phoneAvailable }
@@ -97,6 +101,10 @@ class CapabilityComposerTest {
                 every { modelHasImu(any(), any()) } returns modelHasImu
                 every { modelHasRumble(any(), any()) } returns modelHasRumble
                 every { modelHasTouchpad(any(), any()) } returns modelHasTouchpad
+                every { modelHasLightbar(any(), any()) } returns modelHasLightbar
+                every { modelHasPlayerLeds(any(), any()) } returns modelHasPlayerLeds
+                every { modelHasTriggerEffects(any(), any()) } returns modelHasTriggerEffects
+                every { modelHasTriggerRumble(any(), any()) } returns modelHasTriggerRumble
             }
         val motionStore: MotionEnabledStore = mockk { every { state } returns motionEnabled }
         val rumbleStore: RumbleEnabledStore = mockk { every { state } returns rumbleEnabled }
@@ -240,6 +248,88 @@ class CapabilityComposerTest {
             val controller = composer.capabilityFor("-1000").controller
             assertTrue(Feature.MOTION in controller)
             assertTrue(Feature.RUMBLE in controller)
+        }
+
+    @Test
+    fun `a USB-direct DualSense advertises its LED and trigger surfaces`() =
+        composerTest {
+            val devices =
+                MutableStateFlow(
+                    mapOf(-1000 to device(-1000, isUsbSynthetic = true)),
+                )
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = devices,
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                    modelHasLightbar = true,
+                    modelHasPlayerLeds = true,
+                    modelHasTriggerEffects = true,
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            val controller = composer.capabilityFor("-1000").controller
+            assertTrue(Feature.LIGHTBAR in controller)
+            assertTrue(Feature.PLAYER_LEDS in controller)
+            assertTrue(Feature.TRIGGER_EFFECTS in controller)
+            assertFalse(Feature.TRIGGER_RUMBLE in controller)
+            assertTrue(Feature.BATTERY in controller)
+        }
+
+    @Test
+    fun `a framework pad never advertises LED or trigger surfaces`() =
+        composerTest {
+            // Same model answers, but not captured: the framework path has no raw
+            // output-report writer, so nothing may be advertised.
+            val devices = MutableStateFlow(mapOf(9 to device(9, hasRumble = true)))
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = devices,
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                    modelHasLightbar = true,
+                    modelHasPlayerLeds = true,
+                    modelHasTriggerEffects = true,
+                    modelHasTriggerRumble = true,
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            val controller = composer.capabilityFor("9").controller
+            assertFalse(Feature.LIGHTBAR in controller)
+            assertFalse(Feature.PLAYER_LEDS in controller)
+            assertFalse(Feature.TRIGGER_EFFECTS in controller)
+            assertFalse(Feature.TRIGGER_RUMBLE in controller)
+        }
+
+    @Test
+    fun `a USB-direct Xbox One pad advertises trigger rumble`() =
+        composerTest {
+            val devices =
+                MutableStateFlow(
+                    mapOf(-1000 to device(-1000, isUsbSynthetic = true)),
+                )
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = devices,
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                    modelHasRumble = true,
+                    modelHasTriggerRumble = true,
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            val controller = composer.capabilityFor("-1000").controller
+            assertTrue(Feature.TRIGGER_RUMBLE in controller)
+            assertFalse(Feature.LIGHTBAR in controller)
         }
 
     @Test
