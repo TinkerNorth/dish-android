@@ -23,8 +23,13 @@ import com.tinkernorth.dish.ui.common.GamepadConstants.ABXY_BTN_DRAW_SIZE_FACTOR
 import com.tinkernorth.dish.ui.common.GamepadConstants.ABXY_BTN_SPACING_FACTOR
 import com.tinkernorth.dish.ui.common.GamepadConstants.CENTER_BTN_DRAW_SIZE_FACTOR
 import com.tinkernorth.dish.ui.common.GamepadConstants.HOME_DRAW_SIZE_FACTOR
+import com.tinkernorth.dish.ui.common.GamepadConstants.LIGHTBAR_STROKE_DP
 import com.tinkernorth.dish.ui.common.GamepadConstants.PILL_CORNER_RADIUS_FRACTION
 import com.tinkernorth.dish.ui.common.GamepadConstants.PILL_ICON_SIZE_FRACTION
+import com.tinkernorth.dish.ui.common.GamepadConstants.PLAYER_LED_COUNT
+import com.tinkernorth.dish.ui.common.GamepadConstants.PLAYER_LED_GAP_DP
+import com.tinkernorth.dish.ui.common.GamepadConstants.PLAYER_LED_PITCH_DP
+import com.tinkernorth.dish.ui.common.GamepadConstants.PLAYER_LED_RADIUS_DP
 import com.tinkernorth.dish.ui.common.GamepadConstants.STICK_DIR_LINE_WIDTH_FRACTION
 import com.tinkernorth.dish.ui.common.GamepadConstants.STICK_LABEL_BASELINE_FRACTION
 import com.tinkernorth.dish.ui.common.GamepadConstants.STICK_LABEL_SIZE_MULTI
@@ -38,6 +43,7 @@ import com.tinkernorth.dish.ui.common.GamepadConstants.TRACKPAD_CORNER_RADIUS_FR
 import com.tinkernorth.dish.ui.common.GamepadConstants.TRACKPAD_FINGER_DOT_RADIUS_DP
 import com.tinkernorth.dish.ui.common.GamepadConstants.TRACKPAD_OUTLINE_STROKE_DP
 import com.tinkernorth.dish.ui.common.GamepadConstants.TRACKPAD_TAP_SLOP_DP
+import com.tinkernorth.dish.ui.common.GamepadConstants.TRIGGER_EFFECT_STROKE_DP
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -128,6 +134,37 @@ class GamepadTouchView
                 invalidate()
             }
 
+        // Host-driven feedback rendered on the skin (VirtualPadFeedbackStore): the
+        // phone has no lightbar, player-LED or adaptive-trigger hardware, so the
+        // on-screen pad shows them the way the real controller would.
+        var lightbarColor: Int? = null
+            set(value) {
+                if (field == value) return
+                field = value
+                invalidate()
+            }
+
+        var playerLedMask: Int = 0
+            set(value) {
+                if (field == value) return
+                field = value
+                invalidate()
+            }
+
+        var leftTriggerEffect: Boolean = false
+            set(value) {
+                if (field == value) return
+                field = value
+                invalidate()
+            }
+
+        var rightTriggerEffect: Boolean = false
+            set(value) {
+                if (field == value) return
+                field = value
+                invalidate()
+            }
+
         private val paintBg =
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = ContextCompat.getColor(context, R.color.colorSurface)
@@ -185,6 +222,30 @@ class GamepadTouchView
         // Per-channel min compositor for diagonal d-pad rendering (see [drawDpad]).
         private val dpadDarkenPaint =
             Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.DARKEN) }
+
+        // Colour set per draw from lightbarColor; stroke like the trackpad outline
+        // but wider, so the bar reads as the light around the touchpad it is on the
+        // real DS4 v2 / DualSense.
+        private val paintLightbar =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+
+        private val paintLedOn =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = ContextCompat.getColor(context, R.color.colorPrimary)
+            }
+        private val paintLedOff =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color =
+                    ColorUtils.setAlphaComponent(
+                        ContextCompat.getColor(context, R.color.colorOnSurface),
+                        0x30,
+                    )
+            }
+        private val paintTriggerEffect =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                color = ContextCompat.getColor(context, R.color.colorPrimary)
+            }
 
         private val safeInsets = Rect()
 
@@ -393,6 +454,7 @@ class GamepadTouchView
             drawCenterButtons(canvas, l, s)
             drawShoulders(canvas, l, s)
             drawTriggers(canvas, l, s)
+            drawPlayerLeds(canvas, l)
         }
 
         private fun drawDpad(
@@ -549,6 +611,11 @@ class GamepadTouchView
             c.drawRoundRect(tp, corner, corner, paintStickBg)
             paintStickRing.strokeWidth = TRACKPAD_OUTLINE_STROKE_DP * density
             c.drawRoundRect(tp, corner, corner, paintStickRing)
+            lightbarColor?.let { color ->
+                paintLightbar.color = color
+                paintLightbar.strokeWidth = LIGHTBAR_STROKE_DP * density
+                c.drawRoundRect(tp, corner, corner, paintLightbar)
+            }
             if (trackpadClickFlash || s.buttons and BTN_TOUCHPAD_CLICK != 0) {
                 c.drawRoundRect(tp, corner, corner, paintPressed)
             }
@@ -603,6 +670,45 @@ class GamepadTouchView
         ) {
             drawPillButton(c, l.ltRect, icLT, s.leftTrigger > 0)
             drawPillButton(c, l.rtRect, icRT, s.rightTrigger > 0)
+            if (leftTriggerEffect) drawTriggerEffectRing(c, l.ltRect)
+            if (rightTriggerEffect) drawTriggerEffectRing(c, l.rtRect)
+        }
+
+        // An adaptive-trigger effect has no on-screen force to render, so the pill
+        // gets an accent ring while the game holds a non-neutral effect.
+        private fun drawTriggerEffectRing(
+            c: Canvas,
+            rect: RectF,
+        ) {
+            val r = min(rect.width(), rect.height()) * PILL_CORNER_RADIUS_FRACTION
+            paintTriggerEffect.strokeWidth = TRIGGER_EFFECT_STROKE_DP * density
+            c.drawRoundRect(rect, r, r, paintTriggerEffect)
+        }
+
+        // The DualSense's five microLEDs sit under the touchpad; skins without a
+        // touch zone (Switch) anchor the row under the home button instead. Off
+        // LEDs draw faintly so a partial mask reads as a position, not noise.
+        private fun drawPlayerLeds(
+            c: Canvas,
+            l: GamepadLayout,
+        ) {
+            if (playerLedMask == 0) return
+            val tp = l.trackpadRect
+            val cy =
+                if (tp != null) {
+                    tp.bottom + PLAYER_LED_GAP_DP * density
+                } else {
+                    l.homeCy + l.smallBtnRadius + PLAYER_LED_GAP_DP * density
+                }
+            val cx = tp?.centerX() ?: l.homeCx
+            val radius = PLAYER_LED_RADIUS_DP * density
+            val pitch = radius * 2f + PLAYER_LED_PITCH_DP * density
+            val count = PLAYER_LED_COUNT
+            val startX = cx - pitch * (count - 1) / 2f
+            for (i in 0 until count) {
+                val on = playerLedMask and (1 shl i) != 0
+                c.drawCircle(startX + pitch * i, cy, radius, if (on) paintLedOn else paintLedOff)
+            }
         }
 
         @SuppressLint("ClickableViewAccessibility")

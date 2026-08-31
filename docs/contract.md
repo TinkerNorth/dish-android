@@ -59,9 +59,12 @@ Android-side mapping. The former `wire-format.md` is replaced by the contract.
   `triggerEffects` and `playerLeds` caps ride only when the bound input can
   actually land them: a Direct-claimed pad whose family has the surface
   (DS4/DualSense lightbar, DualSense trigger effects + player LEDs, Switch
-  Pro player lights). The satellite sends those messages only to sessions
-  that advertised the cap, so a framework-path pad (no raw output writer)
-  never sees them.
+  Pro player lights), or the virtual pad, whose skin renders the lights the
+  phone lacks (`VirtualPadFeedbackStore` → `GamepadTouchView`: lightbar ring
+  around the trackpad, player-LED row, trigger-effect accents) and whose
+  vibrator folds Moonlight trigger rumble through the rumble path. A
+  framework-path pad (no raw output writer, no LED API) never advertises,
+  so the satellite never sends it those messages.
 - **Host features.** The host layer reads `hostFeatures.mouseControl`,
   `keyboardControl`, and `rumble`. Rumble is opt-OUT (absent slug → assumed, for
   back-compat with satellites predating it); keyboard is opt-IN (absent → not

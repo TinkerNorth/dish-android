@@ -111,7 +111,11 @@ only for those slots. The same plumbing carries the protocol-2 additions
 replayed verbatim) and `MSG_PLAYER_LEDS` (0x0011, DualSense bar / Switch
 Pro player lights), gated on the `triggerEffects` / `playerLeds`
 descriptor caps. Moonlight `RGB_LED` events land on the same lightbar
-writer.
+writer. The virtual pad is a sink too: its skin renders the lightbar,
+player LEDs and an active adaptive-trigger effect
+(`VirtualPadFeedbackStore`), and Moonlight trigger rumble folds into the
+phone vibrator through the rumble path so the delivery toggle and stop
+rules keep applying.
 
 ## USB-direct rumble output reports
 

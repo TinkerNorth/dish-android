@@ -206,10 +206,13 @@ class CapabilityComposer
         }
 
         private fun virtualControllerLayer(): CapabilitySet {
-            // The phone IS the input: its screen sources the touchpad and mouse, its
-            // vibrator actuates rumble and its own battery reports, so all four ride
-            // regardless of any pad. Motion rides only if the phone has a gyro. No
-            // LED, trigger-motor or trigger-effect surface exists on a phone.
+            // The phone IS the input AND the actuator: its screen sources the touchpad
+            // and mouse, its vibrator actuates rumble (trigger rumble folds into it),
+            // its own battery reports, and the skin renders the light surfaces the
+            // hardware lacks — lightbar, player LEDs and an active adaptive-trigger
+            // effect all draw on the on-screen pad (VirtualPadFeedbackStore). Motion
+            // rides only if the phone has a gyro. The type layer still gates which of
+            // these a given emulated pad actually carries.
             val out =
                 mutableSetOf(
                     Feature.GAMEPAD,
@@ -217,7 +220,11 @@ class CapabilityComposer
                     Feature.TOUCHPAD,
                     Feature.MOUSE,
                     Feature.RUMBLE,
+                    Feature.TRIGGER_RUMBLE,
                     Feature.BATTERY,
+                    Feature.LIGHTBAR,
+                    Feature.TRIGGER_EFFECTS,
+                    Feature.PLAYER_LEDS,
                 )
             if (phoneHasGyro) out += Feature.MOTION
             return CapabilitySet(out)

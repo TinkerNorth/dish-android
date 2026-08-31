@@ -15,6 +15,11 @@ computer. Those lines say "update Satellite too".
   DualShock 4 or DualSense, the light bar now shows the color the game picks;
   a DualSense's player lights and a Switch Pro's player LEDs light up too.
   Works over Satellite (update Satellite too) and over Moonlight hosts.
+- The on-screen controller joins in: its skin draws the light bar color
+  around the trackpad, shows the player lights, marks the triggers while a
+  game shapes them (adaptive triggers), and buzzes the phone for trigger
+  rumble. The setup and binding screens list every one of these per
+  controller and destination, so you can see what will work before you bind.
 - DualSense adaptive triggers, end to end: a game driving the virtual
   DualSense's trigger effects on the PC now shapes the real triggers of a
   USB-connected DualSense (update Satellite too).

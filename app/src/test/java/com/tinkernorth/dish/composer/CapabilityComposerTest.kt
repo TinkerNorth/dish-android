@@ -251,6 +251,31 @@ class CapabilityComposerTest {
         }
 
     @Test
+    fun `the virtual pad carries every feedback surface, rendered by its skin`() =
+        composerTest {
+            val composer =
+                composerFor(
+                    phoneAvailable = true,
+                    devices = MutableStateFlow(emptyMap()),
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            val controller = composer.capabilityFor(com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID).controller
+            // The screen renders the light surfaces; the vibrator folds trigger
+            // rumble; the phone reports its own battery and gyro.
+            assertTrue(Feature.LIGHTBAR in controller)
+            assertTrue(Feature.PLAYER_LEDS in controller)
+            assertTrue(Feature.TRIGGER_EFFECTS in controller)
+            assertTrue(Feature.TRIGGER_RUMBLE in controller)
+            assertTrue(Feature.BATTERY in controller)
+            assertTrue(Feature.MOTION in controller)
+        }
+
+    @Test
     fun `a USB-direct DualSense advertises its LED and trigger surfaces`() =
         composerTest {
             val devices =

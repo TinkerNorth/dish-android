@@ -111,7 +111,6 @@ class MoonlightSessionController
                     feedback.dispatchTriggerRumbleToSlot(slotId, event.left, event.right)
                 is MoonlightEvent.RgbLed ->
                     feedback.dispatchLightbarToSlot(slotId, event.red, event.green, event.blue)
-                else -> Unit
             }
         }
 

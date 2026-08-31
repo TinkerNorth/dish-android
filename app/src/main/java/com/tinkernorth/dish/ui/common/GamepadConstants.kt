@@ -108,4 +108,17 @@ internal object GamepadConstants {
     const val TRACKPAD_TAP_MAX_MS = 200L
 
     const val TRACKPAD_CLICK_PULSE_MS = 70L
+
+    // Host-driven feedback rendering (lightbar ring, player-LED row, trigger-effect accents).
+    const val LIGHTBAR_STROKE_DP = 3f
+
+    const val PLAYER_LED_COUNT = 5
+
+    const val PLAYER_LED_RADIUS_DP = 2.5f
+
+    const val PLAYER_LED_PITCH_DP = 5f
+
+    const val PLAYER_LED_GAP_DP = 6f
+
+    const val TRIGGER_EFFECT_STROKE_DP = 2f
 }

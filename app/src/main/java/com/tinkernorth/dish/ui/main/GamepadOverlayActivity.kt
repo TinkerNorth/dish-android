@@ -52,6 +52,8 @@ class GamepadOverlayActivity :
 
     @Inject lateinit var capabilityComposer: CapabilityComposer
 
+    @Inject lateinit var virtualFeedback: com.tinkernorth.dish.source.store.VirtualPadFeedbackStore
+
     private lateinit var binding: ActivityGamepadOverlayBinding
 
     override fun rootView(): View = binding.root
@@ -110,6 +112,18 @@ class GamepadOverlayActivity :
                     // Stop on collector cancellation (STOP / activity destroy)
                     // so a backgrounded overlay never leaks sensor listeners.
                     motionSource.stop()
+                }
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                // Host-driven feedback painted onto the skin: lightbar colour,
+                // player LEDs, adaptive-trigger accents.
+                virtualFeedback.state.collect { fb ->
+                    binding.gamepadTouchView.lightbarColor = fb.lightbarColor
+                    binding.gamepadTouchView.playerLedMask = fb.playerLedMask
+                    binding.gamepadTouchView.leftTriggerEffect = fb.leftTriggerEffect
+                    binding.gamepadTouchView.rightTriggerEffect = fb.rightTriggerEffect
                 }
             }
         }
