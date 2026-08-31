@@ -21,6 +21,7 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.net.DishProtocol
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.databinding.ActivityConfigureBindingsBinding
 import com.tinkernorth.dish.databinding.BindingApplyStepBinding
@@ -196,6 +197,11 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
             d.hostDropdown.setTextColor(getColor(if (host != null) R.color.colorOnSurface else R.color.colorMuted))
             d.hostDropdown.setOnClickListener { showHostMenu() }
         }
+        val selectedCompat =
+            state.selectedHost
+                ?.takeIf { !noHosts }
+                ?.let { state.hostCompat[it.id] } ?: DishProtocol.Compat.UNKNOWN
+        d.destCompatPill.bindCompat(selectedCompat)
         val plainSatellite = state.hostChosen && !state.isBluetoothHost && !state.isMoonlightHost
         d.legendSatellite.visibility = if (plainSatellite) View.VISIBLE else View.GONE
         d.legendBt.visibility = if (state.hostChosen && state.isBluetoothHost) View.VISIBLE else View.GONE
@@ -414,6 +420,7 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
             card.reviewSublabel.text = destinationSublabel(host)
             card.reviewTierPill.bindPill(tierPillSpec(host.kind))
             card.reviewTierPill.root.visibility = View.VISIBLE
+            card.reviewCompatPill.bindCompat(state.hostCompat[host.id] ?: DishProtocol.Compat.UNKNOWN)
             bindReviewFlows(card.reviewSendsRow, card.reviewSendsChips, destinationSends(caps))
             bindReviewFlows(card.reviewGetsRow, card.reviewGetsChips, destinationGets(caps))
             card.reviewCard.isClickable = true

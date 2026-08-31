@@ -12,6 +12,7 @@ import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.net.DishProtocol
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
@@ -23,6 +24,7 @@ import com.tinkernorth.dish.source.sensor.BatteryValidator
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
+import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.store.UsbPathPreferenceStore
 import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbController
@@ -63,6 +65,7 @@ class MainViewModelTest {
     private lateinit var pathPrefs: UsbPathPreferenceStore
     private lateinit var usbGamepadManager: UsbGamepadManager
     private lateinit var inputRateStore: InputRateStore
+    private val hostFeaturesStore = SatelliteHostFeaturesStore()
     private lateinit var vm: MainViewModel
 
     private val connectionsFlow = MutableStateFlow<List<ConnectionSummary>>(emptyList())
@@ -119,6 +122,7 @@ class MainViewModelTest {
                 pathPrefs,
                 usbGamepadManager,
                 inputRateStore,
+                hostFeaturesStore,
             )
     }
 
@@ -241,6 +245,18 @@ class MainViewModelTest {
             userEnabled = CapabilitySet.EMPTY,
             runtimeDown = CapabilitySet.EMPTY,
         )
+
+    @Test
+    fun `host compat projects each satellite's protocol verdict for the update chips`() =
+        runTest(dispatcher) {
+            hostFeaturesStore.noteProtocolVersion("satellite:old", 1)
+            hostFeaturesStore.noteProtocolVersion("satellite:current", DishProtocol.CURRENT)
+            dispatcher.scheduler.runCurrent()
+
+            val compat = vm.uiState.value.hostCompat
+            assertEquals(DishProtocol.Compat.SATELLITE_UPDATE_AVAILABLE, compat["satellite:old"])
+            assertEquals(DishProtocol.Compat.CURRENT, compat["satellite:current"])
+        }
 
     @Test
     fun `pointer ui offers the virtual slot only the mouse surface`() =

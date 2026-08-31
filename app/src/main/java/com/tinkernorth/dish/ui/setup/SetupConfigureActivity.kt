@@ -19,6 +19,7 @@ import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.core.model.Feature
+import com.tinkernorth.dish.core.net.DishProtocol
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.databinding.ActivitySetupConfigureBinding
 import com.tinkernorth.dish.databinding.SetupReviewCardBinding
@@ -37,6 +38,7 @@ import com.tinkernorth.dish.ui.main.ConfigUiState
 import com.tinkernorth.dish.ui.main.ConfigureBindingsViewModel
 import com.tinkernorth.dish.ui.main.MoonlightAction
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
+import com.tinkernorth.dish.ui.main.bindCompat
 import com.tinkernorth.dish.ui.main.bindMoonlightSession
 import com.tinkernorth.dish.ui.main.iconRes
 import dagger.hilt.android.AndroidEntryPoint
@@ -312,6 +314,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
             card.reviewKind.setText(node.kind)
             card.reviewName.text = node.name
             card.reviewSublabel.text = node.sublabel
+            card.reviewCompatPill.bindCompat(node.compat)
             bindReviewFlows(card.reviewSendsRow, card.reviewSendsChips, node.sends)
             bindReviewFlows(card.reviewGetsRow, card.reviewGetsChips, node.gets)
             container.addView(card.root)
@@ -431,6 +434,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                 sublabel = getString(R.string.setup_cfg_dest_satellite),
                 sends = emptyList(),
                 gets = if (model.mouseMode) listOf(mouse) else emptyList(),
+                compat = state.draft?.hostId?.let { state.hostCompat[it] } ?: DishProtocol.Compat.UNKNOWN,
             ),
             ReviewNode(
                 kind = R.string.binding_label_destination,
@@ -501,6 +505,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         val sublabel: String,
         val sends: List<ReviewFlow>,
         val gets: List<ReviewFlow>,
+        val compat: DishProtocol.Compat = DishProtocol.Compat.UNKNOWN,
     )
 
     private fun renderApplyState(state: ApplyState) {

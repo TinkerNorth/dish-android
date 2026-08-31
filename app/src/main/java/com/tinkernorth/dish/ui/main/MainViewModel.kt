@@ -23,6 +23,7 @@ import com.tinkernorth.dish.source.inputrate.InputRateStore
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
+import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.store.UsbPathPreferenceStore
 import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbController
@@ -58,6 +59,7 @@ class MainViewModel
         private val pathPrefs: UsbPathPreferenceStore,
         private val usbGamepadManager: UsbGamepadManager,
         private val inputRateStore: InputRateStore,
+        private val hostFeaturesStore: SatelliteHostFeaturesStore,
     ) : ViewModel() {
         // Absence means "user has not toggled"; use isMotionEnabled() for default rather than reading directly.
         val motionEnabled: StateFlow<Map<String, Boolean>> = motionEnabledStore.state
@@ -175,6 +177,11 @@ class MainViewModel
                             )
                         }
                     _uiState.update { it.copy(pointerBySlot = map) }
+                }.launchIn(viewModelScope)
+
+            hostFeaturesStore.state
+                .onEach { features ->
+                    _uiState.update { it.copy(hostCompat = features.mapValues { (_, f) -> f.compat }) }
                 }.launchIn(viewModelScope)
         }
 

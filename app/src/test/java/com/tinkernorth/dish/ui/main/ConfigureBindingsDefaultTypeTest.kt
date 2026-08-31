@@ -23,6 +23,7 @@ import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
+import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import io.mockk.coEvery
 import io.mockk.every
@@ -133,6 +134,7 @@ class ConfigureBindingsDefaultTypeTest {
                 catalogRepo,
                 capabilitiesRepo,
                 native,
+                SatelliteHostFeaturesStore(),
             )
     }
 

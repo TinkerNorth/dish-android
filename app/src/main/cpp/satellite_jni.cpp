@@ -402,14 +402,13 @@ void applyUsbTouchpad(int32_t deviceId, const gamepad::TouchpadState& t, uint32_
     uint8_t payload[19];
     const uint8_t idx = (uint8_t)(binding.controllerIndex & 0xFF);
     if (session->protocolVersion.load() >= 2) {
-        dish_wire::encodeTouchpadPayloadV2(payload, idx, t.f0Active, t.f1Active, t.clickDown,
-                                           false, false, t.f0Id, t.f0X, t.f0Y, t.f1Id, t.f1X,
-                                           t.f1Y, eventTimeMs, 0);
+        dish_wire::encodeTouchpadPayloadV2(payload, idx, t.f0Active, t.f1Active, t.clickDown, false,
+                                           false, t.f0Id, t.f0X, t.f0Y, t.f1Id, t.f1X, t.f1Y,
+                                           eventTimeMs, 0);
         sendEncrypted(session.get(), MSG_TOUCHPAD, payload, 19);
     } else {
         dish_wire::encodeTouchpadPayloadV1(payload, idx, t.f0Active, t.f1Active, t.clickDown,
-                                           t.f0Id, t.f0X, t.f0Y, t.f1Id, t.f1X, t.f1Y,
-                                           eventTimeMs);
+                                           t.f0Id, t.f0X, t.f0Y, t.f1Id, t.f1X, t.f1Y, eventTimeMs);
         sendEncrypted(session.get(), MSG_TOUCHPAD, payload, 16);
     }
 }
@@ -762,12 +761,11 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendTo
     } else {
         // v1 has no mouse buttons and no wheel; the overlay never offers them on a v1
         // session, so dropping the fields here loses nothing.
-        dish_wire::encodeTouchpadPayloadV1(payload, idx, f0Active == JNI_TRUE,
-                                           f1Active == JNI_TRUE, buttonPressed == JNI_TRUE,
-                                           (uint8_t)(f0TrackingId & 0xFF), (int16_t)f0x,
-                                           (int16_t)f0y, (uint8_t)(f1TrackingId & 0xFF),
-                                           (int16_t)f1x, (int16_t)f1y,
-                                           (uint32_t)(eventTimeMs & 0xFFFFFFFFLL));
+        dish_wire::encodeTouchpadPayloadV1(
+            payload, idx, f0Active == JNI_TRUE, f1Active == JNI_TRUE, buttonPressed == JNI_TRUE,
+            (uint8_t)(f0TrackingId & 0xFF), (int16_t)f0x, (int16_t)f0y,
+            (uint8_t)(f1TrackingId & 0xFF), (int16_t)f1x, (int16_t)f1y,
+            (uint32_t)(eventTimeMs & 0xFFFFFFFFLL));
         sendEncrypted(s.get(), MSG_TOUCHPAD, payload, 16);
     }
 }

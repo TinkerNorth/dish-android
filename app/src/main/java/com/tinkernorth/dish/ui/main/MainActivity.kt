@@ -242,6 +242,7 @@ class MainActivity :
             s.pathCards,
             s.inputRates,
             s.screenPeakHz,
+            s.hostCompat,
         )
     }
 

@@ -27,6 +27,7 @@ import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.net.DishProtocol
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.databinding.BindingDecisionRowBinding
 import com.tinkernorth.dish.databinding.BindingPillBinding
@@ -141,8 +142,10 @@ class ControllerAdapter(
         val pathCard: PathCard? = null,
         val inputRates: SlotInputRates? = null,
         val screenPeakHz: Int = 0,
+        val hostCompat: DishProtocol.Compat = DishProtocol.Compat.UNKNOWN,
     )
 
+    @Suppress("LongParameterList")
     fun submitSlots(
         slots: List<ControllerSlot>,
         connections: List<ConnectionSummary>,
@@ -151,6 +154,7 @@ class ControllerAdapter(
         pathCards: Map<String, PathCard> = emptyMap(),
         inputRates: Map<String, SlotInputRates> = emptyMap(),
         screenPeakHz: Int = 0,
+        hostCompat: Map<String, DishProtocol.Compat> = emptyMap(),
     ) {
         submitList(
             slots.map { slot ->
@@ -162,6 +166,7 @@ class ControllerAdapter(
                     pathCard = pathCards[slot.id],
                     inputRates = inputRates[slot.id],
                     screenPeakHz = screenPeakHz,
+                    hostCompat = slot.boundConnectionId?.let { hostCompat[it] } ?: DishProtocol.Compat.UNKNOWN,
                 )
             },
         )
@@ -187,6 +192,7 @@ class ControllerAdapter(
 
         private val destinationMono = BindingValueMonoBinding.inflate(inflater, destinationRow.valueContainer, true)
         private val destinationNotBound = BindingValueNotBoundBinding.inflate(inflater, destinationRow.valueContainer, true)
+        private val destinationPills = PillPool(destinationRow.valueContainer)
         private val functionNone = BindingValueNoneBinding.inflate(inflater, functionRow.valueContainer, true)
 
         private val filledActions: List<MaterialButton>
@@ -248,6 +254,7 @@ class ControllerAdapter(
 
             destinationRow.root.visibility = View.VISIBLE
             showDestination(bound.label)
+            destinationPills.bind(listOfNotNull(compatPillSpec(ctx, row.hostCompat)))
 
             val emulate = typePillLabel(row, bound)
             if (emulate != null) {
@@ -267,6 +274,7 @@ class ControllerAdapter(
             connectionPills.bind(connectionSpecs(row, kind = null))
             destinationRow.root.visibility = View.VISIBLE
             showDestination(null)
+            destinationPills.hideAll()
             emulateRow.root.visibility = View.GONE
             functionRow.root.visibility = View.GONE
         }

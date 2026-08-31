@@ -104,6 +104,8 @@ data class HostFeatureSet(
 ) {
     val extendedMouse: Boolean get() = mouseControl && protocolVersion >= DishProtocol.EXTENDED_MOUSE
 
+    val compat: DishProtocol.Compat get() = DishProtocol.compatFor(protocolVersion.takeIf { it > 0 })
+
     fun toCapabilitySet(): CapabilitySet {
         val out =
             mutableSetOf(

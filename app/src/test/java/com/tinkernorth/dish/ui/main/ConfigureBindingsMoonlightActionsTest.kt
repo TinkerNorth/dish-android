@@ -24,6 +24,7 @@ import com.tinkernorth.dish.source.connection.moonlight.MoonlightProbe
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
+import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -120,6 +121,7 @@ class ConfigureBindingsMoonlightActionsTest {
                 catalogRepo = mockk<SatelliteCatalogRepository>(relaxed = true),
                 capabilitiesRepo = mockk<SatelliteCapabilitiesRepository>(relaxed = true),
                 native = mockk<PhysicalInputNative>(relaxed = true),
+                hostFeaturesStore = SatelliteHostFeaturesStore(),
             )
     }
 

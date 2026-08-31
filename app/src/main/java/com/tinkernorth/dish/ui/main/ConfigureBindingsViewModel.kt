@@ -21,6 +21,7 @@ import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.model.CatalogTypeDto
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.net.DishProtocol
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
@@ -34,6 +35,7 @@ import com.tinkernorth.dish.source.connection.moonlight.MoonlightSessionState
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
+import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.source.usb.UsbPhase
@@ -143,6 +145,8 @@ data class ConfigUiState(
     val typeFetchFailed: Boolean = false,
     // What the chosen Moonlight host last told us. Null for every other kind of destination.
     val moonlight: MoonlightSessionInput? = null,
+    // Per-connection protocol verdict (satellite hosts only), for the update chips.
+    val hostCompat: Map<String, DishProtocol.Compat> = emptyMap(),
 ) {
     val selectedHost: BindingHost? get() = hosts.firstOrNull { it.id == draft?.hostId }
     val noHosts: Boolean get() = hosts.isEmpty()
@@ -243,6 +247,7 @@ class ConfigureBindingsViewModel
         private val catalogRepo: SatelliteCatalogRepository,
         private val capabilitiesRepo: SatelliteCapabilitiesRepository,
         private val native: PhysicalInputNative,
+        private val hostFeaturesStore: SatelliteHostFeaturesStore,
     ) : ViewModel() {
         private val _ui = MutableStateFlow(ConfigUiState())
         val ui: StateFlow<ConfigUiState> = _ui.asStateFlow()
@@ -290,6 +295,10 @@ class ConfigureBindingsViewModel
             gamepadRegistry.devices
                 .onEach { _ui.update { state -> state.copy(controllerPresent = controllerPresent(state.snapshot)).withCapabilities() } }
                 .launchIn(viewModelScope)
+            hostFeaturesStore.state
+                .onEach { features ->
+                    _ui.update { it.copy(hostCompat = features.mapValues { (_, f) -> f.compat }) }
+                }.launchIn(viewModelScope)
             observeMoonlightEvents()
         }
 

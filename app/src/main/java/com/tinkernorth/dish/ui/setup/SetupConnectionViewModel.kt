@@ -10,12 +10,15 @@ import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.satelliteLinkState
 import com.tinkernorth.dish.core.model.DiscoveredServer
+import com.tinkernorth.dish.core.model.HostFeatureSet
+import com.tinkernorth.dish.core.net.DishProtocol
 import com.tinkernorth.dish.source.connection.ConnectIntent
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
+import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.ui.connections.moonlightTrustFor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -46,6 +49,7 @@ class SetupConnectionViewModel
         private val satellite: SatelliteConnectionManager,
         private val moonlight: MoonlightConnectionManager,
         private val hub: ConnectionCoordinator,
+        private val hostFeaturesStore: SatelliteHostFeaturesStore,
     ) : ViewModel() {
         enum class Step { PATH, SATELLITE, MOONLIGHT }
 
@@ -54,6 +58,7 @@ class SetupConnectionViewModel
             val name: String,
             val link: LinkState,
             val server: DiscoveredServer,
+            val compat: DishProtocol.Compat = DishProtocol.Compat.UNKNOWN,
         )
 
         // A Moonlight host is picked, never connected: pairing is remembered trust and the
@@ -113,8 +118,9 @@ class SetupConnectionViewModel
                 hub.connections,
                 satellite.connections,
                 satellite.staleSatelliteIds,
-            ) { discovered, summaries, conns, stale ->
-                buildHosts(discovered, summaries, conns, stale)
+                hostFeaturesStore.state,
+            ) { discovered, summaries, conns, stale, features ->
+                buildHosts(discovered, summaries, conns, stale, features)
             }.onEach { hosts -> onHosts(hosts) }.launchIn(viewModelScope)
 
             satellite.isScanning
@@ -235,6 +241,7 @@ class SetupConnectionViewModel
             summaries: List<ConnectionSummary>,
             conns: Map<String, SatelliteConnection>,
             stale: Set<String>,
+            features: Map<String, HostFeatureSet> = emptyMap(),
         ): List<Host> {
             val discoveredById = discovered.associateBy { SatelliteConnection.idFor(it) }
             // The coordinator's summary carries the reactive LinkState; prefer it,
@@ -254,6 +261,7 @@ class SetupConnectionViewModel
                             isDiscovered = id in discoveredById,
                         ),
                     server = server,
+                    compat = features[id]?.compat ?: DishProtocol.Compat.UNKNOWN,
                 )
             }
         }
