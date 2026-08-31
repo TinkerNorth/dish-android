@@ -368,32 +368,22 @@ class ControllerAdapter(
             }
 
             if (bound.kind == ConnectionKind.SATELLITE) {
-                specs.add(touchpadFuncPill(row))
+                specs.addAll(pointerFuncFacts(row).map(::pointerFactPill))
             }
             return specs
         }
 
-        private fun touchpadFuncPill(row: Row): PillSpec {
-            if (row.pathCard?.suggestDirectForTouch == true) {
-                return PillSpec(ctx.getString(R.string.touchpad_needs_direct), R.drawable.ic_touchpad, PillTone.WARN)
+        private fun pointerFactPill(fact: PointerPillFact): PillSpec =
+            when (fact) {
+                PointerPillFact.PAD_NEEDS_DIRECT ->
+                    PillSpec(ctx.getString(R.string.touchpad_needs_direct), R.drawable.ic_touchpad, PillTone.WARN)
+                PointerPillFact.PAD_ON ->
+                    PillSpec(funcValue(R.string.binding_func_touchpad, R.string.touchpad_mode_pad), R.drawable.ic_touchpad, PillTone.ON)
+                PointerPillFact.PAD_OFF ->
+                    PillSpec(funcValue(R.string.binding_func_touchpad, R.string.binding_state_off), R.drawable.ic_touchpad, PillTone.OFF)
+                PointerPillFact.MOUSE_READY ->
+                    PillSpec(ctx.getString(R.string.binding_func_mouse), R.drawable.ic_mouse, PillTone.CAP)
             }
-            val mode = row.pointer?.mode ?: TouchpadModeValue.OFF
-            val valueRes =
-                when (mode) {
-                    TouchpadModeValue.DS4 -> R.string.touchpad_mode_pad
-                    TouchpadModeValue.MOUSE -> R.string.touchpad_mode_mouse
-                    else -> R.string.touchpad_mode_off
-                }
-            val label =
-                ctx.getString(
-                    R.string.binding_func_value,
-                    ctx.getString(R.string.binding_func_touchpad),
-                    ctx.getString(valueRes),
-                )
-            val icon = if (mode == TouchpadModeValue.MOUSE) R.drawable.ic_mouse else R.drawable.ic_touchpad
-            val tone = if (mode == TouchpadModeValue.OFF) PillTone.OFF else PillTone.ON
-            return PillSpec(label, icon, tone)
-        }
 
         private fun funcValue(
             nameRes: Int,
@@ -680,6 +670,21 @@ class ControllerAdapter(
 }
 
 internal enum class CardActionKind { GAMEPAD, TOUCHPAD, MOUSE, SWITCH_DIRECT, SETUP_WIRED, CONFIGURE, FIND_HOSTS }
+
+// What the card's function row says about the slot's pointer surfaces, kept pure so the
+// facts stay testable: the pad surface reports its declared routing (or the Direct nudge
+// that unlocks it), and the mouse rides as an on-demand chip wherever its surface can open.
+internal enum class PointerPillFact { PAD_NEEDS_DIRECT, PAD_ON, PAD_OFF, MOUSE_READY }
+
+internal fun pointerFuncFacts(row: ControllerAdapter.Row): List<PointerPillFact> =
+    buildList {
+        when {
+            row.pathCard?.suggestDirectForTouch == true -> add(PointerPillFact.PAD_NEEDS_DIRECT)
+            row.pointer?.mode == TouchpadModeValue.DS4 -> add(PointerPillFact.PAD_ON)
+            row.motionCap.typeOk(Feature.TOUCHPAD) -> add(PointerPillFact.PAD_OFF)
+        }
+        if (row.pointer?.mouseOpenable == true) add(PointerPillFact.MOUSE_READY)
+    }
 
 internal data class CardActionSpec(
     @DrawableRes val icon: Int,

@@ -72,7 +72,6 @@
     <string name="desc_expand">Expandir</string>
 
     <!-- Selector de modo del panel táctil. -->
-    <string name="touchpad_mode_off">Apagado</string>
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Ratón</string>
     <string name="touchpad_needs_direct">El panel táctil requiere el modo Directo</string>
@@ -141,6 +140,7 @@
     <string name="pointer_button_left">Izquierdo</string>
     <string name="pointer_button_right">Derecho</string>
     <string name="pointer_scroll_strip">Tira de desplazamiento. Arrastra para desplazar, toca para clic central.</string>
+    <string name="mouse_basic_hint">El clic derecho y el desplazamiento necesitan un Satellite más reciente.</string>
 
     <!-- Etiquetas por defecto de slot/conexión. -->
     <string name="default_virtual_controller_name">Mando virtual</string>

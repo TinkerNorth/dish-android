@@ -505,7 +505,7 @@ class FakeSatellite(
              "backend":{"id":"fake","supported":true,"available":true,"errorCode":null},
              "motion":{"available":true},
              "host":{"catalog":{"supported":true},
-                     "mouseControl":{"supported":true,"available":true},
+                     "mouseControl":{"supported":true,"available":true,"buttons":true,"scroll":true},
                      "keyboardControl":{"supported":false},
                      "rumble":{"supported":true,"available":true}}}
             """.trimIndent()
@@ -538,7 +538,7 @@ class FakeSatellite(
                 "features":{"rumble":{"supported":true},"analogTriggers":{"supported":false},
                             "motion":{"supported":true},"lightbar":{"supported":false},
                             "touchpad":{"supported":false}}}],
-             "hostFeatures":{"mouseControl":{"supported":true,"modes":["off","ds4","mouse"]},
+             "hostFeatures":{"mouseControl":{"supported":true,"modes":["off","ds4","mouse"],"buttons":true,"scroll":true},
                              "keyboardControl":{"supported":false},
                              "rumble":{"supported":true}}}
             """.trimIndent()

@@ -165,4 +165,74 @@ class CapabilityTest {
         assertTrue(Feature.MOUSE in features.toCapabilitySet())
         assertFalse(Feature.RUMBLE in features.toCapabilitySet())
     }
+
+    @Test
+    fun `extended mouse is opt-in, so absent flags verifiably mean a basic mouse`() {
+        assertFalse(HostFeatureSet.SATELLITE_DEFAULT.extendedMouse)
+        val fromBareCatalog =
+            HostFeatureSet.fromCatalog(
+                CatalogDto(hostFeatures = mapOf("mouseControl" to CatalogHostFeatureDto(supported = true))),
+            )
+        assertFalse(fromBareCatalog.extendedMouse)
+        val fromBareCaps =
+            HostFeatureSet.fromServerCapabilities(
+                ServerCapabilitiesDto(host = ServerHostDto(mouseControl = ServerHostFeatureDto(supported = true))),
+            )
+        assertFalse(fromBareCaps.extendedMouse)
+    }
+
+    @Test
+    fun `fromCatalog reads the extended mouse advertisement`() {
+        val features =
+            HostFeatureSet.fromCatalog(
+                CatalogDto(
+                    hostFeatures =
+                        mapOf(
+                            "mouseControl" to
+                                CatalogHostFeatureDto(supported = true, buttons = true, scroll = true),
+                        ),
+                ),
+            )
+        assertTrue(features.mouseButtons)
+        assertTrue(features.mouseScroll)
+        assertTrue(features.extendedMouse)
+    }
+
+    @Test
+    fun `fromServerCapabilities reads the extended mouse advertisement`() {
+        val features =
+            HostFeatureSet.fromServerCapabilities(
+                ServerCapabilitiesDto(
+                    host =
+                        ServerHostDto(
+                            mouseControl =
+                                ServerHostFeatureDto(supported = true, available = true, buttons = true, scroll = true),
+                        ),
+                ),
+            )
+        assertTrue(features.extendedMouse)
+    }
+
+    @Test
+    fun `extended mouse requires the whole trio, including mouse control itself`() {
+        val buttonsOnly =
+            HostFeatureSet.fromCatalog(
+                CatalogDto(
+                    hostFeatures =
+                        mapOf("mouseControl" to CatalogHostFeatureDto(supported = true, buttons = true)),
+                ),
+            )
+        assertFalse(buttonsOnly.extendedMouse)
+        val withheldMouse =
+            HostFeatureSet.fromCatalog(
+                CatalogDto(
+                    hostFeatures =
+                        mapOf(
+                            "mouseControl" to
+                                CatalogHostFeatureDto(supported = false, buttons = true, scroll = true),
+                        ),
+                ),
+            )
+        assertFalse(withheldMouse.extendedMouse)
+    }
 }

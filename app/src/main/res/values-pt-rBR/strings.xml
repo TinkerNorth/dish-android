@@ -72,7 +72,6 @@
     <string name="desc_expand">Expandir</string>
 
     <!-- Seletor de modo do touchpad. -->
-    <string name="touchpad_mode_off">Desligado</string>
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Mouse</string>
     <string name="touchpad_needs_direct">O touchpad precisa do modo Direto</string>
@@ -141,6 +140,7 @@
     <string name="pointer_button_left">Esquerdo</string>
     <string name="pointer_button_right">Direito</string>
     <string name="pointer_scroll_strip">Faixa de rolagem. Arraste para rolar, toque para clique do meio.</string>
+    <string name="mouse_basic_hint">O clique direito e a rolagem precisam de um Satellite mais novo.</string>
 
     <!-- Rótulos padrão para slot/conexão. -->
     <string name="default_virtual_controller_name">Controle virtual</string>

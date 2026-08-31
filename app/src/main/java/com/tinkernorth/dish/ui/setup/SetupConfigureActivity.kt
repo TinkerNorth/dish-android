@@ -323,10 +323,11 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         snapshot: BindingSnapshot,
     ): List<ReviewNode> {
         val caps = state.capabilities
-        // Routing is derived, not picked: the emulated pad's own surface wins when the type
-        // carries one, otherwise the touch source drives the host mouse where the host grants it.
+        // Routing is derived, not picked, and the two surfaces coexist: the emulated pad's
+        // touchpad streams by default and the mouse surface flips the slot over while open,
+        // so the summary shows every pointer flow the path can carry.
         val padMode = caps.isAvailable(Feature.TOUCHPAD)
-        val mouseMode = !padMode && caps.isAvailable(Feature.MOUSE)
+        val mouseMode = caps.isAvailable(Feature.MOUSE)
         val model =
             ReviewModel(
                 motionOn = caps.isAvailable(Feature.MOTION) && state.draft?.motionOn == true,
@@ -352,11 +353,10 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         val gamepad = ReviewFlow(R.drawable.ic_gamepad, R.string.setup_cfg_flow_controller)
         val motion = ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro)
         val rumble = ReviewFlow(R.drawable.ic_rumble, R.string.binding_func_rumble)
-        val pointer =
-            if (model.mouseMode) {
-                ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse)
-            } else {
-                ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad)
+        val pointerFlows =
+            buildList {
+                if (model.padMode) add(ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad))
+                if (model.mouseMode) add(ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse))
             }
         val gets = if (model.rumbleOn) listOf(rumble) else emptyList()
         val virtual =
@@ -365,7 +365,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                 icon = R.drawable.ic_gamepad_virtual,
                 name = getString(R.string.default_virtual_controller_name),
                 sublabel = getString(R.string.binding_link_onscreen),
-                sends = listOf(pointer),
+                sends = pointerFlows,
                 gets = emptyList(),
             )
 
@@ -376,7 +376,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                         buildList {
                             add(gamepad)
                             if (model.motionOn) add(motion)
-                            if (model.touchpadOn) add(pointer)
+                            addAll(pointerFlows)
                         },
                     gets = gets,
                 ),

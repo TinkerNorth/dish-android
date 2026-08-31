@@ -70,7 +70,6 @@
     <string name="desc_expand">Aufklappen</string>
 
     <!-- Touchpad-Modus-Picker. -->
-    <string name="touchpad_mode_off">Aus</string>
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Maus</string>
     <string name="touchpad_needs_direct">Touchpad benötigt Direkt-Modus</string>
@@ -139,6 +138,7 @@
     <string name="pointer_button_left">Links</string>
     <string name="pointer_button_right">Rechts</string>
     <string name="pointer_scroll_strip">Scrollleiste. Ziehen zum Scrollen, Tippen für Mittelklick.</string>
+    <string name="mouse_basic_hint">Rechtsklick und Scrollen brauchen einen neueren Satellite.</string>
 
     <!-- Standardbezeichnungen für Slot/Verbindung. -->
     <string name="default_virtual_controller_name">Virtueller Controller</string>

@@ -95,7 +95,14 @@ data class HostFeatureSet(
     val mouseControl: Boolean,
     val keyboardControl: Boolean,
     val rumbleReturn: Boolean,
+    // Extended pointer injection (right/middle buttons, wheel), opt-IN like keyboard:
+    // only a satellite version that decodes the extra MSG_TOUCHPAD fields advertises
+    // them, so an unfetched or older host verifiably gets the basic mouse surface.
+    val mouseButtons: Boolean = false,
+    val mouseScroll: Boolean = false,
 ) {
+    val extendedMouse: Boolean get() = mouseControl && mouseButtons && mouseScroll
+
     fun toCapabilitySet(): CapabilitySet {
         val out =
             mutableSetOf(
@@ -135,6 +142,8 @@ data class HostFeatureSet(
                 // returns rumble, so an ABSENT field keeps the optimistic assumption;
                 // a PRESENT field is honored (a host that can't return rumble hides it).
                 rumbleReturn = catalog.hostFeatures["rumble"]?.supported ?: true,
+                mouseButtons = catalog.hostFeatures["mouseControl"]?.buttons == true,
+                mouseScroll = catalog.hostFeatures["mouseControl"]?.scroll == true,
             )
 
         // Pre-bind, pre-catalog host read (GET /api/server/capabilities). Caller must
@@ -146,6 +155,8 @@ data class HostFeatureSet(
                 mouseControl = caps.host.mouseControl.supported,
                 keyboardControl = caps.host.keyboardControl.supported,
                 rumbleReturn = caps.host.rumble.supported,
+                mouseButtons = caps.host.mouseControl.buttons,
+                mouseScroll = caps.host.mouseControl.scroll,
             )
     }
 }

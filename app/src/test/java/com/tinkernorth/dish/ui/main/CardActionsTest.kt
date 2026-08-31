@@ -6,6 +6,9 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
+import com.tinkernorth.dish.core.model.CapabilitySet
+import com.tinkernorth.dish.core.model.Feature
+import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.usb.PathChoice
@@ -179,6 +182,58 @@ class CardActionsTest {
                 ),
             )
         reachable.forEach { actions -> assertNotNull(cardActionsLayoutFor(actions.viewType)) }
+    }
+
+    private fun padTypeCaps(): SlotCapabilities =
+        SlotCapabilities(
+            controller = CapabilitySet.EMPTY,
+            transport = CapabilitySet.EMPTY,
+            type = CapabilitySet.of(Feature.TOUCHPAD),
+            host = CapabilitySet.EMPTY,
+            userEnabled = CapabilitySet.EMPTY,
+            runtimeDown = CapabilitySet.EMPTY,
+        )
+
+    @Test
+    fun `a ds4-routed slot reports the pad on plus the on-demand mouse chip`() {
+        val facts =
+            pointerFuncFacts(
+                row(slot(SlotInputType.VIRTUAL), pointer = pointer(mouse = true)).copy(motionCap = padTypeCaps()),
+            )
+        assertEquals(listOf(PointerPillFact.PAD_ON, PointerPillFact.MOUSE_READY), facts)
+    }
+
+    @Test
+    fun `a mouse-routed slot without a pad-bearing type reports only the mouse chip`() {
+        val mouseRow =
+            row(
+                slot(SlotInputType.VIRTUAL),
+                pointer = PointerSlotUi(mode = TouchpadModeValue.MOUSE, touchpadOpenable = false, mouseOpenable = true),
+            )
+        assertEquals(listOf(PointerPillFact.MOUSE_READY), pointerFuncFacts(mouseRow))
+    }
+
+    @Test
+    fun `a pad-bearing type whose route is off reports the pad off`() {
+        val offRow =
+            row(
+                slot(SlotInputType.PHYSICAL),
+                pointer = PointerSlotUi(mode = TouchpadModeValue.OFF, touchpadOpenable = false, mouseOpenable = false),
+            ).copy(motionCap = padTypeCaps())
+        assertEquals(listOf(PointerPillFact.PAD_OFF), pointerFuncFacts(offRow))
+    }
+
+    @Test
+    fun `the direct-mode nudge outranks the routing pills`() {
+        val nudgeRow =
+            row(slot(SlotInputType.PHYSICAL), pathCard = pathCard(suggestDirectForTouch = true))
+                .copy(motionCap = padTypeCaps())
+        assertEquals(listOf(PointerPillFact.PAD_NEEDS_DIRECT), pointerFuncFacts(nudgeRow))
+    }
+
+    @Test
+    fun `a slot with neither surface reports no pointer pills`() {
+        assertEquals(emptyList<PointerPillFact>(), pointerFuncFacts(row(slot(SlotInputType.PHYSICAL))))
     }
 
     @Test

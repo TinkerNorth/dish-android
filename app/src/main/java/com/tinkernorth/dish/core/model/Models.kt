@@ -178,6 +178,11 @@ data class CatalogTypeDto(
 data class CatalogHostFeatureDto(
     val supported: Boolean = false,
     val modes: List<String> = emptyList(),
+    // mouseControl only, opt-in like keyboardControl: a satellite that can inject the
+    // right/middle buttons and the wheel says so; absent means an older receiver that
+    // ignores those wire fields, so the client must not offer them.
+    val buttons: Boolean = false,
+    val scroll: Boolean = false,
 )
 
 @Serializable
@@ -219,6 +224,9 @@ data class ServerHostFeatureDto(
     // Runtime read: present (`supported`) but currently down (e.g. backend driver
     // missing). Absent on features with no runtime distinction (catalog, keyboard).
     val available: Boolean = false,
+    // mouseControl only, opt-in: see CatalogHostFeatureDto.
+    val buttons: Boolean = false,
+    val scroll: Boolean = false,
 )
 
 @Serializable

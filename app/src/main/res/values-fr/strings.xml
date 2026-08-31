@@ -71,7 +71,6 @@
     <string name="desc_expand">Développer</string>
 
     <!-- Sélecteur du mode pavé tactile. -->
-    <string name="touchpad_mode_off">Désactivé</string>
     <string name="touchpad_mode_pad">Pavé</string>
     <string name="touchpad_mode_mouse">Souris</string>
     <string name="touchpad_needs_direct">Le pavé tactile nécessite le mode Direct</string>
@@ -140,6 +139,7 @@
     <string name="pointer_button_left">Gauche</string>
     <string name="pointer_button_right">Droite</string>
     <string name="pointer_scroll_strip">Bande de défilement. Glissez pour défiler, touchez pour un clic du milieu.</string>
+    <string name="mouse_basic_hint">Le clic droit et le défilement nécessitent un Satellite plus récent.</string>
 
     <!-- Libellés par défaut pour les emplacements / connexions. -->
     <string name="default_virtual_controller_name">Manette virtuelle</string>

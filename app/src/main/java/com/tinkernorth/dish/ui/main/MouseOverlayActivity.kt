@@ -7,11 +7,16 @@ import android.os.SystemClock
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import com.google.android.material.appbar.MaterialToolbar
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
+import com.tinkernorth.dish.databinding.ActivityMouseOverlayBasicBinding
 import com.tinkernorth.dish.databinding.ActivityMouseOverlayBinding
 import com.tinkernorth.dish.source.store.MouseSurfaceStore
+import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
+import com.tinkernorth.dish.ui.common.HoldButtonView
+import com.tinkernorth.dish.ui.common.ScrollStripView
 import com.tinkernorth.dish.ui.common.TouchpadSurfaceView
 import com.tinkernorth.dish.ui.common.paintConnectionMenuItem
 import com.tinkernorth.dish.ui.common.setupDishToolbar
@@ -26,7 +31,21 @@ import javax.inject.Inject
 class MouseOverlayActivity : BaseInputOverlayActivity() {
     @Inject lateinit var mouseSurfaceStore: MouseSurfaceStore
 
-    private lateinit var binding: ActivityMouseOverlayBinding
+    @Inject lateinit var hostFeaturesStore: SatelliteHostFeaturesStore
+
+    // The two layouts share every view but the extended column; which one inflates is
+    // decided by what the satellite advertised, so the screen never shows a right
+    // button or a scroll wheel the receiver would ignore.
+    private class MouseViews(
+        val root: View,
+        val toolbar: MaterialToolbar,
+        val left: HoldButtonView,
+        val movePad: TouchpadSurfaceView,
+        val right: HoldButtonView?,
+        val strip: ScrollStripView?,
+    )
+
+    private lateinit var views: MouseViews
 
     private data class MouseWireState(
         val fingers: TouchpadSurfaceView.TouchpadState,
@@ -46,7 +65,7 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
     private var optionsMenu: Menu? = null
     private var currentSummary: ConnectionSummary? = null
 
-    override fun rootView(): View = binding.root
+    override fun rootView(): View = views.root
 
     override val resendIntervalNs: Long = BaseInputOverlayActivity.RESEND_INTERVAL_NS_DEFAULT
 
@@ -70,41 +89,65 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityMouseOverlayBinding.inflate(layoutInflater)
-        setContentView(binding.root)
         slotId = intent.getStringExtra(EXTRA_SLOT_ID) ?: VIRTUAL_SLOT_ID
+        val hostId = intent.getStringExtra(EXTRA_CONNECTION_ID).orEmpty()
+        views = inflateFor(hostFeaturesStore.featuresFor(hostId)?.extendedMouse == true)
+        setContentView(views.root)
         installBaseScaffolding()
 
-        setupDishToolbar(binding.overlayToolbar)
-        binding.overlayToolbar.setTitle(R.string.overlay_title_mouse)
+        setupDishToolbar(views.toolbar)
+        views.toolbar.setTitle(R.string.overlay_title_mouse)
         installRateReadout(
             slotId = slotId,
             motionOn = null,
-        ) { binding.overlayToolbar.subtitle = it }
+        ) { views.toolbar.subtitle = it }
 
-        binding.btnMouseLeft.onHeldChanged = { held ->
+        views.left.onHeldChanged = { held ->
             leftHeld = held
             report(latestFingers())
         }
-        binding.btnMouseRight.onHeldChanged = { held ->
+        views.right?.onHeldChanged = { held ->
             rightHeld = held
             report(latestFingers())
         }
-        binding.scrollStrip.onScroll = { notches ->
+        views.strip?.onScroll = { notches ->
             report(latestFingers(), scrollNotches = notches)
         }
-        binding.scrollStrip.onMiddleTap = { pulseMiddleClick() }
+        views.strip?.onMiddleTap = { pulseMiddleClick() }
 
-        binding.mouseMovePad.clickWhenTouched = false
-        binding.mouseMovePad.label = getString(R.string.touchpad_pad_move_label)
-        binding.mouseMovePad.hint = getString(R.string.touchpad_pad_move_hint)
-        binding.mouseMovePad.listener =
+        views.movePad.clickWhenTouched = false
+        views.movePad.label = getString(R.string.touchpad_pad_move_label)
+        views.movePad.hint = getString(R.string.touchpad_pad_move_hint)
+        views.movePad.listener =
             object : TouchpadSurfaceView.Listener {
                 override fun onTouchpadStateChanged(state: TouchpadSurfaceView.TouchpadState) {
                     report(state)
                 }
             }
     }
+
+    private fun inflateFor(extended: Boolean): MouseViews =
+        if (extended) {
+            val b = ActivityMouseOverlayBinding.inflate(layoutInflater)
+            MouseViews(
+                root = b.root,
+                toolbar = b.overlayToolbar,
+                left = b.btnMouseLeft,
+                movePad = b.mouseMovePad,
+                right = b.btnMouseRight,
+                strip = b.scrollStrip,
+            )
+        } else {
+            val b = ActivityMouseOverlayBasicBinding.inflate(layoutInflater)
+            MouseViews(
+                root = b.root,
+                toolbar = b.overlayToolbar,
+                left = b.btnMouseLeft,
+                movePad = b.mouseMovePad,
+                right = null,
+                strip = null,
+            )
+        }
 
     // The store flips this slot's wire routing to mouse for exactly as long as the
     // surface is on screen; the descriptor converge rides the store's emission.
@@ -128,7 +171,7 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
     private fun pulseMiddleClick() {
         middleHeld = true
         report(latestFingers())
-        binding.root.postDelayed({
+        views.root.postDelayed({
             middleHeld = false
             report(latestFingers())
         }, MIDDLE_CLICK_PULSE_MS)

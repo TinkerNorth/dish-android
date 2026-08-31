@@ -92,7 +92,6 @@
     <string name="desc_expand">Expand</string>
 
     <!-- Touchpad routing values, client-side. Wire values match satellite/src/core/types.h. -->
-    <string name="touchpad_mode_off">Off</string>
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Mouse</string>
     <string name="touchpad_needs_direct">Trackpad needs Direct mode</string>
@@ -172,6 +171,7 @@
     <string name="pointer_button_left">Left</string>
     <string name="pointer_button_right">Right</string>
     <string name="pointer_scroll_strip">Scroll strip. Drag to scroll, tap for middle click.</string>
+    <string name="mouse_basic_hint">Right click and scroll need a newer Satellite.</string>
 
     <!-- Default slot / connection labels. -->
     <string name="default_virtual_controller_name">Virtual Controller</string>
