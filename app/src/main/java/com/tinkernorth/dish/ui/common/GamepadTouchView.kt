@@ -23,7 +23,6 @@ import com.tinkernorth.dish.ui.common.GamepadConstants.ABXY_BTN_DRAW_SIZE_FACTOR
 import com.tinkernorth.dish.ui.common.GamepadConstants.ABXY_BTN_SPACING_FACTOR
 import com.tinkernorth.dish.ui.common.GamepadConstants.CENTER_BTN_DRAW_SIZE_FACTOR
 import com.tinkernorth.dish.ui.common.GamepadConstants.HOME_DRAW_SIZE_FACTOR
-import com.tinkernorth.dish.ui.common.GamepadConstants.HOME_VERTICAL_OFFSET_FACTOR
 import com.tinkernorth.dish.ui.common.GamepadConstants.PILL_CORNER_RADIUS_FRACTION
 import com.tinkernorth.dish.ui.common.GamepadConstants.PILL_ICON_SIZE_FRACTION
 import com.tinkernorth.dish.ui.common.GamepadConstants.STICK_DIR_LINE_WIDTH_FRACTION
@@ -34,6 +33,11 @@ import com.tinkernorth.dish.ui.common.GamepadConstants.STICK_RING_STROKE_DP
 import com.tinkernorth.dish.ui.common.GamepadConstants.STICK_THUMB_RADIUS_FRACTION
 import com.tinkernorth.dish.ui.common.GamepadConstants.STICK_THUMB_RING_STROKE_DP
 import com.tinkernorth.dish.ui.common.GamepadConstants.STICK_THUMB_TRAVEL_FRACTION
+import com.tinkernorth.dish.ui.common.GamepadConstants.TRACKPAD_CLICK_PULSE_MS
+import com.tinkernorth.dish.ui.common.GamepadConstants.TRACKPAD_CORNER_RADIUS_FRACTION
+import com.tinkernorth.dish.ui.common.GamepadConstants.TRACKPAD_FINGER_DOT_RADIUS_DP
+import com.tinkernorth.dish.ui.common.GamepadConstants.TRACKPAD_OUTLINE_STROKE_DP
+import com.tinkernorth.dish.ui.common.GamepadConstants.TRACKPAD_TAP_SLOP_DP
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -49,6 +53,17 @@ class GamepadTouchView
     ) : View(context, attrs, defStyleAttr) {
         interface Listener {
             fun onGamepadStateChanged(state: GamepadState)
+
+            fun onTrackpadStateChanged(state: TouchpadSurfaceView.TouchpadState) = Unit
+        }
+
+        // What the trackpad zone does for the bound destination: NONE hides it, TOUCH
+        // streams DS4-shaped finger frames (satellite), CLICK is a plain pad-click
+        // button for a wire with no touch channel (Moonlight).
+        enum class TrackpadMode {
+            NONE,
+            TOUCH,
+            CLICK,
         }
 
         var listener: Listener? = null
@@ -77,6 +92,14 @@ class GamepadTouchView
             const val BTN_RS = 1 shl 9
             const val BTN_HOME = 1 shl 10
 
+            // Local-only bit: hidToXusb ignores it, so it never leaks into an XUSB wire
+            // report. The satellite carries the click inside the touch frame instead, and
+            // the Moonlight sender maps it onto that wire's own touchpad button flag.
+            const val BTN_TOUCHPAD_CLICK = 1 shl 11
+
+            private const val HALF_INT16 = 32768
+            private const val NORM_INT16_SPAN = 65535f
+
             const val HAT_NONE = 0
             const val HAT_N = 1
             const val HAT_NE = 2
@@ -92,6 +115,15 @@ class GamepadTouchView
             set(value) {
                 field = value
                 loadDrawables()
+                relayout()
+                invalidate()
+            }
+
+        var trackpadMode = TrackpadMode.NONE
+            set(value) {
+                if (field == value) return
+                field = value
+                recognizer.trackpadMode = value
                 relayout()
                 invalidate()
             }
@@ -178,6 +210,7 @@ class GamepadTouchView
         private var density = 1f
         private var layout: GamepadLayout? = null
         private val recognizer = GamepadGestureRecognizer()
+        private var trackpadClickFlash = false
 
         init {
             loadDrawables()
@@ -314,7 +347,8 @@ class GamepadTouchView
         private fun relayout() {
             if (width <= 0 || height <= 0) return
             density = resources.displayMetrics.density
-            layout = computeGamepadLayout(width, height, density, safeInsets, skin)
+            recognizer.trackpadTapSlopPx = TRACKPAD_TAP_SLOP_DP * density
+            layout = computeGamepadLayout(width, height, density, safeInsets, skin, trackpadMode != TrackpadMode.NONE)
         }
 
         private fun drawDrawable(
@@ -355,6 +389,7 @@ class GamepadTouchView
             drawStick(canvas, l.rightStickCx, l.rightStickCy, recognizer.rightStickDx, recognizer.rightStickDy, l.stickRadius, "R")
             drawStick(canvas, l.l3StickCx, l.l3StickCy, recognizer.l3StickDx, recognizer.l3StickDy, l.l3StickRadius, "L3")
             drawStick(canvas, l.r3StickCx, l.r3StickCy, recognizer.r3StickDx, recognizer.r3StickDy, l.l3StickRadius, "R3")
+            drawTrackpad(canvas, l, s)
             drawCenterButtons(canvas, l, s)
             drawShoulders(canvas, l, s)
             drawTriggers(canvas, l, s)
@@ -500,8 +535,38 @@ class GamepadTouchView
             val sz = l.smallBtnRadius * CENTER_BTN_DRAW_SIZE_FACTOR
             drawIcon(c, icSelect, l.selectCx, l.centerBtnCy, sz, s.buttons and BTN_SELECT != 0)
             drawIcon(c, icStart, l.startCx, l.centerBtnCy, sz, s.buttons and BTN_START != 0)
-            val homeCy = l.centerBtnCy + l.smallBtnRadius * HOME_VERTICAL_OFFSET_FACTOR
-            drawIcon(c, icHome, l.homeCx, homeCy, sz * HOME_DRAW_SIZE_FACTOR, s.buttons and BTN_HOME != 0)
+            drawIcon(c, icHome, l.homeCx, l.homeCy, sz * HOME_DRAW_SIZE_FACTOR, s.buttons and BTN_HOME != 0)
+        }
+
+        private fun drawTrackpad(
+            c: Canvas,
+            l: GamepadLayout,
+            s: GamepadState,
+        ) {
+            if (trackpadMode == TrackpadMode.NONE) return
+            val tp = l.trackpadRect ?: return
+            val corner = tp.height() * TRACKPAD_CORNER_RADIUS_FRACTION
+            c.drawRoundRect(tp, corner, corner, paintStickBg)
+            paintStickRing.strokeWidth = TRACKPAD_OUTLINE_STROKE_DP * density
+            c.drawRoundRect(tp, corner, corner, paintStickRing)
+            if (trackpadClickFlash || s.buttons and BTN_TOUCHPAD_CLICK != 0) {
+                c.drawRoundRect(tp, corner, corner, paintPressed)
+            }
+            if (trackpadMode != TrackpadMode.TOUCH) return
+            val touch = recognizer.trackpadState
+            if (touch.finger0Active) drawTrackpadFinger(c, tp, touch.finger0X, touch.finger0Y)
+            if (touch.finger1Active) drawTrackpadFinger(c, tp, touch.finger1X, touch.finger1Y)
+        }
+
+        private fun drawTrackpadFinger(
+            c: Canvas,
+            tp: RectF,
+            x: Short,
+            y: Short,
+        ) {
+            val px = tp.left + ((x.toInt() + HALF_INT16).toFloat() / NORM_INT16_SPAN) * tp.width()
+            val py = tp.top + ((y.toInt() + HALF_INT16).toFloat() / NORM_INT16_SPAN) * tp.height()
+            c.drawCircle(px, py, TRACKPAD_FINGER_DOT_RADIUS_DP * density, paintStickThumbActive)
         }
 
         private fun drawPillButton(
@@ -553,8 +618,38 @@ class GamepadTouchView
             recognizer.onTouchEvent(event, l) {
                 listener?.onGamepadStateChanged(recognizer.state)
             }
+            if (recognizer.consumeTrackpadDirty()) {
+                listener?.onTrackpadStateChanged(recognizer.trackpadState)
+            }
+            recognizer.takePendingTrackpadTap()?.let(::pulseTrackpadClick)
             invalidate()
             return true
+        }
+
+        // A quick, still tap replays as a short press-and-release: the tap's own frames
+        // carried touch-without-click, so the click is synthesised after the lift, held
+        // one pulse so a report cadence as slow as the resend tick still sees it.
+        private fun pulseTrackpadClick(tap: GamepadGestureRecognizer.TrackpadTap) {
+            trackpadClickFlash = true
+            listener?.onTrackpadStateChanged(
+                TouchpadSurfaceView.TouchpadState(
+                    finger0Active = true,
+                    buttonPressed = true,
+                    finger0TrackingId = tap.trackingId,
+                    finger0X = tap.x,
+                    finger0Y = tap.y,
+                    eventTimeMs = tap.eventTimeMs,
+                ),
+            )
+            postDelayed({
+                trackpadClickFlash = false
+                if (!recognizer.trackpadState.anyFingerDown()) {
+                    listener?.onTrackpadStateChanged(
+                        TouchpadSurfaceView.TouchpadState(eventTimeMs = tap.eventTimeMs + TRACKPAD_CLICK_PULSE_MS),
+                    )
+                }
+                invalidate()
+            }, TRACKPAD_CLICK_PULSE_MS)
         }
     }
 

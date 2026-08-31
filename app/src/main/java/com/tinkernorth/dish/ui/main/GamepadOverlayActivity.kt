@@ -22,13 +22,17 @@ import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.core.input.hidToXusb
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.net.moonlight.MoonlightControlProtocol
 import com.tinkernorth.dish.databinding.ActivityGamepadOverlayBinding
+import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.sensor.MotionStreamState
 import com.tinkernorth.dish.source.sensor.PhoneBatterySource
 import com.tinkernorth.dish.source.sensor.PhoneMotionSource
 import com.tinkernorth.dish.ui.common.GamepadSkin
 import com.tinkernorth.dish.ui.common.GamepadTouchView
+import com.tinkernorth.dish.ui.common.ResendPacer
+import com.tinkernorth.dish.ui.common.TouchpadSurfaceView
 import com.tinkernorth.dish.ui.common.paintConnectionMenuItem
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.common.showConnectionDialog
@@ -58,6 +62,8 @@ class GamepadOverlayActivity :
 
     // @Volatile for main-thread write / resend-thread read.
     @Volatile private var lastReportedState: GamepadTouchView.GamepadState? = null
+
+    @Volatile private var lastReportedTrackpad: TouchpadSurfaceView.TouchpadState? = null
 
     private lateinit var motionSource: PhoneMotionSource
     private lateinit var batterySource: PhoneBatterySource
@@ -113,24 +119,33 @@ class GamepadOverlayActivity :
 
     // Resend-thread-only (single-threaded Handler dispatcher).
     private var lastResentSnapshot: GamepadTouchView.GamepadState? = null
+    private var lastResentTrackpadSnapshot: TouchpadSurfaceView.TouchpadState? = null
+    private val trackpadResendPacer = ResendPacer()
 
     /**
      * Resend-loop tick; pacing is [resendDue] (edge burst, then keepalive).
      * Fires only after the pad was touched once and only at a Connected
      * satellite. Bluetooth is excluded (BT-HID has its own polling
-     * discipline and a bounded native dispatch queue).
+     * discipline and a bounded native dispatch queue). The trackpad stream
+     * paces on its own [ResendPacer] so a gamepad edge never spends the
+     * touch stream's burst, and vice versa.
      */
     override fun resendOneIfReady() {
-        val state = lastReportedState ?: return
         val summary = hub.summary(connectionId) ?: return
         if (summary.kind != ConnectionKind.SATELLITE) return
         if (!summary.live.isLiveLink()) return
-        // The live state object mutates on the UI thread: copy() is the
+        // The live state objects mutate on the UI thread: copy() is the
         // stable comparison base (a torn read just costs one extra burst).
-        val changed = state != lastResentSnapshot
-        if (changed) lastResentSnapshot = state.copy()
-        if (!resendDue(changed)) return
-        sendSatelliteReport(state)
+        lastReportedState?.let { state ->
+            val changed = state != lastResentSnapshot
+            if (changed) lastResentSnapshot = state.copy()
+            if (resendDue(changed)) sendSatelliteReport(state)
+        }
+        lastReportedTrackpad?.let { touch ->
+            val changed = touch != lastResentTrackpadSnapshot
+            if (changed) lastResentTrackpadSnapshot = touch.copy()
+            if (trackpadResendPacer.resendDue(changed)) sendSatelliteTrackpadReport(touch)
+        }
     }
 
     override fun onResume() {
@@ -224,8 +239,26 @@ class GamepadOverlayActivity :
 
     private fun repaintFrom(paint: OverlayMotionPaint) {
         currentPaint.value = paint
+        binding.gamepadTouchView.trackpadMode = trackpadModeFor(paint.summary, paint.capability)
         paintMenu(paint)
     }
+
+    // The trackpad zone appears only when the emulated type really carries one, and does
+    // only what the wire can deliver: a satellite gets the full touch stream once the
+    // descriptor declares a mode, a Moonlight host gets the click button alone (no touch
+    // packet on that path yet), and everything else hides it.
+    private fun trackpadModeFor(
+        summary: ConnectionSummary?,
+        capability: SlotCapabilities,
+    ): GamepadTouchView.TrackpadMode =
+        when {
+            !capability.typeOk(Feature.TOUCHPAD) -> GamepadTouchView.TrackpadMode.NONE
+            summary?.kind == ConnectionKind.SATELLITE &&
+                capabilityComposer.touchpadWireMode(VIRTUAL_SLOT_ID) != TouchpadModeValue.OFF ->
+                GamepadTouchView.TrackpadMode.TOUCH
+            summary?.kind == ConnectionKind.MOONLIGHT -> GamepadTouchView.TrackpadMode.CLICK
+            else -> GamepadTouchView.TrackpadMode.NONE
+        }
 
     private fun paintMenu(paint: OverlayMotionPaint) {
         val menu = optionsMenu ?: return
@@ -317,19 +350,48 @@ class GamepadOverlayActivity :
 
     // Moonlight's low-16 button flags share XInput's bit layout, so the XUSB
     // wButtons map straight across; sticks (i16) and triggers (u8) match too.
+    // The trackpad click has no XUSB bit and rides the wire's own high flag.
     private fun sendMoonlightReport(state: GamepadTouchView.GamepadState) {
-        val wButtons = hidToXusb(state.buttons, state.hatSwitch)
+        var buttons = hidToXusb(state.buttons, state.hatSwitch)
+        if (state.buttons and GamepadTouchView.BTN_TOUCHPAD_CLICK != 0) {
+            buttons = buttons or MoonlightControlProtocol.BTN_TOUCHPAD
+        }
         val conn = moonlight.get(connectionId) ?: return
         val pad = conn.padFor(VIRTUAL_SLOT_ID) ?: return
         conn.sendControllerState(
             controllerNumber = pad.number,
-            buttons = wButtons,
+            buttons = buttons,
             leftTrigger = state.leftTrigger,
             rightTrigger = state.rightTrigger,
             leftX = state.leftX.toInt(),
             leftY = state.leftY.toInt(),
             rightX = state.rightX.toInt(),
             rightY = state.rightY.toInt(),
+        )
+    }
+
+    override fun onTrackpadStateChanged(state: TouchpadSurfaceView.TouchpadState) {
+        inputRateStore.recordScreenSample()
+        lastReportedTrackpad = state
+        val summary = hub.summary(connectionId) ?: return
+        if (!summary.live.isLiveLink()) return
+        if (summary.kind != ConnectionKind.SATELLITE) return
+        sendSatelliteTrackpadReport(state)
+    }
+
+    private fun sendSatelliteTrackpadReport(state: TouchpadSurfaceView.TouchpadState) {
+        satellite.get(connectionId)?.sendTouchpad(
+            VIRTUAL_SLOT_ID,
+            state.finger0Active,
+            state.finger1Active,
+            state.buttonPressed,
+            state.finger0TrackingId,
+            state.finger0X,
+            state.finger0Y,
+            state.finger1TrackingId,
+            state.finger1X,
+            state.finger1Y,
+            state.eventTimeMs,
         )
     }
 

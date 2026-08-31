@@ -4,6 +4,7 @@
 package com.tinkernorth.dish.source.connection.moonlight
 
 import android.util.Log
+import com.tinkernorth.dish.core.net.moonlight.MoonlightControlProtocol
 import com.tinkernorth.dish.core.net.moonlight.MoonlightControlSession
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEvent
@@ -239,7 +240,7 @@ class MoonlightConnection(
         live.sendControllerState(
             controllerNumber = controllerNumber,
             activeMask = activeMask(),
-            buttons = buttons and 0xFFFF,
+            buttons = buttons and WIRE_BUTTONS_MASK,
             leftTrigger = leftTrigger,
             rightTrigger = rightTrigger,
             leftStickX = leftX,
@@ -281,6 +282,10 @@ class MoonlightConnection(
 
     companion object {
         private const val TAG = "MoonlightConnection"
+
+        // XUSB's low 16 plus the wire's own touchpad flag (buttonFlags2 on the wire);
+        // anything else a caller sets is not a button this client can vouch for.
+        private const val WIRE_BUTTONS_MASK = 0xFFFF or MoonlightControlProtocol.BTN_TOUCHPAD
 
         // Comfortably inside every host deadline we have measured, and cheap.
         private const val MEDIA_PING_INTERVAL_MS = 500L
