@@ -60,6 +60,14 @@
                     android:textColor="@color/colorOnSurfaceVariant"
                     tools:text="USB / Direct" />
             </LinearLayout>
+
+            <include
+                android:id="@+id/reviewTierPill"
+                layout="@layout/binding_pill"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/spacing_md"
+                android:visibility="gone" />
         </LinearLayout>
 
         <LinearLayout
@@ -85,16 +93,12 @@
                 android:layout_marginStart="@dimen/spacing_xs"
                 android:text="@string/setup_cfg_review_sends" />
 
-            <LinearLayout
+            <com.tinkernorth.dish.ui.common.PillFlowLayout
                 android:id="@+id/reviewSendsChips"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginStart="@dimen/spacing_md"
-                android:divider="@drawable/binding_pill_gap"
-                android:gravity="center_vertical|end"
-                android:orientation="horizontal"
-                android:showDividers="middle" />
+                android:layout_marginStart="@dimen/spacing_md" />
         </LinearLayout>
 
         <LinearLayout
@@ -120,16 +124,12 @@
                 android:layout_marginStart="@dimen/spacing_xs"
                 android:text="@string/setup_cfg_review_gets" />
 
-            <LinearLayout
+            <com.tinkernorth.dish.ui.common.PillFlowLayout
                 android:id="@+id/reviewGetsChips"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginStart="@dimen/spacing_md"
-                android:divider="@drawable/binding_pill_gap"
-                android:gravity="center_vertical|end"
-                android:orientation="horizontal"
-                android:showDividers="middle" />
+                android:layout_marginStart="@dimen/spacing_md" />
         </LinearLayout>
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

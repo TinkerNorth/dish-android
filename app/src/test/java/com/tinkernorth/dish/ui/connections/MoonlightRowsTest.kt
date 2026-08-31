@@ -67,12 +67,12 @@ class MoonlightRowsTest {
         assertEquals(MoonlightTrustState.PAIRED, moonlightTrustFor(idle, paired = false, verified = true))
     }
 
-    // Three words and no fourth. The hosts screen never probes, so every state the
+    // Two words and no third. The hosts screen never probes, so every state the
     // rest of the app can be in still has to land on one of these, and none of them
     // may read as a liveness light.
     @Test
-    fun `every row a scan can produce says exactly one of the three trust words`() {
-        val words = setOf(R.string.ml_trust_paired, R.string.ml_trust_remembered, R.string.ml_trust_not_paired)
+    fun `every row a scan can produce says exactly one of the two trust words`() {
+        val words = setOf(R.string.ml_trust_paired, R.string.ml_trust_not_paired)
         val states = mutableSetOf<MoonlightTrustState>()
         for (live in LinkState.entries) {
             for (paired in listOf(false, true)) {

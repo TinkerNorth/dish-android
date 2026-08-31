@@ -32,8 +32,10 @@ import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionCoordinator
+import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
+import com.tinkernorth.dish.composer.LinkTiers
 import com.tinkernorth.dish.core.input.BluetoothGamepad
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.DiscoverySource
@@ -62,6 +64,7 @@ import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.StaticViewAdapter
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
+import com.tinkernorth.dish.ui.common.setLoading
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.donate.attachDonatePill
 import dagger.hilt.android.AndroidEntryPoint
@@ -289,8 +292,11 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.ui.collect { state ->
                     render(state)
-                    satelliteHeader.setLoading(state.scanning, getString(R.string.action_scanning))
-                    moonlightHeader.setLoading(state.moonlightScanning, getString(R.string.action_scanning))
+                    binding.btnScanAll.setLoading(
+                        state.scanning || state.moonlightScanning,
+                        getString(R.string.action_scanning),
+                        getString(R.string.action_scan),
+                    )
                     // Success path emits no ConnectionEvent, so observe state directly to dismiss PIN dialog.
                     dismissPinDialogIfPaired(state)
                 }
@@ -427,28 +433,28 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     }
 
     private fun setupList() {
+        binding.btnScanAll.setOnClickListener { ensureLocalNetworkThenDiscover(userInitiated = true) }
         satelliteHeader =
             SectionHeaderAdapter(
                 R.drawable.ic_satellite,
                 R.string.section_satellites,
-                R.string.action_scan,
-                secondaryActionLabel = R.string.action_add,
-                onSecondaryAction = ::showAddSatelliteDialog,
-            ) { ensureLocalNetworkThenDiscover(userInitiated = true) }
+                R.string.action_add,
+                tier = LinkTiers.forKind(ConnectionKind.SATELLITE),
+            ) { showAddSatelliteDialog() }
         bluetoothHeader =
             SectionHeaderAdapter(
                 R.drawable.ic_bluetooth,
                 R.string.section_bluetooth_hosts,
                 R.string.action_add,
+                tier = LinkTiers.forKind(ConnectionKind.BLUETOOTH),
             ) { requestBtPermissions(continueToAdd = true) }
         moonlightHeader =
             SectionHeaderAdapter(
                 R.drawable.ic_pc_monitor,
                 R.string.section_moonlight_hosts,
-                R.string.action_scan,
-                secondaryActionLabel = R.string.action_add,
-                onSecondaryAction = ::showAddMoonlightDialog,
-            ) { ensureLocalNetworkThenDiscover(userInitiated = true) }
+                R.string.action_add,
+                tier = LinkTiers.forKind(ConnectionKind.MOONLIGHT),
+            ) { showAddMoonlightDialog() }
         satelliteList = SatelliteListAdapter(satelliteRowListener)
         bluetoothList = BluetoothListAdapter(bluetoothRowListener)
         moonlightList = MoonlightListAdapter(moonlightRowListener)

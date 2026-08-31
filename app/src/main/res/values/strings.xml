@@ -31,6 +31,7 @@
     <string name="action_scan">Scan</string>
     <string name="action_scanning">Scanning…</string>
     <string name="action_add">Add</string>
+    <string name="scan_all_hint">One scan finds satellites and Moonlight hosts</string>
     <string name="bt_hosts_empty">No remembered hosts. Tap Add to register a new one</string>
 
     <!-- row_connection.xml + ConnectionsActivity dynamic row labels. -->
@@ -131,6 +132,11 @@
     <string name="chip_status_online">Online</string>
     <string name="chip_status_unstable">Unsteady</string>
 
+    <!-- LinkTier vocabulary: the speed/stability ladder of the connection kinds. -->
+    <string name="link_tier_fastest">Fastest</string>
+    <string name="link_tier_fast">Fast</string>
+    <string name="link_tier_basic">Basic</string>
+
     <!-- Overlay screens (gamepad + touchpad): toolbar action icons + their info-dialog content. -->
     <string name="overlay_status_unknown">Unknown connection</string>
     <string name="overlay_status_not_connected">Not connected</string>
@@ -148,6 +154,15 @@
     <string name="overlay_title_touchpad">Touchpad</string>
     <string name="overlay_rate_touch">Touch %1$s</string>
     <string name="overlay_rate_motion">Motion %1$s</string>
+    <string name="overlay_guard_wifi_detail">Wi-Fi is off or on a different network. Rejoin the host\'s network.</string>
+    <string name="overlay_guard_bt_detail">Reconnect from the host\'s Bluetooth settings.</string>
+    <string name="overlay_guard_ml_detail">The Moonlight session ended. Bind the controller again to start a new one.</string>
+    <string name="overlay_guard_replug_detail">Plug the controller back in to keep using this screen.</string>
+    <string name="overlay_guard_departed_detail">The controller didn\'t come back. This screen will close.</string>
+    <string name="overlay_guard_unbound_title">Controller unbound</string>
+    <string name="overlay_guard_unbound_detail">This slot is no longer bound to %1$s. This screen will close.</string>
+    <string name="overlay_guard_gone_title">Connection removed</string>
+    <string name="overlay_guard_gone_detail">The connection was forgotten. This screen will close.</string>
 
     <!-- Labels for the two side-by-side trackpads in the touchpad overlay.
          The "click" pad routes touches as click+position (drag, text
@@ -200,7 +215,6 @@
     <string name="ml_session_live_body">%1$s · controller %2$d of 4</string>
 
     <string name="ml_trust_paired">Paired</string>
-    <string name="ml_trust_remembered">Remembered</string>
     <string name="ml_trust_not_paired">Not paired</string>
     <string name="ml_host_in_use">In use by %1$s</string>
     <plurals name="ml_host_in_use_count">
@@ -244,7 +258,6 @@
     <string name="ml_ended_body">The app closed on the host. Start a new session to keep using this controller.</string>
 
     <string name="ml_action_pair">Pair now</string>
-    <string name="ml_action_pair_again">Pair again</string>
     <string name="ml_action_new_code">New code</string>
     <string name="ml_action_cancel">Cancel</string>
     <string name="ml_action_try_again">Try again</string>

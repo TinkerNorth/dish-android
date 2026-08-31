@@ -27,6 +27,7 @@
     <string name="action_scan">Skeniraj</string>
     <string name="action_scanning">Skeniranje…</string>
     <string name="action_add">Dodaj</string>
+    <string name="scan_all_hint">Jedno skeniranje pronalazi satelite i Moonlight hostove</string>
     <string name="bt_hosts_empty">Nema zapamćenih hostova. Dodirnite Dodaj da registrujete novi</string>
 
     <!-- row_connection.xml + dinamičke oznake redova u ConnectionsActivity. -->
@@ -105,6 +106,10 @@
     <string name="chip_status_online">Na vezi</string>
     <string name="chip_status_unstable">Nestabilan</string>
 
+    <string name="link_tier_fastest">Najbrži</string>
+    <string name="link_tier_fast">Brz</string>
+    <string name="link_tier_basic">Osnovni</string>
+
     <!-- Sloj kontrolera (activity_gamepad_overlay.xml + GamepadOverlayActivity). -->
     <string name="overlay_status_unknown">Nepoznata veza</string>
     <string name="overlay_status_not_connected">Nije povezan</string>
@@ -119,6 +124,15 @@
     <string name="overlay_title_touchpad">Dodirna ploča</string>
     <string name="overlay_rate_touch">Dodir %1$s</string>
     <string name="overlay_rate_motion">Pokret %1$s</string>
+    <string name="overlay_guard_wifi_detail">Wi-Fi je isključen ili na drugoj mreži. Vratite se na mrežu hosta.</string>
+    <string name="overlay_guard_bt_detail">Ponovo se povežite iz Bluetooth podešavanja hosta.</string>
+    <string name="overlay_guard_ml_detail">Moonlight sesija je završena. Ponovo povežite kontroler da pokrenete novu.</string>
+    <string name="overlay_guard_replug_detail">Ponovo priključite kontroler da nastavite koristiti ovaj ekran.</string>
+    <string name="overlay_guard_departed_detail">Kontroler se nije vratio. Ovaj ekran će se zatvoriti.</string>
+    <string name="overlay_guard_unbound_title">Kontroler odvezan</string>
+    <string name="overlay_guard_unbound_detail">Ovaj slot više nije povezan sa %1$s. Ovaj ekran će se zatvoriti.</string>
+    <string name="overlay_guard_gone_title">Veza uklonjena</string>
+    <string name="overlay_guard_gone_detail">Veza je zaboravljena. Ovaj ekran će se zatvoriti.</string>
     <string name="touchpad_pad_click_label">Klik + Pomak</string>
     <string name="touchpad_pad_move_label">Pomak</string>
     <string name="touchpad_pad_click_hint">Povucite za klik i pomak</string>
@@ -157,7 +171,6 @@
     <string name="ml_session_live_title">Strimuje na %1$s</string>
     <string name="ml_session_live_body">%1$s · kontroler %2$d od 4</string>
     <string name="ml_trust_paired">Upareno</string>
-    <string name="ml_trust_remembered">Zapamćeno</string>
     <string name="ml_trust_not_paired">Nije upareno</string>
     <string name="ml_host_in_use">Koristi ga %1$s</string>
     <plurals name="ml_host_in_use_count">
@@ -199,7 +212,6 @@
     <string name="ml_ended_title">%1$s je završio sesiju</string>
     <string name="ml_ended_body">Aplikacija je zatvorena na hostu. Pokrenite novu sesiju da nastavite koristiti ovaj kontroler.</string>
     <string name="ml_action_pair">Upari sada</string>
-    <string name="ml_action_pair_again">Upari ponovo</string>
     <string name="ml_action_new_code">Novi kod</string>
     <string name="ml_action_cancel">Otkaži</string>
     <string name="ml_action_try_again">Pokušaj ponovo</string>
