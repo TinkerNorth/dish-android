@@ -24,6 +24,7 @@ import com.tinkernorth.dish.ui.common.GamepadConstants.ABXY_BTN_DRAW_SIZE_FACTOR
 import com.tinkernorth.dish.ui.common.GamepadConstants.ABXY_BTN_SPACING_FACTOR
 import com.tinkernorth.dish.ui.common.GamepadConstants.CENTER_BTN_DRAW_SIZE_FACTOR
 import com.tinkernorth.dish.ui.common.GamepadConstants.HOME_DRAW_SIZE_FACTOR
+import com.tinkernorth.dish.ui.common.GamepadConstants.LIGHTBAR_BG_BLEND_FRACTION
 import com.tinkernorth.dish.ui.common.GamepadConstants.LIGHTBAR_STROKE_DP
 import com.tinkernorth.dish.ui.common.GamepadConstants.PILL_CORNER_RADIUS_FRACTION
 import com.tinkernorth.dish.ui.common.GamepadConstants.PILL_ICON_SIZE_FRACTION
@@ -176,9 +177,11 @@ class GamepadTouchView
                 invalidate()
             }
 
+        private val surfaceColor = ContextCompat.getColor(context, R.color.colorSurface)
+
         private val paintBg =
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = ContextCompat.getColor(context, R.color.colorSurface)
+                color = surfaceColor
             }
         private val paintStickBg =
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -477,6 +480,11 @@ class GamepadTouchView
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
+            paintBg.color =
+                lightbarColor
+                    ?.takeIf { skin.hasLightbar }
+                    ?.let { ColorUtils.blendARGB(surfaceColor, it, LIGHTBAR_BG_BLEND_FRACTION) }
+                    ?: surfaceColor
             canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paintBg)
             val l = layout ?: return
             val s = recognizer.state

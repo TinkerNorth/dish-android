@@ -12,11 +12,13 @@ import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 // (stick/d-pad placement) splits the PlayStation family from the rest; the glyphs
 // split every skin: Xbox360 carries Back/Start where Xbox carries View/Menu, and
 // DualSense carries Create/Options where PlayStation carries the DS4 Share/Options.
-enum class GamepadSkin {
+enum class GamepadSkin(
+    val hasLightbar: Boolean = false,
+) {
     Xbox,
     Xbox360,
-    PlayStation,
-    DualSense,
+    PlayStation(hasLightbar = true),
+    DualSense(hasLightbar = true),
     Switch,
     ;
 
