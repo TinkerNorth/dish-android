@@ -30,6 +30,24 @@ class SatelliteHostFeaturesStore
             setState { if (connectionId in it) it else it + (connectionId to features) }
         }
 
+        // Session negotiation is the freshest protocol read (it beats a stale cached
+        // catalog after a satellite update); merged in so the chips and the extended
+        // mouse gate follow the live truth without waiting for a catalog refetch.
+        fun noteProtocolVersion(
+            connectionId: String,
+            protocolVersion: Int,
+        ) {
+            if (protocolVersion <= 0) return
+            setState { current ->
+                val base = current[connectionId] ?: HostFeatureSet.SATELLITE_DEFAULT
+                if (base.protocolVersion == protocolVersion) {
+                    current
+                } else {
+                    current + (connectionId to base.copy(protocolVersion = protocolVersion))
+                }
+            }
+        }
+
         fun clearConnection(connectionId: String) {
             setState { if (connectionId in it) it - connectionId else it }
         }

@@ -2,22 +2,48 @@
 
 package com.tinkernorth.dish.ui.common
 
+import android.graphics.RectF
 import android.view.MotionEvent
 import com.tinkernorth.dish.ui.common.GamepadConstants.ABXY_BTN_SPACING_FACTOR
 import com.tinkernorth.dish.ui.common.GamepadConstants.ABXY_CENTER_ZONE_FRACTION
 import com.tinkernorth.dish.ui.common.GamepadConstants.CENTER_BTN_PICKUP_FACTOR
 import com.tinkernorth.dish.ui.common.GamepadConstants.DPAD_DIAGONAL_THRESHOLD
-import com.tinkernorth.dish.ui.common.GamepadConstants.HOME_VERTICAL_OFFSET_FACTOR
 import com.tinkernorth.dish.ui.common.GamepadConstants.PICKUP_RADIUS_FACTOR
+import com.tinkernorth.dish.ui.common.GamepadConstants.TRACKPAD_TAP_MAX_MS
 import com.tinkernorth.dish.ui.common.GamepadConstants.TRIGGER_MAX
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 internal class GamepadGestureRecognizer {
     var state: GamepadTouchView.GamepadState = GamepadTouchView.GamepadState()
         private set
+
+    var trackpadMode: GamepadTouchView.TrackpadMode = GamepadTouchView.TrackpadMode.NONE
+
+    var trackpadTapSlopPx: Float = 0f
+
+    // Wire-shaped trackpad snapshot, mutated in place like [state]; the view forwards it
+    // whenever [consumeTrackpadDirty] reports a change.
+    val trackpadState = TouchpadSurfaceView.TouchpadState()
+
+    data class TrackpadTap(
+        val x: Short,
+        val y: Short,
+        val trackingId: Int,
+        val eventTimeMs: Long,
+    )
+
+    private class TrackpadTouch(
+        val downX: Float,
+        val downY: Float,
+        val downTimeMs: Long,
+        val xNorm: Short,
+        val yNorm: Short,
+        var moved: Boolean = false,
+    )
 
     var leftStickDx = 0f
         private set
@@ -53,6 +79,25 @@ internal class GamepadGestureRecognizer {
         GamepadTouchView.BTN_A or GamepadTouchView.BTN_B or
             GamepadTouchView.BTN_X or GamepadTouchView.BTN_Y
 
+    private val trackpadSlotForPointer = HashMap<Int, Int>(4)
+    private val trackpadTouches = HashMap<Int, TrackpadTouch>(4)
+    private val trackpadClickPointers = mutableSetOf<Int>()
+    private var nextTrackpadTrackingId = 0
+    private var trackpadDirty = false
+    private var pendingTrackpadTap: TrackpadTap? = null
+
+    fun consumeTrackpadDirty(): Boolean {
+        val dirty = trackpadDirty
+        trackpadDirty = false
+        return dirty
+    }
+
+    fun takePendingTrackpadTap(): TrackpadTap? {
+        val tap = pendingTrackpadTap
+        pendingTrackpadTap = null
+        return tap
+    }
+
     fun onTouchEvent(
         event: MotionEvent,
         layout: GamepadLayout,
@@ -65,24 +110,30 @@ internal class GamepadGestureRecognizer {
             }
             MotionEvent.ACTION_MOVE -> {
                 // Drain historical samples (oldest to newest) so vsync-coalesced intermediate finger positions each become a wire report.
+                // Event times ride only while a trackpad finger is down; they stamp the touch frames.
+                val trackpadLive = trackpadSlotForPointer.isNotEmpty()
                 val historySize = event.historySize
                 for (h in 0 until historySize) {
+                    val historicalTimeMs = if (trackpadLive) event.getHistoricalEventTime(h) else 0L
                     for (i in 0 until event.pointerCount) {
                         applyPointerMove(
                             event.getHistoricalX(i, h),
                             event.getHistoricalY(i, h),
                             event.getPointerId(i),
                             layout,
+                            historicalTimeMs,
                         )
                     }
                     onSampleApplied?.invoke()
                 }
+                val timeMs = if (trackpadLive) event.eventTime else 0L
                 for (i in 0 until event.pointerCount) {
                     applyPointerMove(
                         event.getX(i),
                         event.getY(i),
                         event.getPointerId(i),
                         layout,
+                        timeMs,
                     )
                 }
                 onSampleApplied?.invoke()
@@ -118,6 +169,21 @@ internal class GamepadGestureRecognizer {
         lbPointerId = INVALID_POINTER
         rbPointerId = INVALID_POINTER
         abxyPointerBits.clear()
+        trackpadSlotForPointer.clear()
+        trackpadTouches.clear()
+        trackpadClickPointers.clear()
+        pendingTrackpadTap = null
+        if (trackpadState.anyFingerDown()) {
+            // Clean lift so the receiver never keeps a finger the screen no longer holds.
+            trackpadState.finger0Active = false
+            trackpadState.finger1Active = false
+            trackpadState.finger0X = 0
+            trackpadState.finger0Y = 0
+            trackpadState.finger1X = 0
+            trackpadState.finger1Y = 0
+            trackpadState.buttonPressed = false
+            trackpadDirty = true
+        }
     }
 
     @Suppress("CyclomaticComplexMethod", "ReturnCount", "LongMethod")
@@ -188,11 +254,67 @@ internal class GamepadGestureRecognizer {
             state.buttons = state.buttons or GamepadTouchView.BTN_START
             return
         }
-        val homeCy = l.centerBtnCy + l.smallBtnRadius * HOME_VERTICAL_OFFSET_FACTOR
-        if (hypot(x - l.homeCx, y - homeCy) < l.smallBtnRadius * centerPickup) {
+        if (hypot(x - l.homeCx, y - l.homeCy) < l.smallBtnRadius * centerPickup) {
             state.buttons = state.buttons or GamepadTouchView.BTN_HOME
             return
         }
+        val tp = l.trackpadRect
+        if (tp != null && trackpadMode != GamepadTouchView.TrackpadMode.NONE && tp.contains(x, y)) {
+            trackpadPointerDown(pid, x, y, tp, event.eventTime)
+        }
+    }
+
+    private fun trackpadPointerDown(
+        pid: Int,
+        x: Float,
+        y: Float,
+        tp: RectF,
+        timeMs: Long,
+    ) {
+        if (trackpadMode == GamepadTouchView.TrackpadMode.CLICK) {
+            trackpadClickPointers += pid
+            state.buttons = state.buttons or GamepadTouchView.BTN_TOUCHPAD_CLICK
+            return
+        }
+        val slot =
+            when {
+                !trackpadState.finger0Active -> 0
+                !trackpadState.finger1Active -> 1
+                else -> return
+            }
+        trackpadSlotForPointer[pid] = slot
+        val trackingId = nextTrackpadTrackingId++ and 0xFF
+        val xNorm = trackpadNorm(x, tp.centerX(), tp.width())
+        val yNorm = trackpadNorm(y, tp.centerY(), tp.height())
+        if (slot == 0) {
+            trackpadState.finger0Active = true
+            trackpadState.finger0TrackingId = trackingId
+            trackpadState.finger0X = xNorm
+            trackpadState.finger0Y = yNorm
+        } else {
+            trackpadState.finger1Active = true
+            trackpadState.finger1TrackingId = trackingId
+            trackpadState.finger1X = xNorm
+            trackpadState.finger1Y = yNorm
+        }
+        trackpadState.eventTimeMs = timeMs
+        trackpadTouches[pid] = TrackpadTouch(x, y, timeMs, xNorm, yNorm)
+        trackpadDirty = true
+    }
+
+    // Same int16 normalisation as TouchpadSurfaceView, rect-relative; the receiver owns
+    // the mapping to the emulated pad's own coordinate space.
+    private fun trackpadNorm(
+        v: Float,
+        center: Float,
+        span: Float,
+    ): Short {
+        val s = max(span, 1f)
+        val lo = center - s / 2f
+        return (((v - lo).coerceIn(0f, s) / s) * 65535f - 32768f)
+            .roundToInt()
+            .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+            .toShort()
     }
 
     @Suppress("CyclomaticComplexMethod", "LongMethod")
@@ -201,6 +323,7 @@ internal class GamepadGestureRecognizer {
         y: Float,
         pid: Int,
         l: GamepadLayout,
+        eventTimeMs: Long,
     ) {
         if (pid == leftStickPointerId) {
             val r = computeStickAxes((x - l.leftStickCx) / l.stickRadius, (y - l.leftStickCy) / l.stickRadius)
@@ -241,6 +364,26 @@ internal class GamepadGestureRecognizer {
             if (newBits != currentBits) {
                 abxyPointerBits[pid] = newBits
                 refreshAbxyButtons()
+            }
+        }
+        val trackpadSlot = trackpadSlotForPointer[pid]
+        val tp = l.trackpadRect
+        if (trackpadSlot != null && tp != null) {
+            val xNorm = trackpadNorm(x, tp.centerX(), tp.width())
+            val yNorm = trackpadNorm(y, tp.centerY(), tp.height())
+            if (trackpadSlot == 0) {
+                trackpadState.finger0X = xNorm
+                trackpadState.finger0Y = yNorm
+            } else {
+                trackpadState.finger1X = xNorm
+                trackpadState.finger1Y = yNorm
+            }
+            trackpadState.eventTimeMs = eventTimeMs
+            trackpadDirty = true
+            trackpadTouches[pid]?.let { touch ->
+                if (!touch.moved && hypot(x - touch.downX, y - touch.downY) > trackpadTapSlopPx) {
+                    touch.moved = true
+                }
             }
         }
     }
@@ -315,6 +458,43 @@ internal class GamepadGestureRecognizer {
         if (pid == rbPointerId) {
             rbPointerId = INVALID_POINTER
             state.buttons = state.buttons and GamepadTouchView.BTN_RB.inv()
+            return
+        }
+        if (trackpadClickPointers.remove(pid)) {
+            if (trackpadClickPointers.isEmpty()) {
+                state.buttons = state.buttons and GamepadTouchView.BTN_TOUCHPAD_CLICK.inv()
+            }
+            return
+        }
+        val trackpadSlot = trackpadSlotForPointer.remove(pid)
+        if (trackpadSlot != null) {
+            if (trackpadSlot == 0) {
+                trackpadState.finger0Active = false
+                trackpadState.finger0X = 0
+                trackpadState.finger0Y = 0
+            } else {
+                trackpadState.finger1Active = false
+                trackpadState.finger1X = 0
+                trackpadState.finger1Y = 0
+            }
+            trackpadState.eventTimeMs = event.eventTime
+            trackpadDirty = true
+            val touch = trackpadTouches.remove(pid)
+            // A quick, still touch is the pad click; the view replays it as a press pulse
+            // once this lift frame has gone out.
+            if (touch != null &&
+                !touch.moved &&
+                event.eventTime - touch.downTimeMs <= TRACKPAD_TAP_MAX_MS &&
+                !trackpadState.anyFingerDown()
+            ) {
+                pendingTrackpadTap =
+                    TrackpadTap(
+                        x = touch.xNorm,
+                        y = touch.yNorm,
+                        trackingId = nextTrackpadTrackingId++ and 0xFF,
+                        eventTimeMs = event.eventTime,
+                    )
+            }
             return
         }
         // Centre / stick-click buttons aren't pointer-tracked: drop all on any unmatched up.

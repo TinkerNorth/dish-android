@@ -14,6 +14,7 @@ import com.tinkernorth.dish.core.model.SessionResponse
 import com.tinkernorth.dish.core.model.SessionViewDto
 import com.tinkernorth.dish.core.net.ControllerDescriptor
 import com.tinkernorth.dish.core.net.DiscoveryGateway
+import com.tinkernorth.dish.core.net.DishProtocol
 import com.tinkernorth.dish.core.net.HttpReply
 import com.tinkernorth.dish.core.net.SessionCrypto
 import com.tinkernorth.dish.core.net.hexToBytes
@@ -21,6 +22,8 @@ import com.tinkernorth.dish.core.net.isPrivateHostLiteral
 import com.tinkernorth.dish.di.IoDispatcher
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedSatellite
+import com.tinkernorth.dish.source.store.MouseSurfaceStore
+import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
 import com.tinkernorth.dish.source.system.LocalNetworkAccess
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -34,6 +37,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -78,6 +82,7 @@ internal fun lateSlotConverge(
 @Singleton
 class SatelliteConnectionManager
     @Inject
+    @Suppress("LongParameterList")
     constructor(
         @ApplicationContext private val context: Context,
         private val scope: CoroutineScope,
@@ -89,6 +94,8 @@ class SatelliteConnectionManager
         // Provider (not direct injection) breaks the Hilt cycle: composer → hub → this manager.
         private val capabilityProvider: Provider<CapabilityComposer>,
         private val motionBackendStatusStore: SatelliteMotionBackendStatusStore,
+        private val mouseSurfaceStore: MouseSurfaceStore,
+        private val hostFeaturesStore: SatelliteHostFeaturesStore,
     ) {
         private val _connections = MutableStateFlow<Map<String, SatelliteConnection>>(emptyMap())
         val connections: StateFlow<Map<String, SatelliteConnection>> = _connections.asStateFlow()
@@ -130,21 +137,26 @@ class SatelliteConnectionManager
         // second, the reconcile round-trip can take longer.
         private val reconcileInFlight = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
 
+        // The protocol version settled with each satellite (offer accepted, or the 409
+        // echo). Cleared on forget so a replaced install renegotiates from scratch.
+        private val negotiatedProtocol = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
         init {
             // Project to the per-slot wire view (caps bits + touchpad mode) so unrelated composer
             // emissions (host/type/runtime changes that don't move the descriptor) don't fire
-            // no-op wire updates. The touchpad mode rides the same projection so a per-satellite
-            // pick converges EVERY bound slot, not just the one a screen re-declared.
+            // no-op wire updates. The mouse-surface store rides the combine because opening the
+            // mouse overlay flips a slot's derived mode without moving any capability, and the
+            // descriptor must still converge EVERY bound slot.
             scope.launch {
-                capabilityProvider
-                    .get()
-                    .state
-                    .map { caps ->
-                        val composer = capabilityProvider.get()
-                        caps.mapValues { (slotId, slot) ->
-                            CapabilityResolver.wireCaps(slot) to composer.touchpadWireMode(slotId)
-                        }
-                    }.distinctUntilChanged()
+                combine(
+                    capabilityProvider.get().state,
+                    mouseSurfaceStore.state,
+                ) { caps, _ ->
+                    val composer = capabilityProvider.get()
+                    caps.mapValues { (slotId, slot) ->
+                        CapabilityResolver.wireCaps(slot) to composer.touchpadWireMode(slotId)
+                    }
+                }.distinctUntilChanged()
                     .collect {
                         _connections.value.values.forEach { conn ->
                             conn.refreshCapsIfChanged()
@@ -154,6 +166,142 @@ class SatelliteConnectionManager
         }
 
         fun get(id: String): SatelliteConnection? = _connections.value[id]
+
+        // The version to offer [id] on the next request, or null when the satellite is
+        // verifiably older than anything this client still speaks. Seeded from the
+        // advertisement documents; settled by the 409 echo; remembered per satellite.
+        private fun versionToSpeak(id: String): Int? {
+            negotiatedProtocol[id]?.let { return it }
+            val advertised = hostFeaturesStore.featuresFor(id)?.protocolVersion?.takeIf { it > 0 }
+            return DishProtocol.speakFor(advertised)
+        }
+
+        private fun noteNegotiated(
+            id: String,
+            version: Int,
+        ) {
+            negotiatedProtocol[id] = version
+            hostFeaturesStore.noteProtocolVersion(id, version)
+        }
+
+        // A 409's `supported` echo we can also speak means one retry settles it; null
+        // means no shared version exists and protocolRejectMessage says which side to update.
+        private fun protocolRetryVersion(body: String): Int? {
+            val supported = supportedVersionFrom(body) ?: return null
+            return supported.takeIf { it in DishProtocol.MIN..DishProtocol.CURRENT }
+        }
+
+        private fun protocolRejectMessage(body: String): String =
+            when {
+                (supportedVersionFrom(body) ?: 0) > DishProtocol.CURRENT -> APP_UPDATE_REQUIRED_MSG
+                else -> SATELLITE_UPDATE_REQUIRED_MSG
+            }
+
+        private fun supportedVersionFrom(body: String): Int? =
+            runCatching { json.decodeFromString(SessionResponse.serializer(), body) }
+                .getOrNull()
+                ?.supported
+                ?.takeIf { it > 0 }
+
+        private class NegotiatedPut(
+            val reply: HttpReply?,
+            val speak: Int,
+        )
+
+        // Token + salt are server-supplied: malformed values must degrade like a
+        // refused connect, not crash the coroutine. Per-session key derivation
+        // keeps the pairing key off the UDP path; null means no wire came up.
+        private fun openWire(
+            server: DiscoveredServer,
+            pairingKey: ByteArray,
+            tokenHex: String,
+            saltHex: String,
+            negotiated: Int,
+        ): Int? {
+            val token = runCatching { hexToBytes(tokenHex) }.getOrNull()
+            val salt = runCatching { hexToBytes(saltHex) }.getOrNull()
+            if (token == null || token.size != 4 || salt == null || salt.size != 8) return null
+            val sessionKey = SessionCrypto.deriveSessionKey(pairingKey, salt, token)
+            val handle = controllerRepo.openSocket(server.ip, server.udpPort)
+            if (handle < 0) return null
+            controllerRepo.setConnectionParams(handle, token, sessionKey, negotiated)
+            return handle
+        }
+
+        // One session PUT at the version we'd speak, retried once when the 409 echoes
+        // a version this client also speaks. Null when no shared version exists at
+        // all; a surviving 409 maps through protocolRejectMessage in the caller.
+        private suspend fun putSessionNegotiated(
+            id: String,
+            conn: SatelliteConnection,
+            server: DiscoveredServer,
+            proof: String,
+            descriptors: List<ControllerDescriptor>,
+        ): NegotiatedPut? {
+            var speak = versionToSpeak(id) ?: return null
+            val putOnce: suspend (Int) -> HttpReply? = { version ->
+                runCatching {
+                    discoveryRepo.putSession(
+                        server.ip,
+                        server.httpPort,
+                        deviceId,
+                        deviceName,
+                        proof,
+                        ControllerDescriptor.arrayJson(descriptors),
+                        conn.wantsMouseControl(),
+                        version,
+                    )
+                }.getOrNull()
+            }
+            var reply = putOnce(speak)
+            if (reply?.status == HTTP_CONFLICT) {
+                val retryWith = protocolRetryVersion(reply.body)
+                if (retryWith != null) {
+                    speak = retryWith
+                    noteNegotiated(id, retryWith)
+                    reply = putOnce(retryWith)
+                }
+            }
+            return NegotiatedPut(reply, speak)
+        }
+
+        // One pair round-trip at the version we'd speak, retried once when the 409
+        // echoes a version this client also speaks. Callers keep their reply-shape
+        // handling; a surviving 409 maps through protocolRejectMessage.
+        private suspend fun pairNegotiated(
+            id: String,
+            server: DiscoveredServer,
+            pin: String,
+            clientPin: String = "",
+        ): HttpReply? {
+            val speak = versionToSpeak(id) ?: DishProtocol.MIN
+            val first =
+                runCatching {
+                    discoveryRepo.pair(
+                        server.ip,
+                        server.pairPort,
+                        deviceId,
+                        deviceName,
+                        pin,
+                        clientPin,
+                        protocolVersion = speak,
+                    )
+                }.getOrNull()
+            if (first == null || first.status != HTTP_CONFLICT) return first
+            val retryWith = protocolRetryVersion(first.body) ?: return first
+            noteNegotiated(id, retryWith)
+            return runCatching {
+                discoveryRepo.pair(
+                    server.ip,
+                    server.pairPort,
+                    deviceId,
+                    deviceName,
+                    pin,
+                    clientPin,
+                    protocolVersion = retryWith,
+                )
+            }.getOrNull()
+        }
 
         fun remembered(): List<RememberedSatellite> = store.remembered()
 
@@ -251,9 +399,7 @@ class SatelliteConnectionManager
             intent: ConnectIntent,
         ) {
             val id = SatelliteConnection.idFor(server)
-            val reply =
-                runCatching { discoveryRepo.pair(server.ip, server.pairPort, deviceId, deviceName, "") }
-                    .getOrNull()
+            val reply = pairNegotiated(id, server, pin = "")
             if (reply == null || reply.unreachable) {
                 conn.markDisconnected()
                 emitErrorIfUserInitiated(intent, unreachableMessage(reply))
@@ -261,7 +407,7 @@ class SatelliteConnectionManager
             }
             if (reply.status == HTTP_CONFLICT) {
                 conn.markDisconnected()
-                emitErrorIfUserInitiated(intent, PROTOCOL_MISMATCH_MSG)
+                emitErrorIfUserInitiated(intent, protocolRejectMessage(reply.body))
                 return
             }
             val pair =
@@ -305,9 +451,7 @@ class SatelliteConnectionManager
             conn.updateServer(server)
             conn.markConnecting()
             scope.launch {
-                val reply =
-                    runCatching { discoveryRepo.pair(server.ip, server.pairPort, deviceId, deviceName, pin) }
-                        .getOrNull()
+                val reply = pairNegotiated(id, server, pin)
                 if (reply == null || reply.unreachable) {
                     conn.markDisconnected()
                     _events.emit(ConnectionEvent.Error(unreachableMessage(reply)))
@@ -315,7 +459,7 @@ class SatelliteConnectionManager
                 }
                 if (reply.status == HTTP_CONFLICT) {
                     conn.markDisconnected()
-                    _events.emit(ConnectionEvent.Error(PROTOCOL_MISMATCH_MSG))
+                    _events.emit(ConnectionEvent.Error(protocolRejectMessage(reply.body)))
                     return@launch
                 }
                 val pair =
@@ -358,17 +502,7 @@ class SatelliteConnectionManager
             cancelApprovalPoll(id)
             val job =
                 scope.launch {
-                    val reply =
-                        runCatching {
-                            discoveryRepo.pair(
-                                server.ip,
-                                server.pairPort,
-                                deviceId,
-                                deviceName,
-                                pin = "",
-                                clientPin = clientPin,
-                            )
-                        }.getOrNull()
+                    val reply = pairNegotiated(id, server, pin = "", clientPin = clientPin)
                     if (reply == null || reply.unreachable) {
                         conn.markDisconnected()
                         _events.emit(ConnectionEvent.Error(unreachableMessage(reply)))
@@ -376,7 +510,7 @@ class SatelliteConnectionManager
                     }
                     if (reply.status == HTTP_CONFLICT) {
                         conn.markDisconnected()
-                        _events.emit(ConnectionEvent.Error(PROTOCOL_MISMATCH_MSG))
+                        _events.emit(ConnectionEvent.Error(protocolRejectMessage(reply.body)))
                         return@launch
                     }
                     // Poll until accept / deny / timeout. pairWithPin shares this
@@ -472,18 +606,15 @@ class SatelliteConnectionManager
                 return@withContext
             }
             val descriptors = conn.desiredDescriptors()
-            val reply =
-                runCatching {
-                    discoveryRepo.putSession(
-                        server.ip,
-                        server.httpPort,
-                        deviceId,
-                        deviceName,
-                        creds.proof,
-                        ControllerDescriptor.arrayJson(descriptors),
-                        conn.wantsMouseControl(),
-                    )
-                }.getOrNull()
+            val put = putSessionNegotiated(id, conn, server, creds.proof, descriptors)
+            if (put == null) {
+                return@withContext failSession(conn, server, intent, SATELLITE_UPDATE_REQUIRED_MSG, retry = false)
+            }
+            val speak = put.speak
+            val reply = put.reply
+            if (reply?.status == HTTP_CONFLICT) {
+                return@withContext failSession(conn, server, intent, protocolRejectMessage(reply.body), retry = false)
+            }
             if (reply?.pinMismatch == true) {
                 return@withContext failSession(conn, server, intent, IDENTITY_CHANGED_MSG, retry = false)
             }
@@ -491,7 +622,7 @@ class SatelliteConnectionManager
                 return@withContext failSession(conn, server, intent, SERVER_UNREACHABLE_MSG, retry = true)
             }
             if (reply.status == HTTP_CONFLICT) {
-                return@withContext failSession(conn, server, intent, PROTOCOL_MISMATCH_MSG, retry = false)
+                return@withContext failSession(conn, server, intent, protocolRejectMessage(reply.body), retry = false)
             }
             val resp =
                 runCatching { json.decodeFromString(SessionResponse.serializer(), reply.body) }
@@ -514,22 +645,16 @@ class SatelliteConnectionManager
             if (connId == null || tokenHex == null || saltHex == null) {
                 return@withContext failSession(conn, server, intent, "Error: ${resp.error ?: "connection failed"}", retry = true)
             }
-            // Token + salt are server-supplied: malformed values must degrade
-            // like a refused connect, not crash the coroutine.
-            val token = runCatching { hexToBytes(tokenHex) }.getOrNull()
-            val salt = runCatching { hexToBytes(saltHex) }.getOrNull()
-            if (token == null || token.size != 4 || salt == null || salt.size != 8) {
+            // The response's own version is the settled truth (the satellite accepted the
+            // offer, so they match); it keys the wire frames this session encodes.
+            val negotiated = resp.protocolVersion.takeIf { it > 0 } ?: speak
+            val handle = openWire(server, creds.pairingKey, tokenHex, saltHex, negotiated)
+            if (handle == null) {
                 conn.markDisconnected()
                 return@withContext
             }
-            // Per-session key: the pairing key never touches the UDP path.
-            val sessionKey = SessionCrypto.deriveSessionKey(creds.pairingKey, salt, token)
-            val handle = controllerRepo.openSocket(server.ip, server.udpPort)
-            if (handle < 0) {
-                conn.markDisconnected()
-                return@withContext
-            }
-            controllerRepo.setConnectionParams(handle, token, sessionKey)
+            noteNegotiated(id, negotiated)
+            conn.protocolVersion = negotiated
             store.rememberSatellite(server)
             clearStale(id)
             retryAttempts.remove(id)
@@ -834,6 +959,7 @@ class SatelliteConnectionManager
             store.forgetSatellite(id)
             clearStale(id)
             retryAttempts.remove(id)
+            negotiatedProtocol.remove(id)
             _connections.update { it - id }
         }
 
@@ -868,8 +994,11 @@ class SatelliteConnectionManager
             internal const val IDENTITY_CHANGED_MSG =
                 "This satellite's security identity changed. If it was reinstalled, forget it here and pair again."
 
-            internal const val PROTOCOL_MISMATCH_MSG =
-                "This app and the satellite speak different protocol versions. Update both to the latest version."
+            internal const val SATELLITE_UPDATE_REQUIRED_MSG =
+                "This satellite is too old for this app. Update Satellite on the receiving machine."
+
+            internal const val APP_UPDATE_REQUIRED_MSG =
+                "This satellite needs a newer app. Update Dish on this device."
 
             private const val HTTP_CONFLICT = 409
 

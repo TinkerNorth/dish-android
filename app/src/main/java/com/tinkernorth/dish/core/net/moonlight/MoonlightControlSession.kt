@@ -149,6 +149,30 @@ class MoonlightControlSession(
         }
     }
 
+    fun sendMouseMoveRel(
+        deltaX: Int,
+        deltaY: Int,
+    ) {
+        synchronized(lock) {
+            sendControlPlaintextLocked(MoonlightInputEncoder.mouseMoveRel(deltaX, deltaY))
+        }
+    }
+
+    fun sendMouseButton(
+        down: Boolean,
+        button: Int,
+    ) {
+        synchronized(lock) {
+            sendControlPlaintextLocked(MoonlightInputEncoder.mouseButton(down, button))
+        }
+    }
+
+    fun sendMouseScroll(amount: Int) {
+        synchronized(lock) {
+            sendControlPlaintextLocked(MoonlightInputEncoder.mouseScroll(amount))
+        }
+    }
+
     /**
      * Pump the receive side once: read up to [budget] datagrams, feed the ENet
      * layer, decrypt delivered control payloads and dispatch decoded events.

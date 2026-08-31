@@ -7,6 +7,7 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.DiscoveredServer
+import com.tinkernorth.dish.core.net.DishProtocol
 import com.tinkernorth.dish.core.net.moonlight.RememberedMoonlight
 import com.tinkernorth.dish.source.connection.ConnectIntent
 import com.tinkernorth.dish.source.connection.ConnectionEvent
@@ -14,6 +15,7 @@ import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
+import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -39,6 +41,7 @@ class SetupConnectionViewModelTest {
     private lateinit var satellite: SatelliteConnectionManager
     private lateinit var moonlight: MoonlightConnectionManager
     private lateinit var hub: ConnectionCoordinator
+    private val hostFeaturesStore = SatelliteHostFeaturesStore()
     private lateinit var vm: SetupConnectionViewModel
 
     private val discovered = MutableStateFlow<List<DiscoveredServer>>(emptyList())
@@ -69,13 +72,38 @@ class SetupConnectionViewModelTest {
         every { moonlight.remembered } returns rememberedMoonlight
         every { moonlight.verifiedHostIds } returns verifiedMoonlight
         every { moonlight.isScanning } returns moonlightScanning
-        vm = SetupConnectionViewModel(satellite, moonlight, hub)
+        vm = SetupConnectionViewModel(satellite, moonlight, hub, hostFeaturesStore)
     }
 
     @After
     fun tearDown() {
         Dispatchers.resetMain()
     }
+
+    @Test
+    fun `a host row carries the protocol verdict for the update chip`() =
+        runTest(dispatcher) {
+            hostFeaturesStore.noteProtocolVersion(id, 1)
+            discovered.value = listOf(server)
+            dispatcher.scheduler.runCurrent()
+
+            val host =
+                vm.state.value.hosts
+                    .first { it.id == id }
+            assertEquals(DishProtocol.Compat.SATELLITE_UPDATE_AVAILABLE, host.compat)
+        }
+
+    @Test
+    fun `a never-probed host shows no protocol verdict`() =
+        runTest(dispatcher) {
+            discovered.value = listOf(server)
+            dispatcher.scheduler.runCurrent()
+
+            val host =
+                vm.state.value.hosts
+                    .first { it.id == id }
+            assertEquals(DishProtocol.Compat.UNKNOWN, host.compat)
+        }
 
     @Test
     fun `starts on the path step, not scanning`() =

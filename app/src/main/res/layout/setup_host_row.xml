@@ -52,6 +52,14 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_xs"
                 tools:text="Ready, paired" />
+
+            <include
+                android:id="@+id/hostUpdatePill"
+                layout="@layout/binding_pill"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xs"
+                android:visibility="gone" />
         </LinearLayout>
 
         <ImageView

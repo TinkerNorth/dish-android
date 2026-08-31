@@ -9,7 +9,11 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
+import com.tinkernorth.dish.core.model.CapabilitySet
+import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.net.DishProtocol
+import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.connection.ConnectionEvent
@@ -20,12 +24,13 @@ import com.tinkernorth.dish.source.sensor.BatteryValidator
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
-import com.tinkernorth.dish.source.store.TouchpadModeStore
+import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.store.UsbPathPreferenceStore
 import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbController
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.source.usb.UsbPhase
+import com.tinkernorth.dish.ui.common.GamepadSkin
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -56,11 +61,11 @@ class MainViewModelTest {
     private lateinit var batteryStore: BatteryStatusStore
     private lateinit var motionEnabledStore: MotionEnabledStore
     private lateinit var capabilityComposer: CapabilityComposer
-    private lateinit var touchpadModeStore: TouchpadModeStore
     private lateinit var native: PhysicalInputNative
     private lateinit var pathPrefs: UsbPathPreferenceStore
     private lateinit var usbGamepadManager: UsbGamepadManager
     private lateinit var inputRateStore: InputRateStore
+    private val hostFeaturesStore = SatelliteHostFeaturesStore()
     private lateinit var vm: MainViewModel
 
     private val connectionsFlow = MutableStateFlow<List<ConnectionSummary>>(emptyList())
@@ -86,10 +91,6 @@ class MainViewModelTest {
             mockk(relaxed = true) {
                 every { state } returns capabilityStateFlow
             }
-        touchpadModeStore =
-            TouchpadModeStore(
-                mockk(relaxed = true) { every { all() } returns emptyList() },
-            )
         native = mockk(relaxed = true)
         pathPrefs = mockk(relaxed = true)
         usbGamepadManager = mockk(relaxed = true)
@@ -117,11 +118,11 @@ class MainViewModelTest {
                 batteryStore,
                 motionEnabledStore,
                 capabilityComposer,
-                touchpadModeStore,
                 native,
                 pathPrefs,
                 usbGamepadManager,
                 inputRateStore,
+                hostFeaturesStore,
             )
     }
 
@@ -235,25 +236,94 @@ class MainViewModelTest {
         verify { hub.unbind("slot-X") }
     }
 
+    private fun capsAvailable(vararg features: Feature): SlotCapabilities =
+        SlotCapabilities(
+            controller = CapabilitySet.of(*features),
+            transport = CapabilitySet.of(*features),
+            type = CapabilitySet.of(*features),
+            host = CapabilitySet.of(*features),
+            userEnabled = CapabilitySet.EMPTY,
+            runtimeDown = CapabilitySet.EMPTY,
+        )
+
     @Test
-    fun `touchpad ui reads the wire projection per slot and blocks the overlay for a pad source`() =
+    fun `host compat projects each satellite's protocol verdict for the update chips`() =
+        runTest(dispatcher) {
+            hostFeaturesStore.noteProtocolVersion("satellite:old", 1)
+            hostFeaturesStore.noteProtocolVersion("satellite:current", DishProtocol.CURRENT)
+            dispatcher.scheduler.runCurrent()
+
+            val compat = vm.uiState.value.hostCompat
+            assertEquals(DishProtocol.Compat.SATELLITE_UPDATE_AVAILABLE, compat["satellite:old"])
+            assertEquals(DishProtocol.Compat.CURRENT, compat["satellite:current"])
+        }
+
+    @Test
+    fun `pointer ui offers the virtual slot only the mouse surface`() =
         runTest(dispatcher) {
             every { capabilityComposer.touchpadWireMode(VIRTUAL_SLOT_ID) } returns "ds4"
             every { capabilityComposer.touchpadSource(VIRTUAL_SLOT_ID) } returns
                 com.tinkernorth.dish.composer.TouchpadSource.PHONE
+            capabilityStateFlow.value =
+                mapOf(VIRTUAL_SLOT_ID to capsAvailable(Feature.TOUCHPAD, Feature.MOUSE))
+            dispatcher.scheduler.runCurrent()
+
+            val ui =
+                vm.uiState.value.pointerBySlot
+                    .getValue(VIRTUAL_SLOT_ID)
+            assertEquals("ds4", ui.mode)
+            assertEquals(false, ui.touchpadOpenable)
+            assertTrue(ui.mouseOpenable)
+        }
+
+    @Test
+    fun `pointer ui offers a phone-sourced physical slot both surfaces the path carries`() =
+        runTest(dispatcher) {
+            every { capabilityComposer.touchpadWireMode("9") } returns "ds4"
+            every { capabilityComposer.touchpadSource("9") } returns
+                com.tinkernorth.dish.composer.TouchpadSource.PHONE
+            capabilityStateFlow.value = mapOf("9" to capsAvailable(Feature.TOUCHPAD, Feature.MOUSE))
+            dispatcher.scheduler.runCurrent()
+
+            val ui =
+                vm.uiState.value.pointerBySlot
+                    .getValue("9")
+            assertTrue(ui.touchpadOpenable)
+            assertTrue(ui.mouseOpenable)
+            assertTrue(ui.anyOpenable)
+        }
+
+    @Test
+    fun `pointer ui blocks both surfaces for a pad that streams its own trackpad`() =
+        runTest(dispatcher) {
             every { capabilityComposer.touchpadWireMode("9") } returns "ds4"
             every { capabilityComposer.touchpadSource("9") } returns
                 com.tinkernorth.dish.composer.TouchpadSource.PAD
-            capabilityStateFlow.value =
-                mapOf(VIRTUAL_SLOT_ID to SlotCapabilities.NONE, "9" to SlotCapabilities.NONE)
+            capabilityStateFlow.value = mapOf("9" to capsAvailable(Feature.TOUCHPAD, Feature.MOUSE))
             dispatcher.scheduler.runCurrent()
 
-            val map = vm.uiState.value.touchpadBySlot
-            assertEquals(TouchpadSlotUi(mode = "ds4", phoneSourced = true), map[VIRTUAL_SLOT_ID])
-            assertTrue(map.getValue(VIRTUAL_SLOT_ID).openable)
-            assertEquals(TouchpadSlotUi(mode = "ds4", phoneSourced = false), map["9"])
-            // The pad streams its own trackpad: no phone overlay for the slot.
-            assertEquals(false, map.getValue("9").openable)
+            val ui =
+                vm.uiState.value.pointerBySlot
+                    .getValue("9")
+            assertEquals(false, ui.touchpadOpenable)
+            assertEquals(false, ui.mouseOpenable)
+            assertEquals(false, ui.anyOpenable)
+        }
+
+    @Test
+    fun `pointer ui never offers a mouse the host withholds`() =
+        runTest(dispatcher) {
+            every { capabilityComposer.touchpadWireMode("9") } returns "off"
+            every { capabilityComposer.touchpadSource("9") } returns
+                com.tinkernorth.dish.composer.TouchpadSource.PHONE
+            capabilityStateFlow.value = mapOf("9" to capsAvailable(Feature.GAMEPAD))
+            dispatcher.scheduler.runCurrent()
+
+            val ui =
+                vm.uiState.value.pointerBySlot
+                    .getValue("9")
+            assertEquals(false, ui.touchpadOpenable)
+            assertEquals(false, ui.mouseOpenable)
         }
 
     @Test
@@ -346,6 +416,105 @@ class MainViewModelTest {
             assertNull(virtual.boundConnectionId)
             assertNull(virtual.boundStatus)
         }
+
+    @Test
+    fun `gamepadSkinFor maps each satellite type to its own skin`() =
+        runTest(dispatcher) {
+            bindToKind(
+                ConnectionKind.SATELLITE,
+                mapOf(VIRTUAL_SLOT_ID to com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE),
+            )
+            assertEquals(GamepadSkin.DualSense, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
+
+            bindToKind(
+                ConnectionKind.SATELLITE,
+                mapOf(VIRTUAL_SLOT_ID to com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX),
+            )
+            assertEquals(GamepadSkin.Xbox360, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
+        }
+
+    @Test
+    fun `gamepadSkinFor maps a moonlight Xbox pick to the Xbox skin despite the id collision`() =
+        runTest(dispatcher) {
+            bindToKind(ConnectionKind.MOONLIGHT, mapOf(VIRTUAL_SLOT_ID to MoonlightEmulatedType.XBOX))
+            assertEquals(GamepadSkin.Xbox, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
+
+            bindToKind(ConnectionKind.MOONLIGHT, mapOf(VIRTUAL_SLOT_ID to MoonlightEmulatedType.NINTENDO))
+            assertEquals(GamepadSkin.Switch, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
+        }
+
+    @Test
+    fun `gamepadSkinFor resolves moonlight Auto by whether the source has motion`() =
+        runTest(dispatcher) {
+            every {
+                capabilityComposer.capabilityForCandidate(
+                    VIRTUAL_SLOT_ID,
+                    MoonlightEmulatedType.XBOX,
+                    ConnectionKind.MOONLIGHT,
+                    "c:1",
+                )
+            } returns SlotCapabilities.NONE.copy(controller = CapabilitySet.of(Feature.MOTION))
+            bindToKind(ConnectionKind.MOONLIGHT, emptyMap())
+            assertEquals(GamepadSkin.PlayStation, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
+
+            every {
+                capabilityComposer.capabilityForCandidate(
+                    VIRTUAL_SLOT_ID,
+                    MoonlightEmulatedType.XBOX,
+                    ConnectionKind.MOONLIGHT,
+                    "c:1",
+                )
+            } returns SlotCapabilities.NONE
+            assertEquals(GamepadSkin.Xbox, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
+        }
+
+    @Test
+    fun `gamepadSkinFor reads a bluetooth host's skin from the profile name`() =
+        runTest(dispatcher) {
+            connectionsFlow.value =
+                listOf(
+                    ConnectionSummary(
+                        id = "c:1",
+                        kind = ConnectionKind.BLUETOOTH,
+                        label = "PC",
+                        detail = "",
+                        live = LinkState.Connected,
+                        boundSlotIds = listOf(VIRTUAL_SLOT_ID),
+                        btProfile = "PlayStation",
+                    ),
+                )
+            bindingsFlow.value = mapOf(VIRTUAL_SLOT_ID to "c:1")
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(GamepadSkin.PlayStation, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
+        }
+
+    @Test
+    fun `gamepadSkinFor falls back to the satellite default skin for an unbound slot`() =
+        runTest(dispatcher) {
+            dispatcher.scheduler.runCurrent()
+            assertEquals(GamepadSkin.Xbox360, vm.gamepadSkinFor(VIRTUAL_SLOT_ID))
+        }
+
+    private fun bindToKind(
+        kind: ConnectionKind,
+        types: Map<String, Int>,
+    ) {
+        connectionsFlow.value =
+            listOf(
+                ConnectionSummary(
+                    id = "c:1",
+                    kind = kind,
+                    label = "Host",
+                    detail = "",
+                    live = LinkState.Connected,
+                    boundSlotIds = listOf(VIRTUAL_SLOT_ID),
+                    satelliteControllerTypes = types,
+                ),
+            )
+        bindingsFlow.value = mapOf(VIRTUAL_SLOT_ID to "c:1")
+        dispatcher.scheduler.runCurrent()
+    }
 
     private fun synthetic(
         id: Int,

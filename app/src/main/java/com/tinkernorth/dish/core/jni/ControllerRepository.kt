@@ -22,8 +22,9 @@ class ControllerRepository
             handle: Int,
             token: ByteArray,
             key: ByteArray,
+            protocolVersion: Int,
         ) {
-            SatelliteNative.setConnectionParams(handle, token, key)
+            SatelliteNative.setConnectionParams(handle, token, key, protocolVersion)
         }
 
         fun sendReport(
@@ -93,6 +94,8 @@ class ControllerRepository
             finger0Active: Boolean,
             finger1Active: Boolean,
             buttonPressed: Boolean,
+            rightPressed: Boolean,
+            middlePressed: Boolean,
             finger0TrackingId: Int,
             finger0X: Short,
             finger0Y: Short,
@@ -100,6 +103,7 @@ class ControllerRepository
             finger1X: Short,
             finger1Y: Short,
             eventTimeMs: Long,
+            scrollDelta: Short,
         ) {
             SatelliteNative.sendTouchpad(
                 handle,
@@ -107,6 +111,8 @@ class ControllerRepository
                 finger0Active,
                 finger1Active,
                 buttonPressed,
+                rightPressed,
+                middlePressed,
                 finger0TrackingId,
                 finger0X,
                 finger0Y,
@@ -114,6 +120,7 @@ class ControllerRepository
                 finger1X,
                 finger1Y,
                 eventTimeMs,
+                scrollDelta,
             )
         }
 

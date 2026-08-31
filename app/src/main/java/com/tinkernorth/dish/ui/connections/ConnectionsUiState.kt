@@ -5,6 +5,8 @@ package com.tinkernorth.dish.ui.connections
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.core.model.DiscoveredServer
+import com.tinkernorth.dish.core.model.HostFeatureSet
+import com.tinkernorth.dish.core.net.DishProtocol
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 
 data class ConnectionsUiState(
@@ -31,14 +33,20 @@ data class ConnectionsUiState(
 }
 
 // Known connections first, then discovered servers not already known under their stable id.
+// The compat chip reads the advertised (or negotiated) protocol version; satellites the
+// client never probed stay UNKNOWN and show nothing.
 fun satelliteRows(
     conns: List<ConnectionSummary>,
     discovered: List<DiscoveredServer>,
+    features: Map<String, HostFeatureSet> = emptyMap(),
 ): List<SatelliteRow> {
     val satConns = conns.filter { it.kind == ConnectionKind.SATELLITE }
     val knownIds = satConns.mapTo(mutableSetOf()) { it.id }
     return buildList {
-        satConns.forEach { add(SatelliteRow.Known(it)) }
+        satConns.forEach {
+            val version = features[it.id]?.protocolVersion?.takeIf { v -> v > 0 }
+            add(SatelliteRow.Known(it, DishProtocol.compatFor(version)))
+        }
         discovered.forEach { server ->
             if (SatelliteConnection.idFor(server) !in knownIds) add(SatelliteRow.Discovered(server))
         }

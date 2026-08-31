@@ -40,7 +40,6 @@ class ConfigUiStateBlockerTest {
                 type = CONTROLLER_TYPE_XBOX,
                 directOn = false,
                 motionOn = false,
-                touchpadMode = "off",
             ),
         connections = connections,
         knownHostLabels = knownHostLabels,

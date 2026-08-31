@@ -108,6 +108,9 @@ struct Session {
 
     std::atomic<int8_t> vigemAvailable{-1};
     std::atomic<int8_t> activeControllerCount{-1};
+
+    // Negotiated at session PUT; picks which MSG_TOUCHPAD frame this session encodes.
+    std::atomic<int32_t> protocolVersion{1};
 };
 
 static std::mutex g_sessionsMtx;
@@ -396,11 +399,18 @@ void applyUsbTouchpad(int32_t deviceId, const gamepad::TouchpadState& t, uint32_
     if (binding.kind != SLOT_SATELLITE) return;
     auto session = getSession(binding.sessionHandle);
     if (!session) return;
-    uint8_t payload[16];
-    dish_wire::encodeTouchpadPayload(payload, (uint8_t)(binding.controllerIndex & 0xFF), t.f0Active,
-                                     t.f1Active, t.clickDown, t.f0Id, t.f0X, t.f0Y, t.f1Id, t.f1X,
-                                     t.f1Y, eventTimeMs);
-    sendEncrypted(session.get(), MSG_TOUCHPAD, payload, sizeof(payload));
+    uint8_t payload[19];
+    const uint8_t idx = (uint8_t)(binding.controllerIndex & 0xFF);
+    if (session->protocolVersion.load() >= 2) {
+        dish_wire::encodeTouchpadPayloadV2(payload, idx, t.f0Active, t.f1Active, t.clickDown, false,
+                                           false, t.f0Id, t.f0X, t.f0Y, t.f1Id, t.f1X, t.f1Y,
+                                           eventTimeMs, 0);
+        sendEncrypted(session.get(), MSG_TOUCHPAD, payload, 19);
+    } else {
+        dish_wire::encodeTouchpadPayloadV1(payload, idx, t.f0Active, t.f1Active, t.clickDown,
+                                           t.f0Id, t.f0X, t.f0Y, t.f1Id, t.f1X, t.f1Y, eventTimeMs);
+        sendEncrypted(session.get(), MSG_TOUCHPAD, payload, 16);
+    }
 }
 
 } // namespace dispatch
@@ -668,7 +678,8 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_closeS
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setConnectionParams(
-    JNIEnv* env, jobject, jint handle, jbyteArray tokenArr, jbyteArray keyArr) {
+    JNIEnv* env, jobject, jint handle, jbyteArray tokenArr, jbyteArray keyArr,
+    jint protocolVersion) {
     ensureSodiumInit();
     auto s = getSession(handle);
     if (!s) return;
@@ -684,10 +695,11 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setCon
     s->serverEpoch.store(-1);
     s->activeBitmap.store(-1);
     s->closeReason.store(-1);
+    s->protocolVersion.store(protocolVersion);
     env->ReleaseByteArrayElements(tokenArr, tokenBytes, JNI_ABORT);
     env->ReleaseByteArrayElements(keyArr, keyBytes, JNI_ABORT);
-    LOGI("Session %d params set (token=%02x%02x%02x%02x)", handle, s->token[0], s->token[1],
-         s->token[2], s->token[3]);
+    LOGI("Session %d params set (token=%02x%02x%02x%02x, protocol=%d)", handle, s->token[0],
+         s->token[1], s->token[2], s->token[3], (int)protocolVersion);
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendReport(
@@ -732,17 +744,30 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendBa
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendTouchpad(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jboolean f0Active, jboolean f1Active,
-    jboolean buttonPressed, jint f0TrackingId, jshort f0x, jshort f0y, jint f1TrackingId,
-    jshort f1x, jshort f1y, jlong eventTimeMs) {
+    jboolean buttonPressed, jboolean rightPressed, jboolean middlePressed, jint f0TrackingId,
+    jshort f0x, jshort f0y, jint f1TrackingId, jshort f1x, jshort f1y, jlong eventTimeMs,
+    jshort scrollDelta) {
     auto s = getSession(handle);
     if (!s) return;
-    uint8_t payload[16];
-    dish_wire::encodeTouchpadPayload(
-        payload, (uint8_t)(controllerIndex & 0xFF), f0Active == JNI_TRUE, f1Active == JNI_TRUE,
-        buttonPressed == JNI_TRUE, (uint8_t)(f0TrackingId & 0xFF), (int16_t)f0x, (int16_t)f0y,
-        (uint8_t)(f1TrackingId & 0xFF), (int16_t)f1x, (int16_t)f1y,
-        (uint32_t)(eventTimeMs & 0xFFFFFFFFLL));
-    sendEncrypted(s.get(), MSG_TOUCHPAD, payload, sizeof(payload));
+    uint8_t payload[19];
+    const uint8_t idx = (uint8_t)(controllerIndex & 0xFF);
+    if (s->protocolVersion.load() >= 2) {
+        dish_wire::encodeTouchpadPayloadV2(
+            payload, idx, f0Active == JNI_TRUE, f1Active == JNI_TRUE, buttonPressed == JNI_TRUE,
+            rightPressed == JNI_TRUE, middlePressed == JNI_TRUE, (uint8_t)(f0TrackingId & 0xFF),
+            (int16_t)f0x, (int16_t)f0y, (uint8_t)(f1TrackingId & 0xFF), (int16_t)f1x, (int16_t)f1y,
+            (uint32_t)(eventTimeMs & 0xFFFFFFFFLL), (int16_t)scrollDelta);
+        sendEncrypted(s.get(), MSG_TOUCHPAD, payload, 19);
+    } else {
+        // v1 has no mouse buttons and no wheel; the overlay never offers them on a v1
+        // session, so dropping the fields here loses nothing.
+        dish_wire::encodeTouchpadPayloadV1(
+            payload, idx, f0Active == JNI_TRUE, f1Active == JNI_TRUE, buttonPressed == JNI_TRUE,
+            (uint8_t)(f0TrackingId & 0xFF), (int16_t)f0x, (int16_t)f0y,
+            (uint8_t)(f1TrackingId & 0xFF), (int16_t)f1x, (int16_t)f1y,
+            (uint32_t)(eventTimeMs & 0xFFFFFFFFLL));
+        sendEncrypted(s.get(), MSG_TOUCHPAD, payload, 16);
+    }
 }
 
 JNIEXPORT void JNICALL

@@ -31,6 +31,7 @@ import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.paintTierBadge
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.connections.PairPinDialog
+import com.tinkernorth.dish.ui.main.bindCompat
 import com.tinkernorth.dish.ui.main.chipTextRes
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -194,6 +195,7 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
             val row = SetupHostRowBinding.inflate(layoutInflater, list, false)
             row.hostName.text = host.name.ifBlank { getString(R.string.setup_conn_host_unnamed) }
             row.hostStatus.setText(statusFor(host.link))
+            row.hostUpdatePill.bindCompat(host.compat)
             row.hostCard.setOnClickListener { viewModel.onHostTapped(host.id) }
             list.addView(row.root)
         }

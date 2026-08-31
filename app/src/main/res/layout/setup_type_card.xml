@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Tappable controller-type card (Xbox / PlayStation) with an embedded
-     capability table. The header text and the table rows are set per callsite;
-     capabilityContainer is filled via LinearLayout.bindCapabilityRows. -->
+<!-- Tappable controller-type card with an embedded capability table. The header
+     text, the controller silhouette (typeGlyph) and the table rows are set per
+     callsite; capabilityContainer is filled via LinearLayout.bindCapabilityRows. -->
 <com.google.android.material.card.MaterialCardView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -32,6 +32,7 @@
             android:gravity="center_vertical">
 
             <ImageView
+                android:id="@+id/typeGlyph"
                 android:layout_width="@dimen/icon_picker_glyph"
                 android:layout_height="@dimen/icon_picker_glyph"
                 android:importantForAccessibility="no"

@@ -13,6 +13,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.annotation.DimenRes
 import androidx.annotation.DrawableRes
+import androidx.annotation.LayoutRes
 import androidx.annotation.StringRes
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.recyclerview.widget.DiffUtil
@@ -26,6 +27,7 @@ import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.net.DishProtocol
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.databinding.BindingDecisionRowBinding
 import com.tinkernorth.dish.databinding.BindingPillBinding
@@ -45,6 +47,8 @@ interface SlotActionListener {
     fun onOpenGamepad(slotId: String)
 
     fun onOpenTouchpad(slotId: String)
+
+    fun onOpenMouse(slotId: String)
 
     fun onSwitchToDirect(slotId: String)
 
@@ -115,16 +119,15 @@ internal fun motionRateUserFacingOn(
         Feature.MOTION !in cap.runtimeDown
 
 // Screen input can drive a slot only while an overlay surface exists for it: the on-screen
-// gamepad for the virtual slot, or the slot's phone touchpad surface when it is openable
-// (mode on AND the phone is the touch source; a pad streaming its own trackpad has no phone
-// surface). Outside those states the card's screen rate reads Off.
+// gamepad for the virtual slot, or one of the slot's phone pointer surfaces (a pad streaming
+// its own trackpad has neither). Outside those states the card's screen rate reads Off.
 internal fun screenRateUserFacingOn(
     inputType: SlotInputType,
     boundKind: ConnectionKind?,
-    touchpad: TouchpadSlotUi?,
+    pointer: PointerSlotUi?,
 ): Boolean =
     inputType == SlotInputType.VIRTUAL ||
-        (boundKind == ConnectionKind.SATELLITE && touchpad?.openable == true)
+        (boundKind == ConnectionKind.SATELLITE && pointer?.anyOpenable == true)
 
 class ControllerAdapter(
     private val listener: SlotActionListener,
@@ -135,20 +138,23 @@ class ControllerAdapter(
         val slot: ControllerSlot,
         val connections: List<ConnectionSummary>,
         val motionCap: SlotCapabilities = SlotCapabilities.NONE,
-        val touchpad: TouchpadSlotUi? = null,
+        val pointer: PointerSlotUi? = null,
         val pathCard: PathCard? = null,
         val inputRates: SlotInputRates? = null,
         val screenPeakHz: Int = 0,
+        val hostCompat: DishProtocol.Compat = DishProtocol.Compat.UNKNOWN,
     )
 
+    @Suppress("LongParameterList")
     fun submitSlots(
         slots: List<ControllerSlot>,
         connections: List<ConnectionSummary>,
         motionCapabilities: Map<String, SlotCapabilities> = emptyMap(),
-        touchpadBySlot: Map<String, TouchpadSlotUi> = emptyMap(),
+        pointerBySlot: Map<String, PointerSlotUi> = emptyMap(),
         pathCards: Map<String, PathCard> = emptyMap(),
         inputRates: Map<String, SlotInputRates> = emptyMap(),
         screenPeakHz: Int = 0,
+        hostCompat: Map<String, DishProtocol.Compat> = emptyMap(),
     ) {
         submitList(
             slots.map { slot ->
@@ -156,10 +162,11 @@ class ControllerAdapter(
                     slot = slot,
                     connections = connections,
                     motionCap = motionCapabilities[slot.id] ?: SlotCapabilities.NONE,
-                    touchpad = touchpadBySlot[slot.id],
+                    pointer = pointerBySlot[slot.id],
                     pathCard = pathCards[slot.id],
                     inputRates = inputRates[slot.id],
                     screenPeakHz = screenPeakHz,
+                    hostCompat = slot.boundConnectionId?.let { hostCompat[it] } ?: DishProtocol.Compat.UNKNOWN,
                 )
             },
         )
@@ -167,17 +174,23 @@ class ControllerAdapter(
 
     inner class VH(
         private val b: ItemControllerBinding,
+        @LayoutRes actionsLayoutRes: Int,
     ) : RecyclerView.ViewHolder(b.root) {
         private val ctx: Context get() = b.root.context
         private val inflater: LayoutInflater get() = LayoutInflater.from(ctx)
 
         private val connectionRow = decisionRow(R.string.binding_label_connection)
         private val destinationRow = decisionRow(R.string.binding_label_destination)
+
+        // The compat chip needs the full value width on its own line: squeezed beside
+        // the host name it would wrap into a column and blow the card's height.
+        private val compatRow = decisionRow(null)
         private val emulateRow = decisionRow(R.string.binding_label_emulate)
         private val functionRow = decisionRow(null)
         private val rateRow = decisionRow(null)
 
         private val connectionPills = PillPool(connectionRow.valueContainer)
+        private val compatPills = PillPool(compatRow.valueContainer)
         private val emulatePills = PillPool(emulateRow.valueContainer)
         private val functionPills = PillPool(functionRow.valueContainer)
         private val ratePills = PillPool(rateRow.valueContainer)
@@ -186,17 +199,21 @@ class ControllerAdapter(
         private val destinationNotBound = BindingValueNotBoundBinding.inflate(inflater, destinationRow.valueContainer, true)
         private val functionNone = BindingValueNoneBinding.inflate(inflater, functionRow.valueContainer, true)
 
-        private val filledActions =
-            List(MAX_FILLED_ACTIONS) {
-                inflater.inflate(R.layout.binding_action_button, b.llActions, false) as MaterialButton
-            }
-        private val outlinedAction =
-            inflater.inflate(R.layout.binding_action_button_outlined, b.llActions, false) as MaterialButton
+        private val filledActions: List<MaterialButton>
+        private val outlinedAction: MaterialButton?
 
         init {
-            listOf(connectionRow, destinationRow, emulateRow, functionRow, rateRow).forEach { b.llDecisions.addView(it.root) }
-            filledActions.forEach { b.llActions.addView(it) }
-            b.llActions.addView(outlinedAction)
+            listOf(connectionRow, destinationRow, compatRow, emulateRow, functionRow, rateRow)
+                .forEach { b.llDecisions.addView(it.root) }
+            inflater.inflate(actionsLayoutRes, b.llActions, true)
+            filledActions =
+                listOfNotNull(
+                    b.llActions.findViewById(R.id.btnCardAction1),
+                    b.llActions.findViewById(R.id.btnCardAction2),
+                    b.llActions.findViewById(R.id.btnCardAction3),
+                    b.llActions.findViewById(R.id.btnCardAction4),
+                )
+            outlinedAction = b.llActions.findViewById(R.id.btnCardActionOutlined)
         }
 
         private fun decisionRow(
@@ -242,6 +259,9 @@ class ControllerAdapter(
 
             destinationRow.root.visibility = View.VISIBLE
             showDestination(bound.label)
+            val compatSpecs = listOfNotNull(compatPillSpec(ctx, row.hostCompat))
+            compatRow.root.visibility = if (compatSpecs.isEmpty()) View.GONE else View.VISIBLE
+            compatPills.bind(compatSpecs)
 
             val emulate = typePillLabel(row, bound)
             if (emulate != null) {
@@ -261,6 +281,7 @@ class ControllerAdapter(
             connectionPills.bind(connectionSpecs(row, kind = null))
             destinationRow.root.visibility = View.VISIBLE
             showDestination(null)
+            compatRow.root.visibility = View.GONE
             emulateRow.root.visibility = View.GONE
             functionRow.root.visibility = View.GONE
         }
@@ -362,32 +383,22 @@ class ControllerAdapter(
             }
 
             if (bound.kind == ConnectionKind.SATELLITE) {
-                specs.add(touchpadFuncPill(row))
+                specs.addAll(pointerFuncFacts(row).map(::pointerFactPill))
             }
             return specs
         }
 
-        private fun touchpadFuncPill(row: Row): PillSpec {
-            if (row.pathCard?.suggestDirectForTouch == true) {
-                return PillSpec(ctx.getString(R.string.touchpad_needs_direct), R.drawable.ic_touchpad, PillTone.WARN)
+        private fun pointerFactPill(fact: PointerPillFact): PillSpec =
+            when (fact) {
+                PointerPillFact.PAD_NEEDS_DIRECT ->
+                    PillSpec(ctx.getString(R.string.touchpad_needs_direct), R.drawable.ic_touchpad, PillTone.WARN)
+                PointerPillFact.PAD_ON ->
+                    PillSpec(funcValue(R.string.binding_func_touchpad, R.string.touchpad_mode_pad), R.drawable.ic_touchpad, PillTone.ON)
+                PointerPillFact.PAD_OFF ->
+                    PillSpec(funcValue(R.string.binding_func_touchpad, R.string.binding_state_off), R.drawable.ic_touchpad, PillTone.OFF)
+                PointerPillFact.MOUSE_READY ->
+                    PillSpec(ctx.getString(R.string.binding_func_mouse), R.drawable.ic_mouse, PillTone.CAP)
             }
-            val mode = row.touchpad?.mode ?: TouchpadModeValue.OFF
-            val valueRes =
-                when (mode) {
-                    TouchpadModeValue.DS4 -> R.string.touchpad_mode_pad
-                    TouchpadModeValue.MOUSE -> R.string.touchpad_mode_mouse
-                    else -> R.string.touchpad_mode_off
-                }
-            val label =
-                ctx.getString(
-                    R.string.binding_func_value,
-                    ctx.getString(R.string.binding_func_touchpad),
-                    ctx.getString(valueRes),
-                )
-            val icon = if (mode == TouchpadModeValue.MOUSE) R.drawable.ic_mouse else R.drawable.ic_touchpad
-            val tone = if (mode == TouchpadModeValue.OFF) PillTone.OFF else PillTone.ON
-            return PillSpec(label, icon, tone)
-        }
 
         private fun funcValue(
             nameRes: Int,
@@ -481,7 +492,7 @@ class ControllerAdapter(
                 screenRateUserFacingOn(
                     inputType = row.slot.inputType,
                     boundKind = row.slot.boundStatus?.kind,
-                    touchpad = row.touchpad,
+                    pointer = row.pointer,
                 )
             return when {
                 !computes ->
@@ -532,105 +543,34 @@ class ControllerAdapter(
             }
 
         private fun bindActions(row: Row) {
-            val actions = computeActions(row)
-            filledActions.forEach { it.visibility = View.GONE }
-            outlinedAction.visibility = View.GONE
-            var filledIndex = 0
-            for (action in actions) {
-                val btn = if (action.outlined) outlinedAction else filledActions[filledIndex++]
-                btn.visibility = View.VISIBLE
-                btn.text = action.label
-                btn.setIconResource(action.icon)
-                btn.setOnClickListener { dispatch(action.kind, row.slot.id) }
-            }
+            val actions = computeCardActions(row)
+            actions.filled.forEachIndexed { index, spec -> bindActionButton(filledActions[index], spec, row.slot.id) }
+            val outlinedSpec = actions.outlined
+            if (outlinedSpec != null) outlinedAction?.let { bindActionButton(it, outlinedSpec, row.slot.id) }
         }
 
-        private fun computeActions(row: Row): List<CardAction> {
-            val slot = row.slot
-            val bound = slot.boundStatus
-            if (bound == null || slot.boundConnectionId == null) {
-                val unboundActions = mutableListOf<CardAction>()
-                if (row.pathCard?.wiredSwitchAvailable == true) unboundActions += setupWiredAction()
-                unboundActions +=
-                    if (row.connections.isEmpty()) {
-                        CardAction(
-                            R.drawable.ic_satellite,
-                            ctx.getString(R.string.binding_action_find_hosts),
-                            outlined = false,
-                            kind = ActionKind.FIND_HOSTS,
-                        )
-                    } else {
-                        CardAction(
-                            R.drawable.ic_tune,
-                            ctx.getString(R.string.binding_action_configure),
-                            outlined = true,
-                            kind = ActionKind.CONFIGURE,
-                        )
-                    }
-                return unboundActions
-            }
-            val actions = mutableListOf<CardAction>()
-            val connected = bound.live == LinkState.Connected
-            if (slot.inputType == SlotInputType.VIRTUAL && connected) {
-                actions +=
-                    CardAction(
-                        R.drawable.ic_open_gamepad,
-                        ctx.getString(R.string.action_open_gamepad),
-                        outlined = false,
-                        kind = ActionKind.GAMEPAD,
-                    )
-            }
-            // Openable = mode on AND the phone screen is the touch source. A USB-direct pad
-            // streaming its own trackpad gets no overlay: two producers would fight over the
-            // slot's single MSG_TOUCHPAD stream.
-            if (bound.kind == ConnectionKind.SATELLITE && connected && row.touchpad?.openable == true) {
-                actions +=
-                    CardAction(
-                        R.drawable.ic_open_touchpad,
-                        ctx.getString(R.string.action_open_touchpad),
-                        outlined = false,
-                        kind = ActionKind.TOUCHPAD,
-                    )
-            }
-            if (bound.kind == ConnectionKind.SATELLITE && connected && row.pathCard?.suggestDirectForTouch == true) {
-                actions +=
-                    CardAction(
-                        R.drawable.ic_bolt,
-                        ctx.getString(R.string.card_switch_to_direct),
-                        outlined = false,
-                        kind = ActionKind.SWITCH_DIRECT,
-                    )
-            }
-            if (row.pathCard?.wiredSwitchAvailable == true) actions += setupWiredAction()
-            actions +=
-                CardAction(
-                    R.drawable.ic_tune,
-                    ctx.getString(R.string.binding_action_configure),
-                    outlined = true,
-                    kind = ActionKind.CONFIGURE,
-                )
-            return actions
+        private fun bindActionButton(
+            button: MaterialButton,
+            spec: CardActionSpec,
+            slotId: String,
+        ) {
+            button.setIconResource(spec.icon)
+            button.setText(spec.label)
+            button.setOnClickListener { dispatch(spec.kind, slotId) }
         }
-
-        private fun setupWiredAction(): CardAction =
-            CardAction(
-                R.drawable.ic_usb,
-                ctx.getString(R.string.binding_action_use_wired),
-                outlined = false,
-                kind = ActionKind.SETUP_WIRED,
-            )
 
         private fun dispatch(
-            kind: ActionKind,
+            kind: CardActionKind,
             slotId: String,
         ) {
             when (kind) {
-                ActionKind.GAMEPAD -> listener.onOpenGamepad(slotId)
-                ActionKind.TOUCHPAD -> listener.onOpenTouchpad(slotId)
-                ActionKind.SWITCH_DIRECT -> listener.onSwitchToDirect(slotId)
-                ActionKind.SETUP_WIRED -> listener.onSetupWired(slotId)
-                ActionKind.CONFIGURE -> listener.onConfigure(slotId)
-                ActionKind.FIND_HOSTS -> listener.onManageDestinations()
+                CardActionKind.GAMEPAD -> listener.onOpenGamepad(slotId)
+                CardActionKind.TOUCHPAD -> listener.onOpenTouchpad(slotId)
+                CardActionKind.MOUSE -> listener.onOpenMouse(slotId)
+                CardActionKind.SWITCH_DIRECT -> listener.onSwitchToDirect(slotId)
+                CardActionKind.SETUP_WIRED -> listener.onSetupWired(slotId)
+                CardActionKind.CONFIGURE -> listener.onConfigure(slotId)
+                CardActionKind.FIND_HOSTS -> listener.onManageDestinations()
             }
         }
 
@@ -716,19 +656,15 @@ class ControllerAdapter(
         }
     }
 
-    private data class CardAction(
-        @DrawableRes val icon: Int,
-        val label: String,
-        val outlined: Boolean,
-        val kind: ActionKind,
-    )
-
-    private enum class ActionKind { GAMEPAD, TOUCHPAD, SWITCH_DIRECT, SETUP_WIRED, CONFIGURE, FIND_HOSTS }
+    override fun getItemViewType(position: Int): Int = computeCardActions(getItem(position)).viewType
 
     override fun onCreateViewHolder(
         parent: ViewGroup,
         viewType: Int,
-    ) = VH(ItemControllerBinding.inflate(LayoutInflater.from(parent.context), parent, false))
+    ) = VH(
+        ItemControllerBinding.inflate(LayoutInflater.from(parent.context), parent, false),
+        cardActionsLayoutFor(viewType),
+    )
 
     override fun onBindViewHolder(
         holder: VH,
@@ -748,7 +684,99 @@ class ControllerAdapter(
     }
 }
 
-private const val MAX_FILLED_ACTIONS = 2
+internal enum class CardActionKind { GAMEPAD, TOUCHPAD, MOUSE, SWITCH_DIRECT, SETUP_WIRED, CONFIGURE, FIND_HOSTS }
+
+// What the card's function row says about the slot's pointer surfaces, kept pure so the
+// facts stay testable: the pad surface reports its declared routing (or the Direct nudge
+// that unlocks it), and the mouse rides as an on-demand chip wherever its surface can open.
+internal enum class PointerPillFact { PAD_NEEDS_DIRECT, PAD_ON, PAD_OFF, MOUSE_READY }
+
+internal fun pointerFuncFacts(row: ControllerAdapter.Row): List<PointerPillFact> =
+    buildList {
+        when {
+            row.pathCard?.suggestDirectForTouch == true -> add(PointerPillFact.PAD_NEEDS_DIRECT)
+            row.pointer?.mode == TouchpadModeValue.DS4 -> add(PointerPillFact.PAD_ON)
+            row.motionCap.typeOk(Feature.TOUCHPAD) -> add(PointerPillFact.PAD_OFF)
+        }
+        if (row.pointer?.mouseOpenable == true) add(PointerPillFact.MOUSE_READY)
+    }
+
+internal data class CardActionSpec(
+    @DrawableRes val icon: Int,
+    @StringRes val label: Int,
+    val kind: CardActionKind,
+)
+
+// The action row's shape IS the RecyclerView view type: each (filled count, outlined) pair
+// maps to a layout holding exactly those buttons, so binding never shows or hides one.
+internal data class CardActions(
+    val filled: List<CardActionSpec>,
+    val outlined: CardActionSpec?,
+) {
+    val viewType: Int get() = filled.size * 2 + if (outlined != null) 1 else 0
+}
+
+@LayoutRes
+internal fun cardActionsLayoutFor(viewType: Int): Int =
+    when (viewType) {
+        VIEW_TYPE_O1 -> R.layout.binding_card_actions_o1
+        VIEW_TYPE_F1 -> R.layout.binding_card_actions_f1
+        VIEW_TYPE_F1_O1 -> R.layout.binding_card_actions_f1_o1
+        VIEW_TYPE_F2 -> R.layout.binding_card_actions_f2
+        VIEW_TYPE_F2_O1 -> R.layout.binding_card_actions_f2_o1
+        VIEW_TYPE_F3_O1 -> R.layout.binding_card_actions_f3_o1
+        VIEW_TYPE_F4_O1 -> R.layout.binding_card_actions_f4_o1
+        else -> error("No card actions layout for view type $viewType")
+    }
+
+private const val VIEW_TYPE_O1 = 1
+private const val VIEW_TYPE_F1 = 2
+private const val VIEW_TYPE_F1_O1 = 3
+private const val VIEW_TYPE_F2 = 4
+private const val VIEW_TYPE_F2_O1 = 5
+private const val VIEW_TYPE_F3_O1 = 7
+private const val VIEW_TYPE_F4_O1 = 9
+
+private val CONFIGURE_SPEC =
+    CardActionSpec(R.drawable.ic_tune, R.string.binding_action_configure, CardActionKind.CONFIGURE)
+private val SETUP_WIRED_SPEC =
+    CardActionSpec(R.drawable.ic_usb, R.string.binding_action_use_wired, CardActionKind.SETUP_WIRED)
+
+internal fun computeCardActions(row: ControllerAdapter.Row): CardActions {
+    val slot = row.slot
+    val bound = slot.boundStatus
+    if (bound == null || slot.boundConnectionId == null) {
+        val filled = mutableListOf<CardActionSpec>()
+        if (row.pathCard?.wiredSwitchAvailable == true) filled += SETUP_WIRED_SPEC
+        if (row.connections.isEmpty()) {
+            filled += CardActionSpec(R.drawable.ic_satellite, R.string.binding_action_find_hosts, CardActionKind.FIND_HOSTS)
+            return CardActions(filled, outlined = null)
+        }
+        return CardActions(filled, CONFIGURE_SPEC)
+    }
+    val filled = mutableListOf<CardActionSpec>()
+    val connected = bound.live == LinkState.Connected
+    val satellite = bound.kind == ConnectionKind.SATELLITE
+    val pointerHost = satellite || bound.kind == ConnectionKind.MOONLIGHT
+    if (slot.inputType == SlotInputType.VIRTUAL && connected) {
+        filled += CardActionSpec(R.drawable.ic_open_gamepad, R.string.action_open_gamepad, CardActionKind.GAMEPAD)
+    }
+    // A phone pointer surface only exists where the phone is the slot's touch source:
+    // a USB-direct pad streaming its own trackpad gets neither button, because two
+    // producers would fight over the slot's single MSG_TOUCHPAD stream. The virtual
+    // slot never offers the touchpad surface: its trackpad lives inside the pad itself.
+    if (satellite && connected && slot.inputType != SlotInputType.VIRTUAL && row.pointer?.touchpadOpenable == true) {
+        filled += CardActionSpec(R.drawable.ic_open_touchpad, R.string.action_open_touchpad, CardActionKind.TOUCHPAD)
+    }
+    if (pointerHost && connected && row.pointer?.mouseOpenable == true) {
+        filled += CardActionSpec(R.drawable.ic_mouse, R.string.action_open_mouse, CardActionKind.MOUSE)
+    }
+    if (satellite && connected && row.pathCard?.suggestDirectForTouch == true) {
+        filled += CardActionSpec(R.drawable.ic_bolt, R.string.card_switch_to_direct, CardActionKind.SWITCH_DIRECT)
+    }
+    if (row.pathCard?.wiredSwitchAvailable == true) filled += SETUP_WIRED_SPEC
+    return CardActions(filled, CONFIGURE_SPEC)
+}
 
 private const val BATTERY_FULL_FLOOR = 90
 private const val BATTERY_HIGH_FLOOR = 60

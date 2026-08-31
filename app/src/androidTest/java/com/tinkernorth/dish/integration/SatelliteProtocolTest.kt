@@ -20,7 +20,7 @@ import org.junit.runner.RunWith
 /**
  * Drives the production connection stack (manager, HTTP client with TOFU
  * pinning, session crypto, native UDP path) against an in-process
- * [FakeSatellite] speaking the documented protocol-1 contract.
+ * [FakeSatellite] speaking the documented contract at its single protocol version.
  */
 @RunWith(AndroidJUnit4::class)
 class SatelliteProtocolTest {
@@ -66,7 +66,7 @@ class SatelliteProtocolTest {
         assertEquals("satellite mints one pairing key", satellite.pairingKeyHex != null, true)
         assertTrue("exactly the paired satellite is remembered", manager.remembered().any { it.id == id })
         val put = satellite.sessionPuts.last()
-        assertEquals(1, put.getInt("protocolVersion"))
+        assertEquals(com.tinkernorth.dish.core.net.DishProtocol.CURRENT, put.getInt("protocolVersion"))
         assertTrue("session PUT carries deviceId", put.getString("deviceId").isNotEmpty())
         assertTrue("declarative controllers array is present", put.has("controllers"))
     }

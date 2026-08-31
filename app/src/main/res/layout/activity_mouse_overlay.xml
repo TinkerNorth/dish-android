@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/overlayToolbar"
+            style="@style/Widget.Dish.Toolbar"
+            android:layout_width="match_parent" />
+
+        <FrameLayout
+            android:id="@+id/overlayContentFrame"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="horizontal"
+                android:paddingHorizontal="@dimen/spacing_2xl"
+                android:paddingTop="@dimen/spacing_lg"
+                android:paddingBottom="@dimen/spacing_2xl"
+                android:weightSum="3">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginEnd="@dimen/spacing_md"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <com.tinkernorth.dish.ui.common.HoldButtonView
+                        android:id="@+id/btnMouseLeft"
+                        style="@style/Widget.Dish.Button.Tonal"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:text="@string/pointer_button_left" />
+
+                    <com.tinkernorth.dish.ui.common.ScrollStripView
+                        android:id="@+id/scrollStrip"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_marginVertical="@dimen/spacing_md"
+                        android:layout_weight="1"
+                        android:contentDescription="@string/pointer_scroll_strip" />
+
+                    <com.tinkernorth.dish.ui.common.HoldButtonView
+                        android:id="@+id/btnMouseRight"
+                        style="@style/Widget.Dish.Button.Tonal"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:text="@string/pointer_button_right" />
+                </LinearLayout>
+
+                <com.tinkernorth.dish.ui.common.TouchpadSurfaceView
+                    android:id="@+id/mouseMovePad"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="@dimen/spacing_md"
+                    android:layout_weight="2" />
+            </LinearLayout>
+
+            <include
+                android:id="@+id/linkGuard"
+                layout="@layout/overlay_link_guard"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <include layout="@layout/overlay_low_power_chip" />
+
+    <include layout="@layout/overlay_low_power" />
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

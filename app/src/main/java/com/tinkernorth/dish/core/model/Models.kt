@@ -46,6 +46,8 @@ data class PairResponse(
     val ok: Boolean = false,
     val error: String? = null,
     val sharedKey: String? = null,
+    // 409 protocol rejection echo: the ONE version this satellite speaks.
+    val supported: Int = 0,
 )
 
 // Wire DTOs for the declarative session contract (satellite docs/contract.md).
@@ -105,6 +107,8 @@ data class SessionResponse(
     // Machine-readable 401 cause: NOT_PAIRED | BAD_PROOF. Either is terminal:
     // stop retrying and surface "re-pair needed".
     val code: String? = null,
+    // 409 protocol rejection echo: the ONE version this satellite speaks.
+    val supported: Int = 0,
 ) {
     val unauthorized: Boolean get() = code == CODE_NOT_PAIRED || code == CODE_BAD_PROOF
 

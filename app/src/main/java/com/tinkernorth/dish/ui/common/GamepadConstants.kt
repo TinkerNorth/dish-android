@@ -85,4 +85,27 @@ internal object GamepadConstants {
     const val DPAD_DIAGONAL_THRESHOLD = 0.3f
 
     const val TRIGGER_MAX = 255
+
+    const val TRACKPAD_WIDTH_FRACTION = 0.3f
+
+    // The DS4/DualSense trackpad is roughly 2:1.
+    const val TRACKPAD_ASPECT = 2.0f
+
+    const val TRACKPAD_MAX_HEIGHT_FRACTION = 0.4f
+
+    const val TRACKPAD_CORNER_RADIUS_FRACTION = 0.12f
+
+    const val TRACKPAD_FLANK_BTN_GAP_DP = 10f
+
+    const val TRACKPAD_HOME_GAP_DP = 8f
+
+    const val TRACKPAD_OUTLINE_STROKE_DP = 1.5f
+
+    const val TRACKPAD_FINGER_DOT_RADIUS_DP = 10f
+
+    const val TRACKPAD_TAP_SLOP_DP = 12f
+
+    const val TRACKPAD_TAP_MAX_MS = 200L
+
+    const val TRACKPAD_CLICK_PULSE_MS = 70L
 }

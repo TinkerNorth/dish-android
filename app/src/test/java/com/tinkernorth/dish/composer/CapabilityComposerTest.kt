@@ -14,13 +14,13 @@ import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.repository.SatelliteCatalogRepository
 import com.tinkernorth.dish.source.sensor.PhoneMotionAvailability
 import com.tinkernorth.dish.source.store.MotionEnabledStore
+import com.tinkernorth.dish.source.store.MouseSurfaceStore
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.store.SatelliteHostRuntime
 import com.tinkernorth.dish.source.store.SatelliteHostRuntimeStore
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatus
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
-import com.tinkernorth.dish.source.store.TouchpadModeStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import io.mockk.every
 import io.mockk.mockk
@@ -73,7 +73,7 @@ class CapabilityComposerTest {
         scope: CoroutineScope,
         motionEnabled: MutableStateFlow<Map<String, Boolean>> = MutableStateFlow(emptyMap()),
         rumbleEnabled: MutableStateFlow<Map<String, Boolean>> = MutableStateFlow(emptyMap()),
-        touchpadMode: MutableStateFlow<Map<String, String>> = MutableStateFlow(emptyMap()),
+        mouseSurface: MutableStateFlow<Set<String>> = MutableStateFlow(emptySet()),
         hostFeaturesState: MutableStateFlow<Map<String, HostFeatureSet>> = MutableStateFlow(emptyMap()),
         backendStatus: MutableStateFlow<Map<Pair<String, String>, SatelliteMotionBackendStatus>> =
             MutableStateFlow(emptyMap()),
@@ -100,7 +100,11 @@ class CapabilityComposerTest {
             }
         val motionStore: MotionEnabledStore = mockk { every { state } returns motionEnabled }
         val rumbleStore: RumbleEnabledStore = mockk { every { state } returns rumbleEnabled }
-        val touchpadStore: TouchpadModeStore = mockk { every { state } returns touchpadMode }
+        val mouseSurfaceStore: MouseSurfaceStore =
+            mockk {
+                every { state } returns mouseSurface
+                every { isOpen(any()) } answers { firstArg<String>() in mouseSurface.value }
+            }
         val hostStore: SatelliteHostFeaturesStore =
             mockk {
                 every { state } returns hostFeaturesState
@@ -119,7 +123,7 @@ class CapabilityComposerTest {
             native,
             motionStore,
             rumbleStore,
-            touchpadStore,
+            mouseSurfaceStore,
             hostStore,
             backendStore,
             hostRuntimeStore,
@@ -838,10 +842,10 @@ class CapabilityComposerTest {
             assertEquals(TouchpadSource.NONE, composer.touchpadSource("404"))
         }
 
-    // ── touchpadWireMode: the descriptor projection ─────────────────────────
+    // ── touchpadWireMode: the derived descriptor projection ─────────────────
 
     @Test
-    fun `touchpadWireMode declares the pick when every gate carries`() =
+    fun `touchpadWireMode derives ds4 for a touchpad-bearing type with no pick anywhere`() =
         composerTest {
             val composer =
                 composerFor(
@@ -850,14 +854,13 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A")),
                     connections = MutableStateFlow(listOf(summary("sat-A"))),
                     scope = backgroundScope,
-                    touchpadMode = MutableStateFlow(mapOf("sat-A" to "ds4")),
                     satTypes = MutableStateFlow(mapOf(("sat-A" to VIRTUAL_SLOT_ID) to CONTROLLER_TYPE_PLAYSTATION)),
                 )
             assertEquals("ds4", composer.touchpadWireMode(VIRTUAL_SLOT_ID))
         }
 
     @Test
-    fun `touchpadWireMode collapses a ds4 pick on an xbox-typed slot`() =
+    fun `touchpadWireMode falls through to mouse on an xbox-typed slot`() =
         composerTest {
             val composer =
                 composerFor(
@@ -866,14 +869,13 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A")),
                     connections = MutableStateFlow(listOf(summary("sat-A"))),
                     scope = backgroundScope,
-                    touchpadMode = MutableStateFlow(mapOf("sat-A" to "ds4")),
                     satTypes = MutableStateFlow(mapOf(("sat-A" to VIRTUAL_SLOT_ID) to CONTROLLER_TYPE_XBOX)),
                 )
-            assertEquals("off", composer.touchpadWireMode(VIRTUAL_SLOT_ID))
+            assertEquals("mouse", composer.touchpadWireMode(VIRTUAL_SLOT_ID))
         }
 
     @Test
-    fun `touchpadWireMode is off for an unbound slot and for a never-picked satellite`() =
+    fun `touchpadWireMode is off for an unbound slot`() =
         composerTest {
             val composer =
                 composerFor(
@@ -885,11 +887,10 @@ class CapabilityComposerTest {
                     satTypes = MutableStateFlow(mapOf(("sat-A" to VIRTUAL_SLOT_ID) to CONTROLLER_TYPE_PLAYSTATION)),
                 )
             assertEquals("off", composer.touchpadWireMode("unbound-slot"))
-            assertEquals("off", composer.touchpadWireMode(VIRTUAL_SLOT_ID))
         }
 
     @Test
-    fun `touchpadWireMode gates a mouse pick on the host grant`() =
+    fun `touchpadWireMode gates the mouse fallback on the host grant`() =
         composerTest {
             val withheld =
                 MutableStateFlow(
@@ -910,7 +911,6 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A")),
                     connections = MutableStateFlow(listOf(summary("sat-A"))),
                     scope = backgroundScope,
-                    touchpadMode = MutableStateFlow(mapOf("sat-A" to "mouse")),
                     hostFeaturesState = withheld,
                     satTypes = MutableStateFlow(mapOf(("sat-A" to VIRTUAL_SLOT_ID) to CONTROLLER_TYPE_XBOX)),
                 )
@@ -922,7 +922,7 @@ class CapabilityComposerTest {
         }
 
     @Test
-    fun `touchpadWireMode drops a ds4 pick for a pad whose touch is uncapturable`() =
+    fun `touchpadWireMode is off for a pad whose touch is uncapturable`() =
         composerTest {
             val devices = MutableStateFlow(mapOf(9 to device(9, vendorId = 0x054C, productId = 0x09CC)))
             val composer =
@@ -932,14 +932,36 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(mapOf("9" to "sat-A")),
                     connections = MutableStateFlow(listOf(summary("sat-A"))),
                     scope = backgroundScope,
-                    touchpadMode = MutableStateFlow(mapOf("sat-A" to "ds4")),
                     satTypes = MutableStateFlow(mapOf(("sat-A" to "9") to CONTROLLER_TYPE_PLAYSTATION)),
                     modelHasTouchpad = true,
                 )
             assertEquals("off", composer.touchpadWireMode("9"))
 
-            // The same pad claimed USB-direct captures its trackpad, so the pick carries.
+            // The same pad claimed USB-direct captures its trackpad, so the route carries.
             devices.value = mapOf(9 to device(9, vendorId = 0x054C, productId = 0x09CC, isUsbSynthetic = true))
             assertEquals("ds4", composer.touchpadWireMode("9"))
+        }
+
+    @Test
+    fun `an open mouse surface flips a ds4-routable slot to mouse for exactly that slot`() =
+        composerTest {
+            val mouseSurface = MutableStateFlow<Set<String>>(emptySet())
+            val composer =
+                composerFor(
+                    phoneAvailable = true,
+                    devices = MutableStateFlow(emptyMap()),
+                    bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A")),
+                    connections = MutableStateFlow(listOf(summary("sat-A"))),
+                    scope = backgroundScope,
+                    mouseSurface = mouseSurface,
+                    satTypes = MutableStateFlow(mapOf(("sat-A" to VIRTUAL_SLOT_ID) to CONTROLLER_TYPE_PLAYSTATION)),
+                )
+            assertEquals("ds4", composer.touchpadWireMode(VIRTUAL_SLOT_ID))
+
+            mouseSurface.value = setOf(VIRTUAL_SLOT_ID)
+            assertEquals("mouse", composer.touchpadWireMode(VIRTUAL_SLOT_ID))
+
+            mouseSurface.value = setOf("some-other-slot")
+            assertEquals("ds4", composer.touchpadWireMode(VIRTUAL_SLOT_ID))
         }
 }

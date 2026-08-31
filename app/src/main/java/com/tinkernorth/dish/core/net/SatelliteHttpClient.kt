@@ -42,9 +42,6 @@ internal object SatelliteHttpClient {
     private const val CONNECT_TIMEOUT_MS = 5_000
     private const val READ_TIMEOUT_MS = 5_000
 
-    // docs/contract.md §Versioning. Rides in every pairing/session request.
-    const val PROTOCOL_VERSION = 1
-
     @Suppress("CustomX509TrustManager")
     private val insecureSocketFactory by lazy {
         val trustAll =
@@ -103,6 +100,7 @@ internal object SatelliteHttpClient {
     // PUT /api/connections: the declarative session upsert. `descriptorsJson`
     // is the prebuilt `[{...}, ...]` controllers array (ControllerDescriptor
     // owns its shape so it stays unit-testable without a socket).
+    @Suppress("LongParameterList")
     fun putSession(
         ip: String,
         port: Int,
@@ -111,6 +109,7 @@ internal object SatelliteHttpClient {
         hmacProof: String,
         descriptorsJson: String,
         requestMouseControl: Boolean,
+        protocolVersion: Int,
         satelliteId: String,
         pins: SatellitePinRepository,
     ): HttpReply =
@@ -124,7 +123,7 @@ internal object SatelliteHttpClient {
             body =
                 """{"deviceId":"${jsonEscape(deviceId)}",""" +
                     """"deviceName":"${jsonEscape(deviceName)}",""" +
-                    """"protocolVersion":$PROTOCOL_VERSION,""" +
+                    """"protocolVersion":$protocolVersion,""" +
                     """"controllers":$descriptorsJson,""" +
                     """"hostFeatures":{"mouseControl":$requestMouseControl}}""",
             satelliteId = satelliteId,
@@ -297,6 +296,7 @@ internal object SatelliteHttpClient {
     // `pin` drives Path A (the dish entered the satellite's PIN); `clientPin` drives
     // Path B (the dish shows its own PIN for the operator to accept). Both ride in the
     // body; the satellite uses a valid `pin` first and only falls back to `clientPin`.
+    @Suppress("LongParameterList")
     fun pair(
         ip: String,
         port: Int,
@@ -306,6 +306,7 @@ internal object SatelliteHttpClient {
         satelliteId: String,
         pins: SatellitePinRepository,
         clientPin: String = "",
+        protocolVersion: Int = DishProtocol.CURRENT,
     ): HttpReply =
         request(
             method = "POST",
@@ -317,7 +318,7 @@ internal object SatelliteHttpClient {
             body =
                 """{"deviceId":"${jsonEscape(deviceId)}",""" +
                     """"deviceName":"${jsonEscape(deviceName)}",""" +
-                    """"protocolVersion":$PROTOCOL_VERSION,""" +
+                    """"protocolVersion":$protocolVersion,""" +
                     """"pin":"${jsonEscape(pin)}",""" +
                     """"clientPin":"${jsonEscape(clientPin)}"}""",
             satelliteId = satelliteId,
