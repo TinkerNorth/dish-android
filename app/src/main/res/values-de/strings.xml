@@ -123,6 +123,15 @@
     <string name="overlay_title_touchpad">Touchpad</string>
     <string name="overlay_rate_touch">Touch %1$s</string>
     <string name="overlay_rate_motion">Bewegung %1$s</string>
+    <string name="overlay_guard_wifi_detail">WLAN ist aus oder in einem anderen Netzwerk. Verbinde dich wieder mit dem Netzwerk des Hosts.</string>
+    <string name="overlay_guard_bt_detail">Stelle die Verbindung über die Bluetooth-Einstellungen des Hosts wieder her.</string>
+    <string name="overlay_guard_ml_detail">Die Moonlight-Sitzung wurde beendet. Verknüpfe den Controller erneut, um eine neue zu starten.</string>
+    <string name="overlay_guard_replug_detail">Stecke den Controller wieder ein, um diesen Bildschirm weiter zu nutzen.</string>
+    <string name="overlay_guard_departed_detail">Der Controller kam nicht zurück. Dieser Bildschirm wird geschlossen.</string>
+    <string name="overlay_guard_unbound_title">Verknüpfung aufgehoben</string>
+    <string name="overlay_guard_unbound_detail">Dieser Slot ist nicht mehr mit %1$s verknüpft. Dieser Bildschirm wird geschlossen.</string>
+    <string name="overlay_guard_gone_title">Verbindung entfernt</string>
+    <string name="overlay_guard_gone_detail">Die Verbindung wurde entfernt. Dieser Bildschirm wird geschlossen.</string>
     <string name="touchpad_pad_click_label">Klicken + Bewegen</string>
     <string name="touchpad_pad_move_label">Bewegen</string>
     <string name="touchpad_pad_click_hint">Ziehen zum Klicken und Bewegen</string>

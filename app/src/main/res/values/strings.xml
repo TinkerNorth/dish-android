@@ -154,6 +154,15 @@
     <string name="overlay_title_touchpad">Touchpad</string>
     <string name="overlay_rate_touch">Touch %1$s</string>
     <string name="overlay_rate_motion">Motion %1$s</string>
+    <string name="overlay_guard_wifi_detail">Wi-Fi is off or on a different network. Rejoin the host\'s network.</string>
+    <string name="overlay_guard_bt_detail">Reconnect from the host\'s Bluetooth settings.</string>
+    <string name="overlay_guard_ml_detail">The Moonlight session ended. Bind the controller again to start a new one.</string>
+    <string name="overlay_guard_replug_detail">Plug the controller back in to keep using this screen.</string>
+    <string name="overlay_guard_departed_detail">The controller didn\'t come back. This screen will close.</string>
+    <string name="overlay_guard_unbound_title">Controller unbound</string>
+    <string name="overlay_guard_unbound_detail">This slot is no longer bound to %1$s. This screen will close.</string>
+    <string name="overlay_guard_gone_title">Connection removed</string>
+    <string name="overlay_guard_gone_detail">The connection was forgotten. This screen will close.</string>
 
     <!-- Labels for the two side-by-side trackpads in the touchpad overlay.
          The "click" pad routes touches as click+position (drag, text

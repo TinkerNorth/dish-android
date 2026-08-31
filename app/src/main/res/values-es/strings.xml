@@ -125,6 +125,15 @@
     <string name="overlay_title_touchpad">Panel táctil</string>
     <string name="overlay_rate_touch">Táctil %1$s</string>
     <string name="overlay_rate_motion">Movimiento %1$s</string>
+    <string name="overlay_guard_wifi_detail">El Wi-Fi está apagado o en otra red. Vuelve a la red del host.</string>
+    <string name="overlay_guard_bt_detail">Reconecta desde los ajustes de Bluetooth del host.</string>
+    <string name="overlay_guard_ml_detail">La sesión de Moonlight terminó. Vincula el mando de nuevo para iniciar otra.</string>
+    <string name="overlay_guard_replug_detail">Vuelve a conectar el mando para seguir usando esta pantalla.</string>
+    <string name="overlay_guard_departed_detail">El mando no volvió. Esta pantalla se cerrará.</string>
+    <string name="overlay_guard_unbound_title">Mando desvinculado</string>
+    <string name="overlay_guard_unbound_detail">Esta ranura ya no está vinculada a %1$s. Esta pantalla se cerrará.</string>
+    <string name="overlay_guard_gone_title">Conexión eliminada</string>
+    <string name="overlay_guard_gone_detail">La conexión fue olvidada. Esta pantalla se cerrará.</string>
     <string name="touchpad_pad_click_label">Clic + Mover</string>
     <string name="touchpad_pad_move_label">Mover</string>
     <string name="touchpad_pad_click_hint">Arrastra para hacer clic y mover</string>

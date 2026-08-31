@@ -124,6 +124,15 @@
     <string name="overlay_title_touchpad">Pavé tactile</string>
     <string name="overlay_rate_touch">Tactile %1$s</string>
     <string name="overlay_rate_motion">Mouvement %1$s</string>
+    <string name="overlay_guard_wifi_detail">Le Wi-Fi est désactivé ou sur un autre réseau. Rejoignez le réseau de l\'hôte.</string>
+    <string name="overlay_guard_bt_detail">Reconnectez depuis les réglages Bluetooth de l\'hôte.</string>
+    <string name="overlay_guard_ml_detail">La session Moonlight est terminée. Associez à nouveau la manette pour en démarrer une nouvelle.</string>
+    <string name="overlay_guard_replug_detail">Rebranchez la manette pour continuer à utiliser cet écran.</string>
+    <string name="overlay_guard_departed_detail">La manette n\'est pas revenue. Cet écran va se fermer.</string>
+    <string name="overlay_guard_unbound_title">Manette dissociée</string>
+    <string name="overlay_guard_unbound_detail">Cet emplacement n\'est plus associé à %1$s. Cet écran va se fermer.</string>
+    <string name="overlay_guard_gone_title">Connexion supprimée</string>
+    <string name="overlay_guard_gone_detail">La connexion a été oubliée. Cet écran va se fermer.</string>
     <string name="touchpad_pad_click_label">Clic + Déplacer</string>
     <string name="touchpad_pad_move_label">Déplacer</string>
     <string name="touchpad_pad_click_hint">Glissez pour cliquer et déplacer</string>

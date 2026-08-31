@@ -47,6 +47,12 @@
                 android:paddingHorizontal="@dimen/spacing_2xl"
                 android:paddingTop="@dimen/spacing_lg"
                 android:paddingBottom="@dimen/spacing_2xl" />
+
+            <include
+                android:id="@+id/linkGuard"
+                layout="@layout/overlay_link_guard"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
         </FrameLayout>
     </LinearLayout>
 
