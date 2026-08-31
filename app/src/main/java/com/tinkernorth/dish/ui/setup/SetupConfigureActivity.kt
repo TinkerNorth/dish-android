@@ -338,8 +338,14 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                 mouseMode = mouseMode,
                 padMode = padMode,
                 // Rumble flows back only where the path carries it (no Bluetooth return channel,
-                // no phone fallback for a motorless physical pad); the user's toggle gates it.
+                // no phone fallback for a motorless physical pad); the user's toggle gates it,
+                // and trigger rumble follows it.
                 rumbleOn = caps.isAvailable(Feature.RUMBLE) && state.draft?.rumbleOn == true,
+                batteryOn = caps.isAvailable(Feature.BATTERY),
+                triggerRumbleOn = caps.isAvailable(Feature.TRIGGER_RUMBLE) && state.draft?.rumbleOn == true,
+                lightbar = caps.isAvailable(Feature.LIGHTBAR),
+                triggerEffects = caps.isAvailable(Feature.TRIGGER_EFFECTS),
+                playerLeds = caps.isAvailable(Feature.PLAYER_LEDS),
             )
         return inputNodes(state, snapshot, model) + destinationNodes(state, model)
     }
@@ -348,6 +354,17 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
     // on-screen pad and its touch surface (mouse/touchpad) merge into a single
     // node; when a connected controller is the input, the phone's touch surface is
     // still shown as its own whole virtual-controller input.
+    // Everything the host can push back at this pad, in a fixed order; the
+    // input's gets and the emulated pad's sends are the same list by definition.
+    private fun feedbackFlows(model: ReviewModel): List<ReviewFlow> =
+        buildList {
+            if (model.rumbleOn) add(ReviewFlow(R.drawable.ic_rumble, R.string.binding_func_rumble))
+            if (model.triggerRumbleOn) add(ReviewFlow(R.drawable.ic_trigger_rumble, R.string.setup_cap_trigger_rumble))
+            if (model.lightbar) add(ReviewFlow(R.drawable.ic_lightbar, R.string.setup_cap_lightbar))
+            if (model.triggerEffects) add(ReviewFlow(R.drawable.ic_trigger_effects, R.string.setup_cap_trigger_effects))
+            if (model.playerLeds) add(ReviewFlow(R.drawable.ic_player_leds, R.string.setup_cap_player_leds))
+        }
+
     private fun inputNodes(
         state: ConfigUiState,
         snapshot: BindingSnapshot,
@@ -355,13 +372,13 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
     ): List<ReviewNode> {
         val gamepad = ReviewFlow(R.drawable.ic_gamepad, R.string.setup_cfg_flow_controller)
         val motion = ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro)
-        val rumble = ReviewFlow(R.drawable.ic_rumble, R.string.binding_func_rumble)
+        val battery = ReviewFlow(R.drawable.ic_battery, R.string.setup_cap_battery)
         val pointerFlows =
             buildList {
                 if (model.padMode) add(ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad))
                 if (model.mouseMode) add(ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse))
             }
-        val gets = if (model.rumbleOn) listOf(rumble) else emptyList()
+        val gets = feedbackFlows(model)
         val virtual =
             ReviewNode(
                 kind = R.string.binding_label_input,
@@ -380,6 +397,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                             add(gamepad)
                             if (model.motionOn) add(motion)
                             addAll(pointerFlows)
+                            if (model.batteryOn) add(battery)
                         },
                     gets = gets,
                 ),
@@ -395,6 +413,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                     buildList {
                         add(gamepad)
                         if (model.motionOn) add(motion)
+                        if (model.batteryOn) add(battery)
                     },
                 gets = gets,
             )
@@ -441,12 +460,13 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                 icon = R.drawable.ic_gamepad,
                 name = viewModel.typeLabel(state.draft?.type ?: CONTROLLER_TYPE_XBOX),
                 sublabel = getString(R.string.setup_cfg_virtual_sublabel),
-                sends = rumbleBack,
+                sends = feedbackFlows(model),
                 gets =
                     buildList {
                         add(gamepad)
                         if (model.motionOn) add(motion)
                         if (model.padMode) add(touchpad)
+                        if (model.batteryOn) add(ReviewFlow(R.drawable.ic_battery, R.string.setup_cap_battery))
                     },
             ),
         )
@@ -461,7 +481,6 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
     ): List<ReviewNode> {
         val gamepad = ReviewFlow(R.drawable.ic_gamepad, R.string.setup_cfg_flow_controller)
         val motion = ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro)
-        val rumble = ReviewFlow(R.drawable.ic_rumble, R.string.binding_func_rumble)
         val touchpad = ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad)
         val mouse = ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse)
         val stored = state.draft?.type ?: MoonlightEmulatedType.AUTO
@@ -479,12 +498,13 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                 icon = R.drawable.ic_gamepad,
                 name = getString(moonlightTypeLabelRes(viewModel.moonlightResolvedType(stored))),
                 sublabel = getString(R.string.setup_cfg_virtual_sublabel),
-                sends = if (model.rumbleOn) listOf(rumble) else emptyList(),
+                sends = feedbackFlows(model),
                 gets =
                     buildList {
                         add(gamepad)
                         if (model.motionOn) add(motion)
                         if (model.padMode) add(touchpad)
+                        if (model.batteryOn) add(ReviewFlow(R.drawable.ic_battery, R.string.setup_cap_battery))
                     },
             ),
         )
@@ -496,6 +516,11 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         val mouseMode: Boolean,
         val padMode: Boolean,
         val rumbleOn: Boolean,
+        val batteryOn: Boolean,
+        val triggerRumbleOn: Boolean,
+        val lightbar: Boolean,
+        val triggerEffects: Boolean,
+        val playerLeds: Boolean,
     )
 
     private data class ReviewNode(

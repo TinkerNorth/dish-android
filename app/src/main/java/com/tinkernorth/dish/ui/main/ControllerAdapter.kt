@@ -371,9 +371,12 @@ class ControllerAdapter(
                 specs.add(PillSpec(funcValue(R.string.binding_func_rumble, R.string.binding_state_on), R.drawable.ic_rumble, PillTone.ON))
             }
 
+            // Motion streams to a Satellite and, since protocol 2 shipped the
+            // Moonlight telemetry, to a Moonlight host too (its type layer gates
+            // which emulated pads carry it); Bluetooth stays gamepad-only.
             val motionAvailable =
                 row.motionCap.inputOk(Feature.MOTION) &&
-                    bound.kind == ConnectionKind.SATELLITE &&
+                    bound.kind != ConnectionKind.BLUETOOTH &&
                     row.motionCap.typeOk(Feature.MOTION)
             if (motionAvailable) {
                 val on = row.motionCap.userWants(Feature.MOTION)
@@ -382,11 +385,26 @@ class ControllerAdapter(
                 specs.add(PillSpec(funcValue(R.string.binding_func_motion, state), R.drawable.ic_motion, tone))
             }
 
-            if (bound.kind == ConnectionKind.SATELLITE) {
-                specs.addAll(pointerFuncFacts(row).map(::pointerFactPill))
+            when (bound.kind) {
+                ConnectionKind.SATELLITE -> specs.addAll(pointerFuncFacts(row).map(::pointerFactPill))
+                ConnectionKind.MOONLIGHT -> specs.addAll(moonlightPointerFacts(row).map(::pointerFactPill))
+                ConnectionKind.BLUETOOTH -> Unit
             }
+            specs.addAll(feedbackFuncFacts(row.motionCap).map(::feedbackFactPill))
             return specs
         }
+
+        private fun feedbackFactPill(fact: FeedbackPillFact): PillSpec =
+            when (fact) {
+                FeedbackPillFact.TRIGGER_RUMBLE ->
+                    PillSpec(ctx.getString(R.string.setup_cap_trigger_rumble), R.drawable.ic_trigger_rumble, PillTone.CAP)
+                FeedbackPillFact.LIGHTBAR ->
+                    PillSpec(ctx.getString(R.string.setup_cap_lightbar), R.drawable.ic_lightbar, PillTone.CAP)
+                FeedbackPillFact.TRIGGER_EFFECTS ->
+                    PillSpec(ctx.getString(R.string.setup_cap_trigger_effects), R.drawable.ic_trigger_effects, PillTone.CAP)
+                FeedbackPillFact.PLAYER_LEDS ->
+                    PillSpec(ctx.getString(R.string.setup_cap_player_leds), R.drawable.ic_player_leds, PillTone.CAP)
+            }
 
         private fun pointerFactPill(fact: PointerPillFact): PillSpec =
             when (fact) {
