@@ -11,6 +11,7 @@ import com.tinkernorth.dish.architecture.abstracts.AbstractController
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEvent
+import com.tinkernorth.dish.hotpath.input.FeedbackRouter
 import com.tinkernorth.dish.hotpath.input.RumbleRouter
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
@@ -47,6 +48,7 @@ class MoonlightSessionController
         private val moonlight: MoonlightConnectionManager,
         private val capabilities: CapabilityComposer,
         private val rumble: RumbleRouter,
+        private val feedback: FeedbackRouter,
         scope: CoroutineScope,
     ) : AbstractController<MoonlightDesiredPads>(scope) {
         private var serviceRunning = false
@@ -87,16 +89,29 @@ class MoonlightSessionController
             conn: MoonlightConnection,
             event: MoonlightEvent,
         ) {
-            if (event !is MoonlightEvent.Rumble) return
+            val controllerNumber =
+                when (event) {
+                    is MoonlightEvent.Rumble -> event.controllerNumber
+                    is MoonlightEvent.RumbleTriggers -> event.controllerNumber
+                    is MoonlightEvent.RgbLed -> event.controllerNumber
+                    else -> return
+                }
             val slotId =
                 conn.pads.value.values
-                    .firstOrNull { it.number == event.controllerNumber }
+                    .firstOrNull { it.number == controllerNumber }
                     ?.slotId ?: return
-            // Low frequency is the large motor, which the routers call strong. A
-            // Moonlight rumble has no duration: it holds until the host sends the
-            // next one, so each is delivered for as long as the router allows
-            // and a session that drops mid-buzz stops buzzing on its own.
-            rumble.dispatchToSlot(slotId, event.lowFrequency, event.highFrequency, RUMBLE_HOLD_MS)
+            when (event) {
+                // Low frequency is the large motor, which the routers call strong. A
+                // Moonlight rumble has no duration: it holds until the host sends the
+                // next one, so each is delivered for as long as the router allows
+                // and a session that drops mid-buzz stops buzzing on its own.
+                is MoonlightEvent.Rumble ->
+                    rumble.dispatchToSlot(slotId, event.lowFrequency, event.highFrequency, RUMBLE_HOLD_MS)
+                is MoonlightEvent.RumbleTriggers ->
+                    feedback.dispatchTriggerRumbleToSlot(slotId, event.left, event.right)
+                is MoonlightEvent.RgbLed ->
+                    feedback.dispatchLightbarToSlot(slotId, event.red, event.green, event.blue)
+            }
         }
 
         override fun onStop(owner: LifecycleOwner) = Unit

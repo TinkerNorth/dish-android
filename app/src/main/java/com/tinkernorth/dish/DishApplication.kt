@@ -16,6 +16,8 @@ import com.tinkernorth.dish.composer.StreamingServiceController
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.hotpath.input.BluetoothGamepadBridge
+import com.tinkernorth.dish.hotpath.input.FeedbackBridge
+import com.tinkernorth.dish.hotpath.input.FeedbackRouter
 import com.tinkernorth.dish.hotpath.input.MoonlightGamepadBridge
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.PhysicalSlotBindingObserver
@@ -84,6 +86,8 @@ class DishApplication : Application() {
     @Inject lateinit var inputRateStore: InputRateStore
 
     @Inject lateinit var rumbleRouter: RumbleRouter
+
+    @Inject lateinit var feedbackRouter: FeedbackRouter
 
     @Inject lateinit var moonlightManager: com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
 
@@ -171,6 +175,7 @@ class DishApplication : Application() {
         lifecycle.addObserver(networkStateObserver)
         lifecycle.addObserver(streamingServiceController)
         RumbleBridge.install(rumbleRouter)
+        FeedbackBridge.install(feedbackRouter)
     }
 
     companion object {

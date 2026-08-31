@@ -186,6 +186,33 @@ object SatelliteNative {
         weak: Int,
     )
 
+    // left/right are wire-scale 0..65535 impulse-trigger magnitudes; only the GIP family has the
+    // motors, everything else drops the write in native.
+    external fun sendUsbTriggerRumble(
+        syntheticDeviceId: Int,
+        leftMagnitude: Int,
+        rightMagnitude: Int,
+    )
+
+    external fun sendUsbLightbar(
+        syntheticDeviceId: Int,
+        r: Int,
+        g: Int,
+        b: Int,
+    )
+
+    // ledMask bit 0 = leftmost LED (DualSense bits 0..4, Switch Pro bits 0..3).
+    external fun sendUsbPlayerLeds(
+        syntheticDeviceId: Int,
+        ledMask: Int,
+    )
+
+    // blocks = 22 bytes: the left then right raw 11-byte DualSense trigger-effect fields.
+    external fun sendUsbTriggerEffects(
+        syntheticDeviceId: Int,
+        blocks: ByteArray,
+    )
+
     external fun isKnownFastLaneModel(
         vendorId: Int,
         productId: Int,
@@ -197,6 +224,26 @@ object SatelliteNative {
     ): Boolean
 
     external fun modelHasRumble(
+        vendorId: Int,
+        productId: Int,
+    ): Boolean
+
+    external fun modelHasLightbar(
+        vendorId: Int,
+        productId: Int,
+    ): Boolean
+
+    external fun modelHasPlayerLeds(
+        vendorId: Int,
+        productId: Int,
+    ): Boolean
+
+    external fun modelHasTriggerEffects(
+        vendorId: Int,
+        productId: Int,
+    ): Boolean
+
+    external fun modelHasTriggerRumble(
         vendorId: Int,
         productId: Int,
     ): Boolean

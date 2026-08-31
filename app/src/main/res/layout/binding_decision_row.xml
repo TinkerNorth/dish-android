@@ -13,13 +13,14 @@
         android:layout_width="@dimen/binding_label_column_width"
         android:layout_marginEnd="@dimen/binding_label_gap" />
 
-    <LinearLayout
+    <!-- Flow layout instead of a horizontal LinearLayout: a row that can carry
+         many chips (the function row grew the protocol-2 feedback surfaces)
+         wraps or clips whole chips off-canvas, never squeezes one into an
+         ellipsis. Line budgets are set per row in code so card heights stay
+         fixed regardless of content. -->
+    <com.tinkernorth.dish.ui.common.PillFlowLayout
         android:id="@+id/valueContainer"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:divider="@drawable/binding_pill_gap"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:showDividers="middle" />
+        android:layout_weight="1" />
 </LinearLayout>

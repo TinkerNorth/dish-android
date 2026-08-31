@@ -206,9 +206,13 @@ class CapabilityComposer
         }
 
         private fun virtualControllerLayer(): CapabilitySet {
-            // The phone IS the input: its screen sources the touchpad and mouse and its
-            // vibrator actuates rumble, so all three ride regardless of any pad. Motion
-            // rides only if the phone has a gyro.
+            // The phone IS the input AND the actuator: its screen sources the touchpad
+            // and mouse, its vibrator actuates rumble (trigger rumble folds into it),
+            // its own battery reports, and the skin renders the light surfaces the
+            // hardware lacks — lightbar, player LEDs and an active adaptive-trigger
+            // effect all draw on the on-screen pad (VirtualPadFeedbackStore). Motion
+            // rides only if the phone has a gyro. The type layer still gates which of
+            // these a given emulated pad actually carries.
             val out =
                 mutableSetOf(
                     Feature.GAMEPAD,
@@ -216,6 +220,11 @@ class CapabilityComposer
                     Feature.TOUCHPAD,
                     Feature.MOUSE,
                     Feature.RUMBLE,
+                    Feature.TRIGGER_RUMBLE,
+                    Feature.BATTERY,
+                    Feature.LIGHTBAR,
+                    Feature.TRIGGER_EFFECTS,
+                    Feature.PLAYER_LEDS,
                 )
             if (phoneHasGyro) out += Feature.MOTION
             return CapabilitySet(out)
@@ -227,13 +236,29 @@ class CapabilityComposer
             // that has no trackpad at all. Rumble needs the pad's OWN motor: routing never
             // falls back to the phone for a physical controller, so a motorless pad has no
             // rumble.
-            val out = mutableSetOf(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS)
+            val out = mutableSetOf(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.BATTERY)
             if (deviceTouchpadSource(device) != TouchpadSource.NONE) {
                 out += Feature.TOUCHPAD
                 out += Feature.MOUSE
             }
             if (deviceMotionAvailable(device)) out += Feature.MOTION
             if (deviceRumbleAvailable(device)) out += Feature.RUMBLE
+            // LED / trigger surfaces exist only on the raw Direct path: the framework
+            // exposes no controller LED or trigger-motor API for its pads.
+            if (device.isUsbSynthetic) {
+                if (native.modelHasLightbar(device.vendorId, device.productId)) {
+                    out += Feature.LIGHTBAR
+                }
+                if (native.modelHasTriggerEffects(device.vendorId, device.productId)) {
+                    out += Feature.TRIGGER_EFFECTS
+                }
+                if (native.modelHasPlayerLeds(device.vendorId, device.productId)) {
+                    out += Feature.PLAYER_LEDS
+                }
+                if (native.modelHasTriggerRumble(device.vendorId, device.productId)) {
+                    out += Feature.TRIGGER_RUMBLE
+                }
+            }
             return CapabilitySet(out)
         }
 

@@ -50,17 +50,21 @@ class MoonlightEmulatedTypeTest {
     }
 
     @Test
-    fun `only PlayStation may declare more than analog triggers and rumble`() {
-        assertEquals(0x03, MoonlightEmulatedType.typeMaximum(MoonlightEmulatedType.XBOX))
+    fun `only PlayStation may declare the touchpad, motion and LED surfaces`() {
+        // Trigger rumble and battery describe the physical pad, so every type
+        // may carry them on top of analog triggers + rumble.
+        val base = 0x03 or MoonlightControlProtocol.CAP_TRIGGER_RUMBLE or MoonlightControlProtocol.CAP_BATTERY
+        assertEquals(base, MoonlightEmulatedType.typeMaximum(MoonlightEmulatedType.XBOX))
         assertEquals(0xFF, MoonlightEmulatedType.typeMaximum(MoonlightEmulatedType.PLAYSTATION))
-        assertEquals(0x03, MoonlightEmulatedType.typeMaximum(MoonlightEmulatedType.NINTENDO))
+        assertEquals(base, MoonlightEmulatedType.typeMaximum(MoonlightEmulatedType.NINTENDO))
     }
 
     @Test
     fun `the declared bits are the type maximum intersected with what the source can deliver`() {
         val everything = 0xFF
-        assertEquals(0x03, MoonlightEmulatedType.capabilityBits(MoonlightEmulatedType.XBOX, everything))
-        assertEquals(0x03, MoonlightEmulatedType.capabilityBits(MoonlightEmulatedType.NINTENDO, everything))
+        val base = 0x03 or MoonlightControlProtocol.CAP_TRIGGER_RUMBLE or MoonlightControlProtocol.CAP_BATTERY
+        assertEquals(base, MoonlightEmulatedType.capabilityBits(MoonlightEmulatedType.XBOX, everything))
+        assertEquals(base, MoonlightEmulatedType.capabilityBits(MoonlightEmulatedType.NINTENDO, everything))
         assertEquals(0xFF, MoonlightEmulatedType.capabilityBits(MoonlightEmulatedType.PLAYSTATION, everything))
 
         // A source with nothing but a gamepad declares nothing, whatever the type allows.

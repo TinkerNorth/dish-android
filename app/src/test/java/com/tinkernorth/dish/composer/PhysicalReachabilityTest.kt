@@ -188,4 +188,74 @@ class PhysicalReachabilityTest {
                     cancelAndIgnoreRemainingEvents()
                 }
         }
+
+    // ---- Moonlight sinks --------------------------------------------------
+
+    private fun moonlightConnection(pad: Boolean): com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection {
+        val conn = mockk<com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection>()
+        every { conn.padFor("9") } returns
+            if (pad) {
+                com.tinkernorth.dish.source.connection.moonlight
+                    .MoonlightPad(slotId = "9", number = 0, emulatedType = 1, capabilities = 3, supportedButtons = 0xFFFF)
+            } else {
+                null
+            }
+        return conn
+    }
+
+    @Test
+    fun `sinkFor resolves a moonlight-bound slot to its live connection`() {
+        val conn = moonlightConnection(pad = true)
+        assertSame(
+            conn,
+            PhysicalReachabilityComposer.sinkFor(
+                slotId = "9",
+                bindings = mapOf("9" to "m"),
+                summariesById = mapOf("m" to summary("m", kind = ConnectionKind.MOONLIGHT)),
+                connections = emptyMap(),
+                moonlightConnections = mapOf("m" to conn),
+            ),
+        )
+    }
+
+    @Test
+    fun `sinkFor is null for a moonlight slot whose pad was never announced`() {
+        val conn = moonlightConnection(pad = false)
+        assertNull(
+            PhysicalReachabilityComposer.sinkFor(
+                slotId = "9",
+                bindings = mapOf("9" to "m"),
+                summariesById = mapOf("m" to summary("m", kind = ConnectionKind.MOONLIGHT)),
+                connections = emptyMap(),
+                moonlightConnections = mapOf("m" to conn),
+            ),
+        )
+    }
+
+    @Test
+    fun `sinkFor is null for a moonlight link that is not connected`() {
+        val conn = moonlightConnection(pad = true)
+        assertNull(
+            PhysicalReachabilityComposer.sinkFor(
+                slotId = "9",
+                bindings = mapOf("9" to "m"),
+                summariesById = mapOf("m" to summary("m", kind = ConnectionKind.MOONLIGHT, live = LinkState.Connecting)),
+                connections = emptyMap(),
+                moonlightConnections = mapOf("m" to conn),
+            ),
+        )
+    }
+
+    @Test
+    fun `sinkFor never yields a telemetry lane for a bluetooth binding`() {
+        assertNull(
+            PhysicalReachabilityComposer.sinkFor(
+                slotId = "9",
+                bindings = mapOf("9" to "b"),
+                summariesById = mapOf("b" to summary("b", kind = ConnectionKind.BLUETOOTH)),
+                connections = emptyMap(),
+                moonlightConnections = emptyMap(),
+            ),
+        )
+    }
 }

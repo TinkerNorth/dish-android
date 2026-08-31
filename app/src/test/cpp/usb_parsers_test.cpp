@@ -241,6 +241,154 @@ TEST(Rumble, TooSmallBufferReturnsZero) {
     EXPECT_EQ(0u, buildRumbleReport(Parser::DUALSENSE, 0xFFFF, 0xFFFF, 0, out, sizeof(out)));
 }
 
+TEST(Feedback, MergedGipRumbleCarriesAllFourMotors) {
+    usbparsers::FeedbackState st;
+    st.strong = 0xFFFF;
+    st.weak = 0x8000;
+    st.leftTrigger = 0x4000;
+    st.rightTrigger = 0x2000;
+    uint8_t out[64];
+    size_t n = usbparsers::buildMergedRumbleReport(Parser::XBOX_ONE_GIP, st, 0x11, out, sizeof(out));
+    ASSERT_EQ(13u, n);
+    // Mask 0x0F keeps all four motors addressed; trigger magnitudes ride bytes
+    // 6/7 with the same /512 scale as the mains.
+    EXPECT_EQ(0x09, out[0]);
+    EXPECT_EQ(0x11, out[2]);
+    EXPECT_EQ(0x0F, out[5]);
+    EXPECT_EQ(0x20, out[6]);
+    EXPECT_EQ(0x10, out[7]);
+    EXPECT_EQ(0x7F, out[8]);
+    EXPECT_EQ(0x40, out[9]);
+}
+
+TEST(Feedback, MergedRumbleFallsBackToPlainBuilderElsewhere) {
+    usbparsers::FeedbackState st;
+    st.strong = 0xAA00;
+    st.weak = 0x5500;
+    st.leftTrigger = 0xFFFF; // must be ignored off-GIP
+    uint8_t out[64];
+    size_t n = usbparsers::buildMergedRumbleReport(Parser::DUALSHOCK4, st, 0, out, sizeof(out));
+    ASSERT_EQ(32u, n);
+    EXPECT_EQ(0x05, out[0]);
+    EXPECT_EQ(0x01, out[1]);
+    EXPECT_EQ(0x55, out[4]);
+    EXPECT_EQ(0xAA, out[5]);
+}
+
+TEST(Feedback, DualShock4LightbarLeavesMotorsUnclaimed) {
+    usbparsers::FeedbackState st;
+    uint8_t out[64];
+    size_t n = usbparsers::buildLightbarReport(Parser::DUALSHOCK4, st, 1, 2, 3, out, sizeof(out));
+    ASSERT_EQ(32u, n);
+    EXPECT_EQ(0x05, out[0]);
+    EXPECT_EQ(0x02, out[1]); // lightbar valid, motors NOT valid
+    EXPECT_EQ(0x00, out[4]);
+    EXPECT_EQ(0x00, out[5]);
+    EXPECT_EQ(1, out[6]);
+    EXPECT_EQ(2, out[7]);
+    EXPECT_EQ(3, out[8]);
+}
+
+TEST(Feedback, DualSenseLightbarSetupHandoffFiresExactlyOnce) {
+    usbparsers::FeedbackState st;
+    uint8_t out[64];
+    size_t n = usbparsers::buildLightbarReport(Parser::DUALSENSE, st, 9, 8, 7, out, sizeof(out));
+    ASSERT_EQ(63u, n);
+    EXPECT_EQ(0x02, out[0]);
+    EXPECT_EQ(0x00, out[1]); // no motor/trigger claims
+    EXPECT_EQ(0x04, out[2]); // valid_flag1 lightbar control
+    EXPECT_EQ(0x02, out[39]); // valid_flag2 LIGHTBAR_SETUP on the first write
+    EXPECT_EQ(0x02, out[42]); // lightbar_setup = LIGHT_OUT
+    EXPECT_EQ(9, out[45]);
+    EXPECT_EQ(8, out[46]);
+    EXPECT_EQ(7, out[47]);
+    EXPECT_TRUE(st.ds5LightbarSetupSent);
+
+    n = usbparsers::buildLightbarReport(Parser::DUALSENSE, st, 1, 1, 1, out, sizeof(out));
+    ASSERT_EQ(63u, n);
+    EXPECT_EQ(0x00, out[39]); // handoff never repeats
+    EXPECT_EQ(0x00, out[42]);
+}
+
+TEST(Feedback, LightbarUnsupportedFamiliesReturnZero) {
+    usbparsers::FeedbackState st;
+    uint8_t out[64];
+    EXPECT_EQ(0u, usbparsers::buildLightbarReport(Parser::XBOX_ONE_GIP, st, 1, 2, 3, out, sizeof(out)));
+    EXPECT_EQ(0u, usbparsers::buildLightbarReport(Parser::SWITCH_PRO_USB, st, 1, 2, 3, out, sizeof(out)));
+    EXPECT_EQ(0u, usbparsers::buildLightbarReport(Parser::XINPUT_360, st, 1, 2, 3, out, sizeof(out)));
+}
+
+TEST(Feedback, DualSensePlayerLedsMaskedToFiveBits) {
+    uint8_t out[64];
+    size_t n = usbparsers::buildPlayerLedsReport(Parser::DUALSENSE, 0xFF, 0, out, sizeof(out));
+    ASSERT_EQ(63u, n);
+    EXPECT_EQ(0x02, out[0]);
+    EXPECT_EQ(0x10, out[2]); // valid_flag1 player-indicator control
+    EXPECT_EQ(0x1F, out[44]);
+}
+
+TEST(Feedback, SwitchPlayerLedsRideNeutralRumbleSubcommand) {
+    uint8_t out[64];
+    size_t n = usbparsers::buildPlayerLedsReport(Parser::SWITCH_PRO_USB, 0xF3, 0x2B, out, sizeof(out));
+    ASSERT_EQ(12u, n);
+    EXPECT_EQ(0x01, out[0]);
+    EXPECT_EQ(0x0B, out[1]); // seq low nibble
+    const uint8_t neutral[4] = {0x00, 0x01, 0x40, 0x40};
+    for (int i = 0; i < 4; i++) {
+        EXPECT_EQ(neutral[i], out[2 + i]) << "left byte " << i;
+        EXPECT_EQ(neutral[i], out[6 + i]) << "right byte " << i;
+    }
+    EXPECT_EQ(0x30, out[10]);
+    EXPECT_EQ(0x03, out[11]); // solid-LED nibble only
+}
+
+TEST(Feedback, TriggerEffectsAreDualSenseOnlyAndByteExact) {
+    uint8_t left[11], right[11];
+    for (int i = 0; i < 11; i++) {
+        left[i] = (uint8_t)(0x60 + i);
+        right[i] = (uint8_t)(0x40 + i);
+    }
+    uint8_t out[64];
+    size_t n = usbparsers::buildTriggerEffectsReport(Parser::DUALSENSE, left, right, out, sizeof(out));
+    ASSERT_EQ(63u, n);
+    EXPECT_EQ(0x02, out[0]);
+    EXPECT_EQ(0x04 | 0x08, out[1]); // right + left trigger-effect claims
+    for (int i = 0; i < 11; i++) {
+        EXPECT_EQ(right[i], out[11 + i]) << "right byte " << i;
+        EXPECT_EQ(left[i], out[22 + i]) << "left byte " << i;
+    }
+    EXPECT_EQ(0u, usbparsers::buildTriggerEffectsReport(Parser::DUALSHOCK4, left, right, out, sizeof(out)));
+    EXPECT_EQ(0u, usbparsers::buildTriggerEffectsReport(Parser::XBOX_ONE_GIP, left, right, out, sizeof(out)));
+}
+
+TEST(FeedbackCapability, PredicatesMatchTheBuilders) {
+    using usbparsers::parserHasLightbar;
+    using usbparsers::parserHasPlayerLeds;
+    using usbparsers::parserHasTriggerEffects;
+    using usbparsers::parserHasTriggerRumble;
+    for (auto p : {Parser::NONE, Parser::XINPUT_360, Parser::XBOX_ONE_GIP, Parser::DUALSHOCK4,
+                   Parser::DUALSENSE, Parser::SWITCH_PRO_USB, Parser::STADIA,
+                   Parser::GENERIC_HID_GAMEPAD, Parser::XINPUT_360_WIRELESS,
+                   Parser::STEAM_CONTROLLER}) {
+        usbparsers::FeedbackState st;
+        uint8_t out[64];
+        uint8_t block[11] = {};
+        EXPECT_EQ(parserHasLightbar(p),
+                  usbparsers::buildLightbarReport(p, st, 0, 0, 0, out, sizeof(out)) != 0)
+            << usbparsers::parserName(p);
+        EXPECT_EQ(parserHasPlayerLeds(p),
+                  usbparsers::buildPlayerLedsReport(p, 0, 0, out, sizeof(out)) != 0)
+            << usbparsers::parserName(p);
+        EXPECT_EQ(parserHasTriggerEffects(p),
+                  usbparsers::buildTriggerEffectsReport(p, block, block, out, sizeof(out)) != 0)
+            << usbparsers::parserName(p);
+    }
+    EXPECT_TRUE(parserHasTriggerRumble(Parser::XBOX_ONE_GIP));
+    EXPECT_FALSE(parserHasTriggerRumble(Parser::DUALSENSE));
+    EXPECT_FALSE(parserHasTriggerRumble(Parser::XINPUT_360));
+    EXPECT_FALSE(parserHasTriggerRumble(Parser::SWITCH_PRO_USB));
+}
+
 // parserHasRumble must agree with which families buildRumbleReport actually emits.
 TEST(RumbleCapability, FamiliesWithBuildersReportTrue) {
     EXPECT_TRUE(parserHasRumble(Parser::XINPUT_360));

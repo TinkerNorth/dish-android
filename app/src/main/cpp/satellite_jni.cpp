@@ -60,6 +60,8 @@ static constexpr uint16_t MSG_BATTERY = 0x000B;
 static constexpr uint16_t MSG_TOUCHPAD = 0x000C;
 static constexpr uint16_t MSG_LIGHTBAR = 0x000D;
 static constexpr uint16_t MSG_SESSION_CLOSE = 0x000F;
+static constexpr uint16_t MSG_TRIGGER_EFFECTS = 0x0010;
+static constexpr uint16_t MSG_PLAYER_LEDS = 0x0011;
 
 // Nonce direction byte: the two directions of one session key never share a
 // nonce (contract §Crypto).
@@ -156,20 +158,34 @@ static jmethodID g_btDispatchMethod = nullptr;
 
 static jclass g_moonlightBridgeClass = nullptr;
 static jmethodID g_moonlightDispatchMethod = nullptr;
+static jmethodID g_moonlightMotionMethod = nullptr;
+static jmethodID g_moonlightTouchMethod = nullptr;
 
 static jclass g_rumbleBridgeClass = nullptr;
 static jmethodID g_rumbleDispatchMethod = nullptr;
+static jclass g_feedbackBridgeClass = nullptr;
+static jmethodID g_feedbackLightbarMethod = nullptr;
+static jmethodID g_feedbackTriggerEffectsMethod = nullptr;
+static jmethodID g_feedbackPlayerLedsMethod = nullptr;
 
 // Bridge kinds (Bluetooth, Moonlight) run off the UI thread: BluetoothHidDevice.sendReport is
 // Binder IPC, and the Moonlight path encrypts + frames in Kotlin. One queue + thread serves both;
 // the report's kind picks the Kotlin bridge to upcall.
 struct BridgeReport {
     SlotKind kind;
+    // What the report carries: the Moonlight lane also ferries motion and
+    // touch samples off the USB reader thread (Bluetooth stays gamepad-only).
+    enum Payload : uint8_t { GAMEPAD = 0, MOTION = 1, TOUCH = 2 };
+    Payload payload = GAMEPAD;
     std::string connectionId;
     int32_t controllerNumber;
     uint16_t wButtons;
     uint8_t bLT, bRT;
     int16_t sLX, sLY, sRX, sRY;
+    int16_t gyro[3];
+    int16_t accel[3];
+    uint32_t timestampDeltaUs;
+    gamepad::TouchpadState touch;
 };
 
 static std::mutex g_bridgeQueueMtx;
@@ -212,11 +228,26 @@ static void bridgeDispatchLoop() {
         jclass cls = r.kind == SLOT_MOONLIGHT ? g_moonlightBridgeClass : g_btBridgeClass;
         jmethodID method =
             r.kind == SLOT_MOONLIGHT ? g_moonlightDispatchMethod : g_btDispatchMethod;
+        if (r.kind == SLOT_MOONLIGHT && r.payload == BridgeReport::MOTION)
+            method = g_moonlightMotionMethod;
+        if (r.kind == SLOT_MOONLIGHT && r.payload == BridgeReport::TOUCH)
+            method = g_moonlightTouchMethod;
         if (cls == nullptr || method == nullptr) continue;
         jstring connId = env->NewStringUTF(r.connectionId.c_str());
         // A Moonlight session carries up to four pads on one stream, so its upcall also
         // names which pad the report belongs to; the Bluetooth link is one pad by nature.
-        if (r.kind == SLOT_MOONLIGHT) {
+        if (r.kind == SLOT_MOONLIGHT && r.payload == BridgeReport::MOTION) {
+            env->CallStaticVoidMethod(cls, method, connId, (jint)r.controllerNumber,
+                                      (jint)r.gyro[0], (jint)r.gyro[1], (jint)r.gyro[2],
+                                      (jint)r.accel[0], (jint)r.accel[1], (jint)r.accel[2],
+                                      (jint)r.timestampDeltaUs);
+        } else if (r.kind == SLOT_MOONLIGHT && r.payload == BridgeReport::TOUCH) {
+            env->CallStaticVoidMethod(
+                cls, method, connId, (jint)r.controllerNumber, (jboolean)r.touch.f0Active,
+                (jint)r.touch.f0Id, (jint)r.touch.f0X, (jint)r.touch.f0Y,
+                (jboolean)r.touch.f1Active, (jint)r.touch.f1Id, (jint)r.touch.f1X,
+                (jint)r.touch.f1Y, (jboolean)r.touch.clickDown);
+        } else if (r.kind == SLOT_MOONLIGHT) {
             env->CallStaticVoidMethod(cls, method, connId, (jint)r.controllerNumber,
                                       (jint)r.wButtons, (jint)r.bLT, (jint)r.bRT, (jint)r.sLX,
                                       (jint)r.sLY, (jint)r.sRX, (jint)r.sRY);
@@ -270,18 +301,19 @@ static void publishIfChanged(int32_t deviceId, DeviceState& s) {
         hotpath::markGamepadSent(); // stage-1 end: the URB-driven packet has left sendto()
     } else if (binding.kind == SLOT_BLUETOOTH || binding.kind == SLOT_MOONLIGHT) {
         if (binding.bridgeConnectionId.empty()) return;
-        enqueueBridgeReport(BridgeReport{
-            binding.kind,
-            binding.bridgeConnectionId,
-            binding.controllerIndex,
-            s.wButtons,
-            s.bLT,
-            s.bRT,
-            s.sLX,
-            s.sLY,
-            s.sRX,
-            s.sRY,
-        });
+        BridgeReport r{};
+        r.kind = binding.kind;
+        r.payload = BridgeReport::GAMEPAD;
+        r.connectionId = binding.bridgeConnectionId;
+        r.controllerNumber = binding.controllerIndex;
+        r.wButtons = s.wButtons;
+        r.bLT = s.bLT;
+        r.bRT = s.bRT;
+        r.sLX = s.sLX;
+        r.sLY = s.sLY;
+        r.sRX = s.sRX;
+        r.sRY = s.sRY;
+        enqueueBridgeReport(std::move(r));
     }
 }
 
@@ -379,6 +411,25 @@ void applyUsbMotion(int32_t deviceId, int16_t gyroX, int16_t gyroY, int16_t gyro
     auto it = g_slots.find(deviceId);
     if (it == g_slots.end()) return;
     const SlotBinding& binding = it->second;
+    if (binding.kind == SLOT_MOONLIGHT) {
+        // Kotlin translates to CONTROLLER_MOTION and drops samples the host
+        // never asked for (MOTION_EVENT gate), so this stays fire-and-forget.
+        if (binding.bridgeConnectionId.empty()) return;
+        BridgeReport r{};
+        r.kind = SLOT_MOONLIGHT;
+        r.payload = BridgeReport::MOTION;
+        r.connectionId = binding.bridgeConnectionId;
+        r.controllerNumber = binding.controllerIndex;
+        r.gyro[0] = gyroX;
+        r.gyro[1] = gyroY;
+        r.gyro[2] = gyroZ;
+        r.accel[0] = accelX;
+        r.accel[1] = accelY;
+        r.accel[2] = accelZ;
+        r.timestampDeltaUs = timestampDeltaUs;
+        enqueueBridgeReport(std::move(r));
+        return;
+    }
     if (binding.kind != SLOT_SATELLITE) return;
     auto session = getSession(binding.sessionHandle);
     if (!session) return;
@@ -388,14 +439,27 @@ void applyUsbMotion(int32_t deviceId, int16_t gyroX, int16_t gyroY, int16_t gyro
     sendEncrypted(session.get(), MSG_MOTION, payload, sizeof(payload));
 }
 
-// Satellite-only like motion: the Bluetooth HID descriptor is a plain gamepad, so touch has
-// nowhere to go on that transport. Routing (ds4 pad vs mouse vs off) is the receiver's job,
-// declared per slot in the descriptor.
+// The Bluetooth HID descriptor is a plain gamepad, so touch has nowhere to go on that
+// transport. Satellite gets the full-state frame; Moonlight gets it via the bridge, where
+// Kotlin diffs it into CONTROLLER_TOUCH events. Routing (ds4 pad vs mouse vs off) is the
+// satellite receiver's job, declared per slot in the descriptor.
 void applyUsbTouchpad(int32_t deviceId, const gamepad::TouchpadState& t, uint32_t eventTimeMs) {
     std::lock_guard<std::mutex> lock(g_slotsMtx);
     auto it = g_slots.find(deviceId);
     if (it == g_slots.end()) return;
     const SlotBinding& binding = it->second;
+    if (binding.kind == SLOT_MOONLIGHT) {
+        if (binding.bridgeConnectionId.empty()) return;
+        BridgeReport r{};
+        r.kind = SLOT_MOONLIGHT;
+        r.payload = BridgeReport::TOUCH;
+        r.connectionId = binding.bridgeConnectionId;
+        r.controllerNumber = binding.controllerIndex;
+        r.touch = t;
+        (void)eventTimeMs; // events are re-timed by the reliable control stream
+        enqueueBridgeReport(std::move(r));
+        return;
+    }
     if (binding.kind != SLOT_SATELLITE) return;
     auto session = getSession(binding.sessionHandle);
     if (!session) return;
@@ -920,11 +984,34 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiv
                                   strong, weakMag, durMs);
         if (env->ExceptionCheck()) env->ExceptionClear();
     } else if (msgType == MSG_LIGHTBAR && msgLen == 4 && decLen >= 8) {
-        // Android has no controller-LED API; decode and drop (dish-android does not advertise
-        // CAP_LIGHTBAR).
+        // Routed like rumble: the FeedbackRouter lands it on a Direct-claimed
+        // DS4/DualSense; every other target has no LED sink and drops it.
+        if (g_feedbackBridgeClass == nullptr || g_feedbackLightbarMethod == nullptr) return 1;
         const dish_wire::LightbarPayload lb = dish_wire::decodeLightbarPayload(decrypted + 4);
-        LOGI("Session %d lightbar (no LED API on Android, dropping): idx=%d rgb=%02X%02X%02X",
-             handle, lb.ctrlIdx, lb.r, lb.g, lb.b);
+        env->CallStaticVoidMethod(g_feedbackBridgeClass, g_feedbackLightbarMethod, handle,
+                                  (jint)lb.ctrlIdx, (jint)lb.r, (jint)lb.g, (jint)lb.b);
+        if (env->ExceptionCheck()) env->ExceptionClear();
+    } else if (msgType == MSG_TRIGGER_EFFECTS &&
+               msgLen == 1 + dish_wire::TRIGGER_EFFECTS_PAYLOAD_BYTES &&
+               decLen >= (unsigned long long)(4 + 1 + dish_wire::TRIGGER_EFFECTS_PAYLOAD_BYTES)) {
+        if (g_feedbackBridgeClass == nullptr || g_feedbackTriggerEffectsMethod == nullptr) return 1;
+        const jint ctrlIdx = (jint)decrypted[4];
+        jbyteArray blocks = env->NewByteArray(dish_wire::TRIGGER_EFFECTS_PAYLOAD_BYTES);
+        if (blocks == nullptr) {
+            if (env->ExceptionCheck()) env->ExceptionClear();
+            return 1;
+        }
+        env->SetByteArrayRegion(blocks, 0, dish_wire::TRIGGER_EFFECTS_PAYLOAD_BYTES,
+                                (const jbyte*)(decrypted + 5));
+        env->CallStaticVoidMethod(g_feedbackBridgeClass, g_feedbackTriggerEffectsMethod, handle,
+                                  ctrlIdx, blocks);
+        env->DeleteLocalRef(blocks);
+        if (env->ExceptionCheck()) env->ExceptionClear();
+    } else if (msgType == MSG_PLAYER_LEDS && msgLen == 2 && decLen >= 6) {
+        if (g_feedbackBridgeClass == nullptr || g_feedbackPlayerLedsMethod == nullptr) return 1;
+        env->CallStaticVoidMethod(g_feedbackBridgeClass, g_feedbackPlayerLedsMethod, handle,
+                                  (jint)decrypted[4], (jint)decrypted[5]);
+        if (env->ExceptionCheck()) env->ExceptionClear();
     }
     return 1;
 }
@@ -1143,6 +1230,22 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_hotpath_input_MoonlightGamepadB
             env->ExceptionClear();
         }
     }
+    if (g_moonlightMotionMethod == nullptr) {
+        g_moonlightMotionMethod = env->GetStaticMethodID(g_moonlightBridgeClass, "dispatchMotion",
+                                                         "(Ljava/lang/String;IIIIIIII)V");
+        if (g_moonlightMotionMethod == nullptr) {
+            LOGE("MoonlightGamepadBridge.dispatchMotion not found");
+            env->ExceptionClear();
+        }
+    }
+    if (g_moonlightTouchMethod == nullptr) {
+        g_moonlightTouchMethod = env->GetStaticMethodID(g_moonlightBridgeClass, "dispatchTouch",
+                                                        "(Ljava/lang/String;IZIIIZIIIZ)V");
+        if (g_moonlightTouchMethod == nullptr) {
+            LOGE("MoonlightGamepadBridge.dispatchTouch not found");
+            env->ExceptionClear();
+        }
+    }
     startBridgeDispatchThread();
 }
 
@@ -1187,6 +1290,65 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendUs
                         (uint16_t)(weak & 0xFFFF));
 }
 
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_hotpath_input_FeedbackBridge_nativeInstall(JNIEnv* env, jclass cls) {
+    if (g_feedbackBridgeClass == nullptr) {
+        g_feedbackBridgeClass = (jclass)env->NewGlobalRef(cls);
+    }
+    if (g_feedbackLightbarMethod == nullptr) {
+        g_feedbackLightbarMethod =
+            env->GetStaticMethodID(g_feedbackBridgeClass, "dispatchLightbar", "(IIIII)V");
+        if (g_feedbackLightbarMethod == nullptr) {
+            LOGE("FeedbackBridge.dispatchLightbar not found");
+            env->ExceptionClear();
+        }
+    }
+    if (g_feedbackTriggerEffectsMethod == nullptr) {
+        g_feedbackTriggerEffectsMethod =
+            env->GetStaticMethodID(g_feedbackBridgeClass, "dispatchTriggerEffects", "(II[B)V");
+        if (g_feedbackTriggerEffectsMethod == nullptr) {
+            LOGE("FeedbackBridge.dispatchTriggerEffects not found");
+            env->ExceptionClear();
+        }
+    }
+    if (g_feedbackPlayerLedsMethod == nullptr) {
+        g_feedbackPlayerLedsMethod =
+            env->GetStaticMethodID(g_feedbackBridgeClass, "dispatchPlayerLeds", "(III)V");
+        if (g_feedbackPlayerLedsMethod == nullptr) {
+            LOGE("FeedbackBridge.dispatchPlayerLeds not found");
+            env->ExceptionClear();
+        }
+    }
+}
+
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendUsbTriggerRumble(
+    JNIEnv*, jobject, jint syntheticDeviceId, jint leftMag, jint rightMag) {
+    usbhost::sendTriggerRumble((int32_t)syntheticDeviceId, (uint16_t)(leftMag & 0xFFFF),
+                               (uint16_t)(rightMag & 0xFFFF));
+}
+
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendUsbLightbar(
+    JNIEnv*, jobject, jint syntheticDeviceId, jint r, jint g, jint b) {
+    usbhost::sendLightbar((int32_t)syntheticDeviceId, (uint8_t)(r & 0xFF), (uint8_t)(g & 0xFF),
+                          (uint8_t)(b & 0xFF));
+}
+
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendUsbPlayerLeds(
+    JNIEnv*, jobject, jint syntheticDeviceId, jint ledMask) {
+    usbhost::sendPlayerLeds((int32_t)syntheticDeviceId, (uint8_t)(ledMask & 0xFF));
+}
+
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendUsbTriggerEffects(
+    JNIEnv* env, jobject, jint syntheticDeviceId, jbyteArray blocks) {
+    if (blocks == nullptr) return;
+    if (env->GetArrayLength(blocks) < 2 * usbparsers::TRIGGER_EFFECT_BLOCK_LEN) return;
+    uint8_t buf[2 * usbparsers::TRIGGER_EFFECT_BLOCK_LEN];
+    env->GetByteArrayRegion(blocks, 0, sizeof(buf), (jbyte*)buf);
+    // Wire order left then right (contract 0x0010).
+    usbhost::sendTriggerEffects((int32_t)syntheticDeviceId, buf,
+                                buf + usbparsers::TRIGGER_EFFECT_BLOCK_LEN);
+}
+
 JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_lookupKnownModelName(
     JNIEnv* env, jobject, jint vid, jint pid) {
     const usbparsers::KnownDevice* k =
@@ -1225,6 +1387,39 @@ JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_mo
         usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
     if (!k) return JNI_FALSE;
     return usbparsers::parserHasRumble(k->parser) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_modelHasLightbar(
+    JNIEnv*, jobject, jint vid, jint pid) {
+    const usbparsers::KnownDevice* k =
+        usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
+    if (!k) return JNI_FALSE;
+    return usbparsers::parserHasLightbar(k->parser) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_modelHasPlayerLeds(
+    JNIEnv*, jobject, jint vid, jint pid) {
+    const usbparsers::KnownDevice* k =
+        usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
+    if (!k) return JNI_FALSE;
+    return usbparsers::parserHasPlayerLeds(k->parser) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_tinkernorth_dish_core_jni_SatelliteNative_modelHasTriggerEffects(JNIEnv*, jobject,
+                                                                          jint vid, jint pid) {
+    const usbparsers::KnownDevice* k =
+        usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
+    if (!k) return JNI_FALSE;
+    return usbparsers::parserHasTriggerEffects(k->parser) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_modelHasTriggerRumble(
+    JNIEnv*, jobject, jint vid, jint pid) {
+    const usbparsers::KnownDevice* k =
+        usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
+    if (!k) return JNI_FALSE;
+    return usbparsers::parserHasTriggerRumble(k->parser) ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_modelHasTouchpad(

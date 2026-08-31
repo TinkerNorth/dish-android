@@ -103,6 +103,11 @@
     <string name="setup_cap_rumble">Vibracija</string>
     <string name="setup_cap_motion">Pokret / žiro</string>
     <string name="setup_cap_touchpad">Dodirna ploča</string>
+    <string name="setup_cap_battery">Baterija</string>
+    <string name="setup_cap_lightbar">Svjetlosna traka</string>
+    <string name="setup_cap_trigger_rumble">Vibracija okidača</string>
+    <string name="setup_cap_trigger_effects">Adaptivni okidači</string>
+    <string name="setup_cap_player_leds">LED igrača</string>
     <string name="setup_cap_available">Dostupno</string>
     <string name="setup_cap_off">Isključeno</string>
     <string name="setup_cap_input">Unos</string>

@@ -110,8 +110,12 @@ object MoonlightEmulatedType {
             BASE_BUTTONS
         }
 
+    // Trigger rumble and battery describe the PHYSICAL pad's surfaces, not the
+    // emulated identity, so every type may carry them (moonlight-qt advertises the
+    // same way); the source bits decide whether they actually ride.
     private const val BASE_MAXIMUM =
-        MoonlightControlProtocol.CAP_ANALOG_TRIGGERS or MoonlightControlProtocol.CAP_RUMBLE
+        MoonlightControlProtocol.CAP_ANALOG_TRIGGERS or MoonlightControlProtocol.CAP_RUMBLE or
+            MoonlightControlProtocol.CAP_TRIGGER_RUMBLE or MoonlightControlProtocol.CAP_BATTERY
 
     private const val PLAYSTATION_MAXIMUM = 0xFF
 

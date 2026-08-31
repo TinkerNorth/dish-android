@@ -25,4 +25,13 @@ uint64_t getMotionCount(int32_t deviceId);
 
 void sendRumble(int32_t syntheticDeviceId, uint16_t strong, uint16_t weak);
 
+void sendTriggerRumble(int32_t syntheticDeviceId, uint16_t left, uint16_t right);
+
+void sendLightbar(int32_t syntheticDeviceId, uint8_t r, uint8_t g, uint8_t b);
+
+void sendPlayerLeds(int32_t syntheticDeviceId, uint8_t ledMask);
+
+// left/right are the raw 11-byte DualSense trigger-effect blocks.
+void sendTriggerEffects(int32_t syntheticDeviceId, const uint8_t* left, const uint8_t* right);
+
 } // namespace usbhost

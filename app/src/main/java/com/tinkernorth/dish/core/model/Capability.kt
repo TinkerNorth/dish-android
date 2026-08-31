@@ -24,11 +24,26 @@ enum class Feature(
     // Host-gated via hostFeatures.keyboardControl; modeled but never user-offered
     // (no phone-side source).
     KEYBOARD(Direction.SEND, null),
+
+    // Battery reporting has no satellite catalog slug (it is always accepted there);
+    // over Moonlight it maps to CAP_BATTERY in the arrival advertisement.
+    BATTERY(Direction.SEND, null),
     RUMBLE(Direction.RECEIVE, "rumble"),
 
-    // Modeled for a complete type/host view, but Android exposes no LED sink, so the
-    // controller layer never produces it and it is never offered locally.
+    // Xbox One impulse-trigger motors. Moonlight-only on the wire (RUMBLE_TRIGGERS);
+    // the satellite protocol has no source for it, so its transport crosses it out.
+    TRIGGER_RUMBLE(Direction.RECEIVE, null),
+
+    // Actuated on a Direct-claimed DS4/DualSense; the framework exposes no controller
+    // LED, so framework-path pads and the phone never produce it.
     LIGHTBAR(Direction.RECEIVE, "lightbar"),
+
+    // DualSense adaptive-trigger effect blocks, replayed verbatim into a Direct-claimed
+    // physical DualSense (satellite MSG_TRIGGER_EFFECTS only).
+    TRIGGER_EFFECTS(Direction.RECEIVE, "triggerEffects"),
+
+    // Player-indicator LEDs (DualSense bar, Switch Pro lights), Direct path only.
+    PLAYER_LEDS(Direction.RECEIVE, "playerLeds"),
 }
 
 @JvmInline
@@ -107,13 +122,19 @@ data class HostFeatureSet(
     val compat: DishProtocol.Compat get() = DishProtocol.compatFor(protocolVersion.takeIf { it > 0 })
 
     fun toCapabilitySet(): CapabilitySet {
+        // The per-type surfaces (lightbar/triggerEffects/playerLeds) are the type
+        // layer's job; the host layer passes them so a capable type is not crossed
+        // out by a host that gates them per backend.
         val out =
             mutableSetOf(
                 Feature.GAMEPAD,
                 Feature.ANALOG_TRIGGERS,
                 Feature.MOTION,
                 Feature.TOUCHPAD,
+                Feature.BATTERY,
                 Feature.LIGHTBAR,
+                Feature.TRIGGER_EFFECTS,
+                Feature.PLAYER_LEDS,
             )
         if (mouseControl) out += Feature.MOUSE
         if (keyboardControl) out += Feature.KEYBOARD

@@ -32,6 +32,24 @@ object MoonlightControlProtocol {
     const val INPUT_MOUSE_SCROLL = 0x0000000A
     const val INPUT_CONTROLLER_MULTI = 0x0000000C
     const val INPUT_CONTROLLER_ARRIVAL = 0x55000004
+    const val INPUT_CONTROLLER_TOUCH = 0x55000005
+    const val INPUT_CONTROLLER_MOTION = 0x55000006
+    const val INPUT_CONTROLLER_BATTERY = 0x55000007
+
+    // TOUCH_EVENT_TYPE (control.hpp), shared by the touchscreen, pen and
+    // controller-touch packets; the controller path uses DOWN/MOVE/UP only.
+    const val TOUCH_EVENT_DOWN = 0x01
+    const val TOUCH_EVENT_UP = 0x02
+    const val TOUCH_EVENT_MOVE = 0x03
+
+    // BATTERY_STATE (control.hpp), one byte on the wire.
+    const val BATTERY_STATE_UNKNOWN = 0x00
+    const val BATTERY_NOT_PRESENT = 0x01
+    const val BATTERY_DISCHARGING = 0x02
+    const val BATTERY_CHARGING = 0x03
+    const val BATTERY_NOT_CHARGING = 0x04
+    const val BATTERY_FULL = 0x05
+    const val BATTERY_PERCENTAGE_UNKNOWN = 0xFF
 
     // MOUSE_BUTTON_DOWN/UP button ids (Wolf control.hpp MOUSE_BUTTON_*).
     const val MOUSE_BUTTON_LEFT = 0x01

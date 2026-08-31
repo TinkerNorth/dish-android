@@ -6,6 +6,9 @@ import com.tinkernorth.dish.architecture.abstracts.AbstractComposer
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.connection.TelemetrySink
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -22,23 +25,25 @@ class PhysicalReachabilityComposer
         private val registry: PhysicalGamepadRegistry,
         private val hub: ConnectionCoordinator,
         private val satellite: SatelliteConnectionManager,
+        private val moonlight: MoonlightConnectionManager,
         scope: CoroutineScope,
-    ) : AbstractComposer<Map<String, SatelliteConnection>>(scope, emptyMap()) {
+    ) : AbstractComposer<Map<String, TelemetrySink>>(scope, emptyMap()) {
         @OptIn(ExperimentalCoroutinesApi::class)
-        override fun upstream(): Flow<Map<String, SatelliteConnection>> =
-            satellite.connections.flatMapLatest { conns ->
-                // Outer map only re-emits on add/remove; fold each slot table so post-CONNECT
-                // registrations (every auto-reconnect) are picked up.
-                val slotFlows = conns.values.map { it.slots }
-                val slotsTrigger: Flow<Unit> =
-                    if (slotFlows.isEmpty()) flowOf(Unit) else combine(slotFlows) { }
+        override fun upstream(): Flow<Map<String, TelemetrySink>> =
+            combine(satellite.connections, moonlight.connections, ::Pair).flatMapLatest { (satConns, moonConns) ->
+                // Outer maps only re-emit on add/remove; fold each slot/pad table so
+                // post-CONNECT registrations (every auto-reconnect) are picked up.
+                val innerFlows: List<Flow<Any>> =
+                    satConns.values.map { it.slots } + moonConns.values.map { it.pads }
+                val innerTrigger: Flow<Unit> =
+                    if (innerFlows.isEmpty()) flowOf(Unit) else combine(innerFlows) { }
                 combine(
                     registry.devices,
                     hub.bindings,
                     hub.connections,
-                    slotsTrigger,
+                    innerTrigger,
                 ) { devs, binds, summ, _ ->
-                    resolve(devs.keys, binds, summ, conns)
+                    resolve(devs.keys, binds, summ, satConns, moonConns)
                 }
             }
 
@@ -48,14 +53,38 @@ class PhysicalReachabilityComposer
                 bindings: Map<String, String>,
                 summaries: List<ConnectionSummary>,
                 connections: Map<String, SatelliteConnection>,
-            ): Map<String, SatelliteConnection> {
+                moonlightConnections: Map<String, MoonlightConnection> = emptyMap(),
+            ): Map<String, TelemetrySink> {
                 val summariesById = summaries.associateBy { it.id }
                 return deviceIds
                     .map { it.toString() }
                     .mapNotNull { slotId ->
-                        connectionFor(slotId, bindings, summariesById, connections)
+                        sinkFor(slotId, bindings, summariesById, connections, moonlightConnections)
                             ?.let { slotId to it }
                     }.toMap()
+            }
+
+            fun sinkFor(
+                slotId: String,
+                bindings: Map<String, String>,
+                summariesById: Map<String, ConnectionSummary>,
+                connections: Map<String, SatelliteConnection>,
+                moonlightConnections: Map<String, MoonlightConnection> = emptyMap(),
+            ): TelemetrySink? {
+                val cid = bindings[slotId] ?: return null
+                val summary = summariesById[cid] ?: return null
+                if (summary.live != LinkState.Connected) return null
+                return when (summary.kind) {
+                    ConnectionKind.SATELLITE ->
+                        connections[cid]?.takeIf { it.slots.value[slotId]?.registered == true }
+                    // A Moonlight sink is reachable once the pad is announced on the
+                    // live control stream; the connection itself gates motion on the
+                    // host's MOTION_EVENT request.
+                    ConnectionKind.MOONLIGHT ->
+                        moonlightConnections[cid]?.takeIf { it.padFor(slotId) != null }
+                    // The Bluetooth HID descriptor is a plain gamepad: no telemetry lane.
+                    ConnectionKind.BLUETOOTH -> null
+                }
             }
 
             fun connectionFor(
@@ -63,16 +92,7 @@ class PhysicalReachabilityComposer
                 bindings: Map<String, String>,
                 summariesById: Map<String, ConnectionSummary>,
                 connections: Map<String, SatelliteConnection>,
-            ): SatelliteConnection? {
-                val cid = bindings[slotId] ?: return null
-                val summary = summariesById[cid] ?: return null
-                val onLiveSatellite =
-                    summary.kind == ConnectionKind.SATELLITE &&
-                        summary.live == LinkState.Connected
-                if (!onLiveSatellite) return null
-                val conn = connections[cid] ?: return null
-                return conn.takeIf { it.slots.value[slotId]?.registered == true }
-            }
+            ): SatelliteConnection? = sinkFor(slotId, bindings, summariesById, connections) as? SatelliteConnection
         }
     }
 
@@ -87,13 +107,15 @@ internal object PhysicalReachability {
         bindings: Flow<Map<String, String>>,
         summaries: Flow<List<ConnectionSummary>>,
         connections: Flow<Map<String, SatelliteConnection>>,
-    ): Flow<Map<String, SatelliteConnection>> =
-        connections.flatMapLatest { conns ->
-            val slotFlows = conns.values.map { it.slots }
-            val slotsTrigger: Flow<Unit> =
-                if (slotFlows.isEmpty()) flowOf(Unit) else combine(slotFlows) { }
-            combine(devices, bindings, summaries, slotsTrigger) { devs, binds, summ, _ ->
-                PhysicalReachabilityComposer.resolve(devs.keys, binds, summ, conns)
+        moonlightConnections: Flow<Map<String, MoonlightConnection>> = flowOf(emptyMap()),
+    ): Flow<Map<String, TelemetrySink>> =
+        combine(connections, moonlightConnections, ::Pair).flatMapLatest { (satConns, moonConns) ->
+            val innerFlows: List<Flow<Any>> =
+                satConns.values.map { it.slots } + moonConns.values.map { it.pads }
+            val innerTrigger: Flow<Unit> =
+                if (innerFlows.isEmpty()) flowOf(Unit) else combine(innerFlows) { }
+            combine(devices, bindings, summaries, innerTrigger) { devs, binds, summ, _ ->
+                PhysicalReachabilityComposer.resolve(devs.keys, binds, summ, satConns, moonConns)
             }
         }
 
@@ -102,7 +124,7 @@ internal object PhysicalReachability {
         bindings: Map<String, String>,
         summaries: List<ConnectionSummary>,
         connections: Map<String, SatelliteConnection>,
-    ): Map<String, SatelliteConnection> = PhysicalReachabilityComposer.resolve(deviceIds, bindings, summaries, connections)
+    ): Map<String, TelemetrySink> = PhysicalReachabilityComposer.resolve(deviceIds, bindings, summaries, connections)
 
     fun connectionFor(
         slotId: String,

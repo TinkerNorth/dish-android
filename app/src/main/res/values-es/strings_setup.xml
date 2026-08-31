@@ -103,6 +103,11 @@
     <string name="setup_cap_rumble">Vibración</string>
     <string name="setup_cap_motion">Movimiento / giro</string>
     <string name="setup_cap_touchpad">Panel táctil</string>
+    <string name="setup_cap_battery">Batería</string>
+    <string name="setup_cap_lightbar">Barra de luz</string>
+    <string name="setup_cap_trigger_rumble">Vibración de gatillos</string>
+    <string name="setup_cap_trigger_effects">Gatillos adaptativos</string>
+    <string name="setup_cap_player_leds">LED de jugador</string>
     <string name="setup_cap_available">Disponible</string>
     <string name="setup_cap_off">Apagado</string>
     <string name="setup_cap_input">Entrada</string>

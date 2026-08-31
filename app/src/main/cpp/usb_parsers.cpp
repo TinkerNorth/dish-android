@@ -1418,6 +1418,110 @@ size_t buildRumbleReport(Parser p, uint16_t strong, uint16_t weak, uint8_t seq, 
     return 0;
 }
 
+bool parserHasLightbar(Parser p) { return p == Parser::DUALSHOCK4 || p == Parser::DUALSENSE; }
+
+bool parserHasPlayerLeds(Parser p) { return p == Parser::DUALSENSE || p == Parser::SWITCH_PRO_USB; }
+
+bool parserHasTriggerEffects(Parser p) { return p == Parser::DUALSENSE; }
+
+bool parserHasTriggerRumble(Parser p) { return p == Parser::XBOX_ONE_GIP; }
+
+size_t buildMergedRumbleReport(Parser p, FeedbackState& st, uint8_t seq, uint8_t* out,
+                               size_t outCap) {
+    if (p != Parser::XBOX_ONE_GIP)
+        return buildRumbleReport(p, st.strong, st.weak, seq, out, outCap);
+    // GIP: one report drives all four motors (mask 0x0F), so the merged state rides every write;
+    // a trigger-only change must not zero the main motors and vice versa.
+    if (outCap < 13) return 0;
+    out[0] = 0x09;
+    out[1] = 0x00;
+    out[2] = seq;
+    out[3] = 0x09;
+    out[4] = 0x00;
+    out[5] = 0x0F;
+    out[6] = (uint8_t)(st.leftTrigger / 512);
+    out[7] = (uint8_t)(st.rightTrigger / 512);
+    out[8] = (uint8_t)(st.strong / 512);
+    out[9] = (uint8_t)(st.weak / 512);
+    out[10] = 0xFF;
+    out[11] = 0x00;
+    out[12] = 0xFF;
+    return 13;
+}
+
+size_t buildLightbarReport(Parser p, FeedbackState& st, uint8_t r, uint8_t g, uint8_t b,
+                           uint8_t* out, size_t outCap) {
+    switch (p) {
+    case Parser::DUALSHOCK4:
+        // Flag 0x02 alone: the motor fields are marked invalid, so a colour write never stomps a
+        // live rumble.
+        if (outCap < 32) return 0;
+        memset(out, 0, 32);
+        out[0] = 0x05;
+        out[1] = 0x02;
+        out[6] = r;
+        out[7] = g;
+        out[8] = b;
+        return 32;
+    case Parser::DUALSENSE:
+        if (outCap < 63) return 0;
+        memset(out, 0, 63);
+        out[0] = 0x02;
+        out[2] = 0x04; // valid_flag1 LIGHTBAR_CONTROL_ENABLE
+        if (!st.ds5LightbarSetupSent) {
+            // One-time handoff (hid-playstation does the same at probe): LIGHTBAR_SETUP light-out
+            // stops the firmware's own blue glow so the host colour actually shows.
+            out[39] = 0x02; // valid_flag2 LIGHTBAR_SETUP_CONTROL_ENABLE
+            out[42] = 0x02; // lightbar_setup = LIGHT_OUT
+            st.ds5LightbarSetupSent = true;
+        }
+        out[45] = r;
+        out[46] = g;
+        out[47] = b;
+        return 63;
+    default:
+        return 0;
+    }
+}
+
+size_t buildPlayerLedsReport(Parser p, uint8_t ledMask, uint8_t seq, uint8_t* out, size_t outCap) {
+    switch (p) {
+    case Parser::DUALSENSE:
+        if (outCap < 63) return 0;
+        memset(out, 0, 63);
+        out[0] = 0x02;
+        out[2] = 0x10; // valid_flag1 PLAYER_INDICATOR_CONTROL_ENABLE
+        out[44] = (uint8_t)(ledMask & 0x1F);
+        return 63;
+    case Parser::SWITCH_PRO_USB:
+        // Subcommand 0x30 rides the 0x01 rumble+subcommand report; neutral HD-rumble blocks keep
+        // the motors untouched.
+        if (outCap < 12) return 0;
+        out[0] = 0x01;
+        out[1] = (uint8_t)(seq & 0x0F);
+        switchEncodeMotor(&out[2], 0);
+        switchEncodeMotor(&out[6], 0);
+        out[10] = 0x30;
+        out[11] = (uint8_t)(ledMask & 0x0F);
+        return 12;
+    default:
+        return 0;
+    }
+}
+
+size_t buildTriggerEffectsReport(Parser p, const uint8_t left[TRIGGER_EFFECT_BLOCK_LEN],
+                                 const uint8_t right[TRIGGER_EFFECT_BLOCK_LEN], uint8_t* out,
+                                 size_t outCap) {
+    if (p != Parser::DUALSENSE) return 0;
+    if (outCap < 63) return 0;
+    memset(out, 0, 63);
+    out[0] = 0x02;
+    out[1] = 0x04 | 0x08; // valid_flag0: right + left trigger-effect blocks
+    memcpy(out + 11, right, TRIGGER_EFFECT_BLOCK_LEN);
+    memcpy(out + 22, left, TRIGGER_EFFECT_BLOCK_LEN);
+    return 63;
+}
+
 #ifdef __ANDROID__
 bool runInit(int fd, int interfaceNumber, uint8_t epOut, Parser p, InitKind init) {
     switch (init) {
@@ -1521,6 +1625,41 @@ bool runRumble(int fd, uint8_t epOut, Parser p, uint16_t strong, uint16_t weak, 
     if (epOut == 0) return false;
     uint8_t buf[64];
     size_t n = buildRumbleReport(p, strong, weak, seq, buf, sizeof(buf));
+    if (n == 0) return false;
+    return bulkWrite(fd, epOut, buf, n, 100);
+}
+
+bool runMergedRumble(int fd, uint8_t epOut, Parser p, FeedbackState& st, uint8_t seq) {
+    if (epOut == 0) return false;
+    uint8_t buf[64];
+    size_t n = buildMergedRumbleReport(p, st, seq, buf, sizeof(buf));
+    if (n == 0) return false;
+    return bulkWrite(fd, epOut, buf, n, 100);
+}
+
+bool runLightbar(int fd, uint8_t epOut, Parser p, FeedbackState& st, uint8_t r, uint8_t g,
+                 uint8_t b) {
+    if (epOut == 0) return false;
+    uint8_t buf[64];
+    size_t n = buildLightbarReport(p, st, r, g, b, buf, sizeof(buf));
+    if (n == 0) return false;
+    return bulkWrite(fd, epOut, buf, n, 100);
+}
+
+bool runPlayerLeds(int fd, uint8_t epOut, Parser p, uint8_t ledMask, uint8_t seq) {
+    if (epOut == 0) return false;
+    uint8_t buf[64];
+    size_t n = buildPlayerLedsReport(p, ledMask, seq, buf, sizeof(buf));
+    if (n == 0) return false;
+    return bulkWrite(fd, epOut, buf, n, 100);
+}
+
+bool runTriggerEffects(int fd, uint8_t epOut, Parser p,
+                       const uint8_t left[TRIGGER_EFFECT_BLOCK_LEN],
+                       const uint8_t right[TRIGGER_EFFECT_BLOCK_LEN]) {
+    if (epOut == 0) return false;
+    uint8_t buf[64];
+    size_t n = buildTriggerEffectsReport(p, left, right, buf, sizeof(buf));
     if (n == 0) return false;
     return bulkWrite(fd, epOut, buf, n, 100);
 }

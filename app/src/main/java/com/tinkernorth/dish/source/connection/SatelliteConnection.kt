@@ -49,7 +49,7 @@ class SatelliteConnection(
     // per-controller routes so the session (and its UDP keys) never churns.
     private val onSlotChanged: (slotId: String) -> Unit = {},
     private val onSlotRemoved: (ctrlIdx: Int) -> Unit = {},
-) {
+) : TelemetrySink {
     private val _server = MutableStateFlow(server)
     val server: StateFlow<DiscoveredServer> = _server.asStateFlow()
 
@@ -471,7 +471,7 @@ class SatelliteConnection(
     }
 
     @Suppress("LongParameterList")
-    fun sendMotion(
+    override fun sendMotion(
         slotId: String,
         gyroX: Short,
         gyroY: Short,
@@ -497,7 +497,7 @@ class SatelliteConnection(
         )
     }
 
-    fun sendBattery(
+    override fun sendBattery(
         slotId: String,
         level: Int,
         status: Int,
@@ -509,7 +509,7 @@ class SatelliteConnection(
     }
 
     @Suppress("LongParameterList")
-    fun sendTouchpad(
+    override fun sendTouchpad(
         slotId: String,
         finger0Active: Boolean,
         finger1Active: Boolean,

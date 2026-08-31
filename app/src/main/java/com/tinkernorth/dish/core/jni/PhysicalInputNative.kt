@@ -24,6 +24,26 @@ class PhysicalInputNative
             productId: Int,
         ): Boolean = SatelliteNative.modelHasRumble(vendorId, productId)
 
+        fun modelHasLightbar(
+            vendorId: Int,
+            productId: Int,
+        ): Boolean = SatelliteNative.modelHasLightbar(vendorId, productId)
+
+        fun modelHasPlayerLeds(
+            vendorId: Int,
+            productId: Int,
+        ): Boolean = SatelliteNative.modelHasPlayerLeds(vendorId, productId)
+
+        fun modelHasTriggerEffects(
+            vendorId: Int,
+            productId: Int,
+        ): Boolean = SatelliteNative.modelHasTriggerEffects(vendorId, productId)
+
+        fun modelHasTriggerRumble(
+            vendorId: Int,
+            productId: Int,
+        ): Boolean = SatelliteNative.modelHasTriggerRumble(vendorId, productId)
+
         fun modelFrameworkRumbleUnreliable(
             vendorId: Int,
             productId: Int,
@@ -97,6 +117,37 @@ class PhysicalInputNative
             weak: Int,
         ) {
             SatelliteNative.sendUsbRumble(syntheticDeviceId, strong, weak)
+        }
+
+        fun sendUsbTriggerRumble(
+            syntheticDeviceId: Int,
+            leftMagnitude: Int,
+            rightMagnitude: Int,
+        ) {
+            SatelliteNative.sendUsbTriggerRumble(syntheticDeviceId, leftMagnitude, rightMagnitude)
+        }
+
+        fun sendUsbLightbar(
+            syntheticDeviceId: Int,
+            r: Int,
+            g: Int,
+            b: Int,
+        ) {
+            SatelliteNative.sendUsbLightbar(syntheticDeviceId, r, g, b)
+        }
+
+        fun sendUsbPlayerLeds(
+            syntheticDeviceId: Int,
+            ledMask: Int,
+        ) {
+            SatelliteNative.sendUsbPlayerLeds(syntheticDeviceId, ledMask)
+        }
+
+        fun sendUsbTriggerEffects(
+            syntheticDeviceId: Int,
+            blocks: ByteArray,
+        ) {
+            SatelliteNative.sendUsbTriggerEffects(syntheticDeviceId, blocks)
         }
 
         fun getDeviceUrbCount(deviceId: Int): Long = SatelliteNative.getDeviceUrbCount(deviceId)

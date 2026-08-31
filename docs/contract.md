@@ -3,7 +3,7 @@
 The protocol contract (REST surface, UDP streams, crypto, liveness, identity)
 lives in ONE place: **`satellite/docs/contract.md`** in the
 [TinkerNorth/satellite](https://github.com/TinkerNorth/satellite) repo. This
-client implements protocol 1 against it; this file only records the
+client implements protocol 2 against it; this file only records the
 Android-side mapping. The former `wire-format.md` is replaced by the contract.
 
 ## Where the contract lands in this app
@@ -19,6 +19,8 @@ Android-side mapping. The former `wire-format.md` is replaced by the contract.
 | UDP streams + enriched heartbeat ack + close-notify (socket/crypto only) | `app/src/main/cpp/satellite_jni.cpp` |
 | Catalog cache (ETag, per-satellite) | `repository/SatelliteCatalogRepository.kt` |
 | Host capabilities (`GET /api/server/capabilities`) pre-bind read | `repository/SatelliteCapabilitiesRepository.kt` → host layer + `source/store/SatelliteHostRuntimeStore.kt` |
+| Feedback return paths (RUMBLE 0x0009, LIGHTBAR 0x000D, TRIGGER_EFFECTS 0x0010, PLAYER_LEDS 0x0011) | native decode in `satellite_jni.cpp` → `hotpath/input/RumbleBridge.kt` + `hotpath/input/FeedbackBridge.kt` → `RumbleRouter` / `FeedbackRouter` |
+| Outbound telemetry destinations (satellite UDP vs Moonlight control stream) | `source/connection/TelemetrySink.kt`, resolved per slot by `composer/PhysicalReachabilityComposer.kt` |
 
 ## Client behaviours required by the contract
 
@@ -53,6 +55,16 @@ Android-side mapping. The former `wire-format.md` is replaced by the contract.
   feature/hostFeature slugs are silently not offered. The DS4 PAD mode is gated
   on the type's `features.touchpad.modes` containing `ds4` (read, not inferred
   from the type id); an absent `modes` array falls back to the legacy assumption.
+- **Feedback caps advertise the actuator.** The descriptor's `lightbar`,
+  `triggerEffects` and `playerLeds` caps ride only when the bound input can
+  actually land them: a Direct-claimed pad whose family has the surface
+  (DS4/DualSense lightbar, DualSense trigger effects + player LEDs, Switch
+  Pro player lights), or the virtual pad, whose skin renders the lights the
+  phone lacks (`VirtualPadFeedbackStore` → `GamepadTouchView`: lightbar ring
+  around the trackpad, player-LED row, trigger-effect accents) and whose
+  vibrator folds Moonlight trigger rumble through the rumble path. A
+  framework-path pad (no raw output writer, no LED API) never advertises,
+  so the satellite never sends it those messages.
 - **Host features.** The host layer reads `hostFeatures.mouseControl`,
   `keyboardControl`, and `rumble`. Rumble is opt-OUT (absent slug → assumed, for
   back-compat with satellites predating it); keyboard is opt-IN (absent → not

@@ -23,9 +23,21 @@ object BundledCatalog {
         }
 
     // Every emulated pad carries the gamepad axes and analog triggers; MOUSE/KEYBOARD
-    // are host-injected, so the type layer passes them through for the host to gate.
+    // are host-injected and BATTERY/TRIGGER_RUMBLE have no catalog slug, so the type
+    // layer passes all four through for the host/transport layers to gate. The
+    // triggerEffects/playerLeds surfaces are deliberately absent: a satellite old
+    // enough to serve no catalog predates the messages that carry them.
     private fun padType(vararg padFeatures: Feature): CapabilitySet =
-        CapabilitySet(setOf(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.MOUSE, Feature.KEYBOARD) + padFeatures)
+        CapabilitySet(
+            setOf(
+                Feature.GAMEPAD,
+                Feature.ANALOG_TRIGGERS,
+                Feature.MOUSE,
+                Feature.KEYBOARD,
+                Feature.BATTERY,
+                Feature.TRIGGER_RUMBLE,
+            ) + padFeatures,
+        )
 
     fun typeCapabilitiesById(typeId: Int): CapabilitySet =
         when (typeId) {

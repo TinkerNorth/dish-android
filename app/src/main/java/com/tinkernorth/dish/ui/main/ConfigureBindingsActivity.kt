@@ -40,6 +40,8 @@ import com.tinkernorth.dish.ui.setup.ReviewFlow
 import com.tinkernorth.dish.ui.setup.bindCapabilityRows
 import com.tinkernorth.dish.ui.setup.bindReviewFlows
 import com.tinkernorth.dish.ui.setup.capabilityRows
+import com.tinkernorth.dish.ui.setup.destinationGetFlows
+import com.tinkernorth.dish.ui.setup.destinationSendFlows
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
@@ -448,22 +450,11 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
             ConnectionKind.SATELLITE -> getString(R.string.setup_cfg_dest_satellite)
         }
 
-    // A destination gets every input some emulated type can land on it.
-    private fun destinationGets(potential: CapabilitySet): List<ReviewFlow> =
-        buildList {
-            add(ReviewFlow(R.drawable.ic_gamepad, R.string.setup_cfg_flow_controller))
-            if (Feature.MOTION in potential) add(ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro))
-            if (Feature.TOUCHPAD in potential) add(ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad))
-            if (Feature.MOUSE in potential) add(ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse))
-        }
+    // A destination gets every input some emulated type can land on it, and sends
+    // back every feedback surface some type can source (shared with the review).
+    private fun destinationGets(potential: CapabilitySet): List<ReviewFlow> = destinationGetFlows(potential)
 
-    // Rumble flows back only where the path carries a return channel.
-    private fun destinationSends(potential: CapabilitySet): List<ReviewFlow> =
-        if (Feature.RUMBLE in potential) {
-            listOf(ReviewFlow(R.drawable.ic_rumble, R.string.binding_func_rumble))
-        } else {
-            emptyList()
-        }
+    private fun destinationSends(potential: CapabilitySet): List<ReviewFlow> = destinationSendFlows(potential)
 
     // The type picker shows each emulated type with the setup flow's capability table
     // (what each carries per feature, and whether it is available) so the choice is

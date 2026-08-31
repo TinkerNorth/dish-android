@@ -25,9 +25,17 @@ class MoonlightCatalogTest {
             Feature.ANALOG_TRIGGERS,
             Feature.MOTION,
             Feature.TOUCHPAD,
+            Feature.BATTERY,
             Feature.RUMBLE,
+            Feature.TRIGGER_RUMBLE,
             Feature.LIGHTBAR,
         )
+
+    private val baseBits =
+        MoonlightControlProtocol.CAP_ANALOG_TRIGGERS or
+            MoonlightControlProtocol.CAP_RUMBLE or
+            MoonlightControlProtocol.CAP_TRIGGER_RUMBLE or
+            MoonlightControlProtocol.CAP_BATTERY
 
     @Test
     fun `PlayStation is the only type with motion, touchpad and a lightbar`() {
@@ -83,24 +91,42 @@ class MoonlightCatalogTest {
     }
 
     @Test
-    fun `source bits never claim a battery this pad does not report`() {
-        assertEquals(0, MoonlightCatalog.sourceBits(everything) and MoonlightControlProtocol.CAP_BATTERY)
+    fun `source bits claim a battery only when the source reports one`() {
+        assertEquals(
+            MoonlightControlProtocol.CAP_BATTERY,
+            MoonlightCatalog.sourceBits(everything) and MoonlightControlProtocol.CAP_BATTERY,
+        )
+        val noBattery = everything - CapabilitySet.of(Feature.BATTERY)
+        assertEquals(0, MoonlightCatalog.sourceBits(noBattery) and MoonlightControlProtocol.CAP_BATTERY)
     }
 
     @Test
-    fun `a fully capable source declares 0x03 for Xbox and Nintendo and the rest for PlayStation`() {
-        assertEquals(0x03, MoonlightCatalog.capabilityBits(MoonlightEmulatedType.XBOX, everything))
-        assertEquals(0x03, MoonlightCatalog.capabilityBits(MoonlightEmulatedType.NINTENDO, everything))
-        assertEquals(
-            MoonlightControlProtocol.CAP_ANALOG_TRIGGERS or
-                MoonlightControlProtocol.CAP_RUMBLE or
-                MoonlightControlProtocol.CAP_TRIGGER_RUMBLE or
-                MoonlightControlProtocol.CAP_TOUCHPAD or
-                MoonlightControlProtocol.CAP_ACCELEROMETER or
-                MoonlightControlProtocol.CAP_GYRO or
-                MoonlightControlProtocol.CAP_RGB_LED,
-            MoonlightCatalog.capabilityBits(MoonlightEmulatedType.PLAYSTATION, everything),
-        )
+    fun `a fully capable source declares the base bits for Xbox and Nintendo and 0xFF for PlayStation`() {
+        assertEquals(baseBits, MoonlightCatalog.capabilityBits(MoonlightEmulatedType.XBOX, everything))
+        assertEquals(baseBits, MoonlightCatalog.capabilityBits(MoonlightEmulatedType.NINTENDO, everything))
+        assertEquals(0xFF, MoonlightCatalog.capabilityBits(MoonlightEmulatedType.PLAYSTATION, everything))
+    }
+
+    @Test
+    fun `trigger rumble and battery ride only when the source really has them`() {
+        val noExtras =
+            CapabilitySet.of(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.RUMBLE)
+        val bits = MoonlightCatalog.capabilityBits(MoonlightEmulatedType.XBOX, noExtras)
+        // Rumble no longer drags CAP_TRIGGER_RUMBLE along: a pad without the
+        // trigger motors must not invite RUMBLE_TRIGGERS events it would eat.
+        assertEquals(0, bits and MoonlightControlProtocol.CAP_TRIGGER_RUMBLE)
+        assertEquals(0, bits and MoonlightControlProtocol.CAP_BATTERY)
+        val withExtras =
+            CapabilitySet.of(
+                Feature.GAMEPAD,
+                Feature.ANALOG_TRIGGERS,
+                Feature.RUMBLE,
+                Feature.TRIGGER_RUMBLE,
+                Feature.BATTERY,
+            )
+        val bits2 = MoonlightCatalog.capabilityBits(MoonlightEmulatedType.XBOX, withExtras)
+        assertEquals(MoonlightControlProtocol.CAP_TRIGGER_RUMBLE, bits2 and MoonlightControlProtocol.CAP_TRIGGER_RUMBLE)
+        assertEquals(MoonlightControlProtocol.CAP_BATTERY, bits2 and MoonlightControlProtocol.CAP_BATTERY)
     }
 
     @Test
@@ -117,11 +143,11 @@ class MoonlightCatalogTest {
     // `capabilities [0003] supportedButtonFlags [0000FFFF]` for the Xbox case.
     @Test
     fun `each type produces its own byte-exact CONTROLLER_ARRIVAL`() {
-        assertArrival(MoonlightEmulatedType.XBOX, expectedCaps = 0x03, expectedButtons = 0xFFFF)
-        assertArrival(MoonlightEmulatedType.NINTENDO, expectedCaps = 0x03, expectedButtons = 0xFFFF)
+        assertArrival(MoonlightEmulatedType.XBOX, expectedCaps = 0x47, expectedButtons = 0xFFFF)
+        assertArrival(MoonlightEmulatedType.NINTENDO, expectedCaps = 0x47, expectedButtons = 0xFFFF)
         assertArrival(
             MoonlightEmulatedType.PLAYSTATION,
-            expectedCaps = 0xBF,
+            expectedCaps = 0xFF,
             expectedButtons = 0xFFFF or MoonlightControlProtocol.BTN_TOUCHPAD,
         )
     }

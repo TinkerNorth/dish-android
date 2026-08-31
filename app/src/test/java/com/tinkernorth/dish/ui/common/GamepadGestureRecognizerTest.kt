@@ -47,6 +47,52 @@ class GamepadGestureRecognizerTest {
     // Trackpad zone spanning x 400..600, y 0..100: centre maps to a (0,0) wire frame.
     private val trackpadLayout = layout.copy(trackpadRect = fakeRect(400f, 0f, 600f, 100f))
 
+    @Test
+    fun `trigger rail value ramps from the bottom and pins full in the top zone`() {
+        // Rail spans y 100..500; full zone = top 25% (100..200); ramp = 200..500.
+        assertEquals(255, triggerRailValue(y = 150f, top = 100f, bottom = 500f, analog = true))
+        assertEquals(255, triggerRailValue(y = 200f, top = 100f, bottom = 500f, analog = true))
+        // Halfway down the ramp reads half pull.
+        assertEquals(127, triggerRailValue(y = 350f, top = 100f, bottom = 500f, analog = true))
+        assertEquals(0, triggerRailValue(y = 500f, top = 100f, bottom = 500f, analog = true))
+        // Clamped past either edge.
+        assertEquals(255, triggerRailValue(y = 0f, top = 100f, bottom = 500f, analog = true))
+        assertEquals(0, triggerRailValue(y = 900f, top = 100f, bottom = 500f, analog = true))
+    }
+
+    @Test
+    fun `digital trigger types always read a full press`() {
+        assertEquals(255, triggerRailValue(y = 499f, top = 100f, bottom = 500f, analog = false))
+    }
+
+    @Test
+    fun `a trigger rail gesture slides the value and releases to zero`() {
+        val rail = fakeRect(0f, 100f, 52f, 500f)
+        val railLayout = layout.copy(ltRect = rail)
+        // Touch at half the ramp: a partial pull, not a full press.
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, 26f, 350f), railLayout)
+        assertEquals(127, recognizer.state.leftTrigger)
+        // Slide up into the full zone: whole-button press.
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_MOVE, 26f, 150f), railLayout)
+        assertEquals(255, recognizer.state.leftTrigger)
+        // Slide back down: value follows the finger.
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_MOVE, 26f, 425f), railLayout)
+        assertEquals(63, recognizer.state.leftTrigger)
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_UP, 26f, 425f), railLayout)
+        assertEquals(0, recognizer.state.leftTrigger)
+    }
+
+    @Test
+    fun `a digital-trigger type presses full from anywhere on the rail`() {
+        val rail = fakeRect(0f, 100f, 52f, 500f)
+        val railLayout = layout.copy(ltRect = rail)
+        recognizer.analogTriggers = false
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, 26f, 480f), railLayout)
+        assertEquals(255, recognizer.state.leftTrigger)
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_UP, 26f, 480f), railLayout)
+        assertEquals(0, recognizer.state.leftTrigger)
+    }
+
     private fun fakeRect(
         left: Float,
         top: Float,
@@ -58,7 +104,13 @@ class GamepadGestureRecognizerTest {
         val cy = (top + bottom) / 2f
         val width = right - left
         val height = bottom - top
-        return mockk {
+        return mockk<RectF> {
+            // Real fields on the stub class carry the geometry the analog
+            // trigger rail reads directly.
+            this.left = left
+            this.top = top
+            this.right = right
+            this.bottom = bottom
             every { centerX() } returns cx
             every { centerY() } returns cy
             every { this@mockk.width() } returns width
