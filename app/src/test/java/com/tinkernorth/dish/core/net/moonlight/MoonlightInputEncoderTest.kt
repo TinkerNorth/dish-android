@@ -136,6 +136,57 @@ class MoonlightInputEncoderTest {
     }
 
     @Test
+    fun `CONTROLLER_TOUCH is byte-exact against the Wolf packed struct`() {
+        // ctrl 1, DOWN, pointer 7, x 0.5 / y 0.25 as little-endian IEEE-754
+        // netfloats, pressure 1.0. data_size (BE) counts type + 20-byte body.
+        val bytes =
+            MoonlightInputEncoder.controllerTouch(
+                controllerNumber = 1,
+                eventType = MoonlightControlProtocol.TOUCH_EVENT_DOWN,
+                pointerId = 7,
+                x = 0.5f,
+                y = 0.25f,
+                pressure = 1.0f,
+            )
+        assertEquals(MoonlightInputEncoder.CONTROLLER_TOUCH_LEN, bytes.size)
+        assertEquals(
+            "06021c000000001805000055" + "0101" + "0000" + "07000000" +
+                "0000003f" + "0000803e" + "0000803f",
+            bytesToHex(bytes),
+        )
+    }
+
+    @Test
+    fun `CONTROLLER_MOTION is byte-exact with gyro floats in deg per second`() {
+        val bytes =
+            MoonlightInputEncoder.controllerMotion(
+                controllerNumber = 2,
+                motionType = MoonlightControlProtocol.MOTION_TYPE_GYRO,
+                x = 1.0f,
+                y = -1.0f,
+                z = 0.5f,
+            )
+        assertEquals(MoonlightInputEncoder.CONTROLLER_MOTION_LEN, bytes.size)
+        assertEquals(
+            "060218000000001406000055" + "0202" + "0000" +
+                "0000803f" + "000080bf" + "0000003f",
+            bytesToHex(bytes),
+        )
+    }
+
+    @Test
+    fun `CONTROLLER_BATTERY is byte-exact with the trailing alignment byte`() {
+        val bytes =
+            MoonlightInputEncoder.controllerBattery(
+                controllerNumber = 0,
+                batteryState = MoonlightControlProtocol.BATTERY_CHARGING,
+                percentage = 88,
+            )
+        assertEquals(MoonlightInputEncoder.CONTROLLER_BATTERY_LEN, bytes.size)
+        assertEquals("06020c000000000807000055" + "00035800", bytesToHex(bytes))
+    }
+
+    @Test
     fun `termination carries the graceful reason big-endian`() {
         val bytes = MoonlightInputEncoder.termination()
         assertEquals("00010400" + "80030023", bytesToHex(bytes))

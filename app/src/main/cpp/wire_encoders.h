@@ -89,7 +89,14 @@ inline void encodeTouchpadPayloadV2(uint8_t out[19], uint8_t ctrlIdx, bool f0Act
     putLE16(out + 17, static_cast<uint16_t>(scrollV));
 }
 
-// MSG_LIGHTBAR 0x000D inner, 4B: ctrlIdx, R, G, B. Decode-only on dish-android (no LED API).
+// MSG_TRIGGER_EFFECTS 0x0010 inner, 23B: ctrlIdx, left block (11B mode+params), right block
+// (11B). The blocks are raw DualSense output-report fields, replayed verbatim into a captured
+// physical DualSense.
+inline constexpr int TRIGGER_EFFECTS_PAYLOAD_BYTES = 22;
+
+// MSG_PLAYER_LEDS 0x0011 inner, 2B: ctrlIdx, ledMask (bit 0 = leftmost LED).
+
+// MSG_LIGHTBAR 0x000D inner, 4B: ctrlIdx, R, G, B.
 struct LightbarPayload {
     uint8_t ctrlIdx;
     uint8_t r;

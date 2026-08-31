@@ -100,8 +100,12 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
         lastReportedState = state
         val summary = hub.summary(connectionId) ?: return
         if (!summary.live.isLiveLink()) return
-        if (summary.kind != ConnectionKind.SATELLITE) return
-        sendSatelliteTouchpadReport(state)
+        when (summary.kind) {
+            ConnectionKind.SATELLITE -> sendSatelliteTouchpadReport(state)
+            // Reliable control stream: events, no resend loop needed.
+            ConnectionKind.MOONLIGHT -> moonlight.get(connectionId)?.let { sendTouchpadReport(it, state) }
+            ConnectionKind.BLUETOOTH -> Unit
+        }
     }
 
     override fun resendOneIfReady() {
@@ -140,7 +144,14 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
 
     // Resolves connection by id each call so reconnects after alive-poll death pick up new session handle.
     private fun sendSatelliteTouchpadReport(state: TouchpadSurfaceView.TouchpadState) {
-        satellite.get(connectionId)?.sendTouchpad(
+        satellite.get(connectionId)?.let { sendTouchpadReport(it, state) }
+    }
+
+    private fun sendTouchpadReport(
+        sink: com.tinkernorth.dish.source.connection.TelemetrySink,
+        state: TouchpadSurfaceView.TouchpadState,
+    ) {
+        sink.sendTouchpad(
             slotId,
             state.finger0Active,
             state.finger1Active,

@@ -52,6 +52,8 @@ abstract class BaseInputOverlayActivity : BaseGamepadHostActivity() {
 
     @Inject lateinit var satellite: SatelliteConnectionManager
 
+    @Inject lateinit var moonlight: com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
+
     @Inject lateinit var inputRateStore: InputRateStore
 
     @Inject lateinit var networkState: NetworkStateObserver

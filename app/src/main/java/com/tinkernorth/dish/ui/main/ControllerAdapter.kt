@@ -9,7 +9,6 @@ import android.graphics.drawable.Drawable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.annotation.DimenRes
 import androidx.annotation.DrawableRes
@@ -195,6 +194,18 @@ class ControllerAdapter(
         private val functionPills = PillPool(functionRow.valueContainer)
         private val ratePills = PillPool(rateRow.valueContainer)
 
+        init {
+            // Fixed line budgets keep every card the same height regardless of
+            // content; the function row alone gets two lines because the
+            // protocol-2 feedback surfaces can put up to eight chips on it.
+            listOf(connectionRow, compatRow, emulateRow, rateRow).forEach {
+                it.valueContainer.startAligned = true
+                it.valueContainer.fixedLineCount = 1
+            }
+            functionRow.valueContainer.startAligned = true
+            functionRow.valueContainer.fixedLineCount = 2
+        }
+
         private val destinationMono = BindingValueMonoBinding.inflate(inflater, destinationRow.valueContainer, true)
         private val destinationNotBound = BindingValueNotBoundBinding.inflate(inflater, destinationRow.valueContainer, true)
         private val functionNone = BindingValueNoneBinding.inflate(inflater, functionRow.valueContainer, true)
@@ -368,42 +379,54 @@ class ControllerAdapter(
                 card != null &&
                     (if (card.currentMode == InputPathMode.Direct) card.direct.rumble else card.standard.rumble)
             if (rumblePresent) {
-                specs.add(PillSpec(funcValue(R.string.binding_func_rumble, R.string.binding_state_on), R.drawable.ic_rumble, PillTone.ON))
+                specs.add(PillSpec(ctx.getString(R.string.binding_func_rumble), R.drawable.ic_rumble, PillTone.ON))
             }
 
+            // Motion streams to a Satellite and, since protocol 2 shipped the
+            // Moonlight telemetry, to a Moonlight host too (its type layer gates
+            // which emulated pads carry it); Bluetooth stays gamepad-only.
             val motionAvailable =
                 row.motionCap.inputOk(Feature.MOTION) &&
-                    bound.kind == ConnectionKind.SATELLITE &&
+                    bound.kind != ConnectionKind.BLUETOOTH &&
                     row.motionCap.typeOk(Feature.MOTION)
             if (motionAvailable) {
                 val on = row.motionCap.userWants(Feature.MOTION)
-                val state = if (on) R.string.binding_state_on else R.string.binding_state_off
                 val tone = if (on) PillTone.ON else PillTone.OFF
-                specs.add(PillSpec(funcValue(R.string.binding_func_motion, state), R.drawable.ic_motion, tone))
+                specs.add(PillSpec(ctx.getString(R.string.binding_func_motion), R.drawable.ic_motion, tone))
             }
 
-            if (bound.kind == ConnectionKind.SATELLITE) {
-                specs.addAll(pointerFuncFacts(row).map(::pointerFactPill))
+            when (bound.kind) {
+                ConnectionKind.SATELLITE -> specs.addAll(pointerFuncFacts(row).map(::pointerFactPill))
+                ConnectionKind.MOONLIGHT -> specs.addAll(moonlightPointerFacts(row).map(::pointerFactPill))
+                ConnectionKind.BLUETOOTH -> Unit
             }
+            specs.addAll(feedbackFuncFacts(row.motionCap).map(::feedbackFactPill))
             return specs
         }
+
+        private fun feedbackFactPill(fact: FeedbackPillFact): PillSpec =
+            when (fact) {
+                FeedbackPillFact.TRIGGER_RUMBLE ->
+                    PillSpec(ctx.getString(R.string.setup_cap_trigger_rumble), R.drawable.ic_trigger_rumble, PillTone.CAP)
+                FeedbackPillFact.LIGHTBAR ->
+                    PillSpec(ctx.getString(R.string.setup_cap_lightbar), R.drawable.ic_lightbar, PillTone.CAP)
+                FeedbackPillFact.TRIGGER_EFFECTS ->
+                    PillSpec(ctx.getString(R.string.setup_cap_trigger_effects), R.drawable.ic_trigger_effects, PillTone.CAP)
+                FeedbackPillFact.PLAYER_LEDS ->
+                    PillSpec(ctx.getString(R.string.setup_cap_player_leds), R.drawable.ic_player_leds, PillTone.CAP)
+            }
 
         private fun pointerFactPill(fact: PointerPillFact): PillSpec =
             when (fact) {
                 PointerPillFact.PAD_NEEDS_DIRECT ->
                     PillSpec(ctx.getString(R.string.touchpad_needs_direct), R.drawable.ic_touchpad, PillTone.WARN)
                 PointerPillFact.PAD_ON ->
-                    PillSpec(funcValue(R.string.binding_func_touchpad, R.string.touchpad_mode_pad), R.drawable.ic_touchpad, PillTone.ON)
+                    PillSpec(ctx.getString(R.string.binding_func_touchpad), R.drawable.ic_touchpad, PillTone.ON)
                 PointerPillFact.PAD_OFF ->
-                    PillSpec(funcValue(R.string.binding_func_touchpad, R.string.binding_state_off), R.drawable.ic_touchpad, PillTone.OFF)
+                    PillSpec(ctx.getString(R.string.binding_func_touchpad), R.drawable.ic_touchpad, PillTone.OFF)
                 PointerPillFact.MOUSE_READY ->
                     PillSpec(ctx.getString(R.string.binding_func_mouse), R.drawable.ic_mouse, PillTone.CAP)
             }
-
-        private fun funcValue(
-            nameRes: Int,
-            valueRes: Int,
-        ): String = ctx.getString(R.string.binding_func_value, ctx.getString(nameRes), ctx.getString(valueRes))
 
         private fun bindBattery(battery: BatteryUi?) {
             if (battery == null) {
@@ -496,11 +519,11 @@ class ControllerAdapter(
                 )
             return when {
                 !computes ->
-                    PillSpec(ctx.getString(R.string.binding_state_off), R.drawable.ic_touchpad, PillTone.OFF)
+                    PillSpec(ctx.getString(R.string.binding_func_touchpad), R.drawable.ic_touchpad, PillTone.OFF)
                 row.screenPeakHz > 0 ->
                     PillSpec(ctx.getString(R.string.binding_rate_hz_peak, row.screenPeakHz), R.drawable.ic_touchpad, PillTone.FACT)
                 else ->
-                    PillSpec(ctx.getString(R.string.binding_rate_pending), R.drawable.ic_touchpad, PillTone.CAP)
+                    PillSpec(ctx.getString(R.string.binding_func_touchpad), R.drawable.ic_touchpad, PillTone.CAP)
             }
         }
 
@@ -511,11 +534,11 @@ class ControllerAdapter(
             val gyroHz = row.inputRates?.gyroHz ?: 0
             return when {
                 !motionRateUserFacingOn(row.motionCap, row.slot.boundStatus) ->
-                    PillSpec(ctx.getString(R.string.binding_state_off), R.drawable.ic_motion, PillTone.OFF)
+                    PillSpec(ctx.getString(R.string.binding_func_gyro), R.drawable.ic_motion, PillTone.OFF)
                 gyroHz > 0 ->
                     PillSpec(ctx.getString(R.string.binding_rate_hz, gyroHz), R.drawable.ic_motion, measuredTone)
                 else ->
-                    PillSpec(ctx.getString(R.string.binding_rate_pending), R.drawable.ic_motion, PillTone.CAP)
+                    PillSpec(ctx.getString(R.string.binding_func_gyro), R.drawable.ic_motion, PillTone.CAP)
             }
         }
 
@@ -528,7 +551,7 @@ class ControllerAdapter(
             return if (hz != null) {
                 PillSpec(hz, R.drawable.ic_gamepad, measuredTone)
             } else {
-                PillSpec(ctx.getString(R.string.binding_rate_pending), R.drawable.ic_gamepad, PillTone.CAP)
+                PillSpec(ctx.getString(R.string.setup_cfg_flow_controller), R.drawable.ic_gamepad, PillTone.CAP)
             }
         }
 
@@ -783,7 +806,7 @@ private const val BATTERY_HIGH_FLOOR = 60
 private const val BATTERY_MID_FLOOR = 35
 
 private class PillPool(
-    private val container: LinearLayout,
+    private val container: ViewGroup,
 ) {
     private val pills = mutableListOf<BindingPillBinding>()
 

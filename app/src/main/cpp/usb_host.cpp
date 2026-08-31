@@ -56,6 +56,7 @@ struct DeviceCtx {
     // counter for protocols that carry one (Xbox One serial, Switch Pro packet number).
     std::mutex outMtx;
     uint8_t outSeq = 0;
+    usbparsers::FeedbackState feedback; // guarded by outMtx
 
     std::atomic<bool> stop{false};
     std::thread poller;
@@ -481,19 +482,58 @@ uint64_t getMotionCount(int32_t deviceId) {
     return it->second->motionCount.load(std::memory_order_relaxed);
 }
 
+static std::shared_ptr<DeviceCtx> ctxFor(int32_t syntheticDeviceId) {
+    std::lock_guard<std::mutex> lock(g_mtx);
+    auto it = g_devices.find(syntheticDeviceId);
+    return it == g_devices.end() ? nullptr : it->second;
+}
+
 void sendRumble(int32_t syntheticDeviceId, uint16_t strong, uint16_t weak) {
-    std::shared_ptr<DeviceCtx> ctx;
-    {
-        std::lock_guard<std::mutex> lock(g_mtx);
-        auto it = g_devices.find(syntheticDeviceId);
-        if (it == g_devices.end()) return;
-        ctx = it->second;
-    }
+    auto ctx = ctxFor(syntheticDeviceId);
+    if (!ctx) return;
+    std::lock_guard<std::mutex> lock(ctx->outMtx);
+    if (ctx->fd < 0) return;
+    ctx->feedback.strong = strong;
+    ctx->feedback.weak = weak;
+    uint8_t seq = ctx->outSeq++;
+    usbparsers::runMergedRumble(ctx->fd, ctx->epOut, ctx->parser, ctx->feedback, seq);
+}
+
+void sendTriggerRumble(int32_t syntheticDeviceId, uint16_t left, uint16_t right) {
+    auto ctx = ctxFor(syntheticDeviceId);
+    if (!ctx) return;
+    std::lock_guard<std::mutex> lock(ctx->outMtx);
+    if (ctx->fd < 0) return;
+    if (!usbparsers::parserHasTriggerRumble(ctx->parser)) return;
+    ctx->feedback.leftTrigger = left;
+    ctx->feedback.rightTrigger = right;
+    uint8_t seq = ctx->outSeq++;
+    usbparsers::runMergedRumble(ctx->fd, ctx->epOut, ctx->parser, ctx->feedback, seq);
+}
+
+void sendLightbar(int32_t syntheticDeviceId, uint8_t r, uint8_t g, uint8_t b) {
+    auto ctx = ctxFor(syntheticDeviceId);
+    if (!ctx) return;
+    std::lock_guard<std::mutex> lock(ctx->outMtx);
+    if (ctx->fd < 0) return;
+    usbparsers::runLightbar(ctx->fd, ctx->epOut, ctx->parser, ctx->feedback, r, g, b);
+}
+
+void sendPlayerLeds(int32_t syntheticDeviceId, uint8_t ledMask) {
+    auto ctx = ctxFor(syntheticDeviceId);
     if (!ctx) return;
     std::lock_guard<std::mutex> lock(ctx->outMtx);
     if (ctx->fd < 0) return;
     uint8_t seq = ctx->outSeq++;
-    usbparsers::runRumble(ctx->fd, ctx->epOut, ctx->parser, strong, weak, seq);
+    usbparsers::runPlayerLeds(ctx->fd, ctx->epOut, ctx->parser, ledMask, seq);
+}
+
+void sendTriggerEffects(int32_t syntheticDeviceId, const uint8_t* left, const uint8_t* right) {
+    auto ctx = ctxFor(syntheticDeviceId);
+    if (!ctx) return;
+    std::lock_guard<std::mutex> lock(ctx->outMtx);
+    if (ctx->fd < 0) return;
+    usbparsers::runTriggerEffects(ctx->fd, ctx->epOut, ctx->parser, left, right);
 }
 
 } // namespace usbhost

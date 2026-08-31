@@ -101,4 +101,32 @@ class PillFlowLayoutTest {
         assertEquals(2, lines[1].childCount)
         assertEquals(200, lines[0].width)
     }
+
+    @Test
+    fun `renderable line count is unlimited at zero and clamped by a budget`() {
+        assertEquals(3, renderableLineCount(lineCount = 3, fixedLineCount = 0))
+        assertEquals(2, renderableLineCount(lineCount = 3, fixedLineCount = 2))
+        assertEquals(1, renderableLineCount(lineCount = 1, fixedLineCount = 2))
+    }
+
+    @Test
+    fun `a fixed budget reserves its full height once anything is visible`() {
+        val oneLine = buildFlowLines(listOf(40 to 20), 100, gap)
+        // One line of content in a two-line budget still measures two lines tall,
+        // so the row's height never follows how many chips happen to show.
+        assertEquals(2 * 20 + gap, reservedContentHeight(oneLine, fixedLineCount = 2, gap = gap))
+        val threeLines = buildFlowLines(listOf(90 to 20, 90 to 20, 90 to 20), 100, gap)
+        assertEquals(2 * 20 + gap, reservedContentHeight(threeLines, fixedLineCount = 2, gap = gap))
+    }
+
+    @Test
+    fun `an empty row still collapses under a fixed budget`() {
+        assertEquals(0, reservedContentHeight(emptyList(), fixedLineCount = 2, gap = gap))
+    }
+
+    @Test
+    fun `natural height sums the lines like before`() {
+        val lines = buildFlowLines(listOf(90 to 20, 90 to 24), 100, gap)
+        assertEquals(20 + 24 + gap, reservedContentHeight(lines, fixedLineCount = 0, gap = gap))
+    }
 }

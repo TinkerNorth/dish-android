@@ -36,10 +36,21 @@ object MoonlightInputEncoder {
     const val PERIODIC_PING_LEN = 8
     const val TERMINATION_LEN = 8
 
+    // 4 control header + 8 wrapper + the packed struct bodies (control.hpp):
+    // touch {ctrl u8, event u8, zero[2], pointer u32, x/y/pressure netfloat},
+    // motion {ctrl u8, type u8, zero[2], x/y/z netfloat},
+    // battery {ctrl u8, state u8, percentage u8, zero[1]}.
+    const val CONTROLLER_TOUCH_LEN = 32
+    const val CONTROLLER_MOTION_LEN = 28
+    const val CONTROLLER_BATTERY_LEN = 16
+
     // data_size (the INPUT wrapper's big-endian size) counts from the input-type
     // field to the end of the message.
     private const val MULTI_DATA_SIZE = 30
     private const val ARRIVAL_DATA_SIZE = 12
+    private const val CONTROLLER_TOUCH_DATA_SIZE = 24
+    private const val CONTROLLER_MOTION_DATA_SIZE = 20
+    private const val CONTROLLER_BATTERY_DATA_SIZE = 8
     private const val MOUSE_REL_DATA_SIZE = 8
     private const val MOUSE_BUTTON_DATA_SIZE = 5
     private const val MOUSE_SCROLL_DATA_SIZE = 10
@@ -209,6 +220,79 @@ object MoonlightInputEncoder {
         putShortBE(buf, amount)
         putShortBE(buf, amount)
         putShortBE(buf, 0)
+        return buf.toByteArray()
+    }
+
+    /**
+     * CONTROLLER_TOUCH: one pointer event on the emulated pad's touch surface.
+     * [x]/[y] are normalized 0..1 across the pad (the host multiplies by its
+     * emulated touchpad's resolution); netfloats are little-endian IEEE-754
+     * (Wolf utils::from_netfloat). [pressure] is 1.0 for a solid contact.
+     */
+    fun controllerTouch(
+        controllerNumber: Int,
+        eventType: Int,
+        pointerId: Int,
+        x: Float,
+        y: Float,
+        pressure: Float,
+    ): ByteArray {
+        val buf = ByteBuffer.allocate(CONTROLLER_TOUCH_LEN).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putShort(MoonlightControlProtocol.CTRL_INPUT_DATA.toShort())
+        buf.putShort((CONTROLLER_TOUCH_LEN - CONTROL_HEADER_LEN).toShort())
+        putIntBE(buf, CONTROLLER_TOUCH_DATA_SIZE)
+        buf.putInt(MoonlightControlProtocol.INPUT_CONTROLLER_TOUCH)
+        buf.put((controllerNumber and 0xFF).toByte())
+        buf.put((eventType and 0xFF).toByte())
+        buf.putShort(0) // reserved/alignment
+        buf.putInt(pointerId)
+        buf.putFloat(x)
+        buf.putFloat(y)
+        buf.putFloat(pressure)
+        return buf.toByteArray()
+    }
+
+    /**
+     * CONTROLLER_MOTION: one IMU sample. Wire units are the Moonlight
+     * convention the host converts from: gyro in deg/s (Wolf deg2rad's them),
+     * accel in m/s^2 (passed through to the virtual pad).
+     */
+    fun controllerMotion(
+        controllerNumber: Int,
+        motionType: Int,
+        x: Float,
+        y: Float,
+        z: Float,
+    ): ByteArray {
+        val buf = ByteBuffer.allocate(CONTROLLER_MOTION_LEN).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putShort(MoonlightControlProtocol.CTRL_INPUT_DATA.toShort())
+        buf.putShort((CONTROLLER_MOTION_LEN - CONTROL_HEADER_LEN).toShort())
+        putIntBE(buf, CONTROLLER_MOTION_DATA_SIZE)
+        buf.putInt(MoonlightControlProtocol.INPUT_CONTROLLER_MOTION)
+        buf.put((controllerNumber and 0xFF).toByte())
+        buf.put((motionType and 0xFF).toByte())
+        buf.putShort(0) // reserved/alignment
+        buf.putFloat(x)
+        buf.putFloat(y)
+        buf.putFloat(z)
+        return buf.toByteArray()
+    }
+
+    /** CONTROLLER_BATTERY: state byte + percentage (0xFF = unknown). */
+    fun controllerBattery(
+        controllerNumber: Int,
+        batteryState: Int,
+        percentage: Int,
+    ): ByteArray {
+        val buf = ByteBuffer.allocate(CONTROLLER_BATTERY_LEN).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putShort(MoonlightControlProtocol.CTRL_INPUT_DATA.toShort())
+        buf.putShort((CONTROLLER_BATTERY_LEN - CONTROL_HEADER_LEN).toShort())
+        putIntBE(buf, CONTROLLER_BATTERY_DATA_SIZE)
+        buf.putInt(MoonlightControlProtocol.INPUT_CONTROLLER_BATTERY)
+        buf.put((controllerNumber and 0xFF).toByte())
+        buf.put((batteryState and 0xFF).toByte())
+        buf.put((percentage and 0xFF).toByte())
+        buf.put(0) // reserved/alignment
         return buf.toByteArray()
     }
 

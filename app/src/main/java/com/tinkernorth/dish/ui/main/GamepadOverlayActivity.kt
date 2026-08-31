@@ -50,9 +50,9 @@ class GamepadOverlayActivity :
     GamepadTouchView.Listener {
     @Inject lateinit var btRegistry: BluetoothGamepadRegistry
 
-    @Inject lateinit var moonlight: com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
-
     @Inject lateinit var capabilityComposer: CapabilityComposer
+
+    @Inject lateinit var virtualFeedback: com.tinkernorth.dish.source.store.VirtualPadFeedbackStore
 
     private lateinit var binding: ActivityGamepadOverlayBinding
 
@@ -115,6 +115,18 @@ class GamepadOverlayActivity :
                 }
             }
         }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                // Host-driven feedback painted onto the skin: lightbar colour,
+                // player LEDs, adaptive-trigger accents.
+                virtualFeedback.state.collect { fb ->
+                    binding.gamepadTouchView.lightbarColor = fb.lightbarColor
+                    binding.gamepadTouchView.playerLedMask = fb.playerLedMask
+                    binding.gamepadTouchView.leftTriggerEffect = fb.leftTriggerEffect
+                    binding.gamepadTouchView.rightTriggerEffect = fb.rightTriggerEffect
+                }
+            }
+        }
     }
 
     // Resend-thread-only (single-threaded Handler dispatcher).
@@ -154,7 +166,7 @@ class GamepadOverlayActivity :
         // kind inside the satellite send path, and the cost of a slow battery
         // poll is negligible.
         batterySource.start(lifecycleScope) { level, status ->
-            satellite.get(connectionId)?.sendBattery(VIRTUAL_SLOT_ID, level, status)
+            telemetrySink()?.sendBattery(VIRTUAL_SLOT_ID, level, status)
         }
         // Motion gate + indicator repaint stay with the combine collector,
         // which repeatOnLifecycle re-subscribes on STARTED. Nothing to do here.
@@ -192,16 +204,18 @@ class GamepadOverlayActivity :
         capability: SlotCapabilities,
         summary: ConnectionSummary?,
     ) {
-        // Motion only carries to a Satellite; a Bluetooth-bound slot must not spin the phone IMU.
+        // Motion carries to a Satellite (always) and to a Moonlight host (the
+        // connection drops samples until MOTION_EVENT asks); a Bluetooth-bound
+        // slot must not spin the phone IMU.
         val effective =
             capability.inputOk(Feature.MOTION) &&
                 capability.userWants(Feature.MOTION) &&
-                summary?.kind == ConnectionKind.SATELLITE &&
+                (summary?.kind == ConnectionKind.SATELLITE || summary?.kind == ConnectionKind.MOONLIGHT) &&
                 summary.live.isLiveLink()
         if (effective && !motionSource.isStreaming) {
             motionSource.start { sample, deltaUs ->
                 inputRateStore.recordMotionSample(VIRTUAL_SLOT_ID)
-                satellite.get(connectionId)?.sendMotion(
+                telemetrySink()?.sendMotion(
                     VIRTUAL_SLOT_ID,
                     sample.gyroX,
                     sample.gyroY,
@@ -240,13 +254,16 @@ class GamepadOverlayActivity :
     private fun repaintFrom(paint: OverlayMotionPaint) {
         currentPaint.value = paint
         binding.gamepadTouchView.trackpadMode = trackpadModeFor(paint.summary, paint.capability)
+        // Slide-to-pull rails only for emulated types with analog triggers; a
+        // Switch-typed pad keeps plain full-press rails.
+        binding.gamepadTouchView.analogTriggers = paint.capability.typeOk(Feature.ANALOG_TRIGGERS)
         paintMenu(paint)
     }
 
     // The trackpad zone appears only when the emulated type really carries one, and does
     // only what the wire can deliver: a satellite gets the full touch stream once the
-    // descriptor declares a mode, a Moonlight host gets the click button alone (no touch
-    // packet on that path yet), and everything else hides it.
+    // descriptor declares a mode, a Moonlight host gets CONTROLLER_TOUCH events (and the
+    // click via the button flags), and everything else hides it.
     private fun trackpadModeFor(
         summary: ConnectionSummary?,
         capability: SlotCapabilities,
@@ -256,7 +273,7 @@ class GamepadOverlayActivity :
             summary?.kind == ConnectionKind.SATELLITE &&
                 capabilityComposer.touchpadWireMode(VIRTUAL_SLOT_ID) != TouchpadModeValue.OFF ->
                 GamepadTouchView.TrackpadMode.TOUCH
-            summary?.kind == ConnectionKind.MOONLIGHT -> GamepadTouchView.TrackpadMode.CLICK
+            summary?.kind == ConnectionKind.MOONLIGHT -> GamepadTouchView.TrackpadMode.TOUCH
             else -> GamepadTouchView.TrackpadMode.NONE
         }
 
@@ -375,12 +392,29 @@ class GamepadOverlayActivity :
         lastReportedTrackpad = state
         val summary = hub.summary(connectionId) ?: return
         if (!summary.live.isLiveLink()) return
-        if (summary.kind != ConnectionKind.SATELLITE) return
-        sendSatelliteTrackpadReport(state)
+        when (summary.kind) {
+            ConnectionKind.SATELLITE -> sendSatelliteTrackpadReport(state)
+            // Same frame, translated to CONTROLLER_TOUCH events by the connection;
+            // the click stays on the pad report's button flags.
+            ConnectionKind.MOONLIGHT -> moonlight.get(connectionId)?.let { sendTrackpadReport(it, state) }
+            ConnectionKind.BLUETOOTH -> Unit
+        }
     }
 
     private fun sendSatelliteTrackpadReport(state: TouchpadSurfaceView.TouchpadState) {
-        satellite.get(connectionId)?.sendTouchpad(
+        satellite.get(connectionId)?.let { sendTrackpadReport(it, state) }
+    }
+
+    // The virtual slot's telemetry destination: whichever manager holds this
+    // connection id. Resolved per call so reconnects pick up fresh sessions.
+    private fun telemetrySink(): com.tinkernorth.dish.source.connection.TelemetrySink? =
+        satellite.get(connectionId) ?: moonlight.get(connectionId)
+
+    private fun sendTrackpadReport(
+        sink: com.tinkernorth.dish.source.connection.TelemetrySink,
+        state: TouchpadSurfaceView.TouchpadState,
+    ) {
+        sink.sendTouchpad(
             VIRTUAL_SLOT_ID,
             state.finger0Active,
             state.finger1Active,

@@ -14,7 +14,6 @@ import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.core.net.moonlight.MoonlightControlProtocol
 import com.tinkernorth.dish.databinding.ActivityMouseOverlayBasicBinding
 import com.tinkernorth.dish.databinding.ActivityMouseOverlayBinding
-import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
 import com.tinkernorth.dish.source.store.MouseSurfaceStore
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.ui.common.HoldButtonView
@@ -34,8 +33,6 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
     @Inject lateinit var mouseSurfaceStore: MouseSurfaceStore
 
     @Inject lateinit var hostFeaturesStore: SatelliteHostFeaturesStore
-
-    @Inject lateinit var moonlight: MoonlightConnectionManager
 
     // The two layouts share every view but the extended column; which one inflates is
     // decided by what the satellite advertised, so the screen never shows a right

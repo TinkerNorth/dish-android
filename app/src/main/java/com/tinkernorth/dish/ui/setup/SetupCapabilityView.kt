@@ -32,6 +32,11 @@ private fun capabilityNameRes(kind: SetupCapabilityKind): Int =
         SetupCapabilityKind.RUMBLE -> R.string.setup_cap_rumble
         SetupCapabilityKind.MOTION -> R.string.setup_cap_motion
         SetupCapabilityKind.TOUCHPAD -> R.string.setup_cap_touchpad
+        SetupCapabilityKind.BATTERY -> R.string.setup_cap_battery
+        SetupCapabilityKind.LIGHTBAR -> R.string.setup_cap_lightbar
+        SetupCapabilityKind.TRIGGER_RUMBLE -> R.string.setup_cap_trigger_rumble
+        SetupCapabilityKind.TRIGGER_EFFECTS -> R.string.setup_cap_trigger_effects
+        SetupCapabilityKind.PLAYER_LEDS -> R.string.setup_cap_player_leds
     }
 
 private fun applyCheck(

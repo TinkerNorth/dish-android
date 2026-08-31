@@ -147,6 +147,38 @@ bool parserHasTouchpad(Parser p);
 // actuates.
 bool parserFrameworkRumbleUnreliable(Parser p);
 
+// Feedback surfaces beyond the two rumble motors, all Direct-path only: the framework exposes no
+// controller LED, trigger-motor, or trigger-effect API at all.
+bool parserHasLightbar(Parser p);       // DS4 / DualSense RGB lightbar
+bool parserHasPlayerLeds(Parser p);     // DualSense 5-LED bar, Switch Pro 4 player lights
+bool parserHasTriggerEffects(Parser p); // DualSense adaptive-trigger effect blocks
+bool parserHasTriggerRumble(Parser p);  // Xbox One GIP impulse-trigger motors
+
+inline constexpr int TRIGGER_EFFECT_BLOCK_LEN = 11; // DS5 mode byte + 10 params
+
+// Merged per-device feedback state. GIP packs all four motors into every rumble report (SDL keeps
+// the same merged state), and the DS5 lightbar wants a one-time LIGHTBAR_SETUP handoff, so the
+// writer owns this across calls; everything else is carried per call.
+struct FeedbackState {
+    uint16_t strong = 0;
+    uint16_t weak = 0;
+    uint16_t leftTrigger = 0;
+    uint16_t rightTrigger = 0;
+    bool ds5LightbarSetupSent = false;
+};
+
+// Pure report builders over the merged state; each returns bytes written (0 = unsupported family
+// or out too small). Like buildRumbleReport the buffers are the full OUT transfer including the
+// leading report id where the family has one.
+size_t buildMergedRumbleReport(Parser p, FeedbackState& st, uint8_t seq, uint8_t* out,
+                               size_t outCap);
+size_t buildLightbarReport(Parser p, FeedbackState& st, uint8_t r, uint8_t g, uint8_t b,
+                           uint8_t* out, size_t outCap);
+size_t buildPlayerLedsReport(Parser p, uint8_t ledMask, uint8_t seq, uint8_t* out, size_t outCap);
+size_t buildTriggerEffectsReport(Parser p, const uint8_t left[TRIGGER_EFFECT_BLOCK_LEN],
+                                 const uint8_t right[TRIGGER_EFFECT_BLOCK_LEN], uint8_t* out,
+                                 size_t outCap);
+
 // Pure: writes the index-th GIP init packet for an Xbox One InitKind into out (with the sequence
 // number at byte 2), returns its length or 0 when there are no more. runInit sends them in order.
 size_t buildGipInitPacket(InitKind init, int index, uint8_t seq, uint8_t* out, size_t outCap);
@@ -162,6 +194,15 @@ bool runInit(int fd, int interfaceNumber, uint8_t epOut, Parser p, InitKind init
 void runTeardown(int fd, int interfaceNumber, Parser p);
 
 bool runRumble(int fd, uint8_t epOut, Parser p, uint16_t strong, uint16_t weak, uint8_t seq);
+
+// Android write wrappers over the feedback builders, mirroring runRumble.
+bool runMergedRumble(int fd, uint8_t epOut, Parser p, FeedbackState& st, uint8_t seq);
+bool runLightbar(int fd, uint8_t epOut, Parser p, FeedbackState& st, uint8_t r, uint8_t g,
+                 uint8_t b);
+bool runPlayerLeds(int fd, uint8_t epOut, Parser p, uint8_t ledMask, uint8_t seq);
+bool runTriggerEffects(int fd, uint8_t epOut, Parser p,
+                       const uint8_t left[TRIGGER_EFFECT_BLOCK_LEN],
+                       const uint8_t right[TRIGGER_EFFECT_BLOCK_LEN]);
 
 // Pure: writes the device's rumble report into out, returns its length (0 if unsupported or out is
 // too small). Host-tested in usb_parsers_test.cpp; runRumble is the Android write wrapper.

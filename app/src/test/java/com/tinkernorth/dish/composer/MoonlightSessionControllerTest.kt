@@ -11,6 +11,7 @@ import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEvent
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
+import com.tinkernorth.dish.hotpath.input.FeedbackRouter
 import com.tinkernorth.dish.hotpath.input.RumbleRouter
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
@@ -69,6 +70,8 @@ class MoonlightSessionControllerTest {
 
     private val rumble: RumbleRouter = mockk(relaxed = true)
 
+    private val feedback: FeedbackRouter = mockk(relaxed = true)
+
     private fun controller() =
         MoonlightSessionController(
             context = context,
@@ -76,6 +79,7 @@ class MoonlightSessionControllerTest {
             moonlight = moonlight,
             capabilities = capabilities,
             rumble = rumble,
+            feedback = feedback,
             scope = TestScope(dispatcher),
         )
 
@@ -309,5 +313,55 @@ class MoonlightSessionControllerTest {
 
             verify(exactly = 1) { rumble.dispatchToSlot("pad-b", 65535, 1000, any()) }
             verify(exactly = 0) { rumble.dispatchToSlot("pad-a", any(), any(), any()) }
+        }
+
+    @Test
+    fun `host trigger rumble and LED reach the feedback router for the right slot`() =
+        runTest(dispatcher) {
+            val conn =
+                MoonlightConnection(
+                    id = "moonlight:uid:abc",
+                    host = MoonlightHost(name = "PC", address = "10.0.0.5", uniqueId = "abc"),
+                    scope = TestScope(dispatcher),
+                    ioDispatcher = dispatcher,
+                )
+            conn.acquirePad("pad-a", MoonlightEmulatedType.XBOX, 0x07, 0xFFFF)
+            conn.acquirePad("pad-b", MoonlightEmulatedType.XBOX, 0x07, 0xFFFF)
+            every { moonlight.connections } returns MutableStateFlow(mapOf(conn.id to conn))
+            controller()
+            dispatcher.scheduler.advanceUntilIdle()
+
+            conn.dispatchFeedback(MoonlightEvent.RumbleTriggers(controllerNumber = 0, left = 1234, right = 4321))
+            conn.dispatchFeedback(MoonlightEvent.RgbLed(controllerNumber = 1, red = 10, green = 20, blue = 30))
+
+            verify(exactly = 1) { feedback.dispatchTriggerRumbleToSlot("pad-a", 1234, 4321) }
+            verify(exactly = 0) { feedback.dispatchTriggerRumbleToSlot("pad-b", any(), any()) }
+            verify(exactly = 1) { feedback.dispatchLightbarToSlot("pad-b", 10, 20, 30) }
+            verify(exactly = 0) { feedback.dispatchLightbarToSlot("pad-a", any(), any(), any()) }
+        }
+
+    @Test
+    fun `motion request is absorbed by the connection gate, not the routers`() =
+        runTest(dispatcher) {
+            val conn =
+                MoonlightConnection(
+                    id = "moonlight:uid:abc",
+                    host = MoonlightHost(name = "PC", address = "10.0.0.5", uniqueId = "abc"),
+                    scope = TestScope(dispatcher),
+                    ioDispatcher = dispatcher,
+                )
+            conn.acquirePad("pad-a", MoonlightEmulatedType.PLAYSTATION, 0x37, 0xFFFF)
+            every { moonlight.connections } returns MutableStateFlow(mapOf(conn.id to conn))
+            controller()
+            dispatcher.scheduler.advanceUntilIdle()
+
+            conn.dispatchFeedback(MoonlightEvent.MotionRequest(controllerNumber = 0, reportRateHz = 100, motionType = 2))
+
+            verify(exactly = 0) { rumble.dispatchToSlot(any(), any(), any(), any()) }
+            verify(exactly = 0) { feedback.dispatchTriggerRumbleToSlot(any(), any(), any()) }
+            // The connection recorded the request: the sink now wants motion for the slot.
+            org.junit.Assert.assertTrue(conn.motionWanted("pad-a"))
+            conn.dispatchFeedback(MoonlightEvent.MotionRequest(controllerNumber = 0, reportRateHz = 0, motionType = 2))
+            org.junit.Assert.assertFalse(conn.motionWanted("pad-a"))
         }
 }

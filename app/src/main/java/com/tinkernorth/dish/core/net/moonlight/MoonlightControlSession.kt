@@ -173,6 +173,48 @@ class MoonlightControlSession(
         }
     }
 
+    @Suppress("LongParameterList")
+    fun sendControllerTouch(
+        controllerNumber: Int,
+        eventType: Int,
+        pointerId: Int,
+        x: Float,
+        y: Float,
+        pressure: Float,
+    ) {
+        synchronized(lock) {
+            sendControlPlaintextLocked(
+                MoonlightInputEncoder.controllerTouch(controllerNumber, eventType, pointerId, x, y, pressure),
+            )
+        }
+    }
+
+    fun sendControllerMotion(
+        controllerNumber: Int,
+        motionType: Int,
+        x: Float,
+        y: Float,
+        z: Float,
+    ) {
+        synchronized(lock) {
+            sendControlPlaintextLocked(
+                MoonlightInputEncoder.controllerMotion(controllerNumber, motionType, x, y, z),
+            )
+        }
+    }
+
+    fun sendControllerBattery(
+        controllerNumber: Int,
+        batteryState: Int,
+        percentage: Int,
+    ) {
+        synchronized(lock) {
+            sendControlPlaintextLocked(
+                MoonlightInputEncoder.controllerBattery(controllerNumber, batteryState, percentage),
+            )
+        }
+    }
+
     /**
      * Pump the receive side once: read up to [budget] datagrams, feed the ENet
      * layer, decrypt delivered control payloads and dispatch decoded events.

@@ -110,6 +110,11 @@
     <string name="setup_cap_rumble">Vibration</string>
     <string name="setup_cap_motion">Mouvement / gyro</string>
     <string name="setup_cap_touchpad">Pavé tactile</string>
+    <string name="setup_cap_battery">Batterie</string>
+    <string name="setup_cap_lightbar">Barre lumineuse</string>
+    <string name="setup_cap_trigger_rumble">Vibration des gâchettes</string>
+    <string name="setup_cap_trigger_effects">Gâchettes adaptatives</string>
+    <string name="setup_cap_player_leds">LED joueur</string>
     <string name="setup_cap_available">Disponible</string>
     <string name="setup_cap_off">Désactivé</string>
     <string name="setup_cap_input">Entrée</string>

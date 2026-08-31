@@ -15,7 +15,7 @@ import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.composer.PhysicalReachabilityComposer
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
-import com.tinkernorth.dish.source.connection.SatelliteConnection
+import com.tinkernorth.dish.source.connection.TelemetrySink
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -53,7 +53,7 @@ class PhysicalBatterySource
 
         private var chargingReceiver: BroadcastReceiver? = null
 
-        @Volatile private var reachable: Map<String, SatelliteConnection> = emptyMap()
+        @Volatile private var reachable: Map<String, TelemetrySink> = emptyMap()
 
         @Volatile private var deviceKeys: Set<String> = emptySet()
 
@@ -119,7 +119,7 @@ class PhysicalBatterySource
             chargingReceiver = receiver
         }
 
-        private fun onReachableChanged(next: Map<String, SatelliteConnection>) {
+        private fun onReachableChanged(next: Map<String, TelemetrySink>) {
             reachable = next
             // Hop off the flow-collector thread; pollOnce is synchronous.
             scope.launch { pollOnce() }

@@ -53,4 +53,68 @@ object MoonlightGamepadBridge {
             rightY = sRY,
         )
     }
+
+    /** USB-direct IMU sample for a Moonlight-bound pad, satellite wire scale. */
+    @JvmStatic
+    @Suppress("LongParameterList")
+    fun dispatchMotion(
+        connectionId: String,
+        controllerNumber: Int,
+        gyroX: Int,
+        gyroY: Int,
+        gyroZ: Int,
+        accelX: Int,
+        accelY: Int,
+        accelZ: Int,
+        timestampDeltaUs: Int,
+    ) {
+        val conn = manager?.get(connectionId) ?: return
+        val slotId = conn.slotIdForNumber(controllerNumber) ?: return
+        conn.sendMotion(
+            slotId = slotId,
+            gyroX = gyroX.toShort(),
+            gyroY = gyroY.toShort(),
+            gyroZ = gyroZ.toShort(),
+            accelX = accelX.toShort(),
+            accelY = accelY.toShort(),
+            accelZ = accelZ.toShort(),
+            timestampDeltaUs = timestampDeltaUs,
+        )
+    }
+
+    /** USB-direct touchpad frame for a Moonlight-bound pad; the connection diffs it into events. */
+    @JvmStatic
+    @Suppress("LongParameterList")
+    fun dispatchTouch(
+        connectionId: String,
+        controllerNumber: Int,
+        finger0Active: Boolean,
+        finger0Id: Int,
+        finger0X: Int,
+        finger0Y: Int,
+        finger1Active: Boolean,
+        finger1Id: Int,
+        finger1X: Int,
+        finger1Y: Int,
+        clickDown: Boolean,
+    ) {
+        val conn = manager?.get(connectionId) ?: return
+        val slotId = conn.slotIdForNumber(controllerNumber) ?: return
+        conn.sendTouchpad(
+            slotId = slotId,
+            finger0Active = finger0Active,
+            finger1Active = finger1Active,
+            buttonPressed = clickDown,
+            rightPressed = false,
+            middlePressed = false,
+            finger0TrackingId = finger0Id,
+            finger0X = finger0X.toShort(),
+            finger0Y = finger0Y.toShort(),
+            finger1TrackingId = finger1Id,
+            finger1X = finger1X.toShort(),
+            finger1Y = finger1Y.toShort(),
+            eventTimeMs = 0L,
+            scrollDelta = 0,
+        )
+    }
 }
