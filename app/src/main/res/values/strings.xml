@@ -622,6 +622,7 @@
     <string name="binding_func_gyro">Gyro</string>
     <string name="binding_state_on">On</string>
     <string name="binding_state_off">Off</string>
+    <string name="binding_state_unknown" translatable="false">?</string>
     <string name="binding_func_value">%1$s · %2$s</string>
 
     <string name="binding_rate_hz">%1$d Hz</string>

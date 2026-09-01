@@ -206,6 +206,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                     candidateHostKind = state.selectedHost?.kind ?: ConnectionKind.SATELLITE,
                     candidateHostId = state.draft?.hostId,
                 ),
+                inputUnknown = state.inputUnknown,
             ),
         )
     }
@@ -242,6 +243,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                     candidateHostKind = ConnectionKind.MOONLIGHT,
                     candidateHostId = state.draft?.hostId,
                 ),
+                inputUnknown = state.inputUnknown,
             ),
         )
     }
@@ -414,6 +416,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                         add(gamepad)
                         if (model.motionOn) add(motion)
                         if (model.batteryOn) add(battery)
+                        if (state.inputUnknown) add(ReviewFlow(R.drawable.ic_help, R.string.setup_cap_unknown))
                     },
                 gets = gets,
             )

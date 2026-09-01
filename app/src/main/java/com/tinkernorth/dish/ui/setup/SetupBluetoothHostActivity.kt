@@ -168,11 +168,12 @@ class SetupBluetoothHostActivity : BaseGamepadHostActivity() {
     // A Bluetooth host is never a Satellite, so its transport carries only the gamepad:
     // motion/touchpad/rumble resolve off for both types via the capability layers.
     private fun renderTypeTables() {
+        val inputUnknown = viewModel.inputUnknown()
         binding.cardXbox.capabilityContainer.bindCapabilityRows(
-            capabilityRows(viewModel.capabilityForType(CONTROLLER_TYPE_XBOX)),
+            capabilityRows(viewModel.capabilityForType(CONTROLLER_TYPE_XBOX), inputUnknown),
         )
         binding.cardPlaystation.capabilityContainer.bindCapabilityRows(
-            capabilityRows(viewModel.capabilityForType(CONTROLLER_TYPE_PLAYSTATION)),
+            capabilityRows(viewModel.capabilityForType(CONTROLLER_TYPE_PLAYSTATION), inputUnknown),
         )
     }
 

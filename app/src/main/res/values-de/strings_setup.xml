@@ -116,8 +116,9 @@
     <string name="setup_cap_trigger_rumble">Trigger-Vibration</string>
     <string name="setup_cap_trigger_effects">Adaptive Trigger</string>
     <string name="setup_cap_player_leds">Spieler-LEDs</string>
-    <string name="setup_cap_available">Verfügbar</string>
+    <string name="setup_cap_available">Unterstützt</string>
     <string name="setup_cap_off">Aus</string>
+    <string name="setup_cap_unknown">Unbekannt</string>
     <string name="setup_cap_input">Eingabe</string>
     <string name="setup_cap_destination">Ziel</string>
     <string name="setup_cap_type">Typ</string>

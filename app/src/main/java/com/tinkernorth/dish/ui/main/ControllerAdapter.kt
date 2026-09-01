@@ -266,7 +266,7 @@ class ControllerAdapter(
             bound: ConnectionSummary,
         ) {
             connectionRow.root.visibility = View.VISIBLE
-            connectionPills.bind(connectionSpecs(row, bound.kind))
+            connectionPills.bind(connectionSpecs(row))
 
             destinationRow.root.visibility = View.VISIBLE
             showDestination(bound.label)
@@ -287,9 +287,8 @@ class ControllerAdapter(
         }
 
         private fun bindUnbound(row: Row) {
-            // Unbound shows the connection without a mode chip; Direct/Standard is only chosen at bind time.
             connectionRow.root.visibility = View.VISIBLE
-            connectionPills.bind(connectionSpecs(row, kind = null))
+            connectionPills.bind(connectionSpecs(row))
             destinationRow.root.visibility = View.VISIBLE
             showDestination(null)
             compatRow.root.visibility = View.GONE
@@ -308,10 +307,7 @@ class ControllerAdapter(
             }
         }
 
-        private fun connectionSpecs(
-            row: Row,
-            kind: ConnectionKind?,
-        ): List<PillSpec> {
+        private fun connectionSpecs(row: Row): List<PillSpec> {
             val card = row.pathCard
             val virtual = row.slot.inputType == SlotInputType.VIRTUAL
             val isUsb = !virtual && card?.transport == Transport.Usb
@@ -323,8 +319,7 @@ class ControllerAdapter(
                     else -> R.string.binding_link_usb to R.drawable.ic_usb
                 }
             val specs = mutableListOf(PillSpec(ctx.getString(label), icon, PillTone.FACT))
-            // The Direct/Standard mode chip only applies once a USB controller is on a known path.
-            if (isUsb && kind != null) specs.add(usbModeSpec(card))
+            if (isUsb && card != null) specs.add(usbModeSpec(card))
             if (isBt && card?.wiredSwitchAvailable == true) {
                 specs.add(PillSpec(ctx.getString(R.string.binding_usb_available), R.drawable.ic_usb, PillTone.WARN))
             }
@@ -373,6 +368,7 @@ class ControllerAdapter(
             row: Row,
             bound: ConnectionSummary,
         ): List<PillSpec> {
+            if (inputFunctionsUnknown(row.pathCard)) return unknownFunctionSpecs(row)
             val specs = mutableListOf<PillSpec>()
             val card = row.pathCard
             val rumblePresent =
@@ -403,6 +399,27 @@ class ControllerAdapter(
             specs.addAll(feedbackFuncFacts(row.motionCap).map(::feedbackFactPill))
             return specs
         }
+
+        private fun unknownFunctionSpecs(row: Row): List<PillSpec> {
+            val specs =
+                mutableListOf(
+                    unknownFuncPill(R.string.binding_func_rumble, R.drawable.ic_rumble),
+                    unknownFuncPill(R.string.binding_func_gyro, R.drawable.ic_motion),
+                    unknownFuncPill(R.string.binding_func_touchpad, R.drawable.ic_touchpad),
+                )
+            if (row.pointer?.mouseOpenable == true) specs.add(pointerFactPill(PointerPillFact.MOUSE_READY))
+            return specs
+        }
+
+        private fun unknownFuncPill(
+            @StringRes label: Int,
+            @DrawableRes icon: Int,
+        ): PillSpec =
+            PillSpec(
+                ctx.getString(R.string.binding_func_value, ctx.getString(label), ctx.getString(R.string.binding_state_unknown)),
+                icon,
+                PillTone.OFF,
+            )
 
         private fun feedbackFactPill(fact: FeedbackPillFact): PillSpec =
             when (fact) {
@@ -713,6 +730,10 @@ internal enum class CardActionKind { GAMEPAD, TOUCHPAD, MOUSE, SWITCH_DIRECT, SE
 // facts stay testable: the pad surface reports its declared routing (or the Direct nudge
 // that unlocks it), and the mouse rides as an on-demand chip wherever its surface can open.
 internal enum class PointerPillFact { PAD_NEEDS_DIRECT, PAD_ON, PAD_OFF, MOUSE_READY }
+
+// Direct on an unrecognized model reads a guessed layout, so what the pad supports is not known.
+internal fun inputFunctionsUnknown(card: PathCard?): Boolean =
+    card != null && card.currentMode == InputPathMode.Direct && card.risk == PathRisk.GuessedLayout
 
 internal fun pointerFuncFacts(row: ControllerAdapter.Row): List<PointerPillFact> =
     buildList {

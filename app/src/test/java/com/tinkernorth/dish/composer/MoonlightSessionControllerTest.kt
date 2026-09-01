@@ -97,7 +97,7 @@ class MoonlightSessionControllerTest {
         every { hub.bindings } returns bindings
         every { hub.connections } returns connections
         every { hub.satTypes } returns satTypes
-        every { capabilities.capabilityForCandidate(any(), any(), any(), any()) } returns padCaps
+        every { capabilities.capabilityForCandidate(any(), any(), any(), any(), any()) } returns padCaps
     }
 
     @After
@@ -154,7 +154,7 @@ class MoonlightSessionControllerTest {
     @Test
     fun `Auto becomes PlayStation when the bound input reports motion`() =
         runTest(dispatcher) {
-            every { capabilities.capabilityForCandidate(any(), any(), any(), any()) } returns motionCaps
+            every { capabilities.capabilityForCandidate(any(), any(), any(), any(), any()) } returns motionCaps
             connections.value = listOf(summary("moonlight:pc"))
             bindings.value = mapOf("1" to "moonlight:pc")
             val desired = slot<Map<String, List<MoonlightPadRequest>>>()

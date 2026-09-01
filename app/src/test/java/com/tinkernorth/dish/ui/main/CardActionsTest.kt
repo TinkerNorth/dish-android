@@ -13,8 +13,10 @@ import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.usb.PathChoice
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CardActionsTest {
@@ -254,6 +256,15 @@ class CardActionsTest {
     @Test
     fun `a slot with neither surface reports no pointer pills`() {
         assertEquals(emptyList<PointerPillFact>(), pointerFuncFacts(row(slot(SlotInputType.PHYSICAL))))
+    }
+
+    @Test
+    fun `input functions are unknown only for Direct on an unrecognized model`() {
+        assertFalse(inputFunctionsUnknown(null))
+        assertFalse(inputFunctionsUnknown(pathCard()))
+        val direct = pathCard().copy(currentMode = InputPathMode.Direct, risk = PathRisk.GuessedLayout)
+        assertTrue(inputFunctionsUnknown(direct))
+        assertFalse(inputFunctionsUnknown(direct.copy(risk = PathRisk.None)))
     }
 
     @Test
