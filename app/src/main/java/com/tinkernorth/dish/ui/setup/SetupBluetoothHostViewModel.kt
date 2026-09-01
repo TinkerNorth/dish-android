@@ -136,6 +136,8 @@ class SetupBluetoothHostViewModel
                 candidateHostId = null,
             )
 
+        fun inputUnknown(): Boolean = !capabilityComposer.inputFunctionsFor(slotId, direct = null).known
+
         // Refresh the grant snapshot on every foreground; the OS never broadcasts
         // a revoke, and a grant landed in the Activity launcher needs reflecting.
         fun refresh() = permission.refresh()

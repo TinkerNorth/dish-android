@@ -108,8 +108,9 @@
     <string name="setup_cap_trigger_rumble">Vibracija okidača</string>
     <string name="setup_cap_trigger_effects">Adaptivni okidači</string>
     <string name="setup_cap_player_leds">LED igrača</string>
-    <string name="setup_cap_available">Dostupno</string>
+    <string name="setup_cap_available">Podržano</string>
     <string name="setup_cap_off">Isključeno</string>
+    <string name="setup_cap_unknown">Nepoznato</string>
     <string name="setup_cap_input">Unos</string>
     <string name="setup_cap_destination">Odredište</string>
     <string name="setup_cap_type">Tip</string>

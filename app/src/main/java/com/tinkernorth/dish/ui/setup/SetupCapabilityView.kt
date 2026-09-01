@@ -18,9 +18,15 @@ fun LinearLayout.bindCapabilityRows(rows: List<SetupCapabilityRow>) {
     rows.forEach { row ->
         val rowBinding = SetupCapabilityRowBinding.inflate(inflater, this, false)
         rowBinding.capName.setText(capabilityNameRes(row.kind))
-        rowBinding.capStatus.setText(if (row.available) R.string.setup_cap_available else R.string.setup_cap_off)
+        val statusRes =
+            when {
+                row.available -> R.string.setup_cap_available
+                row.unknown -> R.string.setup_cap_unknown
+                else -> R.string.setup_cap_off
+            }
+        rowBinding.capStatus.setText(statusRes)
         rowBinding.capStatus.setTextColor(context.getColor(if (row.available) R.color.colorSuccess else R.color.colorMuted))
-        applyCheck(rowBinding.icInput, row.inputOk)
+        if (row.inputUnknown) applyUnknown(rowBinding.icInput) else applyCheck(rowBinding.icInput, row.inputOk)
         applyCheck(rowBinding.icDestination, row.destinationOk)
         applyCheck(rowBinding.icType, row.typeOk)
         addView(rowBinding.root)
@@ -45,4 +51,9 @@ private fun applyCheck(
 ) {
     view.setImageResource(if (ok) R.drawable.ic_check_circle else R.drawable.ic_cancel)
     view.imageTintList = ColorStateList.valueOf(view.context.getColor(if (ok) R.color.colorSuccess else R.color.colorMuted))
+}
+
+private fun applyUnknown(view: ImageView) {
+    view.setImageResource(R.drawable.ic_help)
+    view.imageTintList = ColorStateList.valueOf(view.context.getColor(R.color.colorMuted))
 }

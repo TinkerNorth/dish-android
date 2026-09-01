@@ -116,8 +116,9 @@
     <string name="setup_cap_trigger_rumble">Trigger rumble</string>
     <string name="setup_cap_trigger_effects">Adaptive triggers</string>
     <string name="setup_cap_player_leds">Player LEDs</string>
-    <string name="setup_cap_available">Available</string>
+    <string name="setup_cap_available">Supported</string>
     <string name="setup_cap_off">Off</string>
+    <string name="setup_cap_unknown">Unknown</string>
     <string name="setup_cap_input">Input</string>
     <string name="setup_cap_destination">Destination</string>
     <string name="setup_cap_type">Type</string>

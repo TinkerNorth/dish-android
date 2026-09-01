@@ -143,10 +143,11 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
         s.tvInputName.text = " · ${snapshot.name}"
 
         val (linkLabel, linkIcon) =
-            when (snapshot.link) {
-                BindingLink.USB -> getString(R.string.binding_link_usb) to R.drawable.ic_usb
-                BindingLink.BLUETOOTH -> getString(R.string.binding_link_bluetooth) to R.drawable.ic_bluetooth
-                BindingLink.ONSCREEN -> getString(R.string.binding_link_onscreen) to R.drawable.ic_gamepad_virtual
+            when {
+                snapshot.link == BindingLink.BLUETOOTH -> getString(R.string.binding_link_bluetooth) to R.drawable.ic_bluetooth
+                snapshot.link == BindingLink.ONSCREEN -> getString(R.string.binding_link_onscreen) to R.drawable.ic_gamepad_virtual
+                state.draft?.directOn == true -> getString(R.string.binding_mode_direct) to R.drawable.ic_bolt
+                else -> getString(R.string.binding_mode_standard) to R.drawable.ic_cable
             }
         s.ivConnIcon.setImageResource(linkIcon)
         s.tvConnText.text = linkLabel
@@ -169,19 +170,34 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
 
         val fc = s.functionsContainer
         fc.removeAllViews()
-        if (snapshot.hasRumble) {
+        val funcs = state.inputFuncs
+        if (!funcs.known) {
+            listOf(
+                R.string.binding_func_rumble to R.drawable.ic_rumble,
+                R.string.binding_func_gyro to R.drawable.ic_motion,
+                R.string.binding_func_touchpad to R.drawable.ic_touchpad,
+            ).forEach { (label, icon) ->
+                fc.addView(fc.inflateBindingPill(unknownFuncLabel(label), icon, PillTone.OFF))
+            }
+            return
+        }
+        if (funcs.rumble) {
             fc.addView(
                 fc.inflateBindingPill(getString(R.string.binding_func_rumble), R.drawable.ic_rumble, PillTone.CAP),
             )
         }
-        if (snapshot.hasGyro) fc.addView(fc.inflateBindingPill(getString(R.string.binding_func_gyro), R.drawable.ic_motion, PillTone.CAP))
-        if (snapshot.hasTouchpad) {
+        if (funcs.gyro) fc.addView(fc.inflateBindingPill(getString(R.string.binding_func_gyro), R.drawable.ic_motion, PillTone.CAP))
+        if (funcs.touchpad) {
             fc.addView(
                 fc.inflateBindingPill(getString(R.string.binding_func_touchpad), R.drawable.ic_touchpad, PillTone.CAP),
             )
         }
         if (fc.isEmpty()) fc.addView(noneValue(fc))
     }
+
+    private fun unknownFuncLabel(
+        @StringRes label: Int,
+    ): String = getString(R.string.binding_func_value, getString(label), getString(R.string.binding_state_unknown))
 
     private fun bindDestinationSection(
         state: ConfigUiState,
@@ -489,7 +505,10 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
                     getString(R.string.ml_type_auto_resolved, getString(moonlightTypeLabelRes(candidate)))
             }
             card.capabilityContainer.bindCapabilityRows(
-                capabilityRows(viewModel.capabilityForCandidate(snapshot.slotId, candidate, host.kind, host.id)),
+                capabilityRows(
+                    viewModel.capabilityForCandidate(snapshot.slotId, candidate, host.kind, host.id),
+                    inputUnknown = state.inputUnknown,
+                ),
             )
             card.typeCard.setOnClickListener {
                 viewModel.setType(option.id)

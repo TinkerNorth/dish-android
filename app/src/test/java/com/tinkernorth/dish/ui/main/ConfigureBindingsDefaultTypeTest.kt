@@ -8,6 +8,7 @@ import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
+import com.tinkernorth.dish.composer.InputFunctions
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.model.CatalogDto
@@ -112,7 +113,9 @@ class ConfigureBindingsDefaultTypeTest {
         every { gamepadRegistry.devices } returns devicesFlow
         every { usbGamepadManager.controllers } returns MutableStateFlow(emptyMap())
         every { capabilityComposer.capabilityFor(any()) } returns SlotCapabilities.NONE
-        every { capabilityComposer.capabilityForCandidate(any(), any(), any(), any()) } returns SlotCapabilities.NONE
+        every { capabilityComposer.capabilityForCandidate(any(), any(), any(), any(), any()) } returns SlotCapabilities.NONE
+        every { capabilityComposer.inputFunctionsFor(any(), any()) } returns
+            InputFunctions(known = true, rumble = false, gyro = false, touchpad = false)
 
         val conn = mockk<SatelliteConnection>(relaxed = true)
         every { conn.server } returns MutableStateFlow(server)

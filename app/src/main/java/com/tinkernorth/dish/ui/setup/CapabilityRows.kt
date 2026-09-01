@@ -26,23 +26,29 @@ data class SetupCapabilityRow(
     val inputOk: Boolean,
     val destinationOk: Boolean,
     val typeOk: Boolean,
+    val inputUnknown: Boolean = false,
 ) {
     val available: Boolean get() = inputOk && destinationOk && typeOk
+
+    val unknown: Boolean get() = inputUnknown && destinationOk && typeOk
 }
 
 // The three classic rows always render (their off-state is informative); the
 // feedback/battery rows appended in protocol 2 render only when SOME layer can
 // carry them, so a plain Xbox-over-Bluetooth card stays three rows instead of
 // eight rows of crosses.
-fun capabilityRows(caps: SlotCapabilities): List<SetupCapabilityRow> {
+fun capabilityRows(
+    caps: SlotCapabilities,
+    inputUnknown: Boolean = false,
+): List<SetupCapabilityRow> {
     val rows =
         mutableListOf(
-            rowFor(SetupCapabilityKind.RUMBLE, Feature.RUMBLE, caps),
-            rowFor(SetupCapabilityKind.MOTION, Feature.MOTION, caps),
-            rowFor(SetupCapabilityKind.TOUCHPAD, Feature.TOUCHPAD, caps),
+            rowFor(SetupCapabilityKind.RUMBLE, Feature.RUMBLE, caps, inputUnknown),
+            rowFor(SetupCapabilityKind.MOTION, Feature.MOTION, caps, inputUnknown),
+            rowFor(SetupCapabilityKind.TOUCHPAD, Feature.TOUCHPAD, caps, inputUnknown),
         )
     for ((kind, feature) in EXTENDED_ROWS) {
-        val row = rowFor(kind, feature, caps)
+        val row = rowFor(kind, feature, caps, inputUnknown)
         if (row.inputOk || row.destinationOk || row.typeOk) rows += row
     }
     return rows
@@ -61,10 +67,12 @@ private fun rowFor(
     kind: SetupCapabilityKind,
     feature: Feature,
     caps: SlotCapabilities,
+    inputUnknown: Boolean,
 ): SetupCapabilityRow =
     SetupCapabilityRow(
         kind = kind,
         inputOk = caps.inputOk(feature),
         destinationOk = caps.destinationOk(feature),
         typeOk = caps.typeOk(feature),
+        inputUnknown = inputUnknown,
     )

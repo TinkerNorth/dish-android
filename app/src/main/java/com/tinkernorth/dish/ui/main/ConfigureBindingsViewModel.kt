@@ -15,6 +15,7 @@ import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
+import com.tinkernorth.dish.composer.InputFunctions
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.LinkTiers
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
@@ -88,9 +89,6 @@ data class BindingSnapshot(
     val link: BindingLink,
     val directCapable: Boolean,
     val directVerified: Boolean,
-    val hasRumble: Boolean,
-    val hasGyro: Boolean,
-    val hasTouchpad: Boolean,
     val bound: Boolean,
     val directPollHz: Int,
     // Used to re-resolve the slot after a USB path switch replaces the
@@ -149,6 +147,7 @@ data class ConfigUiState(
     val controllerPresent: Boolean = true,
     val dismissedUnsteadyHostIds: Set<String> = emptySet(),
     val capabilities: SlotCapabilities = SlotCapabilities.NONE,
+    val inputFuncs: InputFunctions = InputFunctions(known = true, rumble = false, gyro = false, touchpad = false),
     // Set only when a satellite catalog fetch failed with nothing cached, so Loading (fetch in
     // flight) and Error (fetch failed) are distinguishable — neither is derivable from the draft alone.
     val typeFetchFailed: Boolean = false,
@@ -216,6 +215,11 @@ data class ConfigUiState(
     val isBluetoothHost: Boolean get() = selectedHost?.kind == ConnectionKind.BLUETOOTH
 
     val isMoonlightHost: Boolean get() = selectedHost?.kind == ConnectionKind.MOONLIGHT
+
+    // The USB path the draft would apply (null off USB), so previews track the toggle, not the current path.
+    val candidateDirect: Boolean? get() = if (snapshot?.link == BindingLink.USB) draft?.directOn == true else null
+
+    val inputUnknown: Boolean get() = !inputFuncs.known
 }
 
 data class ApplyStep(
@@ -365,6 +369,7 @@ class ConfigureBindingsViewModel
                     candidateType = MoonlightEmulatedType.XBOX,
                     candidateHostKind = ConnectionKind.MOONLIGHT,
                     candidateHostId = _ui.value.draft?.hostId,
+                    candidateDirect = _ui.value.candidateDirect,
                 )
             return MoonlightEmulatedType.resolve(picked, caps.inputOk(Feature.MOTION))
         }
@@ -542,7 +547,14 @@ class ConfigureBindingsViewModel
             candidateType: Int,
             candidateHostKind: ConnectionKind,
             candidateHostId: String?,
-        ): SlotCapabilities = capabilityComposer.capabilityForCandidate(slotId, candidateType, candidateHostKind, candidateHostId)
+        ): SlotCapabilities =
+            capabilityComposer.capabilityForCandidate(
+                slotId = slotId,
+                candidateType = candidateType,
+                candidateHostKind = candidateHostKind,
+                candidateHostId = candidateHostId,
+                candidateDirect = _ui.value.candidateDirect,
+            )
 
         // Re-resolves the path capabilities from the current draft/host so the gates stay in sync.
         // userEnabled is forced full inside the composer, so these are the inherent "available" layers.
@@ -558,9 +570,10 @@ class ConfigureBindingsViewModel
                         candidateType = if (kind == ConnectionKind.MOONLIGHT) moonlightResolvedType(it) else it,
                         candidateHostKind = kind,
                         candidateHostId = d.hostId,
+                        candidateDirect = candidateDirect,
                     )
                 } ?: SlotCapabilities.NONE
-            return copy(capabilities = caps)
+            return copy(capabilities = caps, inputFuncs = capabilityComposer.inputFunctionsFor(slotId, candidateDirect))
         }
 
         // The label for a controller type from the live catalog, falling back to the
@@ -877,9 +890,6 @@ class ConfigureBindingsViewModel
                     link = BindingLink.ONSCREEN,
                     directCapable = false,
                     directVerified = false,
-                    hasRumble = false,
-                    hasGyro = capabilityComposer.capabilityFor(slotId).inputOk(Feature.MOTION),
-                    hasTouchpad = true,
                     bound = bound,
                     directPollHz = 0,
                 )
@@ -888,16 +898,12 @@ class ConfigureBindingsViewModel
             val isUsb = device?.transport != Transport.Bluetooth
             val vid = device?.vendorId ?: 0
             val pid = device?.productId ?: 0
-            val caps = capabilityComposer.capabilityFor(slotId)
             return BindingSnapshot(
                 slotId = slotId,
                 name = device?.name ?: "",
                 link = if (isUsb) BindingLink.USB else BindingLink.BLUETOOTH,
                 directCapable = isUsb,
                 directVerified = native.isKnownFastLaneModel(vid, pid),
-                hasRumble = caps.inputOk(Feature.RUMBLE),
-                hasGyro = caps.inputOk(Feature.MOTION),
-                hasTouchpad = native.modelHasTouchpad(vid, pid),
                 bound = bound,
                 directPollHz = device?.pollRateHz ?: 0,
                 vendorId = vid,

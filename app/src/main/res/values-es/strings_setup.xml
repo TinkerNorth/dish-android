@@ -108,8 +108,9 @@
     <string name="setup_cap_trigger_rumble">Vibración de gatillos</string>
     <string name="setup_cap_trigger_effects">Gatillos adaptativos</string>
     <string name="setup_cap_player_leds">LED de jugador</string>
-    <string name="setup_cap_available">Disponible</string>
+    <string name="setup_cap_available">Compatible</string>
     <string name="setup_cap_off">Apagado</string>
+    <string name="setup_cap_unknown">Desconocido</string>
     <string name="setup_cap_input">Entrada</string>
     <string name="setup_cap_destination">Destino</string>
     <string name="setup_cap_type">Tipo</string>

@@ -60,7 +60,7 @@ class SetupBluetoothHostViewModelTest {
         every { store.rememberedBtFlow } returns remembered
         every { motion.hasGyro } returns true
         every { hub.bind(any(), any(), any()) } returns true
-        every { capabilityComposer.capabilityForCandidate(any(), any(), any(), any()) } returns SlotCapabilities.NONE
+        every { capabilityComposer.capabilityForCandidate(any(), any(), any(), any(), any()) } returns SlotCapabilities.NONE
         vm = SetupBluetoothHostViewModel(registry, permission, store, hub, capabilityComposer, motion)
     }
 
