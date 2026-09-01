@@ -64,6 +64,11 @@ class GamepadOverlayActivity :
 
     override val resendIntervalNs: Long = BaseInputOverlayActivity.RESEND_INTERVAL_NS_DEFAULT
 
+    // No floating mic chip here: the pad itself carries the mute pill (same state, same store),
+    // and a chip over a full-screen control surface would sit on live pad controls and steal
+    // their touches.
+    override val showsMicChip: Boolean get() = false
+
     // @Volatile for main-thread write / resend-thread read.
     @Volatile private var lastReportedState: GamepadTouchView.GamepadState? = null
 

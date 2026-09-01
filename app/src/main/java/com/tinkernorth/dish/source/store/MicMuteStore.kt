@@ -20,8 +20,9 @@ import javax.inject.Singleton
  * Deliberately NOT persisted, unlike the mic toggle beside it. Mute is a live control over a
  * session the way it is on the hardware, where it clears when the pad powers down; the durable
  * "do not capture" answer is [MicEnabledStore], which is off by default and survives restarts. A
- * mute that outlived the process would also be invisible outside the overlay, which is the worst
- * possible place to hide a microphone that looks broken.
+ * mute that outlived the process would also be invisible until the next session armed a
+ * microphone (every mute surface, the app-wide chip included, only shows while one is armed),
+ * which is the worst possible place to hide a microphone that looks broken.
  */
 @Singleton
 class MicMuteStore

@@ -28,6 +28,12 @@ computer. Those lines say "update Satellite too".
   muted, Dish stops capturing rather than sending silence, so nothing
   leaves your phone at all, and the PC sees the pad's mute button held down
   the way it would on the real controller.
+- You can always see, and silence, the microphone. While any controller has
+  a live microphone, a small chip floats on every screen of the app: red
+  means the mic is hot, grey and slashed means it is muted, and one tap
+  mutes or unmutes everything at once. The streaming notification shows the
+  same state with a Mute mic / Unmute mic button, so it works even from the
+  notification shade with the app in the background.
 - The on-screen mute button tells the truth. Its face (the slashed glyph
   and the amber wash) always shows what your mute actually is, and the ring
   around it shows what the game on the PC thinks; PC software that toggles

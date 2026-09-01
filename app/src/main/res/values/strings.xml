@@ -627,6 +627,15 @@
     <string name="binding_mic_permission_rationale">Dish uses the phone microphone as the emulated controller\'s own microphone, so voice chat on your PC hears you through the pad. Audio goes only to the PC you paired with, only while you are streaming, and it is never stored.</string>
     <string name="binding_mic_permission_blocked">Microphone permission is off for Dish. Turn it on in system settings to use the controller microphone.</string>
     <string name="binding_mic_mute_hint">Mute anytime with the mute button on the on-screen controller, or the one on a connected DualSense. Muted means nothing is sent at all.</string>
+
+    <!-- App-wide mic surfaces: the floating chip on every screen and the streaming
+         notification's mic line + action. One state and one control for the whole device. -->
+    <string name="mic_state_live">Mic live</string>
+    <string name="mic_state_muted">Mic muted</string>
+    <string name="mic_action_mute">Mute mic</string>
+    <string name="mic_action_unmute">Unmute mic</string>
+    <string name="mic_chip_live_desc">Microphone is live. Tap to mute it.</string>
+    <string name="mic_chip_muted_desc">Microphone muted. Tap to unmute it.</string>
     <string name="binding_state_on">On</string>
     <string name="binding_state_off">Off</string>
     <string name="binding_state_unknown" translatable="false">?</string>
