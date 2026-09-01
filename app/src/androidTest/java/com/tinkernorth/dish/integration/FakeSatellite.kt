@@ -203,18 +203,24 @@ class FakeSatellite(
         running = false
         runCatching { https.close() }
         runCatching { udp.close() }
-        threads.forEach { runCatching { it.join(2_000) } }
+        // Snapshot under the lock: the accept loop can register one last handler thread while
+        // close() runs, and joining a live-mutating list throws ConcurrentModificationException.
+        // A thread registered after the snapshot is a daemon whose sockets just closed, so
+        // skipping its join keeps the same best-effort semantics the 2 s timeout already has.
+        val toJoin = synchronized(threads) { threads.toList() }
+        toJoin.forEach { runCatching { it.join(2_000) } }
     }
 
     private fun thread(
         name: String,
         block: () -> Unit,
     ) {
-        threads +=
+        val worker =
             Thread(block, name).apply {
                 isDaemon = true
-                start()
             }
+        synchronized(threads) { threads += worker }
+        worker.start()
     }
 
     private fun acceptLoop() {
