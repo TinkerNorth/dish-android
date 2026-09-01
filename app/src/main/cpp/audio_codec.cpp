@@ -11,11 +11,13 @@ namespace {
 // for knob. Both streams are 48 kHz, 20 ms, VBR with in-band FEC requested;
 // what differs is the application and the bitrate.
 //
-// Mic: 32 kbps mono under OPUS_APPLICATION_VOIP puts Opus in SILK mode, which
-// is the only mode that HAS in-band FEC, the redundant low-rate copy of the
-// previous frame that lets the satellite recover a single lost packet instead
-// of guessing at it. The expected-loss hint is what makes the encoder actually
-// spend bits on that copy; without it the flag alone does nothing.
+// Mic: 32 kbps mono under OPUS_APPLICATION_VOIP, with in-band FEC -- the
+// redundant low-rate copy of the previous frame that lets the satellite recover
+// a single lost packet instead of guessing at it. The expected-loss hint is
+// what makes the encoder actually spend bits on that copy; without it the flag
+// alone does nothing. It is also what picks the MODE: the hint forces SILK in,
+// so both streams encode as Hybrid fullband and both really do carry FEC.
+// Dropping it to zero would hand the speaker to CELT and silently delete that.
 //
 // Speaker: 96 kbps stereo under OPUS_APPLICATION_AUDIO, because that stream
 // carries game and chat audio a player listens to rather than speech a codec
@@ -107,6 +109,19 @@ std::unique_ptr<OpusStreamEncoder> OpusStreamEncoder::create(Stream stream) {
     if (opus_encoder_ctl(enc.get(), OPUS_SET_PACKET_LOSS_PERC(OPUS_EXPECTED_PACKET_LOSS_PCT)) !=
         OPUS_OK) {
         return nullptr;
+    }
+    // Mic only, and this is the encoder that actually ships: a live microphone
+    // never goes digitally silent, so a VAD gate is the only thing that can
+    // collapse a quiet room (measured on libopus 1.6.1: 123 of 250 frames gated
+    // at -50 dBFS after speech, 30.0 -> 16.4 kbps). Muting is a separate and
+    // stricter thing -- it stops delivery entirely, which DTX cannot do.
+    //
+    // The speaker encoder declines it deliberately, matching satellite: that
+    // gate cuts anything ~26-30 dB below the recent peak, which on game audio
+    // replaces a reverb tail with comfort noise. The far end suppresses exact
+    // digital silence instead, which cannot touch audible content.
+    if (stream == Stream::Mic) {
+        if (opus_encoder_ctl(enc.get(), OPUS_SET_DTX(1)) != OPUS_OK) return nullptr;
     }
     return std::unique_ptr<OpusStreamEncoder>(new OpusStreamEncoder(std::move(enc), channels));
 }

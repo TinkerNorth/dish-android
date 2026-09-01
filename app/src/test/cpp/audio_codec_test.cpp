@@ -16,6 +16,7 @@
 // streams are built (audio_codec.h says why), so each stream's loop closes here
 // instead of against a second implementation of the same constants.
 #include "audio_codec.h"
+#include "audio_jitter.h"
 #include "wire_encoders.h"
 
 #include <gtest/gtest.h>
@@ -379,6 +380,97 @@ TEST(AudioCodec, DecodeFecWithNoCarrierConcealsInsteadOfFailing) {
     std::vector<int16_t> out(SPEAKER_FRAME, 0);
     EXPECT_EQ(dec->decodeFec(nullptr, 0, out.data(), SPEAKER_FRAME), MIC_FRAME);
     EXPECT_EQ(dec->decodeFec(nullptr, 0, out.data(), MIC_FRAME - 1), 0u);
+}
+
+// DTX is asymmetric between the two streams on purpose, and the asymmetry is
+// invisible from the header: only behaviour can pin it. The mic wants it
+// because a live microphone never goes digitally silent, so a VAD gate is the
+// only thing that can collapse a quiet room. The speaker must not have it,
+// because its gate cuts anything ~26-30 dB below the recent peak, which on game
+// audio turns a reverb tail into comfort noise.
+TEST(AudioCodecMic, SustainedSilenceCollapsesToDtxPackets) {
+    auto enc = OpusStreamEncoder::create(Stream::Mic);
+    ASSERT_NE(enc, nullptr);
+
+    const std::vector<int16_t> silence(MIC_FRAME, 0);
+    uint8_t packet[MAX_PACKET];
+
+    // DTX needs a run of qualifying input before it engages (measured at 200 ms
+    // on libopus 1.6.1), so the steady state is what is asserted, not frame 1.
+    size_t tiny = 0;
+    size_t counted = 0;
+    for (int i = 0; i < 100; i++) {
+        const size_t bytes = enc->encode(silence.data(), MIC_FRAME, packet, sizeof(packet));
+        ASSERT_GT(bytes, 0u) << "frame " << i;
+        if (i >= 20) {
+            counted++;
+            if (bytes <= 2) tiny++;
+        }
+    }
+    ASSERT_GT(counted, 0u);
+    EXPECT_GT(tiny, counted * 3 / 4);
+}
+
+TEST(AudioCodecMic, DtxPacketsStayLegalOnTheWireAndDecode) {
+    auto enc = OpusStreamEncoder::create(Stream::Mic);
+    auto dec = OpusStreamDecoder::create(Stream::Mic);
+    ASSERT_NE(enc, nullptr);
+    ASSERT_NE(dec, nullptr);
+
+    const std::vector<int16_t> silence(MIC_FRAME, 0);
+    uint8_t packet[MAX_PACKET];
+    size_t bytes = 0;
+    for (int i = 0; i < 40; i++) {
+        bytes = enc->encode(silence.data(), MIC_FRAME, packet, sizeof(packet));
+    }
+    ASSERT_GE(bytes, 1u);
+    ASSERT_LE(bytes, 2u);
+
+    // A 1-byte packet is a legal Opus frame, and the wire minimum exists so it
+    // survives dispatch: header + at least one Opus byte.
+    EXPECT_GE(bytes + static_cast<size_t>(dish_wire::AUDIO_WIRE_HEADER_BYTES),
+              static_cast<size_t>(dish_wire::AUDIO_WIRE_MIN_PAYLOAD_BYTES));
+
+    std::vector<int16_t> out(MIC_FRAME, 12345);
+    EXPECT_EQ(dec->decode(packet, bytes, out.data(), dish_audio::AUDIO_FRAME_SAMPLES), MIC_FRAME);
+
+    // And the reorder window must take it, not reject it as a runt.
+    dish_audio::AudioJitterWindow window;
+    const auto pushed = window.push(0, packet, bytes);
+    EXPECT_EQ(pushed.accept, dish_audio::AudioJitterWindow::Accept::Ok);
+}
+
+TEST(AudioCodecMic, DtxDoesNotGateRealSpeech) {
+    auto enc = OpusStreamEncoder::create(Stream::Mic);
+    ASSERT_NE(enc, nullptr);
+
+    std::vector<int16_t> pcm;
+    uint8_t packet[MAX_PACKET];
+    size_t tiny = 0;
+    for (int i = 0; i < 60; i++) {
+        fillMicFrame(pcm, i);
+        const size_t bytes = enc->encode(pcm.data(), MIC_FRAME, packet, sizeof(packet));
+        ASSERT_GT(bytes, 0u) << "frame " << i;
+        if (bytes <= 2) tiny++;
+    }
+    EXPECT_EQ(tiny, 0u);
+}
+
+TEST(AudioCodecSpeaker, DecliningDtxKeepsSilenceAFullPacket) {
+    auto enc = OpusStreamEncoder::create(Stream::Speaker);
+    ASSERT_NE(enc, nullptr);
+
+    const std::vector<int16_t> silence(SPEAKER_FRAME, 0);
+    uint8_t packet[MAX_PACKET];
+    size_t tiny = 0;
+    for (int i = 0; i < 100; i++) {
+        const size_t bytes = enc->encode(silence.data(), MIC_FRAME, packet, sizeof(packet));
+        ASSERT_GT(bytes, 0u) << "frame " << i;
+        if (bytes <= 2) tiny++;
+    }
+    // Not a bug being pinned: the satellite suppresses exact digital silence
+    // before it ever reaches this encoder, so the codec never needs a VAD.
+    EXPECT_EQ(tiny, 0u);
 }
 
 TEST(AudioCodec, ATightOutputBufferTruncatesThePacketRatherThanOverrunningIt) {
