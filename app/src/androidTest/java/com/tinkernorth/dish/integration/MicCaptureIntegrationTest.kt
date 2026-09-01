@@ -6,6 +6,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
 import com.tinkernorth.dish.composer.MicCaptureComposer
+import com.tinkernorth.dish.core.jni.SatelliteNative
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.source.audio.MicCaptureLoop
 import com.tinkernorth.dish.source.audio.MicCaptureLoopFactory
@@ -219,6 +220,10 @@ class MicCaptureIntegrationTest {
             "muting must stop the stream within one 20 ms window, got ${after - atMute} more frames",
             after - atMute <= 1,
         )
+        // The recorder is released when the capture body returns, which is a moment after the plan
+        // said stop; wait for the engine to say it has stopped rather than assuming the settle
+        // above covered it.
+        assertTrue("the engine must reach quiescence", AppSingletons.await { engine.quiescent })
         assertEquals("the recorder must be released, not left open", 1, mic.closes.get())
 
         // And it comes back: mute is a control, not a teardown.
@@ -232,6 +237,8 @@ class MicCaptureIntegrationTest {
     fun losingTheSessionStopsTheMicrophone() {
         val server = bindVirtualAndGoLive()
         val satellite = fake!!
+        val conn = manager.get(SatelliteConnection.idFor(server))!!
+        val ctrlIdx = conn.slots.value[VIRTUAL_SLOT_ID]!!.controllerIndex
         val engine = newEngine()
 
         engine.apply(eligible(server))
@@ -240,15 +247,37 @@ class MicCaptureIntegrationTest {
         // What a disconnect, an unbind, a revoked grant and a switched-off toggle all look like
         // from the engine's side.
         engine.apply(MicCapturePlan.IDLE)
-        loop.join()
+        // Wait for the engine to have STOPPED, not just to have been told to. The plan lands
+        // synchronously but the capture body is inside a blocking read at the time, and a
+        // fixed-length join is a guess about how long that takes.
+        assertTrue(
+            "the engine must reach quiescence after an idle plan",
+            AppSingletons.await { engine.quiescent },
+        )
+        assertEquals("the recorder must be released, not left open", 1, mic.closes.get())
+
+        // Then drain the wire before asserting on it. Delivery is UDP and the fake reads on a
+        // thread of its own, so a datagram the engine sent BEFORE it stopped can still be in
+        // flight; clearing and sleeping races that, which is exactly what a loaded emulator loses.
+        // One marker window, sent by the TEST rather than by the engine, is the barrier: loopback
+        // delivery is ordered, so once the marker has landed every earlier datagram has landed too
+        // and is cleared with it. Anything arriving afterwards can only come from a capture that
+        // is still running, which is the claim under test.
         satellite.micAudioFrames.clear()
+        assertTrue(
+            "the drain marker must reach the satellite",
+            SatelliteNative.sendMicFrame(conn.handle, ctrlIdx, ShortArray(FRAME_SAMPLES)),
+        )
+        assertTrue("the drain marker must arrive", satellite.awaitMicAudioFrames(1))
+        satellite.micAudioFrames.clear()
+
         Thread.sleep(SETTLE_MS)
         assertTrue("nothing may be sent once the plan went idle", satellite.micAudioFrames.isEmpty())
-        assertEquals(1, mic.closes.get())
     }
 
     private companion object {
         const val SAMPLE_RATE = 48_000
+        const val FRAME_SAMPLES = 960
         const val WINDOW_MS = 20L
 
         // ~12 capture windows: long enough that a leak would be several packets, not a maybe.

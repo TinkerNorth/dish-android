@@ -10,6 +10,7 @@ import com.tinkernorth.dish.bench.HotPathBenchController
 import com.tinkernorth.dish.composer.CatalogPrewarmer
 import com.tinkernorth.dish.composer.CrashReportingController
 import com.tinkernorth.dish.composer.DiagnosticsLogRecorder
+import com.tinkernorth.dish.composer.HostCapabilitiesProbe
 import com.tinkernorth.dish.composer.MoonlightSessionController
 import com.tinkernorth.dish.composer.SlotTopologyController
 import com.tinkernorth.dish.composer.StreamingServiceController
@@ -69,6 +70,8 @@ class DishApplication : Application() {
 
     @Inject lateinit var catalogPrewarmer: CatalogPrewarmer
 
+    @Inject lateinit var hostCapabilitiesProbe: HostCapabilitiesProbe
+
     @Inject lateinit var bluetoothAdapterStateObserver: BluetoothAdapterStateObserver
 
     @Inject lateinit var bluetoothPermissionStateObserver: BluetoothPermissionStateObserver
@@ -126,6 +129,10 @@ class DishApplication : Application() {
         ProcessLifecycleOwner.get().lifecycle.addObserver(crashReportingController)
         // Warm each satellite's catalog once its link is Live; independent of the native load.
         catalogPrewarmer.start()
+        // And read its live host state on the same trigger. The controller-audio verdict lives
+        // only in that document, so a session restored without anyone opening the binding screen
+        // would otherwise stream with the microphone and the controller speaker switched off.
+        hostCapabilitiesProbe.start()
         // Missing ABI on sideloaded builds throws UnsatisfiedLinkError on first
         // native ref; route to NativeUnavailableActivity instead of crashing.
         try {

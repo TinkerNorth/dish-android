@@ -154,6 +154,19 @@ class MicEngine
         /** Which routes are meant to be capturing, so a retired recorder is not counted as one. */
         @Volatile private var armedRoutes: Set<Int> = emptySet()
 
+        /**
+         * True when no capture body is executing: every recorder has closed its microphone and no
+         * window is left between one and the sender.
+         *
+         * Deliberately a different question from [state] being [MicCaptureState.Idle]. Idle says
+         * the engine was TOLD to stop, which the plan decides and which happens synchronously in
+         * [apply]; this says it HAS, which is what the privacy claim is about and what a caller
+         * must be able to wait for rather than sleep through. The two differ for at most one
+         * blocking read, and a window recorded during that gap is dropped rather than sent, so the
+         * difference is never packets.
+         */
+        val quiescent: Boolean get() = recorders.values.none { it.executing }
+
         override fun upstream(): Flow<MicCapturePlan> =
             // Deliberately no distinctUntilChanged: an unchanged plan over a changed route table is
             // a real change of which recorder a slot belongs to, and [apply] is a reconcile that
@@ -229,9 +242,17 @@ class MicEngine
             // thread never clears it, so a failed loop cannot race a start into opening two recorders.
             private var started = false
 
+            // Whether a body is executing right now, as opposed to being told to keep going. Set
+            // before the body is handed to the loop and cleared only when it returns, so this is
+            // never falsely quiet: it errs towards "still busy", which is the safe direction for
+            // anything waiting on it.
+            @Volatile private var bodyRunning = false
+
             val capturing: Boolean get() = running
 
             val failed: Boolean get() = broken
+
+            val executing: Boolean get() = bodyRunning
 
             /**
              * Start, unless one is already meant to exist. A refusal leaves [started] set, which is
@@ -250,6 +271,7 @@ class MicEngine
                 broken = false
                 started = true
                 running = true
+                bodyRunning = true
                 loop.start(::captureLoop)
             }
 
@@ -259,6 +281,16 @@ class MicEngine
             }
 
             private fun captureLoop() {
+                // The outer finally is what [executing] promises: whichever way the body leaves,
+                // the recorder is closed and nothing more will be handed to the sender.
+                try {
+                    runCapture()
+                } finally {
+                    bodyRunning = false
+                }
+            }
+
+            private fun runCapture() {
                 val session = source.open(FRAME_SAMPLES, preferredDeviceId)
                 if (session == null) {
                     Log.w(TAG, "no microphone at endpoint $preferredDeviceId, capture stays off until a slot re-arms it")

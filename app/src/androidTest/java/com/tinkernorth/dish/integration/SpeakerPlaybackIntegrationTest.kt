@@ -12,6 +12,8 @@ import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
 import com.tinkernorth.dish.composer.SpeakerPlayoutComposer
 import com.tinkernorth.dish.core.jni.SatelliteNative
 import com.tinkernorth.dish.core.model.DiscoveredServer
+import com.tinkernorth.dish.core.model.Feature
+import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.hotpath.input.FeedbackRouter
 import com.tinkernorth.dish.integration.AppSingletons.fieldValue
 import com.tinkernorth.dish.source.audio.NativeSpeakerFrameSource
@@ -92,6 +94,10 @@ class SpeakerPlaybackIntegrationTest {
 
     private val speakerEnabled: SpeakerEnabledStore
         get() = AppSingletons.capabilityComposer.fieldValue("speakerEnabled") as SpeakerEnabledStore
+
+    /** What every layer of the model has settled on for the bound slot, the engine's own input. */
+    private fun slotCapabilities(): SlotCapabilities =
+        AppSingletons.capabilityComposer.state.value[VIRTUAL_SLOT_ID] ?: SlotCapabilities.NONE
 
     private val virtualFeedback: VirtualPadFeedbackStore
         get() {
@@ -201,8 +207,16 @@ class SpeakerPlaybackIntegrationTest {
         val conn = manager.get(SatelliteConnection.idFor(server))!!
         val ctrlIdx = conn.slots.value[VIRTUAL_SLOT_ID]!!.controllerIndex
         val packets = speakerPackets(server, count = 8)
-        startEngine()
 
+        // Two waits, not one, so a failure names its own cause. The first is the host's
+        // controller-audio verdict reaching the capability model: it rides GET
+        // /api/server/capabilities and nothing else, and HostCapabilitiesProbe is what reads it
+        // when the link goes Live. The second is the engine acting on that.
+        assertTrue(
+            "the host's controller-audio verdict must reach the capability model",
+            AppSingletons.await { Feature.SPEAKER in slotCapabilities().live },
+        )
+        startEngine()
         assertTrue(
             "the composer must find the bound DualSense slot eligible for controller sound",
             AppSingletons.await { sink.opens.get() == 1 },
@@ -229,7 +243,11 @@ class SpeakerPlaybackIntegrationTest {
             satellite.sendSpeakerAudio(ctrlIdx, packets.size + seq, packet)
             Thread.sleep(FRAME_MS)
         }
-        assertEquals("nothing may play into a slot with controller sound off", playedAtToggle, sink.played.size)
+        // Eight more windows arrive; a slot still playing would take all of them. At most the one
+        // already inside the sink when the track closed may land, the same single-window tolerance
+        // the mute path carries.
+        val leaked = sink.played.size - playedAtToggle
+        assertTrue("nothing may play into a slot with controller sound off, got $leaked windows", leaked <= 1)
     }
 
     @Test

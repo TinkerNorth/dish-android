@@ -17,6 +17,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Before
@@ -270,6 +271,60 @@ class MicEngineTest {
         assertEquals("the in-flight window must be dropped, not sent", 1, frames.size)
         assertEquals("the recorder is released, not left open", 1, mic.closes.get())
         assertEquals(MicCaptureState.Idle, engine.state.value)
+    }
+
+    @Test
+    fun `quiescence means stopped, not told to stop`() {
+        // The two are a whole blocking read apart, and the difference is exactly what an
+        // integration test asserting "no packets" has to be able to wait out instead of sleeping
+        // through. Idle lands with the plan; quiescent lands when the body returns.
+        assertTrue("an engine that never started is quiescent", engine.quiescent)
+
+        engine.apply(eligible())
+        await("the recorder to open") { mic.opens.get() == 1 }
+        assertFalse("a running capture is not quiescent", engine.quiescent)
+
+        // Park the capture thread inside a read and take the plan away. The engine says Idle at
+        // once, because that is what it was told; it is not quiescent until the body is out.
+        mic.releaseWindow()
+        await("the first window") { frames.size == 1 }
+        await("the next read to start") { mic.readsEntered.get() == 2 }
+        engine.apply(MicCapturePlan.IDLE)
+        assertEquals(MicCaptureState.Idle, engine.state.value)
+        assertFalse("a body still inside a read is not quiescent", engine.quiescent)
+
+        mic.releaseWindow()
+        await("the engine to go quiescent") { engine.quiescent }
+        assertEquals("quiescent means the microphone is closed", 1, mic.closes.get())
+        assertEquals("and the window it was holding was dropped, not sent", 1, frames.size)
+    }
+
+    @Test
+    fun `a refused recorder is quiescent once its body gives up`() {
+        mic.refuse.set(true)
+        engine.apply(eligible())
+        await("the refusal to land") { engine.state.value == MicCaptureState.Unavailable }
+        await("the engine to go quiescent") { engine.quiescent }
+    }
+
+    @Test
+    fun `quiescence covers every route, not just the phone's`() {
+        val padSlot = MicCaptureTarget(PAD_SLOT, CONN)
+        slotRoutes[PAD_SLOT] = PadAudioRoute(microphone = true, speaker = false, captureDeviceId = PAD_ENDPOINT)
+        engine.apply(plan(armed = setOf(TARGET, padSlot), delivering = setOf(TARGET, padSlot)))
+        await("both recorders to open") { mic.opens.get() == 2 }
+        assertFalse(engine.quiescent)
+
+        // One route going away is not quiescence: the other is still holding a microphone.
+        engine.apply(eligible())
+        mic.releaseWindow(PAD_ENDPOINT)
+        await("the pad's recorder to close") { mic.closes.get() == 1 }
+        assertFalse("the phone's recorder is still running", engine.quiescent)
+
+        engine.apply(MicCapturePlan.IDLE)
+        mic.drain()
+        await("the engine to go quiescent") { engine.quiescent }
+        assertEquals(2, mic.closes.get())
     }
 
     @Test
