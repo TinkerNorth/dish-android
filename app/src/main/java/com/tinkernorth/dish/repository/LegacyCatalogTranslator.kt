@@ -46,6 +46,10 @@ class LegacyCatalogTranslator
             return buildMap {
                 for (feature in caps.features) {
                     val featureSlug = feature.catalogSlug ?: continue
+                    // A satellite still serving v1 predates controller audio entirely, so its
+                    // DS4 cannot materialize the audio endpoints the bundled type advertises
+                    // for a current host. v1 is a fixed historical shape, not a floor.
+                    if (feature in AUDIO_FEATURES) continue
                     // Touchpad is the DS4 pad mode: the resolver gates it on the "ds4" mode slug.
                     val modes = if (feature == Feature.TOUCHPAD) listOf(TouchpadModeValue.DS4) else emptyList()
                     put(featureSlug, CatalogFeatureDto(supported = true, modes = modes))
@@ -56,5 +60,7 @@ class LegacyCatalogTranslator
         companion object {
             const val CATALOG_VERSION_CURRENT = 2
             private const val LEGACY_V1 = 1
+
+            private val AUDIO_FEATURES = setOf(Feature.MIC, Feature.SPEAKER)
         }
     }

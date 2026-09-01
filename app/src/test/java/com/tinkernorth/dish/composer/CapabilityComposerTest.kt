@@ -10,9 +10,13 @@ import com.tinkernorth.dish.core.model.CatalogFeatureDto
 import com.tinkernorth.dish.core.model.CatalogTypeDto
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.HostFeatureSet
+import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.repository.SatelliteCatalogRepository
+import com.tinkernorth.dish.source.audio.PadAudioRoute
+import com.tinkernorth.dish.source.audio.PadAudioRoutes
 import com.tinkernorth.dish.source.sensor.PhoneMotionAvailability
+import com.tinkernorth.dish.source.store.MicEnabledStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.MouseSurfaceStore
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
@@ -21,6 +25,7 @@ import com.tinkernorth.dish.source.store.SatelliteHostRuntime
 import com.tinkernorth.dish.source.store.SatelliteHostRuntimeStore
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatus
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
+import com.tinkernorth.dish.source.store.SpeakerEnabledStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import io.mockk.every
 import io.mockk.mockk
@@ -73,6 +78,9 @@ class CapabilityComposerTest {
         scope: CoroutineScope,
         motionEnabled: MutableStateFlow<Map<String, Boolean>> = MutableStateFlow(emptyMap()),
         rumbleEnabled: MutableStateFlow<Map<String, Boolean>> = MutableStateFlow(emptyMap()),
+        micEnabled: MutableStateFlow<Map<String, Boolean>> = MutableStateFlow(emptyMap()),
+        speakerEnabled: MutableStateFlow<Map<String, Boolean>> = MutableStateFlow(emptyMap()),
+        padAudioRoutes: MutableStateFlow<Map<Int, PadAudioRoute>> = MutableStateFlow(emptyMap()),
         mouseSurface: MutableStateFlow<Set<String>> = MutableStateFlow(emptySet()),
         hostFeaturesState: MutableStateFlow<Map<String, HostFeatureSet>> = MutableStateFlow(emptyMap()),
         backendStatus: MutableStateFlow<Map<Pair<String, String>, SatelliteMotionBackendStatus>> =
@@ -115,6 +123,15 @@ class CapabilityComposerTest {
             }
         val motionStore: MotionEnabledStore = mockk { every { state } returns motionEnabled }
         val rumbleStore: RumbleEnabledStore = mockk { every { state } returns rumbleEnabled }
+        val micStore: MicEnabledStore = mockk { every { state } returns micEnabled }
+        val speakerStore: SpeakerEnabledStore = mockk { every { state } returns speakerEnabled }
+        val routes: PadAudioRoutes =
+            mockk {
+                every { state } returns padAudioRoutes
+                every { routeFor(any(), any()) } answers {
+                    padAudioRoutes.value[PadAudioRoutes.key(firstArg(), secondArg())] ?: PadAudioRoute.NONE
+                }
+            }
         val mouseSurfaceStore: MouseSurfaceStore =
             mockk {
                 every { state } returns mouseSurface
@@ -138,6 +155,9 @@ class CapabilityComposerTest {
             native,
             motionStore,
             rumbleStore,
+            micStore,
+            speakerStore,
+            routes,
             mouseSurfaceStore,
             hostStore,
             backendStore,
@@ -1012,6 +1032,325 @@ class CapabilityComposerTest {
                     candidateHostId = "sat-A",
                 )
             assertTrue(caps.isAvailable(Feature.TOUCHPAD))
+        }
+
+    // ── controller audio: the phone always, a physical pad only where the OS routes ──
+
+    private fun audioHost(controllerAudio: Boolean): MutableStateFlow<Map<String, HostFeatureSet>> =
+        MutableStateFlow(
+            mapOf(
+                "sat-A" to
+                    HostFeatureSet(
+                        hasCatalog = true,
+                        mouseControl = true,
+                        keyboardControl = false,
+                        rumbleReturn = true,
+                        controllerAudio = controllerAudio,
+                    ),
+            ),
+        )
+
+    private fun catalogWithAudio(supported: Boolean): CatalogDto =
+        CatalogDto(
+            controllerTypes =
+                listOf(
+                    CatalogTypeDto(
+                        id = CONTROLLER_TYPE_DUALSENSE,
+                        slug = "dualsense",
+                        features =
+                            mapOf(
+                                "mic" to CatalogFeatureDto(supported = supported),
+                                "speaker" to CatalogFeatureDto(supported = supported),
+                            ),
+                    ),
+                ),
+        )
+
+    @Test
+    fun `the virtual pad advertises both audio endpoints unconditionally`() =
+        composerTest {
+            // The phone IS the actuator: its own microphone and speaker stand in for the
+            // emulated pad's, so neither needs a hardware probe the way the gyro does.
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = MutableStateFlow(emptyMap()),
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            val controller = composer.capabilityFor(VIRTUAL_SLOT_ID).controller
+            assertTrue(Feature.MIC in controller)
+            assertTrue(Feature.SPEAKER in controller)
+        }
+
+    @Test
+    fun `a USB-direct pad with no audio route advertises neither endpoint`() =
+        composerTest {
+            // Every model probe says yes; the OS route table is the one that matters, and
+            // it is empty, so the caps stay off.
+            val devices = MutableStateFlow(mapOf(-1000 to device(-1000, vendorId = 0x054C, productId = 0x0CE6, isUsbSynthetic = true)))
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = devices,
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                    modelHasLightbar = true,
+                    modelHasPlayerLeds = true,
+                    modelHasTriggerEffects = true,
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            val controller = composer.capabilityFor("-1000").controller
+            assertFalse(Feature.MIC in controller)
+            assertFalse(Feature.SPEAKER in controller)
+            // The surfaces the model DB does own are unaffected.
+            assertTrue(Feature.LIGHTBAR in controller)
+        }
+
+    @Test
+    fun `a USB-direct pad advertises exactly the endpoints the route table reports`() =
+        composerTest {
+            val routes =
+                MutableStateFlow(
+                    mapOf(
+                        PadAudioRoutes.key(0x054C, 0x0CE6) to PadAudioRoute(microphone = true, speaker = true),
+                    ),
+                )
+            val devices = MutableStateFlow(mapOf(-1000 to device(-1000, vendorId = 0x054C, productId = 0x0CE6, isUsbSynthetic = true)))
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = devices,
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                    padAudioRoutes = routes,
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            val both = composer.capabilityFor("-1000").controller
+            assertTrue(Feature.MIC in both)
+            assertTrue(Feature.SPEAKER in both)
+
+            // A headset-less pad that only plays: one endpoint, not the pair.
+            routes.value =
+                mapOf(PadAudioRoutes.key(0x054C, 0x0CE6) to PadAudioRoute(microphone = false, speaker = true))
+            testScheduler.runCurrent()
+            val speakerOnly = composer.capabilityFor("-1000").controller
+            assertFalse(Feature.MIC in speakerOnly)
+            assertTrue(Feature.SPEAKER in speakerOnly)
+        }
+
+    @Test
+    fun `a route for another pad never lands on this one`() =
+        composerTest {
+            val routes =
+                MutableStateFlow(
+                    mapOf(PadAudioRoutes.key(0x054C, 0x09CC) to PadAudioRoute(microphone = true, speaker = true)),
+                )
+            val devices = MutableStateFlow(mapOf(-1000 to device(-1000, vendorId = 0x054C, productId = 0x0CE6, isUsbSynthetic = true)))
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = devices,
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                    padAudioRoutes = routes,
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            val controller = composer.capabilityFor("-1000").controller
+            assertFalse(Feature.MIC in controller)
+            assertFalse(Feature.SPEAKER in controller)
+        }
+
+    @Test
+    fun `a framework-path pad never advertises audio, even with a route`() =
+        composerTest {
+            // Same pad, same endpoints, but not claimed: the physical audio layer belongs
+            // to the Direct path, alongside every other surface it reaches.
+            val routes =
+                MutableStateFlow(
+                    mapOf(PadAudioRoutes.key(0x054C, 0x0CE6) to PadAudioRoute(microphone = true, speaker = true)),
+                )
+            val devices = MutableStateFlow(mapOf(9 to device(9, vendorId = 0x054C, productId = 0x0CE6)))
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = devices,
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                    padAudioRoutes = routes,
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            val controller = composer.capabilityFor("9").controller
+            assertFalse(Feature.MIC in controller)
+            assertFalse(Feature.SPEAKER in controller)
+        }
+
+    @Test
+    fun `audio needs the type slugs AND the host switch, not either alone`() =
+        composerTest {
+            val bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A"))
+            val conns =
+                MutableStateFlow(
+                    listOf(summary("sat-A", satelliteControllerTypes = mapOf(VIRTUAL_SLOT_ID to CONTROLLER_TYPE_DUALSENSE))),
+                )
+            // The catalog columns say what the backend COULD materialize; the host's
+            // runtime switch says whether it will. Both, or nothing.
+            for (typeHasAudio in listOf(true, false)) {
+                for (hostAudioOn in listOf(true, false)) {
+                    val composer =
+                        composerFor(
+                            phoneAvailable = false,
+                            devices = MutableStateFlow(emptyMap()),
+                            bindings = bindings,
+                            connections = conns,
+                            scope = backgroundScope,
+                            hostFeaturesState = audioHost(hostAudioOn),
+                            cachedCatalog = catalogWithAudio(typeHasAudio),
+                        )
+                    composer.probe(this)
+                    testScheduler.runCurrent()
+
+                    val caps = composer.capabilityFor(VIRTUAL_SLOT_ID)
+                    val label = "typeHasAudio=$typeHasAudio hostAudioOn=$hostAudioOn"
+                    assertEquals(label, typeHasAudio && hostAudioOn, caps.isAvailable(Feature.MIC))
+                    assertEquals(label, typeHasAudio && hostAudioOn, caps.isAvailable(Feature.SPEAKER))
+                }
+            }
+        }
+
+    @Test
+    fun `an unprobed satellite offers no audio, because SATELLITE_DEFAULT withholds it`() =
+        composerTest {
+            // No host entry at all: the optimistic default carries mouse and rumble but
+            // never audio, so a host we have not asked is never offered a microphone.
+            val bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A"))
+            val conns =
+                MutableStateFlow(
+                    listOf(summary("sat-A", satelliteControllerTypes = mapOf(VIRTUAL_SLOT_ID to CONTROLLER_TYPE_DUALSENSE))),
+                )
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = MutableStateFlow(emptyMap()),
+                    bindings = bindings,
+                    connections = conns,
+                    scope = backgroundScope,
+                    cachedCatalog = catalogWithAudio(supported = true),
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            val caps = composer.capabilityFor(VIRTUAL_SLOT_ID)
+            assertFalse(caps.isAvailable(Feature.MIC))
+            assertFalse(caps.isAvailable(Feature.SPEAKER))
+            // The type layer really did carry them; the host is the limiting layer.
+            assertTrue(caps.typeOk(Feature.MIC))
+            assertFalse(caps.destinationOk(Feature.MIC))
+        }
+
+    @Test
+    fun `the mic toggle gates enabled without touching available`() =
+        composerTest {
+            val bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A"))
+            val conns =
+                MutableStateFlow(
+                    listOf(summary("sat-A", satelliteControllerTypes = mapOf(VIRTUAL_SLOT_ID to CONTROLLER_TYPE_DUALSENSE))),
+                )
+            val micEnabled = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = MutableStateFlow(emptyMap()),
+                    bindings = bindings,
+                    connections = conns,
+                    scope = backgroundScope,
+                    micEnabled = micEnabled,
+                    hostFeaturesState = audioHost(controllerAudio = true),
+                    cachedCatalog = catalogWithAudio(supported = true),
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            // Mic defaults OFF: available, deliberately not enabled.
+            assertTrue(composer.capabilityFor(VIRTUAL_SLOT_ID).isAvailable(Feature.MIC))
+            assertFalse(composer.capabilityFor(VIRTUAL_SLOT_ID).isEnabled(Feature.MIC))
+            // Speaker defaults ON, so the pad is heard without being asked twice.
+            assertTrue(composer.capabilityFor(VIRTUAL_SLOT_ID).isEnabled(Feature.SPEAKER))
+
+            micEnabled.value = mapOf(VIRTUAL_SLOT_ID to true)
+            testScheduler.runCurrent()
+            assertTrue(composer.capabilityFor(VIRTUAL_SLOT_ID).isEnabled(Feature.MIC))
+        }
+
+    @Test
+    fun `turning the speaker off drops it from enabled but leaves the mic alone`() =
+        composerTest {
+            val bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A"))
+            val conns =
+                MutableStateFlow(
+                    listOf(summary("sat-A", satelliteControllerTypes = mapOf(VIRTUAL_SLOT_ID to CONTROLLER_TYPE_DUALSENSE))),
+                )
+            val speakerEnabled = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to false))
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = MutableStateFlow(emptyMap()),
+                    bindings = bindings,
+                    connections = conns,
+                    scope = backgroundScope,
+                    micEnabled = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to true)),
+                    speakerEnabled = speakerEnabled,
+                    hostFeaturesState = audioHost(controllerAudio = true),
+                    cachedCatalog = catalogWithAudio(supported = true),
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            assertFalse(composer.capabilityFor(VIRTUAL_SLOT_ID).isEnabled(Feature.SPEAKER))
+            assertTrue(composer.capabilityFor(VIRTUAL_SLOT_ID).isAvailable(Feature.SPEAKER))
+            assertTrue(composer.capabilityFor(VIRTUAL_SLOT_ID).isEnabled(Feature.MIC))
+        }
+
+    @Test
+    fun `a moonlight candidate crosses audio out at the transport`() =
+        composerTest {
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = MutableStateFlow(emptyMap()),
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+            val caps =
+                composer.capabilityForCandidate(
+                    slotId = VIRTUAL_SLOT_ID,
+                    candidateType = MoonlightEmulatedType.PLAYSTATION,
+                    candidateHostKind = ConnectionKind.MOONLIGHT,
+                    candidateHostId = "ml-A",
+                )
+            assertFalse(caps.isAvailable(Feature.MIC))
+            assertFalse(caps.isAvailable(Feature.SPEAKER))
+            // The phone still sources them; the transport is what says no.
+            assertTrue(Feature.MIC in caps.controller)
         }
 
     private fun catalogWithDs4Touchpad(modes: List<String>): CatalogDto =

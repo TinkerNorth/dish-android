@@ -149,6 +149,92 @@ class SatelliteCapabilitiesRepositoryTest {
             assertNull(runtimeStore.runtimeFor("sat-1"))
         }
 
+    // ── controller audio: only this document carries the host's `audio` verdict ──
+
+    private fun bodyWithBackends(
+        available: Boolean,
+        audio: Boolean,
+    ): String =
+        """{"protocolVersion":2,"serverVersion":"1.7.0","maxControllers":16,""" +
+            """"backend":{"id":"hidmaestro","supported":true,"available":true,"errorCode":null},""" +
+            """"backends":[{"id":"vigem","kernelMode":true,"audio":false,"available":true,"errorCode":null},""" +
+            """{"id":"hidmaestro","kernelMode":false,"audio":$audio,"available":$available,"errorCode":null}],""" +
+            """"motion":{"available":true},""" +
+            """"host":{"catalog":{"supported":true},""" +
+            """"mouseControl":{"supported":true,"available":true},""" +
+            """"keyboardControl":{"supported":false},""" +
+            """"rumble":{"supported":true,"available":true}}}"""
+
+    @Test
+    fun `an audio-capable backend switches controller audio on`() =
+        runTest {
+            coEvery { gateway.serverCapabilities(any(), any(), any()) } returns
+                HttpReply(200, bodyWithBackends(available = true, audio = true), null)
+
+            repo.refresh(server, "sat-1")
+
+            assertTrue(hostFeaturesStore.featuresFor("sat-1")?.controllerAudio == true)
+        }
+
+    @Test
+    fun `the audio verdict lands even when a catalog read already owns the entry`() =
+        runTest {
+            // setIfAbsent leaves the catalog's richer read alone, so audio has to merge in
+            // on its own or the whole feature would be invisible after a cached catalog.
+            val fromCatalog =
+                HostFeatureSet(
+                    hasCatalog = true,
+                    mouseControl = true,
+                    keyboardControl = false,
+                    rumbleReturn = true,
+                )
+            hostFeaturesStore.setFeatures("sat-1", fromCatalog)
+            coEvery { gateway.serverCapabilities(any(), any(), any()) } returns
+                HttpReply(200, bodyWithBackends(available = true, audio = true), null)
+
+            repo.refresh(server, "sat-1")
+
+            assertEquals(fromCatalog.copy(controllerAudio = true), hostFeaturesStore.featuresFor("sat-1"))
+        }
+
+    @Test
+    fun `a host with controller audio switched off reports none`() =
+        runTest {
+            coEvery { gateway.serverCapabilities(any(), any(), any()) } returns
+                HttpReply(200, bodyWithBackends(available = true, audio = false), null)
+
+            repo.refresh(server, "sat-1")
+
+            assertFalse(hostFeaturesStore.featuresFor("sat-1")?.controllerAudio == true)
+        }
+
+    @Test
+    fun `an audio backend that cannot open its bus offers nothing`() =
+        runTest {
+            coEvery { gateway.serverCapabilities(any(), any(), any()) } returns
+                HttpReply(200, bodyWithBackends(available = false, audio = true), null)
+
+            repo.refresh(server, "sat-1")
+
+            assertFalse(hostFeaturesStore.featuresFor("sat-1")?.controllerAudio == true)
+        }
+
+    @Test
+    fun `an older satellite with no backends array creates no entry from the audio merge`() =
+        runTest {
+            // The verdict is false either way, and writing it must not conjure a host
+            // entry where the absent-host-block rule deliberately left none.
+            val legacyBody =
+                """{"protocolVersion":1,"serverVersion":"1.5.0","maxControllers":16,""" +
+                    """"backend":{"id":"vigem","supported":true,"available":true,"errorCode":null},""" +
+                    """"motion":{"available":true}}"""
+            coEvery { gateway.serverCapabilities(any(), any(), any()) } returns HttpReply(200, legacyBody, null)
+
+            repo.refresh(server, "sat-1")
+
+            assertNull(hostFeaturesStore.featuresFor("sat-1"))
+        }
+
     @Test
     fun `an absent motion block records the backend as up`() =
         runTest {

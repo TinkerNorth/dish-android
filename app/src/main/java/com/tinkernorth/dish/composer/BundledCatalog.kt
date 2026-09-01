@@ -13,11 +13,32 @@ object BundledCatalog {
     const val SLUG_DUALSENSE = "dualsense"
     const val SLUG_SWITCHPRO = "switchpro"
 
+    // Audio rides the two Sony types only: they are the pads that carry real speaker and
+    // microphone endpoints, so they are the only identities a host can materialize with
+    // any. Offering them here cannot outrun the host, which gates audio on its own
+    // runtime `audio` switch, and a satellite old enough to serve no catalog reports no
+    // switch at all.
     fun typeCapabilities(slug: String): CapabilitySet? =
         when (slug) {
             SLUG_XBOX360 -> padType(Feature.RUMBLE)
-            SLUG_DS4 -> padType(Feature.RUMBLE, Feature.MOTION, Feature.TOUCHPAD, Feature.LIGHTBAR)
-            SLUG_DUALSENSE -> padType(Feature.RUMBLE, Feature.MOTION, Feature.TOUCHPAD, Feature.LIGHTBAR)
+            SLUG_DS4 ->
+                padType(
+                    Feature.RUMBLE,
+                    Feature.MOTION,
+                    Feature.TOUCHPAD,
+                    Feature.LIGHTBAR,
+                    Feature.MIC,
+                    Feature.SPEAKER,
+                )
+            SLUG_DUALSENSE ->
+                padType(
+                    Feature.RUMBLE,
+                    Feature.MOTION,
+                    Feature.TOUCHPAD,
+                    Feature.LIGHTBAR,
+                    Feature.MIC,
+                    Feature.SPEAKER,
+                )
             SLUG_SWITCHPRO -> padType(Feature.RUMBLE, Feature.MOTION)
             else -> null
         }

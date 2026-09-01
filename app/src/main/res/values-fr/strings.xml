@@ -468,6 +468,9 @@
     <string name="binding_func_touchpad">Pavé tactile</string>
     <string name="binding_func_mouse">Souris</string>
     <string name="binding_func_gyro">Gyro</string>
+    <string name="binding_func_mic">Microphone</string>
+    <string name="binding_func_speaker">Son de la manette</string>
+    <string name="binding_mic_permission_needed">Autorisation micro requise. Touchez pour autoriser.</string>
     <string name="binding_state_on">Activé</string>
     <string name="binding_state_off">Désactivé</string>
     <string name="binding_func_value">%1$s · %2$s</string>

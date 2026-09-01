@@ -44,6 +44,15 @@ enum class Feature(
 
     // Player-indicator LEDs (DualSense bar, Switch Pro lights), Direct path only.
     PLAYER_LEDS(Direction.RECEIVE, "playerLeds"),
+
+    // The emulated pad's OWN microphone endpoint, sourced by the phone mic (virtual pad)
+    // or by the pad's own headset mic. It also gates the mic-mute lamp coming back
+    // (MSG_MIC_LED): a lamp with no microphone behind it has nothing to report.
+    MIC(Direction.SEND, "mic"),
+
+    // The emulated pad's OWN speaker/headset endpoint, played out the phone or the pad.
+    // Independent of MIC: neither direction implies the other.
+    SPEAKER(Direction.RECEIVE, "speaker"),
 }
 
 @JvmInline
@@ -112,6 +121,11 @@ data class HostFeatureSet(
     val mouseControl: Boolean,
     val keyboardControl: Boolean,
     val rumbleReturn: Boolean,
+    // Whether this host will actually materialize a pad carrying audio endpoints right
+    // now. Read off the capabilities probe's per-backend `audio`, which is the host's
+    // `controllerAudio` setting folded into the backend's own ability; opt-IN, so a
+    // satellite predating controller audio (or one that switched it off) offers none.
+    val controllerAudio: Boolean = false,
     // The protocol version the satellite advertised (catalog + capabilities documents);
     // 0 = never fetched. This is the verified truth behind the update chips and the
     // extended-mouse gate: only a version that decodes the v2 pointer frame reports 2+.
@@ -139,19 +153,31 @@ data class HostFeatureSet(
         if (mouseControl) out += Feature.MOUSE
         if (keyboardControl) out += Feature.KEYBOARD
         if (rumbleReturn) out += Feature.RUMBLE
+        // Audio is the exception to the pass-through above, because it is the one
+        // host-wide RUNTIME switch: the catalog's per-type mic/speaker slugs say what the
+        // backend could materialize, this says whether the host will. A client reading
+        // only the type columns would offer a microphone on a host that has audio off.
+        if (controllerAudio) {
+            out += Feature.MIC
+            out += Feature.SPEAKER
+        }
         return CapabilitySet(out)
     }
 
     companion object {
         // Optimistic baseline for a satellite we have not fetched a catalog from: a
         // satellite has always accepted a mouse-control request and returned rumble,
-        // so both are assumed until a fetched catalog refines them.
+        // so both are assumed until a fetched catalog refines them. Controller audio
+        // gets the opposite treatment: no satellite carried it before the setting
+        // existed, and offering a microphone that cannot land would cost the user a
+        // permission prompt for nothing, so it waits for a capabilities probe.
         val SATELLITE_DEFAULT =
             HostFeatureSet(
                 hasCatalog = false,
                 mouseControl = true,
                 keyboardControl = false,
                 rumbleReturn = true,
+                controllerAudio = false,
             )
 
         fun fromCatalog(catalog: CatalogDto): HostFeatureSet =
@@ -166,6 +192,10 @@ data class HostFeatureSet(
                 // returns rumble, so an ABSENT field keeps the optimistic assumption;
                 // a PRESENT field is honored (a host that can't return rumble hides it).
                 rumbleReturn = catalog.hostFeatures["rumble"]?.supported ?: true,
+                // controllerAudio is deliberately unset here: the catalog carries no
+                // `audio` field at all (it is cached on server version + locale, so an
+                // install-time switch must not move it). SatelliteHostFeaturesStore
+                // carries the probed value across a catalog write instead.
                 protocolVersion = catalog.protocolVersion,
             )
 
@@ -178,6 +208,12 @@ data class HostFeatureSet(
                 mouseControl = caps.host.mouseControl.supported,
                 keyboardControl = caps.host.keyboardControl.supported,
                 rumbleReturn = caps.host.rumble.supported,
+                // `audio` rides the per-backend entries, not the host block: it is true
+                // only where the backend has an audio-carrying type AND the host's
+                // controllerAudio setting is on. Availability counts too, since an
+                // unavailable backend materializes nothing. Older satellites send no
+                // `backends` array at all, which reads as off, and is the truth there.
+                controllerAudio = caps.backends.any { it.available && it.audio },
                 protocolVersion = caps.protocolVersion,
             )
     }

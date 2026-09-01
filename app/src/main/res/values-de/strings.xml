@@ -463,6 +463,9 @@
     <string name="binding_func_touchpad">Touchpad</string>
     <string name="binding_func_mouse">Maus</string>
     <string name="binding_func_gyro">Gyro</string>
+    <string name="binding_func_mic">Mikrofon</string>
+    <string name="binding_func_speaker">Controller-Ton</string>
+    <string name="binding_mic_permission_needed">Mikrofonberechtigung nötig. Zum Erlauben tippen.</string>
     <string name="binding_state_on">Ein</string>
     <string name="binding_state_off">Aus</string>
     <string name="binding_func_value">%1$s · %2$s</string>

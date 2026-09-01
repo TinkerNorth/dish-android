@@ -28,6 +28,7 @@ class DestinationFlowsTest {
                 R.string.touchpad_mode_pad,
                 R.string.touchpad_mode_mouse,
                 R.string.setup_cap_battery,
+                R.string.setup_cap_mic,
             ),
             labels,
         )
@@ -43,6 +44,7 @@ class DestinationFlowsTest {
                 R.string.setup_cap_lightbar,
                 R.string.setup_cap_trigger_effects,
                 R.string.setup_cap_player_leds,
+                R.string.setup_cap_speaker,
             ),
             labels,
         )
@@ -85,5 +87,20 @@ class DestinationFlowsTest {
         assertTrue(R.string.setup_cap_lightbar in sends)
         assertFalse(R.string.setup_cap_trigger_effects in sends)
         assertFalse(R.string.setup_cap_player_leds in sends)
+        // Moonlight has no controller-audio messages at all, in either direction.
+        assertFalse(R.string.setup_cap_mic in destinationGetFlows(moonlight).map { it.label })
+        assertFalse(R.string.setup_cap_speaker in sends)
+    }
+
+    @Test
+    fun `a destination that carries only one audio direction says only that`() {
+        // The two are independent on the wire, so the chips must not imply a pair.
+        val micOnly = CapabilitySet.of(Feature.GAMEPAD, Feature.MIC)
+        assertTrue(R.string.setup_cap_mic in destinationGetFlows(micOnly).map { it.label })
+        assertTrue(destinationSendFlows(micOnly).isEmpty())
+
+        val speakerOnly = CapabilitySet.of(Feature.GAMEPAD, Feature.SPEAKER)
+        assertFalse(R.string.setup_cap_mic in destinationGetFlows(speakerOnly).map { it.label })
+        assertEquals(listOf(R.string.setup_cap_speaker), destinationSendFlows(speakerOnly).map { it.label })
     }
 }

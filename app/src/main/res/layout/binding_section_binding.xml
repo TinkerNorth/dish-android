@@ -152,5 +152,94 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content" />
         </LinearLayout>
+
+        <View
+            android:id="@+id/micDivider"
+            style="@style/Widget.Dish.Divider"
+            android:layout_marginTop="@dimen/config_row_gap"
+            android:layout_marginBottom="@dimen/config_row_gap"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/micRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="@dimen/config_row_icon_size"
+                android:layout_height="@dimen/config_row_icon_size"
+                android:layout_marginEnd="@dimen/config_row_icon_gap"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_mic"
+                app:tint="@color/colorPrimary" />
+
+            <TextView
+                style="@style/TextAppearance.Dish.Body"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/binding_func_mic"
+                android:textColor="@color/colorOnSurface" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/swMic"
+                style="@style/Widget.Dish.Switch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+
+        <!-- Only under the mic row, and only while the grant is missing: a switch that
+             would silently do nothing says so, and the note itself is the ask. -->
+        <TextView
+            android:id="@+id/tvMicPermission"
+            style="@style/TextAppearance.Dish.Caption"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_xs"
+            android:layout_marginStart="@dimen/config_row_note_inset"
+            android:text="@string/binding_mic_permission_needed"
+            android:textColor="@color/colorWarning"
+            android:visibility="gone" />
+
+        <View
+            android:id="@+id/speakerDivider"
+            style="@style/Widget.Dish.Divider"
+            android:layout_marginTop="@dimen/config_row_gap"
+            android:layout_marginBottom="@dimen/config_row_gap"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/speakerRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="@dimen/config_row_icon_size"
+                android:layout_height="@dimen/config_row_icon_size"
+                android:layout_marginEnd="@dimen/config_row_icon_gap"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_speaker"
+                app:tint="@color/colorPrimary" />
+
+            <TextView
+                style="@style/TextAppearance.Dish.Body"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/binding_func_speaker"
+                android:textColor="@color/colorOnSurface" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/swSpeaker"
+                style="@style/Widget.Dish.Switch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
     </LinearLayout>
 </LinearLayout>

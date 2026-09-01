@@ -22,7 +22,10 @@ import javax.inject.Singleton
  *   yet populated it ([SatelliteHostFeaturesStore.setIfAbsent]); a fetched catalog, being
  *   richer, always wins;
  * - the runtime read (motion backend up/down) populates [SatelliteHostRuntimeStore], so a
- *   feature can show as present-but-currently-down pre-bind.
+ *   feature can show as present-but-currently-down pre-bind;
+ * - the per-backend `audio` verdict merges in on its own
+ *   ([SatelliteHostFeaturesStore.noteControllerAudio]), because no other document
+ *   carries it and a catalog read may already own the entry.
  *
  * Unlike the catalog this is live state, so it is not cached or ETag'd.
  */
@@ -53,6 +56,13 @@ class SatelliteCapabilitiesRepository
             if (caps.host.catalog.supported) {
                 hostFeaturesStore.setIfAbsent(satelliteId, HostFeatureSet.fromServerCapabilities(caps))
             }
+            // Audio rides its own merge: this document is the ONLY one that carries the
+            // host's `audio` verdict, so it has to land whether or not a catalog read got
+            // here first, and whether or not the host block exists at all.
+            hostFeaturesStore.noteControllerAudio(
+                satelliteId,
+                HostFeatureSet.fromServerCapabilities(caps).controllerAudio,
+            )
             runtimeStore.setRuntime(satelliteId, SatelliteHostRuntime(motionBackendOk = caps.motion?.available != false))
             return caps
         }

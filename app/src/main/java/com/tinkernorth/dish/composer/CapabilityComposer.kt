@@ -13,7 +13,9 @@ import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.repository.SatelliteCatalogRepository
 import com.tinkernorth.dish.repository.TouchpadModeValue
+import com.tinkernorth.dish.source.audio.PadAudioRoutes
 import com.tinkernorth.dish.source.sensor.PhoneMotionAvailability
+import com.tinkernorth.dish.source.store.MicEnabledStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.MouseSurfaceStore
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
@@ -21,6 +23,7 @@ import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.store.SatelliteHostRuntimeStore
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatus
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
+import com.tinkernorth.dish.source.store.SpeakerEnabledStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -36,8 +39,17 @@ data class InputFunctions(
     val touchpad: Boolean,
 )
 
+// The per-slot audio toggles, folded into one upstream so the composer's combine keeps
+// its arity. The pad route table rides the same fold without being carried: the
+// controller layer reads it through PadAudioRoutes the way it reads the native model
+// tables, and it is here so a pad's endpoints appearing or vanishing re-publishes.
+private data class AudioToggles(
+    val mic: Map<String, Boolean>,
+    val speaker: Map<String, Boolean>,
+)
+
 @Suppress("UNCHECKED_CAST", "LongParameterList")
-private inline fun <T1, T2, T3, T4, T5, T6, T7, R> combine7(
+private inline fun <T1, T2, T3, T4, T5, T6, T7, T8, R> combine8(
     f1: Flow<T1>,
     f2: Flow<T2>,
     f3: Flow<T3>,
@@ -45,9 +57,10 @@ private inline fun <T1, T2, T3, T4, T5, T6, T7, R> combine7(
     f5: Flow<T5>,
     f6: Flow<T6>,
     f7: Flow<T7>,
-    crossinline transform: suspend (T1, T2, T3, T4, T5, T6, T7) -> R,
+    f8: Flow<T8>,
+    crossinline transform: suspend (T1, T2, T3, T4, T5, T6, T7, T8) -> R,
 ): Flow<R> =
-    combine(f1, f2, f3, f4, f5, f6, f7) { args ->
+    combine(f1, f2, f3, f4, f5, f6, f7, f8) { args ->
         transform(
             args[0] as T1,
             args[1] as T2,
@@ -56,6 +69,7 @@ private inline fun <T1, T2, T3, T4, T5, T6, T7, R> combine7(
             args[4] as T5,
             args[5] as T6,
             args[6] as T7,
+            args[7] as T8,
         )
     }
 
@@ -70,6 +84,9 @@ class CapabilityComposer
         private val native: PhysicalInputNative,
         private val motionEnabled: MotionEnabledStore,
         private val rumbleEnabled: RumbleEnabledStore,
+        private val micEnabled: MicEnabledStore,
+        private val speakerEnabled: SpeakerEnabledStore,
+        private val padAudioRoutes: PadAudioRoutes,
         private val mouseSurface: MouseSurfaceStore,
         private val hostFeatures: SatelliteHostFeaturesStore,
         private val motionBackend: SatelliteMotionBackendStatusStore,
@@ -80,8 +97,13 @@ class CapabilityComposer
         // Fixed hardware fact, captured at construction so the combine arity stays at the eight live flows.
         private val phoneHasGyro: Boolean = phoneAvailability.hasGyro
 
+        private val audioToggles: Flow<AudioToggles> =
+            combine(micEnabled.state, speakerEnabled.state, padAudioRoutes.state) { mic, speaker, _ ->
+                AudioToggles(mic, speaker)
+            }
+
         override fun upstream(): Flow<Map<String, SlotCapabilities>> =
-            combine7(
+            combine8(
                 registry.devices,
                 hub.bindings,
                 hub.connections,
@@ -89,7 +111,8 @@ class CapabilityComposer
                 rumbleEnabled.state,
                 hostFeatures.state,
                 motionBackend.state,
-            ) { devices, bindings, summaries, motionMap, rumbleMap, hostMap, backendMap ->
+                audioToggles,
+            ) { devices, bindings, summaries, motionMap, rumbleMap, hostMap, backendMap, audioMap ->
                 val summariesById = summaries.associateBy { it.id }
                 val out = HashMap<String, SlotCapabilities>(devices.size + 1)
 
@@ -103,6 +126,7 @@ class CapabilityComposer
                         rumbleMap = rumbleMap,
                         hostMap = hostMap,
                         backendMap = backendMap,
+                        audioMap = audioMap,
                     )
 
                 for ((deviceId, device) in devices) {
@@ -117,6 +141,7 @@ class CapabilityComposer
                             rumbleMap = rumbleMap,
                             hostMap = hostMap,
                             backendMap = backendMap,
+                            audioMap = audioMap,
                         )
                 }
                 out
@@ -198,17 +223,20 @@ class CapabilityComposer
             rumbleMap: Map<String, Boolean>,
             hostMap: Map<String, HostFeatureSet>,
             backendMap: Map<Pair<String, String>, SatelliteMotionBackendStatus>,
+            audioMap: AudioToggles,
         ): SlotCapabilities {
             val connId = bindings[slotId]
             val summary = connId?.let { summariesById[it] }
             val motionOn = motionMap[slotId] ?: MotionEnabledStore.DEFAULT_ENABLED
             val rumbleOn = rumbleMap[slotId] ?: RumbleEnabledStore.DEFAULT_ENABLED
+            val micOn = audioMap.mic[slotId] ?: MicEnabledStore.DEFAULT_ENABLED
+            val speakerOn = audioMap.speaker[slotId] ?: SpeakerEnabledStore.DEFAULT_ENABLED
             return CapabilityResolver.resolve(
                 controller = controller,
                 transport = transportLayer(summary),
                 type = typeLayer(slotId, summary),
                 host = hostLayer(connId, summary, hostMap),
-                userEnabled = CapabilityResolver.userEnabledCapabilities(motionOn, rumbleOn),
+                userEnabled = CapabilityResolver.userEnabledCapabilities(motionOn, rumbleOn, micOn, speakerOn),
                 runtimeDown = runtimeDownLayer(connId, slotId, backendMap),
             )
         }
@@ -219,8 +247,10 @@ class CapabilityComposer
             // its own battery reports, and the skin renders the light surfaces the
             // hardware lacks — lightbar, player LEDs and an active adaptive-trigger
             // effect all draw on the on-screen pad (VirtualPadFeedbackStore). Motion
-            // rides only if the phone has a gyro. The type layer still gates which of
-            // these a given emulated pad actually carries.
+            // rides only if the phone has a gyro. Audio needs no probe at all: every
+            // phone has a microphone and a speaker, which is exactly what the emulated
+            // pad's two endpoints need, so both ride unconditionally. The type layer
+            // still gates which of these a given emulated pad actually carries.
             val out =
                 mutableSetOf(
                     Feature.GAMEPAD,
@@ -233,6 +263,8 @@ class CapabilityComposer
                     Feature.LIGHTBAR,
                     Feature.TRIGGER_EFFECTS,
                     Feature.PLAYER_LEDS,
+                    Feature.MIC,
+                    Feature.SPEAKER,
                 )
             if (phoneHasGyro) out += Feature.MOTION
             return CapabilitySet(out)
@@ -263,6 +295,14 @@ class CapabilityComposer
                 if (native.modelHasTriggerEffects(vid, pid)) out += Feature.TRIGGER_EFFECTS
                 if (native.modelHasPlayerLeds(vid, pid)) out += Feature.PLAYER_LEDS
                 if (native.modelHasTriggerRumble(vid, pid)) out += Feature.TRIGGER_RUMBLE
+                // The pad's own audio endpoints are Android's to route, not ours: we claim
+                // only the HID interface, so its USB-audio function stays with the OS. That
+                // makes the model tables the wrong source here, and the OS route table the
+                // right one: a pad whose audio function the OS never enumerated can't be
+                // captured from or played to, whatever its model says it has.
+                val audio = padAudioRoutes.routeFor(vid, pid)
+                if (audio.microphone) out += Feature.MIC
+                if (audio.speaker) out += Feature.SPEAKER
             } else {
                 val framework = frameworkFactsFor(device)
                 if (framework?.hasGyro == true) out += Feature.MOTION

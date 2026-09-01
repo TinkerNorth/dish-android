@@ -468,6 +468,9 @@
     <string name="binding_func_touchpad">Dodirna ploča</string>
     <string name="binding_func_mouse">Miš</string>
     <string name="binding_func_gyro">Žiro</string>
+    <string name="binding_func_mic">Mikrofon</string>
+    <string name="binding_func_speaker">Zvuk kontrolera</string>
+    <string name="binding_mic_permission_needed">Potrebna dozvola za mikrofon. Dodirnite da dozvolite.</string>
     <string name="binding_state_on">Uključeno</string>
     <string name="binding_state_off">Isključeno</string>
     <string name="binding_func_value">%1$s · %2$s</string>

@@ -620,6 +620,9 @@
     <string name="binding_func_touchpad">Touchpad</string>
     <string name="binding_func_mouse">Mouse</string>
     <string name="binding_func_gyro">Gyro</string>
+    <string name="binding_func_mic">Microphone</string>
+    <string name="binding_func_speaker">Controller sound</string>
+    <string name="binding_mic_permission_needed">Needs microphone permission. Tap to allow.</string>
     <string name="binding_state_on">On</string>
     <string name="binding_state_off">Off</string>
     <string name="binding_state_unknown" translatable="false">?</string>

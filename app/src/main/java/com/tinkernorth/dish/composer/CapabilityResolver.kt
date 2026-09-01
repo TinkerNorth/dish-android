@@ -82,16 +82,30 @@ object CapabilityResolver {
         if (Feature.PLAYER_LEDS in slot.controller) {
             caps = caps or ControllerDescriptor.CAP_PLAYER_LEDS
         }
+        // The audio caps advertise the client's own source/actuator like the feedback
+        // caps, but they follow their toggles the way motion does: capture and playback
+        // are things the user switches off, and an advertised cap the client will not
+        // honor would have the host stream audio into nothing (and, for `mic`, send a
+        // mute lamp for a microphone that is not running).
+        if (Feature.MIC in slot.controller && Feature.MIC in slot.userEnabled) {
+            caps = caps or ControllerDescriptor.CAP_MIC
+        }
+        if (Feature.SPEAKER in slot.controller && Feature.SPEAKER in slot.userEnabled) {
+            caps = caps or ControllerDescriptor.CAP_SPEAKER
+        }
         return caps
     }
 
     // Touch, mouse, battery and the LED/trigger-effect feedback have no user toggle:
     // whatever the path can carry is simply on, so they ride here unconditionally and
     // the layer intersection does the gating. Trigger rumble is rumble, so it follows
-    // the rumble toggle.
+    // the rumble toggle. Mic and speaker have toggles of their own: audio is the one
+    // surface a user turns off for reasons the capability layers cannot see.
     fun userEnabledCapabilities(
         motionOn: Boolean,
         rumbleOn: Boolean,
+        micOn: Boolean,
+        speakerOn: Boolean,
     ): CapabilitySet {
         val out =
             mutableSetOf(
@@ -109,6 +123,8 @@ object CapabilityResolver {
             out += Feature.RUMBLE
             out += Feature.TRIGGER_RUMBLE
         }
+        if (micOn) out += Feature.MIC
+        if (speakerOn) out += Feature.SPEAKER
         return CapabilitySet(out)
     }
 }

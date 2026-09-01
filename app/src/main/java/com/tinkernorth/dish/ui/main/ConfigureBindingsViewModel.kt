@@ -35,9 +35,12 @@ import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManag
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightProbe
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightSessionState
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
+import com.tinkernorth.dish.source.store.MicEnabledStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
+import com.tinkernorth.dish.source.store.SpeakerEnabledStore
+import com.tinkernorth.dish.source.system.MicPermissionGate
 import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.source.usb.UsbPhase
@@ -45,8 +48,11 @@ import com.tinkernorth.dish.ui.common.bundledControllerTypeLabelRes
 import com.tinkernorth.dish.ui.common.moonlightTypeLabelRes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
@@ -112,6 +118,8 @@ data class BindingDraft(
     val directOn: Boolean,
     val motionOn: Boolean,
     val rumbleOn: Boolean = true,
+    val micOn: Boolean = false,
+    val speakerOn: Boolean = true,
 )
 
 sealed interface BindingBlocker {
@@ -155,6 +163,8 @@ data class ConfigUiState(
     val moonlight: MoonlightSessionInput? = null,
     // Per-connection protocol verdict (satellite hosts only), for the update chips.
     val hostCompat: Map<String, DishProtocol.Compat> = emptyMap(),
+    // RECORD_AUDIO, re-read on every resume: the OS says nothing when a grant is revoked.
+    val micPermissionGranted: Boolean = false,
 ) {
     val selectedHost: BindingHost? get() = hosts.firstOrNull { it.id == draft?.hostId }
     val noHosts: Boolean get() = hosts.isEmpty()
@@ -212,6 +222,17 @@ data class ConfigUiState(
     val motionAvailable: Boolean
         get() = capabilities.isAvailable(Feature.MOTION)
 
+    // The two audio rows appear only where the whole path carries the endpoint: an
+    // audio-capable emulated type, on a host with controller audio switched on, behind an
+    // input that can capture or play.
+    val micAvailable: Boolean get() = capabilities.isAvailable(Feature.MIC)
+
+    val speakerAvailable: Boolean get() = capabilities.isAvailable(Feature.SPEAKER)
+
+    // A mic switched on with no grant behind it is a switch that would silently do
+    // nothing, so the row says so instead and offers the ask.
+    val micNeedsPermission: Boolean get() = micAvailable && draft?.micOn == true && !micPermissionGranted
+
     val isBluetoothHost: Boolean get() = selectedHost?.kind == ConnectionKind.BLUETOOTH
 
     val isMoonlightHost: Boolean get() = selectedHost?.kind == ConnectionKind.MOONLIGHT
@@ -253,6 +274,9 @@ class ConfigureBindingsViewModel
         private val gamepadRegistry: PhysicalGamepadRegistry,
         private val motionEnabledStore: MotionEnabledStore,
         private val rumbleEnabledStore: RumbleEnabledStore,
+        private val micEnabledStore: MicEnabledStore,
+        private val speakerEnabledStore: SpeakerEnabledStore,
+        private val micPermission: MicPermissionGate,
         private val capabilityComposer: CapabilityComposer,
         private val satellite: SatelliteConnectionManager,
         private val moonlight: MoonlightConnectionManager,
@@ -267,6 +291,13 @@ class ConfigureBindingsViewModel
 
         private val _applyState = MutableStateFlow<ApplyState>(ApplyState.Idle)
         val applyState: StateFlow<ApplyState> = _applyState.asStateFlow()
+
+        // One-shot ask for RECORD_AUDIO, emitted when the mic toggle goes on without the
+        // grant. The screen owns the system prompt (only an Activity can launch one), so
+        // this is the seam it listens on. Deliberately not replayed: a prompt must follow
+        // a tap, never a rotation, and the row keeps offering the ask meanwhile.
+        private val _micPermissionRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+        val micPermissionRequests: SharedFlow<Unit> = _micPermissionRequests.asSharedFlow()
 
         private var loadedSlotId: String? = null
 
@@ -291,6 +322,7 @@ class ConfigureBindingsViewModel
                     connections = conns,
                     knownHostLabels = conns.associate { it.id to it.label },
                     controllerPresent = controllerPresent(snapshot),
+                    micPermissionGranted = micPermission.granted,
                 ).withCapabilities()
             draft.hostId?.let { refreshTypeOptions(it) }
             // Refresh the host list as connections come and go, without disturbing the in-progress draft.
@@ -540,6 +572,30 @@ class ConfigureBindingsViewModel
 
         fun setRumble(on: Boolean) = _ui.update { it.copy(draft = it.draft?.copy(rumbleOn = on)).withCapabilities() }
 
+        /**
+         * Turning the microphone on is also the moment to ask for it: the grant is what
+         * makes the toggle mean anything, and asking here is what lets the foreground
+         * service claim its microphone type later. Turning it off never asks.
+         */
+        fun setMic(on: Boolean) {
+            _ui.update { it.copy(draft = it.draft?.copy(micOn = on)).withCapabilities() }
+            if (on && !micPermission.granted) _micPermissionRequests.tryEmit(Unit)
+        }
+
+        fun setSpeaker(on: Boolean) = _ui.update { it.copy(draft = it.draft?.copy(speakerOn = on)).withCapabilities() }
+
+        /** Re-read RECORD_AUDIO: on resume, and when a request the screen launched resolves. */
+        fun refreshMicPermission() {
+            micPermission.refresh()
+            _ui.update { it.copy(micPermissionGranted = micPermission.granted) }
+        }
+
+        /** The row's "needs permission" affordance: ask again, from the same seam. */
+        fun requestMicPermission() {
+            refreshMicPermission()
+            if (!micPermission.granted) _micPermissionRequests.tryEmit(Unit)
+        }
+
         // Inherent path capability for the current draft, used by the screen's gates and the
         // setup type cards. Keyed by the loaded slot so a USB path switch is reflected on reload.
         fun capabilityForCandidate(
@@ -662,6 +718,11 @@ class ConfigureBindingsViewModel
                 // Rumble is a local delivery gate (the phone vibrates as a fallback),
                 // so it applies regardless of the controller's own motor.
                 rumbleEnabledStore.setEnabled(slotId, draft.rumbleOn)
+                // Audio persists like motion, gated on the path carrying it: writing a
+                // mic "on" for a slot that has no microphone endpoint would advertise one
+                // the moment the user later moved that slot to a host that does.
+                if (state.micAvailable) micEnabledStore.setEnabled(slotId, draft.micOn)
+                if (state.speakerAvailable) speakerEnabledStore.setEnabled(slotId, draft.speakerOn)
                 val bound = hub.bind(slotId, hostId, type)
                 if (!bound) {
                     _applyState.value =
@@ -927,6 +988,8 @@ class ConfigureBindingsViewModel
                 directOn = seedDirectOn(device, desiredUsbPathFor(device)),
                 motionOn = motionEnabledStore.isEnabled(slotId),
                 rumbleOn = rumbleEnabledStore.isEnabled(slotId),
+                micOn = micEnabledStore.isEnabled(slotId),
+                speakerOn = speakerEnabledStore.isEnabled(slotId),
             )
         }
 

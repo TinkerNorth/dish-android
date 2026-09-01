@@ -469,6 +469,9 @@
     <string name="binding_func_touchpad">Touchpad</string>
     <string name="binding_func_mouse">Mouse</string>
     <string name="binding_func_gyro">Giroscópio</string>
+    <string name="binding_func_mic">Microfone</string>
+    <string name="binding_func_speaker">Som do controle</string>
+    <string name="binding_mic_permission_needed">Precisa de permissão de microfone. Toque para permitir.</string>
     <string name="binding_state_on">Ligado</string>
     <string name="binding_state_off">Desligado</string>
     <string name="binding_func_value">%1$s · %2$s</string>

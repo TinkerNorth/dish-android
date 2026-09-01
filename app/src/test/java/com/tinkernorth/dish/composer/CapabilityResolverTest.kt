@@ -70,7 +70,7 @@ class CapabilityResolverTest {
 
     @Test
     fun `userEnabledCapabilities always carries GAMEPAD and ANALOG_TRIGGERS`() {
-        val caps = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = false)
+        val caps = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = false, micOn = false, speakerOn = false)
         assertTrue(Feature.GAMEPAD in caps)
         assertTrue(Feature.ANALOG_TRIGGERS in caps)
         assertFalse(Feature.MOTION in caps)
@@ -79,14 +79,14 @@ class CapabilityResolverTest {
 
     @Test
     fun `userEnabledCapabilities reflects motion and rumble toggles`() {
-        val caps = CapabilityResolver.userEnabledCapabilities(motionOn = true, rumbleOn = true)
+        val caps = CapabilityResolver.userEnabledCapabilities(motionOn = true, rumbleOn = true, micOn = true, speakerOn = true)
         assertTrue(Feature.MOTION in caps)
         assertTrue(Feature.RUMBLE in caps)
     }
 
     @Test
     fun `touch and mouse have no user toggle and always ride userEnabled`() {
-        val caps = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = false)
+        val caps = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = false, micOn = false, speakerOn = false)
         assertTrue(Feature.TOUCHPAD in caps)
         assertTrue(Feature.MOUSE in caps)
     }
@@ -281,14 +281,149 @@ class CapabilityResolverTest {
 
     @Test
     fun `trigger rumble follows the rumble toggle, the feedback surfaces have none`() {
-        val off = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = false)
+        val off = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = false, micOn = false, speakerOn = false)
         assertFalse(Feature.TRIGGER_RUMBLE in off)
         assertTrue(Feature.LIGHTBAR in off)
         assertTrue(Feature.TRIGGER_EFFECTS in off)
         assertTrue(Feature.PLAYER_LEDS in off)
         assertTrue(Feature.BATTERY in off)
-        val on = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = true)
+        val on = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = true, micOn = false, speakerOn = false)
         assertTrue(Feature.TRIGGER_RUMBLE in on)
+    }
+
+    // ---- controller audio: caps that advertise the client's own source/actuator ----
+
+    private fun audioSlot(
+        controllerMic: Boolean,
+        controllerSpeaker: Boolean,
+        userMic: Boolean,
+        userSpeaker: Boolean,
+    ): SlotCapabilities {
+        fun set(
+            mic: Boolean,
+            speaker: Boolean,
+        ) = CapabilitySet(
+            buildSet {
+                if (mic) add(Feature.MIC)
+                if (speaker) add(Feature.SPEAKER)
+            },
+        )
+        // Type and host are deliberately empty: like the other wire projections this one
+        // describes what the CLIENT will do, not what the far end can accept.
+        return SlotCapabilities(
+            controller = set(controllerMic, controllerSpeaker),
+            transport = CapabilitySet(Feature.entries.toSet()),
+            type = CapabilitySet.EMPTY,
+            host = CapabilitySet.EMPTY,
+            userEnabled = set(userMic, userSpeaker),
+            runtimeDown = CapabilitySet.EMPTY,
+        )
+    }
+
+    @Test
+    fun `wireCaps carries the audio caps only where the client both can and will`() {
+        for (canMic in listOf(true, false)) {
+            for (wantsMic in listOf(true, false)) {
+                val caps = CapabilityResolver.wireCaps(audioSlot(canMic, false, wantsMic, false))
+                val expected = if (canMic && wantsMic) ControllerDescriptor.CAP_MIC else 0
+                assertEquals(
+                    "canMic=$canMic wantsMic=$wantsMic",
+                    expected,
+                    caps and ControllerDescriptor.CAP_MIC,
+                )
+            }
+        }
+        for (canSpeaker in listOf(true, false)) {
+            for (wantsSpeaker in listOf(true, false)) {
+                val caps = CapabilityResolver.wireCaps(audioSlot(false, canSpeaker, false, wantsSpeaker))
+                val expected = if (canSpeaker && wantsSpeaker) ControllerDescriptor.CAP_SPEAKER else 0
+                assertEquals(
+                    "canSpeaker=$canSpeaker wantsSpeaker=$wantsSpeaker",
+                    expected,
+                    caps and ControllerDescriptor.CAP_SPEAKER,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `wireCaps keeps the audio directions independent`() {
+        // A muted-by-toggle microphone must not take the speaker down with it.
+        val speakerOnly =
+            CapabilityResolver.wireCaps(
+                audioSlot(controllerMic = true, controllerSpeaker = true, userMic = false, userSpeaker = true),
+            )
+        assertEquals(0, speakerOnly and ControllerDescriptor.CAP_MIC)
+        assertEquals(ControllerDescriptor.CAP_SPEAKER, speakerOnly and ControllerDescriptor.CAP_SPEAKER)
+
+        val micOnly =
+            CapabilityResolver.wireCaps(
+                audioSlot(controllerMic = true, controllerSpeaker = true, userMic = true, userSpeaker = false),
+            )
+        assertEquals(ControllerDescriptor.CAP_MIC, micOnly and ControllerDescriptor.CAP_MIC)
+        assertEquals(0, micOnly and ControllerDescriptor.CAP_SPEAKER)
+    }
+
+    @Test
+    fun `wireCaps decisive case - a full-audio DualSense slot is 0x00C3`() {
+        val both =
+            CapabilityResolver.wireCaps(
+                audioSlot(controllerMic = true, controllerSpeaker = true, userMic = true, userSpeaker = true),
+            )
+        // analog triggers + rumble base, plus both audio bits, and nothing else.
+        assertEquals(0x00C3, both)
+    }
+
+    @Test
+    fun `the motion-only slots advertise no audio at all`() {
+        for (gyro in listOf(true, false)) {
+            for (userMotion in listOf(true, false)) {
+                val caps = CapabilityResolver.wireCaps(slot(gyro = gyro, userMotion = userMotion))
+                assertEquals(0, caps and ControllerDescriptor.CAP_MIC)
+                assertEquals(0, caps and ControllerDescriptor.CAP_SPEAKER)
+            }
+        }
+    }
+
+    @Test
+    fun `userEnabledCapabilities reflects the mic and speaker toggles`() {
+        val off = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = false, micOn = false, speakerOn = false)
+        assertFalse(Feature.MIC in off)
+        assertFalse(Feature.SPEAKER in off)
+
+        val on = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = false, micOn = true, speakerOn = true)
+        assertTrue(Feature.MIC in on)
+        assertTrue(Feature.SPEAKER in on)
+
+        // Each toggle moves only its own direction.
+        val micOnly = CapabilityResolver.userEnabledCapabilities(motionOn = false, rumbleOn = false, micOn = true, speakerOn = false)
+        assertTrue(Feature.MIC in micOnly)
+        assertFalse(Feature.SPEAKER in micOnly)
+    }
+
+    @Test
+    fun `typeCapabilities maps the mic and speaker catalog slugs`() {
+        val audioType = CapabilityResolver.typeCapabilities(catalogType("mic", "speaker"))
+        assertTrue(Feature.MIC in audioType)
+        assertTrue(Feature.SPEAKER in audioType)
+
+        // An Xbox-shaped type reports them false, and false must stay off.
+        val silent =
+            CatalogTypeDto(
+                features =
+                    mapOf(
+                        "mic" to CatalogFeatureDto(supported = false),
+                        "speaker" to CatalogFeatureDto(supported = false),
+                    ),
+            )
+        assertFalse(Feature.MIC in CapabilityResolver.typeCapabilities(silent))
+        assertFalse(Feature.SPEAKER in CapabilityResolver.typeCapabilities(silent))
+
+        // A catalog predating the slugs omits them entirely, which is also off: unlike
+        // battery and trigger rumble, audio is NOT a slug-less pass-through.
+        val preAudio = CapabilityResolver.typeCapabilities(CatalogTypeDto(features = emptyMap()))
+        assertFalse(Feature.MIC in preAudio)
+        assertFalse(Feature.SPEAKER in preAudio)
     }
 
     @Test

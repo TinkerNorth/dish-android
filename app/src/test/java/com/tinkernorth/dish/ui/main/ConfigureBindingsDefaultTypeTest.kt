@@ -22,9 +22,12 @@ import com.tinkernorth.dish.repository.SatelliteCatalogRepository
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
+import com.tinkernorth.dish.source.store.MicEnabledStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
+import com.tinkernorth.dish.source.store.SpeakerEnabledStore
+import com.tinkernorth.dish.source.system.MicPermissionGate
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import io.mockk.coEvery
 import io.mockk.every
@@ -58,6 +61,9 @@ class ConfigureBindingsDefaultTypeTest {
     private lateinit var gamepadRegistry: PhysicalGamepadRegistry
     private lateinit var motionEnabledStore: MotionEnabledStore
     private lateinit var rumbleEnabledStore: RumbleEnabledStore
+    private lateinit var micEnabledStore: MicEnabledStore
+    private lateinit var speakerEnabledStore: SpeakerEnabledStore
+    private lateinit var micPermission: MicPermissionGate
     private lateinit var capabilityComposer: CapabilityComposer
     private lateinit var satellite: SatelliteConnectionManager
     private lateinit var moonlight: MoonlightConnectionManager
@@ -99,6 +105,9 @@ class ConfigureBindingsDefaultTypeTest {
         gamepadRegistry = mockk(relaxed = true)
         motionEnabledStore = mockk(relaxed = true)
         rumbleEnabledStore = mockk(relaxed = true)
+        micEnabledStore = mockk(relaxed = true)
+        speakerEnabledStore = mockk(relaxed = true)
+        micPermission = mockk(relaxed = true)
         capabilityComposer = mockk(relaxed = true)
         satellite = mockk(relaxed = true)
         moonlight = mockk(relaxed = true)
@@ -130,6 +139,9 @@ class ConfigureBindingsDefaultTypeTest {
                 gamepadRegistry,
                 motionEnabledStore,
                 rumbleEnabledStore,
+                micEnabledStore,
+                speakerEnabledStore,
+                micPermission,
                 capabilityComposer,
                 satellite,
                 moonlight,

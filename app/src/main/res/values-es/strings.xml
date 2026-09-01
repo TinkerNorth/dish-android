@@ -469,6 +469,9 @@
     <string name="binding_func_touchpad">Panel táctil</string>
     <string name="binding_func_mouse">Ratón</string>
     <string name="binding_func_gyro">Giro</string>
+    <string name="binding_func_mic">Micrófono</string>
+    <string name="binding_func_speaker">Sonido del mando</string>
+    <string name="binding_mic_permission_needed">Necesita permiso de micrófono. Toca para permitir.</string>
     <string name="binding_state_on">Encendido</string>
     <string name="binding_state_off">Apagado</string>
     <string name="binding_func_value">%1$s · %2$s</string>

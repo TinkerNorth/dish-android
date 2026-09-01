@@ -23,9 +23,12 @@ import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightProbe
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
+import com.tinkernorth.dish.source.store.MicEnabledStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
+import com.tinkernorth.dish.source.store.SpeakerEnabledStore
+import com.tinkernorth.dish.source.system.MicPermissionGate
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -117,6 +120,9 @@ class ConfigureBindingsMoonlightActionsTest {
                 gamepadRegistry = registry,
                 motionEnabledStore = mockk<MotionEnabledStore>(relaxed = true),
                 rumbleEnabledStore = mockk<RumbleEnabledStore>(relaxed = true),
+                micEnabledStore = mockk<MicEnabledStore>(relaxed = true),
+                speakerEnabledStore = mockk<SpeakerEnabledStore>(relaxed = true),
+                micPermission = mockk<MicPermissionGate>(relaxed = true),
                 capabilityComposer = capabilities,
                 satellite = mockk<SatelliteConnectionManager>(relaxed = true),
                 moonlight = moonlight,

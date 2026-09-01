@@ -34,6 +34,7 @@ import com.tinkernorth.dish.source.system.BluetoothAdapterStateObserver
 import com.tinkernorth.dish.source.system.BluetoothBondMonitor
 import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
 import com.tinkernorth.dish.source.system.ConnectionForegroundObserver
+import com.tinkernorth.dish.source.system.MicPermissionGate
 import com.tinkernorth.dish.source.system.NetworkStateObserver
 import com.tinkernorth.dish.source.usb.PollRateSampler
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
@@ -66,6 +67,8 @@ class DishApplication : Application() {
     @Inject lateinit var bluetoothAdapterStateObserver: BluetoothAdapterStateObserver
 
     @Inject lateinit var bluetoothPermissionStateObserver: BluetoothPermissionStateObserver
+
+    @Inject lateinit var micPermissionGate: MicPermissionGate
 
     @Inject lateinit var networkStateObserver: NetworkStateObserver
 
@@ -172,6 +175,7 @@ class DishApplication : Application() {
         lifecycle.addObserver(bluetoothBondMonitor)
         lifecycle.addObserver(bluetoothAdapterStateObserver)
         lifecycle.addObserver(bluetoothPermissionStateObserver)
+        lifecycle.addObserver(micPermissionGate)
         lifecycle.addObserver(networkStateObserver)
         lifecycle.addObserver(streamingServiceController)
         RumbleBridge.install(rumbleRouter)

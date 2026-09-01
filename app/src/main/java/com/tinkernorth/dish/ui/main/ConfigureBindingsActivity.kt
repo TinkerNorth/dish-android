@@ -83,6 +83,9 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
     override fun onStart() {
         super.onStart()
         viewModel.refreshMoonlight()
+        // A permission granted (or revoked) in system settings is broadcast nowhere, so
+        // the mic row's state is re-read on every return to the screen.
+        viewModel.refreshMicPermission()
     }
 
     private fun observe() {
@@ -99,6 +102,23 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
                 viewModel.applyState.collect { renderApplyState(it) }
             }
         }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.micPermissionRequests.collect { requestMicPermission() }
+            }
+        }
+    }
+
+    /**
+     * Where the RECORD_AUDIO prompt gets launched. The permission is not declared in the
+     * manifest yet, and a request for an undeclared permission is refused without ever
+     * reaching the user, so today this only re-reads the grant: that still catches one
+     * made in system settings, and leaves the row honestly saying it needs permission.
+     * Replacing the body with an ActivityResultContracts.RequestPermission launcher (whose
+     * result calls [ConfigureBindingsViewModel.refreshMicPermission]) is all this needs.
+     */
+    private fun requestMicPermission() {
+        viewModel.refreshMicPermission()
     }
 
     private fun renderContent(state: ConfigUiState) {
@@ -252,6 +272,34 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
             bz.swRumble.setOnCheckedChangeListener(null)
             bz.swRumble.isChecked = state.draft?.rumbleOn == true
             bz.swRumble.setOnCheckedChangeListener { _, isChecked -> viewModel.setRumble(isChecked) }
+        }
+
+        bindAudioRows(state)
+    }
+
+    // The emulated pad's own audio endpoints, shown only where the whole path carries
+    // them: an audio-capable type, a host with controller audio on, and an input that can
+    // capture or play. Mic first, since it is the direction leaving this phone.
+    private fun bindAudioRows(state: ConfigUiState) {
+        val bz = binding.sectionBinding
+        val micVisible = state.micAvailable
+        bz.micDivider.visibility = if (micVisible) View.VISIBLE else View.GONE
+        bz.micRow.visibility = if (micVisible) View.VISIBLE else View.GONE
+        if (micVisible) {
+            bz.swMic.setOnCheckedChangeListener(null)
+            bz.swMic.isChecked = state.draft?.micOn == true
+            bz.swMic.setOnCheckedChangeListener { _, isChecked -> viewModel.setMic(isChecked) }
+        }
+        bz.tvMicPermission.visibility = if (state.micNeedsPermission) View.VISIBLE else View.GONE
+        bz.tvMicPermission.setOnClickListener { viewModel.requestMicPermission() }
+
+        val speakerVisible = state.speakerAvailable
+        bz.speakerDivider.visibility = if (speakerVisible) View.VISIBLE else View.GONE
+        bz.speakerRow.visibility = if (speakerVisible) View.VISIBLE else View.GONE
+        if (speakerVisible) {
+            bz.swSpeaker.setOnCheckedChangeListener(null)
+            bz.swSpeaker.isChecked = state.draft?.speakerOn == true
+            bz.swSpeaker.setOnCheckedChangeListener { _, isChecked -> viewModel.setSpeaker(isChecked) }
         }
     }
 

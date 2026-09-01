@@ -210,6 +210,11 @@ data class ServerBackendDto(
     val supported: Boolean = false,
     val available: Boolean = false,
     val errorCode: String? = null,
+    // Only the `backends[]` entries carry this: whether the backend will materialize a
+    // pad with real audio endpoints right now (its own ability AND the host's
+    // controllerAudio setting). Absent on the singular `backend` object above and on
+    // satellites predating controller audio, both of which read as false.
+    val audio: Boolean = false,
 )
 
 @Serializable
@@ -239,6 +244,10 @@ data class ServerCapabilitiesDto(
     val serverVersion: String = "",
     val maxControllers: Int = 16,
     val backend: ServerBackendDto = ServerBackendDto(),
+    // The host's full backend option list, most-preferred first (additive; absent on
+    // older satellites). Read for the runtime-switched `audio` flag; the singular
+    // `backend` above stays the preferred-available one every other caller uses.
+    val backends: List<ServerBackendDto> = emptyList(),
     // Absent (no motion block) is unknown, not down: callers treat null as backend-up.
     val motion: ServerMotionDto? = null,
     // Absent (older satellite that predates the host block) → catalog.supported stays
