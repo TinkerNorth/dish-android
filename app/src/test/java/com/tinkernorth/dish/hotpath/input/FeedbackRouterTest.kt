@@ -112,12 +112,34 @@ class FeedbackRouterTest {
     }
 
     @Test
-    fun `a Direct-claimed pad's lamp waits for its output report builder`() {
-        // The DS5 mute-LED report lands with the playback wave; until then the arm resolves and
-        // drops rather than painting the phone's skin for a pad that is not the phone.
+    fun `a Direct-claimed pad's lamp reaches its own output report`() {
         val r = router(managerWith(handle = 7, slotId = "-1000"))
-        r.dispatchMicLed(sessionHandle = 7, controllerIndex = 0, state = MIC_LED_ON)
+        for (state in listOf(MIC_LED_OFF, MIC_LED_ON, MIC_LED_PULSE)) {
+            r.dispatchMicLed(sessionHandle = 7, controllerIndex = 0, state = state)
+            verify(exactly = 1) { native.sendUsbMicMuteLed(-1000, state) }
+        }
+        // And never onto the phone's skin: that pad is not the phone.
         assertEquals(MIC_LED_OFF, store.state.value.micLedState)
+    }
+
+    @Test
+    fun `the lamp routes per target exactly like the lightbar`() {
+        // Direct pads write, the phone paints, framework pads drop. The three arms are the same
+        // three the lightbar resolves to, which is the point: one resolve, one target set.
+        router(managerWith(handle = 7, slotId = "-1000")).dispatchMicLed(7, 0, MIC_LED_ON)
+        verify(exactly = 1) { native.sendUsbMicMuteLed(-1000, MIC_LED_ON) }
+
+        router(managerWith(handle = 7, slotId = VIRTUAL_SLOT_ID)).dispatchMicLed(7, 0, MIC_LED_PULSE)
+        assertEquals(MIC_LED_PULSE, store.state.value.micLedState)
+
+        router(managerWith(handle = 7, slotId = "9")).dispatchMicLed(7, 0, MIC_LED_OFF)
+        verify(exactly = 0) { native.sendUsbMicMuteLed(9, any()) }
+
+        // An unknown session or controller index resolves to nothing at all.
+        val r = router(managerWith(handle = 7, slotId = "-1000"))
+        r.dispatchMicLed(sessionHandle = 8, controllerIndex = 0, state = MIC_LED_ON)
+        r.dispatchMicLed(sessionHandle = 7, controllerIndex = 3, state = MIC_LED_ON)
+        verify(exactly = 1) { native.sendUsbMicMuteLed(any(), any()) }
     }
 
     @Test

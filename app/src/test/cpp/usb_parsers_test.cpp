@@ -319,8 +319,9 @@ TEST(Feedback, LightbarUnsupportedFamiliesReturnZero) {
 }
 
 TEST(Feedback, DualSensePlayerLedsMaskedToFiveBits) {
+    usbparsers::FeedbackState st;
     uint8_t out[64];
-    size_t n = usbparsers::buildPlayerLedsReport(Parser::DUALSENSE, 0xFF, 0, out, sizeof(out));
+    size_t n = usbparsers::buildPlayerLedsReport(Parser::DUALSENSE, st, 0xFF, 0, out, sizeof(out));
     ASSERT_EQ(63u, n);
     EXPECT_EQ(0x02, out[0]);
     EXPECT_EQ(0x10, out[2]); // valid_flag1 player-indicator control
@@ -328,8 +329,10 @@ TEST(Feedback, DualSensePlayerLedsMaskedToFiveBits) {
 }
 
 TEST(Feedback, SwitchPlayerLedsRideNeutralRumbleSubcommand) {
+    usbparsers::FeedbackState st;
     uint8_t out[64];
-    size_t n = usbparsers::buildPlayerLedsReport(Parser::SWITCH_PRO_USB, 0xF3, 0x2B, out, sizeof(out));
+    size_t n =
+        usbparsers::buildPlayerLedsReport(Parser::SWITCH_PRO_USB, st, 0xF3, 0x2B, out, sizeof(out));
     ASSERT_EQ(12u, n);
     EXPECT_EQ(0x01, out[0]);
     EXPECT_EQ(0x0B, out[1]); // seq low nibble
@@ -343,13 +346,15 @@ TEST(Feedback, SwitchPlayerLedsRideNeutralRumbleSubcommand) {
 }
 
 TEST(Feedback, TriggerEffectsAreDualSenseOnlyAndByteExact) {
+    usbparsers::FeedbackState st;
     uint8_t left[11], right[11];
     for (int i = 0; i < 11; i++) {
         left[i] = (uint8_t)(0x60 + i);
         right[i] = (uint8_t)(0x40 + i);
     }
     uint8_t out[64];
-    size_t n = usbparsers::buildTriggerEffectsReport(Parser::DUALSENSE, left, right, out, sizeof(out));
+    size_t n =
+        usbparsers::buildTriggerEffectsReport(Parser::DUALSENSE, st, left, right, out, sizeof(out));
     ASSERT_EQ(63u, n);
     EXPECT_EQ(0x02, out[0]);
     EXPECT_EQ(0x04 | 0x08, out[1]); // right + left trigger-effect claims
@@ -357,12 +362,171 @@ TEST(Feedback, TriggerEffectsAreDualSenseOnlyAndByteExact) {
         EXPECT_EQ(right[i], out[11 + i]) << "right byte " << i;
         EXPECT_EQ(left[i], out[22 + i]) << "left byte " << i;
     }
-    EXPECT_EQ(0u, usbparsers::buildTriggerEffectsReport(Parser::DUALSHOCK4, left, right, out, sizeof(out)));
-    EXPECT_EQ(0u, usbparsers::buildTriggerEffectsReport(Parser::XBOX_ONE_GIP, left, right, out, sizeof(out)));
+    EXPECT_EQ(0u, usbparsers::buildTriggerEffectsReport(Parser::DUALSHOCK4, st, left, right, out,
+                                                       sizeof(out)));
+    EXPECT_EQ(0u, usbparsers::buildTriggerEffectsReport(Parser::XBOX_ONE_GIP, st, left, right, out,
+                                                       sizeof(out)));
+}
+
+// ---- DualSense mic-mute lamp (MSG_MIC_LED) ----
+
+TEST(MicMuteLed, DualSenseStatesAreByteExact) {
+    // hid-playstation's RID-stripped 8 and 9, plus one for the report id this file's builders
+    // carry at out[0]: lamp at out[9], power_save at out[10], valid_flag1 at out[2].
+    const uint8_t states[] = {usbparsers::MIC_MUTE_LED_OFF, usbparsers::MIC_MUTE_LED_ON,
+                              usbparsers::MIC_MUTE_LED_PULSE};
+    for (uint8_t state : states) {
+        usbparsers::FeedbackState st;
+        uint8_t out[64];
+        size_t n = usbparsers::buildMicMuteLedReport(Parser::DUALSENSE, st, state, out, sizeof(out));
+        ASSERT_EQ(63u, n) << "state " << (int)state;
+        EXPECT_EQ(0x02, out[0]);
+        EXPECT_EQ(0x00, out[1]); // no motor or trigger claims
+        // valid_flag1: MIC_MUTE_LED_CONTROL_ENABLE | POWER_SAVE_CONTROL_ENABLE.
+        EXPECT_EQ(0x01 | 0x02, out[2]);
+        EXPECT_EQ(state, out[9]);
+        // The amp follows the lamp: lit (on OR pulse) means the pad's own microphone is muted.
+        EXPECT_EQ(state == usbparsers::MIC_MUTE_LED_OFF ? 0x00 : 0x10, out[10]);
+        EXPECT_EQ(state, st.ds5MicMuteLed);
+        EXPECT_TRUE(st.ds5MicMuteLedSet);
+        // Nothing else in the report is claimed or set.
+        EXPECT_EQ(0x00, out[39]);
+        EXPECT_EQ(0x00, out[44]);
+        EXPECT_EQ(0x00, out[45]);
+    }
+}
+
+TEST(MicMuteLed, OnlyTheDualSenseHasTheLamp) {
+    usbparsers::FeedbackState st;
+    uint8_t out[64];
+    for (auto p : {Parser::NONE, Parser::XINPUT_360, Parser::XBOX_ONE_GIP, Parser::DUALSHOCK4,
+                   Parser::SWITCH_PRO_USB, Parser::STADIA, Parser::GENERIC_HID_GAMEPAD,
+                   Parser::XINPUT_360_WIRELESS, Parser::STEAM_CONTROLLER}) {
+        EXPECT_EQ(0u, usbparsers::buildMicMuteLedReport(p, st, usbparsers::MIC_MUTE_LED_ON, out,
+                                                        sizeof(out)))
+            << usbparsers::parserName(p);
+    }
+    EXPECT_FALSE(st.ds5MicMuteLedSet) << "a refused build must not shadow a lamp";
+}
+
+TEST(MicMuteLed, AnUnknownStateIsRefusedRatherThanClamped) {
+    usbparsers::FeedbackState st;
+    uint8_t out[64];
+    EXPECT_EQ(0u, usbparsers::buildMicMuteLedReport(Parser::DUALSENSE, st, 3, out, sizeof(out)));
+    EXPECT_EQ(0u, usbparsers::buildMicMuteLedReport(Parser::DUALSENSE, st, 0xFF, out, sizeof(out)));
+    EXPECT_FALSE(st.ds5MicMuteLedSet);
+    // And a too-small buffer is the usual refusal.
+    EXPECT_EQ(0u, usbparsers::buildMicMuteLedReport(Parser::DUALSENSE, st,
+                                                    usbparsers::MIC_MUTE_LED_ON, out, 62));
+}
+
+TEST(MicMuteLed, EveryOtherDualSenseReportReassertsTheLamp) {
+    usbparsers::FeedbackState st;
+    uint8_t out[64];
+    uint8_t block[11] = {};
+    for (int i = 0; i < 11; i++) block[i] = (uint8_t)(0x70 + i);
+
+    ASSERT_EQ(63u, usbparsers::buildMicMuteLedReport(Parser::DUALSENSE, st,
+                                                     usbparsers::MIC_MUTE_LED_ON, out, sizeof(out)));
+
+    // A colour written after the lamp carries both: the firmware applies whatever the valid flags
+    // claim, so a lightbar report that flagged the lamp field and left it zeroed would turn the
+    // lamp off as a side effect of changing colour.
+    ASSERT_EQ(63u, usbparsers::buildLightbarReport(Parser::DUALSENSE, st, 9, 8, 7, out, sizeof(out)));
+    EXPECT_EQ(0x04 | 0x01 | 0x02, out[2]) << "lightbar + lamp + power-save claims";
+    EXPECT_EQ(usbparsers::MIC_MUTE_LED_ON, out[9]);
+    EXPECT_EQ(0x10, out[10]);
+    EXPECT_EQ(9, out[45]);
+    EXPECT_EQ(8, out[46]);
+    EXPECT_EQ(7, out[47]);
+
+    ASSERT_EQ(63u, usbparsers::buildPlayerLedsReport(Parser::DUALSENSE, st, 0x1F, 0, out, sizeof(out)));
+    EXPECT_EQ(0x10 | 0x01 | 0x02, out[2]);
+    EXPECT_EQ(usbparsers::MIC_MUTE_LED_ON, out[9]);
+    EXPECT_EQ(0x1F, out[44]);
+
+    ASSERT_EQ(63u, usbparsers::buildTriggerEffectsReport(Parser::DUALSENSE, st, block, block, out,
+                                                         sizeof(out)));
+    EXPECT_EQ(0x04 | 0x08, out[1]) << "the trigger claims are untouched";
+    EXPECT_EQ(0x01 | 0x02, out[2]);
+    EXPECT_EQ(usbparsers::MIC_MUTE_LED_ON, out[9]);
+    EXPECT_EQ(block[0], out[11]);
+    EXPECT_EQ(block[0], out[22]);
+
+    st.strong = 0x8000;
+    st.weak = 0x4000;
+    ASSERT_EQ(63u, usbparsers::buildMergedRumbleReport(Parser::DUALSENSE, st, 0, out, sizeof(out)));
+    EXPECT_EQ(0x01, out[1]) << "the motor claim is untouched";
+    EXPECT_EQ(0x01 | 0x02, out[2]);
+    EXPECT_EQ(usbparsers::MIC_MUTE_LED_ON, out[9]);
+    EXPECT_EQ(0x40, out[3]);
+    EXPECT_EQ(0x80, out[4]);
+}
+
+TEST(MicMuteLed, TheLampWrittenAfterOtherEffectsSurvivesToo) {
+    // The other direction of the same rule: a lamp write is a whole fresh report, so nothing the
+    // pad was already doing may be claimed by it.
+    usbparsers::FeedbackState st;
+    uint8_t out[64];
+    uint8_t block[11] = {};
+    for (int i = 0; i < 11; i++) block[i] = (uint8_t)(0x50 + i);
+    ASSERT_EQ(63u, usbparsers::buildTriggerEffectsReport(Parser::DUALSENSE, st, block, block, out,
+                                                         sizeof(out)));
+    ASSERT_EQ(63u, usbparsers::buildMicMuteLedReport(Parser::DUALSENSE, st,
+                                                     usbparsers::MIC_MUTE_LED_PULSE, out,
+                                                     sizeof(out)));
+    EXPECT_EQ(0x00, out[1]) << "a lamp write must not claim the trigger blocks";
+    EXPECT_EQ(0x01 | 0x02, out[2]);
+    EXPECT_EQ(usbparsers::MIC_MUTE_LED_PULSE, out[9]);
+    EXPECT_EQ(0x10, out[10]);
+    EXPECT_EQ(0x00, out[11]);
+    EXPECT_EQ(0x00, out[22]);
+
+    // And the next trigger write still carries the pulse.
+    ASSERT_EQ(63u, usbparsers::buildTriggerEffectsReport(Parser::DUALSENSE, st, block, block, out,
+                                                         sizeof(out)));
+    EXPECT_EQ(usbparsers::MIC_MUTE_LED_PULSE, out[9]);
+    EXPECT_EQ(block[0], out[11]);
+}
+
+TEST(MicMuteLed, ALampTurnedOffStaysAssertedAndUnmutesTheAmp) {
+    usbparsers::FeedbackState st;
+    uint8_t out[64];
+    ASSERT_EQ(63u, usbparsers::buildMicMuteLedReport(Parser::DUALSENSE, st,
+                                                     usbparsers::MIC_MUTE_LED_ON, out, sizeof(out)));
+    ASSERT_EQ(63u, usbparsers::buildMicMuteLedReport(Parser::DUALSENSE, st,
+                                                     usbparsers::MIC_MUTE_LED_OFF, out,
+                                                     sizeof(out)));
+    EXPECT_EQ(usbparsers::MIC_MUTE_LED_OFF, out[9]);
+    EXPECT_EQ(0x00, out[10]);
+    // Still shadowed: an off lamp is a state the host asked for, so later reports must keep saying
+    // off rather than dropping the claim and letting the pad's own button state show through.
+    EXPECT_TRUE(st.ds5MicMuteLedSet);
+    ASSERT_EQ(63u, usbparsers::buildLightbarReport(Parser::DUALSENSE, st, 1, 2, 3, out, sizeof(out)));
+    EXPECT_EQ(0x04 | 0x01 | 0x02, out[2]);
+    EXPECT_EQ(usbparsers::MIC_MUTE_LED_OFF, out[9]);
+    EXPECT_EQ(0x00, out[10]);
+}
+
+TEST(MicMuteLed, ReportsAreUntouchedUntilTheHostDrivesTheLamp) {
+    // Nothing changes for a host that never sends MSG_MIC_LED: no lamp claim, no power-save claim.
+    usbparsers::FeedbackState st;
+    uint8_t out[64];
+    uint8_t block[11] = {};
+    ASSERT_EQ(63u, usbparsers::buildLightbarReport(Parser::DUALSENSE, st, 1, 2, 3, out, sizeof(out)));
+    EXPECT_EQ(0x04, out[2]);
+    EXPECT_EQ(0x00, out[9]);
+    EXPECT_EQ(0x00, out[10]);
+    ASSERT_EQ(63u, usbparsers::buildPlayerLedsReport(Parser::DUALSENSE, st, 0x03, 0, out, sizeof(out)));
+    EXPECT_EQ(0x10, out[2]);
+    ASSERT_EQ(63u, usbparsers::buildTriggerEffectsReport(Parser::DUALSENSE, st, block, block, out,
+                                                         sizeof(out)));
+    EXPECT_EQ(0x00, out[2]);
 }
 
 TEST(FeedbackCapability, PredicatesMatchTheBuilders) {
     using usbparsers::parserHasLightbar;
+    using usbparsers::parserHasMicMuteLed;
     using usbparsers::parserHasPlayerLeds;
     using usbparsers::parserHasTriggerEffects;
     using usbparsers::parserHasTriggerRumble;
@@ -377,10 +541,14 @@ TEST(FeedbackCapability, PredicatesMatchTheBuilders) {
                   usbparsers::buildLightbarReport(p, st, 0, 0, 0, out, sizeof(out)) != 0)
             << usbparsers::parserName(p);
         EXPECT_EQ(parserHasPlayerLeds(p),
-                  usbparsers::buildPlayerLedsReport(p, 0, 0, out, sizeof(out)) != 0)
+                  usbparsers::buildPlayerLedsReport(p, st, 0, 0, out, sizeof(out)) != 0)
             << usbparsers::parserName(p);
         EXPECT_EQ(parserHasTriggerEffects(p),
-                  usbparsers::buildTriggerEffectsReport(p, block, block, out, sizeof(out)) != 0)
+                  usbparsers::buildTriggerEffectsReport(p, st, block, block, out, sizeof(out)) != 0)
+            << usbparsers::parserName(p);
+        EXPECT_EQ(parserHasMicMuteLed(p),
+                  usbparsers::buildMicMuteLedReport(p, st, usbparsers::MIC_MUTE_LED_ON, out,
+                                                    sizeof(out)) != 0)
             << usbparsers::parserName(p);
     }
     EXPECT_TRUE(parserHasTriggerRumble(Parser::XBOX_ONE_GIP));

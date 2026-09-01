@@ -7,14 +7,29 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
+ * "No endpoint". Android numbers real [android.media.AudioDeviceInfo] entries from 1, so zero is
+ * free, and it is what [android.media.AudioTrack.setPreferredDevice] means by a null preference:
+ * let the platform route.
+ */
+const val NO_AUDIO_DEVICE = 0
+
+/**
  * Which of a physical pad's own audio endpoints Android currently routes to us. A
  * DualSense or DualShock 4 v2 carries a USB Audio Class function alongside its HID
  * interface; the app claims ONLY the HID interface, so that function stays with the OS
  * and its endpoints appear as ordinary [android.media.AudioDeviceInfo] entries.
+ *
+ * The two flags are the capability answer: whether this pad has an endpoint to be captured from
+ * or played to at all. The two ids are the routing answer: WHICH endpoint, for
+ * `setPreferredDevice` on the recorder and the track. The resolver always names an endpoint
+ * alongside the flag it sets, because a claim it cannot point at is a claim it should not make;
+ * a route built without one falls back to the platform's own routing.
  */
 data class PadAudioRoute(
     val microphone: Boolean,
     val speaker: Boolean,
+    val captureDeviceId: Int = NO_AUDIO_DEVICE,
+    val playbackDeviceId: Int = NO_AUDIO_DEVICE,
 ) {
     companion object {
         val NONE = PadAudioRoute(microphone = false, speaker = false)
@@ -34,15 +49,14 @@ data class PadAudioRoute(
  * endpoint appears and vanishes with the cable. Publishing a new map re-runs the
  * capability composition, which re-declares the affected slot's descriptor.
  *
- * STUB: the resolver that walks `AudioDeviceInfo` and matches endpoints to a claimed pad
- * is not built yet, so the table is empty and physical pads advertise neither surface.
- * The gating around it is live, so filling [publishRoutes] is all that is left.
+ * [PadAudioRouteResolver] owns the publishing; [PadAudioMatcher] owns the rule that decides what
+ * belongs to which pad. This is only the table they write and everything else reads.
  */
 @Singleton
 class PadAudioRoutes
     @Inject
     constructor() : AbstractStateSource<Map<Int, PadAudioRoute>>(emptyMap()) {
-        /** Absent (the stub's answer, and the answer for any pad with no endpoints) is [PadAudioRoute.NONE]. */
+        /** Absent (a pad with no endpoints, or one that could not be matched) is [PadAudioRoute.NONE]. */
         fun routeFor(
             vendorId: Int,
             productId: Int,

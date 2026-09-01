@@ -32,6 +32,21 @@ computer. Those lines say "update Satellite too".
   to the PC you paired with, over the same encrypted connection as your
   controller input, one 20 ms slice at a time, and is discarded as soon as
   it is sent. It is never sent to us, and never included in crash reports.
+- And the controller has a speaker now. Whatever a game or a chat app plays
+  through the pad's own speaker on the PC comes out of your phone, in stereo,
+  the moment it is played. Controller sound is on by default per controller;
+  turning it off stops the PC sending it at all, rather than just muting it
+  here.
+- A DualShock 4 v2 or DualSense plugged in by USB (Direct mode) uses its own
+  microphone and its own speaker or headset instead of the phone's, when
+  Android hands us its audio. The Microphone and Controller sound rows appear
+  for a plugged pad only while that is true: if the phone does not pick up the
+  pad's audio, Dish says so instead of promising sound it cannot deliver, and
+  the rows appear and disappear with the cable.
+- The mute light works on a plugged-in DualSense too. A game that lights, or
+  breathes, the pad's mute lamp now lights the real one, and the pad's own
+  microphone is switched off behind it rather than left listening. The
+  on-screen DualSense shows the same thing on its mute button.
 - Controller lights follow the game. On a USB-connected (Direct mode)
   DualShock 4 or DualSense, the light bar now shows the color the game picks;
   a DualSense's player lights and a Switch Pro's player LEDs light up too.

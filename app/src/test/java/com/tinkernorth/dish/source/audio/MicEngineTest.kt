@@ -21,6 +21,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Semaphore
 import java.util.concurrent.atomic.AtomicBoolean
@@ -42,7 +43,8 @@ class MicEngineTest {
 
     /**
      * A microphone whose windows the test hands out one at a time, so "one more window was
-     * recorded" and "the mute landed" can be ordered deliberately instead of raced.
+     * recorded" and "the mute landed" can be ordered deliberately instead of raced. One set of
+     * permits per endpoint, since the engine may hold several recorders at once.
      */
     private class FakeMic : MicCaptureSource {
         val opens = AtomicInteger()
@@ -51,32 +53,42 @@ class MicEngineTest {
         val refuse = AtomicBoolean(false)
         val dieMidStream = AtomicBoolean(false)
         val lastFrameSamples = AtomicInteger()
-        private val windows = Semaphore(0)
+        val openedEndpoints = ConcurrentLinkedQueue<Int>()
+        private val windows = ConcurrentHashMap<Int, Semaphore>()
 
-        override fun open(frameSamples: Int): MicCaptureSession? {
+        private fun permits(endpoint: Int) = windows.computeIfAbsent(endpoint) { Semaphore(0) }
+
+        override fun open(
+            frameSamples: Int,
+            preferredDeviceId: Int,
+        ): MicCaptureSession? {
             lastFrameSamples.set(frameSamples)
             if (refuse.get()) return null
             opens.incrementAndGet()
-            return Session(frameSamples)
+            openedEndpoints += preferredDeviceId
+            return Session(frameSamples, preferredDeviceId)
         }
 
-        /** Let exactly one blocking read complete. */
-        fun releaseWindow() = windows.release()
+        /** Let exactly one blocking read complete on an endpoint. */
+        fun releaseWindow(endpoint: Int = NO_AUDIO_DEVICE) = permits(endpoint).release()
 
         /** Unblock anything still parked, so a finished test never leaves a thread behind. */
-        fun drain() = windows.release(DRAIN_PERMITS)
+        fun drain() {
+            windows.values.forEach { it.release(DRAIN_PERMITS) }
+        }
 
         private inner class Session(
             private val frameSamples: Int,
+            private val endpoint: Int,
         ) : MicCaptureSession {
             override val voiceProcessed = true
 
             override fun read(out: ShortArray): Int {
                 assertEquals("the engine must read whole 20 ms windows", frameSamples, out.size)
                 readsEntered.incrementAndGet()
-                windows.acquire()
+                permits(endpoint).acquire()
                 if (dieMidStream.get()) return out.size - 1
-                out.fill(TONE)
+                out.fill(if (endpoint == NO_AUDIO_DEVICE) TONE else PAD_TONE)
                 return out.size
             }
 
@@ -90,31 +102,52 @@ class MicEngineTest {
         }
     }
 
-    /** A real thread, because the invariant is about what a thread does, not about a decision. */
-    private class TestLoop : MicCaptureLoop {
-        @Volatile private var thread: Thread? = null
+    /** Real threads, because the invariant is about what a thread does, not about a decision. */
+    private class TestLoopFactory : MicCaptureLoopFactory {
+        val loops = ConcurrentHashMap<Int, TestLoop>()
 
-        override fun start(body: () -> Unit) {
-            thread = Thread(body, "test-mic").also { it.start() }
-        }
+        override fun create(preferredDeviceId: Int): MicCaptureLoop = loops.computeIfAbsent(preferredDeviceId) { TestLoop() }
 
-        override fun join() {
-            thread?.join(JOIN_MS)
-            thread = null
-        }
+        fun anyAlive(): Boolean = loops.values.any { it.alive() }
 
-        fun alive(): Boolean = thread?.isAlive == true
+        fun joinAll() = loops.values.forEach { it.join() }
 
-        private companion object {
-            const val JOIN_MS = 2_000L
+        class TestLoop : MicCaptureLoop {
+            @Volatile private var thread: Thread? = null
+
+            override fun start(body: () -> Unit) {
+                thread = Thread(body, "test-mic").also { it.start() }
+            }
+
+            override fun join() {
+                thread?.join(JOIN_MS)
+                thread = null
+            }
+
+            fun alive(): Boolean = thread?.isAlive == true
+
+            private companion object {
+                const val JOIN_MS = 2_000L
+            }
         }
     }
 
     private val frames = ConcurrentLinkedQueue<Pair<String, ShortArray>>()
     private val mic = FakeMic()
-    private val loop = TestLoop()
+    private val loops = TestLoopFactory()
     private val scope = TestScope(StandardTestDispatcher())
     private val plans = MutableStateFlow(MicCapturePlan.IDLE)
+    private val routeTable = MutableStateFlow<Map<Int, PadAudioRoute>>(emptyMap())
+
+    /** Per-slot capture endpoints, so a pad with its own microphone can be moved under the engine. */
+    private val slotRoutes = ConcurrentHashMap<String, PadAudioRoute>()
+
+    private val routing =
+        object : SlotAudioRoutes {
+            override val changes get() = routeTable
+
+            override fun forSlot(slotId: String) = slotRoutes[slotId] ?: PadAudioRoute.NONE
+        }
 
     private val connection =
         mockk<SatelliteConnection> {
@@ -129,7 +162,7 @@ class MicEngineTest {
 
     private val composer = mockk<MicCaptureComposer> { every { state } returns plans }
 
-    private val engine = MicEngine(composer, manager, mic, loop, scope)
+    private val engine = MicEngine(composer, manager, mic, loops, routing, scope)
 
     @Before
     fun setUp() {
@@ -142,7 +175,7 @@ class MicEngineTest {
     fun tearDown() {
         engine.apply(MicCapturePlan.IDLE)
         mic.drain()
-        loop.join()
+        loops.joinAll()
     }
 
     private fun plan(
@@ -182,6 +215,7 @@ class MicEngineTest {
         assertTrue("a window is one 20 ms frame", frames.all { it.second.size == MicEngine.FRAME_SAMPLES })
         assertTrue("captured audio, not silence", frames.all { f -> f.second.all { it == TONE } })
         assertEquals("exactly 960 samples were asked for", MicEngine.FRAME_SAMPLES, mic.lastFrameSamples.get())
+        assertEquals("the phone's own microphone, no preferred endpoint", listOf(NO_AUDIO_DEVICE), mic.openedEndpoints.toList())
     }
 
     @Test
@@ -232,7 +266,7 @@ class MicEngineTest {
         engine.apply(mutedPlan())
         mic.releaseWindow()
 
-        await("the capture thread to finish") { !loop.alive() }
+        await("the capture thread to finish") { !loops.anyAlive() }
         assertEquals("the in-flight window must be dropped, not sent", 1, frames.size)
         assertEquals("the recorder is released, not left open", 1, mic.closes.get())
         assertEquals(MicCaptureState.Idle, engine.state.value)
@@ -244,7 +278,7 @@ class MicEngineTest {
         await("the first recorder") { mic.opens.get() == 1 }
         engine.apply(mutedPlan())
         mic.releaseWindow()
-        await("the first capture to end") { !loop.alive() }
+        await("the first capture to end") { !loops.anyAlive() }
         frames.clear()
 
         engine.apply(eligible())
@@ -265,7 +299,7 @@ class MicEngineTest {
         // switched-off toggle all look like from here.
         engine.apply(MicCapturePlan.IDLE)
         mic.drain()
-        await("the capture thread to finish") { !loop.alive() }
+        await("the capture thread to finish") { !loops.anyAlive() }
         assertEquals("nothing may be sent after the plan went idle", 1, frames.size)
         assertEquals(1, mic.closes.get())
     }
@@ -282,9 +316,80 @@ class MicEngineTest {
         // while it is stopped, and a microphone is the one input that must not.
         owner.registry.currentState = Lifecycle.State.CREATED
         mic.drain()
-        await("the capture thread to finish") { !loop.alive() }
+        await("the capture thread to finish") { !loops.anyAlive() }
         assertEquals("a stopped engine is a closed recorder", 1, mic.closes.get())
         assertEquals(MicCaptureState.Idle, engine.state.value)
+    }
+
+    // ---- per-route capture ----
+
+    @Test
+    fun `a slot whose pad has its own microphone gets its own recorder`() {
+        // An AudioRecord's preferred device is fixed when it is built, so two slots on two
+        // endpoints cannot share one: the phone's microphone and the pad's headset are two sources.
+        val padSlot = MicCaptureTarget(PAD_SLOT, CONN)
+        slotRoutes[PAD_SLOT] = PadAudioRoute(microphone = true, speaker = false, captureDeviceId = PAD_ENDPOINT)
+        engine.apply(plan(armed = setOf(TARGET, padSlot), delivering = setOf(TARGET, padSlot)))
+        await("both recorders to open") { mic.opens.get() == 2 }
+        assertEquals(setOf(NO_AUDIO_DEVICE, PAD_ENDPOINT), mic.openedEndpoints.toSet())
+
+        // And each window goes only to the slots that share its endpoint.
+        mic.releaseWindow(PAD_ENDPOINT)
+        await("the pad's window") { frames.size == 1 }
+        assertEquals(PAD_SLOT, frames.first().first)
+        assertTrue("the pad's own microphone, not the phone's", frames.first().second.all { it == PAD_TONE })
+
+        mic.releaseWindow(NO_AUDIO_DEVICE)
+        await("the phone's window") { frames.size == 2 }
+        assertEquals(SLOT, frames.last().first)
+        assertTrue(frames.last().second.all { it == TONE })
+    }
+
+    @Test
+    fun `two slots on the same pad endpoint still share one recorder`() {
+        val padA = MicCaptureTarget(PAD_SLOT, CONN)
+        val padB = MicCaptureTarget(OTHER_PAD_SLOT, CONN)
+        val route = PadAudioRoute(microphone = true, speaker = false, captureDeviceId = PAD_ENDPOINT)
+        slotRoutes[PAD_SLOT] = route
+        slotRoutes[OTHER_PAD_SLOT] = route
+        engine.apply(plan(armed = setOf(padA, padB), delivering = setOf(padA, padB)))
+        await("one recorder") { mic.opens.get() == 1 }
+        mic.releaseWindow(PAD_ENDPOINT)
+        await("both slots to receive it") { frames.size == 2 }
+        assertEquals("one endpoint, one recorder", 1, mic.opens.get())
+    }
+
+    @Test
+    fun `a pad endpoint appearing moves the slot onto its own recorder`() {
+        // The plan does not change when a route does, so the engine has to notice the table itself.
+        val padSlot = MicCaptureTarget(PAD_SLOT, CONN)
+        engine.apply(plan(armed = setOf(padSlot), delivering = setOf(padSlot)))
+        await("the phone's recorder") { mic.opens.get() == 1 }
+        assertEquals(listOf(NO_AUDIO_DEVICE), mic.openedEndpoints.toList())
+
+        slotRoutes[PAD_SLOT] = PadAudioRoute(microphone = true, speaker = false, captureDeviceId = PAD_ENDPOINT)
+        engine.apply(plan(armed = setOf(padSlot), delivering = setOf(padSlot)))
+        await("the pad's recorder") { mic.opens.get() == 2 }
+        assertEquals(listOf(NO_AUDIO_DEVICE, PAD_ENDPOINT), mic.openedEndpoints.toList())
+
+        // The old recorder is released rather than left holding the phone's microphone.
+        mic.releaseWindow(NO_AUDIO_DEVICE)
+        await("the phone's recorder to close") { mic.closes.get() == 1 }
+    }
+
+    @Test
+    fun `a pad endpoint vanishing puts the slot back on the phone`() {
+        val padSlot = MicCaptureTarget(PAD_SLOT, CONN)
+        slotRoutes[PAD_SLOT] = PadAudioRoute(microphone = true, speaker = false, captureDeviceId = PAD_ENDPOINT)
+        engine.apply(plan(armed = setOf(padSlot), delivering = setOf(padSlot)))
+        await("the pad's recorder") { mic.opens.get() == 1 }
+
+        slotRoutes.remove(PAD_SLOT)
+        engine.apply(plan(armed = setOf(padSlot), delivering = setOf(padSlot)))
+        await("the phone's recorder") { mic.opens.get() == 2 }
+        assertEquals(listOf(PAD_ENDPOINT, NO_AUDIO_DEVICE), mic.openedEndpoints.toList())
+        mic.releaseWindow(NO_AUDIO_DEVICE)
+        await("audio from the phone") { frames.any { it.second.all { s -> s == TONE } } }
     }
 
     // ---- device refusal ----
@@ -318,13 +423,35 @@ class MicEngineTest {
     }
 
     @Test
+    fun `one endpoint refusing does not stop another that works`() {
+        // Only the pad's endpoint is refused here, by opening it while the source says no and the
+        // phone's while it says yes.
+        val padSlot = MicCaptureTarget(PAD_SLOT, CONN)
+        slotRoutes[PAD_SLOT] = PadAudioRoute(microphone = true, speaker = false, captureDeviceId = PAD_ENDPOINT)
+        engine.apply(eligible())
+        await("the phone's recorder") { mic.opens.get() == 1 }
+
+        // Only the new endpoint is refused: the phone's recorder is already open and is not
+        // reopened, so the flag reaches nothing but the pad's attempt.
+        mic.refuse.set(true)
+        engine.apply(plan(armed = setOf(TARGET, padSlot), delivering = setOf(TARGET, padSlot)))
+        Thread.sleep(SETTLE_MS)
+        assertEquals("the refused endpoint opened nothing", 1, mic.opens.get())
+        assertEquals("a live recorder outranks a refused one", MicCaptureState.Capturing, engine.state.value)
+
+        mic.refuse.set(false)
+        mic.releaseWindow(NO_AUDIO_DEVICE)
+        await("the phone's audio to keep flowing") { frames.size == 1 }
+    }
+
+    @Test
     fun `a recorder that dies mid-stream sends no partial window`() {
         engine.apply(eligible())
         await("the recorder to open") { mic.opens.get() == 1 }
         mic.dieMidStream.set(true)
         mic.releaseWindow()
 
-        await("the capture thread to finish") { !loop.alive() }
+        await("the capture thread to finish") { !loops.anyAlive() }
         assertEquals("a short read is a dead recorder, never a short packet", 0, frames.size)
         assertEquals(MicCaptureState.Unavailable, engine.state.value)
         assertEquals(1, mic.closes.get())
@@ -357,15 +484,38 @@ class MicEngineTest {
             plans.value = MicCapturePlan.IDLE
             scope.testScheduler.runCurrent()
             mic.drain()
-            await("the capture thread to finish") { !loop.alive() }
+            await("the capture thread to finish") { !loops.anyAlive() }
             assertEquals(0, frames.size)
+        }
+
+    @Test
+    fun `the engine regroups when the route table moves under an unchanged plan`() =
+        runTest(scope.testScheduler) {
+            val owner = TestOwner()
+            owner.registry.addObserver(engine)
+            owner.registry.currentState = Lifecycle.State.STARTED
+            scope.testScheduler.runCurrent()
+
+            plans.value = eligible()
+            scope.testScheduler.runCurrent()
+            await("the phone's recorder") { mic.opens.get() == 1 }
+
+            slotRoutes[SLOT] = PadAudioRoute(microphone = true, speaker = false, captureDeviceId = PAD_ENDPOINT)
+            routeTable.value = mapOf(1 to PadAudioRoute(microphone = true, speaker = false, captureDeviceId = PAD_ENDPOINT))
+            scope.testScheduler.runCurrent()
+            await("the pad's recorder") { mic.opens.get() == 2 }
+            assertEquals(listOf(NO_AUDIO_DEVICE, PAD_ENDPOINT), mic.openedEndpoints.toList())
         }
 
     private companion object {
         const val SLOT = "virtual"
+        const val PAD_SLOT = "-1000"
+        const val OTHER_PAD_SLOT = "-1001"
         const val CONN = "satellite:abc"
         val TARGET = MicCaptureTarget(SLOT, CONN)
         const val TONE: Short = 4242
+        const val PAD_TONE: Short = 1234
+        const val PAD_ENDPOINT = 12
         const val POLL_MS = 2L
 
         // Long enough for a capture thread that should not exist to have opened a recorder.

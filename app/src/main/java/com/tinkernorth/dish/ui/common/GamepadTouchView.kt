@@ -12,6 +12,7 @@ import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.drawable.Drawable
+import android.os.SystemClock
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
@@ -26,6 +27,9 @@ import com.tinkernorth.dish.ui.common.GamepadConstants.CENTER_BTN_DRAW_SIZE_FACT
 import com.tinkernorth.dish.ui.common.GamepadConstants.HOME_DRAW_SIZE_FACTOR
 import com.tinkernorth.dish.ui.common.GamepadConstants.LIGHTBAR_BG_BLEND_FRACTION
 import com.tinkernorth.dish.ui.common.GamepadConstants.LIGHTBAR_STROKE_DP
+import com.tinkernorth.dish.ui.common.GamepadConstants.MIC_MUTE_LAMP_ALPHA
+import com.tinkernorth.dish.ui.common.GamepadConstants.MIC_MUTE_PULSE_MIN_ALPHA
+import com.tinkernorth.dish.ui.common.GamepadConstants.MIC_MUTE_PULSE_PERIOD_MS
 import com.tinkernorth.dish.ui.common.GamepadConstants.PILL_CORNER_RADIUS_FRACTION
 import com.tinkernorth.dish.ui.common.GamepadConstants.PILL_ICON_SIZE_FRACTION
 import com.tinkernorth.dish.ui.common.GamepadConstants.PLAYER_LED_COUNT
@@ -111,8 +115,9 @@ class GamepadTouchView
             // press stops here and only [withMicMute] ever puts anything on the wire.
             const val BTN_MIC_MUTE = 1 shl 12
 
-            // MSG_MIC_LED's "off"; the wire's other states (on, pulse) both accent the pill.
-            private const val MIC_LED_STATE_OFF = 0
+            // MSG_MIC_LED's own states; the two lit ones both accent the pill, pulse by breathing it.
+            internal const val MIC_LED_STATE_OFF = 0
+            internal const val MIC_LED_STATE_PULSE = 2
 
             private const val HALF_INT16 = 32768
             private const val NORM_INT16_SPAN = 65535f
@@ -188,7 +193,7 @@ class GamepadTouchView
 
         // The mic-mute lamp in the wire's own states (0 off, 1 on, 2 pulse). Written by the local
         // mute and overridden by a host MSG_MIC_LED, last writer wins, exactly as on the hardware;
-        // anything non-off accents the mute pill. Pulse currently paints like on.
+        // anything non-off accents the mute pill, and pulse breathes that accent.
         var micMuteLedState: Int = 0
             set(value) {
                 if (field == value) return
@@ -524,8 +529,10 @@ class GamepadTouchView
             drawMicMute(canvas, l, s)
         }
 
-        // Pressed paints like any other pill; muted adds the accent ring the adaptive-trigger
-        // effect already uses, so the lamp reads as a state the host set rather than as a finger.
+        // Pressed paints like any other pill; the lamp adds the accent ring the adaptive-trigger
+        // effect already uses, so it reads as a state the host set rather than as a finger.
+        // Pulse breathes that same ring instead of introducing a second treatment, and is the only
+        // state that costs frames: on and off are painted once and left alone.
         private fun drawMicMute(
             c: Canvas,
             l: GamepadLayout,
@@ -533,10 +540,16 @@ class GamepadTouchView
         ) {
             val rect = l.micMuteRect ?: return
             drawPillButton(c, rect, icMicMute, s.buttons and BTN_MIC_MUTE != 0)
-            if (micMuteLedState == MIC_LED_STATE_OFF) return
+            val state = micMuteLedState
+            val alpha = micMuteLampAlpha(state, SystemClock.uptimeMillis())
+            if (alpha == 0) return
             val r = min(rect.width(), rect.height()) * PILL_CORNER_RADIUS_FRACTION
             paintTriggerEffect.strokeWidth = TRIGGER_EFFECT_STROKE_DP * density
+            paintTriggerEffect.alpha = alpha
             c.drawRoundRect(rect, r, r, paintTriggerEffect)
+            // Shared with the trigger accents, which expect the solid colour back.
+            paintTriggerEffect.alpha = MIC_MUTE_LAMP_ALPHA
+            if (state == MIC_LED_STATE_PULSE) postInvalidateOnAnimation()
         }
 
         private fun drawDpad(
@@ -872,6 +885,30 @@ class GamepadTouchView
                 invalidate()
             }, TRACKPAD_CLICK_PULSE_MS)
         }
+    }
+
+/**
+ * The mute lamp's accent alpha for one lamp state and one clock reading, kept out of the view so it
+ * can be pinned without one.
+ *
+ * Off draws nothing at all. On is the solid accent every other host-driven surface uses. Pulse
+ * breathes that same accent, because that is what the state means on the hardware: the DualSense's
+ * mute lamp fades in and out, and a blink would read as a warning the host never sent. The wave is
+ * a raised cosine so the seam at the end of each period is smooth rather than a step, and it starts
+ * at the trough so a lamp that has just begun pulsing is visibly different from a solid one.
+ */
+internal fun micMuteLampAlpha(
+    state: Int,
+    uptimeMs: Long,
+): Int =
+    when (state) {
+        GamepadTouchView.MIC_LED_STATE_OFF -> 0
+        GamepadTouchView.MIC_LED_STATE_PULSE -> {
+            val phase = (uptimeMs.mod(MIC_MUTE_PULSE_PERIOD_MS)) / MIC_MUTE_PULSE_PERIOD_MS.toFloat()
+            val wave = (1f - cos(2f * Math.PI.toFloat() * phase)) / 2f
+            (MIC_MUTE_PULSE_MIN_ALPHA + wave * (MIC_MUTE_LAMP_ALPHA - MIC_MUTE_PULSE_MIN_ALPHA)).toInt()
+        }
+        else -> MIC_MUTE_LAMP_ALPHA
     }
 
 internal data class StickAxes(

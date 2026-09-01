@@ -1716,6 +1716,11 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendUs
                                 buf + usbparsers::TRIGGER_EFFECT_BLOCK_LEN);
 }
 
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendUsbMicMuteLed(
+    JNIEnv*, jobject, jint syntheticDeviceId, jint state) {
+    usbhost::sendMicMuteLed((int32_t)syntheticDeviceId, (uint8_t)(state & 0xFF));
+}
+
 JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_lookupKnownModelName(
     JNIEnv* env, jobject, jint vid, jint pid) {
     const usbparsers::KnownDevice* k =

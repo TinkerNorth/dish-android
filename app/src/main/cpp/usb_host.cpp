@@ -536,7 +536,7 @@ void sendPlayerLeds(int32_t syntheticDeviceId, uint8_t ledMask) {
     std::lock_guard<std::mutex> lock(ctx->outMtx);
     if (ctx->fd < 0) return;
     uint8_t seq = ctx->outSeq++;
-    usbparsers::runPlayerLeds(ctx->fd, ctx->epOut, ctx->parser, ledMask, seq);
+    usbparsers::runPlayerLeds(ctx->fd, ctx->epOut, ctx->parser, ctx->feedback, ledMask, seq);
 }
 
 void sendTriggerEffects(int32_t syntheticDeviceId, const uint8_t* left, const uint8_t* right) {
@@ -544,7 +544,15 @@ void sendTriggerEffects(int32_t syntheticDeviceId, const uint8_t* left, const ui
     if (!ctx) return;
     std::lock_guard<std::mutex> lock(ctx->outMtx);
     if (ctx->fd < 0) return;
-    usbparsers::runTriggerEffects(ctx->fd, ctx->epOut, ctx->parser, left, right);
+    usbparsers::runTriggerEffects(ctx->fd, ctx->epOut, ctx->parser, ctx->feedback, left, right);
+}
+
+void sendMicMuteLed(int32_t syntheticDeviceId, uint8_t state) {
+    auto ctx = ctxFor(syntheticDeviceId);
+    if (!ctx) return;
+    std::lock_guard<std::mutex> lock(ctx->outMtx);
+    if (ctx->fd < 0) return;
+    usbparsers::runMicMuteLed(ctx->fd, ctx->epOut, ctx->parser, ctx->feedback, state);
 }
 
 } // namespace usbhost

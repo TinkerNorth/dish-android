@@ -139,4 +139,13 @@ internal object GamepadConstants {
     const val MIC_MUTE_WIDTH_DP = 46f
 
     const val MIC_MUTE_HEIGHT_DP = 26f
+
+    // The mute lamp's accent, in the wire's three states. Solid for "on"; "pulse" breathes between
+    // the trough and the same solid value, over roughly the period the real lamp uses, so the two
+    // lit states are the same accent and only their motion tells them apart.
+    const val MIC_MUTE_LAMP_ALPHA = 0xFF
+
+    const val MIC_MUTE_PULSE_MIN_ALPHA = 0x40
+
+    const val MIC_MUTE_PULSE_PERIOD_MS = 2000L
 }

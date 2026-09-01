@@ -1441,10 +1441,41 @@ bool parserHasTriggerEffects(Parser p) { return p == Parser::DUALSENSE; }
 
 bool parserHasTriggerRumble(Parser p) { return p == Parser::XBOX_ONE_GIP; }
 
+bool parserHasMicMuteLed(Parser p) { return p == Parser::DUALSENSE; }
+
+// DualSense output report 0x02 field offsets and flag bits, in this file's convention: the report
+// id lives at out[0], so these are hid-playstation's RID-stripped 8 and 9 plus one, the same shift
+// the player-LED byte carries (out[44] against stripped 43).
+static constexpr size_t kDs5MicMuteLedByte = 9;
+static constexpr size_t kDs5PowerSaveByte = 10;
+static constexpr uint8_t kDs5ValidFlag1MicMuteLed = 0x01;
+static constexpr uint8_t kDs5ValidFlag1PowerSave = 0x02;
+static constexpr uint8_t kDs5PowerSaveMicMute = 0x10;
+
+// Stamp the shadowed lamp onto a DualSense 0x02 report that was built for something else. Every
+// builder here memsets a fresh report, and the firmware applies whatever the valid flags claim, so
+// without this a colour or player-LED write would be a lamp write too: flags set, field zero.
+// A pad whose lamp the host never drove is left alone, so nothing changes for hosts that do not
+// use it.
+//
+// The power-save bit rides along because the lamp and the microphone amplifier are one thing on
+// this pad: a lit mute lamp over a live microphone is the one failure this whole feature exists to
+// prevent. Pulse counts as lit for the same reason; it is the rarer state and the honest reading of
+// a lamp the user can see.
+static void reassertDs5MicMuteLed(const FeedbackState& st, uint8_t* out) {
+    if (!st.ds5MicMuteLedSet) return;
+    out[2] |= kDs5ValidFlag1MicMuteLed | kDs5ValidFlag1PowerSave;
+    out[kDs5MicMuteLedByte] = st.ds5MicMuteLed;
+    out[kDs5PowerSaveByte] = st.ds5MicMuteLed == MIC_MUTE_LED_OFF ? 0x00 : kDs5PowerSaveMicMute;
+}
+
 size_t buildMergedRumbleReport(Parser p, FeedbackState& st, uint8_t seq, uint8_t* out,
                                size_t outCap) {
-    if (p != Parser::XBOX_ONE_GIP)
-        return buildRumbleReport(p, st.strong, st.weak, seq, out, outCap);
+    if (p != Parser::XBOX_ONE_GIP) {
+        size_t n = buildRumbleReport(p, st.strong, st.weak, seq, out, outCap);
+        if (n != 0 && p == Parser::DUALSENSE) reassertDs5MicMuteLed(st, out);
+        return n;
+    }
     // GIP: one report drives all four motors (mask 0x0F), so the merged state rides every write;
     // a trigger-only change must not zero the main motors and vice versa.
     if (outCap < 13) return 0;
@@ -1493,13 +1524,15 @@ size_t buildLightbarReport(Parser p, FeedbackState& st, uint8_t r, uint8_t g, ui
         out[45] = r;
         out[46] = g;
         out[47] = b;
+        reassertDs5MicMuteLed(st, out);
         return 63;
     default:
         return 0;
     }
 }
 
-size_t buildPlayerLedsReport(Parser p, uint8_t ledMask, uint8_t seq, uint8_t* out, size_t outCap) {
+size_t buildPlayerLedsReport(Parser p, const FeedbackState& st, uint8_t ledMask, uint8_t seq,
+                             uint8_t* out, size_t outCap) {
     switch (p) {
     case Parser::DUALSENSE:
         if (outCap < 63) return 0;
@@ -1507,6 +1540,7 @@ size_t buildPlayerLedsReport(Parser p, uint8_t ledMask, uint8_t seq, uint8_t* ou
         out[0] = 0x02;
         out[2] = 0x10; // valid_flag1 PLAYER_INDICATOR_CONTROL_ENABLE
         out[44] = (uint8_t)(ledMask & 0x1F);
+        reassertDs5MicMuteLed(st, out);
         return 63;
     case Parser::SWITCH_PRO_USB:
         // Subcommand 0x30 rides the 0x01 rumble+subcommand report; neutral HD-rumble blocks keep
@@ -1524,7 +1558,8 @@ size_t buildPlayerLedsReport(Parser p, uint8_t ledMask, uint8_t seq, uint8_t* ou
     }
 }
 
-size_t buildTriggerEffectsReport(Parser p, const uint8_t left[TRIGGER_EFFECT_BLOCK_LEN],
+size_t buildTriggerEffectsReport(Parser p, const FeedbackState& st,
+                                 const uint8_t left[TRIGGER_EFFECT_BLOCK_LEN],
                                  const uint8_t right[TRIGGER_EFFECT_BLOCK_LEN], uint8_t* out,
                                  size_t outCap) {
     if (p != Parser::DUALSENSE) return 0;
@@ -1534,6 +1569,25 @@ size_t buildTriggerEffectsReport(Parser p, const uint8_t left[TRIGGER_EFFECT_BLO
     out[1] = 0x04 | 0x08; // valid_flag0: right + left trigger-effect blocks
     memcpy(out + 11, right, TRIGGER_EFFECT_BLOCK_LEN);
     memcpy(out + 22, left, TRIGGER_EFFECT_BLOCK_LEN);
+    reassertDs5MicMuteLed(st, out);
+    return 63;
+}
+
+size_t buildMicMuteLedReport(Parser p, FeedbackState& st, uint8_t state, uint8_t* out,
+                             size_t outCap) {
+    if (p != Parser::DUALSENSE) return 0;
+    // A state past pulse can only come from a host speaking something newer than this client, and
+    // the JNI receive arm already dropped it; refusing again here keeps the builder honest for any
+    // other caller rather than inventing a lamp the pad would show.
+    if (state > MIC_MUTE_LED_PULSE) return 0;
+    if (outCap < 63) return 0;
+    st.ds5MicMuteLed = state;
+    st.ds5MicMuteLedSet = true;
+    memset(out, 0, 63);
+    out[0] = 0x02;
+    // The whole report body is the re-assert: one code path writes the lamp, whichever builder
+    // asked for it.
+    reassertDs5MicMuteLed(st, out);
     return 63;
 }
 
@@ -1661,20 +1715,29 @@ bool runLightbar(int fd, uint8_t epOut, Parser p, FeedbackState& st, uint8_t r, 
     return bulkWrite(fd, epOut, buf, n, 100);
 }
 
-bool runPlayerLeds(int fd, uint8_t epOut, Parser p, uint8_t ledMask, uint8_t seq) {
+bool runPlayerLeds(int fd, uint8_t epOut, Parser p, const FeedbackState& st, uint8_t ledMask,
+                   uint8_t seq) {
     if (epOut == 0) return false;
     uint8_t buf[64];
-    size_t n = buildPlayerLedsReport(p, ledMask, seq, buf, sizeof(buf));
+    size_t n = buildPlayerLedsReport(p, st, ledMask, seq, buf, sizeof(buf));
     if (n == 0) return false;
     return bulkWrite(fd, epOut, buf, n, 100);
 }
 
-bool runTriggerEffects(int fd, uint8_t epOut, Parser p,
+bool runTriggerEffects(int fd, uint8_t epOut, Parser p, const FeedbackState& st,
                        const uint8_t left[TRIGGER_EFFECT_BLOCK_LEN],
                        const uint8_t right[TRIGGER_EFFECT_BLOCK_LEN]) {
     if (epOut == 0) return false;
     uint8_t buf[64];
-    size_t n = buildTriggerEffectsReport(p, left, right, buf, sizeof(buf));
+    size_t n = buildTriggerEffectsReport(p, st, left, right, buf, sizeof(buf));
+    if (n == 0) return false;
+    return bulkWrite(fd, epOut, buf, n, 100);
+}
+
+bool runMicMuteLed(int fd, uint8_t epOut, Parser p, FeedbackState& st, uint8_t state) {
+    if (epOut == 0) return false;
+    uint8_t buf[64];
+    size_t n = buildMicMuteLedReport(p, st, state, buf, sizeof(buf));
     if (n == 0) return false;
     return bulkWrite(fd, epOut, buf, n, 100);
 }

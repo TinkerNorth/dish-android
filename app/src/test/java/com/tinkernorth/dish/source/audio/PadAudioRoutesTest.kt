@@ -8,9 +8,9 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-// The pad-to-audio-endpoint table. The resolver that fills it is not built yet, so these
-// pin the contract the capability layer already depends on: absent means absent, a
-// published table is read per pad, and the key really does separate models.
+// The pad-to-audio-endpoint table: absent means absent, a published table is read per pad, the key
+// really does separate models, and a claimed surface comes with the endpoint id that backs it.
+// What decides WHICH endpoint belongs to which pad is PadAudioMatcherTest.
 class PadAudioRoutesTest {
     private val ds5 = PadAudioRoutes.key(0x054C, 0x0CE6)
     private val ds4v2 = PadAudioRoutes.key(0x054C, 0x09CC)
@@ -62,5 +62,45 @@ class PadAudioRoutesTest {
         val before = routes.state.value
         routes.publishRoutes(mapOf(ds5 to PadAudioRoute(microphone = true, speaker = true)))
         assertNotEquals(before, routes.state.value)
+    }
+
+    @Test
+    fun `a route carries the endpoint ids the engines set as their preferred device`() {
+        val routes = PadAudioRoutes()
+        routes.publishRoutes(
+            mapOf(
+                ds5 to
+                    PadAudioRoute(
+                        microphone = true,
+                        speaker = true,
+                        captureDeviceId = 12,
+                        playbackDeviceId = 11,
+                    ),
+            ),
+        )
+        assertEquals(12, routes.routeFor(0x054C, 0x0CE6).captureDeviceId)
+        assertEquals(11, routes.routeFor(0x054C, 0x0CE6).playbackDeviceId)
+    }
+
+    @Test
+    fun `an absent route names no endpoint, which is the platform's own routing`() {
+        val routes = PadAudioRoutes()
+        assertEquals(NO_AUDIO_DEVICE, routes.routeFor(0x054C, 0x0CE6).captureDeviceId)
+        assertEquals(NO_AUDIO_DEVICE, routes.routeFor(0x054C, 0x0CE6).playbackDeviceId)
+        assertEquals(NO_AUDIO_DEVICE, PadAudioRoute.NONE.playbackDeviceId)
+    }
+
+    @Test
+    fun `an endpoint id changing is a change the engines can see`() {
+        // A replug renumbers the endpoint while the caps stay true, and a track built against the
+        // old id would play out of nothing.
+        val routes = PadAudioRoutes()
+        val first = mapOf(ds5 to PadAudioRoute(microphone = false, speaker = true, playbackDeviceId = 11))
+        val second = mapOf(ds5 to PadAudioRoute(microphone = false, speaker = true, playbackDeviceId = 13))
+        routes.publishRoutes(first)
+        val before = routes.state.value
+        routes.publishRoutes(second)
+        assertNotEquals(before, routes.state.value)
+        assertEquals(13, routes.routeFor(0x054C, 0x0CE6).playbackDeviceId)
     }
 }

@@ -224,6 +224,14 @@ object SatelliteNative {
         blocks: ByteArray,
     )
 
+    // MSG_MIC_LED's own state: 0 off, 1 on, 2 pulse. The DualSense is the only family with the
+    // lamp, so native drops the write for everything else; the same report also mutes the pad's
+    // microphone amplifier, because the lamp and the amp are one thing on that pad.
+    external fun sendUsbMicMuteLed(
+        syntheticDeviceId: Int,
+        state: Int,
+    )
+
     external fun isKnownFastLaneModel(
         vendorId: Int,
         productId: Int,

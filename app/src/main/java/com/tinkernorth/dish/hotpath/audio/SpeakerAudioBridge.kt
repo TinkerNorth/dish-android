@@ -10,9 +10,10 @@ package com.tinkernorth.dish.hotpath.audio
  * Native owns everything up to PCM: the receive thread queues the Opus packet,
  * a dedicated dispatch thread runs the 2-frame reorder window, decodes, and
  * conceals the frames that never arrived. What arrives here is therefore
- * already in stream order and already one whole 20 ms window: 960 interleaved
- * stereo samples at 48 kHz, signed 16-bit, with [concealed] telling the sink
- * whether the frame was decoded from a packet or synthesized to cover a gap.
+ * already in stream order and already one whole 20 ms window: 960 stereo
+ * frames at 48 kHz, so 1920 interleaved signed 16-bit samples, with
+ * [concealed] telling the sink whether the frame was decoded from a packet or
+ * synthesized to cover a gap.
  *
  * The [Sink] MUST NOT block for long: it is called on the audio dispatch
  * thread, whose queue is 8 frames deep and drops the oldest when it overruns.

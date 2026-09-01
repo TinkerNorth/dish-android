@@ -8,11 +8,13 @@ import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
 import com.tinkernorth.dish.composer.MicCaptureComposer
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.source.audio.MicCaptureLoop
+import com.tinkernorth.dish.source.audio.MicCaptureLoopFactory
 import com.tinkernorth.dish.source.audio.MicCapturePlan
 import com.tinkernorth.dish.source.audio.MicCaptureSession
 import com.tinkernorth.dish.source.audio.MicCaptureSource
 import com.tinkernorth.dish.source.audio.MicCaptureTarget
 import com.tinkernorth.dish.source.audio.MicEngine
+import com.tinkernorth.dish.source.audio.SlotAudioRoutes
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
 import com.tinkernorth.dish.source.store.MicMuteStore
@@ -57,7 +59,10 @@ class MicCaptureIntegrationTest {
         private val phase = AtomicInteger()
         private val open = AtomicBoolean(false)
 
-        override fun open(frameSamples: Int): MicCaptureSession? {
+        override fun open(
+            frameSamples: Int,
+            preferredDeviceId: Int,
+        ): MicCaptureSession? {
             opens.incrementAndGet()
             open.set(true)
             return object : MicCaptureSession {
@@ -156,7 +161,10 @@ class MicCaptureIntegrationTest {
                 MicMuteStore(),
                 engineScope,
             )
-        return MicEngine(composer, manager, mic, loop, engineScope).also { engine = it }
+        // No pad endpoints in this suite: the phone's own microphone is what a virtual pad uses,
+        // and per-route capture has its own coverage host-side.
+        return MicEngine(composer, manager, mic, MicCaptureLoopFactory { loop }, SlotAudioRoutes.NONE, engineScope)
+            .also { engine = it }
     }
 
     private fun targetFor(server: DiscoveredServer) = MicCaptureTarget(VIRTUAL_SLOT_ID, SatelliteConnection.idFor(server))

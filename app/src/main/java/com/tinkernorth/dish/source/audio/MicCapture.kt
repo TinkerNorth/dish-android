@@ -3,11 +3,14 @@
 package com.tinkernorth.dish.source.audio
 
 import android.Manifest
+import android.content.Context
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.util.Log
 import androidx.annotation.RequiresPermission
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.max
@@ -31,9 +34,19 @@ interface MicCaptureSession : AutoCloseable {
     override fun close()
 }
 
-/** Opens the phone's microphone at the wire's format, or reports that this device would not. */
+/**
+ * Opens a microphone at the wire's format, or reports that this device would not.
+ *
+ * [preferredDeviceId] is an [android.media.AudioDeviceInfo] id from the pad route table, or
+ * [NO_AUDIO_DEVICE] for the phone's own microphone. It is a parameter rather than a setting because
+ * a preferred device is fixed for the life of a recorder, which is exactly why the engine runs one
+ * recorder per distinct route.
+ */
 fun interface MicCaptureSource {
-    fun open(frameSamples: Int): MicCaptureSession?
+    fun open(
+        frameSamples: Int,
+        preferredDeviceId: Int,
+    ): MicCaptureSession?
 }
 
 /**
@@ -52,24 +65,35 @@ fun interface MicCaptureSource {
 @Singleton
 class AudioRecordMicSource
     @Inject
-    constructor() : MicCaptureSource {
+    constructor(
+        @ApplicationContext private val context: Context,
+    ) : MicCaptureSource {
+        private val audioManager: AudioManager? =
+            context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+
         @RequiresPermission(Manifest.permission.RECORD_AUDIO)
-        override fun open(frameSamples: Int): MicCaptureSession? {
-            openWith(MediaRecorder.AudioSource.VOICE_COMMUNICATION, frameSamples)?.let { return it }
+        override fun open(
+            frameSamples: Int,
+            preferredDeviceId: Int,
+        ): MicCaptureSession? {
+            openWith(MediaRecorder.AudioSource.VOICE_COMMUNICATION, frameSamples, preferredDeviceId)
+                ?.let { return it }
             Log.w(TAG, "VOICE_COMMUNICATION refused at 48 kHz mono, falling back to MIC (no AEC/NS)")
-            return openWith(MediaRecorder.AudioSource.MIC, frameSamples)
+            return openWith(MediaRecorder.AudioSource.MIC, frameSamples, preferredDeviceId)
         }
 
         @RequiresPermission(Manifest.permission.RECORD_AUDIO)
         private fun openWith(
             source: Int,
             frameSamples: Int,
+            preferredDeviceId: Int,
         ): MicCaptureSession? {
             val record = buildRecorder(source, frameSamples) ?: return null
             if (record.state != AudioRecord.STATE_INITIALIZED) {
                 record.release()
                 return null
             }
+            preferOwnEndpoint(record, preferredDeviceId)
             return try {
                 record.startRecording()
                 if (record.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
@@ -119,6 +143,30 @@ class AudioRecordMicSource
                 // settings); that is a refusal, not a crash.
                 Log.w(TAG, "AudioRecord source=$source denied: ${e.message}")
                 null
+            }
+        }
+
+        /**
+         * Capture from the pad's OWN microphone where the route table named one, so a Direct-claimed
+         * DualSense's headset is what the emulated pad's microphone endpoint carries. A failure here
+         * is not fatal: the recorder still captures, from whatever the platform picked, which is the
+         * phone microphone the virtual pad uses anyway.
+         */
+        private fun preferOwnEndpoint(
+            record: AudioRecord,
+            preferredDeviceId: Int,
+        ) {
+            if (preferredDeviceId == NO_AUDIO_DEVICE) return
+            val device =
+                audioManager
+                    ?.getDevices(AudioManager.GET_DEVICES_INPUTS)
+                    ?.firstOrNull { it.id == preferredDeviceId }
+            if (device == null) {
+                Log.i(TAG, "endpoint $preferredDeviceId is gone, capturing from the default input")
+                return
+            }
+            if (!record.setPreferredDevice(device)) {
+                Log.i(TAG, "endpoint $preferredDeviceId refused, capturing from the default input")
             }
         }
 

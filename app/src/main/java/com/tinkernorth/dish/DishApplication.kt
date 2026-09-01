@@ -25,6 +25,8 @@ import com.tinkernorth.dish.hotpath.input.PhysicalSlotBindingObserver
 import com.tinkernorth.dish.hotpath.input.RumbleBridge
 import com.tinkernorth.dish.hotpath.input.RumbleRouter
 import com.tinkernorth.dish.source.audio.MicEngine
+import com.tinkernorth.dish.source.audio.PadAudioRouteResolver
+import com.tinkernorth.dish.source.audio.SpeakerEngine
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.inputrate.InputRateStore
 import com.tinkernorth.dish.source.sensor.PhysicalBatterySource
@@ -76,6 +78,10 @@ class DishApplication : Application() {
     @Inject lateinit var micMuteStore: MicMuteStore
 
     @Inject lateinit var micEngine: MicEngine
+
+    @Inject lateinit var speakerEngine: SpeakerEngine
+
+    @Inject lateinit var padAudioRouteResolver: PadAudioRouteResolver
 
     @Inject lateinit var networkStateObserver: NetworkStateObserver
 
@@ -188,6 +194,13 @@ class DishApplication : Application() {
         // foreground would have nowhere to send. Registered after the permission gate so the
         // first plan it sees already carries a re-read grant.
         lifecycle.addObserver(micEngine)
+        // Playback is process-STARTED for the same reason, and its native dispatch thread starts
+        // only when a slot actually plays.
+        lifecycle.addObserver(speakerEngine)
+        // Process-scoped like the USB manager's own install: the capability model is composed
+        // whether or not a screen is up, and a physical pad's mic/speaker caps are this table's
+        // answer.
+        padAudioRouteResolver.install()
         lifecycle.addObserver(networkStateObserver)
         lifecycle.addObserver(streamingServiceController)
         RumbleBridge.install(rumbleRouter)
