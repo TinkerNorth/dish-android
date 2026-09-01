@@ -266,8 +266,8 @@ static void bridgeDispatchLoop() {
                 return !g_bridgeDispatchRunning.load(std::memory_order_relaxed) ||
                        !g_bridgeQueue.empty() || !g_micMuteQueue.empty();
             });
-            if (!g_bridgeDispatchRunning.load(std::memory_order_relaxed) &&
-                g_bridgeQueue.empty() && g_micMuteQueue.empty())
+            if (!g_bridgeDispatchRunning.load(std::memory_order_relaxed) && g_bridgeQueue.empty() &&
+                g_micMuteQueue.empty())
                 break;
             // Mute edges first: they are rarer and they gate capture, so they must not wait
             // behind a queue of input reports.
@@ -1658,8 +1658,8 @@ JNIEXPORT void JNICALL
 Java_com_tinkernorth_dish_hotpath_input_MicMuteBridge_nativeInstall(JNIEnv* env, jclass cls) {
     if (g_micMuteBridgeClass == nullptr) { g_micMuteBridgeClass = (jclass)env->NewGlobalRef(cls); }
     if (g_micMutePadMethod == nullptr) {
-        g_micMutePadMethod = env->GetStaticMethodID(g_micMuteBridgeClass, "dispatchPadMicMute",
-                                                    "(IZ)V");
+        g_micMutePadMethod =
+            env->GetStaticMethodID(g_micMuteBridgeClass, "dispatchPadMicMute", "(IZ)V");
         if (g_micMutePadMethod == nullptr) {
             LOGE("MicMuteBridge.dispatchPadMicMute not found");
             env->ExceptionClear();
