@@ -69,9 +69,32 @@ target_compile_options(sodium_static PRIVATE
     $<IF:$<CONFIG:Debug>,-O0,-O3>
     -fvisibility=hidden -Wno-unused-function -Wno-unused-variable)
 
+# ── libopus (built from source via FetchContent) ────────────────────────────
+# Controller audio: one 20 ms Opus packet per wire message in both directions
+# (satellite docs/contract.md §Controller audio). Pinned to a release tarball
+# from the project's own host with its published hash, like libsodium above;
+# bump deliberately.
+#
+# Unlike libsodium, opus ships a CMakeLists that works under FetchContent, so
+# the options below are the whole integration: static (the default), no test
+# binaries, no demo programs, and no install rules to leak into a build that
+# never installs anything.
+FetchContent_Declare(
+    opus
+    URL      https://downloads.xiph.org/releases/opus/opus-1.5.2.tar.gz
+    URL_HASH SHA256=65c1d2f78b9f2fb20082c38cbe47c951ad5839345876e46941612ee87f9a7ce1
+)
+set(OPUS_BUILD_SHARED_LIBRARY OFF CACHE BOOL "" FORCE)
+set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(OPUS_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+set(OPUS_INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+set(OPUS_INSTALL_CMAKE_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(opus)
+
 # ── Main satellite library ──────────────────────────────────────────────────
 add_library(satellite SHARED
     satellite_jni.cpp
+    audio_codec.cpp
     gamepad_input.cpp
     usb_host.cpp
     usb_parsers.cpp
@@ -95,6 +118,7 @@ target_link_libraries(satellite
     log
     android
     sodium_static
+    opus
     -Wl,--whole-archive
     game-activity::game-activity_static
     -Wl,--no-whole-archive)

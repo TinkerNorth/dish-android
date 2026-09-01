@@ -76,6 +76,21 @@ class FakeSatellite(
     val udpOpcodes = CopyOnWriteArrayList<Int>()
     val touchpadPayloads = CopyOnWriteArrayList<ByteArray>()
 
+    /**
+     * One MSG_MIC_AUDIO frame the client sent, split at the wire's 3-byte header
+     * (contract §Controller audio). A frame whose layout does not hold never
+     * lands here: it goes to [micAudioViolations] instead, so a test asserting
+     * on frames also asserts the layout.
+     */
+    class MicAudioFrame(
+        val ctrlIdx: Int,
+        val seq: Int,
+        val opus: ByteArray,
+    )
+
+    val micAudioFrames = CopyOnWriteArrayList<MicAudioFrame>()
+    val micAudioViolations = CopyOnWriteArrayList<String>()
+
     @Volatile var heartbeatCount = 0
         private set
 
@@ -145,6 +160,43 @@ class FakeSatellite(
 
     fun sendSessionClose(reason: Int) {
         sendDown(0x000F, byteArrayOf(reason.toByte()))
+    }
+
+    /** MSG_SPEAKER_AUDIO: ctrlIdx(1) + seq(u16 BE) + one Opus packet. */
+    fun sendSpeakerAudio(
+        ctrlIdx: Int,
+        seq: Int,
+        opus: ByteArray,
+    ) {
+        sendDown(
+            OP_SPEAKER_AUDIO,
+            ByteBuffer
+                .allocate(AUDIO_HEADER_BYTES + opus.size)
+                .put(ctrlIdx.toByte())
+                .putShort(seq.toShort())
+                .put(opus)
+                .array(),
+        )
+    }
+
+    /** MSG_MIC_LED: ctrlIdx(1) + state(1), 0 off / 1 on / 2 pulse. */
+    fun sendMicLed(
+        ctrlIdx: Int,
+        state: Int,
+    ) {
+        sendDown(OP_MIC_LED, byteArrayOf(ctrlIdx.toByte(), state.toByte()))
+    }
+
+    fun awaitMicAudioFrames(
+        count: Int,
+        timeoutMs: Long = 8_000,
+    ): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (micAudioFrames.size >= count) return true
+            Thread.sleep(50)
+        }
+        return false
     }
 
     override fun close() {
@@ -438,11 +490,37 @@ class FakeSatellite(
         val opcode = ((inner[0].toInt() and 0xFF) shl 8) or (inner[1].toInt() and 0xFF)
         udpOpcodes += opcode
         if (opcode == OP_TOUCHPAD && inner.size > 4) touchpadPayloads += inner.copyOfRange(4, inner.size)
+        if (opcode == OP_MIC_AUDIO) acceptMicAudio(inner)
         lastClientAddress = packet.socketAddress
         if (opcode == OP_HEARTBEAT) {
             heartbeatCount += 1
             sendHeartbeatAck()
         }
+    }
+
+    /**
+     * The real satellite's inner-dispatch guard for MSG_MIC_AUDIO, byte for
+     * byte: msgLen must cover the 3-byte header plus at least one Opus byte (a
+     * 1-byte DTX packet is legal, an empty one is not), the declared length must
+     * match what actually arrived, and seq is big-endian.
+     */
+    private fun acceptMicAudio(inner: ByteArray) {
+        val declared = ((inner[2].toInt() and 0xFF) shl 8) or (inner[3].toInt() and 0xFF)
+        val payload = inner.copyOfRange(4, inner.size)
+        if (declared != payload.size) {
+            micAudioViolations += "msgLen $declared but ${payload.size} bytes of payload"
+            return
+        }
+        if (payload.size < AUDIO_HEADER_BYTES + 1) {
+            micAudioViolations += "frame of ${payload.size} bytes carries no Opus packet"
+            return
+        }
+        micAudioFrames +=
+            MicAudioFrame(
+                ctrlIdx = payload[0].toInt() and 0xFF,
+                seq = ((payload[1].toInt() and 0xFF) shl 8) or (payload[2].toInt() and 0xFF),
+                opus = payload.copyOfRange(AUDIO_HEADER_BYTES, payload.size),
+            )
     }
 
     private fun sendHeartbeatAck() {
@@ -513,6 +591,12 @@ class FakeSatellite(
         const val OP_HEARTBEAT = 0x0002
         const val OP_HEARTBEAT_ACK = 0x0003
         const val OP_TOUCHPAD = 0x000C
+        const val OP_MIC_AUDIO = 0x0012
+        const val OP_SPEAKER_AUDIO = 0x0013
+        const val OP_MIC_LED = 0x0014
+
+        // ctrlIdx(1) + seq(u16 BE) ahead of the Opus bytes, both directions.
+        const val AUDIO_HEADER_BYTES = 3
 
         const val CATALOG_ETAG = "\"1.7.0+en\""
 
@@ -522,6 +606,7 @@ class FakeSatellite(
             """
             {"protocolVersion":$PROTOCOL_VERSION,"serverVersion":"1.6.0","maxControllers":16,
              "backend":{"id":"fake","supported":true,"available":true,"errorCode":null},
+             "backends":[{"id":"fake","supported":true,"available":true,"errorCode":null,"audio":true}],
              "motion":{"available":true},
              "host":{"catalog":{"supported":true},
                      "mouseControl":{"supported":true,"available":true},
@@ -553,7 +638,8 @@ class FakeSatellite(
                 "features":{"rumble":{"supported":true},"analogTriggers":{"supported":true},
                             "motion":{"supported":true},"lightbar":{"supported":true},
                             "touchpad":{"supported":true,"modes":["ds4"]},
-                            "triggerEffects":{"supported":true},"playerLeds":{"supported":true}}},
+                            "triggerEffects":{"supported":true},"playerLeds":{"supported":true},
+                            "mic":{"supported":true},"speaker":{"supported":true}}},
                {"id":3,"slug":"switchpro","name":"Switch Pro Controller","shortName":"Switch Pro",
                 "description":"Motion and rumble.",
                 "image":{"href":"/api/catalog/images/switchpro","etag":"\"1.7.0\""},

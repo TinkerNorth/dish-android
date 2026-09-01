@@ -8,7 +8,6 @@ import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.HostFeatureSet
 import com.tinkernorth.dish.core.model.SlotCapabilities
-import com.tinkernorth.dish.core.net.ControllerDescriptor
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.repository.SatelliteCatalogRepository
@@ -154,21 +153,20 @@ class CapabilityComposer
         fun capabilityFor(slotId: String): SlotCapabilities = state.value[slotId] ?: SlotCapabilities.NONE
 
         /**
-         * The CAP_MOTION bit the satellite descriptor carries for [slotId]: motion gated on the
-         * input gyro and the user toggle, NOT on link-liveness (a reconnect must recover motion
-         * without a re-handshake). This is the per-connection lambda value SatelliteConnection ORs
-         * onto BASE_CAPABILITIES; it is a different projection from the `available`/`live` views.
+         * The whole caps word the satellite descriptor carries for [slotId]: the base a pad always
+         * has, motion gated on the input gyro and the user toggle, the feedback caps gated on what
+         * the bound input can actuate, and the audio caps on their toggles too
+         * ([CapabilityResolver.wireCaps] holds the rules). Deliberately NOT gated on
+         * link-liveness: a reconnect must recover the pad's capabilities without a re-handshake,
+         * so this is a different projection from the `available`/`live` views.
+         *
+         * This is the per-connection lambda SatelliteConnection builds every descriptor from.
          */
-        fun motionWireBit(slotId: String): Int =
-            if (capabilityFor(slotId).let { Feature.MOTION in it.controller && Feature.MOTION in it.userEnabled }) {
-                ControllerDescriptor.CAP_MOTION
-            } else {
-                0
-            }
+        fun wireCapsFor(slotId: String): Int = CapabilityResolver.wireCaps(capabilityFor(slotId))
 
         /**
          * The descriptor's touchpadMode for [slotId], pulled at descriptor-build time like
-         * [motionWireBit]. Reads the source stores directly instead of the composed [state]:
+         * [wireCapsFor]. Reads the source stores directly instead of the composed [state]:
          * the pick is keyed by the bound connection, and during a bind the store writes land
          * synchronously before declareSlot while the composed map recomputes asynchronously,
          * so going through [state] would declare a stale "off" and need a second PUT to heal.

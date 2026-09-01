@@ -2,9 +2,30 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 namespace dish_wire {
+
+// Datagram ceilings (satellite docs/contract.md §Packet format). One Ethernet
+// MTU in either direction, so a full audio frame crosses a LAN without
+// fragmenting (a fragmented Opus packet would be an all-or-nothing loss
+// anyway). What the crypto framing leaves behind is the ceiling every sender
+// has to stay under; satellite pins the same number as MAX_INNER_PAYLOAD_BYTES
+// and truncates anything larger on read, which then fails the AEAD.
+inline constexpr size_t MAX_DATAGRAM_BYTES = 1500;
+inline constexpr size_t OUTER_HEADER_BYTES = 8; // token(4 BE) + counter(4 BE)
+inline constexpr size_t INNER_HEADER_BYTES = 4; // msgType(2 BE) + msgLen(2 BE)
+inline constexpr size_t AEAD_TAG_BYTES = 16;    // ChaCha20-Poly1305-IETF
+inline constexpr size_t MAX_INNER_PAYLOAD_BYTES =
+    MAX_DATAGRAM_BYTES - OUTER_HEADER_BYTES - INNER_HEADER_BYTES - AEAD_TAG_BYTES;
+
+// The send path's own guard, factored out so the ceiling is testable without a
+// socket: everything but audio sits under 30 bytes, so this exists to absorb a
+// VBR spike rather than to be approached.
+inline constexpr bool innerPayloadFits(size_t payloadLen) {
+    return payloadLen <= MAX_INNER_PAYLOAD_BYTES;
+}
 
 inline void putLE16(uint8_t* dst, uint16_t v) {
     dst[0] = static_cast<uint8_t>(v);
@@ -107,5 +128,64 @@ struct LightbarPayload {
 inline LightbarPayload decodeLightbarPayload(const uint8_t in[4]) {
     return LightbarPayload{in[0], in[1], in[2], in[3]};
 }
+
+// MSG_MIC_AUDIO 0x0012 (up) and MSG_SPEAKER_AUDIO 0x0013 (down) inner:
+// ctrlIdx(1) + seq(u16 BE) + exactly one 20 ms Opus packet. Opus packets are
+// self-delimiting, so the message length IS the packet length. `seq` wraps and
+// buys exactly two things: which frames never arrived (conceal them) and which
+// arrived too late to matter (drop them). See audio_jitter.h.
+inline constexpr size_t AUDIO_WIRE_HEADER_BYTES = 3;
+// Header plus at least one Opus byte. A 1-byte packet is legal (a DTX silence
+// frame); a header with nothing behind it is malformed.
+inline constexpr size_t AUDIO_WIRE_MIN_PAYLOAD_BYTES = AUDIO_WIRE_HEADER_BYTES + 1;
+// Largest Opus packet one datagram can carry. Two orders of magnitude above a
+// real 20 ms packet (~80 bytes mic, ~240 speaker); it is a bound, not a target.
+inline constexpr size_t AUDIO_WIRE_MAX_OPUS_BYTES =
+    MAX_INNER_PAYLOAD_BYTES - AUDIO_WIRE_HEADER_BYTES;
+
+struct AudioFrameHeader {
+    uint8_t ctrlIdx;
+    uint16_t seq;
+};
+
+// Big-endian, unlike the motion/touchpad payloads above: those mirror XUSB
+// struct layouts, this one mirrors satellite's own encodeAudioFrameHeader
+// (core/types.h). Explicit shifts keep it host-byte-order-independent. `in`
+// must have AUDIO_WIRE_HEADER_BYTES readable; callers guard on that first.
+inline void encodeAudioFrameHeader(uint8_t* out, uint8_t ctrlIdx, uint16_t seq) {
+    out[0] = ctrlIdx;
+    out[1] = static_cast<uint8_t>(seq >> 8);
+    out[2] = static_cast<uint8_t>(seq);
+}
+
+inline AudioFrameHeader decodeAudioFrameHeader(const uint8_t* in) {
+    AudioFrameHeader h;
+    h.ctrlIdx = in[0];
+    h.seq =
+        static_cast<uint16_t>((static_cast<uint16_t>(in[1]) << 8) | static_cast<uint16_t>(in[2]));
+    return h;
+}
+
+// MSG_MIC_LED 0x0014 inner, 2B: ctrlIdx, state. Pulse is the DualSense's own
+// breathing pattern, which the pad renders itself; the host only forwards which
+// mode the game asked for. Anything else is malformed and dropped rather than
+// guessed at (satellite clamps at its decoder too, so an unknown state can only
+// come from a host speaking something we do not).
+inline constexpr uint8_t MIC_LED_STATE_OFF = 0;
+inline constexpr uint8_t MIC_LED_STATE_ON = 1;
+inline constexpr uint8_t MIC_LED_STATE_PULSE = 2;
+inline constexpr uint8_t MIC_LED_STATE_COUNT = 3;
+inline constexpr size_t MIC_LED_PAYLOAD_BYTES = 2;
+
+struct MicLedPayload {
+    uint8_t ctrlIdx;
+    uint8_t state;
+};
+
+inline MicLedPayload decodeMicLedPayload(const uint8_t in[2]) {
+    return MicLedPayload{in[0], in[1]};
+}
+
+inline bool micLedStateValid(uint8_t state) { return state < MIC_LED_STATE_COUNT; }
 
 } // namespace dish_wire

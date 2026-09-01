@@ -10,6 +10,8 @@ import com.tinkernorth.dish.core.model.CatalogFeatureDto
 import com.tinkernorth.dish.core.model.CatalogTypeDto
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.HostFeatureSet
+import com.tinkernorth.dish.core.model.SlotCapabilities
+import com.tinkernorth.dish.core.net.ControllerDescriptor
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.repository.SatelliteCatalogRepository
@@ -1572,5 +1574,114 @@ class CapabilityComposerTest {
 
             mouseSurface.value = setOf("some-other-slot")
             assertEquals("ds4", composer.touchpadWireMode(VIRTUAL_SLOT_ID))
+        }
+
+    // ── wireCapsFor: the whole descriptor caps word, not a base plus one bit ──
+
+    @Test
+    fun `wireCapsFor carries the audio caps the virtual slot resolves`() =
+        composerTest {
+            val mic = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to true))
+            val speaker = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to true))
+            val composer =
+                composerFor(
+                    phoneAvailable = true,
+                    devices = MutableStateFlow(emptyMap()),
+                    bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A")),
+                    connections = MutableStateFlow(listOf(summary("sat-A"))),
+                    scope = backgroundScope,
+                    micEnabled = mic,
+                    speakerEnabled = speaker,
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            val caps = composer.wireCapsFor(VIRTUAL_SLOT_ID)
+            assertEquals(ControllerDescriptor.CAP_MIC, caps and ControllerDescriptor.CAP_MIC)
+            assertEquals(ControllerDescriptor.CAP_SPEAKER, caps and ControllerDescriptor.CAP_SPEAKER)
+            // The base every pad has, still there alongside them.
+            assertEquals(ControllerDescriptor.CAP_RUMBLE, caps and ControllerDescriptor.CAP_RUMBLE)
+            assertEquals(
+                ControllerDescriptor.CAP_ANALOG_TRIGGERS,
+                caps and ControllerDescriptor.CAP_ANALOG_TRIGGERS,
+            )
+
+            // Toggling one direction off moves exactly that bit.
+            mic.value = mapOf(VIRTUAL_SLOT_ID to false)
+            testScheduler.runCurrent()
+            val muted = composer.wireCapsFor(VIRTUAL_SLOT_ID)
+            assertEquals(0, muted and ControllerDescriptor.CAP_MIC)
+            assertEquals(ControllerDescriptor.CAP_SPEAKER, muted and ControllerDescriptor.CAP_SPEAKER)
+        }
+
+    @Test
+    fun `wireCapsFor carries the feedback caps a Direct-claimed DualSense can actuate`() =
+        composerTest {
+            // The regression this pins: these three were resolved and then dropped
+            // before the wire, because the descriptor was built from a hardcoded
+            // base plus the motion bit.
+            val devices =
+                MutableStateFlow(
+                    mapOf(-1000 to device(-1000, vendorId = 0x054C, productId = 0x0CE6, isUsbSynthetic = true)),
+                )
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = devices,
+                    bindings = MutableStateFlow(mapOf("-1000" to "sat-A")),
+                    connections = MutableStateFlow(listOf(summary("sat-A"))),
+                    scope = backgroundScope,
+                    modelHasLightbar = true,
+                    modelHasPlayerLeds = true,
+                    modelHasTriggerEffects = true,
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            val caps = composer.wireCapsFor("-1000")
+            assertEquals(ControllerDescriptor.CAP_LIGHTBAR, caps and ControllerDescriptor.CAP_LIGHTBAR)
+            assertEquals(
+                ControllerDescriptor.CAP_TRIGGER_EFFECTS,
+                caps and ControllerDescriptor.CAP_TRIGGER_EFFECTS,
+            )
+            assertEquals(ControllerDescriptor.CAP_PLAYER_LEDS, caps and ControllerDescriptor.CAP_PLAYER_LEDS)
+        }
+
+    @Test
+    fun `wireCapsFor is the resolver's projection of the same slot, never a second opinion`() =
+        composerTest {
+            val composer =
+                composerFor(
+                    phoneAvailable = true,
+                    devices = MutableStateFlow(emptyMap()),
+                    bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A")),
+                    connections = MutableStateFlow(listOf(summary("sat-A"))),
+                    scope = backgroundScope,
+                    micEnabled = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to true)),
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            assertEquals(
+                CapabilityResolver.wireCaps(composer.capabilityFor(VIRTUAL_SLOT_ID)),
+                composer.wireCapsFor(VIRTUAL_SLOT_ID),
+            )
+        }
+
+    @Test
+    fun `wireCapsFor on an unknown slot is the empty capability set's caps`() =
+        composerTest {
+            val composer =
+                composerFor(
+                    phoneAvailable = true,
+                    devices = MutableStateFlow(emptyMap()),
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                )
+            assertEquals(
+                CapabilityResolver.wireCaps(SlotCapabilities.NONE),
+                composer.wireCapsFor("no-such-slot"),
+            )
         }
 }

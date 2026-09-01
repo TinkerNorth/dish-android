@@ -41,6 +41,12 @@ class ControllerRepository
             SatelliteNative.sendReport(handle, index, buttons, lt, rt, lx, ly, rx, ry)
         }
 
+        fun sendMicFrame(
+            handle: Int,
+            index: Int,
+            pcmMono: ShortArray,
+        ): Boolean = SatelliteNative.sendMicFrame(handle, index, pcmMono)
+
         fun getVigemAvailable(handle: Int): Int = SatelliteNative.getVigemAvailable(handle)
 
         fun getActiveControllerCount(handle: Int): Int = SatelliteNative.getActiveControllerCount(handle)
