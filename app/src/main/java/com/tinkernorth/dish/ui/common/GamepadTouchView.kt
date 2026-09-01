@@ -105,6 +105,15 @@ class GamepadTouchView
             // the Moonlight sender maps it onto that wire's own touchpad button flag.
             const val BTN_TOUCHPAD_CLICK = 1 shl 11
 
+            // Local-only too, and for a second reason on top of the first: this bit is a
+            // momentary PRESS, while the wire's WBUTTON_MIC_MUTE carries the mute STATE the
+            // press toggles. The overlay owns that state (it is what gates capture), so the
+            // press stops here and only [withMicMute] ever puts anything on the wire.
+            const val BTN_MIC_MUTE = 1 shl 12
+
+            // MSG_MIC_LED's "off"; the wire's other states (on, pulse) both accent the pill.
+            private const val MIC_LED_STATE_OFF = 0
+
             private const val HALF_INT16 = 32768
             private const val NORM_INT16_SPAN = 65535f
 
@@ -171,6 +180,16 @@ class GamepadTouchView
             }
 
         var rightTriggerEffect: Boolean = false
+            set(value) {
+                if (field == value) return
+                field = value
+                invalidate()
+            }
+
+        // The mic-mute lamp in the wire's own states (0 off, 1 on, 2 pulse). Written by the local
+        // mute and overridden by a host MSG_MIC_LED, last writer wins, exactly as on the hardware;
+        // anything non-off accents the mute pill. Pulse currently paints like on.
+        var micMuteLedState: Int = 0
             set(value) {
                 if (field == value) return
                 field = value
@@ -306,6 +325,7 @@ class GamepadTouchView
         private var icSelect: Drawable? = null
         private var icStart: Drawable? = null
         private var icHome: Drawable? = null
+        private var icMicMute: Drawable? = null
 
         private var density = 1f
         private var layout: GamepadLayout? = null
@@ -337,6 +357,8 @@ class GamepadTouchView
         private fun loadDrawables() {
             val c = context
             val tint = ContextCompat.getColor(c, R.color.colorOnSurface)
+            // Only the DualSense carries one, so only that skin loads it.
+            icMicMute = if (skin.hasMicMute) loadTinted(c, R.drawable.ic_gp_ps5_mic, tint) else null
             when (skin) {
                 GamepadSkin.PlayStation -> loadPlayStationSet(c, tint, R.drawable.ic_gp_ps_share, R.drawable.ic_gp_ps_options)
                 GamepadSkin.DualSense -> loadPlayStationSet(c, tint, R.drawable.ic_gp_ps5_create, R.drawable.ic_gp_ps5_options)
@@ -499,6 +521,22 @@ class GamepadTouchView
             drawShoulders(canvas, l, s)
             drawTriggers(canvas, l, s)
             drawPlayerLeds(canvas, l)
+            drawMicMute(canvas, l, s)
+        }
+
+        // Pressed paints like any other pill; muted adds the accent ring the adaptive-trigger
+        // effect already uses, so the lamp reads as a state the host set rather than as a finger.
+        private fun drawMicMute(
+            c: Canvas,
+            l: GamepadLayout,
+            s: GamepadState,
+        ) {
+            val rect = l.micMuteRect ?: return
+            drawPillButton(c, rect, icMicMute, s.buttons and BTN_MIC_MUTE != 0)
+            if (micMuteLedState == MIC_LED_STATE_OFF) return
+            val r = min(rect.width(), rect.height()) * PILL_CORNER_RADIUS_FRACTION
+            paintTriggerEffect.strokeWidth = TRIGGER_EFFECT_STROKE_DP * density
+            c.drawRoundRect(rect, r, r, paintTriggerEffect)
         }
 
         private fun drawDpad(

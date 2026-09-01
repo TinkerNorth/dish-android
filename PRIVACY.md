@@ -1,6 +1,6 @@
 # Dish for Android: Privacy Policy
 
-**Effective date:** 2026-06-20.
+**Effective date:** 2026-09-01.
 **Hosted copy:** [`https://dish.tinkernorth.com/privacy/dish-android/`](https://dish.tinkernorth.com/privacy/dish-android/).
 The hosted copy at that URL is the canonical version; this file mirrors it
 in-repo so the code and the policy ship together. Google Play points at the
@@ -27,6 +27,13 @@ local network.
   Android version, and an auto-generated install ID. They do not contain
   the names of the satellites you pair with, your IP address, or your
   controller input.
+- Dish can act as your controller's **microphone**, so voice chat on your
+  PC hears you through the emulated pad. That is off unless you switch it
+  on for a controller, it needs the microphone permission, and the audio
+  goes only to the PC you paired with, only while that controller is
+  streaming. It is never recorded, never stored, and never sent to us. Mute
+  stops it at the source: while muted, no audio packet leaves your phone at
+  all.
 - You can opt out of crash reporting at any time from the gear icon on
   the main screen → *Share crash reports*. The choice persists across
   launches and is honoured before any crash can be uploaded on the next
@@ -50,6 +57,8 @@ The following data never leaves your phone except to your own
 | Last per-slot controller binding (slot → satellite/BT host) | Same SharedPreferences | Restoring your last setup on launch. |
 | Per-slot battery readings (transient) | In-memory only | Showing the battery indicator on the controller card. |
 | Gamepad input events (button presses, sticks, gyroscope) | In-memory only | Forwarded over encrypted UDP to the satellite you paired with, or over Bluetooth HID. Not logged or stored. |
+| Per-slot Microphone / Controller sound switches | App-private SharedPreferences (`user_preferences.xml`) | Remembering which controllers you gave a microphone or a speaker. The microphone switch defaults to off. |
+| Microphone audio, while the controller microphone is on and unmuted | In-memory only, one 20 ms window at a time | Encoded and forwarded over the same encrypted UDP session to the satellite you paired with. Never written to storage, never logged, never sent to TinkerNorth. |
 
 ### 2.2 Sent to your own LAN (not to TinkerNorth)
 
@@ -71,9 +80,24 @@ The following data never leaves your phone except to your own
   encrypted MSG_MOTION, MSG_BATTERY, and MSG_TOUCHPAD frames). The app
   also listens on the same socket for MSG_RUMBLE and MSG_LIGHTBAR
   return-path packets from the satellite.
+- **Controller audio.** A satellite can give its emulated pad the audio
+  endpoints a real DualShock 4 v2 or DualSense has. If you switch the
+  Microphone on for a controller, the app captures the phone microphone in
+  20 ms windows, encodes each one with Opus, and sends it over the SAME
+  encrypted UDP session as your controller input (`MSG_MIC_AUDIO`, port
+  9876) so it arrives on the PC as the pad's own microphone. If you switch
+  Controller sound on, the pad's audio comes back the same way
+  (`MSG_SPEAKER_AUDIO`). Nothing is buffered to disk and nothing is kept
+  after the window is sent. Capture runs only while all of the following
+  hold: the controller is bound and streaming to a satellite, the
+  Microphone switch is on, the microphone permission is granted, and the
+  controller is not muted. Muting is enforced by stopping the capture, not
+  by sending silence, so a muted controller sends no audio packets at all.
 - **Bluetooth HID.** As an alternative to Wi-Fi, the app can present
   itself to a paired host as a Bluetooth HID gamepad. In that mode no
-  data crosses Wi-Fi; the host receives a standard HID report.
+  data crosses Wi-Fi; the host receives a standard HID report. Bluetooth
+  and Moonlight hosts carry no controller audio at all: neither protocol
+  has a microphone channel, so the switches are not offered for them.
 
 ### 2.3 Sent to Google (Crashlytics)
 
@@ -94,6 +118,7 @@ Crashlytics **does not** receive:
 - The names, IPs, or MAC addresses of satellites or Bluetooth hosts you
   pair with.
 - Your gamepad input events.
+- Any microphone audio, or any audio at all.
 - Your Wi-Fi SSID or IP address.
 - Any contact information.
 
@@ -111,12 +136,16 @@ Crashlytics retains crash data for 90 days, then deletes it. See Google's
 | `BLUETOOTH_SCAN` (API 31+) | Discovering nearby Bluetooth hosts and controllers so you can pair them. Declared with `neverForLocation`: we do not derive your location from Bluetooth results and collect no scan data. | Runtime, when you scan for a Bluetooth host or controller. |
 | `BLUETOOTH`, `BLUETOOTH_ADMIN` (API ≤ 30 only) | Legacy Bluetooth equivalent for Android ≤ 11. | Install-time. |
 | `POST_NOTIFICATIONS` (API 33+) | Showing the ongoing-session notification while a controller is streaming, plus actionable error banners. | Runtime, on first launch on Android 13+. Declining still lets the app run; the notification just isn't visible. |
+| `RECORD_AUDIO` | Acting as the emulated controller's own microphone, so voice chat on your PC hears you through the pad. | Runtime, only when you switch Microphone on for a controller. Declining leaves everything else working; the row says it needs permission and never pretends to capture. |
 | `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_CONNECTED_DEVICE` | Keeping the streaming session alive when you background the app. | Install-time. |
+| `FOREGROUND_SERVICE_MICROPHONE` | Letting that same session keep the controller microphone working while the app is backgrounded. The microphone service type is claimed only while a controller with the Microphone switch on is streaming, never by default. | Install-time. |
 | `WAKE_LOCK` | Keeping the CPU awake while a controller is bound, so input latency stays low. | Install-time. |
 | `VIBRATE` | Routing in-game rumble from the satellite to the phone's vibration motor. | Install-time. |
 
-We do **not** request: location, contacts, microphone, camera, calendar,
-SMS, call log, photos, files, or device admin.
+We do **not** request: location, contacts, camera, calendar, SMS, call log,
+photos, files, or device admin. The microphone is the one sensitive
+permission Dish asks for, it is asked for only when you turn the controller
+microphone on, and it is never used for anything but that.
 
 ---
 
@@ -144,6 +173,13 @@ or comparable laws in other jurisdictions.
   backup so it survives device transfers). The next app start applies
   the saved preference before any code path that could produce a crash
   report.
+- **Controller microphone opt-out:** it is off until you switch it on, per
+  controller, on that controller's binding screen. Switching it off stops
+  capture and stops the client advertising a microphone to the host at all.
+  Muting (the mute button on the on-screen controller, or the one on a
+  connected DualSense) stops capture immediately without changing the
+  switch. Revoking the microphone permission in system settings stops it
+  too, and the binding screen goes back to saying it needs permission.
 - **Forget a satellite or host:** *Connections → Forget* deletes the
   stored shared key and the entry from `connection_store.xml`. There is
   no server-side record to delete because there is no TinkerNorth server.

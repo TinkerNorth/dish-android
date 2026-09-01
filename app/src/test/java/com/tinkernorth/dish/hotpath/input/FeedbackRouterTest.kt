@@ -6,6 +6,9 @@ import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.store.MIC_LED_OFF
+import com.tinkernorth.dish.source.store.MIC_LED_ON
+import com.tinkernorth.dish.source.store.MIC_LED_PULSE
 import com.tinkernorth.dish.source.store.VirtualPadFeedbackStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import io.mockk.every
@@ -93,6 +96,28 @@ class FeedbackRouterTest {
         assertFalse(store.state.value.leftTriggerEffect)
         assertFalse(store.state.value.rightTriggerEffect)
         verify(exactly = 0) { native.sendUsbTriggerEffects(any(), any()) }
+    }
+
+    @Test
+    fun `the mic-mute lamp paints the virtual pad and overrides the local mute`() {
+        val r = router(managerWith(handle = 7, slotId = VIRTUAL_SLOT_ID))
+        store.setLocalMicMute(true)
+        r.dispatchMicLed(sessionHandle = 7, controllerIndex = 0, state = MIC_LED_OFF)
+        // Last writer wins, like the hardware: the game drove the lamp, so the lamp is the
+        // game's. What the user muted is untouched by this; MicMuteStore holds that.
+        assertEquals(MIC_LED_OFF, store.state.value.micLedState)
+
+        r.dispatchMicLed(sessionHandle = 7, controllerIndex = 0, state = MIC_LED_PULSE)
+        assertEquals(MIC_LED_PULSE, store.state.value.micLedState)
+    }
+
+    @Test
+    fun `a Direct-claimed pad's lamp waits for its output report builder`() {
+        // The DS5 mute-LED report lands with the playback wave; until then the arm resolves and
+        // drops rather than painting the phone's skin for a pad that is not the phone.
+        val r = router(managerWith(handle = 7, slotId = "-1000"))
+        r.dispatchMicLed(sessionHandle = 7, controllerIndex = 0, state = MIC_LED_ON)
+        assertEquals(MIC_LED_OFF, store.state.value.micLedState)
     }
 
     @Test

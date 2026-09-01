@@ -41,7 +41,20 @@ class StreamingService : Service() {
 
     @Inject lateinit var usbGamepadManager: UsbGamepadManager
 
+    @Inject lateinit var micCapture: MicCaptureComposer
+
     private var observerJob: Job? = null
+
+    // The microphone type bit we last actually asserted. The service type only changes through
+    // another startForeground call, so this is what tells us when one is due.
+    private var micTypeHeld = false
+
+    private data class ServiceSnapshot(
+        val streamingSlots: Int,
+        val connections: List<ConnectionSummary>,
+        val directClaims: Int,
+        val micArmed: Boolean,
+    )
 
     override fun onCreate() {
         super.onCreate()
@@ -54,9 +67,14 @@ class StreamingService : Service() {
         // eventual device-side restore. Collected in the process scope so a background unplug or
         // release still reaches the stopSelf below.
         observerJob =
-            combine(wakeState.streamingSlotCount, hub.connections, usbGamepadManager.controllers) { count, conns, controllers ->
-                Triple(count, conns, controllers.directClaimCount())
-            }.onEach { (count, conns, claims) -> refresh(count, conns, claims) }
+            combine(
+                wakeState.streamingSlotCount,
+                hub.connections,
+                usbGamepadManager.controllers,
+                micCapture.state,
+            ) { count, conns, controllers, plan ->
+                ServiceSnapshot(count, conns, controllers.directClaimCount(), plan.arming)
+            }.onEach(::refresh)
                 .launchIn(wakeStateScope())
     }
 
@@ -100,24 +118,26 @@ class StreamingService : Service() {
 
     private fun startForegroundInitial(): Boolean {
         val notification = build(count = wakeState.streamingSlotCount.value, primaryLabel = null)
-        return startInForeground(notification)
+        return startInForeground(notification, micCapture.state.value.arming)
     }
 
-    private fun refresh(
-        count: Int,
-        conns: List<ConnectionSummary>,
-        directClaims: Int,
-    ) {
-        if (count <= 0 && directClaims <= 0) {
+    private fun refresh(snapshot: ServiceSnapshot) {
+        if (snapshot.streamingSlots <= 0 && snapshot.directClaims <= 0) {
             // Belt-and-braces against out-of-order emissions so notification never reads "0 streaming".
             stopSelf()
             return
         }
         val primary =
-            conns
+            snapshot.connections
                 .firstOrNull { it.live == LinkState.Connected }
                 ?.label
-        val notification = build(count = count, primaryLabel = primary)
+        val notification = build(count = snapshot.streamingSlots, primaryLabel = primary)
+        if (snapshot.micArmed != micTypeHeld) {
+            // The microphone type is only ever held while a mic-enabled binding is streaming, so
+            // arming and disarming both mean re-declaring the service. Nothing else here does.
+            startInForeground(notification, snapshot.micArmed)
+            return
+        }
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(NOTIFICATION_ID, notification)
     }
@@ -171,18 +191,49 @@ class StreamingService : Service() {
             .build()
     }
 
-    private fun startInForeground(notification: Notification): Boolean =
+    /**
+     * Declare (or re-declare) the foreground state with the types this service is entitled to hold
+     * right now.
+     *
+     * The microphone type is while-in-use: Android 12+ only lets it start while the app is in the
+     * foreground, and Android 14+ enforces that with an exception. Every path that arms a
+     * microphone here runs from the UI (the binding toggle, its permission prompt, the overlay's
+     * mute button), which is what satisfies the rule. A refusal is still reachable when a held
+     * Direct claim keeps the service alive in the background and a satellite reconnects there, so
+     * a refused microphone type falls back to the type this service can always hold rather than
+     * taking the session down with it.
+     */
+    private fun startInForeground(
+        notification: Notification,
+        micArmed: Boolean,
+    ): Boolean =
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
-            } else {
-                startForeground(NOTIFICATION_ID, notification)
+            if (!declareForeground(notification, micArmed) && micArmed) {
+                declareForeground(notification, micArmed = false)
             }
             true
         } catch (e: IllegalStateException) {
             // A background-initiated FGS start can be refused on Android 12+; stop instead of crashing.
             Log.w(TAG, "foreground start refused: ${e.message}")
             stopSelf()
+            false
+        }
+
+    /** Returns false when the requested type set was denied; throws only for a refused start. */
+    private fun declareForeground(
+        notification: Notification,
+        micArmed: Boolean,
+    ): Boolean =
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification, foregroundServiceTypes(micArmed))
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+            micTypeHeld = micArmed
+            true
+        } catch (e: SecurityException) {
+            Log.w(TAG, "foreground type (mic=$micArmed) denied: ${e.message}")
             false
         }
 
@@ -214,3 +265,18 @@ class StreamingService : Service() {
         private const val TAG = "StreamingService"
     }
 }
+
+/**
+ * The service types this session is entitled to hold. CONNECTED_DEVICE is what the session IS and
+ * is always present; MICROPHONE appears exactly while a mic-enabled binding is streaming, because
+ * a foreground service claiming a microphone type it is not using is a microphone the user cannot
+ * account for.
+ *
+ * Deliberately keyed on ARMED and not on delivering: a mute is a moment-to-moment control, and
+ * dropping the type on every toggle would risk not getting it back, since a while-in-use type can
+ * only start while the app is in the foreground. Muted still means zero packets, enforced where it
+ * belongs, in the capture engine.
+ */
+internal fun foregroundServiceTypes(micArmed: Boolean): Int =
+    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
+        if (micArmed) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0

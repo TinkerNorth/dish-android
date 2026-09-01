@@ -501,6 +501,71 @@ class SatelliteConnectionTest {
         verify(exactly = 0) { repo.sendReport(any(), eq(99), any(), any(), any(), any(), any(), any(), any()) }
     }
 
+    // ── mic frames ─────────────────────────────────────────────────────────
+    //
+    // The last gate in front of the wire. Everything above it (toggle, permission, mute, capture)
+    // is decided in the capture engine; what is asserted here is that the connection itself never
+    // lets a frame past for a slot that has no live pad behind it.
+
+    @Test
+    fun `mic frames stay gated until the descriptor is applied`() {
+        every { repo.isConnectionAlive(any()) } returns true
+        every { repo.sendMicFrame(any(), any(), any()) } returns true
+        conn.attachSlot("slot-1", controllerType = 2)
+        connectLive(applied = emptyList())
+
+        val window = ShortArray(MIC_FRAME_SAMPLES)
+        assertFalse("an unapplied descriptor is a pad the host does not know", conn.sendMicFrame("slot-1", window))
+        verify(exactly = 0) { repo.sendMicFrame(any(), any(), any()) }
+
+        conn.applyResults(listOf(okApply(0)))
+        assertTrue(conn.sendMicFrame("slot-1", window))
+        verify(exactly = 1) { repo.sendMicFrame(7, 0, window) }
+    }
+
+    @Test
+    fun `mic frames route to the slot's own controller index`() {
+        every { repo.isConnectionAlive(any()) } returns true
+        every { repo.sendMicFrame(any(), any(), any()) } returns true
+        conn.attachSlot("slot-A", controllerType = 2)
+        conn.attachSlot("slot-B", controllerType = 2)
+        connectLive(handle = 11, applied = listOf(okApply(0), okApply(1)))
+
+        val window = ShortArray(MIC_FRAME_SAMPLES)
+        assertTrue(conn.sendMicFrame("slot-B", window))
+        verify(exactly = 1) { repo.sendMicFrame(11, 1, window) }
+    }
+
+    @Test
+    fun `a mic frame for an unknown slot or a dead session never reaches the wire`() {
+        every { repo.isConnectionAlive(any()) } returns true
+        every { repo.sendMicFrame(any(), any(), any()) } returns true
+        conn.attachSlot("slot-1", controllerType = 2)
+
+        val window = ShortArray(MIC_FRAME_SAMPLES)
+        // Idle session: no handle to send on.
+        assertFalse(conn.sendMicFrame("slot-1", window))
+
+        connectLive(applied = listOf(okApply(0)))
+        assertFalse("a slot this connection never had", conn.sendMicFrame("ghost", window))
+
+        conn.markDisconnected()
+        assertFalse("a disconnected session sends nothing", conn.sendMicFrame("slot-1", window))
+        verify(exactly = 0) { repo.sendMicFrame(any(), any(), any()) }
+    }
+
+    @Test
+    fun `a refusal below the JNI surface is reported, not swallowed`() {
+        // False means nothing left the device (wrong window size, no encoder); the caller's own
+        // privacy accounting depends on that being the truth rather than a delivery promise.
+        every { repo.isConnectionAlive(any()) } returns true
+        every { repo.sendMicFrame(any(), any(), any()) } returns false
+        conn.attachSlot("slot-1", controllerType = 2)
+        connectLive(applied = listOf(okApply(0)))
+
+        assertFalse(conn.sendMicFrame("slot-1", ShortArray(MIC_FRAME_SAMPLES - 1)))
+    }
+
     @Test
     fun `attaching a second slot allocates a fresh controller index`() {
         conn.attachSlot("slot-A", controllerType = 0)
@@ -961,5 +1026,8 @@ class SatelliteConnectionTest {
         // words on top of it the way the composer does.
         const val BASE_CAPS =
             ControllerDescriptor.CAP_ANALOG_TRIGGERS or ControllerDescriptor.CAP_RUMBLE
+
+        // 20 ms of mono at 48 kHz, the only window MSG_MIC_AUDIO carries.
+        const val MIC_FRAME_SAMPLES = 960
     }
 }

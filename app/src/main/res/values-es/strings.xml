@@ -472,6 +472,10 @@
     <string name="binding_func_mic">Micrófono</string>
     <string name="binding_func_speaker">Sonido del mando</string>
     <string name="binding_mic_permission_needed">Necesita permiso de micrófono. Toca para permitir.</string>
+    <string name="binding_mic_permission_title">Permiso de micrófono</string>
+    <string name="binding_mic_permission_rationale">Dish usa el micrófono del teléfono como el micrófono del mando emulado, así el chat de voz de tu PC te escucha a través del mando. El audio va solo al PC con el que te emparejaste, solo mientras transmites, y nunca se guarda.</string>
+    <string name="binding_mic_permission_blocked">El permiso de micrófono está desactivado para Dish. Actívalo en los ajustes del sistema para usar el micrófono del mando.</string>
+    <string name="binding_mic_mute_hint">Silencia cuando quieras con el botón de silencio del mando en pantalla, o con el de un DualSense conectado. Silenciado significa que no se envía nada.</string>
     <string name="binding_state_on">Encendido</string>
     <string name="binding_state_off">Apagado</string>
     <string name="binding_func_value">%1$s · %2$s</string>

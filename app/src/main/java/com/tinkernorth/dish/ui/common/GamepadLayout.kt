@@ -15,6 +15,9 @@ import com.tinkernorth.dish.ui.common.GamepadConstants.DPAD_INNER_PAD_DP
 import com.tinkernorth.dish.ui.common.GamepadConstants.HOME_VERTICAL_OFFSET_FACTOR
 import com.tinkernorth.dish.ui.common.GamepadConstants.L3_STICK_GAP_DP
 import com.tinkernorth.dish.ui.common.GamepadConstants.L3_STICK_RADIUS_FRACTION
+import com.tinkernorth.dish.ui.common.GamepadConstants.MIC_MUTE_GAP_DP
+import com.tinkernorth.dish.ui.common.GamepadConstants.MIC_MUTE_HEIGHT_DP
+import com.tinkernorth.dish.ui.common.GamepadConstants.MIC_MUTE_WIDTH_DP
 import com.tinkernorth.dish.ui.common.GamepadConstants.SAFE_AREA_CUSHION_DP
 import com.tinkernorth.dish.ui.common.GamepadConstants.SHOULDER_BAND_HEIGHT_DP
 import com.tinkernorth.dish.ui.common.GamepadConstants.SHOULDER_CENTER_HALF_GAP_DP
@@ -57,6 +60,9 @@ internal data class GamepadLayout(
     val homeCy: Float,
     val centerBtnCy: Float,
     val trackpadRect: RectF? = null,
+    // Null for every skin but the DualSense: the mic-mute button only exists on that pad, and
+    // only that identity carries WBUTTON_MIC_MUTE into the emulated pad's input report.
+    val micMuteRect: RectF? = null,
 )
 
 @Suppress("LongMethod")
@@ -148,6 +154,22 @@ internal fun computeGamepadLayout(
         trackpadRect?.let { it.bottom + TRACKPAD_HOME_GAP_DP * density + smallBtnRadius }
             ?: (centerBtnCy + smallBtnRadius * HOME_VERTICAL_OFFSET_FACTOR)
 
+    // Under the PS button, where the real DualSense puts it. Clamped to the content band so a
+    // short screen pushes it up against the bottom edge rather than off it.
+    val micMuteRect =
+        if (skin.hasMicMute) {
+            val muteW = MIC_MUTE_WIDTH_DP * density
+            val muteH = MIC_MUTE_HEIGHT_DP * density
+            val muteTop =
+                min(
+                    homeCy + smallBtnRadius + MIC_MUTE_GAP_DP * density,
+                    contentBottom - muteH,
+                )
+            RectF(centerCx - muteW / 2, muteTop, centerCx + muteW / 2, muteTop + muteH)
+        } else {
+            null
+        }
+
     return GamepadLayout(
         dpadRect = dpadRect,
         abxyRect = abxyRect,
@@ -173,5 +195,6 @@ internal fun computeGamepadLayout(
         homeCy = homeCy,
         centerBtnCy = centerBtnCy,
         trackpadRect = trackpadRect,
+        micMuteRect = micMuteRect,
     )
 }

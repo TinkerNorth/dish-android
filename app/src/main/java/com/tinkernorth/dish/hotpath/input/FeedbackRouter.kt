@@ -79,16 +79,14 @@ class FeedbackRouter
 
         /**
          * Mic-mute lamp (MSG_MIC_LED): 0 off, 1 on, 2 pulse, already validated
-         * natively. Resolves like every other feedback kind; both sinks land
-         * with the playback wave, which owns the DualSense mute-LED output
-         * report and the virtual pad's mute-button rendering. Framework pads
-         * drop it for the usual reason (no controller-LED API), so the drop is
-         * the finished behaviour for that arm, not a stub.
-         *
-         * [state] is unused only because both sinks are still TODO below; the
-         * playback wave consumes it and drops the suppression with them.
+         * natively. Resolves like every other feedback kind. The phone renders
+         * it on the on-screen pad's mute button, overriding whatever the local
+         * mute last painted there (last writer wins, like the hardware). The
+         * Direct-USB sink lands with the playback wave, which owns the
+         * DualSense mute-LED output report. Framework pads drop it for the
+         * usual reason (no controller-LED API), so the drop is the finished
+         * behaviour for that arm, not a stub.
          */
-        @Suppress("UnusedParameter")
         fun dispatchMicLed(
             sessionHandle: Int,
             controllerIndex: Int,
@@ -98,8 +96,7 @@ class FeedbackRouter
                 // TODO(AND-4): usb_parsers buildMicMuteLedReport, via a
                 //  sendUsbMicMuteLed triad next to sendUsbPlayerLeds.
                 is RumbleTarget.DirectUsb -> Unit
-                // TODO(AND-4): VirtualPadFeedbackStore.setMicLed(state).
-                RumbleTarget.Phone -> Unit
+                RumbleTarget.Phone -> virtualFeedback.setMicLed(state)
                 else -> Unit
             }
         }

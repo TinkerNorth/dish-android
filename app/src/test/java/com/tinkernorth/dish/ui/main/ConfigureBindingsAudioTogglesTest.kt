@@ -355,6 +355,67 @@ class ConfigureBindingsAudioTogglesTest {
             assertFalse(vm.ui.value.speakerAvailable)
         }
 
+    // ── the three states the mic row can be in ─────────────────────────────
+
+    @Test
+    fun `off, needs-permission and armed are mutually exclusive`() =
+        runTest(dispatcher) {
+            open()
+            // Off: neither note has anything to say.
+            assertFalse(vm.ui.value.micNeedsPermission)
+            assertFalse(vm.ui.value.micMuteHintVisible)
+
+            // On without a grant: the ask, and only the ask.
+            vm.setMic(true)
+            assertTrue(vm.ui.value.micNeedsPermission)
+            assertFalse(vm.ui.value.micMuteHintVisible)
+
+            // On with the grant: armed, so where the mute controls are is what matters.
+            granted = true
+            vm.refreshMicPermission()
+            assertFalse(vm.ui.value.micNeedsPermission)
+            assertTrue(vm.ui.value.micMuteHintVisible)
+        }
+
+    @Test
+    fun `a denied grant leaves the row asking rather than silently armed`() =
+        runTest(dispatcher) {
+            open()
+            vm.setMic(true)
+            // The launcher's result is a refresh either way; a refusal must not flip the row into
+            // a state that claims a working microphone.
+            granted = false
+            vm.refreshMicPermission()
+            assertTrue(vm.ui.value.micNeedsPermission)
+            assertFalse(vm.ui.value.micMuteHintVisible)
+        }
+
+    @Test
+    fun `a grant revoked in system settings puts the row back to needing permission`() =
+        runTest(dispatcher) {
+            granted = true
+            open()
+            vm.setMic(true)
+            assertTrue(vm.ui.value.micMuteHintVisible)
+
+            granted = false
+            vm.refreshMicPermission()
+            assertTrue(vm.ui.value.micNeedsPermission)
+            assertFalse(vm.ui.value.micMuteHintVisible)
+        }
+
+    @Test
+    fun `a path with no microphone shows neither note, grant or not`() =
+        runTest(dispatcher) {
+            pathCaps = capsWith(Feature.SPEAKER)
+            granted = true
+            open()
+            vm.setMic(true)
+            assertFalse(vm.ui.value.micAvailable)
+            assertFalse(vm.ui.value.micNeedsPermission)
+            assertFalse(vm.ui.value.micMuteHintVisible)
+        }
+
     private companion object {
         const val SLOT = "9"
         const val HOST = "host-1"

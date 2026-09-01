@@ -18,17 +18,20 @@ import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.hotpath.input.BluetoothGamepadBridge
 import com.tinkernorth.dish.hotpath.input.FeedbackBridge
 import com.tinkernorth.dish.hotpath.input.FeedbackRouter
+import com.tinkernorth.dish.hotpath.input.MicMuteBridge
 import com.tinkernorth.dish.hotpath.input.MoonlightGamepadBridge
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.PhysicalSlotBindingObserver
 import com.tinkernorth.dish.hotpath.input.RumbleBridge
 import com.tinkernorth.dish.hotpath.input.RumbleRouter
+import com.tinkernorth.dish.source.audio.MicEngine
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.inputrate.InputRateStore
 import com.tinkernorth.dish.source.sensor.PhysicalBatterySource
 import com.tinkernorth.dish.source.sensor.PhysicalMotionSource
 import com.tinkernorth.dish.source.sensor.VirtualBatterySource
 import com.tinkernorth.dish.source.store.LatencyProfilingStore
+import com.tinkernorth.dish.source.store.MicMuteStore
 import com.tinkernorth.dish.source.store.ThemePreferenceStore
 import com.tinkernorth.dish.source.system.BluetoothAdapterStateObserver
 import com.tinkernorth.dish.source.system.BluetoothBondMonitor
@@ -69,6 +72,10 @@ class DishApplication : Application() {
     @Inject lateinit var bluetoothPermissionStateObserver: BluetoothPermissionStateObserver
 
     @Inject lateinit var micPermissionGate: MicPermissionGate
+
+    @Inject lateinit var micMuteStore: MicMuteStore
+
+    @Inject lateinit var micEngine: MicEngine
 
     @Inject lateinit var networkStateObserver: NetworkStateObserver
 
@@ -176,10 +183,18 @@ class DishApplication : Application() {
         lifecycle.addObserver(bluetoothAdapterStateObserver)
         lifecycle.addObserver(bluetoothPermissionStateObserver)
         lifecycle.addObserver(micPermissionGate)
+        // Capture is process-STARTED like every other streaming source: leaving the app tears
+        // down the foreground service and with it the session, so a microphone that outlived the
+        // foreground would have nowhere to send. Registered after the permission gate so the
+        // first plan it sees already carries a re-read grant.
+        lifecycle.addObserver(micEngine)
         lifecycle.addObserver(networkStateObserver)
         lifecycle.addObserver(streamingServiceController)
         RumbleBridge.install(rumbleRouter)
         FeedbackBridge.install(feedbackRouter)
+        // A Direct-claimed DualSense's own mute button, coming up from the report decoder that
+        // owns its latch, into the same per-slot holder the on-screen button writes.
+        MicMuteBridge.install(micMuteStore::setPadMuted)
     }
 
     companion object {

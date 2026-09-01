@@ -233,6 +233,10 @@ data class ConfigUiState(
     // nothing, so the row says so instead and offers the ask.
     val micNeedsPermission: Boolean get() = micAvailable && draft?.micOn == true && !micPermissionGranted
 
+    // Shown only once the microphone is really armed: at that point where the mute controls live
+    // is the one thing worth saying, and before it the note would be noise.
+    val micMuteHintVisible: Boolean get() = micAvailable && draft?.micOn == true && micPermissionGranted
+
     val isBluetoothHost: Boolean get() = selectedHost?.kind == ConnectionKind.BLUETOOTH
 
     val isMoonlightHost: Boolean get() = selectedHost?.kind == ConnectionKind.MOONLIGHT

@@ -126,6 +126,9 @@ void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
     }
 
     gamepad::DeviceState scratch{};
+    // Last mute state we told Kotlin about. Starts unmuted, which is what a freshly claimed pad's
+    // parser state says too, so the first edge is a real press and not a startup echo.
+    bool lastMicMuted = false;
     bool running = true;
 
     while (running && !ctx->stop.load(std::memory_order_relaxed)) {
@@ -190,6 +193,14 @@ void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
                                                     (size_t)reaped->actual_length, scratch,
                                                     &ctx->stickRange)) {
                     dispatch::applyUsbReport(ctx->syntheticDeviceId, scratch);
+
+                    // The decoder owns the mute latch (the wire bit has to be folded in here, on
+                    // this thread, with no JNI in the way); Kotlin gets told only on the edge, so
+                    // the mirror costs nothing per report.
+                    if (ctx->stickRange.micMuted != lastMicMuted) {
+                        lastMicMuted = ctx->stickRange.micMuted;
+                        dispatch::applyPadMicMute(ctx->syntheticDeviceId, lastMicMuted);
+                    }
 
                     int64_t nowNs = 0;
                     if (scratch.motionValid || scratch.touchValid) {

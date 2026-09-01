@@ -842,6 +842,101 @@ TEST(TouchDecode, DualSenseIdleSurfaceIsAValidAllLiftedUpdate) {
     EXPECT_FALSE(s.touchClick);
 }
 
+// ── DualSense mic-mute button ───────────────────────────────────────────────
+//
+// The button is momentary (byte 10 bit 0x04, next to the touchpad click at 0x02) but the wire's
+// WBUTTON_MIC_MUTE carries the mute STATE it toggles, so the decoder latches it in ParserState.
+
+namespace {
+
+// One report with the mute button held or released, decoded against a persistent parser state.
+bool decodeMute(ParserState& st, bool muteDown) {
+    auto r = dualSenseReport();
+    if (muteDown) r[10] |= 0x04;
+    DeviceState s{};
+    EXPECT_TRUE(decodeReport(Parser::DUALSENSE, r.data(), r.size(), s, &st));
+    return (s.wButtons & gamepad::WBUTTON_MIC_MUTE) != 0;
+}
+
+} // namespace
+
+TEST(MicMute, PressTogglesTheStateAndReleaseDoesNot) {
+    ParserState st;
+    EXPECT_FALSE(decodeMute(st, false)); // idle: unmuted
+    EXPECT_TRUE(decodeMute(st, true));   // press: muted from this report on
+    EXPECT_TRUE(decodeMute(st, false));  // release: still muted
+    EXPECT_FALSE(decodeMute(st, true));  // second press: unmuted
+    EXPECT_FALSE(decodeMute(st, false));
+}
+
+TEST(MicMute, HoldingTheButtonDoesNotChatterAtReportRate) {
+    // A DualSense reports at up to 1 kHz; a level-triggered toggle would flip the mute a
+    // thousand times a second for as long as a finger rested on the button.
+    ParserState st;
+    EXPECT_TRUE(decodeMute(st, true));
+    for (int i = 0; i < 50; i++) EXPECT_TRUE(decodeMute(st, true));
+    EXPECT_TRUE(decodeMute(st, false));
+}
+
+TEST(MicMute, TheBitRidesEveryReportWhileMutedNotJustThePressFrame) {
+    // The host reads it as state, so a frame in the middle of a quiet minute still has to say
+    // "muted"; that is what makes a lost packet harmless.
+    ParserState st;
+    EXPECT_TRUE(decodeMute(st, true));
+    auto r = dualSenseReport();
+    r[8] |= 0x20; // an unrelated button (cross) on a later frame
+    DeviceState s{};
+    ASSERT_TRUE(decodeReport(Parser::DUALSENSE, r.data(), r.size(), s, &st));
+    EXPECT_TRUE((s.wButtons & gamepad::WBUTTON_MIC_MUTE) != 0);
+    EXPECT_TRUE((s.wButtons & gamepad::XUSB_A) != 0);
+}
+
+TEST(MicMute, TheMuteBitIsIndependentOfTheTouchpadClickBesideIt) {
+    ParserState st;
+    auto r = dualSenseReport();
+    r[10] |= 0x02; // click only
+    DeviceState s{};
+    ASSERT_TRUE(decodeReport(Parser::DUALSENSE, r.data(), r.size(), s, &st));
+    EXPECT_TRUE(s.touchClick);
+    EXPECT_FALSE((s.wButtons & gamepad::WBUTTON_MIC_MUTE) != 0);
+
+    r[10] |= 0x04; // both
+    DeviceState s2{};
+    ASSERT_TRUE(decodeReport(Parser::DUALSENSE, r.data(), r.size(), s2, &st));
+    EXPECT_TRUE(s2.touchClick);
+    EXPECT_TRUE((s2.wButtons & gamepad::WBUTTON_MIC_MUTE) != 0);
+}
+
+TEST(MicMute, AStatelessDecodeCarriesNoMuteBit) {
+    // A caller with no per-device memory (the attach-time probe) cannot own a latch, so it
+    // reports what it can see and never invents a mute state.
+    auto r = dualSenseReport();
+    r[10] |= 0x04;
+    DeviceState s{};
+    ASSERT_TRUE(decodeReport(Parser::DUALSENSE, r.data(), r.size(), s, nullptr));
+    EXPECT_FALSE((s.wButtons & gamepad::WBUTTON_MIC_MUTE) != 0);
+}
+
+TEST(MicMute, AFreshlyClaimedPadStartsUnmuted) {
+    // Matches the hardware: the pad's own mute clears when it powers down, and a new
+    // ParserState is this app's equivalent of a power cycle.
+    ParserState st;
+    EXPECT_FALSE(st.micMuted);
+    EXPECT_FALSE(st.micMuteHeld);
+    EXPECT_FALSE(decodeMute(st, false));
+}
+
+TEST(MicMute, NoOtherFamilyProducesTheBit) {
+    // 0x0800 is spent on the DualSense's mute button and nothing else may set it, or a pad with
+    // no mute button would arrive at the host holding one down.
+    ParserState st;
+    auto ds4 = ds4Report();
+    ds4[7] |= 0xFF; // every button byte 7 bit, mute's neighbours included
+    DeviceState s{};
+    ASSERT_TRUE(decodeReport(Parser::DUALSHOCK4, ds4.data(), ds4.size(), s, &st));
+    EXPECT_FALSE((s.wButtons & gamepad::WBUTTON_MIC_MUTE) != 0);
+}
+
 TEST(TouchpadCapability, PlayStationParsersHaveTouchpads) {
     EXPECT_TRUE(usbparsers::parserHasTouchpad(Parser::DUALSHOCK4));
     EXPECT_TRUE(usbparsers::parserHasTouchpad(Parser::DUALSENSE));

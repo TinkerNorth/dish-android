@@ -466,6 +466,10 @@
     <string name="binding_func_mic">Mikrofon</string>
     <string name="binding_func_speaker">Controller-Ton</string>
     <string name="binding_mic_permission_needed">Mikrofonberechtigung nötig. Zum Erlauben tippen.</string>
+    <string name="binding_mic_permission_title">Mikrofonberechtigung</string>
+    <string name="binding_mic_permission_rationale">Dish nutzt das Telefonmikrofon als Mikrofon des emulierten Controllers, damit der Sprachchat am PC dich über den Controller hört. Der Ton geht nur an den gekoppelten PC, nur während du streamst, und wird nie gespeichert.</string>
+    <string name="binding_mic_permission_blocked">Die Mikrofonberechtigung ist für Dish aus. Schalte sie in den Systemeinstellungen ein, um das Controller-Mikrofon zu nutzen.</string>
+    <string name="binding_mic_mute_hint">Jederzeit stummschalten: mit der Stummtaste am Controller auf dem Bildschirm oder der an einem verbundenen DualSense. Stumm heißt, es wird gar nichts gesendet.</string>
     <string name="binding_state_on">Ein</string>
     <string name="binding_state_off">Aus</string>
     <string name="binding_func_value">%1$s · %2$s</string>

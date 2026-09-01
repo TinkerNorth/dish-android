@@ -112,6 +112,13 @@ struct ParserState {
     // Steam Controller stick, held across the frames where the shared left axes carry pad data.
     int16_t steamStickX = 0;
     int16_t steamStickY = 0;
+    // The DualSense mic-mute button is momentary, but the wire's WBUTTON_MIC_MUTE carries the
+    // mute STATE it toggles (contract §Controller audio), so the latch that state lives in is
+    // ours to keep. It sits here rather than in DeviceState because DeviceState is rebuilt from
+    // scratch by every decode; this survives across reports for as long as the pad is claimed,
+    // which is the same lifetime the pad's own firmware gives its mute setting.
+    bool micMuteHeld = false;
+    bool micMuted = false;
 };
 
 const KnownDevice* lookupKnown(uint16_t vid, uint16_t pid);

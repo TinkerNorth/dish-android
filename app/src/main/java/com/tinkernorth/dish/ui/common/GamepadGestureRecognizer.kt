@@ -262,6 +262,15 @@ internal class GamepadGestureRecognizer {
             state.buttons = state.buttons or GamepadTouchView.BTN_HOME
             return
         }
+        // Momentary like the pad's own mute button: the press is an edge, and what it toggles is
+        // the mute state the overlay owns. Checked before the trackpad because the pill sits
+        // below the pad, not inside it.
+        l.micMuteRect?.let { mute ->
+            if (mute.contains(x, y)) {
+                state.buttons = state.buttons or GamepadTouchView.BTN_MIC_MUTE
+                return
+            }
+        }
         val tp = l.trackpadRect
         if (tp != null && trackpadMode != GamepadTouchView.TrackpadMode.NONE && tp.contains(x, y)) {
             trackpadPointerDown(pid, x, y, tp, event.eventTime)
@@ -515,7 +524,7 @@ internal class GamepadGestureRecognizer {
             (
                 GamepadTouchView.BTN_SELECT or GamepadTouchView.BTN_START or
                     GamepadTouchView.BTN_HOME or GamepadTouchView.BTN_LS or
-                    GamepadTouchView.BTN_RS
+                    GamepadTouchView.BTN_RS or GamepadTouchView.BTN_MIC_MUTE
             ).inv()
     }
 

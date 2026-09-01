@@ -132,4 +132,11 @@ internal object GamepadConstants {
     const val PLAYER_LED_GAP_DP = 6f
 
     const val TRIGGER_EFFECT_STROKE_DP = 2f
+
+    // Mic-mute pill, where the DualSense carries it: centred under the PS button.
+    const val MIC_MUTE_GAP_DP = 12f
+
+    const val MIC_MUTE_WIDTH_DP = 46f
+
+    const val MIC_MUTE_HEIGHT_DP = 26f
 }

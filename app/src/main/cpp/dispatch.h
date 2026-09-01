@@ -21,4 +21,10 @@ void applyUsbMotion(int32_t deviceId, int16_t gyroX, int16_t gyroY, int16_t gyro
 
 void applyUsbTouchpad(int32_t deviceId, const gamepad::TouchpadState& t, uint32_t eventTimeMs);
 
+// The pad's own mic-mute button flipped its latch. The wire bit rides the ordinary input report
+// (the decoder already folded it in); this only mirrors the new state up to Kotlin, where the
+// capture engine gates on it and the lamp renders it. Rare (one call per press), and never
+// called from the report path when nothing changed.
+void applyPadMicMute(int32_t deviceId, bool muted);
+
 } // namespace dispatch

@@ -26,6 +26,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 #include <sodium.h>
 
@@ -204,6 +205,9 @@ static jmethodID g_feedbackMicLedMethod = nullptr;
 static jclass g_speakerAudioBridgeClass = nullptr;
 static jmethodID g_speakerAudioFrameMethod = nullptr;
 
+static jclass g_micMuteBridgeClass = nullptr;
+static jmethodID g_micMutePadMethod = nullptr;
+
 // Bridge kinds (Bluetooth, Moonlight) run off the UI thread: BluetoothHidDevice.sendReport is
 // Binder IPC, and the Moonlight path encrypts + frames in Kotlin. One queue + thread serves both;
 // the report's kind picks the Kotlin bridge to upcall.
@@ -231,6 +235,12 @@ static std::thread g_bridgeDispatchThread;
 static std::atomic<bool> g_bridgeDispatchRunning{false};
 static constexpr size_t BRIDGE_QUEUE_MAX = 64;
 
+// A pad's mic-mute latch flipped. It shares the bridge thread (already attached to the JVM, and
+// the USB reader thread is not) but NOT the report queue: reports are drop-oldest because a stale
+// stick position is worth nothing, while a dropped mute edge would leave the app believing a muted
+// pad is live. One entry per button press, so the queue never grows.
+static std::deque<std::pair<int32_t, bool>> g_micMuteQueue;
+
 static void enqueueBridgeReport(BridgeReport&& r) {
     {
         std::lock_guard<std::mutex> lock(g_bridgeQueueMtx);
@@ -254,10 +264,25 @@ static void bridgeDispatchLoop() {
             std::unique_lock<std::mutex> lock(g_bridgeQueueMtx);
             g_bridgeQueueCv.wait(lock, [] {
                 return !g_bridgeDispatchRunning.load(std::memory_order_relaxed) ||
-                       !g_bridgeQueue.empty();
+                       !g_bridgeQueue.empty() || !g_micMuteQueue.empty();
             });
-            if (!g_bridgeDispatchRunning.load(std::memory_order_relaxed) && g_bridgeQueue.empty())
+            if (!g_bridgeDispatchRunning.load(std::memory_order_relaxed) &&
+                g_bridgeQueue.empty() && g_micMuteQueue.empty())
                 break;
+            // Mute edges first: they are rarer and they gate capture, so they must not wait
+            // behind a queue of input reports.
+            if (!g_micMuteQueue.empty()) {
+                auto ev = g_micMuteQueue.front();
+                g_micMuteQueue.pop_front();
+                lock.unlock();
+                if (g_micMuteBridgeClass != nullptr && g_micMutePadMethod != nullptr) {
+                    env->CallStaticVoidMethod(g_micMuteBridgeClass, g_micMutePadMethod,
+                                              (jint)ev.first, (jboolean)ev.second);
+                    if (env->ExceptionCheck()) env->ExceptionClear();
+                }
+                continue;
+            }
+            if (g_bridgeQueue.empty()) continue;
             r = std::move(g_bridgeQueue.front());
             g_bridgeQueue.pop_front();
         }
@@ -586,6 +611,17 @@ void forgetDevice(int32_t deviceId) {
     std::lock_guard<std::mutex> lock(g_devicesMtx);
     g_devices.erase(deviceId);
     g_frameworkEventCounts.erase(deviceId);
+}
+
+// Called on the USB reader thread, which is not attached to the JVM: hand the edge to the bridge
+// thread (which is) rather than attaching per press. Nothing here touches the wire; the mute bit
+// is already in the report the decoder produced.
+void applyPadMicMute(int32_t deviceId, bool muted) {
+    {
+        std::lock_guard<std::mutex> lock(g_bridgeQueueMtx);
+        g_micMuteQueue.emplace_back(deviceId, muted);
+    }
+    g_bridgeQueueCv.notify_one();
 }
 
 void applyUsbMotion(int32_t deviceId, int16_t gyroX, int16_t gyroY, int16_t gyroZ, int16_t accelX,
@@ -1613,6 +1649,23 @@ Java_com_tinkernorth_dish_hotpath_input_FeedbackBridge_nativeInstall(JNIEnv* env
             env->ExceptionClear();
         }
     }
+}
+
+// The pad's own mic-mute button, going UP. FeedbackBridge carries what the host asked the pad to
+// do; this is the pad telling the app what the user did to it, and the only signal on the USB
+// input path that Kotlin needs by event rather than by report.
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_hotpath_input_MicMuteBridge_nativeInstall(JNIEnv* env, jclass cls) {
+    if (g_micMuteBridgeClass == nullptr) { g_micMuteBridgeClass = (jclass)env->NewGlobalRef(cls); }
+    if (g_micMutePadMethod == nullptr) {
+        g_micMutePadMethod = env->GetStaticMethodID(g_micMuteBridgeClass, "dispatchPadMicMute",
+                                                    "(IZ)V");
+        if (g_micMutePadMethod == nullptr) {
+            LOGE("MicMuteBridge.dispatchPadMicMute not found");
+            env->ExceptionClear();
+        }
+    }
+    startBridgeDispatchThread();
 }
 
 // Speaker audio has its own bridge rather than riding FeedbackBridge: it is a

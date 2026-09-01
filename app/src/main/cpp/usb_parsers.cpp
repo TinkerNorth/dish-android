@@ -22,6 +22,7 @@
 namespace usbparsers {
 
 using gamepad::DeviceState;
+using gamepad::WBUTTON_MIC_MUTE;
 using gamepad::XUSB_A;
 using gamepad::XUSB_B;
 using gamepad::XUSB_BACK;
@@ -850,9 +851,14 @@ bool decodeDualShock4(const uint8_t* buf, size_t len, DeviceState& s, const PsIm
 
 // DualSense USB report 0x01. Same axis conventions as DS4 but the byte layout shifts: triggers
 // move to bytes 5/6 and the button bytes are at 8/9/10.
-bool decodeDualSense(const uint8_t* buf, size_t len, DeviceState& s, const PsImuCalib* calib) {
+//
+// Takes the whole ParserState rather than just the IMU calibration because the mic-mute button
+// needs a latch across reports; a null one decodes everything except the mute state, which is the
+// honest answer for a caller that kept no per-device memory.
+bool decodeDualSense(const uint8_t* buf, size_t len, DeviceState& s, ParserState* sticks) {
     if (len < 11) return false;
     if (buf[0] != 0x01) return false;
+    const PsImuCalib* calib = sticks != nullptr ? &sticks->psImu : nullptr;
 
     s.sLX = scaleU8Centered(buf[1], false);
     s.sLY = scaleU8Centered(buf[2], true);
@@ -874,6 +880,15 @@ bool decodeDualSense(const uint8_t* buf, size_t len, DeviceState& s, const PsImu
     if (buf[9] & 0x40) b |= XUSB_THUMB_L;
     if (buf[9] & 0x80) b |= XUSB_THUMB_R;
     b = setDpadFromHat(b, buf[8] & 0x0F);
+    // Mic-mute lives beside the touchpad click in button byte 10 (0x04 next to 0x02). The press
+    // is an edge, the wire bit is a state: flip the latch on the way down only, so holding the
+    // button does not chatter the mute on and off at report rate.
+    if (sticks != nullptr) {
+        const bool muteDown = (buf[10] & 0x04) != 0;
+        if (muteDown && !sticks->micMuteHeld) sticks->micMuted = !sticks->micMuted;
+        sticks->micMuteHeld = muteDown;
+        if (sticks->micMuted) b |= WBUTTON_MIC_MUTE;
+    }
     s.wButtons = b;
 
     // gyro at 16/18/20, accel at 22/24/26 (int16 LE); same calibration as DS4, signs unverified.
@@ -1199,7 +1214,7 @@ bool decodeReport(Parser p, const uint8_t* buf, size_t len, DeviceState& s, Pars
     case Parser::DUALSHOCK4:
         return decodeDualShock4(buf, len, s, sticks ? &sticks->psImu : nullptr);
     case Parser::DUALSENSE:
-        return decodeDualSense(buf, len, s, sticks ? &sticks->psImu : nullptr);
+        return decodeDualSense(buf, len, s, sticks);
     case Parser::SWITCH_PRO_USB:
         return sticks != nullptr && decodeSwitchProUsb(buf, len, s, *sticks);
     case Parser::STADIA:

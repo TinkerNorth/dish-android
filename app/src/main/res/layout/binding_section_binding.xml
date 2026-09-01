@@ -204,6 +204,19 @@
             android:textColor="@color/colorWarning"
             android:visibility="gone" />
 
+        <!-- Only once the microphone is actually armed: where the mute controls are is the one
+             thing a user needs to know before a live microphone reaches their PC. -->
+        <TextView
+            android:id="@+id/tvMicMuteHint"
+            style="@style/TextAppearance.Dish.Caption"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_xs"
+            android:layout_marginStart="@dimen/config_row_note_inset"
+            android:text="@string/binding_mic_mute_hint"
+            android:textColor="@color/colorOnSurfaceVariant"
+            android:visibility="gone" />
+
         <View
             android:id="@+id/speakerDivider"
             style="@style/Widget.Dish.Divider"

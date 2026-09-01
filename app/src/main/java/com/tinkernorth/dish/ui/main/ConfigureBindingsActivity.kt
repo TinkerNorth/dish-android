@@ -2,14 +2,19 @@
 
 package com.tinkernorth.dish.ui.main
 
+import android.Manifest
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.os.Bundle
+import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.annotation.ColorRes
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.core.net.toUri
 import androidx.core.view.isEmpty
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -109,16 +114,57 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
         }
     }
 
+    private val micPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            viewModel.refreshMicPermission()
+            // Android stops prompting after the second refusal, so a request that returns denied
+            // with no rationale left to show will never reach the user again. Saying so beats a
+            // row that keeps offering an ask the system silently swallows.
+            if (!granted && !shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)) {
+                showMicPermissionBlocked()
+            }
+        }
+
     /**
-     * Where the RECORD_AUDIO prompt gets launched. The permission is not declared in the
-     * manifest yet, and a request for an undeclared permission is refused without ever
-     * reaching the user, so today this only re-reads the grant: that still catches one
-     * made in system settings, and leaves the row honestly saying it needs permission.
-     * Replacing the body with an ActivityResultContracts.RequestPermission launcher (whose
-     * result calls [ConfigureBindingsViewModel.refreshMicPermission]) is all this needs.
+     * Where the RECORD_AUDIO prompt gets launched, from the mic toggle going on or from the row's
+     * own "needs permission" note. Asking here is also what lets the foreground service claim its
+     * microphone type: that type is while-in-use, so it can only start while the app is in the
+     * foreground, and a binding screen is exactly that.
      */
     private fun requestMicPermission() {
         viewModel.refreshMicPermission()
+        if (viewModel.ui.value.micPermissionGranted) return
+        if (!shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)) {
+            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            return
+        }
+        // Second time round. The system prompt says nothing about why a gamepad app wants a
+        // microphone, and the answer is unusual enough to be worth a sentence first.
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.binding_mic_permission_title)
+            .setMessage(R.string.binding_mic_permission_rationale)
+            .setPositiveButton(R.string.action_grant) { _, _ ->
+                micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            }.setNegativeButton(R.string.action_cancel, null)
+            .show()
+    }
+
+    private fun showMicPermissionBlocked() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.binding_mic_permission_title)
+            .setMessage(R.string.binding_mic_permission_blocked)
+            .setPositiveButton(R.string.action_open_settings) { _, _ -> openAppDetailsSettings() }
+            .setNegativeButton(R.string.action_close, null)
+            .show()
+    }
+
+    private fun openAppDetailsSettings() {
+        val intent =
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = "package:$packageName".toUri()
+            }
+        runCatching { startActivity(intent) }
+            .onFailure { startActivity(Intent(Settings.ACTION_SETTINGS)) }
     }
 
     private fun renderContent(state: ConfigUiState) {
@@ -292,6 +338,7 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
         }
         bz.tvMicPermission.visibility = if (state.micNeedsPermission) View.VISIBLE else View.GONE
         bz.tvMicPermission.setOnClickListener { viewModel.requestMicPermission() }
+        bz.tvMicMuteHint.visibility = if (state.micMuteHintVisible) View.VISIBLE else View.GONE
 
         val speakerVisible = state.speakerAvailable
         bz.speakerDivider.visibility = if (speakerVisible) View.VISIBLE else View.GONE

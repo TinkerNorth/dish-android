@@ -4,6 +4,7 @@ package com.tinkernorth.dish.ui.common
 
 import android.graphics.RectF
 import android.view.MotionEvent
+import com.tinkernorth.dish.core.input.hidToXusb
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -556,6 +557,54 @@ class GamepadGestureRecognizerTest {
         recognizer.onTouchEvent(event(MotionEvent.ACTION_CANCEL, x = 500f, y = 50f), trackpadLayout)
         assertTrue(recognizer.consumeTrackpadDirty())
         assertEquals(false, recognizer.trackpadState.anyFingerDown())
+    }
+
+    // ── mic-mute pill (DualSense skin only) ────────────────────────────────
+
+    // Pill spanning x 700..800, y 700..730, well clear of every other zone in [layout].
+    private val muteLayout get() = layout.copy(micMuteRect = fakeRect(700f, 700f, 800f, 730f))
+
+    @Test
+    fun `the mute pill reports a momentary press and clears on release`() {
+        // Momentary like the pad's own button: what the press toggles is the mute state the
+        // overlay owns, so the bit itself must not stick.
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 750f, y = 715f), muteLayout)
+        assertEquals(GamepadTouchView.BTN_MIC_MUTE, recognizer.state.buttons and GamepadTouchView.BTN_MIC_MUTE)
+
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_UP, x = 750f, y = 715f), muteLayout)
+        assertEquals(0, recognizer.state.buttons and GamepadTouchView.BTN_MIC_MUTE)
+    }
+
+    @Test
+    fun `a skin with no mute button never produces the bit`() {
+        // layout carries micMuteRect = null, which is every skin but the DualSense.
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 750f, y = 715f), layout)
+        assertEquals(0, recognizer.state.buttons and GamepadTouchView.BTN_MIC_MUTE)
+    }
+
+    @Test
+    fun `cancel drops a held mute press`() {
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 750f, y = 715f), muteLayout)
+        assertTrue(recognizer.state.buttons and GamepadTouchView.BTN_MIC_MUTE != 0)
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_CANCEL, x = 750f, y = 715f), muteLayout)
+        assertEquals(0, recognizer.state.buttons and GamepadTouchView.BTN_MIC_MUTE)
+    }
+
+    @Test
+    fun `the mute pill claims nothing outside its own rect`() {
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 699f, y = 715f), muteLayout)
+        assertEquals(0, recognizer.state.buttons and GamepadTouchView.BTN_MIC_MUTE)
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_UP, x = 699f, y = 715f), muteLayout)
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 750f, y = 731f), muteLayout)
+        assertEquals(0, recognizer.state.buttons and GamepadTouchView.BTN_MIC_MUTE)
+    }
+
+    @Test
+    fun `the mute bit is local-only and cannot reach an XUSB wire report`() {
+        // 1 shl 12 sits in the HID-layout word the view emits, where hidToXusb knows no such
+        // button; the wire's own WBUTTON_MIC_MUTE is set from the mute STATE instead.
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 750f, y = 715f), muteLayout)
+        assertEquals(0, hidToXusb(recognizer.state.buttons, recognizer.state.hatSwitch))
     }
 
     private companion object {

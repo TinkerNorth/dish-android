@@ -474,6 +474,27 @@ class SatelliteConnection(
         controllerRepo.sendReport(snap.handle, info.controllerIndex, buttons, lt, rt, lx, ly, rx, ry)
     }
 
+    /**
+     * One 20 ms mono window (exactly 960 samples at 48 kHz) for the slot's emulated microphone
+     * endpoint. Native encodes it to Opus on the calling thread and sends MSG_MIC_AUDIO.
+     *
+     * Not on [TelemetrySink]: controller audio is a satellite-only stream, and a Moonlight host
+     * has no microphone channel to offer it. Returns whether the frame left the device, which is
+     * the last gate on the privacy invariant rather than a delivery promise: the stream itself is
+     * lossy by contract.
+     */
+    fun sendMicFrame(
+        slotId: String,
+        pcmMono: ShortArray,
+    ): Boolean {
+        val snap = live ?: return false
+        val info = _slots.value[slotId] ?: return false
+        // Same gate as every other stream: audio for an unapplied descriptor is dropped
+        // server-side as an unknown controller, so it never reaches the wire from here.
+        if (!info.registered) return false
+        return controllerRepo.sendMicFrame(snap.handle, info.controllerIndex, pcmMono)
+    }
+
     @Suppress("LongParameterList")
     override fun sendMotion(
         slotId: String,
