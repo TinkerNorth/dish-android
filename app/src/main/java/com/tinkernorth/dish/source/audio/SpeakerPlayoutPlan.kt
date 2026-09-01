@@ -96,3 +96,38 @@ object SpeakerPlayoutPolicy {
         return SpeakerPlayoutPlan(voices)
     }
 }
+
+/**
+ * How much silence to slip in front of a window to rebuild the anti-underrun cushion.
+ *
+ * The satellite sends nothing for a digitally silent window, so a live stream goes quiet for
+ * seconds at a time and the track drains. Resuming into a drained track leaves no cushion at all,
+ * which is the condition the two-window start threshold exists to prevent.
+ *
+ * Silence rather than a pause-and-re-prime: withholding windows until the threshold is met again
+ * would strand a sound shorter than the cushion, leaving a lone 20 ms blip unplayed until the next
+ * one arrived. Writing silence delays the resumed audio by the same 40 ms and can never swallow it.
+ *
+ * The signal is the track's own underrun counter, which keeps wrapping frame arithmetic out of the
+ * one path where a bug is audible.
+ */
+object SpeakerCushionPolicy {
+    /**
+     * Samples of silence to write before the next window, or 0 to write it straight through.
+     *
+     * [lastSeenUnderruns] is what this session observed the last time it refilled. A counter that
+     * has not moved means the track kept up; one that went backwards means it was reset under us
+     * (a flush, or a new track on the same session), which is not an underrun to compensate for.
+     */
+    fun refillSamples(
+        playing: Boolean,
+        underruns: Int,
+        lastSeenUnderruns: Int,
+        cushionSamples: Int,
+    ): Int {
+        // Not playing yet: the start threshold owns the cushion until it does.
+        if (!playing) return 0
+        if (cushionSamples <= 0) return 0
+        return if (underruns > lastSeenUnderruns) cushionSamples else 0
+    }
+}

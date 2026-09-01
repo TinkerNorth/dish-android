@@ -112,9 +112,11 @@ std::unique_ptr<OpusStreamEncoder> OpusStreamEncoder::create(Stream stream) {
     }
     // Mic only, and this is the encoder that actually ships: a live microphone
     // never goes digitally silent, so a VAD gate is the only thing that can
-    // collapse a quiet room (measured on libopus 1.6.1: 123 of 250 frames gated
-    // at -50 dBFS after speech, 30.0 -> 16.4 kbps). Muting is a separate and
-    // stricter thing -- it stops delivery entirely, which DTX cannot do.
+    // collapse a quiet room (satellite measured 123 of 250 frames gated at
+    // -50 dBFS after speech, 30.0 -> 16.4 kbps, on libopus 1.6.1; this repo
+    // pins 1.5.2, where the suite below re-proves the collapse holds). Muting
+    // is a separate and stricter thing -- it stops delivery entirely, which DTX
+    // cannot do.
     //
     // The speaker encoder declines it deliberately, matching satellite: that
     // gate cuts anything ~26-30 dB below the recent peak, which on game audio

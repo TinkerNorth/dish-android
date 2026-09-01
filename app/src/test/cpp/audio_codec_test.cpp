@@ -395,8 +395,10 @@ TEST(AudioCodecMic, SustainedSilenceCollapsesToDtxPackets) {
     const std::vector<int16_t> silence(MIC_FRAME, 0);
     uint8_t packet[MAX_PACKET];
 
-    // DTX needs a run of qualifying input before it engages (measured at 200 ms
-    // on libopus 1.6.1), so the steady state is what is asserted, not frame 1.
+    // DTX needs a run of qualifying input before it engages (200 ms when
+    // satellite measured it), so the steady state is what is asserted, not
+    // frame 1. The 20-frame lead-in is deliberately looser than that figure so
+    // this does not become a pin on one libopus version's ramp.
     size_t tiny = 0;
     size_t counted = 0;
     for (int i = 0; i < 100; i++) {

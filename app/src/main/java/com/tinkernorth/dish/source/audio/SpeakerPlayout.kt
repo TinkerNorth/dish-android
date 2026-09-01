@@ -147,10 +147,13 @@ class AudioTrackSpeakerSink
             private var playing = false
             private var closed = false
             private var reportedFailure = false
+            private var lastSeenUnderruns = 0
+            private val cushion = ShortArray(startThresholdSamples)
 
             override fun write(pcmStereo: ShortArray): Int =
                 synchronized(lock) {
                     if (closed) return 0
+                    refillCushion()
                     // WRITE_NON_BLOCKING accounts in whole frames, so a partial write never leaves
                     // half a stereo pair behind and the channels cannot swap; the tail is simply
                     // dropped, which is the right thing for a live stream whose buffer is full.
@@ -172,6 +175,23 @@ class AudioTrackSpeakerSink
                 runCatching { track.play() }
                     .onFailure { Log.w(TAG, "AudioTrack would not start: ${it.message}") }
                 playing = true
+                // Underruns from before playback started are not a drained cushion, so the
+                // baseline is taken here rather than at construction.
+                lastSeenUnderruns = runCatching { track.underrunCount }.getOrDefault(0)
+            }
+
+            private fun refillCushion() {
+                val underruns = runCatching { track.underrunCount }.getOrNull() ?: return
+                val refill =
+                    SpeakerCushionPolicy.refillSamples(
+                        playing = playing,
+                        underruns = underruns,
+                        lastSeenUnderruns = lastSeenUnderruns,
+                        cushionSamples = cushion.size,
+                    )
+                lastSeenUnderruns = underruns
+                if (refill <= 0) return
+                track.write(cushion, 0, refill, AudioTrack.WRITE_NON_BLOCKING)
             }
 
             override fun close() {
