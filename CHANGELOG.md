@@ -28,6 +28,12 @@ computer. Those lines say "update Satellite too".
   muted, Dish stops capturing rather than sending silence, so nothing
   leaves your phone at all, and the PC sees the pad's mute button held down
   the way it would on the real controller.
+- The on-screen mute button tells the truth. Its face (the slashed glyph
+  and the amber wash) always shows what your mute actually is, and the ring
+  around it shows what the game on the PC thinks; PC software that toggles
+  its own mute can no longer make the button look stuck or lie about
+  whether you are muted. Presses near the bottom edge of the screen also
+  land on the mute button now instead of the PS button beneath it.
 - Audio never touches storage and never leaves your network: it goes only
   to the PC you paired with, over the same encrypted connection as your
   controller input, one 20 ms slice at a time, and is discarded as soon as

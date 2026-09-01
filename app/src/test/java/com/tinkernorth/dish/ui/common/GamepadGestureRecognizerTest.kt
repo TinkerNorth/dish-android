@@ -583,6 +583,30 @@ class GamepadGestureRecognizerTest {
     }
 
     @Test
+    fun `at clamped geometry a press inside the pill wins over the home pickup halo`() {
+        // A short screen clamps the pill up until it overlaps the home button's pickup circle
+        // (smallBtnRadius x 1.5). The pill is a drawn rect and the halo is forgiveness around an
+        // invisible boundary, so a finger inside the rect means the pill, always; testing home
+        // first turned mute presses into PS-button presses and made the pill feel dead.
+        val clamped =
+            muteLayout.copy(
+                homeCx = 750f,
+                homeCy = 690f,
+                smallBtnRadius = 20f,
+            )
+        // (750,705) is 15px from the home centre, well inside its 30px halo, AND inside the pill.
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 750f, y = 705f), clamped)
+        assertEquals(GamepadTouchView.BTN_MIC_MUTE, recognizer.state.buttons and GamepadTouchView.BTN_MIC_MUTE)
+        assertEquals(0, recognizer.state.buttons and GamepadTouchView.BTN_HOME)
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_UP, x = 750f, y = 705f), clamped)
+
+        // Above the pill the halo still works: the home button lost no reachable area.
+        recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 750f, y = 685f), clamped)
+        assertEquals(GamepadTouchView.BTN_HOME, recognizer.state.buttons and GamepadTouchView.BTN_HOME)
+        assertEquals(0, recognizer.state.buttons and GamepadTouchView.BTN_MIC_MUTE)
+    }
+
+    @Test
     fun `cancel drops a held mute press`() {
         recognizer.onTouchEvent(event(MotionEvent.ACTION_DOWN, x = 750f, y = 715f), muteLayout)
         assertTrue(recognizer.state.buttons and GamepadTouchView.BTN_MIC_MUTE != 0)

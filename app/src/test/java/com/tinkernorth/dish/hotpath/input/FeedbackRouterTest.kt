@@ -99,13 +99,12 @@ class FeedbackRouterTest {
     }
 
     @Test
-    fun `the mic-mute lamp paints the virtual pad and overrides the local mute`() {
+    fun `the mic-mute lamp paints the virtual pad's lamp and only the lamp`() {
         val r = router(managerWith(handle = 7, slotId = VIRTUAL_SLOT_ID))
-        store.setLocalMicMute(true)
-        r.dispatchMicLed(sessionHandle = 7, controllerIndex = 0, state = MIC_LED_OFF)
-        // Last writer wins, like the hardware: the game drove the lamp, so the lamp is the
-        // game's. What the user muted is untouched by this; MicMuteStore holds that.
-        assertEquals(MIC_LED_OFF, store.state.value.micLedState)
+        r.dispatchMicLed(sessionHandle = 7, controllerIndex = 0, state = MIC_LED_ON)
+        // The lamp is the host's alone; what the user muted lives in MicMuteStore and paints
+        // the pill's face directly, so nothing a host sends can reach it through here.
+        assertEquals(MIC_LED_ON, store.state.value.micLedState)
 
         r.dispatchMicLed(sessionHandle = 7, controllerIndex = 0, state = MIC_LED_PULSE)
         assertEquals(MIC_LED_PULSE, store.state.value.micLedState)

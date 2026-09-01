@@ -82,10 +82,11 @@ class FeedbackRouter
          * natively. Resolves like every other feedback kind. A Direct-claimed
          * DualSense gets the real lamp (and, with it, its own microphone
          * amplifier muted, which is what the hardware couples). The phone
-         * renders it on the on-screen pad's mute button, overriding whatever
-         * the local mute last painted there (last writer wins, like the
-         * hardware). Framework pads drop it for the usual reason (no
-         * controller-LED API).
+         * renders it as the accent ring on the on-screen pad's mute button,
+         * and only the ring: the pill's face is the local mute state, which
+         * this lamp has no say over (a host driving the lamp out of phase
+         * must not make a muted mic look live). Framework pads drop it for
+         * the usual reason (no controller-LED API).
          */
         fun dispatchMicLed(
             sessionHandle: Int,

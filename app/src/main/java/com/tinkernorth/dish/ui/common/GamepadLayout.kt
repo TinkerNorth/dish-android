@@ -155,7 +155,10 @@ internal fun computeGamepadLayout(
             ?: (centerBtnCy + smallBtnRadius * HOME_VERTICAL_OFFSET_FACTOR)
 
     // Under the PS button, where the real DualSense puts it. Clamped to the content band so a
-    // short screen pushes it up against the bottom edge rather than off it.
+    // short screen pushes it up against the bottom edge rather than off it. The clamp can slide
+    // the pill into the home button's pickup halo; the gesture recognizer hit-tests the pill
+    // before the centre circles, so the overlap costs home some invisible forgiveness zone and
+    // never costs the pill its own drawn area.
     val micMuteRect =
         if (skin.hasMicMute) {
             val muteW = MIC_MUTE_WIDTH_DP * density

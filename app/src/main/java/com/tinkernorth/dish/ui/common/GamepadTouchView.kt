@@ -191,9 +191,21 @@ class GamepadTouchView
                 invalidate()
             }
 
-        // The mic-mute lamp in the wire's own states (0 off, 1 on, 2 pulse). Written by the local
-        // mute and overridden by a host MSG_MIC_LED, last writer wins, exactly as on the hardware;
-        // anything non-off accents the mute pill, and pulse breathes that accent.
+        // The LOCAL mute state (MicMuteStore), which is what actually gates capture. It owns the
+        // mute pill's face — glyph and fill — unconditionally: no host message can make a muted
+        // microphone look live, or a live one look muted.
+        var micMuted: Boolean = false
+            set(value) {
+                if (field == value) return
+                field = value
+                invalidate()
+            }
+
+        // The HOST's mic lamp in the wire's own states (0 off, 1 on, 2 pulse), from MSG_MIC_LED
+        // only. Secondary "what the host thinks" info: it accents the pill with the ring the
+        // trigger effects use (pulse breathes it) and never touches the pill's face, because
+        // host software that reads the wire's held mute-state bit as a held button can drive its
+        // own mute out of phase with ours, and the face must keep telling the local truth.
         var micMuteLedState: Int = 0
             set(value) {
                 if (field == value) return
@@ -255,6 +267,18 @@ class GamepadTouchView
         private val paintPillPressed =
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = ContextCompat.getColor(context, R.color.colorPrimary)
+            }
+
+        // The mute pill's muted wash: the warning tone at the pressed overlays' translucency,
+        // laid over the pill ground and under the slashed glyph. Colour seconds the glyph so
+        // the muted state also reads for anyone the tints look alike to.
+        private val paintPillMicMuted =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color =
+                    ColorUtils.setAlphaComponent(
+                        ContextCompat.getColor(context, R.color.colorWarning),
+                        0x40,
+                    )
             }
 
         // Per-channel min compositor for diagonal d-pad rendering (see [drawDpad]).
@@ -331,6 +355,7 @@ class GamepadTouchView
         private var icStart: Drawable? = null
         private var icHome: Drawable? = null
         private var icMicMute: Drawable? = null
+        private var icMicMuteMuted: Drawable? = null
 
         private var density = 1f
         private var layout: GamepadLayout? = null
@@ -362,8 +387,11 @@ class GamepadTouchView
         private fun loadDrawables() {
             val c = context
             val tint = ContextCompat.getColor(c, R.color.colorOnSurface)
-            // Only the DualSense carries one, so only that skin loads it.
+            // Only the DualSense carries one, so only that skin loads the pair. The slashed
+            // variant is the muted face; it stays glyph-different from the live one so the two
+            // states survive any tint (colour is reinforcement, not the message).
             icMicMute = if (skin.hasMicMute) loadTinted(c, R.drawable.ic_gp_ps5_mic, tint) else null
+            icMicMuteMuted = if (skin.hasMicMute) loadTinted(c, R.drawable.ic_gp_ps5_mic_muted, tint) else null
             when (skin) {
                 GamepadSkin.PlayStation -> loadPlayStationSet(c, tint, R.drawable.ic_gp_ps_share, R.drawable.ic_gp_ps_options)
                 GamepadSkin.DualSense -> loadPlayStationSet(c, tint, R.drawable.ic_gp_ps5_create, R.drawable.ic_gp_ps5_options)
@@ -529,17 +557,26 @@ class GamepadTouchView
             drawMicMute(canvas, l, s)
         }
 
-        // Pressed paints like any other pill; the lamp adds the accent ring the adaptive-trigger
-        // effect already uses, so it reads as a state the host set rather than as a finger.
-        // Pulse breathes that same ring instead of introducing a second treatment, and is the only
-        // state that costs frames: on and off are painted once and left alone.
+        // Two visual channels, deliberately decoupled. The pill's FACE (glyph + wash) is the
+        // local mute state and nothing else: slashed glyph over a warning wash while muted, the
+        // plain mic while live, so the host can never repaint a muted microphone as live. The
+        // host's lamp keeps only the accent ring the adaptive-trigger effect already uses, so it
+        // reads as a state the host set rather than as a finger. Pulse breathes that same ring
+        // instead of introducing a second treatment, and is the only state that costs frames:
+        // everything else is painted once and left alone.
         private fun drawMicMute(
             c: Canvas,
             l: GamepadLayout,
             s: GamepadState,
         ) {
             val rect = l.micMuteRect ?: return
-            drawPillButton(c, rect, icMicMute, s.buttons and BTN_MIC_MUTE != 0)
+            val face = micMutePillFace(pressed = s.buttons and BTN_MIC_MUTE != 0, muted = micMuted)
+            val corner = min(rect.width(), rect.height()) * PILL_CORNER_RADIUS_FRACTION
+            c.drawRoundRect(rect, corner, corner, if (face == MicPillFace.PRESSED) paintPillPressed else paintPillBg)
+            if (face == MicPillFace.MUTED) c.drawRoundRect(rect, corner, corner, paintPillMicMuted)
+            // The glyph tracks the mute alone: a finger on the pill changes the ground it sits
+            // on, not what the microphone is doing.
+            drawPillIcon(c, rect, if (micMuted) icMicMuteMuted else icMicMute)
             val state = micMuteLedState
             val alpha = micMuteLampAlpha(state, SystemClock.uptimeMillis())
             if (alpha == 0) return
@@ -739,14 +776,23 @@ class GamepadTouchView
         ) {
             val r = min(rect.width(), rect.height()) * PILL_CORNER_RADIUS_FRACTION
             c.drawRoundRect(rect, r, r, if (pressed) paintPillPressed else paintPillBg)
-            if (d != null) {
-                val iconSize = (min(rect.width(), rect.height()) * PILL_ICON_SIZE_FRACTION).toInt()
-                val half = iconSize / 2
-                val cx = rect.centerX().toInt()
-                val cy = rect.centerY().toInt()
-                d.setBounds(cx - half, cy - half, cx + half, cy + half)
-                d.draw(c)
-            }
+            drawPillIcon(c, rect, d)
+        }
+
+        // Split from [drawPillButton] because the mute pill paints its own ground (three states,
+        // not two) but centres its glyph exactly like every other pill.
+        private fun drawPillIcon(
+            c: Canvas,
+            rect: RectF,
+            d: Drawable?,
+        ) {
+            d ?: return
+            val iconSize = (min(rect.width(), rect.height()) * PILL_ICON_SIZE_FRACTION).toInt()
+            val half = iconSize / 2
+            val cx = rect.centerX().toInt()
+            val cy = rect.centerY().toInt()
+            d.setBounds(cx - half, cy - half, cx + half, cy + half)
+            d.draw(c)
         }
 
         private fun drawShoulders(
@@ -885,6 +931,32 @@ class GamepadTouchView
                 invalidate()
             }, TRACKPAD_CLICK_PULSE_MS)
         }
+    }
+
+/** The mute pill's ground, from most transient to most durable: a finger, then the mute. */
+internal enum class MicPillFace {
+    IDLE,
+    MUTED,
+    PRESSED,
+}
+
+/**
+ * Which ground the mute pill paints, kept out of the view so it can be pinned without one.
+ *
+ * Pressed wins over muted: the pressed flash is sub-second finger feedback, and hiding it would
+ * make the pill the one button on the pad that does not acknowledge a touch. The mute is never
+ * lost under it, because the glyph carries the mute on its own (the slash tracks [muted] whatever
+ * the ground does). Everything here is LOCAL state; the host's lamp is a separate ring on top and
+ * has no say in the face.
+ */
+internal fun micMutePillFace(
+    pressed: Boolean,
+    muted: Boolean,
+): MicPillFace =
+    when {
+        pressed -> MicPillFace.PRESSED
+        muted -> MicPillFace.MUTED
+        else -> MicPillFace.IDLE
     }
 
 /**

@@ -23,11 +23,12 @@ data class VirtualPadFeedback(
     // Whether the game holds a non-neutral adaptive-trigger effect per trigger.
     val leftTriggerEffect: Boolean = false,
     val rightTriggerEffect: Boolean = false,
-    // The mic-mute lamp, in the wire's own states: 0 off, 1 on, 2 pulse (MSG_MIC_LED).
-    // LAST WRITER WINS between two sources, which is the DualSense's own behaviour: muting
-    // locally lights it immediately so the button never looks dead, and a game that drives the
-    // lamp afterwards owns it from then on. It is therefore the LAMP and not the mute state:
-    // what actually gates capture is MicMuteStore.
+    // The HOST's mic lamp, in the wire's own states: 0 off, 1 on, 2 pulse (MSG_MIC_LED).
+    // Deliberately the host's alone: the on-screen mute button draws the LOCAL mute state
+    // (MicMuteStore) on its own face, so this lamp is secondary "what the host thinks" info
+    // and a host repaint can never make a muted microphone look live. The two disagree
+    // whenever host-side software, seeing the wire's held mute-state bit as a held button,
+    // toggles its own mute out of phase with ours; the face tells the truth regardless.
     val micLedState: Int = MIC_LED_OFF,
 )
 
@@ -64,17 +65,12 @@ class VirtualPadFeedbackStore
             _state.value = _state.value.copy(leftTriggerEffect = leftActive, rightTriggerEffect = rightActive)
         }
 
-        /** The host's lamp (MSG_MIC_LED), already validated natively to 0/1/2. */
+        /**
+         * The host's lamp (MSG_MIC_LED), already validated natively to 0/1/2. The ONLY writer:
+         * the local mute paints the mute button's own face straight from MicMuteStore instead
+         * of writing here, so the lamp always means "the host said this" and nothing else.
+         */
         fun setMicLed(state: Int) {
             _state.value = _state.value.copy(micLedState = state.coerceIn(MIC_LED_OFF, MIC_LED_PULSE))
-        }
-
-        /**
-         * The local mute state, painted immediately so the on-screen mute button never looks dead
-         * while a host that may never send MSG_MIC_LED decides what to do. A later host lamp
-         * overrides it, and the mute itself is unaffected either way.
-         */
-        fun setLocalMicMute(muted: Boolean) {
-            setMicLed(if (muted) MIC_LED_ON else MIC_LED_OFF)
         }
     }

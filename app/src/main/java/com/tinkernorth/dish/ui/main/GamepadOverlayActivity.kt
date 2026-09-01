@@ -142,11 +142,15 @@ class GamepadOverlayActivity :
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                // The mute state itself, which is what rides the wire and what gates capture. It
-                // lives in the store rather than in the view because the pad's own button writes
-                // the same state, and because the microphone must keep obeying it after the
-                // overlay is gone.
-                micMute.state.collect { micMuted = it[VIRTUAL_SLOT_ID] ?: MicMuteStore.DEFAULT_MUTED }
+                // The mute state itself, which is what rides the wire, gates capture, and owns
+                // the mute pill's face. It lives in the store rather than in the view because
+                // the pad's own button (and the app-wide mic chip) writes the same state, and
+                // because the microphone must keep obeying it after the overlay is gone.
+                micMute.state.collect {
+                    val muted = it[VIRTUAL_SLOT_ID] ?: MicMuteStore.DEFAULT_MUTED
+                    micMuted = muted
+                    binding.gamepadTouchView.micMuted = muted
+                }
             }
         }
     }
@@ -457,19 +461,21 @@ class GamepadOverlayActivity :
 
     /**
      * The on-screen mute button, on the way down only. It toggles the same per-slot mute a
-     * Direct-claimed DualSense's own button toggles, and it does two things at once: capture stops
-     * (MicEngine gates on the store, so muted means zero MSG_MIC_AUDIO leaves the device) and the
-     * lamp lights immediately, so the button never looks dead while a host that may never send
-     * MSG_MIC_LED decides what to do. A host lamp arriving later overrides the paint, not the mute.
+     * Direct-claimed DualSense's own button toggles: capture stops (MicEngine gates on the store,
+     * so muted means zero MSG_MIC_AUDIO leaves the device) and the pill's face repaints from the
+     * store collector above, so the button acknowledges every press whatever the host does. The
+     * host's lamp (MSG_MIC_LED) is a separate ring on the pill and deliberately not written here:
+     * hosts that read the wire's held mute-state bit as a held button toggle their own mute out
+     * of phase with ours, and a face that raced them looked dead in the field.
      */
     private fun applyMicMuteEdge(state: GamepadTouchView.GamepadState) {
         val down = state.buttons and GamepadTouchView.BTN_MIC_MUTE != 0
         if (down == micMuteDown) return
         micMuteDown = down
         if (!down) return
-        val muted = micMute.toggle(VIRTUAL_SLOT_ID)
-        micMuted = muted
-        virtualFeedback.setLocalMicMute(muted)
+        // The volatile snapshot is written here as well as in the collector so the very frame
+        // that carried the press already carries the new state on the wire.
+        micMuted = micMute.toggle(VIRTUAL_SLOT_ID)
     }
 
     // The touch view emits HID-layout button bits + a separate hat-switch; the
