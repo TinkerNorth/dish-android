@@ -1038,7 +1038,10 @@ class CapabilityComposerTest {
 
     // ── controller audio: the phone always, a physical pad only where the OS routes ──
 
-    private fun audioHost(controllerAudio: Boolean): MutableStateFlow<Map<String, HostFeatureSet>> =
+    private fun audioHost(
+        mic: Boolean,
+        speaker: Boolean = mic,
+    ): MutableStateFlow<Map<String, HostFeatureSet>> =
         MutableStateFlow(
             mapOf(
                 "sat-A" to
@@ -1047,7 +1050,8 @@ class CapabilityComposerTest {
                         mouseControl = true,
                         keyboardControl = false,
                         rumbleReturn = true,
-                        controllerAudio = controllerAudio,
+                        controllerMic = mic,
+                        controllerSpeaker = speaker,
                     ),
             ),
         )
@@ -1204,34 +1208,41 @@ class CapabilityComposerTest {
         }
 
     @Test
-    fun `audio needs the type slugs AND the host switch, not either alone`() =
+    fun `audio needs the type slugs AND the host switch, not either alone, per direction`() =
         composerTest {
             val bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A"))
             val conns =
                 MutableStateFlow(
                     listOf(summary("sat-A", satelliteControllerTypes = mapOf(VIRTUAL_SLOT_ID to CONTROLLER_TYPE_DUALSENSE))),
                 )
-            // The catalog columns say what the backend COULD materialize; the host's
-            // runtime switch says whether it will. Both, or nothing.
+            // The catalog columns say what the backend COULD materialize; the host's runtime
+            // switches say whether it will, one per direction. Both, or nothing — and the two
+            // directions independently, since the host gates the WIRES apart and may flip
+            // either under a live stream. Every audio consumer downstream (the capture and
+            // playout composers, the pills, the setup rows) reads MIC and SPEAKER off this
+            // slot and nothing else, so a host layer that folded them back into one verdict
+            // would offer a microphone to a host that only asked for a speaker.
             for (typeHasAudio in listOf(true, false)) {
-                for (hostAudioOn in listOf(true, false)) {
-                    val composer =
-                        composerFor(
-                            phoneAvailable = false,
-                            devices = MutableStateFlow(emptyMap()),
-                            bindings = bindings,
-                            connections = conns,
-                            scope = backgroundScope,
-                            hostFeaturesState = audioHost(hostAudioOn),
-                            cachedCatalog = catalogWithAudio(typeHasAudio),
-                        )
-                    composer.probe(this)
-                    testScheduler.runCurrent()
+                for (hostMic in listOf(true, false)) {
+                    for (hostSpeaker in listOf(true, false)) {
+                        val composer =
+                            composerFor(
+                                phoneAvailable = false,
+                                devices = MutableStateFlow(emptyMap()),
+                                bindings = bindings,
+                                connections = conns,
+                                scope = backgroundScope,
+                                hostFeaturesState = audioHost(mic = hostMic, speaker = hostSpeaker),
+                                cachedCatalog = catalogWithAudio(typeHasAudio),
+                            )
+                        composer.probe(this)
+                        testScheduler.runCurrent()
 
-                    val caps = composer.capabilityFor(VIRTUAL_SLOT_ID)
-                    val label = "typeHasAudio=$typeHasAudio hostAudioOn=$hostAudioOn"
-                    assertEquals(label, typeHasAudio && hostAudioOn, caps.isAvailable(Feature.MIC))
-                    assertEquals(label, typeHasAudio && hostAudioOn, caps.isAvailable(Feature.SPEAKER))
+                        val caps = composer.capabilityFor(VIRTUAL_SLOT_ID)
+                        val label = "type=$typeHasAudio mic=$hostMic speaker=$hostSpeaker"
+                        assertEquals(label, typeHasAudio && hostMic, caps.isAvailable(Feature.MIC))
+                        assertEquals(label, typeHasAudio && hostSpeaker, caps.isAvailable(Feature.SPEAKER))
+                    }
                 }
             }
         }
@@ -1283,7 +1294,7 @@ class CapabilityComposerTest {
                     connections = conns,
                     scope = backgroundScope,
                     micEnabled = micEnabled,
-                    hostFeaturesState = audioHost(controllerAudio = true),
+                    hostFeaturesState = audioHost(mic = true),
                     cachedCatalog = catalogWithAudio(supported = true),
                 )
             composer.probe(this)
@@ -1318,7 +1329,7 @@ class CapabilityComposerTest {
                     scope = backgroundScope,
                     micEnabled = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to true)),
                     speakerEnabled = speakerEnabled,
-                    hostFeaturesState = audioHost(controllerAudio = true),
+                    hostFeaturesState = audioHost(mic = true),
                     cachedCatalog = catalogWithAudio(supported = true),
                 )
             composer.probe(this)

@@ -19,12 +19,13 @@ import javax.inject.Singleton
  * Reads GET /api/server/capabilities once a satellite's link goes Live, so the host's live state
  * reaches the capability model without waiting for someone to open the binding screen.
  *
- * The controller-audio verdict is why this exists. `audio` rides the per-backend entries of that
- * one document and nothing else carries it: not the catalog (cached on server version and locale,
- * so a switch the user flips on the PC must not move it) and not the session PUT. Its only reader
- * used to be the configure screen, which meant a session restored by startup auto-reconnect
- * streamed with the verdict unknown, and unknown is opt-OUT by design: the microphone and the
- * controller speaker stayed off until the user happened to open that screen once.
+ * The controller-audio verdict is why this exists. It rides that one document — the host-level
+ * `controllerAudio` block, or the per-backend `audio` flag on a satellite predating it — and
+ * nothing else carries it: not the catalog (cached on server version and locale, so a switch the
+ * user flips on the PC must not move it) and not the session PUT. Its only reader used to be the
+ * configure screen, which meant a session restored by startup auto-reconnect streamed with the
+ * verdict unknown, and unknown is opt-OUT by design: the microphone and the controller speaker
+ * stayed off until the user happened to open that screen once.
  *
  * Probed once per SESSION rather than once per process like the catalog, because it IS live state:
  * `controllerAudio` is a switch on the host's own dashboard, and a reconnect is exactly when it may

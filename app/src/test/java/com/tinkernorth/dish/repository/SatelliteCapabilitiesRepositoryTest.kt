@@ -165,15 +165,120 @@ class SatelliteCapabilitiesRepositoryTest {
             """"keyboardControl":{"supported":false},""" +
             """"rumble":{"supported":true,"available":true}}}"""
 
+    // The direction-split host block, which supersedes the per-backend flag where present.
+    // Carries an audio-capable backend throughout, so every assertion below is the BLOCK
+    // being obeyed rather than the fallback quietly agreeing with it.
+    private fun bodyWithControllerAudio(
+        enabled: Boolean,
+        mic: Boolean,
+        speaker: Boolean,
+    ): String =
+        """{"protocolVersion":2,"serverVersion":"1.8.0","maxControllers":16,""" +
+            """"backend":{"id":"hidmaestro","supported":true,"available":true,"errorCode":null},""" +
+            """"backends":[{"id":"hidmaestro","kernelMode":false,"audio":true,"available":true,"errorCode":null}],""" +
+            """"motion":{"available":true},""" +
+            """"host":{"catalog":{"supported":true},""" +
+            """"mouseControl":{"supported":true,"available":true},""" +
+            """"keyboardControl":{"supported":false},""" +
+            """"rumble":{"supported":true,"available":true}},""" +
+            """"controllerAudio":{"enabled":$enabled,"mic":$mic,"speaker":$speaker}}"""
+
     @Test
-    fun `an audio-capable backend switches controller audio on`() =
+    fun `the controllerAudio block lands both directions`() =
         runTest {
+            coEvery { gateway.serverCapabilities(any(), any(), any()) } returns
+                HttpReply(200, bodyWithControllerAudio(enabled = true, mic = true, speaker = true), null)
+
+            repo.refresh(server, "sat-1")
+
+            val host = hostFeaturesStore.featuresFor("sat-1")
+            assertTrue(host?.controllerMic == true)
+            assertTrue(host?.controllerSpeaker == true)
+        }
+
+    @Test
+    fun `a host that switched the microphone off keeps its speaker`() =
+        runTest {
+            // The two switches gate the WIRE, not the persona: the pad still has both
+            // endpoints, so muting one direction must not take the other down with it.
+            coEvery { gateway.serverCapabilities(any(), any(), any()) } returns
+                HttpReply(200, bodyWithControllerAudio(enabled = true, mic = false, speaker = true), null)
+
+            repo.refresh(server, "sat-1")
+
+            val host = hostFeaturesStore.featuresFor("sat-1")
+            assertFalse(host?.controllerMic == true)
+            assertTrue(host?.controllerSpeaker == true)
+        }
+
+    @Test
+    fun `a host that switched the speaker off keeps its microphone`() =
+        runTest {
+            coEvery { gateway.serverCapabilities(any(), any(), any()) } returns
+                HttpReply(200, bodyWithControllerAudio(enabled = true, mic = true, speaker = false), null)
+
+            repo.refresh(server, "sat-1")
+
+            val host = hostFeaturesStore.featuresFor("sat-1")
+            assertTrue(host?.controllerMic == true)
+            assertFalse(host?.controllerSpeaker == true)
+        }
+
+    @Test
+    fun `a disabled block forces both directions off, over an audio-capable backend`() =
+        runTest {
+            // The master switch is off while the direction switches and the backend all still
+            // say yes: the block is the host's own verdict and outranks both.
+            coEvery { gateway.serverCapabilities(any(), any(), any()) } returns
+                HttpReply(200, bodyWithControllerAudio(enabled = false, mic = true, speaker = true), null)
+
+            repo.refresh(server, "sat-1")
+
+            val host = hostFeaturesStore.featuresFor("sat-1")
+            assertFalse(host?.controllerMic == true)
+            assertFalse(host?.controllerSpeaker == true)
+        }
+
+    @Test
+    fun `unknown keys in and around the block cannot break the parse`() =
+        runTest {
+            // The block is additive and so is whatever the host adds to it next. A field the
+            // client has never heard of must not cost it the fields it does know, which is the
+            // failure that would land as "audio silently stopped working after a host update".
+            val futureBody =
+                """{"protocolVersion":3,"serverVersion":"1.9.0","maxControllers":16,"quantumMode":true,""" +
+                    """"backend":{"id":"hidmaestro","supported":true,"available":true,"errorCode":null},""" +
+                    """"backends":[{"id":"hidmaestro","audio":true,"available":true,"telepathy":"maybe"}],""" +
+                    """"motion":{"available":true},""" +
+                    """"host":{"catalog":{"supported":true},""" +
+                    """"mouseControl":{"supported":true,"available":true},""" +
+                    """"keyboardControl":{"supported":false},""" +
+                    """"rumble":{"supported":true,"available":true}},""" +
+                    """"controllerAudio":{"enabled":true,"mic":true,"speaker":false,"headset":"future"}}"""
+            coEvery { gateway.serverCapabilities(any(), any(), any()) } returns HttpReply(200, futureBody, null)
+
+            val caps = repo.refresh(server, "sat-1")
+
+            assertEquals("1.9.0", caps?.serverVersion)
+            val host = hostFeaturesStore.featuresFor("sat-1")
+            assertTrue(host?.controllerMic == true)
+            assertFalse(host?.controllerSpeaker == true)
+        }
+
+    @Test
+    fun `an audio-capable backend switches controller audio on when the block is absent`() =
+        runTest {
+            // The satellite carries audio but predates the host block: the per-backend flag is
+            // all there is, and it answers for both directions or the feature disappears on
+            // every host older than the block.
             coEvery { gateway.serverCapabilities(any(), any(), any()) } returns
                 HttpReply(200, bodyWithBackends(available = true, audio = true), null)
 
             repo.refresh(server, "sat-1")
 
-            assertTrue(hostFeaturesStore.featuresFor("sat-1")?.controllerAudio == true)
+            val host = hostFeaturesStore.featuresFor("sat-1")
+            assertTrue(host?.controllerMic == true)
+            assertTrue(host?.controllerSpeaker == true)
         }
 
     @Test
@@ -190,11 +295,14 @@ class SatelliteCapabilitiesRepositoryTest {
                 )
             hostFeaturesStore.setFeatures("sat-1", fromCatalog)
             coEvery { gateway.serverCapabilities(any(), any(), any()) } returns
-                HttpReply(200, bodyWithBackends(available = true, audio = true), null)
+                HttpReply(200, bodyWithControllerAudio(enabled = true, mic = true, speaker = false), null)
 
             repo.refresh(server, "sat-1")
 
-            assertEquals(fromCatalog.copy(controllerAudio = true), hostFeaturesStore.featuresFor("sat-1"))
+            assertEquals(
+                fromCatalog.copy(controllerMic = true, controllerSpeaker = false),
+                hostFeaturesStore.featuresFor("sat-1"),
+            )
         }
 
     @Test
@@ -205,7 +313,8 @@ class SatelliteCapabilitiesRepositoryTest {
 
             repo.refresh(server, "sat-1")
 
-            assertFalse(hostFeaturesStore.featuresFor("sat-1")?.controllerAudio == true)
+            assertFalse(hostFeaturesStore.featuresFor("sat-1")?.controllerMic == true)
+            assertFalse(hostFeaturesStore.featuresFor("sat-1")?.controllerSpeaker == true)
         }
 
     @Test
@@ -216,7 +325,8 @@ class SatelliteCapabilitiesRepositoryTest {
 
             repo.refresh(server, "sat-1")
 
-            assertFalse(hostFeaturesStore.featuresFor("sat-1")?.controllerAudio == true)
+            assertFalse(hostFeaturesStore.featuresFor("sat-1")?.controllerMic == true)
+            assertFalse(hostFeaturesStore.featuresFor("sat-1")?.controllerSpeaker == true)
         }
 
     @Test

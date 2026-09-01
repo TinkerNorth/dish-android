@@ -121,11 +121,15 @@ data class HostFeatureSet(
     val mouseControl: Boolean,
     val keyboardControl: Boolean,
     val rumbleReturn: Boolean,
-    // Whether this host will actually materialize a pad carrying audio endpoints right
-    // now. Read off the capabilities probe's per-backend `audio`, which is the host's
-    // `controllerAudio` setting folded into the backend's own ability; opt-IN, so a
-    // satellite predating controller audio (or one that switched it off) offers none.
-    val controllerAudio: Boolean = false,
+    // Whether this host will actually carry audio in each direction right now. Two fields
+    // and not one verdict, because the host switches the directions independently and gates
+    // the WIRE with them: a single boolean would have a speaker-only host offering a
+    // microphone whose frames it drops on the floor, and the user paying a permission prompt
+    // for it. Read off the capabilities probe (its `controllerAudio` block, or the older
+    // per-backend `audio` flag for both directions at once); opt-IN, so a satellite predating
+    // controller audio, or one that switched it off, offers neither.
+    val controllerMic: Boolean = false,
+    val controllerSpeaker: Boolean = false,
     // The protocol version the satellite advertised (catalog + capabilities documents);
     // 0 = never fetched. This is the verified truth behind the update chips and the
     // extended-mouse gate: only a version that decodes the v2 pointer frame reports 2+.
@@ -157,10 +161,9 @@ data class HostFeatureSet(
         // host-wide RUNTIME switch: the catalog's per-type mic/speaker slugs say what the
         // backend could materialize, this says whether the host will. A client reading
         // only the type columns would offer a microphone on a host that has audio off.
-        if (controllerAudio) {
-            out += Feature.MIC
-            out += Feature.SPEAKER
-        }
+        // One direction at a time: the two switches are the host's to move separately.
+        if (controllerMic) out += Feature.MIC
+        if (controllerSpeaker) out += Feature.SPEAKER
         return CapabilitySet(out)
     }
 
@@ -177,7 +180,8 @@ data class HostFeatureSet(
                 mouseControl = true,
                 keyboardControl = false,
                 rumbleReturn = true,
-                controllerAudio = false,
+                controllerMic = false,
+                controllerSpeaker = false,
             )
 
         fun fromCatalog(catalog: CatalogDto): HostFeatureSet =
@@ -192,29 +196,40 @@ data class HostFeatureSet(
                 // returns rumble, so an ABSENT field keeps the optimistic assumption;
                 // a PRESENT field is honored (a host that can't return rumble hides it).
                 rumbleReturn = catalog.hostFeatures["rumble"]?.supported ?: true,
-                // controllerAudio is deliberately unset here: the catalog carries no
+                // The audio pair is deliberately unset here: the catalog carries no
                 // `audio` field at all (it is cached on server version + locale, so an
                 // install-time switch must not move it). SatelliteHostFeaturesStore
-                // carries the probed value across a catalog write instead.
+                // carries the probed directions across a catalog write instead.
                 protocolVersion = catalog.protocolVersion,
             )
 
         // Pre-bind, pre-catalog host read (GET /api/server/capabilities). Caller must
         // gate on host.catalog.supported first: an older satellite omits the block, and
         // mapping its all-false default would wrongly report everything unsupported.
-        fun fromServerCapabilities(caps: ServerCapabilitiesDto): HostFeatureSet =
-            HostFeatureSet(
+        fun fromServerCapabilities(caps: ServerCapabilitiesDto): HostFeatureSet {
+            // The per-backend fallback, for a satellite that carries audio but predates the
+            // host-level block: `audio` is true only where the backend has an audio-carrying
+            // type AND the host's controllerAudio setting is on, and availability counts too,
+            // since an unavailable backend materializes nothing. A satellite predating BOTH
+            // sends no `backends` array either, which reads as off, and is the truth there.
+            val perBackend = caps.backends.any { it.available && it.audio }
+            // An ABSENT block is unknown, not off, which is why the DTO field is nullable:
+            // reading it as two falses would mute every host older than the block while its
+            // per-backend flag was saying audio flows. A PRESENT block wins outright, since
+            // it is the only place the two directions are reported apart. `enabled` is
+            // re-ANDed rather than trusted: the host does fold it into both directions, but a
+            // stale direction switch left true under a disabled master would otherwise
+            // advertise an endpoint that will never be plugged.
+            val block = caps.controllerAudio
+            return HostFeatureSet(
                 hasCatalog = caps.host.catalog.supported,
                 mouseControl = caps.host.mouseControl.supported,
                 keyboardControl = caps.host.keyboardControl.supported,
                 rumbleReturn = caps.host.rumble.supported,
-                // `audio` rides the per-backend entries, not the host block: it is true
-                // only where the backend has an audio-carrying type AND the host's
-                // controllerAudio setting is on. Availability counts too, since an
-                // unavailable backend materializes nothing. Older satellites send no
-                // `backends` array at all, which reads as off, and is the truth there.
-                controllerAudio = caps.backends.any { it.available && it.audio },
+                controllerMic = block?.let { it.enabled && it.mic } ?: perBackend,
+                controllerSpeaker = block?.let { it.enabled && it.speaker } ?: perBackend,
                 protocolVersion = caps.protocolVersion,
             )
+        }
     }
 }
