@@ -8,6 +8,7 @@ import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
+import com.tinkernorth.dish.composer.InputFunctions
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.model.SlotCapabilities
@@ -101,7 +102,9 @@ class ConfigureBindingsMoonlightActionsTest {
 
         val capabilities = mockk<CapabilityComposer>(relaxed = true)
         every { capabilities.capabilityFor(any()) } returns SlotCapabilities.NONE
-        every { capabilities.capabilityForCandidate(any(), any(), any(), any()) } returns SlotCapabilities.NONE
+        every { capabilities.capabilityForCandidate(any(), any(), any(), any(), any()) } returns SlotCapabilities.NONE
+        every { capabilities.inputFunctionsFor(any(), any()) } returns
+            InputFunctions(known = true, rumble = false, gyro = false, touchpad = false)
         val registry = mockk<PhysicalGamepadRegistry>(relaxed = true)
         every { registry.devices } returns MutableStateFlow(emptyMap())
         val usb = mockk<UsbGamepadManager>(relaxed = true)

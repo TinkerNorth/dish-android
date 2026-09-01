@@ -29,6 +29,13 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import javax.inject.Inject
 import javax.inject.Singleton
 
+data class InputFunctions(
+    val known: Boolean,
+    val rumble: Boolean,
+    val gyro: Boolean,
+    val touchpad: Boolean,
+)
+
 @Suppress("UNCHECKED_CAST", "LongParameterList")
 private inline fun <T1, T2, T3, T4, T5, T6, T7, R> combine7(
     f1: Flow<T1>,
@@ -168,9 +175,10 @@ class CapabilityComposer
             candidateType: Int,
             candidateHostKind: ConnectionKind,
             candidateHostId: String?,
+            candidateDirect: Boolean? = null,
         ): SlotCapabilities =
             CapabilityResolver.resolve(
-                controller = liveControllerLayer(slotId),
+                controller = candidateControllerLayer(slotId, candidateDirect),
                 transport = TransportProfiles.forKind(candidateHostKind),
                 type = typeCapabilitiesFor(candidateType, candidateHostId, candidateHostKind),
                 host = candidateHostLayer(candidateHostKind, candidateHostId),
@@ -230,50 +238,85 @@ class CapabilityComposer
             return CapabilitySet(out)
         }
 
-        private fun deviceControllerLayer(device: PhysicalGamepadRegistry.Device): CapabilitySet {
+        private fun deviceControllerLayer(
+            device: PhysicalGamepadRegistry.Device,
+            direct: Boolean = device.isUsbSynthetic,
+        ): CapabilitySet {
             // The pad supplies the gamepad axes. Touch comes from the pad's OWN trackpad where
             // the path can read it (USB Direct); the phone screen substitutes only for a pad
             // that has no trackpad at all. Rumble needs the pad's OWN motor: routing never
             // falls back to the phone for a physical controller, so a motorless pad has no
             // rumble.
+            val vid = device.vendorId
+            val pid = device.productId
             val out = mutableSetOf(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.BATTERY)
-            if (deviceTouchpadSource(device) != TouchpadSource.NONE) {
+            if (deviceTouchpadSource(device, direct) != TouchpadSource.NONE) {
                 out += Feature.TOUCHPAD
                 out += Feature.MOUSE
             }
-            if (deviceMotionAvailable(device)) out += Feature.MOTION
-            if (deviceRumbleAvailable(device)) out += Feature.RUMBLE
-            // LED / trigger surfaces exist only on the raw Direct path: the framework
-            // exposes no controller LED or trigger-motor API for its pads.
-            if (device.isUsbSynthetic) {
-                if (native.modelHasLightbar(device.vendorId, device.productId)) {
-                    out += Feature.LIGHTBAR
-                }
-                if (native.modelHasTriggerEffects(device.vendorId, device.productId)) {
-                    out += Feature.TRIGGER_EFFECTS
-                }
-                if (native.modelHasPlayerLeds(device.vendorId, device.productId)) {
-                    out += Feature.PLAYER_LEDS
-                }
-                if (native.modelHasTriggerRumble(device.vendorId, device.productId)) {
-                    out += Feature.TRIGGER_RUMBLE
-                }
+            if (direct) {
+                // A Direct pad has no framework InputDevice to probe; everything, including the
+                // LED / trigger surfaces the framework can never reach, comes from the native tables.
+                if (native.modelHasImu(vid, pid)) out += Feature.MOTION
+                if (native.modelHasRumble(vid, pid)) out += Feature.RUMBLE
+                if (native.modelHasLightbar(vid, pid)) out += Feature.LIGHTBAR
+                if (native.modelHasTriggerEffects(vid, pid)) out += Feature.TRIGGER_EFFECTS
+                if (native.modelHasPlayerLeds(vid, pid)) out += Feature.PLAYER_LEDS
+                if (native.modelHasTriggerRumble(vid, pid)) out += Feature.TRIGGER_RUMBLE
+            } else {
+                val framework = frameworkFactsFor(device)
+                if (framework?.hasGyro == true) out += Feature.MOTION
+                if (framework?.hasRumble == true) out += Feature.RUMBLE
             }
             return CapabilitySet(out)
         }
 
-        // A Direct synthetic has no framework InputDevice to probe, so its feedback comes from the native parser instead.
-        private fun deviceMotionAvailable(device: PhysicalGamepadRegistry.Device): Boolean =
-            if (device.isUsbSynthetic) native.modelHasImu(device.vendorId, device.productId) else device.hasGyro
+        private fun frameworkFactsFor(device: PhysicalGamepadRegistry.Device): PhysicalGamepadRegistry.FrameworkCaps? =
+            if (device.isUsbSynthetic) {
+                registry.frameworkCapsFor(device.vendorId, device.productId)
+            } else {
+                PhysicalGamepadRegistry.FrameworkCaps(hasGyro = device.hasGyro, hasRumble = device.hasRumble)
+            }
 
-        private fun deviceRumbleAvailable(device: PhysicalGamepadRegistry.Device): Boolean =
-            if (device.isUsbSynthetic) native.modelHasRumble(device.vendorId, device.productId) else device.hasRumble
+        fun inputFunctionsFor(
+            slotId: String,
+            direct: Boolean?,
+        ): InputFunctions {
+            if (slotId == VIRTUAL_SLOT_ID) {
+                return InputFunctions(known = true, rumble = false, gyro = phoneHasGyro, touchpad = true)
+            }
+            val device =
+                slotId.toIntOrNull()?.let { registry.devices.value[it] }
+                    ?: return InputFunctions(known = true, rumble = false, gyro = false, touchpad = false)
+            val vid = device.vendorId
+            val pid = device.productId
+            val onDirect = direct ?: device.isUsbSynthetic
+            if (onDirect) {
+                val known = native.isKnownFastLaneModel(vid, pid)
+                return InputFunctions(
+                    known = known,
+                    rumble = known && native.modelHasRumble(vid, pid),
+                    gyro = known && native.modelHasImu(vid, pid),
+                    touchpad = known && native.modelHasTouchpad(vid, pid),
+                )
+            }
+            val framework = frameworkFactsFor(device)
+            return InputFunctions(
+                known = framework != null,
+                rumble = framework?.hasRumble == true,
+                gyro = framework?.hasGyro == true,
+                touchpad = false,
+            )
+        }
 
-        private fun deviceTouchpadSource(device: PhysicalGamepadRegistry.Device): TouchpadSource =
+        private fun deviceTouchpadSource(
+            device: PhysicalGamepadRegistry.Device,
+            direct: Boolean = device.isUsbSynthetic,
+        ): TouchpadSource =
             TouchpadRouting.sourceFor(
                 isVirtual = false,
                 padHasTouchpad = native.modelHasTouchpad(device.vendorId, device.productId),
-                padCaptured = device.isUsbSynthetic,
+                padCaptured = direct,
             )
 
         /** Who produces touch for [slotId] right now: the pad, the phone screen, or nobody. */
@@ -288,6 +331,15 @@ class CapabilityComposer
             if (slotId == VIRTUAL_SLOT_ID) return virtualControllerLayer()
             val device = slotId.toIntOrNull()?.let { registry.devices.value[it] } ?: return CapabilitySet.EMPTY
             return deviceControllerLayer(device)
+        }
+
+        private fun candidateControllerLayer(
+            slotId: String,
+            direct: Boolean?,
+        ): CapabilitySet {
+            if (direct == null || slotId == VIRTUAL_SLOT_ID) return liveControllerLayer(slotId)
+            val device = slotId.toIntOrNull()?.let { registry.devices.value[it] } ?: return CapabilitySet.EMPTY
+            return deviceControllerLayer(device, direct)
         }
 
         // Unbound slots get a permissive transport so candidate/report queries see inherent availability.

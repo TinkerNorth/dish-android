@@ -86,10 +86,16 @@ class CapabilityComposerTest {
         modelHasPlayerLeds: Boolean = false,
         modelHasTriggerEffects: Boolean = false,
         modelHasTriggerRumble: Boolean = false,
+        knownFastLane: Boolean = false,
+        frameworkCaps: PhysicalGamepadRegistry.FrameworkCaps? = null,
         satTypes: MutableStateFlow<Map<Pair<String, String>, Int>> = MutableStateFlow(emptyMap()),
     ): CapabilityComposer {
         val availability: PhoneMotionAvailability = mockk { every { hasGyro } returns phoneAvailable }
-        val registry: PhysicalGamepadRegistry = mockk { every { this@mockk.devices } returns devices }
+        val registry: PhysicalGamepadRegistry =
+            mockk {
+                every { this@mockk.devices } returns devices
+                every { frameworkCapsFor(any(), any()) } returns frameworkCaps
+            }
         val hub: ConnectionCoordinator =
             mockk {
                 every { this@mockk.bindings } returns bindings
@@ -105,6 +111,7 @@ class CapabilityComposerTest {
                 every { modelHasPlayerLeds(any(), any()) } returns modelHasPlayerLeds
                 every { modelHasTriggerEffects(any(), any()) } returns modelHasTriggerEffects
                 every { modelHasTriggerRumble(any(), any()) } returns modelHasTriggerRumble
+                every { isKnownFastLaneModel(any(), any()) } returns knownFastLane
             }
         val motionStore: MotionEnabledStore = mockk { every { state } returns motionEnabled }
         val rumbleStore: RumbleEnabledStore = mockk { every { state } returns rumbleEnabled }
@@ -405,6 +412,154 @@ class CapabilityComposerTest {
                     candidateHostId = "sat-A",
                 )
             assertFalse(caps.isAvailable(Feature.RUMBLE))
+        }
+
+    @Test
+    fun `candidateDirect previews the Direct layer for a pad still routed Standard`() =
+        composerTest {
+            val devices =
+                MutableStateFlow(mapOf(7 to device(7, vendorId = 0x054C, productId = 0x09CC, hasRumble = false, hasGyro = false)))
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = devices,
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                    modelHasImu = true,
+                    modelHasRumble = true,
+                    knownFastLane = true,
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            val direct =
+                composer.capabilityForCandidate(
+                    slotId = "7",
+                    candidateType = CONTROLLER_TYPE_PLAYSTATION,
+                    candidateHostKind = ConnectionKind.SATELLITE,
+                    candidateHostId = "sat-A",
+                    candidateDirect = true,
+                )
+            assertTrue(Feature.MOTION in direct.controller)
+            assertTrue(Feature.RUMBLE in direct.controller)
+
+            val standard =
+                composer.capabilityForCandidate(
+                    slotId = "7",
+                    candidateType = CONTROLLER_TYPE_PLAYSTATION,
+                    candidateHostKind = ConnectionKind.SATELLITE,
+                    candidateHostId = "sat-A",
+                    candidateDirect = false,
+                )
+            assertFalse(Feature.MOTION in standard.controller)
+            assertFalse(Feature.RUMBLE in standard.controller)
+        }
+
+    @Test
+    fun `candidateDirect false on a claimed pad reads the last framework sighting`() =
+        composerTest {
+            val devices =
+                MutableStateFlow(mapOf(-1000 to device(-1000, vendorId = 0x054C, productId = 0x09CC, isUsbSynthetic = true)))
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = devices,
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                    modelHasImu = true,
+                    modelHasRumble = true,
+                    frameworkCaps = PhysicalGamepadRegistry.FrameworkCaps(hasGyro = true, hasRumble = false),
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            val standard =
+                composer.capabilityForCandidate(
+                    slotId = "-1000",
+                    candidateType = CONTROLLER_TYPE_PLAYSTATION,
+                    candidateHostKind = ConnectionKind.SATELLITE,
+                    candidateHostId = "sat-A",
+                    candidateDirect = false,
+                )
+            assertTrue(Feature.MOTION in standard.controller)
+            assertFalse(Feature.RUMBLE in standard.controller)
+        }
+
+    @Test
+    fun `inputFunctionsFor marks Direct on an unrecognized model unknown`() =
+        composerTest {
+            val devices = MutableStateFlow(mapOf(7 to device(7, vendorId = 0x0E6F, productId = 0x0180)))
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = devices,
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                    knownFastLane = false,
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            val funcs = composer.inputFunctionsFor("7", direct = true)
+            assertFalse(funcs.known)
+            assertFalse(funcs.rumble)
+            assertFalse(funcs.gyro)
+            assertFalse(funcs.touchpad)
+        }
+
+    @Test
+    fun `inputFunctionsFor reads the framework probe on Standard and the tables on Direct`() =
+        composerTest {
+            val devices =
+                MutableStateFlow(mapOf(7 to device(7, vendorId = 0x054C, productId = 0x09CC, hasRumble = true, hasGyro = false)))
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = devices,
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                    modelHasImu = true,
+                    modelHasRumble = true,
+                    modelHasTouchpad = true,
+                    knownFastLane = true,
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            val standard = composer.inputFunctionsFor("7", direct = false)
+            assertTrue(standard.known)
+            assertTrue(standard.rumble)
+            assertFalse(standard.gyro)
+            assertFalse(standard.touchpad)
+
+            val direct = composer.inputFunctionsFor("7", direct = true)
+            assertTrue(direct.known)
+            assertTrue(direct.gyro)
+            assertTrue(direct.touchpad)
+        }
+
+    @Test
+    fun `inputFunctionsFor is unknown for a claimed pad never seen routed`() =
+        composerTest {
+            val devices =
+                MutableStateFlow(mapOf(-1000 to device(-1000, vendorId = 0x054C, productId = 0x09CC, isUsbSynthetic = true)))
+            val composer =
+                composerFor(
+                    phoneAvailable = false,
+                    devices = devices,
+                    bindings = MutableStateFlow(emptyMap()),
+                    connections = MutableStateFlow(emptyList()),
+                    scope = backgroundScope,
+                    frameworkCaps = null,
+                )
+            composer.probe(this)
+            testScheduler.runCurrent()
+
+            assertFalse(composer.inputFunctionsFor("-1000", direct = false).known)
         }
 
     @Test

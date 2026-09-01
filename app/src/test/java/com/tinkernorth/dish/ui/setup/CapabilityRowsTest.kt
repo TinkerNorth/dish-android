@@ -127,4 +127,30 @@ class CapabilityRowsTest {
         assertFalse(motion.available)
         assertEquals(motion.inputOk && motion.destinationOk && motion.typeOk, motion.available)
     }
+
+    @Test
+    fun `inputUnknown rides every row and reads unknown only where the rest of the path carries`() {
+        val everything = CapabilitySet(Feature.entries.toSet())
+        val caps =
+            SlotCapabilities(
+                controller = CapabilitySet.EMPTY,
+                transport = everything,
+                type = CapabilitySet.of(Feature.RUMBLE, Feature.MOTION),
+                host = everything,
+                userEnabled = CapabilitySet.EMPTY,
+                runtimeDown = CapabilitySet.EMPTY,
+            )
+        val rows = capabilityRows(caps, inputUnknown = true).associateBy { it.kind }
+
+        val rumble = rows.getValue(SetupCapabilityKind.RUMBLE)
+        assertTrue(rumble.inputUnknown)
+        assertTrue(rumble.unknown)
+        assertFalse(rumble.available)
+
+        val touchpad = rows.getValue(SetupCapabilityKind.TOUCHPAD)
+        assertTrue(touchpad.inputUnknown)
+        assertFalse(touchpad.unknown)
+
+        assertTrue(capabilityRows(caps).none { it.inputUnknown })
+    }
 }
