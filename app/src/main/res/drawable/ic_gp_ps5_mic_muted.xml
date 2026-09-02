@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The muted face of the DualSense skin's mute button: ic_gp_ps5_mic with the slash the real
+     pad's muted glyph carries. A separate drawable rather than a runtime overlay so the muted
+     state stays a glyph difference, legible under any tint. Same conventions as its sibling:
+     one filled white path, 64dp square viewport, tinted at load. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="64dp"
+    android:height="64dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M32 8 A6 6 0 0 1 38 14 L38 28 A6 6 0 0 1 26 28 L26 14 A6 6 0 0 1 32 8 Z M15 30 A17 17 0 0 0 49 30 L45 30 A13 13 0 0 1 19 30 L15 30 Z M30 46 L34 46 34 52 40 52 40 56 24 56 24 52 30 52 Z M13 9 L16 6 L51 47 L48 50 Z" />
+</vector>

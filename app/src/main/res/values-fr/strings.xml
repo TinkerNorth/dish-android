@@ -468,6 +468,20 @@
     <string name="binding_func_touchpad">Pavé tactile</string>
     <string name="binding_func_mouse">Souris</string>
     <string name="binding_func_gyro">Gyro</string>
+    <string name="binding_func_mic">Microphone</string>
+    <string name="binding_func_speaker">Son de la manette</string>
+    <string name="binding_mic_permission_needed">Autorisation micro requise. Touchez pour autoriser.</string>
+    <string name="binding_mic_permission_title">Autorisation du micro</string>
+    <string name="binding_mic_permission_rationale">Dish utilise le micro du téléphone comme micro de la manette émulée, pour que le chat vocal de votre PC vous entende à travers la manette. L\'audio part uniquement vers le PC que vous avez appairé, uniquement pendant la diffusion, et il n\'est jamais conservé.</string>
+    <string name="binding_mic_permission_blocked">L\'autorisation du micro est désactivée pour Dish. Activez-la dans les réglages du système pour utiliser le micro de la manette.</string>
+    <string name="binding_mic_mute_hint">Coupez le micro quand vous voulez avec le bouton de la manette à l\'écran, ou celui d\'une DualSense connectée. Micro coupé veut dire que rien n\'est envoyé.</string>
+
+    <string name="mic_state_live">Micro actif</string>
+    <string name="mic_state_muted">Micro coupé</string>
+    <string name="mic_action_mute">Couper le micro</string>
+    <string name="mic_action_unmute">Rétablir le micro</string>
+    <string name="mic_chip_live_desc">Le micro est actif. Touchez pour le couper.</string>
+    <string name="mic_chip_muted_desc">Micro coupé. Touchez pour le rétablir.</string>
     <string name="binding_state_on">Activé</string>
     <string name="binding_state_off">Désactivé</string>
     <string name="binding_func_value">%1$s · %2$s</string>

@@ -24,6 +24,16 @@ constexpr uint16_t XUSB_X = 0x4000;
 constexpr uint16_t XUSB_Y = 0x8000;
 constexpr uint16_t XUSB_DPAD_MASK = 0x000F;
 
+// Not an XINPUT bit: 0x0800 is the one value the XINPUT-shaped word leaves
+// unassigned, and protocol 2 spends it on the DualSense mic-mute button
+// (satellite core/types.h WBUTTON_MIC_MUTE, docs/contract.md §Controller
+// audio). Only the DualSense identity maps it into the emulated pad's input
+// report; every other identity ignores it. It is state, not an edge, like every
+// other button in the word, and it rides the ordinary MSG_GAMEPAD_DATA frame:
+// the whole 16-bit word is copied through, so nothing on this path has to know
+// about it beyond leaving it alone.
+constexpr uint16_t WBUTTON_MIC_MUTE = 0x0800;
+
 // Mirrored from <android/keycodes.h> so this header builds host-side for tests.
 constexpr int32_t KC_DPAD_UP = 19;
 constexpr int32_t KC_DPAD_DOWN = 20;

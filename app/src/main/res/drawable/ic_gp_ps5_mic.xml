@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mic-mute button glyph for the DualSense skin. Drawn here rather than converted, because the
+     Kenney controller-prompt set the other ic_gp_* glyphs come from (tools/svg2vd.ps1) has no
+     mute button in it. Same conventions as its siblings so it sits in the row without standing
+     out: one filled white path, 64dp square viewport, tinted at load. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="64dp"
+    android:height="64dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M32 8 A6 6 0 0 1 38 14 L38 28 A6 6 0 0 1 26 28 L26 14 A6 6 0 0 1 32 8 Z M15 30 A17 17 0 0 0 49 30 L45 30 A13 13 0 0 1 19 30 L15 30 Z M30 46 L34 46 34 52 40 52 40 56 24 56 24 52 30 52 Z" />
+</vector>

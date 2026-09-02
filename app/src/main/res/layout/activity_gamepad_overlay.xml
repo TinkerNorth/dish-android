@@ -58,6 +58,10 @@
 
     <include layout="@layout/overlay_low_power_chip" />
 
+    <!-- Carried for scaffolding uniformity (the include gate checks every screen); this
+         activity never binds it, because the pad itself carries the mute pill. -->
+    <include layout="@layout/overlay_mic_chip" />
+
     <!-- Low-power overlays (countdown banner + dim screen). Included last
          so the dim FrameLayout sits on top of the gamepad and consumes
          the wake-tap, identical to activity_main.xml. -->

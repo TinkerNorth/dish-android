@@ -204,6 +204,8 @@
     <dimen name="config_section_icon_gap">@dimen/size_7</dimen>
     <dimen name="config_row_icon_size">@dimen/icon_card_glyph</dimen>
     <dimen name="config_row_icon_gap">@dimen/size_11</dimen>
+    <!-- Aligns a note under a config row's label rather than its glyph (icon + gap). -->
+    <dimen name="config_row_note_inset">@dimen/size_28</dimen>
     <dimen name="config_row_gap">@dimen/size_11</dimen>
     <dimen name="config_legend_row_gap">@dimen/size_2</dimen>
     <dimen name="config_callout_padding">@dimen/size_11</dimen>

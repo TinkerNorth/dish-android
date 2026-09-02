@@ -108,6 +108,8 @@
     <string name="setup_cap_trigger_rumble">Vibração dos gatilhos</string>
     <string name="setup_cap_trigger_effects">Gatilhos adaptáveis</string>
     <string name="setup_cap_player_leds">LEDs de jogador</string>
+    <string name="setup_cap_mic">Microfone</string>
+    <string name="setup_cap_speaker">Som do controle</string>
     <string name="setup_cap_available">Suportado</string>
     <string name="setup_cap_off">Desligado</string>
     <string name="setup_cap_unknown">Desconhecido</string>

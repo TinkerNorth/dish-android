@@ -165,4 +165,38 @@ class GamepadButtonLayoutsTest {
     ) {
         assertEquals(expected, hidToXusb(hidButtons, hat))
     }
+
+    // ---- mic mute: the one free bit in the XINPUT-shaped word ----
+
+    @Test
+    fun `mic mute is 0x0800, the one bit the XINPUT word leaves free`() {
+        // Satellite maps this bit into the DualSense's input report, so a
+        // renumbering would press some other button on the emulated pad. The
+        // sweep proves both halves of the claim: every OTHER bit of the word is
+        // reachable from a real button, and 0x0800 is reachable from none.
+        assertEquals(0x0800, WBUTTON_MIC_MUTE)
+        var reachable = 0
+        for (hid in 0..0x07FF) {
+            for (hat in 0..8) reachable = reachable or hidToXusb(hid, hat)
+        }
+        assertEquals(0xFFFF and WBUTTON_MIC_MUTE.inv(), reachable)
+    }
+
+    @Test
+    fun `withMicMute sets and clears only the mute bit`() {
+        val pressed = hidToXusb(GamepadTouchView.BTN_A or GamepadTouchView.BTN_LB, GamepadTouchView.HAT_E)
+        val muted = withMicMute(pressed, muted = true)
+        assertEquals(pressed or WBUTTON_MIC_MUTE, muted)
+        assertEquals(pressed, withMicMute(muted, muted = false))
+        // Idempotent both ways: mute is state on every frame, not an edge.
+        assertEquals(muted, withMicMute(muted, muted = true))
+        assertEquals(pressed, withMicMute(pressed, muted = false))
+    }
+
+    @Test
+    fun `xusbToHid drops the mute bit rather than aliasing a HID button`() {
+        val packed = xusbToHid(hidToXusb(GamepadTouchView.BTN_A, GamepadTouchView.HAT_NONE) or WBUTTON_MIC_MUTE)
+        assertEquals(GamepadTouchView.BTN_A, hidButtonsOf(packed))
+        assertEquals(GamepadTouchView.HAT_NONE, hidHatOf(packed))
+    }
 }

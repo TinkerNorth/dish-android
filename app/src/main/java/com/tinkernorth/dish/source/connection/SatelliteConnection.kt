@@ -40,8 +40,12 @@ class SatelliteConnection(
     private val scope: CoroutineScope,
     private val controllerRepo: ControllerRepository,
     private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO,
-    private val motionCapsBitsFor: (slotId: String) -> Int = { CAP_MOTION_BIT_LEGACY },
-    // Pulled at descriptor-build time like motionCapsBitsFor, so the mode a slot declares can
+    // The WHOLE caps word for a slot, pulled at descriptor-build time from the composer
+    // (CapabilityResolver.wireCaps). Not a base plus one bit: every cap the client advertises
+    // is a live per-slot fact, and computing part of it here would let the descriptor drift
+    // from the capability model the rest of the app renders.
+    private val wireCapsFor: (slotId: String) -> Int = { DEFAULT_WIRE_CAPABILITIES },
+    // Pulled at descriptor-build time like wireCapsFor, so the mode a slot declares can
     // never drift from the store-derived routing the rest of the app displays.
     private val touchpadModeFor: (slotId: String) -> String = { ControllerDescriptor.TOUCHPAD_MODE_OFF },
     private val motionBackendStatusStore: SatelliteMotionBackendStatusStore? = null,
@@ -336,7 +340,7 @@ class SatelliteConnection(
         if (_state.value != SatelliteSessionState.Live) return
         for ((slotId, binding) in _slots.value) {
             if (!binding.registered) continue
-            val newCaps = BASE_CAPABILITIES or motionCapsBitsFor(slotId)
+            val newCaps = wireCapsFor(slotId)
             if (binding.lastAdvertisedCaps == newCaps &&
                 binding.lastAdvertisedTouchpadMode == touchpadModeFor(slotId)
             ) {
@@ -388,7 +392,7 @@ class SatelliteConnection(
         return ControllerDescriptor(
             ctrlIdx = binding.controllerIndex,
             type = binding.controllerType,
-            caps = BASE_CAPABILITIES or motionCapsBitsFor(slotId),
+            caps = wireCapsFor(slotId),
             touchpadMode = touchpadModeFor(slotId),
         )
     }
@@ -429,7 +433,7 @@ class SatelliteConnection(
                     )
                     binding.copy(
                         registered = true,
-                        lastAdvertisedCaps = BASE_CAPABILITIES or motionCapsBitsFor(slotId),
+                        lastAdvertisedCaps = wireCapsFor(slotId),
                         lastAdvertisedTouchpadMode = touchpadModeFor(slotId),
                     )
                 } else {
@@ -468,6 +472,27 @@ class SatelliteConnection(
         // Gate: reports for an unapplied descriptor would be dropped server-side as unknown.
         if (!info.registered) return
         controllerRepo.sendReport(snap.handle, info.controllerIndex, buttons, lt, rt, lx, ly, rx, ry)
+    }
+
+    /**
+     * One 20 ms mono window (exactly 960 samples at 48 kHz) for the slot's emulated microphone
+     * endpoint. Native encodes it to Opus on the calling thread and sends MSG_MIC_AUDIO.
+     *
+     * Not on [TelemetrySink]: controller audio is a satellite-only stream, and a Moonlight host
+     * has no microphone channel to offer it. Returns whether the frame left the device, which is
+     * the last gate on the privacy invariant rather than a delivery promise: the stream itself is
+     * lossy by contract.
+     */
+    fun sendMicFrame(
+        slotId: String,
+        pcmMono: ShortArray,
+    ): Boolean {
+        val snap = live ?: return false
+        val info = _slots.value[slotId] ?: return false
+        // Same gate as every other stream: audio for an unapplied descriptor is dropped
+        // server-side as an unknown controller, so it never reaches the wire from here.
+        if (!info.registered) return false
+        return controllerRepo.sendMicFrame(snap.handle, info.controllerIndex, pcmMono)
     }
 
     @Suppress("LongParameterList")
@@ -553,11 +578,14 @@ class SatelliteConnection(
         private const val FALTER_THRESHOLD = 2
         private const val FALTER_TO_DEAD = 5
 
-        // CAP_LIGHTBAR intentionally unset: Android has no controller-LED API.
-        private const val BASE_CAPABILITIES =
-            ControllerDescriptor.CAP_ANALOG_TRIGGERS or ControllerDescriptor.CAP_RUMBLE
-
-        internal const val CAP_MOTION_BIT_LEGACY = ControllerDescriptor.CAP_MOTION
+        // Only for a connection built without a composer (tests, and the moment before
+        // one is wired): the caps every emulated pad has plus motion, which is what this
+        // class advertised for its whole pre-composer life. Production always passes
+        // wireCapsFor, so no live descriptor is ever built from this.
+        internal const val DEFAULT_WIRE_CAPABILITIES =
+            ControllerDescriptor.CAP_ANALOG_TRIGGERS or
+                ControllerDescriptor.CAP_RUMBLE or
+                ControllerDescriptor.CAP_MOTION
 
         // CLOSE_REASON_* wire values (contract §UDP messages).
         const val CLOSE_REASON_SHUTDOWN = 0
