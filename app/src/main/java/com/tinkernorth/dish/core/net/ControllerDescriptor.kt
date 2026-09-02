@@ -27,6 +27,8 @@ data class ControllerDescriptor(
             append(",\"lightbar\":").append((caps and CAP_LIGHTBAR) != 0)
             append(",\"triggerEffects\":").append((caps and CAP_TRIGGER_EFFECTS) != 0)
             append(",\"playerLeds\":").append((caps and CAP_PLAYER_LEDS) != 0)
+            append(",\"mic\":").append((caps and CAP_MIC) != 0)
+            append(",\"speaker\":").append((caps and CAP_SPEAKER) != 0)
             append("}")
             append(",\"touchpadMode\":\"").append(sanitizedMode()).append("\"}")
         }
@@ -45,6 +47,12 @@ data class ControllerDescriptor(
         const val CAP_LIGHTBAR = 0x0008
         const val CAP_TRIGGER_EFFECTS = 0x0010
         const val CAP_PLAYER_LEDS = 0x0020
+
+        // Controller audio. Like the feedback caps these advertise the CLIENT's own
+        // source/actuator: `mic` lets the host accept MSG_MIC_AUDIO (and send the mute
+        // lamp back), `speaker` lets it send MSG_SPEAKER_AUDIO. Independent directions.
+        const val CAP_MIC = 0x0040
+        const val CAP_SPEAKER = 0x0080
 
         // Protocol constants (never localized): valid descriptor touchpadMode values.
         const val TOUCHPAD_MODE_DS4 = "ds4"

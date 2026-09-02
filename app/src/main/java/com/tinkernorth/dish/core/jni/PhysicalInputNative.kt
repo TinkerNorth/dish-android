@@ -150,6 +150,13 @@ class PhysicalInputNative
             SatelliteNative.sendUsbTriggerEffects(syntheticDeviceId, blocks)
         }
 
+        fun sendUsbMicMuteLed(
+            syntheticDeviceId: Int,
+            state: Int,
+        ) {
+            SatelliteNative.sendUsbMicMuteLed(syntheticDeviceId, state)
+        }
+
         fun getDeviceUrbCount(deviceId: Int): Long = SatelliteNative.getDeviceUrbCount(deviceId)
 
         fun getDeviceMotionCount(deviceId: Int): Long = SatelliteNative.getDeviceMotionCount(deviceId)

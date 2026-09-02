@@ -32,6 +32,7 @@ internal fun destinationGetFlows(potential: CapabilitySet): List<ReviewFlow> =
         if (Feature.TOUCHPAD in potential) add(ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad))
         if (Feature.MOUSE in potential) add(ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse))
         if (Feature.BATTERY in potential) add(ReviewFlow(R.drawable.ic_battery, R.string.setup_cap_battery))
+        if (Feature.MIC in potential) add(ReviewFlow(R.drawable.ic_mic, R.string.setup_cap_mic))
     }
 
 internal fun destinationSendFlows(potential: CapabilitySet): List<ReviewFlow> =
@@ -45,6 +46,7 @@ internal fun destinationSendFlows(potential: CapabilitySet): List<ReviewFlow> =
             add(ReviewFlow(R.drawable.ic_trigger_effects, R.string.setup_cap_trigger_effects))
         }
         if (Feature.PLAYER_LEDS in potential) add(ReviewFlow(R.drawable.ic_player_leds, R.string.setup_cap_player_leds))
+        if (Feature.SPEAKER in potential) add(ReviewFlow(R.drawable.ic_speaker, R.string.setup_cap_speaker))
     }
 
 // Fills a sends/gets chip row, hiding the whole row when there is nothing to show.

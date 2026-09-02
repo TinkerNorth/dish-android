@@ -20,6 +20,7 @@ import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.core.input.hidToXusb
+import com.tinkernorth.dish.core.input.withMicMute
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.core.net.moonlight.MoonlightControlProtocol
@@ -29,6 +30,7 @@ import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.sensor.MotionStreamState
 import com.tinkernorth.dish.source.sensor.PhoneBatterySource
 import com.tinkernorth.dish.source.sensor.PhoneMotionSource
+import com.tinkernorth.dish.source.store.MicMuteStore
 import com.tinkernorth.dish.ui.common.GamepadSkin
 import com.tinkernorth.dish.ui.common.GamepadTouchView
 import com.tinkernorth.dish.ui.common.ResendPacer
@@ -54,16 +56,31 @@ class GamepadOverlayActivity :
 
     @Inject lateinit var virtualFeedback: com.tinkernorth.dish.source.store.VirtualPadFeedbackStore
 
+    @Inject lateinit var micMute: MicMuteStore
+
     private lateinit var binding: ActivityGamepadOverlayBinding
 
     override fun rootView(): View = binding.root
 
     override val resendIntervalNs: Long = BaseInputOverlayActivity.RESEND_INTERVAL_NS_DEFAULT
 
+    // No floating mic chip here: the pad itself carries the mute pill (same state, same store),
+    // and a chip over a full-screen control surface would sit on live pad controls and steal
+    // their touches.
+    override val showsMicChip: Boolean get() = false
+
     // @Volatile for main-thread write / resend-thread read.
     @Volatile private var lastReportedState: GamepadTouchView.GamepadState? = null
 
     @Volatile private var lastReportedTrackpad: TouchpadSurfaceView.TouchpadState? = null
+
+    // Mute is STATE on the wire, so every frame carries it, including the resend loop's: hence a
+    // volatile snapshot rather than a store read on the send path.
+    @Volatile private var micMuted = false
+
+    // UI-thread only: the mute button is momentary and what it toggles is the state above, so
+    // only the press edge counts. A held button must not chatter the mute at touch-sample rate.
+    private var micMuteDown = false
 
     private lateinit var motionSource: PhoneMotionSource
     private lateinit var batterySource: PhoneBatterySource
@@ -124,6 +141,20 @@ class GamepadOverlayActivity :
                     binding.gamepadTouchView.playerLedMask = fb.playerLedMask
                     binding.gamepadTouchView.leftTriggerEffect = fb.leftTriggerEffect
                     binding.gamepadTouchView.rightTriggerEffect = fb.rightTriggerEffect
+                    binding.gamepadTouchView.micMuteLedState = fb.micLedState
+                }
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                // The mute state itself, which is what rides the wire, gates capture, and owns
+                // the mute pill's face. It lives in the store rather than in the view because
+                // the pad's own button (and the app-wide mic chip) writes the same state, and
+                // because the microphone must keep obeying it after the overlay is gone.
+                micMute.state.collect {
+                    val muted = it[VIRTUAL_SLOT_ID] ?: MicMuteStore.DEFAULT_MUTED
+                    micMuted = muted
+                    binding.gamepadTouchView.micMuted = muted
                 }
             }
         }
@@ -338,6 +369,7 @@ class GamepadOverlayActivity :
 
     override fun onGamepadStateChanged(state: GamepadTouchView.GamepadState) {
         inputRateStore.recordScreenSample()
+        applyMicMuteEdge(state)
         // Stored before the connection-status gate so input captured while
         // the session is still Linking is replayed by the resend loop the
         // moment it flips to Connected.
@@ -432,10 +464,31 @@ class GamepadOverlayActivity :
         )
     }
 
+    /**
+     * The on-screen mute button, on the way down only. It toggles the same per-slot mute a
+     * Direct-claimed DualSense's own button toggles: capture stops (MicEngine gates on the store,
+     * so muted means zero MSG_MIC_AUDIO leaves the device) and the pill's face repaints from the
+     * store collector above, so the button acknowledges every press whatever the host does. The
+     * host's lamp (MSG_MIC_LED) is a separate ring on the pill and deliberately not written here:
+     * hosts that read the wire's held mute-state bit as a held button toggle their own mute out
+     * of phase with ours, and a face that raced them looked dead in the field.
+     */
+    private fun applyMicMuteEdge(state: GamepadTouchView.GamepadState) {
+        val down = state.buttons and GamepadTouchView.BTN_MIC_MUTE != 0
+        if (down == micMuteDown) return
+        micMuteDown = down
+        if (!down) return
+        // The volatile snapshot is written here as well as in the collector so the very frame
+        // that carried the press already carries the new state on the wire.
+        micMuted = micMute.toggle(VIRTUAL_SLOT_ID)
+    }
+
     // The touch view emits HID-layout button bits + a separate hat-switch; the
     // satellite path wants XUSB `wButtons` with the d-pad folded into the low nibble.
+    // Mute is folded in as a held bit, not an edge: WBUTTON_MIC_MUTE carries the state, so
+    // every frame says what it is, resends included.
     private fun sendSatelliteReport(state: GamepadTouchView.GamepadState) {
-        val wButtons = hidToXusb(state.buttons, state.hatSwitch)
+        val wButtons = withMicMute(hidToXusb(state.buttons, state.hatSwitch), micMuted)
         satellite.get(connectionId)?.sendReport(
             VIRTUAL_SLOT_ID,
             wButtons,

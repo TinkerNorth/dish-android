@@ -468,13 +468,23 @@ can't reach are still unit-testable from a host build:
   the send-on-change gate. No Android, JNI, or sodium headers: it
   builds against `app/src/test/cpp/` with googletest.
 - `wire_encoders.h`: pure byte-layout encoders for `MSG_MOTION`,
-  `MSG_BATTERY`, `MSG_TOUCHPAD`, and `MSG_LIGHTBAR`. Same host-build
+  `MSG_BATTERY`, `MSG_TOUCHPAD`, `MSG_LIGHTBAR`, and the controller-audio
+  frames (`MSG_MIC_AUDIO` / `MSG_SPEAKER_AUDIO` / `MSG_MIC_LED`), plus the
+  datagram ceilings the send path sizes its buffers from. Same host-build
   rule; the wire layout is type-checked against the contract
   (`satellite/docs/contract.md`).
+- `audio_jitter.h`: the 2-frame reorder window for one direction of one
+  controller's audio stream. Dependency-free (std only, no codec) and a
+  deliberate mirror of satellite's `core/audio/audio_jitter.h`, because both
+  ends of a stream have to agree on what counts as lost and what counts as
+  late.
+- `audio_codec.{cpp,h}`: the libopus wrapper, pinned to the two wire stream
+  formats. Not header-only (it needs `<opus.h>`), but still host-buildable:
+  `audio_codec_test` links the same pinned libopus the app does.
 - `satellite_jni.cpp`: the Android-only glue. Owns sockets, libsodium,
-  the session map, the rumble + Bluetooth callbacks, and the JNI
-  registration. This file does **not** ship pure helpers: anything
-  testable belongs in one of the headers above.
+  the session map, the rumble + Bluetooth callbacks, the speaker-audio
+  dispatch thread, and the JNI registration. This file does **not** ship
+  pure helpers: anything testable belongs in one of the files above.
 
 The split is the reason `gamepad_input.h` mirrors Android keycodes
 as integer constants instead of including `<android/keycodes.h>`:

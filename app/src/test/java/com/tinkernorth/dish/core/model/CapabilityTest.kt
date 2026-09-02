@@ -225,6 +225,199 @@ class CapabilityTest {
         )
     }
 
+    // ── controller audio: the one runtime-switched host fact ────────────────
+
+    private fun hostWith(
+        mic: Boolean,
+        speaker: Boolean = mic,
+    ): HostFeatureSet =
+        HostFeatureSet(
+            hasCatalog = true,
+            mouseControl = true,
+            keyboardControl = false,
+            rumbleReturn = true,
+            controllerMic = mic,
+            controllerSpeaker = speaker,
+        )
+
+    private fun backend(
+        id: String,
+        available: Boolean,
+        audio: Boolean,
+    ): ServerBackendDto = ServerBackendDto(id = id, supported = true, available = available, audio = audio)
+
+    private fun audioBlock(
+        enabled: Boolean = true,
+        mic: Boolean = true,
+        speaker: Boolean = true,
+    ): ServerControllerAudioDto = ServerControllerAudioDto(enabled = enabled, mic = mic, speaker = speaker)
+
+    @Test
+    fun `the audio pair rides the host layer only while the host carries audio`() {
+        val on = hostWith(mic = true).toCapabilitySet()
+        assertTrue(Feature.MIC in on)
+        assertTrue(Feature.SPEAKER in on)
+
+        val off = hostWith(mic = false).toCapabilitySet()
+        assertFalse(Feature.MIC in off)
+        assertFalse(Feature.SPEAKER in off)
+        // The rest of the host layer is untouched by the audio switch.
+        assertTrue(Feature.GAMEPAD in off)
+        assertTrue(Feature.RUMBLE in off)
+        assertTrue(Feature.LIGHTBAR in off)
+    }
+
+    @Test
+    fun `each audio direction reaches its own feature and only its own`() {
+        // The host gates the two wires separately, so one verdict cannot stand in for both:
+        // a speaker-only host that offered a microphone would spend a permission prompt on
+        // frames the host drops.
+        val micOnly = hostWith(mic = true, speaker = false).toCapabilitySet()
+        assertTrue(Feature.MIC in micOnly)
+        assertFalse(Feature.SPEAKER in micOnly)
+
+        val speakerOnly = hostWith(mic = false, speaker = true).toCapabilitySet()
+        assertFalse(Feature.MIC in speakerOnly)
+        assertTrue(Feature.SPEAKER in speakerOnly)
+    }
+
+    @Test
+    fun `SATELLITE_DEFAULT keeps audio off, unlike the optimistic mouse and rumble`() {
+        // Opt-IN: an unprobed satellite may well predate controller audio, and offering a
+        // microphone that cannot land would cost a permission prompt for nothing.
+        assertFalse(HostFeatureSet.SATELLITE_DEFAULT.controllerMic)
+        assertFalse(HostFeatureSet.SATELLITE_DEFAULT.controllerSpeaker)
+        assertFalse(Feature.MIC in HostFeatureSet.SATELLITE_DEFAULT.toCapabilitySet())
+        assertFalse(Feature.SPEAKER in HostFeatureSet.SATELLITE_DEFAULT.toCapabilitySet())
+    }
+
+    @Test
+    fun `the controllerAudio block reports each direction on its own`() {
+        val caps =
+            ServerCapabilitiesDto(
+                controllerAudio = audioBlock(mic = true, speaker = false),
+                host = ServerHostDto(catalog = ServerHostFeatureDto(supported = true)),
+            )
+        val features = HostFeatureSet.fromServerCapabilities(caps)
+        assertTrue(features.controllerMic)
+        assertFalse(features.controllerSpeaker)
+        assertTrue(Feature.MIC in features.toCapabilitySet())
+        assertFalse(Feature.SPEAKER in features.toCapabilitySet())
+
+        val mirrored =
+            HostFeatureSet.fromServerCapabilities(
+                ServerCapabilitiesDto(controllerAudio = audioBlock(mic = false, speaker = true)),
+            )
+        assertFalse(mirrored.controllerMic)
+        assertTrue(mirrored.controllerSpeaker)
+    }
+
+    @Test
+    fun `a disabled controllerAudio block forces both directions off`() {
+        // The host folds `enabled` into both switches already; this is the client refusing to
+        // hand out an endpoint on a stale switch should a host ever stop folding it.
+        val features =
+            HostFeatureSet.fromServerCapabilities(
+                ServerCapabilitiesDto(controllerAudio = audioBlock(enabled = false, mic = true, speaker = true)),
+            )
+        assertFalse(features.controllerMic)
+        assertFalse(features.controllerSpeaker)
+    }
+
+    @Test
+    fun `the controllerAudio block wins over the per-backend flag`() {
+        // The backend still reports audio (it is the one that carries it), but the host has
+        // switched one direction of the WIRE off, and the wire is what the client obeys.
+        val caps =
+            ServerCapabilitiesDto(
+                backends = listOf(backend("hidmaestro", available = true, audio = true)),
+                controllerAudio = audioBlock(mic = false, speaker = true),
+            )
+        val features = HostFeatureSet.fromServerCapabilities(caps)
+        assertFalse(features.controllerMic)
+        assertTrue(features.controllerSpeaker)
+    }
+
+    @Test
+    fun `an absent block falls back to the per-backend flag for both directions`() {
+        // A satellite that carries audio but predates the block: reading the missing block as
+        // two falses would mute it outright, so the older per-backend verdict answers for both.
+        val caps =
+            ServerCapabilitiesDto(
+                backends =
+                    listOf(
+                        backend("vigem", available = true, audio = false),
+                        backend("hidmaestro", available = true, audio = true),
+                    ),
+                host = ServerHostDto(catalog = ServerHostFeatureDto(supported = true)),
+            )
+        val features = HostFeatureSet.fromServerCapabilities(caps)
+        assertTrue(features.controllerMic)
+        assertTrue(features.controllerSpeaker)
+        assertTrue(Feature.MIC in features.toCapabilitySet())
+        assertTrue(Feature.SPEAKER in features.toCapabilitySet())
+    }
+
+    @Test
+    fun `fromServerCapabilities honors a host that switched controller audio off`() {
+        // The setting is folded into `audio` server-side, so every backend reports false.
+        val caps =
+            ServerCapabilitiesDto(
+                backends =
+                    listOf(
+                        backend("vigem", available = true, audio = false),
+                        backend("hidmaestro", available = true, audio = false),
+                    ),
+            )
+        val features = HostFeatureSet.fromServerCapabilities(caps)
+        assertFalse(features.controllerMic)
+        assertFalse(features.controllerSpeaker)
+    }
+
+    @Test
+    fun `fromServerCapabilities ignores an audio backend that is not available`() {
+        // A backend that cannot open its bus materializes nothing, audio included.
+        val caps =
+            ServerCapabilitiesDto(
+                backends = listOf(backend("hidmaestro", available = false, audio = true)),
+            )
+        val features = HostFeatureSet.fromServerCapabilities(caps)
+        assertFalse(features.controllerMic)
+        assertFalse(features.controllerSpeaker)
+    }
+
+    @Test
+    fun `an older satellite sends no backends array, which reads as no audio`() {
+        val features = HostFeatureSet.fromServerCapabilities(ServerCapabilitiesDto())
+        assertFalse(features.controllerMic)
+        assertFalse(features.controllerSpeaker)
+    }
+
+    @Test
+    fun `fromCatalog never claims audio, because the catalog cannot carry it`() {
+        // The catalog is cached on server version + locale, so an install-time switch
+        // must not move it; the store carries the probe's verdict across this write.
+        assertFalse(HostFeatureSet.fromCatalog(CatalogDto()).controllerMic)
+        assertFalse(HostFeatureSet.fromCatalog(CatalogDto()).controllerSpeaker)
+        assertFalse(
+            Feature.MIC in
+                HostFeatureSet
+                    .fromCatalog(
+                        CatalogDto(hostFeatures = mapOf("mouseControl" to CatalogHostFeatureDto(supported = true))),
+                    ).toCapabilitySet(),
+        )
+    }
+
+    @Test
+    fun `the audio features carry the protocol's own slugs and directions`() {
+        // The slugs are protocol constants; the catalog is matched on them by name.
+        assertEquals("mic", Feature.MIC.catalogSlug)
+        assertEquals("speaker", Feature.SPEAKER.catalogSlug)
+        // The phone SOURCES the microphone and RECEIVES the pad's speaker audio.
+        assertEquals(Direction.SEND, Feature.MIC.direction)
+        assertEquals(Direction.RECEIVE, Feature.SPEAKER.direction)
+    }
+
     @Test
     fun `extended mouse needs both the version and mouse control itself`() {
         val versionWithoutMouse =

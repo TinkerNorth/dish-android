@@ -57,6 +57,20 @@ class LegacyCatalogTranslatorTest {
     }
 
     @Test
+    fun `the v1 DS4 carries no audio endpoints, whatever the bundled type says`() {
+        // v1 is a fixed historical shape: a satellite still serving it predates controller
+        // audio, so the bundled type's mic/speaker must not leak backwards into it.
+        val out = translator.normalize(CatalogDto())
+        val ds4 = out.controllerTypes[1]
+        assertFalse(ds4.features.containsKey("mic"))
+        assertFalse(ds4.features.containsKey("speaker"))
+
+        val ds4Caps = CapabilityResolver.typeCapabilities(ds4)
+        assertFalse(Feature.MIC in ds4Caps)
+        assertFalse(Feature.SPEAKER in ds4Caps)
+    }
+
+    @Test
     fun `a legacy body's own controllerTypes are discarded, not echoed`() {
         val junk =
             CatalogDto(

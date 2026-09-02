@@ -78,6 +78,17 @@ object SatelliteNative {
         scrollDelta: Short,
     )
 
+    // One 20 ms mono window (exactly 960 samples at 48 kHz, signed 16-bit) from the
+    // capture thread: native encodes it to Opus and sends MSG_MIC_AUDIO. False means
+    // nothing left the device (no session, wrong window size, or no encoder), which
+    // is the only answer the caller can act on: the stream itself is lossy by
+    // contract, so a sent frame carries no delivery promise either.
+    external fun sendMicFrame(
+        handle: Int,
+        controllerIndex: Int,
+        pcmMono: ShortArray,
+    ): Boolean
+
     external fun startHeartbeat(handle: Int)
 
     external fun stopHeartbeat(handle: Int)
@@ -211,6 +222,14 @@ object SatelliteNative {
     external fun sendUsbTriggerEffects(
         syntheticDeviceId: Int,
         blocks: ByteArray,
+    )
+
+    // MSG_MIC_LED's own state: 0 off, 1 on, 2 pulse. The DualSense is the only family with the
+    // lamp, so native drops the write for everything else; the same report also mutes the pad's
+    // microphone amplifier, because the lamp and the amp are one thing on that pad.
+    external fun sendUsbMicMuteLed(
+        syntheticDeviceId: Int,
+        state: Int,
     )
 
     external fun isKnownFastLaneModel(

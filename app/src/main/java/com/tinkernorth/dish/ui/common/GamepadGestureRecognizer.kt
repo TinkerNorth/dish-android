@@ -250,6 +250,18 @@ internal class GamepadGestureRecognizer {
             refreshAbxyButtons()
             return
         }
+        // Momentary like the pad's own mute button: the press is an edge, and what it toggles is
+        // the mute state the overlay owns. Checked before the three centre circles, not just
+        // before the trackpad: the pill hangs directly below the home button, and on a short
+        // screen the layout clamps it up into the home pickup halo. The halo is a forgiveness
+        // zone around an invisible boundary; the pill is a drawn rect, so a finger inside it
+        // means the pill, always.
+        l.micMuteRect?.let { mute ->
+            if (mute.contains(x, y)) {
+                state.buttons = state.buttons or GamepadTouchView.BTN_MIC_MUTE
+                return
+            }
+        }
         if (hypot(x - l.selectCx, y - l.centerBtnCy) < l.smallBtnRadius * centerPickup) {
             state.buttons = state.buttons or GamepadTouchView.BTN_SELECT
             return
@@ -515,7 +527,7 @@ internal class GamepadGestureRecognizer {
             (
                 GamepadTouchView.BTN_SELECT or GamepadTouchView.BTN_START or
                     GamepadTouchView.BTN_HOME or GamepadTouchView.BTN_LS or
-                    GamepadTouchView.BTN_RS
+                    GamepadTouchView.BTN_RS or GamepadTouchView.BTN_MIC_MUTE
             ).inv()
     }
 

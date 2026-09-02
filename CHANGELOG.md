@@ -11,6 +11,54 @@ computer. Those lines say "update Satellite too".
 
 ### Added
 
+- Your controller has a microphone now. A DualShock 4 v2 or DualSense
+  plugged into a PC has its own microphone and its own speaker, and games
+  and voice chat use them. Dish can give the emulated pad the same thing:
+  switch Microphone on for a controller and the phone's microphone becomes
+  the pad's microphone, so party chat on the PC hears you through the
+  controller (update Satellite too, and turn Controller audio on there).
+- It is off until you turn it on, per controller. Turning it on is what
+  asks for microphone permission, and the switch only appears where the
+  whole path can carry one: an emulated DualSense or DualShock 4 v2, on a
+  Satellite with controller audio enabled. Bluetooth and Moonlight hosts do
+  not offer it, because those protocols have no microphone channel.
+- Mute means muted. The on-screen DualSense now has the mute button the
+  real one has, under the PS button, and the mute button on a
+  USB-connected DualSense works too; both toggle the same thing. While
+  muted, Dish stops capturing rather than sending silence, so nothing
+  leaves your phone at all, and the PC sees the pad's mute button held down
+  the way it would on the real controller.
+- You can always see, and silence, the microphone. While any controller has
+  a live microphone, a small chip floats on every screen of the app: red
+  means the mic is hot, grey and slashed means it is muted, and one tap
+  mutes or unmutes everything at once. The streaming notification shows the
+  same state with a Mute mic / Unmute mic button, so it works even from the
+  notification shade with the app in the background.
+- The on-screen mute button tells the truth. Its face (the slashed glyph
+  and the amber wash) always shows what your mute actually is, and the ring
+  around it shows what the game on the PC thinks; PC software that toggles
+  its own mute can no longer make the button look stuck or lie about
+  whether you are muted. Presses near the bottom edge of the screen also
+  land on the mute button now instead of the PS button beneath it.
+- Audio never touches storage and never leaves your network: it goes only
+  to the PC you paired with, over the same encrypted connection as your
+  controller input, one 20 ms slice at a time, and is discarded as soon as
+  it is sent. It is never sent to us, and never included in crash reports.
+- And the controller has a speaker now. Whatever a game or a chat app plays
+  through the pad's own speaker on the PC comes out of your phone, in stereo,
+  the moment it is played. Controller sound is on by default per controller;
+  turning it off stops the PC sending it at all, rather than just muting it
+  here.
+- A DualShock 4 v2 or DualSense plugged in by USB (Direct mode) uses its own
+  microphone and its own speaker or headset instead of the phone's, when
+  Android hands us its audio. The Microphone and Controller sound rows appear
+  for a plugged pad only while that is true: if the phone does not pick up the
+  pad's audio, Dish says so instead of promising sound it cannot deliver, and
+  the rows appear and disappear with the cable.
+- The mute light works on a plugged-in DualSense too. A game that lights, or
+  breathes, the pad's mute lamp now lights the real one, and the pad's own
+  microphone is switched off behind it rather than left listening. The
+  on-screen DualSense shows the same thing on its mute button.
 - Controller lights follow the game. On a USB-connected (Direct mode)
   DualShock 4 or DualSense, the light bar now shows the color the game picks;
   a DualSense's player lights and a Switch Pro's player LEDs light up too.
@@ -31,8 +79,8 @@ computer. Those lines say "update Satellite too".
   A divider line shows where the full zone starts. Pads emulating a type
   without analog triggers (Switch Pro) keep the plain press.
 - Moonlight hosts now receive controller motion (when the game asks for it),
-  the DualShock/DualSense touchpad — from the pad itself in Direct mode or
-  from the phone screen — and battery levels, the same telemetry the
+  the DualShock/DualSense touchpad (from the pad itself in Direct mode, or
+  from the phone screen) and battery levels, the same telemetry the
   Satellite path already carried.
 
 ## [1.1.4] - 2026-08-24

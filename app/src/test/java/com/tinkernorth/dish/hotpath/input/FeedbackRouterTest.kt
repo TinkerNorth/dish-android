@@ -6,6 +6,9 @@ import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.store.MIC_LED_OFF
+import com.tinkernorth.dish.source.store.MIC_LED_ON
+import com.tinkernorth.dish.source.store.MIC_LED_PULSE
 import com.tinkernorth.dish.source.store.VirtualPadFeedbackStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import io.mockk.every
@@ -93,6 +96,49 @@ class FeedbackRouterTest {
         assertFalse(store.state.value.leftTriggerEffect)
         assertFalse(store.state.value.rightTriggerEffect)
         verify(exactly = 0) { native.sendUsbTriggerEffects(any(), any()) }
+    }
+
+    @Test
+    fun `the mic-mute lamp paints the virtual pad's lamp and only the lamp`() {
+        val r = router(managerWith(handle = 7, slotId = VIRTUAL_SLOT_ID))
+        r.dispatchMicLed(sessionHandle = 7, controllerIndex = 0, state = MIC_LED_ON)
+        // The lamp is the host's alone; what the user muted lives in MicMuteStore and paints
+        // the pill's face directly, so nothing a host sends can reach it through here.
+        assertEquals(MIC_LED_ON, store.state.value.micLedState)
+
+        r.dispatchMicLed(sessionHandle = 7, controllerIndex = 0, state = MIC_LED_PULSE)
+        assertEquals(MIC_LED_PULSE, store.state.value.micLedState)
+    }
+
+    @Test
+    fun `a Direct-claimed pad's lamp reaches its own output report`() {
+        val r = router(managerWith(handle = 7, slotId = "-1000"))
+        for (state in listOf(MIC_LED_OFF, MIC_LED_ON, MIC_LED_PULSE)) {
+            r.dispatchMicLed(sessionHandle = 7, controllerIndex = 0, state = state)
+            verify(exactly = 1) { native.sendUsbMicMuteLed(-1000, state) }
+        }
+        // And never onto the phone's skin: that pad is not the phone.
+        assertEquals(MIC_LED_OFF, store.state.value.micLedState)
+    }
+
+    @Test
+    fun `the lamp routes per target exactly like the lightbar`() {
+        // Direct pads write, the phone paints, framework pads drop. The three arms are the same
+        // three the lightbar resolves to, which is the point: one resolve, one target set.
+        router(managerWith(handle = 7, slotId = "-1000")).dispatchMicLed(7, 0, MIC_LED_ON)
+        verify(exactly = 1) { native.sendUsbMicMuteLed(-1000, MIC_LED_ON) }
+
+        router(managerWith(handle = 7, slotId = VIRTUAL_SLOT_ID)).dispatchMicLed(7, 0, MIC_LED_PULSE)
+        assertEquals(MIC_LED_PULSE, store.state.value.micLedState)
+
+        router(managerWith(handle = 7, slotId = "9")).dispatchMicLed(7, 0, MIC_LED_OFF)
+        verify(exactly = 0) { native.sendUsbMicMuteLed(9, any()) }
+
+        // An unknown session or controller index resolves to nothing at all.
+        val r = router(managerWith(handle = 7, slotId = "-1000"))
+        r.dispatchMicLed(sessionHandle = 8, controllerIndex = 0, state = MIC_LED_ON)
+        r.dispatchMicLed(sessionHandle = 7, controllerIndex = 3, state = MIC_LED_ON)
+        verify(exactly = 1) { native.sendUsbMicMuteLed(any(), any()) }
     }
 
     @Test

@@ -70,7 +70,7 @@ class SatelliteConnectionTest {
     private val touchpadModes = mutableMapOf<String, String>()
 
     private fun newConnection(
-        motionCapsBitsFor: (String) -> Int = { ControllerDescriptor.CAP_MOTION },
+        wireCapsFor: (String) -> Int = { SatelliteConnection.DEFAULT_WIRE_CAPABILITIES },
         store: SatelliteMotionBackendStatusStore? = null,
     ): SatelliteConnection =
         SatelliteConnection(
@@ -78,7 +78,7 @@ class SatelliteConnectionTest {
             server = server,
             scope = scope,
             controllerRepo = repo,
-            motionCapsBitsFor = motionCapsBitsFor,
+            wireCapsFor = wireCapsFor,
             touchpadModeFor = { touchpadModes[it] ?: ControllerDescriptor.TOUCHPAD_MODE_OFF },
             motionBackendStatusStore = store,
             onSlotChanged = { slotSyncs += it },
@@ -213,7 +213,11 @@ class SatelliteConnectionTest {
     @Test
     fun `desiredDescriptors carries caps from the per-slot capability lambda`() {
         val perSlot =
-            newConnection(motionCapsBitsFor = { slot -> if (slot == "slot-A") ControllerDescriptor.CAP_MOTION else 0 })
+            newConnection(
+                wireCapsFor = { slot ->
+                    if (slot == "slot-A") BASE_CAPS or ControllerDescriptor.CAP_MOTION else BASE_CAPS
+                },
+            )
         perSlot.attachSlot("slot-A", controllerType = 1)
         perSlot.attachSlot("slot-B", controllerType = 0)
 
@@ -222,8 +226,105 @@ class SatelliteConnectionTest {
         assertTrue((descriptors[1]!!.caps and ControllerDescriptor.CAP_MOTION) == 0)
         assertTrue((descriptors[1]!!.caps and ControllerDescriptor.CAP_RUMBLE) != 0)
         assertTrue((descriptors[1]!!.caps and ControllerDescriptor.CAP_ANALOG_TRIGGERS) != 0)
-        // Lightbar never advertised (no controller-LED API on Android).
-        assertTrue((descriptors[0]!!.caps and ControllerDescriptor.CAP_LIGHTBAR) == 0)
+    }
+
+    // The composer is the ONLY source of a descriptor's caps word: before this,
+    // SatelliteConnection built one out of a hardcoded base plus the motion bit, so
+    // CAP_LIGHTBAR / CAP_TRIGGER_EFFECTS / CAP_PLAYER_LEDS (and now MIC / SPEAKER)
+    // were computed by CapabilityResolver, watched for change by the manager, and
+    // then dropped on the floor before the wire. Nothing here may reconstruct any
+    // part of the word locally.
+    @Test
+    fun `descriptorFor advertises every feedback and audio cap the composer resolves`() {
+        val full =
+            BASE_CAPS or ControllerDescriptor.CAP_MOTION or ControllerDescriptor.CAP_LIGHTBAR or
+                ControllerDescriptor.CAP_TRIGGER_EFFECTS or ControllerDescriptor.CAP_PLAYER_LEDS or
+                ControllerDescriptor.CAP_MIC or ControllerDescriptor.CAP_SPEAKER
+        val conn = newConnection(wireCapsFor = { full })
+        conn.attachSlot("slot-ds5", controllerType = 2)
+
+        assertEquals(full, conn.descriptorFor("slot-ds5")?.caps)
+    }
+
+    @Test
+    fun `descriptorFor degrades to exactly what the composer says, cap by cap`() {
+        // Each cap dropped on its own: a descriptor that ORed in a local default
+        // would keep advertising the one the composer just switched off.
+        val everyCap =
+            listOf(
+                ControllerDescriptor.CAP_MOTION,
+                ControllerDescriptor.CAP_LIGHTBAR,
+                ControllerDescriptor.CAP_TRIGGER_EFFECTS,
+                ControllerDescriptor.CAP_PLAYER_LEDS,
+                ControllerDescriptor.CAP_MIC,
+                ControllerDescriptor.CAP_SPEAKER,
+            )
+        val full = everyCap.fold(BASE_CAPS) { acc, cap -> acc or cap }
+        for (dropped in everyCap) {
+            val conn = newConnection(wireCapsFor = { full and dropped.inv() })
+            conn.attachSlot("slot-1", controllerType = 2)
+            assertEquals(full and dropped.inv(), conn.descriptorFor("slot-1")?.caps)
+        }
+    }
+
+    @Test
+    fun `descriptorFor carries the bare base when the composer resolves nothing else`() {
+        val conn = newConnection(wireCapsFor = { BASE_CAPS })
+        conn.attachSlot("slot-1", controllerType = 0)
+
+        val caps = conn.descriptorFor("slot-1")?.caps
+        assertEquals(BASE_CAPS, caps)
+        assertEquals(0, caps!! and ControllerDescriptor.CAP_MIC)
+        assertEquals(0, caps and ControllerDescriptor.CAP_SPEAKER)
+    }
+
+    @Test
+    fun `the caps word reaches the descriptor JSON, not just the data class`() {
+        // The JSON is what the satellite parses, and it names each cap separately:
+        // a bit that stops at the data class would still never reach the host.
+        val conn =
+            newConnection(
+                wireCapsFor = { BASE_CAPS or ControllerDescriptor.CAP_MIC or ControllerDescriptor.CAP_SPEAKER },
+            )
+        conn.attachSlot("slot-1", controllerType = 2)
+
+        val json = conn.descriptorFor("slot-1")!!.toJson()
+        assertTrue(json.contains("\"mic\":true"))
+        assertTrue(json.contains("\"speaker\":true"))
+        assertTrue(json.contains("\"playerLeds\":false"))
+    }
+
+    @Test
+    fun `applyResults stamps the composer's caps so a later refresh sees no change`() {
+        // lastAdvertisedCaps must be the SAME projection descriptorFor sends, or
+        // refreshCapsIfChanged compares two different words and re-PUTs forever.
+        every { repo.isConnectionAlive(any()) } returns true
+        val full = BASE_CAPS or ControllerDescriptor.CAP_LIGHTBAR or ControllerDescriptor.CAP_MIC
+        val conn = newConnection(wireCapsFor = { full })
+        conn.attachSlot("slot-1", controllerType = 2)
+        connectLive(target = conn, applied = listOf(okApply(0, appliedType = 2)))
+
+        assertEquals(full, conn.slots.value["slot-1"]?.lastAdvertisedCaps)
+        slotSyncs.clear()
+        conn.refreshCapsIfChanged()
+        assertTrue(slotSyncs.isEmpty())
+        conn.markDisconnected()
+    }
+
+    @Test
+    fun `refreshCapsIfChanged reacts to an audio cap moving, not just motion`() {
+        every { repo.isConnectionAlive(any()) } returns true
+        var caps = BASE_CAPS or ControllerDescriptor.CAP_SPEAKER
+        val conn = newConnection(wireCapsFor = { caps })
+        conn.attachSlot("slot-1", controllerType = 2)
+        connectLive(target = conn, applied = listOf(okApply(0, appliedType = 2)))
+        slotSyncs.clear()
+
+        caps = BASE_CAPS // the user turned controller sound off
+        conn.refreshCapsIfChanged()
+
+        assertEquals(listOf("slot-1"), slotSyncs)
+        conn.markDisconnected()
     }
 
     @Test
@@ -400,6 +501,71 @@ class SatelliteConnectionTest {
         verify(exactly = 0) { repo.sendReport(any(), eq(99), any(), any(), any(), any(), any(), any(), any()) }
     }
 
+    // ── mic frames ─────────────────────────────────────────────────────────
+    //
+    // The last gate in front of the wire. Everything above it (toggle, permission, mute, capture)
+    // is decided in the capture engine; what is asserted here is that the connection itself never
+    // lets a frame past for a slot that has no live pad behind it.
+
+    @Test
+    fun `mic frames stay gated until the descriptor is applied`() {
+        every { repo.isConnectionAlive(any()) } returns true
+        every { repo.sendMicFrame(any(), any(), any()) } returns true
+        conn.attachSlot("slot-1", controllerType = 2)
+        connectLive(applied = emptyList())
+
+        val window = ShortArray(MIC_FRAME_SAMPLES)
+        assertFalse("an unapplied descriptor is a pad the host does not know", conn.sendMicFrame("slot-1", window))
+        verify(exactly = 0) { repo.sendMicFrame(any(), any(), any()) }
+
+        conn.applyResults(listOf(okApply(0)))
+        assertTrue(conn.sendMicFrame("slot-1", window))
+        verify(exactly = 1) { repo.sendMicFrame(7, 0, window) }
+    }
+
+    @Test
+    fun `mic frames route to the slot's own controller index`() {
+        every { repo.isConnectionAlive(any()) } returns true
+        every { repo.sendMicFrame(any(), any(), any()) } returns true
+        conn.attachSlot("slot-A", controllerType = 2)
+        conn.attachSlot("slot-B", controllerType = 2)
+        connectLive(handle = 11, applied = listOf(okApply(0), okApply(1)))
+
+        val window = ShortArray(MIC_FRAME_SAMPLES)
+        assertTrue(conn.sendMicFrame("slot-B", window))
+        verify(exactly = 1) { repo.sendMicFrame(11, 1, window) }
+    }
+
+    @Test
+    fun `a mic frame for an unknown slot or a dead session never reaches the wire`() {
+        every { repo.isConnectionAlive(any()) } returns true
+        every { repo.sendMicFrame(any(), any(), any()) } returns true
+        conn.attachSlot("slot-1", controllerType = 2)
+
+        val window = ShortArray(MIC_FRAME_SAMPLES)
+        // Idle session: no handle to send on.
+        assertFalse(conn.sendMicFrame("slot-1", window))
+
+        connectLive(applied = listOf(okApply(0)))
+        assertFalse("a slot this connection never had", conn.sendMicFrame("ghost", window))
+
+        conn.markDisconnected()
+        assertFalse("a disconnected session sends nothing", conn.sendMicFrame("slot-1", window))
+        verify(exactly = 0) { repo.sendMicFrame(any(), any(), any()) }
+    }
+
+    @Test
+    fun `a refusal below the JNI surface is reported, not swallowed`() {
+        // False means nothing left the device (wrong window size, no encoder); the caller's own
+        // privacy accounting depends on that being the truth rather than a delivery promise.
+        every { repo.isConnectionAlive(any()) } returns true
+        every { repo.sendMicFrame(any(), any(), any()) } returns false
+        conn.attachSlot("slot-1", controllerType = 2)
+        connectLive(applied = listOf(okApply(0)))
+
+        assertFalse(conn.sendMicFrame("slot-1", ShortArray(MIC_FRAME_SAMPLES - 1)))
+    }
+
     @Test
     fun `attaching a second slot allocates a fresh controller index`() {
         conn.attachSlot("slot-A", controllerType = 0)
@@ -461,7 +627,7 @@ class SatelliteConnectionTest {
     fun `refreshCapsIfChanged requests a sync when the capability lambda moved`() {
         every { repo.isConnectionAlive(any()) } returns true
         var capsBit = ControllerDescriptor.CAP_MOTION
-        val reactive = newConnection(motionCapsBitsFor = { capsBit })
+        val reactive = newConnection(wireCapsFor = { capsBit })
         reactive.attachSlot("slot-1", controllerType = 1)
         connectLive(target = reactive, applied = listOf(okApply(0, appliedType = 1)))
         slotSyncs.clear()
@@ -479,7 +645,7 @@ class SatelliteConnectionTest {
         // A non-off mode proves applyResults stamped lastAdvertisedTouchpadMode: without the
         // stamp every refresh would see off != ds4 and re-sync forever.
         touchpadModes["slot-1"] = "ds4"
-        val steady = newConnection(motionCapsBitsFor = { ControllerDescriptor.CAP_MOTION })
+        val steady = newConnection(wireCapsFor = { SatelliteConnection.DEFAULT_WIRE_CAPABILITIES })
         steady.attachSlot("slot-1", controllerType = 1)
         connectLive(target = steady, applied = listOf(okApply(0, appliedType = 1)))
         slotSyncs.clear()
@@ -494,7 +660,7 @@ class SatelliteConnectionTest {
     @Test
     fun `refreshCapsIfChanged skips unapplied slots and idle sessions`() {
         var capsBit = ControllerDescriptor.CAP_MOTION
-        val pending = newConnection(motionCapsBitsFor = { capsBit })
+        val pending = newConnection(wireCapsFor = { capsBit })
         pending.attachSlot("slot-pending", controllerType = 0)
 
         capsBit = 0
@@ -853,5 +1019,15 @@ class SatelliteConnectionTest {
 
         assertEquals(fwIndex, conn.slots.value["slot-usb"]?.controllerIndex)
         assertEquals(2, conn.slots.value.size)
+    }
+
+    private companion object {
+        // What CapabilityResolver.wireCaps gives every pad; the tests build caps
+        // words on top of it the way the composer does.
+        const val BASE_CAPS =
+            ControllerDescriptor.CAP_ANALOG_TRIGGERS or ControllerDescriptor.CAP_RUMBLE
+
+        // 20 ms of mono at 48 kHz, the only window MSG_MIC_AUDIO carries.
+        const val MIC_FRAME_SAMPLES = 960
     }
 }

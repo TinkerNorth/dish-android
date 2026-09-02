@@ -22,7 +22,8 @@ class ControllerDescriptorTest {
             )
         assertEquals(
             """{"ctrlIdx":2,"type":1,"caps":{"rumble":true,"motion":true,"analogTriggers":true,""" +
-                """"lightbar":false,"triggerEffects":false,"playerLeds":false},"touchpadMode":"ds4"}""",
+                """"lightbar":false,"triggerEffects":false,"playerLeds":false,"mic":false,"speaker":false},""" +
+                """"touchpadMode":"ds4"}""",
             d.toJson(),
         )
     }
@@ -66,5 +67,57 @@ class ControllerDescriptorTest {
         assertEquals(0x0002, ControllerDescriptor.CAP_RUMBLE)
         assertEquals(0x0004, ControllerDescriptor.CAP_MOTION)
         assertEquals(0x0008, ControllerDescriptor.CAP_LIGHTBAR)
+        assertEquals(0x0010, ControllerDescriptor.CAP_TRIGGER_EFFECTS)
+        assertEquals(0x0020, ControllerDescriptor.CAP_PLAYER_LEDS)
+        assertEquals(0x0040, ControllerDescriptor.CAP_MIC)
+        assertEquals(0x0080, ControllerDescriptor.CAP_SPEAKER)
+    }
+
+    @Test
+    fun `every cap bit is distinct and none overlap`() {
+        val bits =
+            listOf(
+                ControllerDescriptor.CAP_ANALOG_TRIGGERS,
+                ControllerDescriptor.CAP_RUMBLE,
+                ControllerDescriptor.CAP_MOTION,
+                ControllerDescriptor.CAP_LIGHTBAR,
+                ControllerDescriptor.CAP_TRIGGER_EFFECTS,
+                ControllerDescriptor.CAP_PLAYER_LEDS,
+                ControllerDescriptor.CAP_MIC,
+                ControllerDescriptor.CAP_SPEAKER,
+            )
+        assertEquals(bits.size, bits.toSet().size)
+        val union: Int = bits.fold(0) { acc, bit -> acc or bit }
+        assertEquals(0x00FF, union)
+    }
+
+    @Test
+    fun `the audio caps ride the descriptor as named booleans`() {
+        val d =
+            ControllerDescriptor(
+                ctrlIdx = 0,
+                type = 2,
+                caps = ControllerDescriptor.CAP_MIC or ControllerDescriptor.CAP_SPEAKER,
+                touchpadMode = "off",
+            )
+        assertEquals(
+            """{"ctrlIdx":0,"type":2,"caps":{"rumble":false,"motion":false,"analogTriggers":false,""" +
+                """"lightbar":false,"triggerEffects":false,"playerLeds":false,"mic":true,"speaker":true},""" +
+                """"touchpadMode":"off"}""",
+            d.toJson(),
+        )
+    }
+
+    @Test
+    fun `mic and speaker are independent directions on the wire`() {
+        // A client can play the pad's audio without sourcing its microphone, and the
+        // reverse; neither bit may drag the other along.
+        val micOnly = ControllerDescriptor(0, 2, ControllerDescriptor.CAP_MIC, "off").toJson()
+        assertTrue(micOnly.contains("\"mic\":true"))
+        assertTrue(micOnly.contains("\"speaker\":false"))
+
+        val speakerOnly = ControllerDescriptor(0, 2, ControllerDescriptor.CAP_SPEAKER, "off").toJson()
+        assertTrue(speakerOnly.contains("\"mic\":false"))
+        assertTrue(speakerOnly.contains("\"speaker\":true"))
     }
 }

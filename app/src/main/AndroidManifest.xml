@@ -12,9 +12,17 @@
 
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- CONNECTED_DEVICE (not DATA_SYNC) fits a user-facing controller-to-host session. -->
+    <!-- CONNECTED_DEVICE (not DATA_SYNC) fits a user-facing controller-to-host session.
+         MICROPHONE rides alongside it only for controller audio: the emulated pad's own
+         microphone endpoint, sourced from the phone while a mic-enabled binding streams. The
+         type bit is passed at startForeground only in that state, never by default. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+
+    <!-- Opt-in and off by default: asked for only when a slot's Microphone toggle goes on, and
+         only where the bound host can materialize a pad that carries a microphone endpoint. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
@@ -33,6 +41,8 @@
     <uses-feature android:name="android.hardware.faketouch" android:required="false" />
     <uses-feature android:name="android.hardware.gamepad" android:required="false" />
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+    <!-- RECORD_AUDIO implies a required microphone; a phone without one is still a controller. -->
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <!-- network_security_config denies cleartext as a belt-and-braces signal for Play's pre-launch checks. -->
     <application
@@ -216,7 +226,7 @@
         <service
             android:name=".composer.StreamingService"
             android:exported="false"
-            android:foregroundServiceType="connectedDevice" />
+            android:foregroundServiceType="connectedDevice|microphone" />
 
         <service
             android:name=".composer.MoonlightSessionService"

@@ -210,6 +210,11 @@ data class ServerBackendDto(
     val supported: Boolean = false,
     val available: Boolean = false,
     val errorCode: String? = null,
+    // Only the `backends[]` entries carry this: whether the backend will materialize a
+    // pad with real audio endpoints right now (its own ability AND the host's
+    // controllerAudio setting). Absent on the singular `backend` object above and on
+    // satellites predating controller audio, both of which read as false.
+    val audio: Boolean = false,
 )
 
 @Serializable
@@ -233,17 +238,43 @@ data class ServerHostDto(
     val rumble: ServerHostFeatureDto = ServerHostFeatureDto(),
 )
 
+// The host's controller-audio switch as the HOST sees it, split by direction (additive;
+// absent on older satellites). `enabled` is the setting ANDed with whether any enumerated
+// backend can carry audio at all; `mic` and `speaker` are the two per-direction switches,
+// already ANDed with it server-side. They gate the WIRE and not the persona (the emulated
+// pad keeps both endpoints either way), which is why the host may flip them under a live
+// stream while `enabled` only moves at the next plug. A field missing from a PRESENT block
+// reads as false, the same opt-out the rest of this document takes: a host that stopped
+// sending `enabled` would be a host we no longer understand, and offering a microphone it
+// will not plug costs the user a permission prompt for nothing.
+@Serializable
+data class ServerControllerAudioDto(
+    val enabled: Boolean = false,
+    val mic: Boolean = false,
+    val speaker: Boolean = false,
+)
+
 @Serializable
 data class ServerCapabilitiesDto(
     val protocolVersion: Int = 1,
     val serverVersion: String = "",
     val maxControllers: Int = 16,
     val backend: ServerBackendDto = ServerBackendDto(),
+    // The host's full backend option list, most-preferred first (additive; absent on
+    // older satellites). Read for the runtime-switched `audio` flag; the singular
+    // `backend` above stays the preferred-available one every other caller uses.
+    val backends: List<ServerBackendDto> = emptyList(),
     // Absent (no motion block) is unknown, not down: callers treat null as backend-up.
     val motion: ServerMotionDto? = null,
     // Absent (older satellite that predates the host block) → catalog.supported stays
     // false, the signal callers use to know the host block is real before trusting it.
     val host: ServerHostDto = ServerHostDto(),
+    // NULLABLE like `motion` and unlike `host`, because absence here is UNKNOWN and not
+    // off: a satellite predating this block still carries audio and still reports it on
+    // the per-backend `audio` flag, so reading a missing block as two falses would mute
+    // every older host. Absent ⇒ fall back to `backends`; present ⇒ it is the truth, and
+    // the per-backend flag stays only the answer to WHICH backend carries it.
+    val controllerAudio: ServerControllerAudioDto? = null,
 )
 
 data class ControllerEntry(
