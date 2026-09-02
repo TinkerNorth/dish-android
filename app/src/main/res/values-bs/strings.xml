@@ -468,6 +468,20 @@
     <string name="binding_func_touchpad">Dodirna ploča</string>
     <string name="binding_func_mouse">Miš</string>
     <string name="binding_func_gyro">Žiro</string>
+    <string name="binding_func_mic">Mikrofon</string>
+    <string name="binding_func_speaker">Zvuk kontrolera</string>
+    <string name="binding_mic_permission_needed">Potrebna dozvola za mikrofon. Dodirnite da dozvolite.</string>
+    <string name="binding_mic_permission_title">Dozvola za mikrofon</string>
+    <string name="binding_mic_permission_rationale">Dish koristi mikrofon telefona kao mikrofon emuliranog kontrolera, pa vas glasovni chat na računaru čuje kroz kontroler. Zvuk ide samo na računar s kojim ste upareni, samo dok strimujete, i nikada se ne pohranjuje.</string>
+    <string name="binding_mic_permission_blocked">Dozvola za mikrofon je isključena za Dish. Uključite je u postavkama sistema da biste koristili mikrofon kontrolera.</string>
+    <string name="binding_mic_mute_hint">Utišajte kad god želite tipkom za utišavanje na kontroleru na ekranu ili onom na povezanom DualSense uređaju. Utišano znači da se ne šalje ništa.</string>
+
+    <string name="mic_state_live">Mikrofon uključen</string>
+    <string name="mic_state_muted">Mikrofon utišan</string>
+    <string name="mic_action_mute">Utišaj mikrofon</string>
+    <string name="mic_action_unmute">Uključi mikrofon</string>
+    <string name="mic_chip_live_desc">Mikrofon je uključen. Dodirnite da ga utišate.</string>
+    <string name="mic_chip_muted_desc">Mikrofon je utišan. Dodirnite da ga ponovo uključite.</string>
     <string name="binding_state_on">Uključeno</string>
     <string name="binding_state_off">Isključeno</string>
     <string name="binding_func_value">%1$s · %2$s</string>

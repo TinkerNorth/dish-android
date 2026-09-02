@@ -36,4 +36,22 @@ class TransportProfilesTest {
         assertTrue(Feature.RUMBLE in caps)
         assertFalse(Feature.KEYBOARD in caps)
     }
+
+    @Test
+    fun `controller audio is satellite-only`() {
+        // The satellite protocol carries the pad's own audio endpoints in both
+        // directions; the Moonlight control protocol has no such message and no
+        // microphone channel at all, and Bluetooth is a fixed HID gamepad.
+        val satellite = TransportProfiles.forKind(ConnectionKind.SATELLITE)
+        assertTrue(Feature.MIC in satellite)
+        assertTrue(Feature.SPEAKER in satellite)
+
+        val moonlight = TransportProfiles.forKind(ConnectionKind.MOONLIGHT)
+        assertFalse(Feature.MIC in moonlight)
+        assertFalse(Feature.SPEAKER in moonlight)
+
+        val bluetooth = TransportProfiles.forKind(ConnectionKind.BLUETOOTH)
+        assertFalse(Feature.MIC in bluetooth)
+        assertFalse(Feature.SPEAKER in bluetooth)
+    }
 }

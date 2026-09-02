@@ -10,6 +10,7 @@ import com.tinkernorth.dish.bench.HotPathBenchController
 import com.tinkernorth.dish.composer.CatalogPrewarmer
 import com.tinkernorth.dish.composer.CrashReportingController
 import com.tinkernorth.dish.composer.DiagnosticsLogRecorder
+import com.tinkernorth.dish.composer.HostCapabilitiesProbe
 import com.tinkernorth.dish.composer.MoonlightSessionController
 import com.tinkernorth.dish.composer.SlotTopologyController
 import com.tinkernorth.dish.composer.StreamingServiceController
@@ -18,22 +19,28 @@ import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.hotpath.input.BluetoothGamepadBridge
 import com.tinkernorth.dish.hotpath.input.FeedbackBridge
 import com.tinkernorth.dish.hotpath.input.FeedbackRouter
+import com.tinkernorth.dish.hotpath.input.MicMuteBridge
 import com.tinkernorth.dish.hotpath.input.MoonlightGamepadBridge
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.PhysicalSlotBindingObserver
 import com.tinkernorth.dish.hotpath.input.RumbleBridge
 import com.tinkernorth.dish.hotpath.input.RumbleRouter
+import com.tinkernorth.dish.source.audio.MicEngine
+import com.tinkernorth.dish.source.audio.PadAudioRouteResolver
+import com.tinkernorth.dish.source.audio.SpeakerEngine
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.inputrate.InputRateStore
 import com.tinkernorth.dish.source.sensor.PhysicalBatterySource
 import com.tinkernorth.dish.source.sensor.PhysicalMotionSource
 import com.tinkernorth.dish.source.sensor.VirtualBatterySource
 import com.tinkernorth.dish.source.store.LatencyProfilingStore
+import com.tinkernorth.dish.source.store.MicMuteStore
 import com.tinkernorth.dish.source.store.ThemePreferenceStore
 import com.tinkernorth.dish.source.system.BluetoothAdapterStateObserver
 import com.tinkernorth.dish.source.system.BluetoothBondMonitor
 import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
 import com.tinkernorth.dish.source.system.ConnectionForegroundObserver
+import com.tinkernorth.dish.source.system.MicPermissionGate
 import com.tinkernorth.dish.source.system.NetworkStateObserver
 import com.tinkernorth.dish.source.usb.PollRateSampler
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
@@ -63,9 +70,21 @@ class DishApplication : Application() {
 
     @Inject lateinit var catalogPrewarmer: CatalogPrewarmer
 
+    @Inject lateinit var hostCapabilitiesProbe: HostCapabilitiesProbe
+
     @Inject lateinit var bluetoothAdapterStateObserver: BluetoothAdapterStateObserver
 
     @Inject lateinit var bluetoothPermissionStateObserver: BluetoothPermissionStateObserver
+
+    @Inject lateinit var micPermissionGate: MicPermissionGate
+
+    @Inject lateinit var micMuteStore: MicMuteStore
+
+    @Inject lateinit var micEngine: MicEngine
+
+    @Inject lateinit var speakerEngine: SpeakerEngine
+
+    @Inject lateinit var padAudioRouteResolver: PadAudioRouteResolver
 
     @Inject lateinit var networkStateObserver: NetworkStateObserver
 
@@ -110,6 +129,10 @@ class DishApplication : Application() {
         ProcessLifecycleOwner.get().lifecycle.addObserver(crashReportingController)
         // Warm each satellite's catalog once its link is Live; independent of the native load.
         catalogPrewarmer.start()
+        // And read its live host state on the same trigger. The controller-audio verdict lives
+        // only in that document, so a session restored without anyone opening the binding screen
+        // would otherwise stream with the microphone and the controller speaker switched off.
+        hostCapabilitiesProbe.start()
         // Missing ABI on sideloaded builds throws UnsatisfiedLinkError on first
         // native ref; route to NativeUnavailableActivity instead of crashing.
         try {
@@ -172,10 +195,26 @@ class DishApplication : Application() {
         lifecycle.addObserver(bluetoothBondMonitor)
         lifecycle.addObserver(bluetoothAdapterStateObserver)
         lifecycle.addObserver(bluetoothPermissionStateObserver)
+        lifecycle.addObserver(micPermissionGate)
+        // Capture is process-STARTED like every other streaming source: leaving the app tears
+        // down the foreground service and with it the session, so a microphone that outlived the
+        // foreground would have nowhere to send. Registered after the permission gate so the
+        // first plan it sees already carries a re-read grant.
+        lifecycle.addObserver(micEngine)
+        // Playback is process-STARTED for the same reason, and its native dispatch thread starts
+        // only when a slot actually plays.
+        lifecycle.addObserver(speakerEngine)
+        // Process-scoped like the USB manager's own install: the capability model is composed
+        // whether or not a screen is up, and a physical pad's mic/speaker caps are this table's
+        // answer.
+        padAudioRouteResolver.install()
         lifecycle.addObserver(networkStateObserver)
         lifecycle.addObserver(streamingServiceController)
         RumbleBridge.install(rumbleRouter)
         FeedbackBridge.install(feedbackRouter)
+        // A Direct-claimed DualSense's own mute button, coming up from the report decoder that
+        // owns its latch, into the same per-slot holder the on-screen button writes.
+        MicMuteBridge.install(micMuteStore::setPadMuted)
     }
 
     companion object {

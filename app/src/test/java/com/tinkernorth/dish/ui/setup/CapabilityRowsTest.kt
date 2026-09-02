@@ -47,6 +47,8 @@ class CapabilityRowsTest {
                 SetupCapabilityKind.TRIGGER_RUMBLE,
                 SetupCapabilityKind.TRIGGER_EFFECTS,
                 SetupCapabilityKind.PLAYER_LEDS,
+                SetupCapabilityKind.MICROPHONE,
+                SetupCapabilityKind.SPEAKER,
             ),
             capabilityRows(full).map { it.kind },
         )
@@ -126,6 +128,50 @@ class CapabilityRowsTest {
         val motion = rows.getValue(SetupCapabilityKind.MOTION)
         assertFalse(motion.available)
         assertEquals(motion.inputOk && motion.destinationOk && motion.typeOk, motion.available)
+    }
+
+    @Test
+    fun `the audio rows appear only where some layer carries them`() {
+        // A plain Xbox-over-Bluetooth card must not grow two crossed-out audio rows.
+        assertTrue(capabilityRows(SlotCapabilities.NONE).none { it.kind == SetupCapabilityKind.MICROPHONE })
+        assertTrue(capabilityRows(SlotCapabilities.NONE).none { it.kind == SetupCapabilityKind.SPEAKER })
+
+        // A host that carries audio surfaces both rows even before an input can source
+        // them, so the limitation reads as a crossed column rather than a missing row.
+        val hostOnly =
+            SlotCapabilities(
+                controller = CapabilitySet.EMPTY,
+                transport = CapabilitySet.of(Feature.MIC, Feature.SPEAKER),
+                type = CapabilitySet.of(Feature.MIC, Feature.SPEAKER),
+                host = CapabilitySet.of(Feature.MIC, Feature.SPEAKER),
+                userEnabled = CapabilitySet.EMPTY,
+                runtimeDown = CapabilitySet.EMPTY,
+            )
+        val rows = capabilityRows(hostOnly).associateBy { it.kind }
+        val mic = rows.getValue(SetupCapabilityKind.MICROPHONE)
+        assertFalse(mic.inputOk)
+        assertTrue(mic.destinationOk)
+        assertTrue(mic.typeOk)
+        assertFalse(mic.available)
+        assertTrue(SetupCapabilityKind.SPEAKER in rows.keys)
+    }
+
+    @Test
+    fun `the two audio rows are independent of each other`() {
+        // A pad that plays but has no headset mic shows one row, not two.
+        val speakerOnly =
+            SlotCapabilities(
+                controller = CapabilitySet.of(Feature.SPEAKER),
+                transport = CapabilitySet.of(Feature.SPEAKER),
+                type = CapabilitySet.of(Feature.SPEAKER),
+                host = CapabilitySet.of(Feature.SPEAKER),
+                userEnabled = CapabilitySet.EMPTY,
+                runtimeDown = CapabilitySet.EMPTY,
+            )
+        val rows = capabilityRows(speakerOnly).associateBy { it.kind }
+        assertTrue(SetupCapabilityKind.SPEAKER in rows.keys)
+        assertFalse(SetupCapabilityKind.MICROPHONE in rows.keys)
+        assertTrue(rows.getValue(SetupCapabilityKind.SPEAKER).available)
     }
 
     @Test

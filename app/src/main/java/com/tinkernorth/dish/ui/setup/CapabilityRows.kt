@@ -19,6 +19,8 @@ enum class SetupCapabilityKind {
     TRIGGER_RUMBLE,
     TRIGGER_EFFECTS,
     PLAYER_LEDS,
+    MICROPHONE,
+    SPEAKER,
 }
 
 data class SetupCapabilityRow(
@@ -61,6 +63,11 @@ private val EXTENDED_ROWS =
         SetupCapabilityKind.TRIGGER_RUMBLE to Feature.TRIGGER_RUMBLE,
         SetupCapabilityKind.TRIGGER_EFFECTS to Feature.TRIGGER_EFFECTS,
         SetupCapabilityKind.PLAYER_LEDS to Feature.PLAYER_LEDS,
+        // The audio pair last, client-sourced first: the pad's microphone goes up, its
+        // speaker comes back. Same relevance rule as the rest, so a card for a type or a
+        // host with no audio endpoints never grows two crossed-out rows.
+        SetupCapabilityKind.MICROPHONE to Feature.MIC,
+        SetupCapabilityKind.SPEAKER to Feature.SPEAKER,
     )
 
 private fun rowFor(

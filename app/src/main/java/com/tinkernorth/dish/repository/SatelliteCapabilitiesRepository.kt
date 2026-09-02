@@ -22,7 +22,10 @@ import javax.inject.Singleton
  *   yet populated it ([SatelliteHostFeaturesStore.setIfAbsent]); a fetched catalog, being
  *   richer, always wins;
  * - the runtime read (motion backend up/down) populates [SatelliteHostRuntimeStore], so a
- *   feature can show as present-but-currently-down pre-bind.
+ *   feature can show as present-but-currently-down pre-bind;
+ * - the controller-audio verdict, one direction each, merges in on its own
+ *   ([SatelliteHostFeaturesStore.noteControllerAudio]), because no other document
+ *   carries it and a catalog read may already own the entry.
  *
  * Unlike the catalog this is live state, so it is not cached or ETag'd.
  */
@@ -48,11 +51,21 @@ class SatelliteCapabilitiesRepository
                 runCatching { json.decodeFromString(ServerCapabilitiesDto.serializer(), reply.body) }
                     .getOrNull() ?: return null
 
+            val probed = HostFeatureSet.fromServerCapabilities(caps)
             // An older satellite omits the host block (catalog.supported stays false): leave
             // the optimistic default in place rather than reporting everything unsupported.
             if (caps.host.catalog.supported) {
-                hostFeaturesStore.setIfAbsent(satelliteId, HostFeatureSet.fromServerCapabilities(caps))
+                hostFeaturesStore.setIfAbsent(satelliteId, probed)
             }
+            // Audio rides its own merge: this document is the ONLY one that carries the
+            // host's audio verdict, so it has to land whether or not a catalog read got
+            // here first, and whether or not the host block exists at all. Both directions
+            // go together because the host reports them together and switches them apart.
+            hostFeaturesStore.noteControllerAudio(
+                satelliteId,
+                mic = probed.controllerMic,
+                speaker = probed.controllerSpeaker,
+            )
             runtimeStore.setRuntime(satelliteId, SatelliteHostRuntime(motionBackendOk = caps.motion?.available != false))
             return caps
         }

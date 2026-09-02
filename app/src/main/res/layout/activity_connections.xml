@@ -83,6 +83,8 @@
         <include layout="@layout/overlay_low_power_chip" />
     </LinearLayout>
 
+    <include layout="@layout/overlay_mic_chip" />
+
     <!-- Low-power overlays (countdown banner + dim screen). Included last so
          the dim FrameLayout sits on top, identical to activity_main.xml. -->
     <include layout="@layout/overlay_low_power" />

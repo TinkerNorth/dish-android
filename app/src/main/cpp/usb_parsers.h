@@ -112,6 +112,13 @@ struct ParserState {
     // Steam Controller stick, held across the frames where the shared left axes carry pad data.
     int16_t steamStickX = 0;
     int16_t steamStickY = 0;
+    // The DualSense mic-mute button is momentary, but the wire's WBUTTON_MIC_MUTE carries the
+    // mute STATE it toggles (contract §Controller audio), so the latch that state lives in is
+    // ours to keep. It sits here rather than in DeviceState because DeviceState is rebuilt from
+    // scratch by every decode; this survives across reports for as long as the pad is claimed,
+    // which is the same lifetime the pad's own firmware gives its mute setting.
+    bool micMuteHeld = false;
+    bool micMuted = false;
 };
 
 const KnownDevice* lookupKnown(uint16_t vid, uint16_t pid);
@@ -153,18 +160,32 @@ bool parserHasLightbar(Parser p);       // DS4 / DualSense RGB lightbar
 bool parserHasPlayerLeds(Parser p);     // DualSense 5-LED bar, Switch Pro 4 player lights
 bool parserHasTriggerEffects(Parser p); // DualSense adaptive-trigger effect blocks
 bool parserHasTriggerRumble(Parser p);  // Xbox One GIP impulse-trigger motors
+bool parserHasMicMuteLed(Parser p);     // DualSense mic-mute lamp (and its mic amp)
 
 inline constexpr int TRIGGER_EFFECT_BLOCK_LEN = 11; // DS5 mode byte + 10 params
 
+// MSG_MIC_LED's states, which are also the DualSense's own mute-lamp values.
+inline constexpr uint8_t MIC_MUTE_LED_OFF = 0;
+inline constexpr uint8_t MIC_MUTE_LED_ON = 1;
+inline constexpr uint8_t MIC_MUTE_LED_PULSE = 2;
+
 // Merged per-device feedback state. GIP packs all four motors into every rumble report (SDL keeps
-// the same merged state), and the DS5 lightbar wants a one-time LIGHTBAR_SETUP handoff, so the
-// writer owns this across calls; everything else is carried per call.
+// the same merged state), the DS5 lightbar wants a one-time LIGHTBAR_SETUP handoff, and the DS5
+// mute lamp has to survive every later write, so the writer owns this across calls; everything
+// else is carried per call.
 struct FeedbackState {
     uint16_t strong = 0;
     uint16_t weak = 0;
     uint16_t leftTrigger = 0;
     uint16_t rightTrigger = 0;
     bool ds5LightbarSetupSent = false;
+    // Last lamp state the host asked for, and whether it ever asked. Every DS5 report we build
+    // starts from a fresh memset, so the lamp is re-asserted from here on all of them: a report
+    // that flags a field the firmware then finds zeroed is exactly how a lamp gets stomped by an
+    // unrelated colour change. Unset means the host never drove the lamp, and a pad whose lamp we
+    // were never asked about must keep whatever it had.
+    uint8_t ds5MicMuteLed = MIC_MUTE_LED_OFF;
+    bool ds5MicMuteLedSet = false;
 };
 
 // Pure report builders over the merged state; each returns bytes written (0 = unsupported family
@@ -174,10 +195,17 @@ size_t buildMergedRumbleReport(Parser p, FeedbackState& st, uint8_t seq, uint8_t
                                size_t outCap);
 size_t buildLightbarReport(Parser p, FeedbackState& st, uint8_t r, uint8_t g, uint8_t b,
                            uint8_t* out, size_t outCap);
-size_t buildPlayerLedsReport(Parser p, uint8_t ledMask, uint8_t seq, uint8_t* out, size_t outCap);
-size_t buildTriggerEffectsReport(Parser p, const uint8_t left[TRIGGER_EFFECT_BLOCK_LEN],
+size_t buildPlayerLedsReport(Parser p, const FeedbackState& st, uint8_t ledMask, uint8_t seq,
+                             uint8_t* out, size_t outCap);
+size_t buildTriggerEffectsReport(Parser p, const FeedbackState& st,
+                                 const uint8_t left[TRIGGER_EFFECT_BLOCK_LEN],
                                  const uint8_t right[TRIGGER_EFFECT_BLOCK_LEN], uint8_t* out,
                                  size_t outCap);
+// state is MSG_MIC_LED's own (0 off / 1 on / 2 pulse); anything else is refused rather than
+// clamped, since a lamp state we cannot name is one this pad should not be shown. Records the
+// state in [st] so the other builders keep re-asserting it.
+size_t buildMicMuteLedReport(Parser p, FeedbackState& st, uint8_t state, uint8_t* out,
+                             size_t outCap);
 
 // Pure: writes the index-th GIP init packet for an Xbox One InitKind into out (with the sequence
 // number at byte 2), returns its length or 0 when there are no more. runInit sends them in order.
@@ -199,10 +227,12 @@ bool runRumble(int fd, uint8_t epOut, Parser p, uint16_t strong, uint16_t weak, 
 bool runMergedRumble(int fd, uint8_t epOut, Parser p, FeedbackState& st, uint8_t seq);
 bool runLightbar(int fd, uint8_t epOut, Parser p, FeedbackState& st, uint8_t r, uint8_t g,
                  uint8_t b);
-bool runPlayerLeds(int fd, uint8_t epOut, Parser p, uint8_t ledMask, uint8_t seq);
-bool runTriggerEffects(int fd, uint8_t epOut, Parser p,
+bool runPlayerLeds(int fd, uint8_t epOut, Parser p, const FeedbackState& st, uint8_t ledMask,
+                   uint8_t seq);
+bool runTriggerEffects(int fd, uint8_t epOut, Parser p, const FeedbackState& st,
                        const uint8_t left[TRIGGER_EFFECT_BLOCK_LEN],
                        const uint8_t right[TRIGGER_EFFECT_BLOCK_LEN]);
+bool runMicMuteLed(int fd, uint8_t epOut, Parser p, FeedbackState& st, uint8_t state);
 
 // Pure: writes the device's rumble report into out, returns its length (0 if unsupported or out is
 // too small). Host-tested in usb_parsers_test.cpp; runRumble is the Android write wrapper.

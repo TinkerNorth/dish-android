@@ -5,6 +5,56 @@ are listed in-app (Settings → Licenses, generated into
 `app/src/main/assets/licenses/licenses.json`). Material that is not a build dependency is
 attributed here.
 
+## Bundled native libraries (built from source, not Gradle dependencies)
+
+The in-app list is generated from the release runtime classpath's POMs, so it cannot see the
+C libraries `app/src/main/cpp/CMakeLists.txt` fetches and links statically into
+`libsatellite.so`. Both are attributed here instead:
+
+- **libopus** (`opus-1.5.2`, https://opus-codec.org): the controller-audio codec. The pad's
+  microphone is encoded to Opus before it leaves the device and the pad's speaker stream is
+  decoded on arrival (satellite `docs/contract.md` §Controller audio). Licensed BSD-3-Clause.
+- **libsodium** (`1.0.20`, https://libsodium.org): ChaCha20-Poly1305 for the encrypted UDP
+  wire protocol. Licensed ISC.
+
+```
+Copyright 2001-2023 Xiph.Org, Skype Limited, Octasic,
+                    Jean-Marc Valin, Timothy B. Terriberry,
+                    CSIRO, Gregory Maxwell, Mark Borgerding,
+                    Erik de Castro Lopo
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+- Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+
+- Neither the name of Internet Society, IETF or IETF Trust, nor the
+names of specific contributors, may be used to endorse or promote
+products derived from this software without specific prior written
+permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+Opus also carries a patent grant covering the Opus Interactive Audio Codec reference
+implementation; see the upstream `COPYING` file in the release tarball.
+
 ## SDL (Simple DirectMedia Layer): controller IDs and Switch Pro motion scaling
 
 The USB controller recognition table in `app/src/main/cpp/usb_parsers.cpp` (the `kImported`

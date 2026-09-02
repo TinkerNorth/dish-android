@@ -348,6 +348,11 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                 lightbar = caps.isAvailable(Feature.LIGHTBAR),
                 triggerEffects = caps.isAvailable(Feature.TRIGGER_EFFECTS),
                 playerLeds = caps.isAvailable(Feature.PLAYER_LEDS),
+                // The pad's own endpoints: the microphone rides up with the input's other
+                // sources, its speaker comes back with the rest of the feedback. Both
+                // follow their toggles, which is why they read the draft like rumble does.
+                micOn = caps.isAvailable(Feature.MIC) && state.draft?.micOn == true,
+                speakerOn = caps.isAvailable(Feature.SPEAKER) && state.draft?.speakerOn == true,
             )
         return inputNodes(state, snapshot, model) + destinationNodes(state, model)
     }
@@ -365,6 +370,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
             if (model.lightbar) add(ReviewFlow(R.drawable.ic_lightbar, R.string.setup_cap_lightbar))
             if (model.triggerEffects) add(ReviewFlow(R.drawable.ic_trigger_effects, R.string.setup_cap_trigger_effects))
             if (model.playerLeds) add(ReviewFlow(R.drawable.ic_player_leds, R.string.setup_cap_player_leds))
+            if (model.speakerOn) add(ReviewFlow(R.drawable.ic_speaker, R.string.setup_cap_speaker))
         }
 
     private fun inputNodes(
@@ -375,6 +381,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         val gamepad = ReviewFlow(R.drawable.ic_gamepad, R.string.setup_cfg_flow_controller)
         val motion = ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro)
         val battery = ReviewFlow(R.drawable.ic_battery, R.string.setup_cap_battery)
+        val mic = ReviewFlow(R.drawable.ic_mic, R.string.setup_cap_mic)
         val pointerFlows =
             buildList {
                 if (model.padMode) add(ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad))
@@ -400,6 +407,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                             if (model.motionOn) add(motion)
                             addAll(pointerFlows)
                             if (model.batteryOn) add(battery)
+                            if (model.micOn) add(mic)
                         },
                     gets = gets,
                 ),
@@ -416,6 +424,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                         add(gamepad)
                         if (model.motionOn) add(motion)
                         if (model.batteryOn) add(battery)
+                        if (model.micOn) add(mic)
                         if (state.inputUnknown) add(ReviewFlow(R.drawable.ic_help, R.string.setup_cap_unknown))
                     },
                 gets = gets,
@@ -470,6 +479,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                         if (model.motionOn) add(motion)
                         if (model.padMode) add(touchpad)
                         if (model.batteryOn) add(ReviewFlow(R.drawable.ic_battery, R.string.setup_cap_battery))
+                        if (model.micOn) add(ReviewFlow(R.drawable.ic_mic, R.string.setup_cap_mic))
                     },
             ),
         )
@@ -524,6 +534,8 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         val lightbar: Boolean,
         val triggerEffects: Boolean,
         val playerLeds: Boolean,
+        val micOn: Boolean,
+        val speakerOn: Boolean,
     )
 
     private data class ReviewNode(

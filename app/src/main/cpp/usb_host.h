@@ -34,4 +34,8 @@ void sendPlayerLeds(int32_t syntheticDeviceId, uint8_t ledMask);
 // left/right are the raw 11-byte DualSense trigger-effect blocks.
 void sendTriggerEffects(int32_t syntheticDeviceId, const uint8_t* left, const uint8_t* right);
 
+// MSG_MIC_LED's own state byte: 0 off, 1 on, 2 pulse. Only the DualSense has the lamp; every other
+// family drops the write in the builder.
+void sendMicMuteLed(int32_t syntheticDeviceId, uint8_t state);
+
 } // namespace usbhost

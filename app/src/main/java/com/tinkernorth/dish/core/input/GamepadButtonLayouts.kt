@@ -20,6 +20,26 @@ private const val XUSB_Y = 0x8000
 
 private const val XUSB_DPAD_MASK = 0x000F
 
+/**
+ * Not an XINPUT bit: 0x0800 is the one value the XINPUT-shaped `wButtons` word leaves
+ * unassigned, and protocol 2 spends it on the DualSense mic-mute button (satellite
+ * core/types.h WBUTTON_MIC_MUTE, docs/contract.md §Controller audio). Only the
+ * DualSense identity maps it into the emulated pad's input report; every other identity
+ * ignores it, and the Moonlight path never carries it at all.
+ *
+ * It is state, not an edge, like every other button in the word: whoever owns the mute
+ * state sets it on every frame while muted. [xusbToHid] deliberately drops it (no HID
+ * gamepad descriptor has a mute button) and [hidToXusb] never produces it, so it can
+ * only arrive by an explicit [withMicMute].
+ */
+const val WBUTTON_MIC_MUTE = 0x0800
+
+/** Fold the mic-mute state into a satellite-bound button word. */
+fun withMicMute(
+    wButtons: Int,
+    muted: Boolean,
+): Int = if (muted) wButtons or WBUTTON_MIC_MUTE else wButtons and WBUTTON_MIC_MUTE.inv()
+
 private const val HID_A = 0x0001
 private const val HID_B = 0x0002
 private const val HID_X = 0x0004

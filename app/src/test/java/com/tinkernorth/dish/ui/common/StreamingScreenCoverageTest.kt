@@ -42,7 +42,11 @@ class StreamingScreenCoverageTest {
     }
 
     // Scaffolded screens inherit the overlays from screen_scaffold; a bespoke screen keeps
-    // its own CoordinatorLayout root and must carry the includes itself.
+    // its own CoordinatorLayout root and must carry the includes itself. The mic chip include
+    // is gated the same way: mic state must be visible on EVERY screen, so a new screen that
+    // forgets the include is a screen where a hot microphone hides (the gamepad overlay
+    // carries the include for uniformity and suppresses the binding, since its pad already
+    // renders the mute pill).
     @Test
     fun `every full-screen activity layout includes the low power overlays`() {
         val missing =
@@ -64,7 +68,9 @@ class StreamingScreenCoverageTest {
 
     private fun hasOverlayIncludes(file: File): Boolean {
         val xml = file.readText()
-        return xml.contains("@layout/overlay_low_power") && xml.contains("@layout/overlay_low_power_chip")
+        return xml.contains("@layout/overlay_low_power") &&
+            xml.contains("@layout/overlay_low_power_chip") &&
+            xml.contains("@layout/overlay_mic_chip")
     }
 
     private fun manifestActivities(): List<String> =

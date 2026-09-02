@@ -397,6 +397,7 @@ class ControllerAdapter(
                 ConnectionKind.BLUETOOTH -> Unit
             }
             specs.addAll(feedbackFuncFacts(row.motionCap).map(::feedbackFactPill))
+            specs.addAll(audioFuncFacts(row.motionCap).map(::audioFactPill))
             return specs
         }
 
@@ -431,6 +432,14 @@ class ControllerAdapter(
                     PillSpec(ctx.getString(R.string.setup_cap_trigger_effects), R.drawable.ic_trigger_effects, PillTone.CAP)
                 FeedbackPillFact.PLAYER_LEDS ->
                     PillSpec(ctx.getString(R.string.setup_cap_player_leds), R.drawable.ic_player_leds, PillTone.CAP)
+            }
+
+        private fun audioFactPill(fact: AudioPillFact): PillSpec =
+            when (fact) {
+                AudioPillFact.MIC ->
+                    PillSpec(ctx.getString(R.string.setup_cap_mic), R.drawable.ic_mic, PillTone.ON)
+                AudioPillFact.SPEAKER ->
+                    PillSpec(ctx.getString(R.string.setup_cap_speaker), R.drawable.ic_speaker, PillTone.ON)
             }
 
         private fun pointerFactPill(fact: PointerPillFact): PillSpec =

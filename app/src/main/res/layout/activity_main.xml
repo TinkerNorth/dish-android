@@ -165,6 +165,8 @@
         <include layout="@layout/overlay_low_power_chip" />
     </LinearLayout>
 
+    <include layout="@layout/overlay_mic_chip" />
+
     <!-- Low-power overlays. The Snackbar-based feedback layer doesn't need
          a layout include: it's instantiated at runtime by
          DishNotifications via Snackbar.make() against this root view. -->

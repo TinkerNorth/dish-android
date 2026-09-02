@@ -349,5 +349,7 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
+    <include layout="@layout/overlay_mic_chip" />
+
     <include layout="@layout/overlay_low_power" />
 </FrameLayout>

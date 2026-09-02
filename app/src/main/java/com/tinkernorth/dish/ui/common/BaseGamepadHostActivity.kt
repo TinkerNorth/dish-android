@@ -12,6 +12,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.net.toUri
 import androidx.viewbinding.ViewBinding
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.composer.MicIndicatorCoordinator
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.databinding.ScreenScaffoldBinding
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
@@ -32,10 +33,26 @@ abstract class BaseGamepadHostActivity : AppCompatActivity() {
 
     @Inject lateinit var lowPowerSignal: LowPowerSignal
 
+    @Inject lateinit var micIndicator: MicIndicatorCoordinator
+
     private var gamepadHost: GamepadActivityHost? = null
 
+    // The app-wide mic chip rides the same scaffolding as the low-power chrome, so a hot (or
+    // muted) microphone is visible and reachable on every screen. Only the gamepad overlay opts
+    // out: its pad already carries the mute pill, and a floating tap target over a full-screen
+    // control surface would steal pad touches.
+    protected open val showsMicChip: Boolean get() = true
+
     protected fun installGamepadHost(rootView: View) {
-        gamepadHost = attachGamepadHost(rootView, wakeState, gamepadRegistry, notifications, lowPowerSignal)
+        gamepadHost =
+            attachGamepadHost(
+                rootView,
+                wakeState,
+                gamepadRegistry,
+                notifications,
+                lowPowerSignal,
+                if (showsMicChip) micIndicator else null,
+            )
     }
 
     protected fun openExternalUrl(url: String) {

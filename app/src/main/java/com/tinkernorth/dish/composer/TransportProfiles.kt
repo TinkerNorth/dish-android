@@ -17,8 +17,9 @@ object TransportProfiles {
             // The Moonlight control stream carries the emulated pad whole: input, motion,
             // touch and battery out, and rumble/trigger-rumble/LED events back. Mouse
             // rides the same stream natively (MOUSE_MOVE_REL/BUTTON/SCROLL), no
-            // advertisement needed. No adaptive-trigger or player-LED events exist in
-            // the Moonlight control protocol, so those stay satellite-only.
+            // advertisement needed. No adaptive-trigger, player-LED or controller-audio
+            // events exist in the Moonlight control protocol (it has no microphone
+            // channel at all), so those stay satellite-only.
             ConnectionKind.MOONLIGHT ->
                 CapabilitySet.of(
                     Feature.GAMEPAD,

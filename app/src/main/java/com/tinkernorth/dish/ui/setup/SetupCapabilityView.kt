@@ -43,6 +43,8 @@ private fun capabilityNameRes(kind: SetupCapabilityKind): Int =
         SetupCapabilityKind.TRIGGER_RUMBLE -> R.string.setup_cap_trigger_rumble
         SetupCapabilityKind.TRIGGER_EFFECTS -> R.string.setup_cap_trigger_effects
         SetupCapabilityKind.PLAYER_LEDS -> R.string.setup_cap_player_leds
+        SetupCapabilityKind.MICROPHONE -> R.string.setup_cap_mic
+        SetupCapabilityKind.SPEAKER -> R.string.setup_cap_speaker
     }
 
 private fun applyCheck(

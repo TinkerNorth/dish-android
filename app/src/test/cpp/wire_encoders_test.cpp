@@ -289,3 +289,136 @@ TEST(EncodeTouchpadPayloadV2, ButtonsRideOnFingerlessFrames) {
     EXPECT_EQ(out[1], 0x00);
     EXPECT_EQ(out[2], 0x07);
 }
+
+// ---- datagram ceilings (contract §Packet format) ---------------------------
+
+TEST(DatagramCeilings, InnerPayloadCeilingIsTheMtuMinusTheFraming) {
+    // 1500 is the whole datagram, not the payload: the two headers and the AEAD
+    // tag come out of it first. Getting this wrong by even 4 bytes would put a
+    // VBR spike on the wire that the satellite truncates on read and then fails
+    // to authenticate, which reads as a crypto bug rather than a size bug.
+    EXPECT_EQ(dish_wire::MAX_DATAGRAM_BYTES, 1500u);
+    EXPECT_EQ(dish_wire::OUTER_HEADER_BYTES, 8u);
+    EXPECT_EQ(dish_wire::INNER_HEADER_BYTES, 4u);
+    EXPECT_EQ(dish_wire::AEAD_TAG_BYTES, 16u);
+    EXPECT_EQ(dish_wire::MAX_INNER_PAYLOAD_BYTES, 1472u);
+}
+
+TEST(DatagramCeilings, PayloadsUpToTheCeilingFitAndOneMoreDoesNot) {
+    // The send path's whole size guard, exercised without a socket.
+    EXPECT_TRUE(dish_wire::innerPayloadFits(0));
+    EXPECT_TRUE(dish_wire::innerPayloadFits(13)); // MSG_GAMEPAD_DATA
+    EXPECT_TRUE(dish_wire::innerPayloadFits(dish_wire::MAX_INNER_PAYLOAD_BYTES - 1));
+    EXPECT_TRUE(dish_wire::innerPayloadFits(dish_wire::MAX_INNER_PAYLOAD_BYTES));
+    EXPECT_FALSE(dish_wire::innerPayloadFits(dish_wire::MAX_INNER_PAYLOAD_BYTES + 1));
+    EXPECT_FALSE(dish_wire::innerPayloadFits(dish_wire::MAX_DATAGRAM_BYTES));
+}
+
+TEST(DatagramCeilings, AFullSizeInnerMessageIsExactlyOneDatagram) {
+    // The property the buffers in the JNI send path are sized from: header plus
+    // a maximal payload plus the tag lands exactly on the MTU, so nothing this
+    // client emits can fragment.
+    EXPECT_EQ(dish_wire::OUTER_HEADER_BYTES + dish_wire::INNER_HEADER_BYTES +
+                  dish_wire::MAX_INNER_PAYLOAD_BYTES + dish_wire::AEAD_TAG_BYTES,
+              dish_wire::MAX_DATAGRAM_BYTES);
+}
+
+// ---- controller audio: MSG_MIC_AUDIO / MSG_SPEAKER_AUDIO -------------------
+
+TEST(AudioFrameHeader, CtrlIdxThenBigEndianSeq) {
+    // Big-endian, unlike every other payload in this file: the audio header
+    // mirrors satellite's encodeAudioFrameHeader, not an XUSB struct.
+    uint8_t out[3]{};
+    dish_wire::encodeAudioFrameHeader(out, 7, 0x1234);
+    EXPECT_EQ(out[0], 7);
+    EXPECT_EQ(out[1], 0x12);
+    EXPECT_EQ(out[2], 0x34);
+}
+
+TEST(AudioFrameHeader, SeqUsesTheWholeU16Range) {
+    uint8_t out[3]{};
+    dish_wire::encodeAudioFrameHeader(out, 0, 0);
+    EXPECT_EQ(out[1], 0x00);
+    EXPECT_EQ(out[2], 0x00);
+    dish_wire::encodeAudioFrameHeader(out, 0, 0x00FF);
+    EXPECT_EQ(out[1], 0x00);
+    EXPECT_EQ(out[2], 0xFF);
+    dish_wire::encodeAudioFrameHeader(out, 0, 0xFF00);
+    EXPECT_EQ(out[1], 0xFF);
+    EXPECT_EQ(out[2], 0x00);
+    dish_wire::encodeAudioFrameHeader(out, 0xFF, 0xFFFF);
+    EXPECT_EQ(out[0], 0xFF);
+    EXPECT_EQ(out[1], 0xFF);
+    EXPECT_EQ(out[2], 0xFF);
+}
+
+TEST(AudioFrameHeader, DecodeReadsExactlyWhatEncodeWrote) {
+    const uint8_t in[3] = {0x05, 0xBE, 0xEF};
+    const dish_wire::AudioFrameHeader h = dish_wire::decodeAudioFrameHeader(in);
+    EXPECT_EQ(h.ctrlIdx, 0x05);
+    EXPECT_EQ(h.seq, 0xBEEF);
+}
+
+TEST(AudioFrameHeader, RoundTripsEverySeqBoundaryAndTheWrap) {
+    const uint16_t seqs[] = {0, 1, 0x00FF, 0x0100, 0x7FFF, 0x8000, 0xFFFE, 0xFFFF};
+    for (uint16_t seq : seqs) {
+        uint8_t buf[3]{};
+        dish_wire::encodeAudioFrameHeader(buf, 3, seq);
+        const dish_wire::AudioFrameHeader h = dish_wire::decodeAudioFrameHeader(buf);
+        EXPECT_EQ(h.ctrlIdx, 3);
+        EXPECT_EQ(h.seq, seq);
+    }
+}
+
+TEST(AudioFrameHeader, DecodeIgnoresWhateverFollowsTheHeader) {
+    // The Opus packet starts at byte 3 and is not the header's business; a
+    // decoder that read past its three bytes would corrupt the seq.
+    const uint8_t frame[8] = {0x02, 0x00, 0x2A, 0xFC, 0xFF, 0xFF, 0xFF, 0xFF};
+    const dish_wire::AudioFrameHeader h = dish_wire::decodeAudioFrameHeader(frame);
+    EXPECT_EQ(h.ctrlIdx, 0x02);
+    EXPECT_EQ(h.seq, 42);
+}
+
+TEST(AudioFrameHeader, PayloadBoundsLeaveRoomForExactlyOneOpusPacket) {
+    EXPECT_EQ(dish_wire::AUDIO_WIRE_HEADER_BYTES, 3u);
+    // A 1-byte Opus packet is a legal DTX silence frame, so the smallest
+    // dispatchable payload is the header plus one byte; a bare header is
+    // malformed, not silence.
+    EXPECT_EQ(dish_wire::AUDIO_WIRE_MIN_PAYLOAD_BYTES, 4u);
+    EXPECT_EQ(dish_wire::AUDIO_WIRE_MAX_OPUS_BYTES, 1469u);
+    EXPECT_TRUE(dish_wire::innerPayloadFits(dish_wire::AUDIO_WIRE_HEADER_BYTES +
+                                            dish_wire::AUDIO_WIRE_MAX_OPUS_BYTES));
+    EXPECT_FALSE(dish_wire::innerPayloadFits(dish_wire::AUDIO_WIRE_HEADER_BYTES +
+                                             dish_wire::AUDIO_WIRE_MAX_OPUS_BYTES + 1));
+}
+
+// ---- controller audio: MSG_MIC_LED ----------------------------------------
+
+TEST(DecodeMicLedPayload, CtrlIdxThenState) {
+    const uint8_t in[2] = {4, dish_wire::MIC_LED_STATE_PULSE};
+    const dish_wire::MicLedPayload led = dish_wire::decodeMicLedPayload(in);
+    EXPECT_EQ(led.ctrlIdx, 4);
+    EXPECT_EQ(led.state, 2);
+    EXPECT_EQ(dish_wire::MIC_LED_PAYLOAD_BYTES, 2u);
+}
+
+TEST(DecodeMicLedPayload, TheThreeStatesAreOffOnPulseInThatOrder) {
+    // Wire values, mirrored from satellite core/types.h: the host sources them
+    // from the game's own DS5 output report, so renumbering them here would
+    // silently light the wrong lamp.
+    EXPECT_EQ(dish_wire::MIC_LED_STATE_OFF, 0);
+    EXPECT_EQ(dish_wire::MIC_LED_STATE_ON, 1);
+    EXPECT_EQ(dish_wire::MIC_LED_STATE_PULSE, 2);
+    EXPECT_EQ(dish_wire::MIC_LED_STATE_COUNT, 3);
+}
+
+TEST(DecodeMicLedPayload, OnlyTheThreeKnownStatesAreValid) {
+    // A state we do not know can only come from a host speaking something
+    // newer. Rendering it as a guess would be worse than rendering nothing, so
+    // the receive arm drops it rather than clamping.
+    EXPECT_TRUE(dish_wire::micLedStateValid(dish_wire::MIC_LED_STATE_OFF));
+    EXPECT_TRUE(dish_wire::micLedStateValid(dish_wire::MIC_LED_STATE_ON));
+    EXPECT_TRUE(dish_wire::micLedStateValid(dish_wire::MIC_LED_STATE_PULSE));
+    EXPECT_FALSE(dish_wire::micLedStateValid(3));
+    EXPECT_FALSE(dish_wire::micLedStateValid(0xFF));
+}

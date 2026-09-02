@@ -76,9 +76,57 @@ target_include_directories(send_counter_test PRIVATE "${SATELLITE_CPP}")
 target_compile_options(send_counter_test PRIVATE -Wall -Wextra -Wpedantic)
 target_link_libraries(send_counter_test PRIVATE GTest::gtest_main)
 
+# Controller-audio reorder window. Header-only and dependency-free by design, so
+# this target links no codec at all: the ordering rules are exactly the part
+# that should be provable without one. Mirrors satellite's
+# tests/test_audio_jitter.cpp case for case, because both ends of one stream
+# have to agree on what counts as lost, late, or worth concealing.
+add_executable(audio_jitter_test
+    audio_jitter_test.cpp
+)
+target_include_directories(audio_jitter_test PRIVATE "${SATELLITE_CPP}")
+target_compile_options(audio_jitter_test PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(audio_jitter_test PRIVATE GTest::gtest_main)
+
+# The libopus wrapper, round-tripped through real encoders and decoders. Needs
+# the codec, so it fetches the same pinned release the app builds against (see
+# src/main/cpp/CMakeLists.txt): testing the settings against a different libopus
+# would prove nothing about the one that ships.
+FetchContent_Declare(
+    opus
+    URL      https://downloads.xiph.org/releases/opus/opus-1.5.2.tar.gz
+    URL_HASH SHA256=65c1d2f78b9f2fb20082c38cbe47c951ad5839345876e46941612ee87f9a7ce1
+)
+set(OPUS_BUILD_SHARED_LIBRARY OFF CACHE BOOL "" FORCE)
+set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(OPUS_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+set(OPUS_INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+set(OPUS_INSTALL_CMAKE_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(opus)
+
+add_executable(audio_codec_test
+    audio_codec_test.cpp
+    "${SATELLITE_CPP}/audio_codec.cpp"
+)
+target_include_directories(audio_codec_test PRIVATE "${SATELLITE_CPP}")
+target_compile_options(audio_codec_test PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(audio_codec_test PRIVATE GTest::gtest_main opus)
+
 include(GoogleTest)
-gtest_discover_tests(gamepad_input_test)
-gtest_discover_tests(wire_encoders_test)
-gtest_discover_tests(usb_parsers_test)
-gtest_discover_tests(usb_hid_descriptor_test)
-gtest_discover_tests(send_counter_test)
+
+# DISCOVERY_MODE PRE_TEST, not the default POST_BUILD: CMake 4.x names the
+# scratch file its post-build discovery step writes after a hash of an argument
+# it never actually passes, so every target here writes the same
+# cmake_test_discovery_*.json. That step is appended to the target's LINK
+# command, so a parallel build races several targets over one file, and the run
+# either fails outright or hands ctest one target's tests listed under another
+# (seen locally on 4.4.0: totals both above and below the real one). Discovering
+# at ctest time instead is serial by construction and generator-independent, so
+# it holds for the Makefile generator CI uses as well as Ninja here.
+gtest_discover_tests(gamepad_input_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(wire_encoders_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(usb_parsers_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(usb_hid_descriptor_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(send_counter_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(audio_jitter_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(audio_codec_test DISCOVERY_MODE PRE_TEST)

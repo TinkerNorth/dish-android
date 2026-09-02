@@ -80,6 +80,15 @@ object AppModule {
     @Singleton
     fun provideBluetoothHidSession(factory: @JvmSuppressWildcards () -> HidProxyClient): BluetoothHidSession = BluetoothHidSession(factory)
 
+    // The pad-audio route lookup the capture and playback engines depend on, bound to the real
+    // registry-backed one. An interface because a device with no pad endpoints is a legitimate
+    // implementation, and because the engines have no business knowing a slot id is a device id.
+    @Provides
+    @Singleton
+    fun provideSlotAudioRoutes(
+        routing: com.tinkernorth.dish.source.audio.PadAudioRouting,
+    ): com.tinkernorth.dish.source.audio.SlotAudioRoutes = routing
+
     // The Moonlight client identity is keystore-backed; bind the interface the
     // pairing/gateway code depends on to the concrete provider.
     @Provides

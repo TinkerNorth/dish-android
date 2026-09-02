@@ -56,6 +56,26 @@ class GamepadSkinTest {
     }
 
     @Test
+    fun `only the DualSense carries a mic-mute button`() {
+        // The DS4 v2 has no such button, and only the DualSense identity maps WBUTTON_MIC_MUTE
+        // into the emulated pad's input report: offering it on any other skin would be a control
+        // the host never sees.
+        assertEquals(
+            setOf(GamepadSkin.DualSense),
+            GamepadSkin.entries.filter { it.hasMicMute }.toSet(),
+        )
+    }
+
+    @Test
+    fun `no Moonlight or Bluetooth destination can reach the mute button`() {
+        // Neither transport carries controller audio, and neither mapper can produce DualSense.
+        val reachable =
+            (MoonlightEmulatedType.ORDER + listOf(0, 99)).map(GamepadSkin::forMoonlightType) +
+                listOf(GamepadSkin.forBtProfile("PLAYSTATION"), GamepadSkin.forBtProfile(null))
+        assertEquals(emptyList<GamepadSkin>(), reachable.filter { it.hasMicMute })
+    }
+
+    @Test
     fun `every skin name round-trips through the intent extra`() {
         GamepadSkin.entries.forEach { skin ->
             assertEquals(skin, GamepadSkin.fromName(skin.name))

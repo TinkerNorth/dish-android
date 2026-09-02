@@ -332,8 +332,8 @@ class SatelliteConnectionManager
                 scope,
                 controllerRepo,
                 ioDispatcher = ioDispatcher,
-                motionCapsBitsFor = { slotId ->
-                    capabilityProvider.get().motionWireBit(slotId)
+                wireCapsFor = { slotId ->
+                    capabilityProvider.get().wireCapsFor(slotId)
                 },
                 touchpadModeFor = { slotId ->
                     capabilityProvider.get().touchpadWireMode(slotId)

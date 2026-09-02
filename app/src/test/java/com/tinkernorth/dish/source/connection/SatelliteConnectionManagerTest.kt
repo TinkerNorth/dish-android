@@ -103,7 +103,7 @@ class SatelliteConnectionManagerTest {
                 kotlinx.coroutines.flow.MutableStateFlow(
                     emptyMap<String, com.tinkernorth.dish.core.model.SlotCapabilities>(),
                 )
-            every { motionWireBit(any()) } returns 0
+            every { wireCapsFor(any()) } returns BASE_WIRE_CAPS
             every { touchpadWireMode(any()) } returns "off"
         }
 
@@ -1378,4 +1378,11 @@ class SatelliteConnectionManagerTest {
             )
             verify { store.setSatelliteSharedKey(serverId, "cc".repeat(32)) }
         }
+
+    private companion object {
+        // What CapabilityResolver.wireCaps resolves for a pad with nothing else on.
+        val BASE_WIRE_CAPS =
+            com.tinkernorth.dish.core.net.ControllerDescriptor.CAP_ANALOG_TRIGGERS or
+                com.tinkernorth.dish.core.net.ControllerDescriptor.CAP_RUMBLE
+    }
 }

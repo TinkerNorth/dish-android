@@ -14,11 +14,15 @@ import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 // DualSense carries Create/Options where PlayStation carries the DS4 Share/Options.
 enum class GamepadSkin(
     val hasLightbar: Boolean = false,
+    // The mic-mute button under the PS button, DualSense only: the DS4 v2 has no such button, and
+    // only the DualSense identity maps WBUTTON_MIC_MUTE into the emulated pad's input report, so
+    // offering it anywhere else would be a control the host never sees.
+    val hasMicMute: Boolean = false,
 ) {
     Xbox,
     Xbox360,
     PlayStation(hasLightbar = true),
-    DualSense(hasLightbar = true),
+    DualSense(hasLightbar = true, hasMicMute = true),
     Switch,
     ;
 

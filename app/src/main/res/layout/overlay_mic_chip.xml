@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- App-wide microphone chip: visible on every screen while any slot has an armed microphone,
+     so the mic is never hot (or silently muted) anywhere the user cannot see and reach it. One
+     tap mutes every armed slot; the next unmutes them all. Docked top-centre, the one strip of
+     shared chrome every screen leaves clear (titles sit left, menus right, and the bottom
+     centre belongs to the low-power chip). Painted by MicChipController through
+     GamepadActivityHost, the same shared scaffolding that binds the low-power views; the
+     gamepad overlay alone suppresses it (its pad already carries the mute pill, and a floating
+     tap target over a full-screen control surface would steal pad touches). -->
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <LinearLayout
+        android:id="@+id/llMicChip"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="@dimen/spacing_lg"
+        android:background="@drawable/bg_pill"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="@dimen/spacing_5xl"
+        android:paddingVertical="@dimen/spacing_lg"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/ivMicChipIcon"
+            android:layout_width="@dimen/icon_card_glyph"
+            android:layout_height="@dimen/icon_card_glyph"
+            android:src="@drawable/ic_mic"
+            app:tint="@color/colorError"
+            android:importantForAccessibility="no"
+            android:layout_marginEnd="@dimen/spacing_md" />
+
+        <TextView
+            android:id="@+id/tvMicChipLabel"
+            style="@style/TextAppearance.Dish.Label.Accent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/mic_state_live" />
+    </LinearLayout>
+</merge>

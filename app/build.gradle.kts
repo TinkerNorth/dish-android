@@ -282,9 +282,14 @@ val nativeTestConfigure =
         inputs.file(nativeTestSrcDir.file("CMakeLists.txt"))
         inputs.file(nativeTestSrcDir.file("gamepad_input_test.cpp"))
         inputs.file(nativeTestSrcDir.file("wire_encoders_test.cpp"))
+        inputs.file(nativeTestSrcDir.file("audio_jitter_test.cpp"))
+        inputs.file(nativeTestSrcDir.file("audio_codec_test.cpp"))
         inputs.file(layout.projectDirectory.file("src/main/cpp/gamepad_input.h"))
         inputs.file(layout.projectDirectory.file("src/main/cpp/gamepad_input.cpp"))
         inputs.file(layout.projectDirectory.file("src/main/cpp/wire_encoders.h"))
+        inputs.file(layout.projectDirectory.file("src/main/cpp/audio_jitter.h"))
+        inputs.file(layout.projectDirectory.file("src/main/cpp/audio_codec.h"))
+        inputs.file(layout.projectDirectory.file("src/main/cpp/audio_codec.cpp"))
         outputs.dir(nativeTestBuildDir)
         // Ninja on Windows (no make in a stock environment); Make everywhere else, matching CI.
         val generator =

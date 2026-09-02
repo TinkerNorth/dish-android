@@ -859,3 +859,25 @@ TEST(ApplyKey, BaseBehaviorUnchangedWithoutTheSwitchQuirk) {
     EXPECT_TRUE(s.wButtons & XUSB_LB);
     EXPECT_EQ(0, s.bLT);
 }
+
+TEST(MicMuteBit, IsTheOneValueTheXinputWordLeavesUnassigned) {
+    // Satellite maps 0x0800 into the DualSense's own input report, so a
+    // renumbering here would press some other button on the emulated pad.
+    EXPECT_EQ(0x0800, WBUTTON_MIC_MUTE);
+    const uint16_t everyXusbBit = XUSB_DPAD_UP | XUSB_DPAD_DOWN | XUSB_DPAD_LEFT | XUSB_DPAD_RIGHT |
+                                  XUSB_START | XUSB_BACK | XUSB_THUMB_L | XUSB_THUMB_R | XUSB_LB |
+                                  XUSB_RB | XUSB_GUIDE | XUSB_A | XUSB_B | XUSB_X | XUSB_Y;
+    EXPECT_EQ(0, everyXusbBit & WBUTTON_MIC_MUTE);
+    // And it really is the LAST one: the word has no other free bit to spend.
+    EXPECT_EQ(0xFFFF, everyXusbBit | WBUTTON_MIC_MUTE);
+}
+
+TEST(MicMuteBit, NoKeycodeCanEverSetIt) {
+    // Mute is not an Android keycode: it comes from the on-screen button or a
+    // physical DualSense's own decode, and rides the word as state. A framework
+    // key that happened to map here would toggle a live microphone.
+    for (int32_t kc = 0; kc < 320; kc++) {
+        EXPECT_EQ(0, keycodeToXusb(kc) & WBUTTON_MIC_MUTE) << "keycode " << kc;
+        EXPECT_EQ(0, switchLayoutKeycodeToXusb(kc) & WBUTTON_MIC_MUTE) << "keycode " << kc;
+    }
+}

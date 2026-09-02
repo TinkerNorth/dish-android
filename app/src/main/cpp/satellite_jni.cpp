@@ -26,9 +26,12 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 #include <sodium.h>
 
+#include "audio_codec.h"
+#include "audio_jitter.h"
 #include "dispatch.h"
 #include "gamepad_input.h"
 #include "hotpath_latency.h"
@@ -62,6 +65,12 @@ static constexpr uint16_t MSG_LIGHTBAR = 0x000D;
 static constexpr uint16_t MSG_SESSION_CLOSE = 0x000F;
 static constexpr uint16_t MSG_TRIGGER_EFFECTS = 0x0010;
 static constexpr uint16_t MSG_PLAYER_LEDS = 0x0011;
+// Controller audio: the emulated pad's OWN endpoints, never the host's game
+// audio. The two stream messages share one payload shape (wire_encoders.h);
+// MSG_MIC_LED is the mute lamp the game asked for, coalesced like MSG_LIGHTBAR.
+static constexpr uint16_t MSG_MIC_AUDIO = 0x0012;
+static constexpr uint16_t MSG_SPEAKER_AUDIO = 0x0013;
+static constexpr uint16_t MSG_MIC_LED = 0x0014;
 
 // Nonce direction byte: the two directions of one session key never share a
 // nonce (contract §Crypto).
@@ -80,6 +89,19 @@ struct XUSB_REPORT {
 };
 #pragma pack(pop)
 static_assert(sizeof(XUSB_REPORT) == 12, "XUSB_REPORT must be 12 bytes");
+
+// One bound controller's audio working set: the outbound mic encoder with its
+// wrapping wire sequence, and the inbound speaker pair (reorder window feeding
+// the decoder whose gaps it declares). Allocated lazily on the slot's first
+// frame in that direction, because an Opus codec is ~20 KB of state each and
+// most controllers never carry audio at all.
+struct ControllerAudio {
+    std::unique_ptr<dish_audio::OpusStreamEncoder> micEncoder;
+    uint16_t micSeq = 0;
+
+    dish_audio::AudioJitterWindow speakerWindow;
+    std::unique_ptr<dish_audio::OpusStreamDecoder> speakerDecoder;
+};
 
 struct Session {
     int udpSock = -1;
@@ -113,6 +135,17 @@ struct Session {
 
     // Negotiated at session PUT; picks which MSG_TOUCHPAD frame this session encodes.
     std::atomic<int32_t> protocolVersion{1};
+
+    // Per-controller audio state, keyed by ctrlIdx. Touched by the mic capture
+    // thread (encode) and the audio dispatch thread (decode), never by the
+    // receive thread, so one lock covers it: at 50 frames/s per direction the
+    // two threads are each inside for well under a millisecond a second.
+    std::mutex audioMtx;
+    std::unordered_map<uint8_t, ControllerAudio> audio;
+    // Set by closeSocket. Queued speaker frames hold a strong reference to this
+    // session, so they can outlive it by a few milliseconds; decoding into a
+    // torn-down session would deliver audio to a slot that is already gone.
+    std::atomic<bool> closed{false};
 };
 
 static std::mutex g_sessionsMtx;
@@ -167,6 +200,13 @@ static jclass g_feedbackBridgeClass = nullptr;
 static jmethodID g_feedbackLightbarMethod = nullptr;
 static jmethodID g_feedbackTriggerEffectsMethod = nullptr;
 static jmethodID g_feedbackPlayerLedsMethod = nullptr;
+static jmethodID g_feedbackMicLedMethod = nullptr;
+
+static jclass g_speakerAudioBridgeClass = nullptr;
+static jmethodID g_speakerAudioFrameMethod = nullptr;
+
+static jclass g_micMuteBridgeClass = nullptr;
+static jmethodID g_micMutePadMethod = nullptr;
 
 // Bridge kinds (Bluetooth, Moonlight) run off the UI thread: BluetoothHidDevice.sendReport is
 // Binder IPC, and the Moonlight path encrypts + frames in Kotlin. One queue + thread serves both;
@@ -195,6 +235,12 @@ static std::thread g_bridgeDispatchThread;
 static std::atomic<bool> g_bridgeDispatchRunning{false};
 static constexpr size_t BRIDGE_QUEUE_MAX = 64;
 
+// A pad's mic-mute latch flipped. It shares the bridge thread (already attached to the JVM, and
+// the USB reader thread is not) but NOT the report queue: reports are drop-oldest because a stale
+// stick position is worth nothing, while a dropped mute edge would leave the app believing a muted
+// pad is live. One entry per button press, so the queue never grows.
+static std::deque<std::pair<int32_t, bool>> g_micMuteQueue;
+
 static void enqueueBridgeReport(BridgeReport&& r) {
     {
         std::lock_guard<std::mutex> lock(g_bridgeQueueMtx);
@@ -218,10 +264,25 @@ static void bridgeDispatchLoop() {
             std::unique_lock<std::mutex> lock(g_bridgeQueueMtx);
             g_bridgeQueueCv.wait(lock, [] {
                 return !g_bridgeDispatchRunning.load(std::memory_order_relaxed) ||
-                       !g_bridgeQueue.empty();
+                       !g_bridgeQueue.empty() || !g_micMuteQueue.empty();
             });
-            if (!g_bridgeDispatchRunning.load(std::memory_order_relaxed) && g_bridgeQueue.empty())
+            if (!g_bridgeDispatchRunning.load(std::memory_order_relaxed) && g_bridgeQueue.empty() &&
+                g_micMuteQueue.empty())
                 break;
+            // Mute edges first: they are rarer and they gate capture, so they must not wait
+            // behind a queue of input reports.
+            if (!g_micMuteQueue.empty()) {
+                auto ev = g_micMuteQueue.front();
+                g_micMuteQueue.pop_front();
+                lock.unlock();
+                if (g_micMuteBridgeClass != nullptr && g_micMutePadMethod != nullptr) {
+                    env->CallStaticVoidMethod(g_micMuteBridgeClass, g_micMutePadMethod,
+                                              (jint)ev.first, (jboolean)ev.second);
+                    if (env->ExceptionCheck()) env->ExceptionClear();
+                }
+                continue;
+            }
+            if (g_bridgeQueue.empty()) continue;
             r = std::move(g_bridgeQueue.front());
             g_bridgeQueue.pop_front();
         }
@@ -267,6 +328,153 @@ static void startBridgeDispatchThread() {
     bool was = g_bridgeDispatchRunning.exchange(true, std::memory_order_relaxed);
     if (was) return;
     g_bridgeDispatchThread = std::thread(bridgeDispatchLoop);
+}
+
+// The inbound MSG_SPEAKER_AUDIO path.
+//
+// Its own queue and thread rather than the input bridge's, for two reasons: an
+// audio frame must never evict a gamepad report from that queue, and the sink
+// at the far end is an AudioTrack whose write blocks until the buffer takes the
+// samples. The four other return-path arms upcall straight out of receiveAck
+// because they hand over a handful of bytes and return; doing that here would
+// let a full AudioTrack stall the session's entire UDP drain, heartbeat acks
+// included. So the receive thread only copies the Opus packet in: reorder
+// window, decode and concealment all run over here, off the socket.
+struct SpeakerFrame {
+    // Strong: the session's codecs must outlive a closeSocket that races a
+    // queued frame. `closed` is what stops us decoding into a dead session.
+    std::shared_ptr<Session> session;
+    int handle = -1;
+    uint8_t ctrlIdx = 0;
+    uint16_t seq = 0;
+    std::vector<uint8_t> opus;
+};
+
+static std::mutex g_audioQueueMtx;
+static std::condition_variable g_audioQueueCv;
+static std::deque<SpeakerFrame> g_audioQueue;
+static std::thread g_audioDispatchThread;
+static std::atomic<bool> g_audioDispatchRunning{false};
+// 8 frames = 160 ms. A backlog past that is audio too old to play on time, and
+// dropping the oldest is exactly what the reorder window's gap handling covers.
+static constexpr size_t AUDIO_QUEUE_MAX = 8;
+
+static void enqueueSpeakerFrame(SpeakerFrame&& f) {
+    {
+        std::lock_guard<std::mutex> lock(g_audioQueueMtx);
+        if (g_audioQueue.size() >= AUDIO_QUEUE_MAX) g_audioQueue.pop_front();
+        g_audioQueue.push_back(std::move(f));
+    }
+    g_audioQueueCv.notify_one();
+}
+
+// Reorder + decode one queued frame into `pcm` (which holds up to
+// AUDIO_JITTER_MAX_EVENTS_PER_PUSH consecutive interleaved-stereo frames).
+// Returns how many frames it produced and, per frame, whether it was concealed
+// rather than decoded from a packet that actually arrived.
+//
+// Runs entirely under the session's audio lock so the window's event pointers
+// (which alias its own storage) stay valid; the JVM upcalls deliberately happen
+// after it is released, so a blocking AudioTrack cannot hold up mic capture.
+static int decodeSpeakerFrame(const SpeakerFrame& f, std::vector<int16_t>& pcm,
+                              bool concealed[dish_audio::AUDIO_JITTER_MAX_EVENTS_PER_PUSH]) {
+    std::lock_guard<std::mutex> lock(f.session->audioMtx);
+    ControllerAudio& ca = f.session->audio[f.ctrlIdx];
+    if (!ca.speakerDecoder) {
+        ca.speakerDecoder = dish_audio::OpusStreamDecoder::create(dish_audio::Stream::Speaker);
+        if (!ca.speakerDecoder) {
+            LOGE("speaker audio: no Opus decoder for ctrl %u", (unsigned)f.ctrlIdx);
+            return 0;
+        }
+    }
+
+    const auto r = ca.speakerWindow.push(f.seq, f.opus.data(), f.opus.size());
+    int produced = 0;
+    for (int i = 0; i < r.count; i++) {
+        const auto& e = r.events[i];
+        int16_t* out = pcm.data() + produced * dish_audio::AUDIO_SPEAKER_FRAME_SAMPLES;
+        size_t frames = 0;
+        if (e.kind == dish_audio::AudioJitterWindow::Event::Kind::Packet) {
+            frames = ca.speakerDecoder->decode(e.data, e.len, out, dish_audio::AUDIO_FRAME_SAMPLES);
+        } else {
+            // Unconditionally the FEC entry: whether the carrier holds a
+            // redundant copy of the missing frame is an encoder-side decision
+            // we cannot see, and libopus falls back to plain concealment by
+            // itself when it does not. A null carrier means conceal blind.
+            frames = ca.speakerDecoder->decodeFec(e.fecCarrier, e.fecCarrierLen, out,
+                                                  dish_audio::AUDIO_FRAME_SAMPLES);
+        }
+        if (frames != static_cast<size_t>(dish_audio::AUDIO_FRAME_SAMPLES)) continue;
+        concealed[produced] = e.kind == dish_audio::AudioJitterWindow::Event::Kind::Gap;
+        produced++;
+    }
+    return produced;
+}
+
+static void deliverSpeakerPcm(JNIEnv* env, int handle, uint8_t ctrlIdx, const int16_t* pcm,
+                              bool concealed) {
+    if (g_speakerAudioBridgeClass == nullptr || g_speakerAudioFrameMethod == nullptr) return;
+    // A fresh array per 20 ms frame: 3.8 KB of short-lived garbage 50 times a
+    // second is far below what a pinned reusable buffer would cost in JNI
+    // critical sections, and the samples have to be copied into the JVM heap
+    // either way.
+    jshortArray samples = env->NewShortArray(dish_audio::AUDIO_SPEAKER_FRAME_SAMPLES);
+    if (samples == nullptr) {
+        if (env->ExceptionCheck()) env->ExceptionClear();
+        return;
+    }
+    env->SetShortArrayRegion(samples, 0, dish_audio::AUDIO_SPEAKER_FRAME_SAMPLES,
+                             reinterpret_cast<const jshort*>(pcm));
+    env->CallStaticVoidMethod(g_speakerAudioBridgeClass, g_speakerAudioFrameMethod, (jint)handle,
+                              (jint)ctrlIdx, samples, (jboolean)concealed);
+    env->DeleteLocalRef(samples);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+}
+
+static void audioDispatchLoop() {
+    JNIEnv* env = nullptr;
+    if (!g_jvm || g_jvm->AttachCurrentThread(&env, nullptr) != JNI_OK || env == nullptr) {
+        LOGE("audioDispatchLoop: AttachCurrentThread failed");
+        return;
+    }
+    // Named for its first caller; the value it sets is URGENT_AUDIO niceness,
+    // which is exactly what a 20 ms decode cadence wants.
+    dish::elevateCurrentThreadToInputPriority();
+    LOGI("Speaker audio dispatch thread started");
+    // Allocated once for the thread: one push can drain the whole window and
+    // conceal ahead of it, so size for the worst case rather than reallocating.
+    std::vector<int16_t> pcm(static_cast<size_t>(dish_audio::AUDIO_JITTER_MAX_EVENTS_PER_PUSH) *
+                             dish_audio::AUDIO_SPEAKER_FRAME_SAMPLES);
+    bool concealed[dish_audio::AUDIO_JITTER_MAX_EVENTS_PER_PUSH] = {};
+    while (g_audioDispatchRunning.load(std::memory_order_relaxed)) {
+        SpeakerFrame f;
+        {
+            std::unique_lock<std::mutex> lock(g_audioQueueMtx);
+            g_audioQueueCv.wait(lock, [] {
+                return !g_audioDispatchRunning.load(std::memory_order_relaxed) ||
+                       !g_audioQueue.empty();
+            });
+            if (!g_audioDispatchRunning.load(std::memory_order_relaxed) && g_audioQueue.empty())
+                break;
+            f = std::move(g_audioQueue.front());
+            g_audioQueue.pop_front();
+        }
+        if (!f.session || f.session->closed.load(std::memory_order_acquire)) continue;
+        const int produced = decodeSpeakerFrame(f, pcm, concealed);
+        for (int i = 0; i < produced; i++) {
+            deliverSpeakerPcm(env, f.handle, f.ctrlIdx,
+                              pcm.data() + i * dish_audio::AUDIO_SPEAKER_FRAME_SAMPLES,
+                              concealed[i]);
+        }
+    }
+    g_jvm->DetachCurrentThread();
+    LOGI("Speaker audio dispatch thread stopped");
+}
+
+static void startAudioDispatchThread() {
+    bool was = g_audioDispatchRunning.exchange(true, std::memory_order_relaxed);
+    if (was) return;
+    g_audioDispatchThread = std::thread(audioDispatchLoop);
 }
 
 static inline float axisCur(const GameActivityMotionEvent* ev, int axis) {
@@ -403,6 +611,17 @@ void forgetDevice(int32_t deviceId) {
     std::lock_guard<std::mutex> lock(g_devicesMtx);
     g_devices.erase(deviceId);
     g_frameworkEventCounts.erase(deviceId);
+}
+
+// Called on the USB reader thread, which is not attached to the JVM: hand the edge to the bridge
+// thread (which is) rather than attaching per press. Nothing here touches the wire; the mute bit
+// is already in the report the decoder produced.
+void applyPadMicMute(int32_t deviceId, bool muted) {
+    {
+        std::lock_guard<std::mutex> lock(g_bridgeQueueMtx);
+        g_micMuteQueue.emplace_back(deviceId, muted);
+    }
+    g_bridgeQueueCv.notify_one();
 }
 
 void applyUsbMotion(int32_t deviceId, int16_t gyroX, int16_t gyroY, int16_t gyroZ, int16_t accelX,
@@ -563,9 +782,12 @@ static bool sendEncrypted(Session* s, uint16_t msgType, const uint8_t* payload,
                           uint16_t payloadLen) {
     if (!s || s->udpSock < 0) return false;
 
-    uint16_t innerLen = 4 + payloadLen;
-    uint8_t inner[4 + 256];
-    if (innerLen > sizeof(inner)) return false;
+    // Sized from the contract's datagram ceiling, not from the message set:
+    // MSG_MIC_AUDIO carries a whole Opus packet, and the bound has to hold
+    // structurally rather than by what today's senders happen to emit.
+    uint8_t inner[dish_wire::INNER_HEADER_BYTES + dish_wire::MAX_INNER_PAYLOAD_BYTES];
+    if (!dish_wire::innerPayloadFits(payloadLen)) return false;
+    uint16_t innerLen = static_cast<uint16_t>(dish_wire::INNER_HEADER_BYTES + payloadLen);
     putBE16(inner, msgType);
     putBE16(inner + 2, payloadLen);
     if (payloadLen > 0) memcpy(inner + 4, payload, payloadLen);
@@ -585,6 +807,10 @@ static bool sendEncrypted(Session* s, uint16_t msgType, const uint8_t* payload,
                                               nullptr, nonce, s->key);
 
     uint8_t packet[8 + sizeof(ciphertext)];
+    // The ceiling made structural: a full-size inner payload plus header and
+    // tag is exactly one Ethernet MTU, so nothing this path emits can fragment.
+    static_assert(sizeof(packet) == dish_wire::MAX_DATAGRAM_BYTES,
+                  "send buffer must be exactly the contract's datagram ceiling");
     memcpy(packet, s->token, 4);
     putBE32(packet + 4, ctr);
     memcpy(packet + 8, ciphertext, (size_t)cipherLen);
@@ -734,6 +960,14 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_closeS
     }
     s->heartbeatRunning.store(false);
     if (s->heartbeatThread.joinable()) s->heartbeatThread.join();
+    // Before the codecs go: a speaker frame already queued still holds a strong
+    // reference to this session, and decoding it now would deliver audio to a
+    // slot that no longer exists.
+    s->closed.store(true, std::memory_order_release);
+    {
+        std::lock_guard<std::mutex> audioLock(s->audioMtx);
+        s->audio.clear();
+    }
     if (s->udpSock >= 0) {
         close(s->udpSock);
         s->udpSock = -1;
@@ -760,6 +994,14 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setCon
     s->activeBitmap.store(-1);
     s->closeReason.store(-1);
     s->protocolVersion.store(protocolVersion);
+    // Audio streams restart with the (token, sessionKey) pair too: a re-PUT
+    // replugs the pads server-side, so the far end's sequence numbers start
+    // over and the old reorder window would read the new stream's first second
+    // as ancient history.
+    {
+        std::lock_guard<std::mutex> audioLock(s->audioMtx);
+        s->audio.clear();
+    }
     env->ReleaseByteArrayElements(tokenArr, tokenBytes, JNI_ABORT);
     env->ReleaseByteArrayElements(keyArr, keyBytes, JNI_ABORT);
     LOGI("Session %d params set (token=%02x%02x%02x%02x, protocol=%d)", handle, s->token[0],
@@ -832,6 +1074,51 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendTo
             (uint32_t)(eventTimeMs & 0xFFFFFFFFLL));
         sendEncrypted(s.get(), MSG_TOUCHPAD, payload, 16);
     }
+}
+
+// One 20 ms mono window straight from AudioRecord: encode it and put it on the
+// wire as MSG_MIC_AUDIO. Called from the capture thread, so all of the work
+// (Opus encode included) happens there rather than on the caller's.
+//
+// Refusing a window that is not exactly AUDIO_FRAME_SAMPLES is the encoder's
+// job, not a check duplicated here: a mis-framed buffer must not become a
+// packet the satellite cannot place in its timeline.
+JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendMicFrame(
+    JNIEnv* env, jobject, jint handle, jint controllerIndex, jshortArray pcmMono) {
+    auto s = getSession(handle);
+    if (!s || pcmMono == nullptr) return JNI_FALSE;
+    if (env->GetArrayLength(pcmMono) != dish_audio::AUDIO_FRAME_SAMPLES) return JNI_FALSE;
+    int16_t pcm[dish_audio::AUDIO_FRAME_SAMPLES];
+    env->GetShortArrayRegion(pcmMono, 0, dish_audio::AUDIO_FRAME_SAMPLES,
+                             reinterpret_cast<jshort*>(pcm));
+
+    // The wire ceiling, not a guess at the bitrate: libopus treats the output
+    // size as a hard limit it encodes down to, so the only refusal on this path
+    // should be one the contract actually imposes.
+    uint8_t payload[dish_wire::AUDIO_WIRE_HEADER_BYTES + dish_wire::AUDIO_WIRE_MAX_OPUS_BYTES];
+    const uint8_t idx = (uint8_t)(controllerIndex & 0xFF);
+    size_t opusBytes = 0;
+    uint16_t seq = 0;
+    {
+        std::lock_guard<std::mutex> lock(s->audioMtx);
+        ControllerAudio& ca = s->audio[idx];
+        if (!ca.micEncoder) {
+            ca.micEncoder = dish_audio::OpusStreamEncoder::create(dish_audio::Stream::Mic);
+            if (!ca.micEncoder) {
+                LOGE("mic audio: no Opus encoder for ctrl %u", (unsigned)idx);
+                return JNI_FALSE;
+            }
+        }
+        opusBytes = ca.micEncoder->encode(pcm, dish_audio::AUDIO_FRAME_SAMPLES,
+                                          payload + dish_wire::AUDIO_WIRE_HEADER_BYTES,
+                                          dish_wire::AUDIO_WIRE_MAX_OPUS_BYTES);
+        if (opusBytes == 0) return JNI_FALSE;
+        seq = ca.micSeq++; // u16, wraps by design (contract §Controller audio)
+    }
+    dish_wire::encodeAudioFrameHeader(payload, idx, seq);
+    const uint16_t payloadLen =
+        static_cast<uint16_t>(dish_wire::AUDIO_WIRE_HEADER_BYTES + opusBytes);
+    return sendEncrypted(s.get(), MSG_MIC_AUDIO, payload, payloadLen) ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT void JNICALL
@@ -907,7 +1194,13 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiv
                                                                                      jint handle) {
     auto s = getSession(handle);
     if (!s || s->udpSock < 0) return -1;
-    uint8_t buf[128];
+    // A whole datagram: MSG_SPEAKER_AUDIO carries an Opus packet, and a short
+    // read would truncate the ciphertext into an AEAD failure rather than an
+    // honest error (satellite docs/contract.md §Packet format).
+    uint8_t buf[dish_wire::MAX_DATAGRAM_BYTES];
+    static_assert(sizeof(buf) >= dish_wire::OUTER_HEADER_BYTES + dish_wire::INNER_HEADER_BYTES +
+                                     dish_wire::MAX_INNER_PAYLOAD_BYTES + dish_wire::AEAD_TAG_BYTES,
+                  "recv buffer must hold a maximal datagram, framing and tag included");
     struct sockaddr_in from = {};
     socklen_t fl = sizeof(from);
     ssize_t n = recvfrom(s->udpSock, buf, sizeof(buf), 0, (struct sockaddr*)&from, &fl);
@@ -933,7 +1226,7 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiv
     nonce[0] = CRYPTO_DIR_SERVER_TO_CLIENT;
     putBE32(nonce + 8, ctr);
 
-    // Must size with buf[128] not the message-set max: bound holds structurally, not by luck.
+    // Must size with buf not the message-set max: bound holds structurally, not by luck.
     uint8_t decrypted[sizeof(buf)];
     unsigned long long decLen = 0;
     size_t cipherLen = (size_t)n - 8;
@@ -1011,6 +1304,35 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiv
         if (g_feedbackBridgeClass == nullptr || g_feedbackPlayerLedsMethod == nullptr) return 1;
         env->CallStaticVoidMethod(g_feedbackBridgeClass, g_feedbackPlayerLedsMethod, handle,
                                   (jint)decrypted[4], (jint)decrypted[5]);
+        if (env->ExceptionCheck()) env->ExceptionClear();
+    } else if (msgType == MSG_SPEAKER_AUDIO && msgLen >= dish_wire::AUDIO_WIRE_MIN_PAYLOAD_BYTES &&
+               decLen >= 4 + (unsigned long long)msgLen) {
+        // Queued, not decoded here: see the audio dispatch thread. With no
+        // playback engine installed there is nothing to decode FOR, so the
+        // frame is dropped before it costs a copy (same shape as the feedback
+        // arms, which bail on a missing bridge class).
+        if (g_speakerAudioBridgeClass == nullptr) return 1;
+        const dish_wire::AudioFrameHeader h = dish_wire::decodeAudioFrameHeader(decrypted + 4);
+        const uint8_t* opus = decrypted + 4 + dish_wire::AUDIO_WIRE_HEADER_BYTES;
+        const size_t opusLen = msgLen - dish_wire::AUDIO_WIRE_HEADER_BYTES;
+        SpeakerFrame f;
+        f.session = s;
+        f.handle = handle;
+        f.ctrlIdx = h.ctrlIdx;
+        f.seq = h.seq;
+        f.opus.assign(opus, opus + opusLen);
+        enqueueSpeakerFrame(std::move(f));
+    } else if (msgType == MSG_MIC_LED && msgLen == dish_wire::MIC_LED_PAYLOAD_BYTES &&
+               decLen >= 4 + dish_wire::MIC_LED_PAYLOAD_BYTES) {
+        // Routed like the lightbar: the FeedbackRouter lands it on whichever
+        // sink the slot has. A state we do not know can only come from a host
+        // speaking something newer, and rendering it as a guess would be worse
+        // than rendering nothing, so it is dropped here rather than clamped.
+        const dish_wire::MicLedPayload led = dish_wire::decodeMicLedPayload(decrypted + 4);
+        if (!dish_wire::micLedStateValid(led.state)) return 1;
+        if (g_feedbackBridgeClass == nullptr || g_feedbackMicLedMethod == nullptr) return 1;
+        env->CallStaticVoidMethod(g_feedbackBridgeClass, g_feedbackMicLedMethod, handle,
+                                  (jint)led.ctrlIdx, (jint)led.state);
         if (env->ExceptionCheck()) env->ExceptionClear();
     }
     return 1;
@@ -1319,6 +1641,51 @@ Java_com_tinkernorth_dish_hotpath_input_FeedbackBridge_nativeInstall(JNIEnv* env
             env->ExceptionClear();
         }
     }
+    if (g_feedbackMicLedMethod == nullptr) {
+        g_feedbackMicLedMethod =
+            env->GetStaticMethodID(g_feedbackBridgeClass, "dispatchMicLed", "(III)V");
+        if (g_feedbackMicLedMethod == nullptr) {
+            LOGE("FeedbackBridge.dispatchMicLed not found");
+            env->ExceptionClear();
+        }
+    }
+}
+
+// The pad's own mic-mute button, going UP. FeedbackBridge carries what the host asked the pad to
+// do; this is the pad telling the app what the user did to it, and the only signal on the USB
+// input path that Kotlin needs by event rather than by report.
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_hotpath_input_MicMuteBridge_nativeInstall(JNIEnv* env, jclass cls) {
+    if (g_micMuteBridgeClass == nullptr) { g_micMuteBridgeClass = (jclass)env->NewGlobalRef(cls); }
+    if (g_micMutePadMethod == nullptr) {
+        g_micMutePadMethod =
+            env->GetStaticMethodID(g_micMuteBridgeClass, "dispatchPadMicMute", "(IZ)V");
+        if (g_micMutePadMethod == nullptr) {
+            LOGE("MicMuteBridge.dispatchPadMicMute not found");
+            env->ExceptionClear();
+        }
+    }
+    startBridgeDispatchThread();
+}
+
+// Speaker audio has its own bridge rather than riding FeedbackBridge: it is a
+// continuous stream with a queue and a thread behind it, not a coalesced
+// last-value-wins signal, and its sink is an audio engine rather than an
+// actuator router.
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_hotpath_audio_SpeakerAudioBridge_nativeInstall(JNIEnv* env, jclass cls) {
+    if (g_speakerAudioBridgeClass == nullptr) {
+        g_speakerAudioBridgeClass = (jclass)env->NewGlobalRef(cls);
+    }
+    if (g_speakerAudioFrameMethod == nullptr) {
+        g_speakerAudioFrameMethod =
+            env->GetStaticMethodID(g_speakerAudioBridgeClass, "dispatchSpeakerFrame", "(II[SZ)V");
+        if (g_speakerAudioFrameMethod == nullptr) {
+            LOGE("SpeakerAudioBridge.dispatchSpeakerFrame not found");
+            env->ExceptionClear();
+        }
+    }
+    startAudioDispatchThread();
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendUsbTriggerRumble(
@@ -1347,6 +1714,11 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendUs
     // Wire order left then right (contract 0x0010).
     usbhost::sendTriggerEffects((int32_t)syntheticDeviceId, buf,
                                 buf + usbparsers::TRIGGER_EFFECT_BLOCK_LEN);
+}
+
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendUsbMicMuteLed(
+    JNIEnv*, jobject, jint syntheticDeviceId, jint state) {
+    usbhost::sendMicMuteLed((int32_t)syntheticDeviceId, (uint8_t)(state & 0xFF));
 }
 
 JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_lookupKnownModelName(

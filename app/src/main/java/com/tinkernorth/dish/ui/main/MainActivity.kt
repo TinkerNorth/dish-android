@@ -19,6 +19,7 @@ import androidx.recyclerview.widget.ConcatAdapter
 import com.google.androidgamesdk.GameActivity
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionCoordinator
+import com.tinkernorth.dish.composer.MicIndicatorCoordinator
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.databinding.ActivityMainBinding
@@ -63,6 +64,8 @@ class MainActivity :
     @Inject lateinit var notifications: DishNotifications
 
     @Inject lateinit var lowPowerSignal: LowPowerSignal
+
+    @Inject lateinit var micIndicator: MicIndicatorCoordinator
 
     @Inject lateinit var onboarding: OnboardingPreferenceStore
 
@@ -128,7 +131,7 @@ class MainActivity :
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         applyPaneLayout(resources.configuration)
-        gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications, lowPowerSignal)
+        gamepadHost = attachGamepadHost(binding.root, wakeState, gamepadRegistry, notifications, lowPowerSignal, micIndicator)
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()
         attachDonatePill()
