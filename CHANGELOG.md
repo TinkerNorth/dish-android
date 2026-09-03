@@ -7,7 +7,13 @@ computer. Those lines say "update Satellite too".
 
 ---
 
-## Unreleased
+## [2.0.0] - Unreleased
+
+Everything below ships as 2.0.0, the release where the whole Dish and
+Satellite family moves to one shared version number. The headline since
+1.1.4: your controller gains a microphone, a speaker and a working mute
+light, and Dish can now stream from Moonlight hosts (Sunshine, Apollo,
+Wolf) as well as Satellite.
 
 ### Added
 
