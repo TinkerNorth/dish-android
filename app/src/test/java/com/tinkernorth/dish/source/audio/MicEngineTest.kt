@@ -65,8 +65,11 @@ class MicEngineTest {
         ): MicCaptureSession? {
             lastFrameSamples.set(frameSamples)
             if (refuse.get()) return null
-            opens.incrementAndGet()
+            // Endpoint first, count second: the tests await on the count and then read the
+            // endpoint list, so the increment is the publication barrier. The other order let
+            // an await release between the two writes and read one endpoint too few.
             openedEndpoints += preferredDeviceId
+            opens.incrementAndGet()
             return Session(frameSamples, preferredDeviceId)
         }
 
