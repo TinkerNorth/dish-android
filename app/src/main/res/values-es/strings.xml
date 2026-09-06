@@ -63,39 +63,16 @@
     <string name="satellite_fallback_name">satélite</string>
 
     <!-- Tarjeta item_controller (item_controller.xml). -->
-    <string name="slot_output_to_label">Salida hacia</string>
     <string name="action_unbind">Desenlazar</string>
     <string name="action_open_gamepad">Abrir el mando</string>
-    <string name="desc_open_gamepad">Abrir el mando</string>
     <string name="action_open_touchpad">Abrir el panel táctil</string>
     <string name="action_open_mouse">Abrir el ratón</string>
-    <string name="desc_expand">Expandir</string>
 
     <!-- Selector de modo del panel táctil. -->
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Ratón</string>
     <string name="touchpad_needs_direct">El panel táctil requiere el modo Directo</string>
     <string name="card_switch_to_direct">Cambiar a Directo</string>
-
-    <!-- Texto de estado del slot en ControllerAdapter (bajo el nombre). -->
-    <string name="slot_status_disconnecting">Desconectando… %1$ds</string>
-    <string name="slot_status_routing_to">→ %1$s</string>
-    <string name="slot_status_bound">Enlazado</string>
-    <string name="slot_status_tap_to_bind">Toca para enlazar</string>
-
-    <!-- Filas del selector por slot en ControllerAdapter. -->
-    <string name="picker_empty_no_connections">No hay conexiones aún. Toca Gestionar arriba</string>
-    <string name="picker_empty_no_available">No hay conexiones disponibles ahora mismo</string>
-    <string name="picker_title_with_status">%1$s%2$s</string>
-    <string name="picker_status_online"> • en línea</string>
-    <string name="picker_status_connecting"> • conectando…</string>
-    <string name="picker_status_offline"> • desconectada</string>
-    <string name="picker_status_needs_pairing"> • emparejamiento necesario</string>
-    <string name="picker_detail_bound_here"> • enlazada aquí</string>
-    <string name="picker_detail_in_use"> • en uso</string>
-
-    <!-- Selector de tipo de mando por slot. -->
-    <string name="picker_type_label">Tipo</string>
 
     <!-- Vocabulario de etiquetas/filas para LinkState. -->
     <string name="chip_status_found">Encontrado</string>
@@ -271,11 +248,6 @@
     <string name="motion_user_disabled_detail">Has desactivado el movimiento para esta ranura. Activa el interruptor Movimiento en la fila del mando para volver a enviar gyro.</string>
     <string name="motion_no_host_sink_detail">Un mando virtual estilo Xbox no tiene superficie de movimiento en el host. Cambia el mando a PlayStation para la puntería gyro / inclinación.</string>
     <string name="motion_backend_broken_detail">El satélite aceptó este mando pero no pudo crear su dispositivo de movimiento, probablemente un problema de permisos o de kernel en el servidor. Reinicia el satélite o consulta sus registros.</string>
-    <string name="controller_motion_toggle_label">Movimiento (gyro)</string>
-    <string name="controller_motion_toggle_subtitle_on">Enviando puntería gyro / inclinación al host.</string>
-    <string name="controller_motion_toggle_subtitle_off">No se envían muestras gyro para esta ranura.</string>
-    <string name="controller_motion_toggle_subtitle_no_gyro">Este dispositivo no tiene giroscopio.</string>
-    <string name="controller_motion_toggle_subtitle_no_host_sink">El host no puede recibir movimiento de un mando estilo Xbox. Cambia arriba a PlayStation para el gyro.</string>
 
     <!-- Indicador de batería por slot. -->
     <string name="battery_percent">%1$d %%</string>
@@ -411,29 +383,12 @@
     <string name="licenses_open_external">Abrir licencia de %1$s</string>
     <string name="settings_version_label">VERSIÓN</string>
 
-    <string name="path_label_direct">Modo directo</string>
-    <string name="path_label_direct_with_rate">Modo directo · %1$d Hz</string>
-    <string name="path_label_standard">Modo estándar</string>
-    <string name="path_label_bluetooth">Bluetooth</string>
     <string name="path_reason_busy">Otra app está usando este mando.</string>
     <string name="path_reason_init_failed">No se pudo activar el Modo directo. Se usa Modo estándar.</string>
     <string name="path_reason_permission_denied">Permiso USB denegado. Concédelo para usar el Modo directo.</string>    <string name="direct_failed">No se pudo cambiar %1$s a Modo directo.</string>
-    <string name="path_input_section_label">Ruta de entrada</string>
-    <string name="path_choice_standard">Estándar</string>
-    <string name="path_choice_direct">Directo</string>
-    <string name="path_caps_standard">Estándar: vibración %1$s · movimiento %2$s</string>
-    <string name="path_caps_direct">Directo: vibración %1$s · movimiento %2$s</string>
-    <string name="path_risk_verified">Verificado para Modo directo.</string>
     <string name="path_risk_guessed">No reconocido. El Modo directo adivina la disposición de este mando, así que algunas entradas pueden leerse mal. Puedes volver cuando quieras.</string>
-    <string name="path_risk_bluetooth">El Modo directo necesita una conexión USB.</string>
-    <string name="path_restoring">Restaurando Modo estándar</string>
-    <string name="path_confirm_title">¿Probar Modo directo?</string>
-    <string name="path_confirm_body">No reconocemos este mando. El Modo directo adivina la disposición de botones y sticks, así que algunas entradas pueden leerse mal. Puedes volver al Estándar cuando quieras.</string>
-    <string name="path_confirm_positive">Probar</string>
-    <string name="path_confirm_negative">Cancelar</string>
     <string name="direct_restore_failed">No se pudo restaurar el Modo estándar para %1$s. Desconéctalo y vuelve a conectarlo.</string>
     <string name="direct_revert_to_direct">No se pudo cambiar %1$s a Estándar. Sigue en Modo directo.</string>
-    <string name="path_restore_stuck">El Modo estándar no responde. Cambia a Directo o desconéctalo y vuelve a conectarlo.</string>
     <string name="path_needs_replug">Desconectado. Desconéctalo y vuelve a conectarlo para usarlo.</string>
 
     <string name="binding_label_connection">Conexión</string>
@@ -483,7 +438,6 @@
     <string name="mic_action_unmute">Reactivar micro</string>
     <string name="mic_chip_live_desc">El micrófono está activo. Toca para silenciarlo.</string>
     <string name="mic_chip_muted_desc">Micrófono silenciado. Toca para reactivarlo.</string>
-    <string name="binding_state_on">Encendido</string>
     <string name="binding_state_off">Apagado</string>
     <string name="binding_func_value">%1$s · %2$s</string>
 
