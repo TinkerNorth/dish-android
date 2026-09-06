@@ -43,6 +43,8 @@ abstract class BaseGamepadHostActivity : AppCompatActivity() {
     // control surface would steal pad touches.
     protected open val showsMicChip: Boolean get() = true
 
+    protected open val holdsScreenAwake: Boolean get() = false
+
     protected fun installGamepadHost(rootView: View) {
         gamepadHost =
             attachGamepadHost(
@@ -52,7 +54,7 @@ abstract class BaseGamepadHostActivity : AppCompatActivity() {
                 notifications,
                 lowPowerSignal,
                 if (showsMicChip) micIndicator else null,
-            )
+            ).also { it.setScreenHold(holdsScreenAwake) }
     }
 
     protected fun openExternalUrl(url: String) {

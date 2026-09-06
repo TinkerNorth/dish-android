@@ -23,6 +23,8 @@ import com.tinkernorth.dish.source.lowpower.LowPowerManager
 import com.tinkernorth.dish.source.lowpower.LowPowerSignal
 import com.tinkernorth.dish.source.notification.DishNotifications
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -43,6 +45,8 @@ class GamepadActivityHost(
     private var snackbarAnchorJob: Job? = null
     private var unbufferedJoystickRequested = false
     private var performanceHintsApplied = false
+    private val screenHold = MutableStateFlow(false)
+    private var keepScreenOn = false
 
     init {
         val overlay = OverlayLowPowerBinding.bind(rootView)
@@ -58,6 +62,7 @@ class GamepadActivityHost(
                         tvLowPowerTime = overlay.tvLowPowerTime,
                         tvLowPowerStatus = overlay.tvLowPowerStatus,
                         llStreamingHint = chip.llStreamingHint,
+                        tvLowPowerDimBody = overlay.tvLowPowerDimBody,
                     )
                 activeControllerCount = { wakeState.streamingSlotCount.value }
             }
@@ -69,7 +74,8 @@ class GamepadActivityHost(
             .launchIn(activity.lifecycleScope)
         activity.lifecycleScope.launch {
             activity.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                wakeState.shouldKeepScreenOn.collect(::applyScreenOn)
+                combine(wakeState.shouldKeepScreenOn, screenHold) { streaming, hold -> streaming to (streaming || hold) }
+                    .collect { (streaming, keepOn) -> applyScreenOn(keepOn, streaming) }
             }
         }
         activity.lifecycleScope.launch {
@@ -92,6 +98,10 @@ class GamepadActivityHost(
 
     fun cancelDimOnStop() {
         lowPowerManager.cancel()
+    }
+
+    fun setScreenHold(active: Boolean) {
+        screenHold.value = active
     }
 
     // Trust the device, not event.source: generic HID adapters report BUTTON_* as SOURCE_KEYBOARD; fallthrough → DPAD_CENTER clicks.
@@ -139,9 +149,7 @@ class GamepadActivityHost(
     fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         val overlayActive = lowPowerManager.state.value == LowPowerManager.State.ACTIVE
         val consume = lowPowerTouchGate.onDispatch(ev.action, overlayActive)
-        if (wakeState.shouldKeepScreenOn.value &&
-            ev.actionMasked != MotionEvent.ACTION_CANCEL
-        ) {
+        if (keepScreenOn && ev.actionMasked != MotionEvent.ACTION_CANCEL) {
             lowPowerManager.onUserInteraction()
         }
         return consume
@@ -158,13 +166,17 @@ class GamepadActivityHost(
         applyPerformanceWindowHints()
     }
 
-    private fun applyScreenOn(active: Boolean) {
-        if (active) {
+    private fun applyScreenOn(
+        keepOn: Boolean,
+        streaming: Boolean,
+    ) {
+        keepScreenOn = keepOn
+        if (keepOn) {
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         } else {
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
-        lowPowerManager.onLockStateChanged(active)
+        lowPowerManager.onLockStateChanged(keepOn, streaming)
     }
 
     private fun isGamepadSource(source: Int): Boolean =

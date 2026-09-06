@@ -461,7 +461,6 @@
     <string name="diagnostics_ms_p50_p99">%1$.2f ms (p50) · %2$.2f ms (p99)</string>
     <string name="diagnostics_unknown">Unknown</string>
     <string name="diagnostics_present">Present</string>
-    <string name="diagnostics_no_controllers">No controllers connected.</string>
     <string name="diagnostics_no_connections">No hosts connected.</string>
     <string name="diagnostics_transport">Connection</string>
     <string name="diagnostics_transport_usb_direct">USB direct</string>
@@ -508,7 +507,6 @@
     <string name="inspector_section_motion">MOTION</string>
     <string name="inspector_section_touch">TOUCHPAD</string>
     <string name="inspector_section_tests">STICK TESTS</string>
-    <string name="inspector_section_rumble">RUMBLE TEST</string>
     <string name="inspector_values">L %1$d, %2$d · R %3$d, %4$d · LT %5$d · RT %6$d</string>
     <string name="inspector_pressed">Pressed: %1$s</string>
     <string name="inspector_none">none</string>
@@ -526,6 +524,37 @@
     <string name="inspector_rumble_weak">Weak</string>
     <string name="inspector_rumble_strong">Strong</string>
     <string name="inspector_rumble_both">Both</string>
+    <string name="inspector_section_host">HOST</string>
+    <string name="inspector_section_input">LIVE INPUT</string>
+    <string name="inspector_section_feedback">FEEDBACK TESTS</string>
+    <string name="inspector_section_audio">AUDIO TESTS</string>
+    <string name="inspector_host_unbound">Not bound to a host. Tests run on the controller directly.</string>
+    <string name="inspector_trigger_left">Left</string>
+    <string name="inspector_trigger_right">Right</string>
+    <string name="inspector_cycle">Cycle</string>
+    <string name="inspector_pulse_triggers">Pulse resistance</string>
+    <string name="inspector_mic_lamp">Mic lamp</string>
+    <string name="inspector_lamp_on">On</string>
+    <string name="inspector_lamp_pulse">Pulse</string>
+    <string name="inspector_play_tone">Play test sound</string>
+    <string name="inspector_tone_playing">Playing…</string>
+    <string name="inspector_tone_unavailable">No audio output for this controller.</string>
+    <string name="inspector_mic_test">Test microphone</string>
+    <string name="inspector_mic_stop">Stop</string>
+    <string name="inspector_mic_listening">Listening… speak into the microphone.</string>
+    <string name="inspector_mic_level">Level %1$d%% · peak %2$d%%</string>
+    <string name="inspector_mic_unavailable">The microphone could not be opened.</string>
+    <string name="inspector_no_feedback">No feedback features on this path.</string>
+    <string name="inspector_no_audio">No audio endpoints on this path.</string>
+    <string name="diagnostics_feature_keyboard">Keyboard</string>
+    <string name="diagnostics_host_slot">Slot %1$d · %2$s as %3$s · touchpad %4$s</string>
+    <string name="diagnostics_host_bound">%1$s as %2$s</string>
+    <string name="diagnostics_host_protocol">Protocol</string>
+    <string name="diagnostics_host_version">Host version</string>
+    <string name="diagnostics_host_features">Host features</string>
+    <string name="diagnostics_none">none</string>
+    <string name="diagnostics_joined" translatable="false">%1$s · %2$s</string>
+    <string name="diagnostics_protocol_value" translatable="false">v%1$d</string>
 
     <string name="settings_version_label">VERSION</string>
     <!-- Brand wordmark in the footer. Not translated: stylistic constant

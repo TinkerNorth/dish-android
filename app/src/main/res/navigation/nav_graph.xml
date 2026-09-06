@@ -179,9 +179,9 @@
         android:name="com.tinkernorth.dish.ui.diagnostics.InputInspectorActivity"
         android:label="@string/settings_diagnostics_title">
         <argument
-            android:name="extra_device_id"
-            app:argType="integer"
-            android:defaultValue="0" />
+            android:name="extra_slot_id"
+            app:argType="string"
+            android:defaultValue="virtual" />
         <argument
             android:name="extra_device_name"
             app:argType="string"

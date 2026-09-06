@@ -25,6 +25,7 @@ class LowPowerManager(
         val tvLowPowerTime: TextView,
         val tvLowPowerStatus: TextView,
         val llStreamingHint: LinearLayout,
+        val tvLowPowerDimBody: TextView? = null,
     )
 
     var views: Views? = null
@@ -42,8 +43,11 @@ class LowPowerManager(
 
     private val inactivityRunnable = Runnable { startCountdown() }
 
-    fun onLockStateChanged(active: Boolean) {
-        isStreaming = active
+    fun onLockStateChanged(
+        active: Boolean,
+        streaming: Boolean = active,
+    ) {
+        isStreaming = streaming
         if (active && state.value == State.IDLE) {
             resetInactivityTimer()
         } else if (!active) {
@@ -139,6 +143,7 @@ class LowPowerManager(
         val v = views ?: return
         v.llStreamingHint.visibility =
             if (isStreaming && state.value == State.IDLE) View.VISIBLE else View.GONE
+        v.tvLowPowerDimBody?.visibility = if (isStreaming) View.VISIBLE else View.GONE
     }
 
     fun refreshStatus() {

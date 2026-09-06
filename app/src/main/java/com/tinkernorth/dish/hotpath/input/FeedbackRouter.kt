@@ -42,11 +42,7 @@ class FeedbackRouter
             g: Int,
             b: Int,
         ) {
-            when (val target = resolveTarget(sessionHandle, controllerIndex)) {
-                is RumbleTarget.DirectUsb -> native.sendUsbLightbar(target.deviceId, r, g, b)
-                RumbleTarget.Phone -> virtualFeedback.setLightbar(r, g, b)
-                else -> Unit
-            }
+            actuateLightbar(resolveTarget(sessionHandle, controllerIndex), r, g, b)
         }
 
         fun dispatchTriggerEffects(
@@ -54,15 +50,7 @@ class FeedbackRouter
             controllerIndex: Int,
             blocks: ByteArray,
         ) {
-            when (val target = resolveTarget(sessionHandle, controllerIndex)) {
-                is RumbleTarget.DirectUsb -> native.sendUsbTriggerEffects(target.deviceId, blocks)
-                RumbleTarget.Phone ->
-                    virtualFeedback.setTriggerEffects(
-                        leftActive = triggerEffectActive(blocks, LEFT_BLOCK_OFFSET),
-                        rightActive = triggerEffectActive(blocks, RIGHT_BLOCK_OFFSET),
-                    )
-                else -> Unit
-            }
+            actuateTriggerEffects(resolveTarget(sessionHandle, controllerIndex), blocks)
         }
 
         fun dispatchPlayerLeds(
@@ -70,11 +58,7 @@ class FeedbackRouter
             controllerIndex: Int,
             ledMask: Int,
         ) {
-            when (val target = resolveTarget(sessionHandle, controllerIndex)) {
-                is RumbleTarget.DirectUsb -> native.sendUsbPlayerLeds(target.deviceId, ledMask)
-                RumbleTarget.Phone -> virtualFeedback.setPlayerLeds(ledMask)
-                else -> Unit
-            }
+            actuatePlayerLeds(resolveTarget(sessionHandle, controllerIndex), ledMask)
         }
 
         /**
@@ -93,25 +77,38 @@ class FeedbackRouter
             controllerIndex: Int,
             state: Int,
         ) {
-            when (val target = resolveTarget(sessionHandle, controllerIndex)) {
-                is RumbleTarget.DirectUsb -> native.sendUsbMicMuteLed(target.deviceId, state)
-                RumbleTarget.Phone -> virtualFeedback.setMicLed(state)
-                else -> Unit
-            }
+            actuateMicLed(resolveTarget(sessionHandle, controllerIndex), state)
         }
 
-        /** Moonlight path: the connection already resolved the slot. */
+        /** Slot-addressed entry points: the Moonlight path and the inspector's test bench already know the slot. */
         fun dispatchLightbarToSlot(
             slotId: String,
             r: Int,
             g: Int,
             b: Int,
         ) {
-            when (val target = classifyTarget(slotId)) {
-                is RumbleTarget.DirectUsb -> native.sendUsbLightbar(target.deviceId, r, g, b)
-                RumbleTarget.Phone -> virtualFeedback.setLightbar(r, g, b)
-                else -> Unit
-            }
+            actuateLightbar(classifyTarget(slotId), r, g, b)
+        }
+
+        fun dispatchTriggerEffectsToSlot(
+            slotId: String,
+            blocks: ByteArray,
+        ) {
+            actuateTriggerEffects(classifyTarget(slotId), blocks)
+        }
+
+        fun dispatchPlayerLedsToSlot(
+            slotId: String,
+            ledMask: Int,
+        ) {
+            actuatePlayerLeds(classifyTarget(slotId), ledMask)
+        }
+
+        fun dispatchMicLedToSlot(
+            slotId: String,
+            state: Int,
+        ) {
+            actuateMicLed(classifyTarget(slotId), state)
         }
 
         fun dispatchTriggerRumbleToSlot(
@@ -127,6 +124,56 @@ class FeedbackRouter
                 // toggle, the stop-on-zero rule and the duration clamp all apply.
                 RumbleTarget.Phone ->
                     rumble.dispatchToSlot(VIRTUAL_SLOT_ID, leftMagnitude, rightMagnitude, TRIGGER_RUMBLE_HOLD_MS)
+                else -> Unit
+            }
+        }
+
+        private fun actuateLightbar(
+            target: RumbleTarget,
+            r: Int,
+            g: Int,
+            b: Int,
+        ) {
+            when (target) {
+                is RumbleTarget.DirectUsb -> native.sendUsbLightbar(target.deviceId, r, g, b)
+                RumbleTarget.Phone -> virtualFeedback.setLightbar(r, g, b)
+                else -> Unit
+            }
+        }
+
+        private fun actuateTriggerEffects(
+            target: RumbleTarget,
+            blocks: ByteArray,
+        ) {
+            when (target) {
+                is RumbleTarget.DirectUsb -> native.sendUsbTriggerEffects(target.deviceId, blocks)
+                RumbleTarget.Phone ->
+                    virtualFeedback.setTriggerEffects(
+                        leftActive = triggerEffectActive(blocks, LEFT_BLOCK_OFFSET),
+                        rightActive = triggerEffectActive(blocks, RIGHT_BLOCK_OFFSET),
+                    )
+                else -> Unit
+            }
+        }
+
+        private fun actuatePlayerLeds(
+            target: RumbleTarget,
+            ledMask: Int,
+        ) {
+            when (target) {
+                is RumbleTarget.DirectUsb -> native.sendUsbPlayerLeds(target.deviceId, ledMask)
+                RumbleTarget.Phone -> virtualFeedback.setPlayerLeds(ledMask)
+                else -> Unit
+            }
+        }
+
+        private fun actuateMicLed(
+            target: RumbleTarget,
+            state: Int,
+        ) {
+            when (target) {
+                is RumbleTarget.DirectUsb -> native.sendUsbMicMuteLed(target.deviceId, state)
+                RumbleTarget.Phone -> virtualFeedback.setMicLed(state)
                 else -> Unit
             }
         }

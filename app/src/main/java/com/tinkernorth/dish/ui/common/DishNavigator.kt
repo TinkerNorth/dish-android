@@ -125,13 +125,13 @@ class DishNavigator(
     }
 
     fun toInputInspector(
-        deviceId: Int,
+        slotId: String,
         deviceName: String,
     ) {
         go(
             R.id.inputInspectorActivity,
             Bundle().apply {
-                putInt("extra_device_id", deviceId)
+                putString("extra_slot_id", slotId)
                 putString("extra_device_name", deviceName)
             },
         )

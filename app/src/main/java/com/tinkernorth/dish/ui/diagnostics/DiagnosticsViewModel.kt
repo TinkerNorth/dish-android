@@ -5,6 +5,8 @@ package com.tinkernorth.dish.ui.diagnostics
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
+import com.tinkernorth.dish.source.store.DiagnosticsLogEntry
+import com.tinkernorth.dish.source.store.DiagnosticsLogStore
 import com.tinkernorth.dish.source.store.LatencyProfilingStore
 import com.tinkernorth.dish.source.system.WifiLink
 import com.tinkernorth.dish.source.system.WifiLinkSource
@@ -17,6 +19,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
@@ -29,6 +33,8 @@ class DiagnosticsViewModel
         private val physicalInputNative: PhysicalInputNative,
         private val wifiLinkSource: WifiLinkSource,
         private val json: Json,
+        private val sources: DiagnosticsSources,
+        diagnosticsLog: DiagnosticsLogStore,
     ) : ViewModel() {
         sealed interface LatencyUi {
             data object Off : LatencyUi
@@ -55,6 +61,21 @@ class DiagnosticsViewModel
                     delay(WIFI_POLL_MS)
                 }
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null)
+
+        private val world: Flow<DiagnosticsWorld> =
+            sources.world.shareIn(viewModelScope, SharingStarted.WhileSubscribed(), replay = 1)
+
+        val controllers: StateFlow<List<ControllerDiag>> =
+            world
+                .map { controllerDiags(it, sources::touchpadMode) }
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
+
+        val hosts: StateFlow<List<HostDiag>> =
+            world
+                .map { hostDiags(it, sources::touchpadMode) }
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
+
+        val events: StateFlow<List<DiagnosticsLogEntry>> = diagnosticsLog.state
 
         private fun probeTicks(): Flow<LatencyUi> =
             flow {
