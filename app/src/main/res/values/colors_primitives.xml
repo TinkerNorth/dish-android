@@ -87,7 +87,6 @@
     <color name="cloud_200">#FFF2F4F8</color>
     <color name="cloud_300">#FFECEFF5</color>
     <color name="cloud_400">#FFE5E9F1</color>
-    <color name="cloud_500">#FFDADFEB</color>
 
     <!-- ===== Slate: extended muted-text scale. =====
          slate_300 (existing) is the muted text tone on dark surfaces.
@@ -96,7 +95,6 @@
          enough contrast against the cloud_* ramp), slate_700 is the
          outline-variant divider tone for the same surfaces. -->
     <color name="slate_500">#FF6E7894</color>
-    <color name="slate_700">#FF394466</color>
 
     <!-- ===== Light-mode tonal containers. =====
          The M3 `colorPrimaryContainer` / `colorErrorContainer` /

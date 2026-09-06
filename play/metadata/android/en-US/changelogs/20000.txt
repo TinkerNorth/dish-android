@@ -1,0 +1,7 @@
+Dish 2.0.0: one version number across Dish and Satellite. Update Satellite too.
+
+• Your controller gains a microphone and a speaker: the phone's mic becomes the pad's mic, and controller sound plays through the phone.
+• Mute means muted, with a mic chip on every screen.
+• Stream from Moonlight hosts (Sunshine, Apollo, Wolf) as well as Satellite.
+• Controller lights, player LEDs and adaptive triggers follow the game.
+• On-screen triggers are analog now.

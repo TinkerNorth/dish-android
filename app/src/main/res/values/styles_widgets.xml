@@ -119,9 +119,6 @@
 
     <!-- Used by `picker_empty_label.xml`, inflated by ControllerAdapter
          when the slot picker has no connections to show. -->
-    <style name="Widget.Dish.EmptyStateText.Picker">
-        <item name="android:layout_marginTop">@dimen/spacing_xs</item>
-    </style>
 
     <!-- Used by `activity_connections.xml`'s tvSatelliteEmpty + tvBtEmpty.
          Vertical padding (instead of margin) keeps the empty-state row's
@@ -348,21 +345,6 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:textAppearance">@style/TextAppearance.Dish.Label.Micro</item>
         <item name="android:textAllCaps">true</item>
-    </style>
-
-    <style name="Widget.Dish.Segment" parent="">
-        <item name="android:layout_width">wrap_content</item>
-        <item name="android:layout_height">match_parent</item>
-        <item name="android:gravity">center</item>
-        <item name="android:paddingStart">@dimen/config_segment_padding_horizontal</item>
-        <item name="android:paddingEnd">@dimen/config_segment_padding_horizontal</item>
-        <item name="android:paddingTop">@dimen/binding_row_padding_vertical</item>
-        <item name="android:paddingBottom">@dimen/binding_row_padding_vertical</item>
-        <item name="android:textAppearance">@style/TextAppearance.Dish.BodySmall</item>
-        <item name="android:textColor">@color/binding_segment_text</item>
-        <item name="android:background">@drawable/bg_binding_segment</item>
-        <item name="android:clickable">true</item>
-        <item name="android:focusable">true</item>
     </style>
 
     <style name="Widget.Dish.Divider" parent="">

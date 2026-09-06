@@ -62,39 +62,16 @@
     <string name="satellite_fallback_name">satelit</string>
 
     <!-- Kartica item_controller (item_controller.xml). -->
-    <string name="slot_output_to_label">Izlaz na</string>
     <string name="action_unbind">Odveži</string>
     <string name="action_open_gamepad">Otvori kontroler</string>
-    <string name="desc_open_gamepad">Otvori kontroler</string>
     <string name="action_open_touchpad">Otvori dodirnu ploču</string>
     <string name="action_open_mouse">Otvori miš</string>
-    <string name="desc_expand">Proširi</string>
 
     <!-- Birač režima dodirne ploče. -->
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Miš</string>
     <string name="touchpad_needs_direct">Dodirnoj ploči je potreban Brzi način</string>
     <string name="card_switch_to_direct">Prebaci na Brzi</string>
-
-    <!-- Tekst statusa slota u ControllerAdapter (ispod imena). -->
-    <string name="slot_status_disconnecting">Prekidanje veze… %1$ds</string>
-    <string name="slot_status_routing_to">→ %1$s</string>
-    <string name="slot_status_bound">Povezan</string>
-    <string name="slot_status_tap_to_bind">Dodirnite za povezivanje</string>
-
-    <!-- Redovi izbora po slotu u ControllerAdapter. -->
-    <string name="picker_empty_no_connections">Još nema veza. Dodirnite Upravljanje iznad</string>
-    <string name="picker_empty_no_available">Trenutno nema dostupnih veza</string>
-    <string name="picker_title_with_status">%1$s%2$s</string>
-    <string name="picker_status_online"> • na vezi</string>
-    <string name="picker_status_connecting"> • povezivanje…</string>
-    <string name="picker_status_offline"> • van veze</string>
-    <string name="picker_status_needs_pairing"> • potrebno uparivanje</string>
-    <string name="picker_detail_bound_here"> • povezano ovdje</string>
-    <string name="picker_detail_in_use"> • u upotrebi</string>
-
-    <!-- Prekidač tipa kontrolera po slotu. -->
-    <string name="picker_type_label">Tip</string>
 
     <!-- Vokabular čipova/redova za LinkState. -->
     <string name="chip_status_found">Pronađen</string>
@@ -268,11 +245,6 @@
     <string name="motion_user_disabled_detail">Isključili ste pokret za ovaj slot. Uključite prekidač Pokret u redu kontrolera da biste ponovo počeli slati žiro.</string>
     <string name="motion_no_host_sink_detail">Virtuelni kontroler u Xbox stilu nema površinu za pokret na hostu. Prebacite kontroler na PlayStation za žiro nišanjenje / nagib.</string>
     <string name="motion_backend_broken_detail">Satelit je prihvatio ovaj kontroler ali nije mogao kreirati uređaj za pokret, vjerovatno problem s dozvolama ili kernelom na serveru. Restartajte satelit ili provjerite njegove zapisnike.</string>
-    <string name="controller_motion_toggle_label">Pokret (žiro)</string>
-    <string name="controller_motion_toggle_subtitle_on">Šalje žiro nišanjenje / nagib hostu.</string>
-    <string name="controller_motion_toggle_subtitle_off">Žiro uzorci se ne šalju za ovaj slot.</string>
-    <string name="controller_motion_toggle_subtitle_no_gyro">Ovaj uređaj nema žiroskop.</string>
-    <string name="controller_motion_toggle_subtitle_no_host_sink">Host ne može primiti pokret s kontrolera u Xbox stilu. Prebacite gore na PlayStation za žiro.</string>
 
     <!-- Indikator baterije po slotu. -->
     <string name="battery_percent">%1$d %%</string>
@@ -410,29 +382,12 @@
     <string name="licenses_open_external">Otvori licencu za %1$s</string>
     <string name="settings_version_label">VERZIJA</string>
 
-    <string name="path_label_direct">Brzi način</string>
-    <string name="path_label_direct_with_rate">Brzi način · %1$d Hz</string>
-    <string name="path_label_standard">Standardni način</string>
-    <string name="path_label_bluetooth">Bluetooth</string>
     <string name="path_reason_busy">Druga aplikacija koristi ovaj kontroler.</string>
     <string name="path_reason_init_failed">Nije moguće postaviti Brzi način. Koristi se Standardni način.</string>
     <string name="path_reason_permission_denied">USB dozvola odbijena. Odobrite je za Brzi način.</string>    <string name="direct_failed">Nije moguće prebaciti %1$s na Brzi način.</string>
-    <string name="path_input_section_label">Način unosa</string>
-    <string name="path_choice_standard">Standardni</string>
-    <string name="path_choice_direct">Brzi</string>
-    <string name="path_caps_standard">Standardni: vibracija %1$s · pokret %2$s</string>
-    <string name="path_caps_direct">Brzi: vibracija %1$s · pokret %2$s</string>
-    <string name="path_risk_verified">Provjereno za Brzi način.</string>
     <string name="path_risk_guessed">Nije prepoznato. Brzi način pogađa raspored ovog kontrolera, pa neki unosi mogu biti pogrešni. Možete se vratiti u svakom trenutku.</string>
-    <string name="path_risk_bluetooth">Brzi način zahtijeva USB vezu.</string>
-    <string name="path_restoring">Vraćanje Standardnog načina</string>
-    <string name="path_confirm_title">Isprobati Brzi način?</string>
-    <string name="path_confirm_body">Ne prepoznajemo ovaj kontroler. Brzi način pogađa raspored dugmadi i palica, pa neki unosi mogu biti pogrešni. Možete se vratiti na Standardni u svakom trenutku.</string>
-    <string name="path_confirm_positive">Isprobaj</string>
-    <string name="path_confirm_negative">Otkaži</string>
     <string name="direct_restore_failed">Vraćanje Standardnog načina za %1$s nije uspjelo. Isključite i ponovo priključite.</string>
     <string name="direct_revert_to_direct">Nije moguće prebaciti %1$s na Standardni. I dalje je na Brzom načinu.</string>
-    <string name="path_restore_stuck">Standardni način ne reagira. Prebacite na Brzi ili ponovo priključite.</string>
     <string name="path_needs_replug">Prekinuto. Isključite i ponovo priključite da koristite ovaj kontroler.</string>
 
     <string name="binding_label_connection">Veza</string>
@@ -482,7 +437,6 @@
     <string name="mic_action_unmute">Uključi mikrofon</string>
     <string name="mic_chip_live_desc">Mikrofon je uključen. Dodirnite da ga utišate.</string>
     <string name="mic_chip_muted_desc">Mikrofon je utišan. Dodirnite da ga ponovo uključite.</string>
-    <string name="binding_state_on">Uključeno</string>
     <string name="binding_state_off">Isključeno</string>
     <string name="binding_func_value">%1$s · %2$s</string>
 

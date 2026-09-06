@@ -1,0 +1,7 @@
+Dish 2.0.0: un solo número de versión para Dish y Satellite. Actualiza también Satellite.
+
+• Tu mando gana micrófono y altavoz: el micro del teléfono pasa a ser el del mando, y el sonido del mando suena en el teléfono.
+• Silenciar es silenciar, con un indicador de micro en cada pantalla.
+• Juega desde hosts Moonlight (Sunshine, Apollo, Wolf) además de Satellite.
+• Las luces del mando, los LED de jugador y los gatillos adaptativos siguen al juego.
+• Los gatillos en pantalla ahora son analógicos.
