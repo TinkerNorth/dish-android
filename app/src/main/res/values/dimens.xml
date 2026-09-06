@@ -58,11 +58,9 @@
     <dimen name="icon_dot_lg">@dimen/size_8</dimen>        <!-- slot-card status indicator -->
     <dimen name="icon_battery">@dimen/size_20</dimen>      <!-- battery glyph in slot card -->
     <dimen name="icon_picker_glyph">@dimen/size_22</dimen> <!-- glyph in expanded picker row -->
-    <dimen name="icon_brand_sm">@dimen/size_22</dimen>     <!-- header brand glyph (small) -->
     <dimen name="icon_section_header">@dimen/size_18</dimen> <!-- section-title brand glyph -->
     <dimen name="icon_card_container">@dimen/size_36</dimen> <!-- rounded-square icon container (Settings cards) -->
     <dimen name="icon_card_glyph">@dimen/size_18</dimen>     <!-- icon nested inside icon_card_container -->
-    <dimen name="icon_action">@dimen/size_28</dimen>       <!-- quick-launch overlay button -->
     <dimen name="icon_row_glyph">@dimen/size_28</dimen>    <!-- connection-row brand glyph -->
     <dimen name="icon_controller">@dimen/size_36</dimen>   <!-- slot-card controller icon -->
     <dimen name="icon_chevron_lg">@dimen/size_20</dimen>   <!-- expand/collapse caret on slot card -->
@@ -96,17 +94,11 @@
          ============================================================ -->
     <dimen name="card_padding">@dimen/size_14</dimen>
     <dimen name="card_padding_horizontal">@dimen/size_14</dimen>
-    <dimen name="card_padding_bottom">@dimen/size_14</dimen>
     <dimen name="card_margin_bottom">@dimen/size_10</dimen>
 
     <!-- ============================================================
          INLINE PICKER ROW (expanded slot card body)
          ============================================================ -->
-    <dimen name="picker_row_padding">@dimen/size_10</dimen>
-    <dimen name="picker_row_margin_top">@dimen/size_6</dimen>
-    <dimen name="picker_section_margin_top">@dimen/size_8</dimen>     <!-- between Type / Motion / Touchpad rows -->
-    <dimen name="picker_section_padding_bottom">@dimen/size_6</dimen> <!-- "OUTPUT TO" label -->
-    <dimen name="picker_label_margin_end">@dimen/size_10</dimen>
 
     <!-- ============================================================
          CHIP (pickable Type / Touchpad-mode chips)
@@ -213,7 +205,6 @@
     <dimen name="config_callout_icon_size">@dimen/spacing_3xl</dimen>
     <dimen name="config_callout_icon_gap">@dimen/size_9</dimen>
     <dimen name="config_empty_glyph_size">@dimen/size_40</dimen>
-    <dimen name="config_segment_padding_horizontal">@dimen/spacing_xl</dimen>
     <dimen name="config_step_indicator_size">@dimen/spacing_3xl</dimen>
     <dimen name="config_step_pending_dot">@dimen/size_15</dimen>
     <dimen name="config_step_row_icon">@dimen/spacing_4xl</dimen>

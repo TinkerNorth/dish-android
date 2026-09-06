@@ -62,39 +62,16 @@
     <string name="satellite_fallback_name">satellite</string>
 
     <!-- Carte item_controller (item_controller.xml). -->
-    <string name="slot_output_to_label">Sortie vers</string>
     <string name="action_unbind">Délier</string>
     <string name="action_open_gamepad">Ouvrir la manette</string>
-    <string name="desc_open_gamepad">Ouvrir la manette</string>
     <string name="action_open_touchpad">Ouvrir le pavé tactile</string>
     <string name="action_open_mouse">Ouvrir la souris</string>
-    <string name="desc_expand">Développer</string>
 
     <!-- Sélecteur du mode pavé tactile. -->
     <string name="touchpad_mode_pad">Pavé</string>
     <string name="touchpad_mode_mouse">Souris</string>
     <string name="touchpad_needs_direct">Le pavé tactile nécessite le mode Direct</string>
     <string name="card_switch_to_direct">Passer en Direct</string>
-
-    <!-- Texte du statut de l\'emplacement dans ControllerAdapter (sous le nom). -->
-    <string name="slot_status_disconnecting">Déconnexion… %1$ds</string>
-    <string name="slot_status_routing_to">→ %1$s</string>
-    <string name="slot_status_bound">Liée</string>
-    <string name="slot_status_tap_to_bind">Touchez pour lier</string>
-
-    <!-- Lignes du sélecteur par emplacement dans ControllerAdapter. -->
-    <string name="picker_empty_no_connections">Aucune connexion : touchez Gérer ci-dessus</string>
-    <string name="picker_empty_no_available">Aucune connexion disponible pour l\'instant</string>
-    <string name="picker_title_with_status">%1$s%2$s</string>
-    <string name="picker_status_online"> • en ligne</string>
-    <string name="picker_status_connecting"> • connexion…</string>
-    <string name="picker_status_offline"> • hors ligne</string>
-    <string name="picker_status_needs_pairing"> • appairage requis</string>
-    <string name="picker_detail_bound_here"> • liée ici</string>
-    <string name="picker_detail_in_use"> • utilisée</string>
-
-    <!-- Bascule de type de manette par emplacement. -->
-    <string name="picker_type_label">Type</string>
 
     <!-- Vocabulaire des puces / lignes pour LinkState. -->
     <string name="chip_status_found">Trouvée</string>
@@ -270,11 +247,6 @@
     <string name="motion_user_disabled_detail">Vous avez désactivé le mouvement pour cet emplacement. Activez le bouton Mouvement sur la ligne de la manette pour recommencer à envoyer le gyro.</string>
     <string name="motion_no_host_sink_detail">Une manette virtuelle de style Xbox n\'a pas de surface de mouvement sur l\'hôte. Passez la manette en PlayStation pour la visée gyro / inclinaison.</string>
     <string name="motion_backend_broken_detail">Le satellite a accepté cette manette mais n\'a pas pu créer son périphérique de mouvement : probablement un problème de permission ou de noyau sur le serveur. Redémarrez le satellite ou vérifiez ses journaux.</string>
-    <string name="controller_motion_toggle_label">Mouvement (gyro)</string>
-    <string name="controller_motion_toggle_subtitle_on">Envoie la visée gyro / inclinaison à l\'hôte.</string>
-    <string name="controller_motion_toggle_subtitle_off">Aucun échantillon gyro n\'est envoyé pour cet emplacement.</string>
-    <string name="controller_motion_toggle_subtitle_no_gyro">Cet appareil n\'a pas de gyroscope.</string>
-    <string name="controller_motion_toggle_subtitle_no_host_sink">L\'hôte ne peut pas recevoir le mouvement d\'une manette de style Xbox. Passez en PlayStation ci-dessus pour le gyro.</string>
 
     <!-- Indicateur de batterie par emplacement. -->
     <string name="battery_percent">%1$d %%</string>
@@ -410,29 +382,12 @@
     <string name="licenses_open_external">Ouvrir la licence de %1$s</string>
     <string name="settings_version_label">VERSION</string>
 
-    <string name="path_label_direct">Mode direct</string>
-    <string name="path_label_direct_with_rate">Mode direct · %1$d Hz</string>
-    <string name="path_label_standard">Mode standard</string>
-    <string name="path_label_bluetooth">Bluetooth</string>
     <string name="path_reason_busy">Une autre app utilise cette manette.</string>
     <string name="path_reason_init_failed">Impossible d\'activer le Mode direct. Mode standard utilisé.</string>
     <string name="path_reason_permission_denied">Autorisation USB refusée. Accordez-la pour le Mode direct.</string>    <string name="direct_failed">Impossible de passer %1$s en Mode direct.</string>
-    <string name="path_input_section_label">Voie d\'entrée</string>
-    <string name="path_choice_standard">Standard</string>
-    <string name="path_choice_direct">Direct</string>
-    <string name="path_caps_standard">Standard : vibration %1$s · mouvement %2$s</string>
-    <string name="path_caps_direct">Direct : vibration %1$s · mouvement %2$s</string>
-    <string name="path_risk_verified">Vérifié pour le Mode direct.</string>
     <string name="path_risk_guessed">Non reconnue. Le Mode direct devine la disposition de cette manette, donc certaines entrées peuvent être mal lues. Vous pouvez revenir à tout moment.</string>
-    <string name="path_risk_bluetooth">Le Mode direct nécessite une connexion USB.</string>
-    <string name="path_restoring">Restauration du Mode standard</string>
-    <string name="path_confirm_title">Essayer le Mode direct ?</string>
-    <string name="path_confirm_body">Nous ne reconnaissons pas cette manette. Le Mode direct devine la disposition des boutons et des sticks, donc certaines entrées peuvent être mal lues. Vous pouvez revenir au Mode standard à tout moment.</string>
-    <string name="path_confirm_positive">Essayer</string>
-    <string name="path_confirm_negative">Annuler</string>
     <string name="direct_restore_failed">Impossible de restaurer le Mode standard pour %1$s. Débranchez-le puis rebranchez-le.</string>
     <string name="direct_revert_to_direct">Impossible de passer %1$s en Standard. Toujours en Mode direct.</string>
-    <string name="path_restore_stuck">Le Mode standard ne répond pas. Passez en Direct ou rebranchez la manette.</string>
     <string name="path_needs_replug">Déconnectée. Débranchez puis rebranchez pour utiliser cette manette.</string>
 
     <string name="binding_label_connection">Connexion</string>
@@ -482,7 +437,6 @@
     <string name="mic_action_unmute">Rétablir le micro</string>
     <string name="mic_chip_live_desc">Le micro est actif. Touchez pour le couper.</string>
     <string name="mic_chip_muted_desc">Micro coupé. Touchez pour le rétablir.</string>
-    <string name="binding_state_on">Activé</string>
     <string name="binding_state_off">Désactivé</string>
     <string name="binding_func_value">%1$s · %2$s</string>
 

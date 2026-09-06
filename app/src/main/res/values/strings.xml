@@ -83,40 +83,21 @@
     <string name="satellite_fallback_name">satellite</string>
 
     <!-- Item controller card (item_controller.xml). -->
-    <string name="slot_output_to_label">Output to</string>
     <string name="action_unbind">Unbind</string>
     <string name="action_open_gamepad">Open Gamepad</string>
-    <string name="desc_open_gamepad">Open gamepad</string>
     <string name="action_open_touchpad">Open Touchpad</string>
     <string name="action_open_mouse">Open Mouse</string>
-    <string name="desc_expand">Expand</string>
 
     <!-- Touchpad routing values, client-side. Wire values match satellite/src/core/types.h. -->
     <string name="touchpad_mode_pad">Pad</string>
     <string name="touchpad_mode_mouse">Mouse</string>
     <string name="touchpad_needs_direct">Trackpad needs Direct mode</string>
     <string name="card_switch_to_direct">Switch to Direct</string>
-    <!-- ControllerAdapter slot-status text (renders below the slot name). -->
-    <string name="slot_status_disconnecting">Disconnecting… %1$ds</string>
-    <string name="slot_status_routing_to">→ %1$s</string>
-    <string name="slot_status_bound">Bound</string>
-    <string name="slot_status_tap_to_bind">Tap to bind</string>
 
-    <!-- ControllerAdapter per-slot picker rows: empty state + inline status. -->
-    <string name="picker_empty_no_connections">No connections yet. Tap Manage above</string>
-    <string name="picker_empty_no_available">No connections available right now</string>
     <!-- `%2$s` is one of picker_status_* (each carries its own leading " • "
          separator) so simple concatenation reads correctly. -->
-    <string name="picker_title_with_status">%1$s%2$s</string>
-    <string name="picker_status_online"> • online</string>
-    <string name="picker_status_connecting"> • connecting…</string>
-    <string name="picker_status_offline"> • offline</string>
-    <string name="picker_status_needs_pairing"> • needs pairing</string>
-    <string name="picker_detail_bound_here"> • bound here</string>
-    <string name="picker_detail_in_use"> • in use</string>
 
     <!-- Per-slot controller-type toggle. Brand names are not translated. -->
-    <string name="picker_type_label">Type</string>
     <string name="picker_type_xbox" translatable="false">Xbox</string>
     <string name="picker_type_playstation" translatable="false">PlayStation</string>
     <string name="picker_type_dualsense" translatable="false">DualSense</string>
@@ -315,13 +296,6 @@
     <string name="motion_user_disabled_detail">You turned motion off for this slot. Enable the Motion switch on the controller row to start sending gyro again.</string>
     <string name="motion_no_host_sink_detail">An Xbox-style virtual pad has no motion surface on the host. Switch the controller to PlayStation for gyro aim / tilt.</string>
     <string name="motion_backend_broken_detail">The satellite accepted this controller but couldn\'t create its motion device, likely a permission or kernel issue on the server. Restart the satellite, or check its logs.</string>
-
-    <!-- Per-slot motion toggle switch on the controller list row. -->
-    <string name="controller_motion_toggle_label">Motion (gyro)</string>
-    <string name="controller_motion_toggle_subtitle_on">Sending gyro aim / tilt to the host.</string>
-    <string name="controller_motion_toggle_subtitle_off">Gyro samples are not being sent for this slot.</string>
-    <string name="controller_motion_toggle_subtitle_no_gyro">This device has no gyroscope.</string>
-    <string name="controller_motion_toggle_subtitle_no_host_sink">Host can\'t sink motion for an Xbox-style pad. Switch to PlayStation above for gyro.</string>
 
     <!-- Per-slot battery indicator on the controller list (Task 1.2). -->
     <!-- Battery percentage, e.g. "84%". -->
@@ -571,32 +545,15 @@
          controller landed on Standard mode so the user can act on it (grant a permission, switch
          to USB, etc.). All copy is intentionally non-technical: no mention of JNI, USB host,
          interrupt endpoints, evdev, kernel, etc. -->
-    <string name="path_label_direct">Direct mode</string>
-    <string name="path_label_direct_with_rate">Direct mode · %1$d Hz</string>
-    <string name="path_label_standard">Standard mode</string>
-    <string name="path_label_bluetooth">Bluetooth</string>
     <string name="path_reason_busy">Another app is using this controller.</string>
     <string name="path_reason_init_failed">Couldn\'t set up Direct mode. Using Standard mode instead.</string>
     <string name="path_reason_permission_denied">USB permission denied. Grant it to use Direct mode.</string>    <string name="direct_failed">Couldn\'t switch %1$s to Direct mode.</string>
 
     <!-- Input-path chooser in the expanded controller card: a Standard/Direct toggle plus the
          per-device trade-off and risk copy. capMark passes ✓/✗ into the %s slots. -->
-    <string name="path_input_section_label">Input path</string>
-    <string name="path_choice_standard">Standard</string>
-    <string name="path_choice_direct">Direct</string>
-    <string name="path_caps_standard">Standard: rumble %1$s · motion %2$s</string>
-    <string name="path_caps_direct">Direct: rumble %1$s · motion %2$s</string>
-    <string name="path_risk_verified">Verified for Direct mode.</string>
     <string name="path_risk_guessed">Not recognised. Direct mode guesses this controller\'s layout, so some inputs may read wrong. You can switch back anytime.</string>
-    <string name="path_risk_bluetooth">Direct mode needs a USB connection.</string>
-    <string name="path_restoring">Restoring Standard mode</string>
-    <string name="path_confirm_title">Try Direct mode?</string>
-    <string name="path_confirm_body">We don\'t recognise this controller. Direct mode guesses its button and stick layout, so some inputs may read wrong. You can switch back to Standard anytime.</string>
-    <string name="path_confirm_positive">Try Direct</string>
-    <string name="path_confirm_negative">Cancel</string>
     <string name="direct_restore_failed">Couldn\'t restore Standard mode for %1$s. Unplug and replug it.</string>
     <string name="direct_revert_to_direct">Couldn\'t switch %1$s to Standard. Still on Direct mode.</string>
-    <string name="path_restore_stuck">Standard mode isn\'t responding. Switch to Direct, or unplug and replug.</string>
     <string name="path_needs_replug">Disconnected. Unplug and replug to use this controller.</string>
 
     <!-- Tri-zone controller card + Configure-bindings activity. -->
@@ -636,7 +593,6 @@
     <string name="mic_action_unmute">Unmute mic</string>
     <string name="mic_chip_live_desc">Microphone is live. Tap to mute it.</string>
     <string name="mic_chip_muted_desc">Microphone muted. Tap to unmute it.</string>
-    <string name="binding_state_on">On</string>
     <string name="binding_state_off">Off</string>
     <string name="binding_state_unknown" translatable="false">?</string>
     <string name="binding_func_value">%1$s · %2$s</string>

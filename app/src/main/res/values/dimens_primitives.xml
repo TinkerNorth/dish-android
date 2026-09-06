@@ -45,7 +45,6 @@
     <dimen name="size_56">56dp</dimen>
     <dimen name="size_80">80dp</dimen>
     <dimen name="size_96">96dp</dimen>
-    <dimen name="size_240">240dp</dimen>
     <dimen name="size_280">280dp</dimen>
     <dimen name="size_600">600dp</dimen>
 

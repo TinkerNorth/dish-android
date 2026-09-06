@@ -1,0 +1,7 @@
+Dish 2.0.0: jedan broj verzije za Dish i Satellite. Ažurirajte i Satellite.
+
+• Vaš kontroler dobija mikrofon i zvučnik: mikrofon telefona postaje mikrofon kontrolera, a zvuk kontrolera se čuje na telefonu.
+• Utišano znači utišano, uz indikator mikrofona na svakom ekranu.
+• Igrajte s Moonlight hostova (Sunshine, Apollo, Wolf) uz Satellite.
+• Svjetla kontrolera, LED-ovi igrača i adaptivni okidači prate igru.
+• Okidači na ekranu su sada analogni.

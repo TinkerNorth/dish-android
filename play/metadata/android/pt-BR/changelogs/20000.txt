@@ -1,0 +1,7 @@
+Dish 2.0.0: um único número de versão para Dish e Satellite. Atualize o Satellite também.
+
+• Seu controle ganha microfone e alto-falante: o microfone do celular vira o do controle, e o som do controle toca no celular.
+• Mudo é mudo, com um indicador de microfone em cada tela.
+• Jogue a partir de hosts Moonlight (Sunshine, Apollo, Wolf) além do Satellite.
+• Luzes do controle, LEDs de jogador e gatilhos adaptativos seguem o jogo.
+• Os gatilhos na tela agora são analógicos.

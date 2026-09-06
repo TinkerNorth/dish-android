@@ -1,0 +1,7 @@
+Dish 2.0.0: eine Versionsnummer für Dish und Satellite. Bitte auch Satellite aktualisieren.
+
+• Dein Controller bekommt Mikrofon und Lautsprecher: Das Handy-Mikro wird zum Pad-Mikro, und Controller-Sound läuft über das Handy.
+• Stumm heißt stumm, mit einem Mikro-Chip auf jedem Bildschirm.
+• Streame von Moonlight-Hosts (Sunshine, Apollo, Wolf) und von Satellite.
+• Controller-Lichter, Spieler-LEDs und adaptive Trigger folgen dem Spiel.
+• Die Bildschirm-Trigger sind jetzt analog.

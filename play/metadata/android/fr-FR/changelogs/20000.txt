@@ -1,0 +1,7 @@
+Dish 2.0.0 : un seul numéro de version pour Dish et Satellite. Mettez aussi Satellite à jour.
+
+• Votre manette gagne un micro et un haut-parleur : le micro du téléphone devient celui de la manette, et son audio sort sur le téléphone.
+• Muet veut dire muet, avec un indicateur micro sur chaque écran.
+• Jouez depuis des hôtes Moonlight (Sunshine, Apollo, Wolf) en plus de Satellite.
+• Lumières, LED joueur et gâchettes adaptatives suivent le jeu.
+• Les gâchettes à l'écran sont désormais analogiques.
