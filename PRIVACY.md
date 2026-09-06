@@ -1,6 +1,6 @@
 # Dish for Android: Privacy Policy
 
-**Effective date:** 2026-09-01.
+**Effective date:** 2026-09-06.
 **Hosted copy:** [`https://dish.tinkernorth.com/privacy/dish-android/`](https://dish.tinkernorth.com/privacy/dish-android/).
 The hosted copy at that URL is the canonical version; this file mirrors it
 in-repo so the code and the policy ship together. Google Play points at the
@@ -8,18 +8,20 @@ hosted URL.
 
 This document describes what data the Dish Android app collects, why, how
 long it is retained, and the choices you have over it. The product as a
-whole spans four repositories (`satellite`, `dish-android`, `dish-linux`,
-`dish-mac`); this policy is specific to the Android client. The server
-(`satellite`) runs on your own PC and does not transmit data off your
-local network.
+whole spans several repositories (`satellite`, `dish-android`,
+`dish-windows`, `dish-linux`, `dish-mac`); this policy is specific to the
+Android client. The server (`satellite`) runs on your own PC and has its own
+policy, as do the desktop clients; do not read one as describing another.
 
 ---
 
 ## 1. Short version
 
 - Dish is a **LAN-only** wireless gamepad. Controller input goes from your
-  phone, over your Wi-Fi (encrypted) or Bluetooth, to your own PC. It does
-  not stream to any TinkerNorth-operated server.
+  phone, over your Wi-Fi (encrypted) or Bluetooth, to your own PC: a
+  `satellite` server, a Moonlight host (Sunshine, Apollo, Wolf) or a
+  Bluetooth host you paired with. It does not stream to any
+  TinkerNorth-operated server.
 - We do not sell, share, or rent your data. We do not show ads. We do not
   profile you for marketing.
 - We collect **crash reports** via Google Firebase Crashlytics so we can
@@ -54,6 +56,8 @@ The following data never leaves your phone except to your own
 | Remembered satellite servers (name, IP, port) | App-private SharedPreferences (`connection_store.xml`) | Reconnecting to known hosts. Excluded from cloud backup and device transfer. |
 | Libsodium-derived shared keys (one per paired satellite) | Same SharedPreferences | Encrypting the gamepad wire protocol (ChaCha20-Poly1305). Excluded from cloud backup and device transfer. |
 | Remembered Bluetooth HID host MACs and labels | Same SharedPreferences | Reconnecting to known BT hosts. |
+| Remembered Moonlight hosts (name, address, ports, host id, the app last launched there, the controller type you chose) | Same SharedPreferences | Reconnecting to Moonlight hosts you paired with. |
+| Moonlight client identity: an RSA key pair with a self-signed certificate, plus a random client id | The private key in the Android Keystore, where it cannot be exported; the certificate and id in app-private storage | Proving to a Moonlight host that this is the phone it paired with. Sent only to Moonlight hosts you pair with, never to us. |
 | Last per-slot controller binding (slot → satellite/BT host) | Same SharedPreferences | Restoring your last setup on launch. |
 | Per-slot battery readings (transient) | In-memory only | Showing the battery indicator on the controller card. |
 | Gamepad input events (button presses, sticks, gyroscope) | In-memory only | Forwarded over encrypted UDP to the satellite you paired with, or over Bluetooth HID. Not logged or stored. |
@@ -93,6 +97,23 @@ The following data never leaves your phone except to your own
   Microphone switch is on, the microphone permission is granted, and the
   controller is not muted. Muting is enforced by stopping the capture, not
   by sending silence, so a muted controller sends no audio packets at all.
+- **Moonlight hosts.** Dish can also be the controller for a Sunshine,
+  Apollo or Wolf host, speaking the Moonlight (GameStream) protocol instead
+  of the satellite one. Hosts are found over mDNS (`_nvstream._tcp`) or
+  added by address. Pairing follows that protocol: a few HTTP requests to
+  the host on port 47989, which the protocol fixes as plain HTTP because no
+  shared secret exists yet. The PIN never travels over the wire; both sides
+  derive a key from it and prove they hold it. From then on every call is
+  mutual TLS on port 47984 with the phone's client certificate, and the
+  host's certificate is pinned so a swapped host is refused. To open a
+  controller session the app launches or resumes an app on the host, then
+  sends your controller input, motion, touchpad and battery over the
+  protocol's encrypted (AES-GCM) control channel. The host also streams its
+  screen and audio at the lowest settings it allows, because the protocol
+  needs a stream to hold the session open; Dish discards those packets
+  without decoding them and never stores or shows them. The host learns the
+  phone's client id, a device name and the client certificate. All of this
+  stays on your local network.
 - **Bluetooth HID.** As an alternative to Wi-Fi, the app can present
   itself to a paired host as a Bluetooth HID gamepad. In that mode no
   data crosses Wi-Fi; the host receives a standard HID report. Bluetooth
@@ -115,8 +136,8 @@ Crashlytics. The report contains:
 
 Crashlytics **does not** receive:
 
-- The names, IPs, or MAC addresses of satellites or Bluetooth hosts you
-  pair with.
+- The names, IPs, or MAC addresses of satellites, Moonlight hosts or
+  Bluetooth hosts you pair with.
 - Your gamepad input events.
 - Any microphone audio, or any audio at all.
 - Your Wi-Fi SSID or IP address.
@@ -181,11 +202,13 @@ or comparable laws in other jurisdictions.
   switch. Revoking the microphone permission in system settings stops it
   too, and the binding screen goes back to saying it needs permission.
 - **Forget a satellite or host:** *Connections → Forget* deletes the
-  stored shared key and the entry from `connection_store.xml`. There is
-  no server-side record to delete because there is no TinkerNorth server.
+  stored shared key (for a Moonlight host, its entry and pinned
+  certificate) from `connection_store.xml`. There is no server-side record
+  to delete because there is no TinkerNorth server. A Moonlight host keeps
+  its own list of paired clients, which you clear in that host's settings.
 - **Wipe everything:** Uninstall the app. All app-private storage,
-  including paired keys and the crash-reporting preference, is removed
-  by Android.
+  including paired keys, the Moonlight identity in the Keystore and the
+  crash-reporting preference, is removed by Android.
 
 ---
 
