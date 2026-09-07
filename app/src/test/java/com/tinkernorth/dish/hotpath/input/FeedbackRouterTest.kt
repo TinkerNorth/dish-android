@@ -6,6 +6,7 @@ import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.store.FeedbackActivityStore
 import com.tinkernorth.dish.source.store.MIC_LED_OFF
 import com.tinkernorth.dish.source.store.MIC_LED_ON
 import com.tinkernorth.dish.source.store.MIC_LED_PULSE
@@ -48,7 +49,8 @@ class FeedbackRouterTest {
         return manager
     }
 
-    private fun router(manager: SatelliteConnectionManager = mockk(relaxed = true)) = FeedbackRouter(manager, native, store, rumble)
+    private fun router(manager: SatelliteConnectionManager = mockk(relaxed = true)) =
+        FeedbackRouter(manager, native, store, rumble, FeedbackActivityStore())
 
     @Test
     fun `lightbar reaches a Direct-claimed pad through the session resolve`() {

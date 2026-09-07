@@ -46,6 +46,17 @@ class DiagnosticsViewModel
             ) : LatencyUi
         }
 
+        data class Overview(
+            val controllers: List<ControllerDiag>,
+            val hosts: List<HostDiag>,
+            val radios: RadioFacts,
+            val latencyRows: LatencyRows,
+        ) {
+            companion object {
+                val EMPTY = Overview(emptyList(), emptyList(), RadioFacts.NONE, LatencyRows(emptyList(), emptyList()))
+            }
+        }
+
         // WhileSubscribed ties the probe to the screen: the collector lives inside
         // repeatOnLifecycle(STARTED), so leaving the screen stops the fast pings.
         @OptIn(ExperimentalCoroutinesApi::class)
@@ -65,15 +76,13 @@ class DiagnosticsViewModel
         private val world: Flow<DiagnosticsWorld> =
             sources.world.shareIn(viewModelScope, SharingStarted.WhileSubscribed(), replay = 1)
 
-        val controllers: StateFlow<List<ControllerDiag>> =
+        val overview: StateFlow<Overview> =
             world
-                .map { controllerDiags(it, sources::touchpadMode) }
-                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
-
-        val hosts: StateFlow<List<HostDiag>> =
-            world
-                .map { hostDiags(it, sources::touchpadMode) }
-                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
+                .map { w ->
+                    val controllers = controllerDiags(w, sources::touchpadMode)
+                    val hosts = hostDiags(w, sources::touchpadMode)
+                    Overview(controllers, hosts, w.radios, latencyRows(controllers, hosts))
+                }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), Overview.EMPTY)
 
         val events: StateFlow<List<DiagnosticsLogEntry>> = diagnosticsLog.state
 

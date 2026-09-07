@@ -23,6 +23,12 @@ uint64_t getUrbCount(int32_t deviceId);
 
 uint64_t getMotionCount(int32_t deviceId);
 
+// URBs that reaped with an error status, failed to submit, or failed to reap.
+uint64_t getUrbErrorCount(int32_t deviceId);
+
+// {"model","parser","init","reportBytes","endpointOut","lastUrbStatus"} for a claimed device.
+std::string deviceInfoJson(int32_t deviceId);
+
 void sendRumble(int32_t syntheticDeviceId, uint16_t strong, uint16_t weak);
 
 void sendTriggerRumble(int32_t syntheticDeviceId, uint16_t left, uint16_t right);

@@ -16,6 +16,7 @@ import com.tinkernorth.dish.repository.SatelliteCatalogRepository
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.inputrate.FrameworkInputTimingStore
 import com.tinkernorth.dish.source.inputrate.InputRateStore
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
@@ -29,6 +30,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.onStart
+import kotlinx.serialization.json.Json
 import javax.inject.Inject
 
 private data class LiveInputs(
@@ -45,6 +49,13 @@ private data class FactInputs(
     val hostFeatures: Map<String, HostFeatureSet>,
 )
 
+private data class ExtraInputs(
+    val radios: RadioFacts,
+    val pads: PadWorld,
+    val links: LinkWorld,
+    val audio: AudioWorld,
+)
+
 @Suppress("LongParameterList")
 class DiagnosticsSources
     @Inject
@@ -59,6 +70,12 @@ class DiagnosticsSources
         private val batteries: BatteryStatusStore,
         private val hostFeatures: SatelliteHostFeaturesStore,
         private val catalogRepo: SatelliteCatalogRepository,
+        private val timing: FrameworkInputTimingStore,
+        private val json: Json,
+        radioSources: RadioSources,
+        padSources: PadSources,
+        linkSources: LinkSources,
+        audioSources: AudioSources,
     ) {
         fun touchpadMode(slotId: String): String = capabilities.touchpadWireMode(slotId)
 
@@ -76,12 +93,21 @@ class DiagnosticsSources
                 if (conns.isEmpty()) return@flatMapLatest flowOf(emptyMap())
                 val perConnection =
                     conns.map { (id, conn) ->
-                        combine(conn.state, conn.slots, telemetryTicks) { state, slots, _ ->
-                            id to SatelliteSnapshot(state == SatelliteSessionState.Live, slots, telemetryOf(conn))
+                        combine(conn.state, conn.slots, conn.sessionFacts, telemetryTicks) { state, slots, facts, _ ->
+                            id to snapshotOf(conn, state, slots, facts)
                         }
                     }
                 combine(perConnection) { it.toMap() }
             }
+
+        private val extras: Flow<ExtraInputs> =
+            combine(
+                radioSources.flow(telemetryTicks),
+                padSources.flow(telemetryTicks),
+                linkSources.flow(telemetryTicks),
+                audioSources.flow(telemetryTicks),
+                ::ExtraInputs,
+            )
 
         internal val world: Flow<DiagnosticsWorld> =
             combine(
@@ -89,7 +115,8 @@ class DiagnosticsSources
                 combine(inputRates.state, batteries.samples, capabilities.state, hostFeatures.state) { rates, bat, caps, hf ->
                     FactInputs(rates.slots, bat, caps, hf)
                 },
-            ) { live, facts ->
+                extras,
+            ) { live, facts, extra ->
                 DiagnosticsWorld(
                     devices = live.devices,
                     virtualName = context.getString(R.string.default_virtual_controller_name),
@@ -101,17 +128,43 @@ class DiagnosticsSources
                     caps = facts.caps,
                     hostFeatures = facts.hostFeatures,
                     serverVersions = serverVersions(live.summaries),
+                    radios = extra.radios,
+                    pads = extra.pads,
+                    links = extra.links,
+                    audio = extra.audio,
+                    nowMs = System.currentTimeMillis(),
                 )
-            }
+            }.onStart { timing.arm() }
+                .onCompletion { timing.disarm() }
 
-        private fun telemetryOf(conn: SatelliteConnection): SatelliteTelemetry? {
+        private fun snapshotOf(
+            conn: SatelliteConnection,
+            state: SatelliteSessionState,
+            slots: Map<String, SatelliteConnection.SlotBinding>,
+            facts: SatelliteConnection.SessionFacts?,
+        ): SatelliteSnapshot {
             val handle = conn.handle
-            if (handle < 0) return null
-            return SatelliteTelemetry(
-                vigemAvailable = controllerRepo.getVigemAvailable(handle) > 0,
-                activeControllers = controllerRepo.getActiveControllerCount(handle),
-                epoch = controllerRepo.getServerEpoch(handle),
-                activeBitmap = controllerRepo.getActiveBitmap(handle),
+            if (handle < 0) {
+                return SatelliteSnapshot(live = state == SatelliteSessionState.Live, slots = slots, telemetry = null, facts = facts)
+            }
+            val telemetry =
+                SatelliteTelemetry(
+                    vigemAvailable = controllerRepo.getVigemAvailable(handle) > 0,
+                    activeControllers = controllerRepo.getActiveControllerCount(handle),
+                    epoch = controllerRepo.getServerEpoch(handle),
+                    activeBitmap = controllerRepo.getActiveBitmap(handle),
+                )
+            val indices = slots.values.map { it.controllerIndex }.distinct()
+            return SatelliteSnapshot(
+                live = state == SatelliteSessionState.Live,
+                slots = slots,
+                telemetry = telemetry,
+                stats = parseSessionStats(json, controllerRepo.sessionStatsJson(handle)),
+                facts = facts,
+                packetsSent = controllerRepo.getSendCounter(handle),
+                closeReason = controllerRepo.getSessionCloseReason(handle),
+                slotSends = indices.associateWith { controllerRepo.getSlotSendCount(handle, it) },
+                slotMotion = indices.associateWith { controllerRepo.getSlotMotionCount(handle, it) },
             )
         }
 

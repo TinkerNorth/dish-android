@@ -25,6 +25,7 @@ import com.tinkernorth.dish.source.store.MIC_LED_OFF
 import com.tinkernorth.dish.source.store.MIC_LED_ON
 import com.tinkernorth.dish.source.store.MIC_LED_PULSE
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
+import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.diagnostics.InputInspectorViewModel.Companion.TEST_MAGNITUDE
 import dagger.hilt.android.AndroidEntryPoint
@@ -44,6 +45,7 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
 
     private val viewModel: InputInspectorViewModel by viewModels()
     private lateinit var binding: ActivityInputInspectorBinding
+    private val nav by lazy { DishNavigator(this) }
 
     override val holdsScreenAwake: Boolean get() = true
 
@@ -72,7 +74,16 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
         intent.getStringExtra(EXTRA_DEVICE_NAME)?.let { binding.toolbar.subtitle = it }
 
         binding.sectionHost.labelSection.setText(R.string.inspector_section_host)
+        binding.sectionDevice.labelSection.setText(R.string.diagnostics_section_device)
         binding.sectionInput.labelSection.setText(R.string.inspector_section_input)
+        binding.btnOpenBinding.setOnClickListener {
+            nav.toBindingInspector(
+                viewModel.slotId,
+                binding.toolbar.subtitle
+                    ?.toString()
+                    .orEmpty(),
+            )
+        }
         binding.sectionMotion.labelSection.setText(R.string.inspector_section_motion)
         binding.sectionTouch.labelSection.setText(R.string.inspector_section_touch)
         binding.sectionTests.labelSection.setText(R.string.inspector_section_tests)
@@ -127,6 +138,10 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
         setLines(binding.tvSlotLine, controller?.host?.let { boundSlotLines(it) }.orEmpty())
         setLines(binding.tvBatteryLine, listOfNotNull(controller?.battery?.let { diagKv(R.string.setup_cap_battery, batteryValue(it)) }))
         binding.tvHostHint.visibility = if (controller?.host == null) View.VISIBLE else View.GONE
+        binding.btnOpenBinding.visibility = if (controller?.host == null) View.GONE else View.VISIBLE
+        val deviceLines = controller?.let { padDeviceLines(it, state.nowMs) }.orEmpty()
+        binding.containerDevice.renderLines(deviceLines)
+        setVisible(binding.sectionDevice.root, deviceLines.isNotEmpty())
 
         val bench = state.bench
         setVisible(binding.rowRumble.root, bench.rumble)
@@ -356,6 +371,7 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
         val driftL = StickHealth.drift(leftSamples)
         val driftR = StickHealth.drift(rightSamples)
         val suggested = StickHealth.suggestedDeadzone(maxOf(driftL, driftR))
+        viewModel.noteDrift(driftL, driftR, suggested)
         return getString(
             R.string.inspector_drift_result,
             percent(driftL),
@@ -369,6 +385,7 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
         val right = StickHealth.envelope(rightSamples)
         binding.plotLeftStick.clearTrail()
         binding.plotRightStick.clearTrail()
+        viewModel.noteRange(worstReach(left), worstReach(right), left.circularityError, right.circularityError)
         return getString(
             R.string.inspector_range_result,
             percent(worstReach(left)),

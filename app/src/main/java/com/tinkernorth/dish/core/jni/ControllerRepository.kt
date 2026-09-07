@@ -59,6 +59,18 @@ class ControllerRepository
 
         fun getSendCounter(handle: Int): Long = SatelliteNative.getSendCounter(handle)
 
+        fun sessionStatsJson(handle: Int): String = SatelliteNative.sessionStatsJson(handle)
+
+        fun getSlotSendCount(
+            handle: Int,
+            controllerIndex: Int,
+        ): Long = SatelliteNative.getSlotSendCount(handle, controllerIndex)
+
+        fun getSlotMotionCount(
+            handle: Int,
+            controllerIndex: Int,
+        ): Long = SatelliteNative.getSlotMotionCount(handle, controllerIndex)
+
         @Suppress("LongParameterList")
         fun sendMotion(
             handle: Int,

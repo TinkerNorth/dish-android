@@ -78,6 +78,8 @@ class EnetClient(
     private var roundTripTimeVarianceMs = 0L
     private var sampledRtt = false
 
+    val roundTripMs: Long? get() = if (sampledRtt) roundTripTimeMs else null
+
     /**
      * The send time of the oldest reliable command still waiting for its
      * acknowledgement, or 0 when nothing is overdue. Reset by ANY acknowledgement,

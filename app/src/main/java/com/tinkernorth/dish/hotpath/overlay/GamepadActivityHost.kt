@@ -4,6 +4,7 @@ package com.tinkernorth.dish.hotpath.overlay
 
 import android.os.Build
 import android.os.PowerManager
+import android.os.SystemClock
 import android.view.Display
 import android.view.InputDevice
 import android.view.KeyEvent
@@ -19,6 +20,7 @@ import com.tinkernorth.dish.core.jni.SatelliteNative
 import com.tinkernorth.dish.databinding.OverlayLowPowerBinding
 import com.tinkernorth.dish.databinding.OverlayLowPowerChipBinding
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
+import com.tinkernorth.dish.source.inputrate.FrameworkInputTimingStore
 import com.tinkernorth.dish.source.lowpower.LowPowerManager
 import com.tinkernorth.dish.source.lowpower.LowPowerSignal
 import com.tinkernorth.dish.source.notification.DishNotifications
@@ -36,6 +38,7 @@ class GamepadActivityHost(
     private val wakeState: WakeStateController,
     private val gamepadRegistry: PhysicalGamepadRegistry,
     private val lowPowerSignal: LowPowerSignal,
+    private val inputTiming: FrameworkInputTimingStore,
 ) {
     private val window = activity.window
     private val lowPowerTouchGate = LowPowerTouchGate()
@@ -108,6 +111,7 @@ class GamepadActivityHost(
     fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val isKnownGamepad = event.deviceId in gamepadRegistry.devices.value
         if (!isGamepadSource(event.source) && !isKnownGamepad) return false
+        if (inputTiming.enabled) inputTiming.record(event.deviceId, event.eventTime, SystemClock.uptimeMillis())
         SatelliteNative.processGamepadKeyEvent(
             event.deviceId,
             event.source,
@@ -125,6 +129,7 @@ class GamepadActivityHost(
             unbufferedJoystickRequested = true
             requestUnbufferedJoystickDispatch(event)
         }
+        if (isJoy && inputTiming.enabled) inputTiming.record(event.deviceId, event.eventTime, SystemClock.uptimeMillis())
         return isJoy &&
             SatelliteNative.processGamepadMotionEvent(
                 event.deviceId,

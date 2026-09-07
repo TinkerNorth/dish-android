@@ -3,9 +3,13 @@
 package com.tinkernorth.dish.ui.diagnostics
 
 import com.tinkernorth.dish.composer.ConnectionKind
+import com.tinkernorth.dish.core.input.resolveGamepadQuirk
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
+import com.tinkernorth.dish.source.bluetooth.BluetoothLinkType
+import com.tinkernorth.dish.source.store.StickTestHistoryStore
+import com.tinkernorth.dish.source.usb.UsbDescriptorStore
 import com.tinkernorth.dish.ui.main.BatteryUi
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import com.tinkernorth.dish.ui.main.routedTwinIdsHiddenBySynthetics
@@ -109,6 +113,29 @@ private fun physicalDiag(
         battery = batteryUi(world, slotId),
         host = boundHostDiag(slotId, world, touchpadMode),
         functions = functionsOf(world.caps[slotId]),
+        facts = padFacts(device, world),
+    )
+}
+
+internal fun padFacts(
+    device: PhysicalGamepadRegistry.Device,
+    world: DiagnosticsWorld,
+): PadFacts {
+    val pads = world.pads
+    val endpointKey = UsbDescriptorStore.key(device.vendorId, device.productId)
+    return PadFacts(
+        vendorId = device.vendorId,
+        productId = device.productId,
+        endpoint = world.radios.usb[endpointKey],
+        direct = pads.deviceInfo[device.id],
+        urbErrors = pads.urbErrors[device.id] ?: 0L,
+        quirkBits = if (device.isUsbSynthetic) 0 else resolveGamepadQuirk(device.vendorId, device.productId),
+        linkType = pads.btLinkTypes[device.id] ?: BluetoothLinkType.UNKNOWN,
+        reportCount = pads.reportCounts[device.id] ?: 0L,
+        lastInputAtMs = world.rates[device.id.toString()]?.lastInputAtMs ?: 0L,
+        directTiming = pads.deviceLatency[device.id],
+        frameworkTiming = pads.frameworkTiming[device.id],
+        stickHistory = pads.stickHistory[StickTestHistoryStore.keyFor(device.vendorId, device.productId, device.name)],
     )
 }
 

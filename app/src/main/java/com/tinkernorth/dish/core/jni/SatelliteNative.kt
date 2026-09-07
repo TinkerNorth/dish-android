@@ -299,6 +299,27 @@ object SatelliteNative {
     // Framework KeyEvent/MotionEvent updates applied for a routed device (USB Standard or Bluetooth).
     external fun getDeviceInputEventCount(deviceId: Int): Long
 
+    external fun getDeviceUrbErrorCount(deviceId: Int): Long
+
+    // {"model","parser","init","reportBytes","endpointOut","lastUrbStatus"}; empty for an unknown device.
+    external fun deviceInfoJson(deviceId: Int): String
+
+    // Per-device stage-1 / URB-gap percentiles; n=0 blocks while the bench is off.
+    external fun deviceLatencyJson(deviceId: Int): String
+
+    // One session's own RTT window plus ping/ack/missed tallies; empty for an unknown handle.
+    external fun sessionStatsJson(handle: Int): String
+
+    external fun getSlotSendCount(
+        handle: Int,
+        controllerIndex: Int,
+    ): Long
+
+    external fun getSlotMotionCount(
+        handle: Int,
+        controllerIndex: Int,
+    ): Long
+
     // Opt-in latency benchmark: stage-1 USB-direct hot path (URB reap -> sendto) and
     // stage-2 heartbeat RTT. Off by default; one relaxed atomic load when disabled.
     external fun setHotPathBench(on: Boolean)

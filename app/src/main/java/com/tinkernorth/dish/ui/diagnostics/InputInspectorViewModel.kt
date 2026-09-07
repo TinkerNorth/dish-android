@@ -12,6 +12,7 @@ import com.tinkernorth.dish.hotpath.input.RumbleRouter
 import com.tinkernorth.dish.source.audio.MicLevelProbe
 import com.tinkernorth.dish.source.audio.MicProbeReading
 import com.tinkernorth.dish.source.audio.SpeakerTestTone
+import com.tinkernorth.dish.source.store.StickTestHistoryStore
 import com.tinkernorth.dish.source.system.MicPermissionGate
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -86,6 +87,7 @@ data class InspectorUiState(
     val controller: ControllerDiag?,
     val bench: FeatureBench,
     val micPermissionGranted: Boolean,
+    val nowMs: Long = 0L,
 )
 
 sealed interface MicTestUi {
@@ -118,6 +120,7 @@ class InputInspectorViewModel
         private val feedback: FeedbackRouter,
         private val micProbe: MicLevelProbe,
         private val testTone: SpeakerTestTone,
+        private val stickHistory: StickTestHistoryStore,
     ) : ViewModel() {
         val slotId: String = savedState.get<String>(EXTRA_SLOT_ID) ?: VIRTUAL_SLOT_ID
         val deviceId: Int? = slotId.toIntOrNull()
@@ -129,6 +132,7 @@ class InputInspectorViewModel
                     controller = controllerDiags(world, sources::touchpadMode).firstOrNull { it.slotId == slotId },
                     bench = FeatureBench.from(world.caps[slotId], isVirtual),
                     micPermissionGranted = granted,
+                    nowMs = world.nowMs,
                 )
             }.stateIn(
                 viewModelScope,
@@ -160,9 +164,9 @@ class InputInspectorViewModel
             right: Int,
         ) {
             viewModelScope.launch {
-                feedback.dispatchTriggerRumbleToSlot(slotId, left, right)
+                feedback.testTriggerRumble(slotId, left, right)
                 delay(TEST_BUZZ_MS.toLong())
-                feedback.dispatchTriggerRumbleToSlot(slotId, 0, 0)
+                feedback.testTriggerRumble(slotId, 0, 0)
             }
         }
 
@@ -247,6 +251,29 @@ class InputInspectorViewModel
 
         fun refreshMicPermission() {
             micPermission.refresh()
+        }
+
+        fun noteDrift(
+            left: Float,
+            right: Float,
+            suggestedDeadzone: Float,
+        ) {
+            historyKey()?.let { stickHistory.noteDrift(it, left, right, suggestedDeadzone) }
+        }
+
+        fun noteRange(
+            reachLeft: Float,
+            reachRight: Float,
+            circularityLeft: Float?,
+            circularityRight: Float?,
+        ) {
+            historyKey()?.let { stickHistory.noteRange(it, reachLeft, reachRight, circularityLeft, circularityRight) }
+        }
+
+        private fun historyKey(): String? {
+            val controller = ui.value.controller ?: return null
+            val facts = controller.facts ?: return null
+            return StickTestHistoryStore.keyFor(facts.vendorId, facts.productId, controller.name)
         }
 
         private fun percent(fraction: Float): Int = (fraction * PERCENT).roundToInt().coerceIn(0, PERCENT)

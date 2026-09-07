@@ -137,6 +137,32 @@ class DishNavigator(
         )
     }
 
+    fun toHostInspector(
+        connectionId: String,
+        label: String,
+    ) {
+        go(
+            R.id.hostInspectorActivity,
+            Bundle().apply {
+                putString("extra_connection_id", connectionId)
+                putString("extra_label", label)
+            },
+        )
+    }
+
+    fun toBindingInspector(
+        slotId: String,
+        label: String,
+    ) {
+        go(
+            R.id.bindingInspectorActivity,
+            Bundle().apply {
+                putString("extra_slot_id", slotId)
+                putString("extra_label", label)
+            },
+        )
+    }
+
     // Setup flow handoff to the dashboard: the setup task is over, so the back stack resets.
     fun finishSetupToDashboard() {
         activity.startActivity(

@@ -38,12 +38,26 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
+            <include
+                android:id="@+id/sectionRadios"
+                layout="@layout/section_header"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+            <LinearLayout
+                android:id="@+id/containerRadios"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
             <!-- ═══ CONTROLLERS ════════════════════════════════════════ -->
             <include
                 android:id="@+id/sectionControllers"
                 layout="@layout/section_header"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/section_header_gap_above"
                 android:layout_marginBottom="@dimen/section_header_gap_below" />
 
             <LinearLayout

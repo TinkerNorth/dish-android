@@ -71,6 +71,29 @@
                 android:text="@string/inspector_host_unbound"
                 android:visibility="gone" />
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnOpenBinding"
+                style="@style/Widget.Dish.Button.Outlined"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:text="@string/diagnostics_binding_button"
+                android:visibility="gone" />
+
+            <include
+                android:id="@+id/sectionDevice"
+                layout="@layout/section_header"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/section_header_gap_above"
+                android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+            <LinearLayout
+                android:id="@+id/containerDevice"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
             <LinearLayout
                 android:id="@+id/containerLiveInput"
                 android:layout_width="match_parent"

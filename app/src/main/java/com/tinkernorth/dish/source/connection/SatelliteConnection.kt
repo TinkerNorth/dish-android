@@ -97,10 +97,26 @@ class SatelliteConnection(
         val registered: Boolean,
         val lastAdvertisedCaps: Int? = null,
         val lastAdvertisedTouchpadMode: String? = null,
+        val lastApplyResult: String? = null,
+    )
+
+    data class SessionFacts(
+        val maxControllers: Int,
+        val protocolVersion: Int,
     )
 
     private val _slots = MutableStateFlow<Map<String, SlotBinding>>(emptyMap())
     val slots: StateFlow<Map<String, SlotBinding>> = _slots.asStateFlow()
+
+    private val _sessionFacts = MutableStateFlow<SessionFacts?>(null)
+    val sessionFacts: StateFlow<SessionFacts?> = _sessionFacts.asStateFlow()
+
+    fun noteSessionFacts(
+        maxControllers: Int,
+        protocolVersion: Int,
+    ) {
+        _sessionFacts.value = SessionFacts(maxControllers, protocolVersion)
+    }
 
     private var aliveJob: Job? = null
     private var ackJob: Job? = null
@@ -435,10 +451,11 @@ class SatelliteConnection(
                         registered = true,
                         lastAdvertisedCaps = wireCapsFor(slotId),
                         lastAdvertisedTouchpadMode = touchpadModeFor(slotId),
+                        lastApplyResult = result.result,
                     )
                 } else {
                     motionBackendStatusStore?.clear(id, slotId)
-                    binding.copy(registered = false)
+                    binding.copy(registered = false, lastApplyResult = result.result)
                 }
             }
         }

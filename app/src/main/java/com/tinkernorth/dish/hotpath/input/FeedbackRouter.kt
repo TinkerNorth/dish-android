@@ -5,6 +5,8 @@ package com.tinkernorth.dish.hotpath.input
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.store.FeedbackActivityStore
+import com.tinkernorth.dish.source.store.FeedbackKind
 import com.tinkernorth.dish.source.store.VirtualPadFeedbackStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import javax.inject.Inject
@@ -34,6 +36,7 @@ class FeedbackRouter
         private val native: PhysicalInputNative,
         private val virtualFeedback: VirtualPadFeedbackStore,
         private val rumble: RumbleRouter,
+        private val feedbackActivity: FeedbackActivityStore,
     ) {
         fun dispatchLightbar(
             sessionHandle: Int,
@@ -42,7 +45,9 @@ class FeedbackRouter
             g: Int,
             b: Int,
         ) {
-            actuateLightbar(resolveTarget(sessionHandle, controllerIndex), r, g, b)
+            val target = resolveTarget(sessionHandle, controllerIndex)
+            noteHost(target, FeedbackKind.LIGHTBAR)
+            actuateLightbar(target, r, g, b)
         }
 
         fun dispatchTriggerEffects(
@@ -50,7 +55,9 @@ class FeedbackRouter
             controllerIndex: Int,
             blocks: ByteArray,
         ) {
-            actuateTriggerEffects(resolveTarget(sessionHandle, controllerIndex), blocks)
+            val target = resolveTarget(sessionHandle, controllerIndex)
+            noteHost(target, FeedbackKind.TRIGGER_EFFECTS)
+            actuateTriggerEffects(target, blocks)
         }
 
         fun dispatchPlayerLeds(
@@ -58,7 +65,9 @@ class FeedbackRouter
             controllerIndex: Int,
             ledMask: Int,
         ) {
-            actuatePlayerLeds(resolveTarget(sessionHandle, controllerIndex), ledMask)
+            val target = resolveTarget(sessionHandle, controllerIndex)
+            noteHost(target, FeedbackKind.PLAYER_LEDS)
+            actuatePlayerLeds(target, ledMask)
         }
 
         /**
@@ -77,7 +86,9 @@ class FeedbackRouter
             controllerIndex: Int,
             state: Int,
         ) {
-            actuateMicLed(resolveTarget(sessionHandle, controllerIndex), state)
+            val target = resolveTarget(sessionHandle, controllerIndex)
+            noteHost(target, FeedbackKind.MIC_LED)
+            actuateMicLed(target, state)
         }
 
         /** Slot-addressed entry points: the Moonlight path and the inspector's test bench already know the slot. */
@@ -116,6 +127,16 @@ class FeedbackRouter
             leftMagnitude: Int,
             rightMagnitude: Int,
         ) {
+            feedbackActivity.note(slotId, FeedbackKind.TRIGGER_RUMBLE)
+            testTriggerRumble(slotId, leftMagnitude, rightMagnitude)
+        }
+
+        /** The bench's entry: the same actuation without counting it as host feedback. */
+        fun testTriggerRumble(
+            slotId: String,
+            leftMagnitude: Int,
+            rightMagnitude: Int,
+        ) {
             when (val target = classifyTarget(slotId)) {
                 is RumbleTarget.DirectUsb ->
                     native.sendUsbTriggerRumble(target.deviceId, leftMagnitude, rightMagnitude)
@@ -126,6 +147,20 @@ class FeedbackRouter
                     rumble.dispatchToSlot(VIRTUAL_SLOT_ID, leftMagnitude, rightMagnitude, TRIGGER_RUMBLE_HOLD_MS)
                 else -> Unit
             }
+        }
+
+        private fun noteHost(
+            target: RumbleTarget,
+            kind: FeedbackKind,
+        ) {
+            val slotId =
+                when (target) {
+                    RumbleTarget.Phone -> VIRTUAL_SLOT_ID
+                    is RumbleTarget.Framework -> target.deviceId.toString()
+                    is RumbleTarget.DirectUsb -> target.deviceId.toString()
+                    RumbleTarget.None -> return
+                }
+            feedbackActivity.note(slotId, kind)
         }
 
         private fun actuateLightbar(

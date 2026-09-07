@@ -17,6 +17,7 @@ import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.databinding.ScreenScaffoldBinding
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
+import com.tinkernorth.dish.source.inputrate.FrameworkInputTimingStore
 import com.tinkernorth.dish.source.lowpower.LowPowerSignal
 import com.tinkernorth.dish.source.notification.DishNotifications
 import javax.inject.Inject
@@ -34,6 +35,8 @@ abstract class BaseGamepadHostActivity : AppCompatActivity() {
     @Inject lateinit var lowPowerSignal: LowPowerSignal
 
     @Inject lateinit var micIndicator: MicIndicatorCoordinator
+
+    @Inject lateinit var inputTiming: FrameworkInputTimingStore
 
     private var gamepadHost: GamepadActivityHost? = null
 
@@ -54,6 +57,7 @@ abstract class BaseGamepadHostActivity : AppCompatActivity() {
                 notifications,
                 lowPowerSignal,
                 if (showsMicChip) micIndicator else null,
+                inputTiming,
             ).also { it.setScreenHold(holdsScreenAwake) }
     }
 
