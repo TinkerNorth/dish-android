@@ -42,7 +42,7 @@ on:
 #                                 captures a fresh store screenshot set
 #                                 from the tagged build on CI emulators
 #                                 (store-screenshots.yml, one leg per form
-#                                 factor), and publish-play rolls the
+#                                 factor and locale), and publish-play rolls the
 #                                 signed AAB out to the Play production
 #                                 track with per-locale release notes and
 #                                 the full store listing: text and graphics
@@ -391,7 +391,8 @@ jobs:
           merge-multiple: true
           path: fresh
 
-      # The three capture artifacts share the play/metadata layout. Each
+      # The capture artifacts (one per form factor and locale) share the
+      # play/metadata layout and merge into one tree on download. Each
       # form-factor directory is replaced whole, so a screen dropped from the
       # harness cannot linger as a stale committed PNG, and every listing
       # locale must have every form factor: a partial set is a failed

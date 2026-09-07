@@ -2,8 +2,9 @@ name: Store Screenshots
 
 # Re-captures the Play screenshot set on CI emulators using the
 # DishScreenshots instrumented harness: one matrix leg per store form
-# factor, each looping the six listing locales, cropped to Play's
-# dimensions and uploaded as artifacts laid out for play/metadata.
+# factor and locale, cropped to Play's dimensions and uploaded as
+# artifacts laid out for play/metadata (download them together with
+# `gh run download <run> -p 'screenshots-*'` and they merge into one tree).
 # Runs two ways: dispatched by hand to refresh the committed set (a human
 # reviews the captures before they land in play/metadata), and called from
 # release.yml on every tag, so the Play upload carries screenshots of the
@@ -46,13 +47,43 @@ permissions:
   contents: read
 
 jobs:
+  # One capture leg per form factor AND locale. A locale takes the harness
+  # about 13 minutes on a CI emulator, so a single leg looping all six ran
+  # past the 60-minute job limit and was cancelled mid-locale; fanning out
+  # keeps every leg well inside it and brings a full set down to one leg's
+  # wall time. The locale list arrives as a string (workflow inputs cannot
+  # be arrays), so this job turns it into the JSON the matrix needs.
+  plan:
+    name: Plan locales
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      locales: ${{ steps.plan.outputs.locales }}
+    steps:
+      - name: Locales to JSON
+        id: plan
+        env:
+          LOCALES: ${{ inputs.locales || 'en-US' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          json=$(printf '%s\n' $LOCALES | sed 's/.*/"&"/' | paste -sd, -)
+          [ -n "$json" ] || { echo "::error::No locales to capture."; exit 1; }
+          echo "locales=[${json}]" >> "$GITHUB_OUTPUT"
+          echo "Capturing: [${json}]"
+
   capture:
-    name: Capture (${{ matrix.form }})
+    name: Capture (${{ matrix.form }}, ${{ matrix.locale }})
+    needs: [plan]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
+        locale: ${{ fromJSON(needs.plan.outputs.locales) }}
+        form: [phone, sevenInch, tenInch]
+        # Keyed by form, so each entry only attaches its sizes to the
+        # locale × form combinations rather than adding a leg of its own.
         include:
           - form: phone
             size: 1080x2424
@@ -109,7 +140,7 @@ jobs:
         env:
           CAPTURE_SIZE: ${{ matrix.size }}
           CAPTURE_DENSITY: ${{ matrix.density }}
-          CAPTURE_LOCALES: ${{ inputs.locales || 'en-US' }}
+          CAPTURE_LOCALES: ${{ matrix.locale }}
         with:
           api-level: 35
           target: google_apis
@@ -137,6 +168,6 @@ jobs:
       - name: Upload screenshots
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: screenshots-${{ matrix.form }}
+          name: screenshots-${{ matrix.form }}-${{ matrix.locale }}
           path: stage/
           retention-days: 14
