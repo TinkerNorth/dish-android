@@ -1,0 +1,5 @@
+Dish 2.1.0: tips are back in the Play build.
+
+• Support Dish from the heart button: a one-time tip or a monthly supporter plan, paid through Google Play.
+• A tip unlocks nothing; Dish stays free, open source and ad-free for everyone.
+• Cancel the monthly plan any time in Google Play.

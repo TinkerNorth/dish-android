@@ -175,4 +175,11 @@
          opaque and consumer-tinted); this token carries the dim already
          so the low-power HUD can apply it as a single background. -->
     <color name="colorOverlayScrim">@color/ink_900_a80</color>
+
+<color name="pulse_pink_500">#FFFF6FB5</color>
+    <color name="pulse_pink_200">#1FFF6FB5</color>
+
+    <color name="colorPulse">@color/pulse_pink_500</color>
+    <color name="colorOnPulse">@color/navy_900</color>
+    <color name="colorPulseFill">@color/pulse_pink_200</color>
 </resources>

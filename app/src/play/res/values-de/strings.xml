@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="donate_bar_ask">Spende über Google Play, damit es so bleibt →</string>
+    <string name="donate_lead">Dish, Satellite und jeder Dish-Client sind kostenlos, Open Source, werbefrei und analysefrei. Keine Paywall-Features, keine Upsells und keine Pläne in diese Richtung. Trinkgelder sind das, was dafür sorgt, dass es so bleibt.</string>
+    <string name="settings_support_body">Gib dem Entwickler über Google Play ein Trinkgeld, einmalig oder monatlich.</string>
+    <string name="donate_tip_title">Einmaliges Trinkgeld</string>
+    <string name="donate_tip_body">Wähle einen Betrag. Google Play übernimmt Zahlung und Beleg. Ein Trinkgeld schaltet nichts frei; Dish bleibt für alle gleich.</string>
+    <string name="donate_monthly_title">Monatliche Unterstützung</string>
+    <string name="donate_monthly_body">Verlängert sich jeden Monat zum angezeigten Preis, bis du kündigst. Kündigen kannst du jederzeit in Google Play unter Zahlungen und Abos.</string>
+    <string name="donate_monthly_switch">Wähle einen anderen Betrag, um deinen Plan zu ändern. Google Play rechnet die Änderung anteilig ab.</string>
+    <string name="donate_monthly_active">Du unterstützt Dish jeden Monat. Danke.</string>
+    <string name="donate_manage">In Google Play verwalten →</string>
+    <string name="donate_per_month">%1$s / Monat</string>
+    <string name="donate_loading">Verbindung zu Google Play…</string>
+    <string name="donate_unavailable">Die Abrechnung über Google Play ist auf diesem Gerät gerade nicht verfügbar.</string>
+    <string name="donate_pending">Deine Zahlung steht noch aus. Google Play schließt sie ab, und Dish bedankt sich dann.</string>
+    <string name="donate_thanks_tip">Danke für das Trinkgeld!</string>
+    <string name="donate_thanks_monthly">Danke, dass du Dish jeden Monat unterstützt!</string>
+    <string name="donate_error">Google Play konnte das nicht abschließen. Es wurde nichts abgebucht.</string>
+</resources>

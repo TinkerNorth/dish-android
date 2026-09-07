@@ -88,18 +88,11 @@ android {
         buildConfigField("boolean", "HOTPATH_BENCH", "false")
     }
 
-    // Distribution channel decides whether the donation surface is compiled in.
-    // Google Play's Payments policy requires in-app donations to run through
-    // Play Billing unless the developer is a verified tax-exempt organization,
-    // so the Play artifact ships without the donate screen, the pill, the
-    // toolbar heart, and the Settings support card. This is a source-set split,
-    // not a runtime flag: the screens, copy, and payment URLs are never
-    // compiled into the Play build. The directly-distributed build (GitHub
-    // Releases, tinkernorth.com) keeps all of it.
-    //
-    // Everything donation-related lives in src/github; src/play holds no-op
-    // twins of the same functions plus two gone-View layout stubs for the
-    // <include>s the shared layouts still carry.
+    // Distribution channel decides how the donate screen takes money. Both flavors ship the
+    // same donation touchpoints from src/main (toolbar heart, pill, Settings card) and their own
+    // `DonateActivity`: github links out to external payment rails, play sells tips through Play
+    // Billing, which Google Play's Payments policy requires of Play-distributed apps. External
+    // payment links never compile into the Play artifact.
     flavorDimensions += "distribution"
     productFlavors {
         create("github") {
@@ -243,6 +236,10 @@ dependencies {
     implementation(libs.firebase.crashlytics)
     implementation(libs.firebase.crashlytics.ndk)
     // Firebase Analytics is deliberately omitted: it would auto-inject AD_ID permission and break the zero-analytics privacy posture.
+    // Google Play's Payments policy requires Play-distributed apps to sell digital goods through
+    // Play Billing, so the client (and the BILLING permission its manifest merges in) rides the
+    // `play` flavor only; the github flavor keeps its external donation links.
+    "playImplementation"(libs.billing)
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.turbine)

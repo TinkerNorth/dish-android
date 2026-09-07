@@ -7,6 +7,21 @@ computer. Those lines say "update Satellite too".
 
 ---
 
+## [2.1.0] - Unreleased
+
+### Added
+
+- The Google Play build can take tips again. Google Play's Payments policy
+  requires payments inside a Play-distributed app to go through Google
+  Play's billing system, so the donate screen in the Play build now sells
+  one-time tips and a monthly supporter plan through Google Play instead of
+  linking out. A tip unlocks nothing; Dish stays the same for everyone, and
+  the monthly plan can be cancelled any time from Google Play. The GitHub
+  build keeps its GitHub Sponsors, Ko-fi, and Buy Me a Coffee links.
+- The heart button, the support pill, and the Settings support card are back
+  in the Play build; they open the new screen. The billing client only
+  connects when that screen opens, so streaming is untouched.
+
 ## [2.0.0] - 2026-09-06
 
 Everything below ships as 2.0.0, the release where the whole Dish and

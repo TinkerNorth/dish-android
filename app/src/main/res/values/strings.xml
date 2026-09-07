@@ -823,4 +823,16 @@
 
     <string name="binding_desc_back">Back</string>
 
+    <string name="donate_bar_headline">Dish is free and open source.</string>
+    <string name="donate_bar_dismiss">Dismiss donation banner</string>
+    <string name="donate_title">Support Dish</string>
+    <string name="donate_eyebrow">Support the project</string>
+    <string name="donate_h1">Dish runs on coffee and goodwill.</string>
+    <string name="donate_why_title">What your donation pays for</string>
+    <string name="donate_why_hosting">Hosting. dish.tinkernorth.com, tinkernorth.com, and every signed-installer mirror. AWS isn\'t free, even at our traffic scale.</string>
+    <string name="donate_why_signing">Code-signing certificates. Windows SmartScreen only plays nice because we pay for an EV certificate every year. The same goes for the Apple Developer Program account for the upcoming macOS client.</string>
+    <string name="donate_why_play">Google Play developer fee. A one-time $25 fee plus the time required to keep the Play listing compliant with every new policy round.</string>
+    <string name="donate_why_time">Time. Honest answer: most of it. Dish is a nights-and-weekends project. Donations let me say \"yes\" to working on it instead of taking on extra consulting.</string>
+    <string name="donate_thanks">Thank you. Every dollar, every star, every shared link. They all add up. Emir</string>
+    <string name="settings_support_title">Support Dish</string>
 </resources>
