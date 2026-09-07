@@ -2,7 +2,7 @@
 
 This file describes how every PNG currently sitting in `metadata/android/<locale>/images/` was produced, what data it depicts, and how to recreate the set. It is the source of truth for the screenshot pipeline so the captures stay reproducible across model edits, emulator changes, and future locale additions.
 
-> Status: the screenshots currently committed were captured before the guided Setup flow and the dashboard card rework, so some show screens that no longer exist (the old welcome and setup-wizard screens). They are stale and must be re-captured before submission. The pipeline below is still the procedure to use, and the screen catalogue has been updated to the current screens.
+> Status: every tagged release captures a fresh set from the build it ships and uploads that to Play (`release.yml`: the `screenshots` job calls `store-screenshots.yml`, and `publish-play` swaps the captures in before `fastlane supply`). The PNGs committed here are the reviewed baseline, not what the store shows: refresh them with the Store Screenshots workflow whenever the screens change, so reviewers, the manual listing sync and this document stay honest.
 
 ## Output layout
 
