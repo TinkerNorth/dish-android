@@ -38,17 +38,23 @@ on:
 #                                 Firebase. When unset, the build still
 #                                 succeeds but ships without crash reporting.
 #   PLAY_SERVICE_ACCOUNT_JSON     Google Play service-account key (raw
-#                                 JSON). When set, the signed AAB rolls
-#                                 out to the Play production track with
-#                                 per-locale release notes and the full
-#                                 store listing (text, screenshots,
-#                                 graphics) synced from play/metadata.
+#                                 JSON). When set, the `screenshots` job
+#                                 captures a fresh store screenshot set
+#                                 from the tagged build on CI emulators
+#                                 (store-screenshots.yml, one leg per form
+#                                 factor), and publish-play rolls the
+#                                 signed AAB out to the Play production
+#                                 track with per-locale release notes and
+#                                 the full store listing: text and graphics
+#                                 from play/metadata, screenshots from that
+#                                 capture. The committed screenshots are
+#                                 the reviewed baseline, never what ships.
 #                                 workflow_dispatch can pick another
 #                                 track or a draft status. When unset,
-#                                 the publish-play job no-ops. The app
-#                                 record and its FIRST build must be
-#                                 created manually in the Play Console
-#                                 before the API can publish.
+#                                 both jobs are skipped. The app record
+#                                 and its FIRST build must be created
+#                                 manually in the Play Console before the
+#                                 API can publish.
 #
 # Pin map (verify with `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`):
 #   actions/checkout                @ v7.0.1  → 3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -279,9 +285,71 @@ jobs:
           name: android
           path: dist/
 
+  play-inputs:
+    name: Play publish inputs
+    needs: [gates]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      enabled: ${{ steps.gate.outputs.enabled }}
+      locales: ${{ steps.locales.outputs.locales }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      # Secrets cannot be read from a job-level `if`, so the capture job keys
+      # off this output instead: no credentials, no half hour of emulator
+      # time for screenshots nothing would upload.
+      - name: Gate on Play credentials
+        id: gate
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${PLAY_SERVICE_ACCOUNT_JSON:-}" ]; then
+            echo "::notice::PLAY_SERVICE_ACCOUNT_JSON not set. Skipping the screenshot capture and the Play upload."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The listing locales are the directories under play/metadata/android,
+      # exactly the set fastlane supply publishes. play/metadata/unsupported
+      # (Bosnian) is captured by the manual workflow for the repo's own
+      # record but has no Play listing to land in, so it stays out here.
+      - name: List Play listing locales
+        id: locales
+        shell: bash
+        run: |
+          set -euo pipefail
+          locales=$(find play/metadata/android -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | LC_ALL=C sort | tr '\n' ' ')
+          locales="${locales% }"
+          [ -n "$locales" ] || { echo "::error::play/metadata/android has no locale directories."; exit 1; }
+          echo "locales=$locales" >> "$GITHUB_OUTPUT"
+          echo "Play listing locales: $locales"
+
+  screenshots:
+    name: Capture store screenshots
+    needs: [play-inputs]
+    if: ${{ needs.play-inputs.outputs.enabled == 'true' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/store-screenshots.yml
+    with:
+      locales: ${{ needs.play-inputs.outputs.locales }}
+      ref: ${{ inputs.tag || github.ref }}
+
   publish-play:
     name: Upload AAB to Google Play
-    needs: [release]
+    needs: [release, screenshots]
+    # Fresh screenshots are part of the upload, so a failed capture fails the
+    # publish instead of quietly shipping the committed baseline; `gh run
+    # rerun --failed` re-runs the capture and this job. A skipped capture
+    # (no Play credentials) skips this job the same way.
+    if: ${{ !cancelled() && needs.release.result == 'success' && needs.screenshots.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -314,6 +382,42 @@ jobs:
         with:
           name: android
           path: dist
+
+      - name: Download fresh screenshots
+        if: ${{ steps.gate.outputs.enabled == 'true' }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: screenshots-*
+          merge-multiple: true
+          path: fresh
+
+      # The three capture artifacts share the play/metadata layout. Each
+      # form-factor directory is replaced whole, so a screen dropped from the
+      # harness cannot linger as a stale committed PNG, and every listing
+      # locale must have every form factor: a partial set is a failed
+      # capture, not something to paper over with the committed images.
+      - name: Replace committed screenshots with the fresh capture
+        if: ${{ steps.gate.outputs.enabled == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          replaced=0
+          for locdir in play/metadata/android/*/; do
+            loc=$(basename "$locdir")
+            for form in phoneScreenshots sevenInchScreenshots tenInchScreenshots; do
+              src="fresh/play/metadata/android/${loc}/images/${form}"
+              if ! compgen -G "${src}/*.png" > /dev/null; then
+                echo "::error::No ${form} captures for ${loc} in the screenshots artifacts."
+                exit 1
+              fi
+              dest="${locdir}images/${form}"
+              rm -rf "$dest"
+              mkdir -p "$dest"
+              cp "${src}"/*.png "$dest/"
+              replaced=$((replaced + $(find "$dest" -name '*.png' | wc -l)))
+            done
+          done
+          echo "Replaced the committed screenshot set with ${replaced} fresh captures."
 
       - name: Locate signed AAB and mapping
         if: ${{ steps.gate.outputs.enabled == 'true' }}
