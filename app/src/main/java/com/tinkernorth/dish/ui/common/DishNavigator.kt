@@ -125,14 +125,40 @@ class DishNavigator(
     }
 
     fun toInputInspector(
-        deviceId: Int,
+        slotId: String,
         deviceName: String,
     ) {
         go(
             R.id.inputInspectorActivity,
             Bundle().apply {
-                putInt("extra_device_id", deviceId)
+                putString("extra_slot_id", slotId)
                 putString("extra_device_name", deviceName)
+            },
+        )
+    }
+
+    fun toHostInspector(
+        connectionId: String,
+        label: String,
+    ) {
+        go(
+            R.id.hostInspectorActivity,
+            Bundle().apply {
+                putString("extra_connection_id", connectionId)
+                putString("extra_label", label)
+            },
+        )
+    }
+
+    fun toBindingInspector(
+        slotId: String,
+        label: String,
+    ) {
+        go(
+            R.id.bindingInspectorActivity,
+            Bundle().apply {
+                putString("extra_slot_id", slotId)
+                putString("extra_label", label)
             },
         )
     }

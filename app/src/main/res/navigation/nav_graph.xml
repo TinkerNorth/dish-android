@@ -179,11 +179,39 @@
         android:name="com.tinkernorth.dish.ui.diagnostics.InputInspectorActivity"
         android:label="@string/settings_diagnostics_title">
         <argument
-            android:name="extra_device_id"
-            app:argType="integer"
-            android:defaultValue="0" />
+            android:name="extra_slot_id"
+            app:argType="string"
+            android:defaultValue="virtual" />
         <argument
             android:name="extra_device_name"
+            app:argType="string"
+            android:defaultValue="" />
+    </activity>
+
+    <activity
+        android:id="@+id/hostInspectorActivity"
+        android:name="com.tinkernorth.dish.ui.diagnostics.HostInspectorActivity"
+        android:label="@string/diagnostics_host_inspector_title">
+        <argument
+            android:name="extra_connection_id"
+            app:argType="string"
+            android:defaultValue="" />
+        <argument
+            android:name="extra_label"
+            app:argType="string"
+            android:defaultValue="" />
+    </activity>
+
+    <activity
+        android:id="@+id/bindingInspectorActivity"
+        android:name="com.tinkernorth.dish.ui.diagnostics.BindingInspectorActivity"
+        android:label="@string/diagnostics_binding_title">
+        <argument
+            android:name="extra_slot_id"
+            app:argType="string"
+            android:defaultValue="virtual" />
+        <argument
+            android:name="extra_label"
             app:argType="string"
             android:defaultValue="" />
     </activity>

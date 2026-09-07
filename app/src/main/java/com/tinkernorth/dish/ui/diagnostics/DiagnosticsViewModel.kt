@@ -5,6 +5,8 @@ package com.tinkernorth.dish.ui.diagnostics
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
+import com.tinkernorth.dish.source.store.DiagnosticsLogEntry
+import com.tinkernorth.dish.source.store.DiagnosticsLogStore
 import com.tinkernorth.dish.source.store.LatencyProfilingStore
 import com.tinkernorth.dish.source.system.WifiLink
 import com.tinkernorth.dish.source.system.WifiLinkSource
@@ -17,6 +19,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
@@ -29,6 +33,8 @@ class DiagnosticsViewModel
         private val physicalInputNative: PhysicalInputNative,
         private val wifiLinkSource: WifiLinkSource,
         private val json: Json,
+        private val sources: DiagnosticsSources,
+        diagnosticsLog: DiagnosticsLogStore,
     ) : ViewModel() {
         sealed interface LatencyUi {
             data object Off : LatencyUi
@@ -38,6 +44,17 @@ class DiagnosticsViewModel
             data class Stats(
                 val panel: LatencyPanel,
             ) : LatencyUi
+        }
+
+        data class Overview(
+            val controllers: List<ControllerDiag>,
+            val hosts: List<HostDiag>,
+            val radios: RadioFacts,
+            val latencyRows: LatencyRows,
+        ) {
+            companion object {
+                val EMPTY = Overview(emptyList(), emptyList(), RadioFacts.NONE, LatencyRows(emptyList(), emptyList()))
+            }
         }
 
         // WhileSubscribed ties the probe to the screen: the collector lives inside
@@ -55,6 +72,19 @@ class DiagnosticsViewModel
                     delay(WIFI_POLL_MS)
                 }
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null)
+
+        private val world: Flow<DiagnosticsWorld> =
+            sources.world.shareIn(viewModelScope, SharingStarted.WhileSubscribed(), replay = 1)
+
+        val overview: StateFlow<Overview> =
+            world
+                .map { w ->
+                    val controllers = controllerDiags(w, sources::touchpadMode)
+                    val hosts = hostDiags(w, sources::touchpadMode)
+                    Overview(controllers, hosts, w.radios, latencyRows(controllers, hosts))
+                }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), Overview.EMPTY)
+
+        val events: StateFlow<List<DiagnosticsLogEntry>> = diagnosticsLog.state
 
         private fun probeTicks(): Flow<LatencyUi> =
             flow {

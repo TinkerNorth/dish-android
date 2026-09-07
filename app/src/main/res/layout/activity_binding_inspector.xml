@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        style="@style/Widget.Dish.Toolbar"
+        android:layout_width="match_parent"
+        app:title="@string/diagnostics_binding_title" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingHorizontal="@dimen/spacing_5xl"
+        android:paddingTop="@dimen/spacing_md"
+        android:paddingBottom="@dimen/spacing_6xl">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvBindingEmpty"
+                style="@style/TextAppearance.Dish.Body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/diagnostics_binding_none"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/containerBound"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <include
+                    android:id="@+id/sectionBinding"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+                <LinearLayout
+                    android:id="@+id/containerBinding"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <include
+                    android:id="@+id/sectionDeclared"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+                <LinearLayout
+                    android:id="@+id/containerDeclared"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <include
+                    android:id="@+id/sectionCapabilities"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+                <LinearLayout
+                    android:id="@+id/containerCapabilities"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <include
+                    android:id="@+id/sectionStreams"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+                <LinearLayout
+                    android:id="@+id/containerStreams"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <include
+                    android:id="@+id/sectionFeedback"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+                <LinearLayout
+                    android:id="@+id/containerFeedback"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+                <include
+                    android:id="@+id/sectionLatency"
+                    layout="@layout/section_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/section_header_gap_above"
+                    android:layout_marginBottom="@dimen/section_header_gap_below" />
+
+                <LinearLayout
+                    android:id="@+id/containerLatency"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </LinearLayout>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

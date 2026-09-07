@@ -24,6 +24,8 @@ object MoonlightXml {
         val externalPort: Int?,
         val mac: String?,
         val localIp: String?,
+        val appVersion: String? = null,
+        val gfeVersion: String? = null,
     ) {
         val paired: Boolean get() = pairStatus == 1
         val busy: Boolean get() = currentGame != 0 || state.endsWith("SERVER_BUSY")
@@ -95,6 +97,8 @@ object MoonlightXml {
             externalPort = intText(root, "ExternalPort"),
             mac = text(root, "mac"),
             localIp = text(root, "LocalIP"),
+            appVersion = text(root, "appversion"),
+            gfeVersion = text(root, "GfeVersion"),
         )
     }
 

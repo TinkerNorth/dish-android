@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -93,6 +94,12 @@ class SpeakerEngine
          * that stays a measurable fact rather than a silent one.
          */
         val droppedSamples = AtomicLong()
+        private val droppedByRoute = ConcurrentHashMap<Long, AtomicLong>()
+
+        fun droppedSamplesFor(
+            sessionHandle: Int,
+            controllerIndex: Int,
+        ): Long = droppedByRoute[SpeakerPlayoutPlan.routeKey(sessionHandle, controllerIndex)]?.get() ?: 0L
 
         private class Voice(
             val target: SpeakerTarget,
@@ -199,7 +206,13 @@ class SpeakerEngine
         ) {
             val voice = voices[SpeakerPlayoutPlan.routeKey(sessionHandle, controllerIndex)] ?: return
             val written = voice.session.write(pcmStereo)
-            if (written < pcmStereo.size) droppedSamples.addAndGet((pcmStereo.size - written).toLong())
+            if (written < pcmStereo.size) {
+                val dropped = (pcmStereo.size - written).toLong()
+                droppedSamples.addAndGet(dropped)
+                droppedByRoute
+                    .computeIfAbsent(SpeakerPlayoutPlan.routeKey(sessionHandle, controllerIndex)) { AtomicLong() }
+                    .addAndGet(dropped)
+            }
         }
 
         companion object {

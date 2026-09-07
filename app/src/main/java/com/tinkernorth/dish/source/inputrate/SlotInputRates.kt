@@ -9,6 +9,7 @@ data class SlotInputRates(
     val controllerHz: Int = 0,
     val controllerPeakHz: Int = 0,
     val gyroHz: Int = 0,
+    val lastInputAtMs: Long = 0L,
 ) {
     val hasAny: Boolean get() = controllerHz > 0 || controllerPeakHz > 0 || gyroHz > 0
 }
