@@ -382,6 +382,7 @@ nav.toTouchpad(connectionId = cid, slotId = slotId)
 | `gamepadOverlayActivity` | `GamepadOverlayActivity` | `extra_connection_id`, `extra_use_ps_layout` |
 | `touchpadOverlayActivity` | `TouchpadOverlayActivity` | `extra_connection_id`, `extra_slot_id` |
 | `nativeUnavailableActivity` | `NativeUnavailableActivity` | none |
+| `donateActivity` | `DonateActivity` (one per flavor) | none |
 
 **Deep links**: NOT declared in the graph. The navigation runtime's lint
 check (`DeepLinkInActivityDestination`) flags `<deepLink>` on `<activity>`
@@ -395,13 +396,13 @@ The current "pairing needed" notification routes through MainActivity's
 in-app callback (`DishNavigator.toConnectionsForPairing`), not a deep
 link, so the lint check stays clean.
 
-**`DonateActivity` is deliberately absent** from the table and the graph.
-It ships only in the `github` product flavor (the Play build carries no
-donation surface — see "Distribution flavors" below), and `NavInflater`
-resolves every `android:name` when the graph inflates, so a destination
-pointing at a class the Play build lacks would break navigation on every
-screen. The github flavor launches it by explicit `Intent` from
-`ui/donate/DonationSurface.kt`.
+**`DonateActivity` is in the graph** (`donateActivity`, reached through
+`DishNavigator.toDonate()` from `ui/donate/DonationSurface.kt`). Both
+flavors supply a class by that name, which is what makes it safe:
+`NavInflater` resolves every `android:name` when the graph inflates, so a
+destination pointing at a class one flavor lacks would break navigation on
+every screen. See "Distribution flavors" below for what each flavor's
+`DonateActivity` does.
 
 **What stays outside the graph**: external `startActivity` calls that
 target other apps (browser `ACTION_VIEW`, Bluetooth settings, Wi-Fi
@@ -645,37 +646,50 @@ deeper), the error red can drop below AA. Compute before adopting.
 | Activity transitions | `app/src/main/res/anim/fade_through_enter.xml`, `fade_through_exit.xml` |
 | Navigation graph | `app/src/main/res/navigation/nav_graph.xml` |
 | Navigation wrapper | `app/src/main/java/com/tinkernorth/dish/ui/common/DishNavigator.kt` |
-| Donation surface (github flavor) | `app/src/github/` |
-| Donation no-ops (Play flavor) | `app/src/play/` |
+| Donation touchpoints (shared) | `app/src/main/java/com/tinkernorth/dish/ui/donate/`, `view_donate_*.xml` |
+| Donate screen (per flavor) | `app/src/github/`, `app/src/play/` |
 
 ## Distribution flavors
 
 One flavor dimension, `distribution`, with two flavors:
 
-| Flavor | Ships as | Donation surface |
+| Flavor | Ships as | Donate screen takes money via |
 |---|---|---|
-| `github` (default) | APK on GitHub Releases / tinkernorth.com | Yes |
-| `play` | AAB on Google Play | No |
+| `github` (default) | APK on GitHub Releases / tinkernorth.com | External links: GitHub Sponsors, Ko-fi, Buy Me a Coffee |
+| `play` | AAB on Google Play | Google Play's billing system: one-time tips and a monthly supporter plan |
 
-Google Play's Payments policy requires in-app donations to run through
-Play Billing unless the developer is a verified tax-exempt organization,
-so the Play build carries no donate screen, pill, toolbar heart, or
-Settings support card. This is a source-set split rather than a runtime
-flag: the screens, the copy, and the payment URLs are never compiled into
-the Play artifact.
+Google Play's Payments policy requires a Play-distributed app to sell
+digital goods through Play Billing and forbids steering users to other
+payment methods, so the two flavors part ways only inside `DonateActivity`.
+The touchpoints that open it are shared and live in `src/main`: the toolbar
+heart (`view_donate_heart_button.xml`), the dismissable pill
+(`DonatePill.kt`, `view_donate_pill.xml`), the Settings support card
+(`DonationSurface.kt`), the pulse-pink color roles, the `donate_*`
+dimensions, the `donate_why_row` include, and the copy both screens share.
+`DonateActivity` is a `nav_graph` destination reached through
+`DishNavigator.toDonate()`.
 
-Everything donation-related lives in `src/github` — `DonateActivity`,
-`DonatePill.kt`, `DonationSurface.kt`, the donate layouts and drawables,
-the pulse-pink color roles, the `donate_*` dimensions, and the `donate_*`
-/ `settings_support_*` / donation-URL strings in all six locales.
-`src/play` holds no-op twins of the three `DonationSurface` entry points
-(`attachDonatePill`, `wireDonateButton`, `bindDonateSettingsCard`) so
-shared activities compile against one API, plus gone-`View` stubs for
-`view_donate_heart_button.xml` and `view_donate_pill.xml`, which shared
-layouts still `<include>`.
+Each flavor supplies its own `DonateActivity`, `activity_donate.xml`
+(plus `layout-sw600dp`), and the three strings whose wording differs
+(`donate_bar_ask`, `donate_lead`, `settings_support_body`), in all six
+locales:
 
-Adding a donation touchpoint means adding it to the `github` seam and a
-no-op to the `play` seam — never a call into `src/github` from `src/main`.
+- `src/github`: the payment rail cards and their URLs. Nothing in here
+  compiles into the Play artifact, so the Play build carries no external
+  payment link.
+- `src/play`: the Play Billing client. `source/billing/` holds the
+  `BillingGateway` contract, `PlayBillingGateway` wrapping the Billing
+  Library behind it, `TipJarSource` owning the catalog and purchase state,
+  and `TipCatalog` with the product ids; `DonateViewModel` maps that state
+  for the screen, `donate_tier_button.xml` is the inflated tier button, and
+  `di/BillingModule.kt` binds the gateway. Product ids are permanent in
+  Play Console and name tiers, not amounts; prices are read from Play at
+  runtime. The billing client connects only when the donate screen opens,
+  so the stream path never pays for it.
+
+Adding a donation touchpoint means adding it to `src/main` and letting it
+call `openDonateScreen()`; adding a payment path means changing one
+flavor's `DonateActivity` only.
 
 Gradle task names carry the flavor: `assembleGithubDebug`,
 `assemblePlayDebug`, `testGithubDebugUnitTest`, `bundlePlayRelease`, and

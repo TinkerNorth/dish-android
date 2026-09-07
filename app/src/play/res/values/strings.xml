@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Donation copy specific to the Play flavor, where tips go through Google
+    Play's billing system: the tier cards and the three lines whose wording
+    differs from the github flavor (donate_bar_ask, donate_lead,
+    settings_support_body). Shared donation copy lives in src/main.
+-->
+<resources>
+    <string name="donate_bar_ask">Tip through Google Play to keep it that way →</string>
+    <string name="donate_lead">Dish, Satellite, and every Dish client are free, open source, ad-free, and analytics-free. No paywalled features, no upsells, and no plans for any of that. Tips are what keep them true.</string>
+    <string name="settings_support_body">Tip the developer through Google Play, once or monthly.</string>
+    <string name="donate_tip_title">One-time tip</string>
+    <string name="donate_tip_body">Pick an amount. Google Play handles the payment and the receipt. A tip unlocks nothing; Dish stays the same for everyone.</string>
+    <string name="donate_monthly_title">Monthly supporter</string>
+    <string name="donate_monthly_body">Renews every month at the price shown until you cancel. Cancel any time in Google Play under Payments and subscriptions.</string>
+    <string name="donate_monthly_switch">Pick a different amount to change your plan. The change is prorated by Google Play.</string>
+    <string name="donate_monthly_active">You support Dish every month. Thank you.</string>
+    <string name="donate_manage">Manage in Google Play →</string>
+    <string name="donate_per_month">%1$s / month</string>
+    <string name="donate_loading">Contacting Google Play…</string>
+    <string name="donate_unavailable">Google Play billing isn\'t available on this device right now.</string>
+    <string name="donate_pending">Your payment is pending. Google Play will finish it, and Dish will say thanks then.</string>
+    <string name="donate_thanks_tip">Thank you for the tip!</string>
+    <string name="donate_thanks_monthly">Thank you for supporting Dish every month!</string>
+    <string name="donate_error">Google Play couldn\'t complete that. Nothing was charged.</string>
+    <string name="url_play_subscriptions" translatable="false">https://play.google.com/store/account/subscriptions?sku=%1$s&amp;package=%2$s</string>
+</resources>

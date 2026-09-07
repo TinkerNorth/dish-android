@@ -54,6 +54,10 @@ class DishNavigator(
         go(R.id.settingsActivity)
     }
 
+    fun toDonate() {
+        go(R.id.donateActivity)
+    }
+
     fun toConfigureBindings(slotId: String) {
         go(
             R.id.configureBindingsActivity,

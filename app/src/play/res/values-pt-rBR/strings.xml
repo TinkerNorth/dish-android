@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="donate_bar_ask">Deixe uma gorjeta pelo Google Play para que continue assim →</string>
+    <string name="donate_lead">Dish, Satellite e todo cliente Dish são gratuitos, de código aberto, sem anúncios e sem analytics. Nada de recursos pagos, nada de upsell, e nenhum plano para isso. As gorjetas são o que os mantém assim.</string>
+    <string name="settings_support_body">Deixe uma gorjeta para o desenvolvedor pelo Google Play, uma vez ou todo mês.</string>
+    <string name="donate_tip_title">Gorjeta única</string>
+    <string name="donate_tip_body">Escolha um valor. O Google Play cuida do pagamento e do recibo. Uma gorjeta não desbloqueia nada; o Dish continua igual para todo mundo.</string>
+    <string name="donate_monthly_title">Apoio mensal</string>
+    <string name="donate_monthly_body">Renova todo mês pelo preço exibido até você cancelar. Cancele quando quiser no Google Play, em Pagamentos e assinaturas.</string>
+    <string name="donate_monthly_switch">Escolha outro valor para mudar seu plano. O Google Play faz o cálculo proporcional da mudança.</string>
+    <string name="donate_monthly_active">Você apoia o Dish todo mês. Obrigado.</string>
+    <string name="donate_manage">Gerenciar no Google Play →</string>
+    <string name="donate_per_month">%1$s / mês</string>
+    <string name="donate_loading">Conectando ao Google Play…</string>
+    <string name="donate_unavailable">O faturamento do Google Play não está disponível neste dispositivo agora.</string>
+    <string name="donate_pending">Seu pagamento está pendente. O Google Play vai concluí-lo, e o Dish agradece depois.</string>
+    <string name="donate_thanks_tip">Obrigado pela gorjeta!</string>
+    <string name="donate_thanks_monthly">Obrigado por apoiar o Dish todo mês!</string>
+    <string name="donate_error">O Google Play não conseguiu concluir a operação. Nada foi cobrado.</string>
+</resources>
