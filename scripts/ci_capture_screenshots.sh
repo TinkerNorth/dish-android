@@ -20,11 +20,23 @@ for LOC in ${CAPTURE_LOCALES}; do
   adb shell cmd locale set-app-locales com.tinkernorth.dish --locales "$LOC"
   adb shell am force-stop com.tinkernorth.dish
   adb shell run-as com.tinkernorth.dish rm -rf files/screengrab || true
+  # The crash log buffer is separate from main and small, so it cannot wrap
+  # over a long locale; cleared here so only this locale's crashes count.
+  adb logcat -c -b crash
   adb shell am instrument -w -e testLocale "$LOC" \
     -e class com.tinkernorth.dish.screenshots.DishScreenshots \
     com.tinkernorth.dish.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/instrument.log
   # am instrument exits 0 even on test failures; gate on the runner summary.
   grep -q "OK (" /tmp/instrument.log
+  # A crash in ANY process of the app or the test package puts Android's
+  # "keeps stopping" dialog over the next capture, while the runner still
+  # reports OK because the instrumented process itself survived. Those
+  # screenshots must never leave this job.
+  if adb logcat -d -b crash | grep -q "FATAL EXCEPTION"; then
+    adb logcat -d -b crash | head -60
+    echo "::error::A process crashed during the ${LOC} capture; its dialog would be in the screenshots. See the crash log above."
+    exit 1
+  fi
   adb exec-out run-as com.tinkernorth.dish tar cf - -C files screengrab > captures/grab.tar
   tar xf captures/grab.tar -C captures
   rm captures/grab.tar
