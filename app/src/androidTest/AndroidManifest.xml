@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application>
+        <!-- OkHttp 5 registers an App Startup initializer in its manifest, and
+             okhttp-tls (the fake satellite's TLS, androidTest only) merges it
+             into this test APK. The startup runtime itself is not packaged
+             here: the build strips every class the app already ships. Inside
+             the instrumented app process that is harmless, since only the
+             app's own startup provider runs there. It is fatal in the test
+             package's OWN process, which ActivityScenario starts to host its
+             EmptyActivity on every launch: the provider cannot be loaded, the
+             process dies, and Android's "keeps stopping" dialog was being
+             captured into the store screenshots. Nothing in the tests needs
+             the initializer (OkHttp works without it), so it is removed. -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            tools:node="remove" />
+    </application>
+
+</manifest>
