@@ -7,7 +7,7 @@ computer. Those lines say "update Satellite too".
 
 ---
 
-## [2.0.0] - Unreleased
+## [2.0.0] - 2026-09-06
 
 Everything below ships as 2.0.0, the release where the whole Dish and
 Satellite family moves to one shared version number. The headline since
@@ -190,6 +190,7 @@ The first public release.
 
 Earlier test builds (0.0.x) are only documented in the git history.
 
+[2.0.0]: https://github.com/TinkerNorth/dish-android/releases/tag/2.0.0
 [1.1.4]: https://github.com/TinkerNorth/dish-android/releases/tag/1.1.4
 [1.1.1]: https://github.com/TinkerNorth/dish-android/releases/tag/1.1.1
 [1.0.1]: https://github.com/TinkerNorth/dish-android/releases/tag/1.0.1
