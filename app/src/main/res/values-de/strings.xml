@@ -499,7 +499,6 @@
     <string name="diagnostics_latency_off_hint">Latenz-Profiling ist aus. Schalte es ein, um zu messen (verursacht etwas Mehraufwand im Eingabepfad).</string>
     <string name="diagnostics_latency_waiting">Wird gemessen…</string>
     <string name="diagnostics_phone_path">Eingabepfad des Telefons</string>
-    <string name="diagnostics_network_latency">Netzwerklatenz</string>
     <string name="diagnostics_latency_warn_title">Latenz-Profiling einschalten?</string>
     <string name="diagnostics_latency_warn_message">Latenz-Profiling verursacht während der Messung etwas Mehraufwand im Eingabepfad. Lass es beim normalen Spielen aus und schalte es nach der Messung wieder aus.</string>
     <string name="diagnostics_latency_warn_positive">Einschalten</string>
@@ -679,7 +678,7 @@
     <string name="diagnostics_confirmed">Vom Host bestätigt</string>
     <string name="diagnostics_streaming_label">Streamt</string>
     <string name="diagnostics_apply_result">Ergebnis</string>
-    <string name="diagnostics_apply_ok">ok</string>
+    <string name="diagnostics_apply_ok">OK</string>
     <string name="diagnostics_apply_replug_failed">Neuanschluss fehlgeschlagen, voriges Pad bleibt</string>
     <string name="diagnostics_motion_backend">Motion-Backend</string>
     <string name="diagnostics_backend_ok">bereit</string>

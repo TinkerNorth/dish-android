@@ -505,7 +505,6 @@
     <string name="diagnostics_latency_off_hint">El perfilado de latencia está desactivado. Actívalo para medir (añade algo de trabajo a la ruta de entrada).</string>
     <string name="diagnostics_latency_waiting">Midiendo…</string>
     <string name="diagnostics_phone_path">Ruta de entrada del teléfono</string>
-    <string name="diagnostics_network_latency">Latencia de red</string>
     <string name="diagnostics_latency_warn_title">¿Activar el perfilado de latencia?</string>
     <string name="diagnostics_latency_warn_message">El perfilado de latencia añade algo de trabajo a la ruta de entrada mientras mide. Déjalo desactivado para el juego normal y desactívalo cuando termines.</string>
     <string name="diagnostics_latency_warn_positive">Activar</string>

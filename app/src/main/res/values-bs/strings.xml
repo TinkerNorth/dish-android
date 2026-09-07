@@ -504,7 +504,6 @@
     <string name="diagnostics_latency_off_hint">Profiliranje kašnjenja je isključeno. Uključite ga za mjerenje (dodaje malo posla putu unosa).</string>
     <string name="diagnostics_latency_waiting">Mjerenje…</string>
     <string name="diagnostics_phone_path">Put unosa telefona</string>
-    <string name="diagnostics_network_latency">Mrežna latencija</string>
     <string name="diagnostics_latency_warn_title">Uključiti profiliranje kašnjenja?</string>
     <string name="diagnostics_latency_warn_message">Profiliranje kašnjenja dodaje malo posla putu unosa dok mjeri. Ostavite ga isključenim za normalnu igru i isključite ga kada završite.</string>
     <string name="diagnostics_latency_warn_positive">Uključi</string>

@@ -505,7 +505,6 @@
     <string name="diagnostics_latency_off_hint">O perfilamento de latência está desativado. Ative-o para medir (adiciona um pouco de trabalho ao caminho de entrada).</string>
     <string name="diagnostics_latency_waiting">Medindo…</string>
     <string name="diagnostics_phone_path">Caminho de entrada do telefone</string>
-    <string name="diagnostics_network_latency">Latência de rede</string>
     <string name="diagnostics_latency_warn_title">Ativar o perfilamento de latência?</string>
     <string name="diagnostics_latency_warn_message">O perfilamento de latência adiciona um pouco de trabalho ao caminho de entrada enquanto mede. Deixe-o desativado durante o jogo normal e desative-o ao terminar.</string>
     <string name="diagnostics_latency_warn_positive">Ativar</string>
@@ -685,7 +684,7 @@
     <string name="diagnostics_confirmed">Confirmado pelo host</string>
     <string name="diagnostics_streaming_label">Transmitindo</string>
     <string name="diagnostics_apply_result">Resultado</string>
-    <string name="diagnostics_apply_ok">ok</string>
+    <string name="diagnostics_apply_ok">OK</string>
     <string name="diagnostics_apply_replug_failed">reconexão falhou, controle anterior mantido</string>
     <string name="diagnostics_motion_backend">Backend de movimento</string>
     <string name="diagnostics_backend_ok">pronto</string>

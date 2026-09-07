@@ -504,7 +504,6 @@
     <string name="diagnostics_latency_off_hint">Le profilage de latence est désactivé. Activez-le pour mesurer (ajoute un peu de travail à la chaîne d\'entrée).</string>
     <string name="diagnostics_latency_waiting">Mesure en cours…</string>
     <string name="diagnostics_phone_path">Chaîne d\'entrée du téléphone</string>
-    <string name="diagnostics_network_latency">Latence réseau</string>
     <string name="diagnostics_latency_warn_title">Activer le profilage de latence ?</string>
     <string name="diagnostics_latency_warn_message">Le profilage de latence ajoute un peu de travail à la chaîne d\'entrée pendant la mesure. Laissez-le désactivé pour le jeu normal et désactivez-le une fois terminé.</string>
     <string name="diagnostics_latency_warn_positive">Activer</string>
@@ -684,7 +683,7 @@
     <string name="diagnostics_confirmed">Confirmé par l\'hôte</string>
     <string name="diagnostics_streaming_label">En flux</string>
     <string name="diagnostics_apply_result">Résultat</string>
-    <string name="diagnostics_apply_ok">ok</string>
+    <string name="diagnostics_apply_ok">OK</string>
     <string name="diagnostics_apply_replug_failed">rebranchement échoué, manette précédente conservée</string>
     <string name="diagnostics_motion_backend">Backend mouvement</string>
     <string name="diagnostics_backend_ok">prêt</string>
