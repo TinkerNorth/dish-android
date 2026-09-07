@@ -713,4 +713,17 @@
     <string name="diagnostics_feedback_value">%1$s · %2$s · %3$d au total</string>
     <string name="diagnostics_latency_estimate">Entrée vers hôte</string>
     <string name="diagnostics_estimate_parts">poll %1$s · téléphone %2$s · réseau %3$s</string>
+
+    <string name="donate_bar_headline">Dish est gratuit et open source.</string>
+    <string name="donate_bar_dismiss">Fermer la bannière de don</string>
+    <string name="donate_title">Soutenir Dish</string>
+    <string name="donate_eyebrow">Soutenir le projet</string>
+    <string name="donate_h1">Dish tourne au café et à la bonne volonté.</string>
+    <string name="donate_why_title">À quoi sert réellement votre don</string>
+    <string name="donate_why_hosting">Hébergement. dish.tinkernorth.com, tinkernorth.com, et chaque miroir d\'installateur signé. AWS n\'est pas gratuit, même à notre échelle de trafic.</string>
+    <string name="donate_why_signing">Certificats de signature de code. Windows SmartScreen ne joue le jeu que parce que nous payons un certificat EV chaque année. Idem pour le compte Apple Developer Program pour le futur client macOS.</string>
+    <string name="donate_why_play">Frais de développeur Google Play. 25 $ uniques plus le temps nécessaire pour garder la fiche Play conforme à chaque nouvelle vague de règles.</string>
+    <string name="donate_why_time">Le temps. Réponse honnête : la majeure partie. Dish est un projet du soir et du week-end. Les dons me permettent de dire « oui » à y travailler plutôt que d\'accepter des contrats supplémentaires.</string>
+    <string name="donate_thanks">Merci. Chaque don, chaque favori, chaque lien partagé. Tout s\'additionne. Emir</string>
+    <string name="settings_support_title">Soutenir Dish</string>
 </resources>

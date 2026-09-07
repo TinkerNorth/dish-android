@@ -227,4 +227,8 @@
         android:name="com.tinkernorth.dish.ui.main.NativeUnavailableActivity"
         android:label="@string/fatal_native_title" />
 
+    <activity
+        android:id="@+id/donateActivity"
+        android:name="com.tinkernorth.dish.ui.donate.DonateActivity"
+        android:label="@string/donate_title" />
 </navigation>

@@ -713,4 +713,17 @@
     <string name="diagnostics_feedback_value">%1$s · %2$s · ukupno %3$d</string>
     <string name="diagnostics_latency_estimate">Od unosa do hosta</string>
     <string name="diagnostics_estimate_parts">poll %1$s · telefon %2$s · mreža %3$s</string>
+
+    <string name="donate_bar_headline">Dish je besplatan i otvorenog koda.</string>
+    <string name="donate_bar_dismiss">Zatvori baner za donaciju</string>
+    <string name="donate_title">Podrži Dish</string>
+    <string name="donate_eyebrow">Podržite projekat</string>
+    <string name="donate_h1">Dish radi na kafi i dobroj volji.</string>
+    <string name="donate_why_title">Šta vaša donacija zapravo plaća</string>
+    <string name="donate_why_hosting">Hosting. dish.tinkernorth.com, tinkernorth.com i svaki signed-installer mirror. AWS nije besplatan, čak ni na našem obimu saobraćaja.</string>
+    <string name="donate_why_signing">Code-signing sertifikati. Windows SmartScreen sarađuje samo zato što plaćamo EV sertifikat svake godine. Isto vrijedi za Apple Developer Program nalog za nadolazeći macOS klijent.</string>
+    <string name="donate_why_play">Google Play developer naknada. Jednokratna naknada od 25 dolara plus vrijeme potrebno za održavanje Play oglasa usklađenim sa svakom novom rundom politika.</string>
+    <string name="donate_why_time">Vrijeme. Iskren odgovor: većina toga. Dish je projekat noći i vikenda. Donacije mi dozvoljavaju da kažem „da“ radu na njemu umjesto preuzimanju dodatnog konsultantskog posla.</string>
+    <string name="donate_thanks">Hvala vam. Svaki dolar, svaka zvjezdica, svaki podijeljeni link. Sve to zbraja. Emir</string>
+    <string name="settings_support_title">Podrži Dish</string>
 </resources>

@@ -1,0 +1,5 @@
+Dish 2.1.0 : les pourboires reviennent dans la version Play.
+
+• Soutenez Dish depuis le bouton cœur : pourboire unique ou soutien mensuel, réglé via Google Play.
+• Un pourboire ne débloque rien ; Dish reste gratuit, open source et sans publicité pour tout le monde.
+• Annulez le soutien mensuel à tout moment dans Google Play.

@@ -1,0 +1,5 @@
+Dish 2.1.0: Trinkgelder sind zurück in der Play-Version.
+
+• Unterstütze Dish über den Herz-Button: einmaliges Trinkgeld oder monatliche Unterstützung, bezahlt über Google Play.
+• Ein Trinkgeld schaltet nichts frei; Dish bleibt für alle kostenlos, Open Source und werbefrei.
+• Die monatliche Unterstützung lässt sich jederzeit in Google Play kündigen.

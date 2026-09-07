@@ -28,6 +28,7 @@ androidxTestRunner = "1.7.0"
 androidxTestRules = "1.7.0"
 androidxTestOrchestrator = "1.6.1"
 okhttpTls = "5.5.0"
+billing = "9.1.0"
 splashscreen = "1.2.0"
 viewpager2 = "1.1.0"
 window = "1.5.1"
@@ -60,6 +61,7 @@ kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-cor
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-crashlytics = { group = "com.google.firebase", name = "firebase-crashlytics" }
 firebase-crashlytics-ndk = { group = "com.google.firebase", name = "firebase-crashlytics-ndk" }
+billing = { group = "com.android.billingclient", name = "billing", version.ref = "billing" }
 # firebase-analytics intentionally absent. See app/build.gradle.kts and PRIVACY.md
 # for the zero-analytics posture. Re-adding it requires policy and Data Safety updates.
 androidx-test-core = { group = "androidx.test", name = "core", version.ref = "androidxTestCore" }

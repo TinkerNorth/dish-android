@@ -93,8 +93,6 @@ class SettingsActivity : BaseGamepadHostActivity() {
         binding.cardRowOpenSourceLicenses.cardRowSubtitle.setText(R.string.settings_open_source_licenses_body)
         binding.cardOpenSourceLicenses.setOnClickListener { nav.toLicenses() }
 
-        // Binds and shows the support card in the github flavor; hides it in
-        // the Play flavor, which ships no donation surface.
         bindDonateSettingsCard()
 
         // Observe-then-bind: opposite order would re-write the persisted preference on the first frame.

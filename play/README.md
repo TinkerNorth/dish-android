@@ -9,6 +9,8 @@ play/
   README.md                          ← you are here
   REVIEWER_NOTES.md                  ← test instructions for the Play reviewer (English only)
   DATA_SAFETY.md                     ← form answers for the Data Safety section
+  BILLING.md                         ← tip-jar products, Play Console prerequisites, sync workflow
+  products.json                      ← the product catalog scripts/play_products.py applies
   PERMISSIONS_JUSTIFICATION.md       ← per-permission rationale for Play Console
   CONTENT_RATING.md                  ← notes for the IARC content-rating questionnaire
   metadata/

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="donate_bar_ask">Laissez un pourboire via Google Play pour que cela continue →</string>
+    <string name="donate_lead">Dish, Satellite et chaque client Dish sont gratuits, open source, sans publicité et sans analyse. Pas de fonctionnalités payantes, pas d\'upsell et aucun projet en ce sens. Les pourboires sont ce qui les garde ainsi.</string>
+    <string name="settings_support_body">Laissez un pourboire au développeur via Google Play, une fois ou chaque mois.</string>
+    <string name="donate_tip_title">Pourboire unique</string>
+    <string name="donate_tip_body">Choisissez un montant. Google Play gère le paiement et le reçu. Un pourboire ne débloque rien ; Dish reste identique pour tout le monde.</string>
+    <string name="donate_monthly_title">Soutien mensuel</string>
+    <string name="donate_monthly_body">Se renouvelle chaque mois au prix indiqué jusqu\'à annulation. Annulez à tout moment dans Google Play, sous Paiements et abonnements.</string>
+    <string name="donate_monthly_switch">Choisissez un autre montant pour changer de formule. Google Play calcule le changement au prorata.</string>
+    <string name="donate_monthly_active">Vous soutenez Dish chaque mois. Merci.</string>
+    <string name="donate_manage">Gérer dans Google Play →</string>
+    <string name="donate_per_month">%1$s / mois</string>
+    <string name="donate_loading">Connexion à Google Play…</string>
+    <string name="donate_unavailable">La facturation Google Play n\'est pas disponible sur cet appareil pour le moment.</string>
+    <string name="donate_pending">Votre paiement est en attente. Google Play le finalisera, et Dish vous remerciera à ce moment-là.</string>
+    <string name="donate_thanks_tip">Merci pour le pourboire !</string>
+    <string name="donate_thanks_monthly">Merci de soutenir Dish chaque mois !</string>
+    <string name="donate_error">Google Play n\'a pas pu finaliser l\'opération. Rien n\'a été débité.</string>
+</resources>

@@ -1,0 +1,108 @@
+{
+    "packageName": "com.tinkernorth.dish",
+    "currency": "CAD",
+    "defaultLanguage": "en-US",
+    "tips": {
+        "description": {
+            "en-US": "A one-time thank-you to the Dish developer. It unlocks nothing; Dish stays the same for everyone.",
+            "de-DE": "Ein einmaliges Dankeschön an den Dish-Entwickler. Es schaltet nichts frei; Dish bleibt für alle gleich.",
+            "es-ES": "Un agradecimiento único al desarrollador de Dish. No desbloquea nada; Dish sigue igual para todos.",
+            "fr-FR": "Un merci ponctuel au développeur de Dish. Il ne débloque rien ; Dish reste identique pour tout le monde.",
+            "pt-BR": "Um agradecimento único ao desenvolvedor do Dish. Não desbloqueia nada; o Dish continua igual para todo mundo."
+        },
+        "products": [
+            {
+                "sku": "tip_5",
+                "price": "5.00",
+                "title": {
+                    "en-US": "Small tip",
+                    "de-DE": "Kleines Trinkgeld",
+                    "es-ES": "Propina pequeña",
+                    "fr-FR": "Petit pourboire",
+                    "pt-BR": "Gorjeta pequena"
+                }
+            },
+            {
+                "sku": "tip_10",
+                "price": "10.00",
+                "title": {
+                    "en-US": "Medium tip",
+                    "de-DE": "Mittleres Trinkgeld",
+                    "es-ES": "Propina mediana",
+                    "fr-FR": "Pourboire moyen",
+                    "pt-BR": "Gorjeta média"
+                }
+            },
+            {
+                "sku": "tip_25",
+                "price": "25.00",
+                "title": {
+                    "en-US": "Large tip",
+                    "de-DE": "Großes Trinkgeld",
+                    "es-ES": "Propina grande",
+                    "fr-FR": "Grand pourboire",
+                    "pt-BR": "Gorjeta grande"
+                }
+            },
+            {
+                "sku": "tip_50",
+                "price": "50.00",
+                "title": {
+                    "en-US": "Big tip",
+                    "de-DE": "Sehr großes Trinkgeld",
+                    "es-ES": "Propina muy grande",
+                    "fr-FR": "Très grand pourboire",
+                    "pt-BR": "Gorjeta generosa"
+                }
+            },
+            {
+                "sku": "tip_100",
+                "price": "100.00",
+                "title": {
+                    "en-US": "Huge tip",
+                    "de-DE": "Riesiges Trinkgeld",
+                    "es-ES": "Propina enorme",
+                    "fr-FR": "Pourboire énorme",
+                    "pt-BR": "Gorjeta enorme"
+                }
+            },
+            {
+                "sku": "tip_max",
+                "price": "999.99",
+                "title": {
+                    "en-US": "Legendary tip",
+                    "de-DE": "Legendäres Trinkgeld",
+                    "es-ES": "Propina legendaria",
+                    "fr-FR": "Pourboire légendaire",
+                    "pt-BR": "Gorjeta lendária"
+                }
+            }
+        ]
+    },
+    "subscription": {
+        "productId": "supporter_monthly",
+        "title": {
+            "en-US": "Dish supporter",
+            "de-DE": "Dish-Unterstützung",
+            "es-ES": "Apoyo a Dish",
+            "fr-FR": "Soutien à Dish",
+            "pt-BR": "Apoio ao Dish"
+        },
+        "description": {
+            "en-US": "A monthly thank-you to the Dish developer. Renews monthly until cancelled in Google Play. It unlocks nothing.",
+            "de-DE": "Ein monatliches Dankeschön an den Dish-Entwickler. Verlängert sich monatlich, bis es in Google Play gekündigt wird. Es schaltet nichts frei.",
+            "es-ES": "Un agradecimiento mensual al desarrollador de Dish. Se renueva cada mes hasta cancelarlo en Google Play. No desbloquea nada.",
+            "fr-FR": "Un merci mensuel au développeur de Dish. Se renouvelle chaque mois jusqu'à annulation dans Google Play. Il ne débloque rien.",
+            "pt-BR": "Um agradecimento mensal ao desenvolvedor do Dish. Renova todo mês até ser cancelado no Google Play. Não desbloqueia nada."
+        },
+        "basePlans": [
+            { "basePlanId": "monthly-1", "price": "1.00" },
+            { "basePlanId": "monthly-3", "price": "3.00" },
+            { "basePlanId": "monthly-5", "price": "5.00" },
+            { "basePlanId": "monthly-10", "price": "10.00" },
+            { "basePlanId": "monthly-25", "price": "25.00" },
+            { "basePlanId": "monthly-50", "price": "50.00" },
+            { "basePlanId": "monthly-100", "price": "100.00" }
+        ]
+    }
+}

@@ -27,7 +27,6 @@ import com.tinkernorth.dish.ui.donate.wireDonateButton
 fun AppCompatActivity.setupDishToolbar(toolbar: Toolbar) {
     setSupportActionBar(toolbar)
     toolbar.setNavigationOnClickListener { finish() }
-    // No-op in the Play flavor, which ships no donation surface.
     wireDonateButton()
 }
 

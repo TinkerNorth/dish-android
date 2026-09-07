@@ -53,6 +53,7 @@ These map to the fields on the Data Safety form in Play Console. Cross-reference
 - **No advertising ID (AD_ID)**: Firebase Analytics is deliberately omitted from the build (see `app/build.gradle.kts`). The `com.google.android.gms.permission.AD_ID` permission is NOT in the manifest.
 - **No location**: the app does not request or use location permissions at any API level.
 - **No contact / SMS / call log / camera permissions**: not requested.
+- **Tips through Google Play (Play build only)**: payment details are collected by Google Play's billing system directly from the user and never reach the app, which the Data safety guidance exempts from declaration. The app receives only the owned-product list and purchase tokens, keeps them in memory to acknowledge or consume the purchase, and never stores, uploads, or logs them, so "Financial info" and "Purchase history" stay NOT collected.
 - **Microphone is the only sensitive permission requested**, it is requested only from the Microphone switch on a controller's binding screen, and the audio is never recorded or uploaded.
 
 ## Notes for Play reviewers

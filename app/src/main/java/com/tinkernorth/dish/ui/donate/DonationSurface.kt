@@ -2,7 +2,6 @@
 
 package com.tinkernorth.dish.ui.donate
 
-import android.content.Intent
 import android.content.res.ColorStateList
 import android.view.View
 import android.widget.ImageView
@@ -11,29 +10,15 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.ui.common.DishNavigator
 
-/**
- * Donation surface for the directly-distributed (`github`) build: the
- * toolbar heart, the dismissable pill, and the Settings support card, all of
- * which open [DonateActivity].
- *
- * The `play` source set supplies no-op twins of these functions. Everything
- * donation-related — this file, [DonateActivity], [attachDonatePill], the
- * layouts, the copy, and the payment URLs — is compiled into the github
- * flavor only, so the Play artifact never contains it. See
- * `src/play/java/.../DonationSurface.kt` for the policy background.
- *
- * [DonateActivity] is launched by explicit Intent rather than through
- * `DishNavigator`/`nav_graph.xml`: the graph is shared by both flavors and
- * `NavInflater` resolves every `android:name` at inflation time, so a
- * destination pointing at a class the Play build doesn't have would break
- * navigation for every screen.
- */
+// Every screen shares these touchpoints (with the pill in DonatePill.kt); the flavors part ways
+// inside DonateActivity, which github and play each supply: external payment rails on github,
+// Play Billing on play, as Google Play's Payments policy requires of Play-distributed apps.
 fun AppCompatActivity.wireDonateButton() {
     findViewById<View>(R.id.btnDonate)?.setOnClickListener { openDonateScreen() }
 }
 
-/** Binds and shows the Settings support card the shared layout declares. */
 fun AppCompatActivity.bindDonateSettingsCard() {
     val card = findViewById<View>(R.id.cardSupport) ?: return
     card.isVisible = true
@@ -49,5 +34,5 @@ fun AppCompatActivity.bindDonateSettingsCard() {
 }
 
 internal fun AppCompatActivity.openDonateScreen() {
-    startActivity(Intent(this, DonateActivity::class.java))
+    DishNavigator(this).toDonate()
 }

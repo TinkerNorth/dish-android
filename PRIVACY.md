@@ -148,6 +148,26 @@ Crashlytics retains crash data for 90 days, then deletes it. See Google's
 
 ---
 
+### 2.4 Sent to Google (tips through Google Play, Play build only)
+
+The Google Play build of Dish lets you tip the developer, once or monthly,
+through Google Play's billing system. Google, not Dish, takes the payment:
+your payment method, billing address and receipt are handled by Google Play
+under [Google's Privacy Policy](https://policies.google.com/privacy) and the
+Google Play Terms of Service. Dish never sees them.
+
+What Dish receives from Google Play, on your device only, is the list of
+products you own and a purchase token per purchase. Dish uses them to mark
+a tip as delivered, so Google Play can close it out, and to show you that a
+monthly plan is active. Nothing about a purchase is stored by Dish, sent to
+TinkerNorth, or included in crash reports.
+
+The build distributed on GitHub and tinkernorth.com contains none of this.
+It links to third-party donation pages instead, and their own privacy
+policies apply once you leave the app.
+
+---
+
 ## 3. Permissions and why we ask for them
 
 | Permission | Why | When asked |

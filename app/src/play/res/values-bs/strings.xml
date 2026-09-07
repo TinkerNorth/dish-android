@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="donate_bar_ask">Ostavite bakšiš preko Google Playa da tako i ostane →</string>
+    <string name="donate_lead">Dish, Satellite i svaki Dish klijent su besplatni, otvorenog koda, bez reklama i bez analitike. Bez funkcija iza paywalla, bez upsellova i bez planova za bilo šta od toga. Bakšiši su ono što ih drži takvima.</string>
+    <string name="settings_support_body">Ostavite bakšiš programeru preko Google Playa, jednom ili mjesečno.</string>
+    <string name="donate_tip_title">Jednokratni bakšiš</string>
+    <string name="donate_tip_body">Odaberite iznos. Google Play obavlja plaćanje i izdaje račun. Bakšiš ne otključava ništa; Dish ostaje isti za sve.</string>
+    <string name="donate_monthly_title">Mjesečna podrška</string>
+    <string name="donate_monthly_body">Obnavlja se svakog mjeseca po prikazanoj cijeni dok ne otkažete. Otkažite bilo kada u Google Playu pod Plaćanja i pretplate.</string>
+    <string name="donate_monthly_switch">Odaberite drugi iznos da promijenite plan. Google Play proporcionalno obračunava promjenu.</string>
+    <string name="donate_monthly_active">Podržavate Dish svakog mjeseca. Hvala.</string>
+    <string name="donate_manage">Upravljajte u Google Playu →</string>
+    <string name="donate_per_month">%1$s / mjesec</string>
+    <string name="donate_loading">Povezivanje s Google Playem…</string>
+    <string name="donate_unavailable">Naplata preko Google Playa trenutno nije dostupna na ovom uređaju.</string>
+    <string name="donate_pending">Vaša uplata je na čekanju. Google Play će je završiti, a Dish će se tada zahvaliti.</string>
+    <string name="donate_thanks_tip">Hvala za bakšiš!</string>
+    <string name="donate_thanks_monthly">Hvala što podržavate Dish svakog mjeseca!</string>
+    <string name="donate_error">Google Play to nije mogao završiti. Ništa nije naplaćeno.</string>
+</resources>

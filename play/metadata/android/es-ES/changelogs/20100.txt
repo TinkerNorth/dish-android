@@ -1,0 +1,5 @@
+Dish 2.1.0: las propinas vuelven a la versión de Play.
+
+• Apoya a Dish desde el botón del corazón: propina única o apoyo mensual, pagado a través de Google Play.
+• Una propina no desbloquea nada; Dish sigue siendo gratis, de código abierto y sin anuncios para todos.
+• Cancela el apoyo mensual cuando quieras en Google Play.
