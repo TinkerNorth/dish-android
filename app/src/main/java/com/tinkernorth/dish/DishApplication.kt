@@ -11,6 +11,7 @@ import com.tinkernorth.dish.composer.CatalogPrewarmer
 import com.tinkernorth.dish.composer.CrashReportingController
 import com.tinkernorth.dish.composer.DiagnosticsLogRecorder
 import com.tinkernorth.dish.composer.HostCapabilitiesProbe
+import com.tinkernorth.dish.composer.LinkHistoryRecorder
 import com.tinkernorth.dish.composer.MoonlightSessionController
 import com.tinkernorth.dish.composer.SlotTopologyController
 import com.tinkernorth.dish.composer.StreamingServiceController
@@ -116,6 +117,8 @@ class DishApplication : Application() {
 
     @Inject lateinit var diagnosticsLogRecorder: DiagnosticsLogRecorder
 
+    @Inject lateinit var linkHistoryRecorder: LinkHistoryRecorder
+
     // Exposed so StreamingService (framework-owned lifecycle) can reuse the Hilt singleton scope.
     @Inject lateinit var processScope: CoroutineScope
 
@@ -139,6 +142,7 @@ class DishApplication : Application() {
             installNativeBackedObservers()
             HotPathBenchController.install(this, processScope)
             diagnosticsLogRecorder.install()
+            linkHistoryRecorder.install()
             // Re-arm latency profiling only if the user previously left it on (they accepted the
             // warning then). Default is false, so a fresh install keeps the hot path measurement-free.
             physicalInputNative.setHotPathBench(latencyProfilingStore.state.value)

@@ -163,6 +163,12 @@ class PhysicalInputNative
 
         fun getDeviceInputEventCount(deviceId: Int): Long = SatelliteNative.getDeviceInputEventCount(deviceId)
 
+        fun getDeviceUrbErrorCount(deviceId: Int): Long = SatelliteNative.getDeviceUrbErrorCount(deviceId)
+
+        fun deviceInfoJson(deviceId: Int): String = SatelliteNative.deviceInfoJson(deviceId)
+
+        fun deviceLatencyJson(deviceId: Int): String = SatelliteNative.deviceLatencyJson(deviceId)
+
         // Opt-in latency benchmark (stage-1 USB-direct hot path + stage-2 heartbeat RTT).
         fun setHotPathBench(on: Boolean) = SatelliteNative.setHotPathBench(on)
 

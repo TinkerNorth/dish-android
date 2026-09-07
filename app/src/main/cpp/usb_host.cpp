@@ -51,6 +51,8 @@ struct DeviceCtx {
 
     std::atomic<uint64_t> urbCount{0};
     std::atomic<uint64_t> motionCount{0};
+    std::atomic<uint64_t> urbErrorCount{0};
+    std::atomic<int32_t> lastUrbStatus{0};
 
     // Guards rumble writes to epOut against the detach that closes fd; outSeq is the output report
     // counter for protocols that carry one (Xbox One serial, Switch Pro packet number).
@@ -150,6 +152,7 @@ void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
             if (r < 0) {
                 if (errno == EAGAIN) break;
                 LOGE("dev=%d REAPURB failed: %s", ctx->syntheticDeviceId, strerror(errno));
+                ctx->urbErrorCount.fetch_add(1, std::memory_order_relaxed);
                 running = false;
                 break;
             }
@@ -171,8 +174,14 @@ void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
                 break;
             }
 
+            if (reaped->status != 0) {
+                ctx->urbErrorCount.fetch_add(1, std::memory_order_relaxed);
+                ctx->lastUrbStatus.store(reaped->status, std::memory_order_relaxed);
+            }
+
             if (reaped->status == 0 && reaped->actual_length > 0) {
-                hotpath::markInputRead(); // stage-1 start: a fresh input report is in hand
+                hotpath::markInputRead(
+                    ctx->syntheticDeviceId); // stage-1 start: a fresh input report is in hand
                 ctx->urbCount.fetch_add(1, std::memory_order_relaxed);
                 memset(&scratch, 0, sizeof(scratch));
                 usbparsers::WirelessEvent wev = usbparsers::checkWirelessEvent(
@@ -244,6 +253,7 @@ void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
             }
 
             if (!submitSlot(*completed)) {
+                ctx->urbErrorCount.fetch_add(1, std::memory_order_relaxed);
                 running = false;
                 break;
             }
@@ -476,6 +486,7 @@ void detachDevice(int32_t syntheticDeviceId) {
     shutdownLocked(ctx);
     dispatch::resetAndPublish(syntheticDeviceId);
     dispatch::forgetDevice(syntheticDeviceId);
+    hotpath::forgetDevice(syntheticDeviceId);
     LOGI("detach dev=%d (%s) done", syntheticDeviceId, ctx->modelName.c_str());
 }
 
@@ -484,6 +495,61 @@ uint64_t getUrbCount(int32_t deviceId) {
     auto it = g_devices.find(deviceId);
     if (it == g_devices.end()) return 0;
     return it->second->urbCount.load(std::memory_order_relaxed);
+}
+
+uint64_t getUrbErrorCount(int32_t deviceId) {
+    std::lock_guard<std::mutex> lock(g_mtx);
+    auto it = g_devices.find(deviceId);
+    if (it == g_devices.end()) return 0;
+    return it->second->urbErrorCount.load(std::memory_order_relaxed);
+}
+
+static const char* initKindName(usbparsers::InitKind init) {
+    switch (init) {
+    case usbparsers::InitKind::XBOX_ONE_POWERON:
+        return "Xbox One power-on";
+    case usbparsers::InitKind::XBOX_ONE_S:
+        return "Xbox One S set-mode";
+    case usbparsers::InitKind::SWITCH_PRO_HANDSHAKE:
+        return "Switch Pro handshake";
+    case usbparsers::InitKind::STEAM_QUIET:
+        return "Steam quiet mode";
+    case usbparsers::InitKind::NONE:
+    default:
+        return "";
+    }
+}
+
+static void appendJsonString(std::string& out, const std::string& value) {
+    out += '"';
+    for (char c : value) {
+        if (c == '"' || c == '\\') out += '\\';
+        if ((unsigned char)c < 0x20) continue;
+        out += c;
+    }
+    out += '"';
+}
+
+std::string deviceInfoJson(int32_t deviceId) {
+    std::shared_ptr<DeviceCtx> ctx;
+    {
+        std::lock_guard<std::mutex> lock(g_mtx);
+        auto it = g_devices.find(deviceId);
+        if (it == g_devices.end()) return "";
+        ctx = it->second;
+    }
+    std::string out = "{\"model\":";
+    appendJsonString(out, ctx->modelName);
+    out += ",\"parser\":";
+    appendJsonString(out, ctx->parserName);
+    out += ",\"init\":";
+    appendJsonString(out, initKindName(ctx->init));
+    char buf[96];
+    snprintf(buf, sizeof(buf), ",\"reportBytes\":%u,\"endpointOut\":%s,\"lastUrbStatus\":%d}",
+             (unsigned)ctx->epInMaxPacket, ctx->epOut != 0 ? "true" : "false",
+             (int)ctx->lastUrbStatus.load(std::memory_order_relaxed));
+    out += buf;
+    return out;
 }
 
 uint64_t getMotionCount(int32_t deviceId) {

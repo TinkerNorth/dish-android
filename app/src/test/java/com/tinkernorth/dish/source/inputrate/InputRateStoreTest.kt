@@ -52,9 +52,9 @@ class InputRateStoreTest {
         store.sampleAll(nowMs = 1000L)
         every { native.getDeviceInputEventCount(7) } returns 60L
         store.sampleAll(nowMs = 1500L)
-        assertEquals(SlotInputRates(controllerHz = 120, controllerPeakHz = 120), slotRates())
+        assertEquals(SlotInputRates(controllerHz = 120, controllerPeakHz = 120, lastInputAtMs = 1500L), slotRates())
         store.sampleAll(nowMs = 2000L)
-        assertEquals(SlotInputRates(controllerHz = 120, controllerPeakHz = 120), slotRates())
+        assertEquals(SlotInputRates(controllerHz = 120, controllerPeakHz = 120, lastInputAtMs = 1500L), slotRates())
     }
 
     @Test
@@ -67,7 +67,7 @@ class InputRateStoreTest {
         every { native.getDeviceMotionCount(-1000) } returns 62L
         store.sampleAll(nowMs = 1500L)
         assertEquals(
-            SlotInputRates(controllerHz = 1000, controllerPeakHz = 1000, gyroHz = 125),
+            SlotInputRates(controllerHz = 1000, controllerPeakHz = 1000, gyroHz = 125, lastInputAtMs = 1500L),
             slotRates("-1000"),
         )
     }

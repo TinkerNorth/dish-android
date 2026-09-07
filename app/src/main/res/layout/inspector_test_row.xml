@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="@dimen/spacing_lg"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/tvTestLabel"
+        style="@style/TextAppearance.Dish.Label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        tools:text="Rumble" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_xs"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnTestA"
+            style="@style/Widget.Dish.Button.Outlined"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            tools:text="Weak" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnTestB"
+            style="@style/Widget.Dish.Button.Outlined"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="@dimen/spacing_md"
+            android:visibility="gone"
+            tools:text="Strong"
+            tools:visibility="visible" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnTestC"
+            style="@style/Widget.Dish.Button"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="@dimen/spacing_md"
+            android:visibility="gone"
+            tools:text="Both"
+            tools:visibility="visible" />
+    </LinearLayout>
+</LinearLayout>

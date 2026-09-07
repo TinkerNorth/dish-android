@@ -6,6 +6,7 @@ import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.store.FeedbackActivityStore
 import com.tinkernorth.dish.source.store.MIC_LED_OFF
 import com.tinkernorth.dish.source.store.MIC_LED_ON
 import com.tinkernorth.dish.source.store.MIC_LED_PULSE
@@ -48,7 +49,8 @@ class FeedbackRouterTest {
         return manager
     }
 
-    private fun router(manager: SatelliteConnectionManager = mockk(relaxed = true)) = FeedbackRouter(manager, native, store, rumble)
+    private fun router(manager: SatelliteConnectionManager = mockk(relaxed = true)) =
+        FeedbackRouter(manager, native, store, rumble, FeedbackActivityStore())
 
     @Test
     fun `lightbar reaches a Direct-claimed pad through the session resolve`() {
@@ -176,5 +178,33 @@ class FeedbackRouterTest {
         r.dispatchTriggerRumbleToSlot("9", 1, 2)
         verify(exactly = 0) { native.sendUsbTriggerRumble(9, any(), any()) }
         verify(exactly = 0) { rumble.dispatchToSlot("9", any(), any(), any()) }
+    }
+
+    @Test
+    fun `slot-addressed feedback reaches a Direct-claimed pad without a session`() {
+        val r = router()
+        val blocks = ByteArray(22) { it.toByte() }
+        r.dispatchPlayerLedsToSlot("-1000", 0x03)
+        r.dispatchMicLedToSlot("-1000", MIC_LED_PULSE)
+        r.dispatchTriggerEffectsToSlot("-1000", blocks)
+        verify(exactly = 1) { native.sendUsbPlayerLeds(-1000, 0x03) }
+        verify(exactly = 1) { native.sendUsbMicMuteLed(-1000, MIC_LED_PULSE) }
+        verify(exactly = 1) { native.sendUsbTriggerEffects(-1000, blocks) }
+    }
+
+    @Test
+    fun `slot-addressed feedback paints the virtual pad and skips framework pads`() {
+        val r = router()
+        r.dispatchPlayerLedsToSlot(VIRTUAL_SLOT_ID, 0x02)
+        r.dispatchMicLedToSlot(VIRTUAL_SLOT_ID, MIC_LED_ON)
+        assertEquals(0x02, store.state.value.playerLedMask)
+        assertEquals(MIC_LED_ON, store.state.value.micLedState)
+
+        r.dispatchPlayerLedsToSlot("9", 0x1F)
+        r.dispatchTriggerEffectsToSlot("9", ByteArray(22))
+        r.dispatchMicLedToSlot("9", MIC_LED_ON)
+        verify(exactly = 0) { native.sendUsbPlayerLeds(any(), any()) }
+        verify(exactly = 0) { native.sendUsbTriggerEffects(any(), any()) }
+        verify(exactly = 0) { native.sendUsbMicMuteLed(any(), any()) }
     }
 }

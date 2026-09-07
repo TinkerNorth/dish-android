@@ -47,7 +47,15 @@ class DiagnosticsViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun viewModel() = DiagnosticsViewModel(store, native, wifi, Json { ignoreUnknownKeys = true })
+    private fun viewModel() =
+        DiagnosticsViewModel(
+            store,
+            native,
+            wifi,
+            Json { ignoreUnknownKeys = true },
+            mockk(relaxed = true),
+            mockk(relaxed = true),
+        )
 
     @Test
     fun `latency is off while profiling is disabled and no probe runs`() =

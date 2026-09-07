@@ -34,6 +34,16 @@ class InputRateStore
         private class SlotTrackers {
             val controller = InputRateTracker()
             val gyro = InputRateTracker()
+            private var lastCount = -1L
+            private var lastInputAtMs = 0L
+
+            fun noteCount(
+                count: Long,
+                nowMs: Long,
+            ) {
+                if (lastCount >= 0 && count != lastCount) lastInputAtMs = nowMs
+                lastCount = count
+            }
 
             fun rebaseline() {
                 controller.rebaseline()
@@ -45,6 +55,7 @@ class InputRateStore
                     controllerHz = controller.lastHz,
                     controllerPeakHz = controller.peakHz,
                     gyroHz = gyro.lastHz,
+                    lastInputAtMs = lastInputAtMs,
                 )
         }
 
@@ -98,13 +109,11 @@ class InputRateStore
                 val slotId = id.toString()
                 slotIds.add(slotId)
                 val t = trackers.getOrPut(slotId) { SlotTrackers() }
-                if (device.isUsbSynthetic) {
-                    t.controller.update(native.getDeviceUrbCount(id), nowMs)
-                    t.gyro.update(native.getDeviceMotionCount(id), nowMs)
-                } else {
-                    t.controller.update(native.getDeviceInputEventCount(id), nowMs)
-                    t.gyro.update(motionCounts[slotId]?.get() ?: 0L, nowMs)
-                }
+                val count = if (device.isUsbSynthetic) native.getDeviceUrbCount(id) else native.getDeviceInputEventCount(id)
+                t.controller.update(count, nowMs)
+                t.noteCount(count, nowMs)
+                val gyroCount = if (device.isUsbSynthetic) native.getDeviceMotionCount(id) else motionCounts[slotId]?.get() ?: 0L
+                t.gyro.update(gyroCount, nowMs)
                 val rates = t.rates()
                 if (rates.hasAny) slots[slotId] = rates
             }

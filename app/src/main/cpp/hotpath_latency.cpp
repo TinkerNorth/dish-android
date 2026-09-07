@@ -6,7 +6,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <ctime>
+#include <memory>
 #include <mutex>
+#include <unordered_map>
 #include <vector>
 
 namespace hotpath {
@@ -26,6 +28,7 @@ inline int64_t nowNs() {
 thread_local int64_t t_reapNs = 0;
 // Previous reap on the same poller thread, for the inter-arrival (jitter) ring.
 thread_local int64_t t_prevReapNs = 0;
+thread_local int32_t t_deviceId = 0;
 
 // One bounded ring per metric. A mutex per sample is cheap next to the syscall
 // the send already does, and only taken while benchmarking.
@@ -64,17 +67,28 @@ Ring g_stage1;          // URB reap -> gamepad sent
 Ring g_rtt{kRttWindow}; // heartbeat ping -> ack, sliding
 Ring g_urbGap;          // URB inter-arrival gap (polling jitter)
 
+constexpr size_t kDeviceWindow = 512;
+
+struct DeviceRings {
+    Ring stage1{kDeviceWindow};
+    Ring urbGap{kDeviceWindow};
+};
+
+std::mutex g_devMtx;
+std::unordered_map<int32_t, std::unique_ptr<DeviceRings>> g_dev;
+
+DeviceRings& ringsFor(int32_t deviceId) {
+    std::lock_guard<std::mutex> lk(g_devMtx);
+    auto& slot = g_dev[deviceId];
+    if (!slot) slot = std::make_unique<DeviceRings>();
+    return *slot;
+}
+
 // Gaps above this are stream pauses (idle pad, replug), not polling jitter; recording them
 // would drown the tail the metric exists to expose.
 constexpr double kUrbGapMaxUs = 100000.0;
 
-void appendPctl(std::string& out, const char* name, Ring& r, bool reset) {
-    std::vector<double> v;
-    {
-        std::lock_guard<std::mutex> lk(r.mtx);
-        v = r.us;
-        if (reset) r.us.clear();
-    }
+void appendPctlValues(std::string& out, const char* name, std::vector<double> v) {
     char buf[256];
     if (v.empty()) {
         snprintf(buf, sizeof(buf), "\"%s\":{\"n\":0}", name);
@@ -95,6 +109,16 @@ void appendPctl(std::string& out, const char* name, Ring& r, bool reset) {
     out += buf;
 }
 
+void appendPctl(std::string& out, const char* name, Ring& r, bool reset) {
+    std::vector<double> v;
+    {
+        std::lock_guard<std::mutex> lk(r.mtx);
+        v = r.us;
+        if (reset) r.us.clear();
+    }
+    appendPctlValues(out, name, std::move(v));
+}
+
 } // namespace
 
 void setEnabled(bool on) {
@@ -106,16 +130,22 @@ void setEnabled(bool on) {
     g_stage1.clear();
     g_rtt.clear();
     g_urbGap.clear();
+    std::lock_guard<std::mutex> lk(g_devMtx);
+    g_dev.clear();
 }
 bool enabled() { return g_enabled.load(std::memory_order_relaxed); }
 
-void markInputRead() {
+void markInputRead(int32_t deviceId) {
     if (!g_enabled.load(std::memory_order_relaxed)) return;
     const int64_t now = nowNs();
-    if (t_prevReapNs != 0) {
+    if (t_prevReapNs != 0 && t_deviceId == deviceId) {
         double us = (double)(now - t_prevReapNs) / 1000.0;
-        if (us >= 0 && us < kUrbGapMaxUs) g_urbGap.add(us);
+        if (us >= 0 && us < kUrbGapMaxUs) {
+            g_urbGap.add(us);
+            ringsFor(deviceId).urbGap.add(us);
+        }
     }
+    t_deviceId = deviceId;
     t_prevReapNs = now;
     t_reapNs = now;
 }
@@ -125,7 +155,38 @@ void markGamepadSent() {
     if (t_reapNs == 0) return; // not a URB-driven send (framework path, motion, ...)
     double us = (double)(nowNs() - t_reapNs) / 1000.0;
     t_reapNs = 0;
-    if (us >= 0 && us < 1e6) g_stage1.add(us);
+    if (us >= 0 && us < 1e6) {
+        g_stage1.add(us);
+        ringsFor(t_deviceId).stage1.add(us);
+    }
+}
+
+std::string deviceLatencyJson(int32_t deviceId) {
+    std::vector<double> stage1;
+    std::vector<double> gap;
+    {
+        std::lock_guard<std::mutex> lk(g_devMtx);
+        auto it = g_dev.find(deviceId);
+        if (it != g_dev.end()) {
+            {
+                std::lock_guard<std::mutex> rl(it->second->stage1.mtx);
+                stage1 = it->second->stage1.us;
+            }
+            std::lock_guard<std::mutex> rl(it->second->urbGap.mtx);
+            gap = it->second->urbGap.us;
+        }
+    }
+    std::string out = "{";
+    appendPctlValues(out, "stage1_hotpath_us", std::move(stage1));
+    out += ",";
+    appendPctlValues(out, "urb_gap_us", std::move(gap));
+    out += "}";
+    return out;
+}
+
+void forgetDevice(int32_t deviceId) {
+    std::lock_guard<std::mutex> lk(g_devMtx);
+    g_dev.erase(deviceId);
 }
 
 int64_t nowMonotonicNs() { return nowNs(); }
@@ -136,10 +197,49 @@ bool shouldArmPing(int64_t outstandingNs, int64_t nowNs) {
     return outstandingNs == 0 || nowNs - outstandingNs >= kRttMaxNs;
 }
 
-void addRttSample(int64_t sentNs, int64_t nowNs) {
+void addRttSample(RttStats* session, int64_t sentNs, int64_t nowNs) {
     if (!g_enabled.load(std::memory_order_relaxed)) return;
     double us = (double)(nowNs - sentNs) / 1000.0;
-    if (us >= 0 && us < (double)kRttMaxNs / 1000.0) g_rtt.add(us);
+    if (us < 0 || us >= (double)kRttMaxNs / 1000.0) return;
+    g_rtt.add(us);
+    if (session == nullptr) return;
+    std::lock_guard<std::mutex> lk(session->mtx);
+    session->us[session->next] = us;
+    session->next = (session->next + 1) % RttStats::kWindow;
+    if (session->count < RttStats::kWindow) session->count++;
+}
+
+void clearRtt(RttStats& session) {
+    std::lock_guard<std::mutex> lk(session.mtx);
+    session.count = 0;
+    session.next = 0;
+}
+
+std::string sessionStatsJson(RttStats& session, int missedAcks) {
+    std::vector<double> ordered;
+    {
+        std::lock_guard<std::mutex> lk(session.mtx);
+        ordered.reserve(session.count);
+        const size_t start = session.count < RttStats::kWindow ? 0 : session.next;
+        for (size_t i = 0; i < session.count; i++) {
+            ordered.push_back(session.us[(start + i) % RttStats::kWindow]);
+        }
+    }
+    std::string out = "{\"rtt_recent_us\":[";
+    const size_t take = ordered.size() < 32 ? ordered.size() : 32;
+    char num[32];
+    for (size_t i = ordered.size() - take; i < ordered.size(); i++) {
+        snprintf(num, sizeof(num), "%.0f", ordered[i]);
+        if (i != ordered.size() - take) out += ",";
+        out += num;
+    }
+    out += "],";
+    appendPctlValues(out, "rtt_us", std::move(ordered));
+    snprintf(num, sizeof(num), ",\"pings\":%u,\"acks\":%u,\"missed\":%d}",
+             session.pings.load(std::memory_order_relaxed),
+             session.acks.load(std::memory_order_relaxed), missedAcks);
+    out += num;
+    return out;
 }
 
 void resetRttWindow() { g_rtt.clear(); }

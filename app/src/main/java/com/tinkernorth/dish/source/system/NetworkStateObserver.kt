@@ -10,6 +10,9 @@ import android.net.NetworkRequest
 import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.architecture.abstracts.AbstractStateSource
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -30,32 +33,40 @@ class NetworkStateObserver
 
         @Volatile private var registered = false
 
+        private val _wifiDrops = MutableStateFlow(0)
+        val wifiDrops: StateFlow<Int> = _wifiDrops.asStateFlow()
+
+        private fun publish(next: NetworkState) {
+            if (state.value == NetworkState.WIFI && next != NetworkState.WIFI) _wifiDrops.value = _wifiDrops.value + 1
+            setState(next)
+        }
+
         private val callback =
             object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) {
-                    setState(currentState())
+                    publish(currentState())
                 }
 
                 override fun onLost(network: Network) {
-                    setState(currentState())
+                    publish(currentState())
                 }
 
                 override fun onCapabilitiesChanged(
                     network: Network,
                     capabilities: NetworkCapabilities,
                 ) {
-                    setState(currentState())
+                    publish(currentState())
                 }
             }
 
         init {
-            setState(currentState())
+            publish(currentState())
         }
 
         override fun onStart(owner: LifecycleOwner) {
             if (registered) return
             // Callbacks aren't guaranteed to fire for the already-current network on registration.
-            setState(currentState())
+            publish(currentState())
             val request =
                 NetworkRequest
                     .Builder()

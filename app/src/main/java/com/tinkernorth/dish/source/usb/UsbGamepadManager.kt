@@ -56,6 +56,7 @@ class UsbGamepadManager
         private val scope: CoroutineScope,
         private val native: PhysicalInputNative,
         private val pathPrefs: UsbPathPreferenceStore,
+        private val descriptors: UsbDescriptorStore,
     ) {
         private val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
 
@@ -168,6 +169,20 @@ class UsbGamepadManager
             val pid = device.productId
             val key = vpk(vid, pid)
             usbDevices[key] = device
+            findInterruptInPair(device)?.let { (intf, epIn, epOut) ->
+                descriptors.note(
+                    vid,
+                    pid,
+                    UsbEndpointFacts(
+                        intervalRaw = epIn.interval,
+                        maxPacketSize = epIn.maxPacketSize,
+                        pollRateHz = computeUsbPollRateHz(epIn.interval, epIn.maxPacketSize),
+                        highSpeed = epIn.maxPacketSize > FULL_SPEED_MAX_PACKET,
+                        interfaceClass = intf.interfaceClass,
+                        hasOutEndpoint = epOut != null,
+                    ),
+                )
+            }
             val existing = _controllers.value[key]
             if (existing == null) {
                 val fwId = liveFrameworkFor(registry.devices.value, vid, pid)
@@ -597,3 +612,5 @@ internal fun resolvePathChoice(
     isFastLaneModel: Boolean,
     priorFailure: DirectClaimFailure?,
 ): PathChoice = stored ?: if (isFastLaneModel && priorFailure == null) PathChoice.Direct else PathChoice.Standard
+
+private const val FULL_SPEED_MAX_PACKET = 64

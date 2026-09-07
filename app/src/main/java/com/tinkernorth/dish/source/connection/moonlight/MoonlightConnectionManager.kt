@@ -17,6 +17,7 @@ import com.tinkernorth.dish.core.net.moonlight.MoonlightXml
 import com.tinkernorth.dish.core.net.moonlight.RememberedMoonlight
 import com.tinkernorth.dish.di.IoDispatcher
 import com.tinkernorth.dish.repository.RememberedMoonlightRepository
+import com.tinkernorth.dish.source.store.MoonlightHostFactsStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -167,6 +168,7 @@ class MoonlightConnectionManager
         private val gateway: MoonlightHttpGateway,
         private val identity: MoonlightIdentity,
         private val store: RememberedMoonlightRepository,
+        private val hostFacts: MoonlightHostFactsStore = MoonlightHostFactsStore(),
     ) {
         private val _connections = MutableStateFlow<Map<String, MoonlightConnection>>(emptyMap())
         val connections: StateFlow<Map<String, MoonlightConnection>> = _connections.asStateFlow()
@@ -291,6 +293,7 @@ class MoonlightConnectionManager
                         .getHttp(MoonlightUrls.serverInfoHttp(host.address, host.httpPort, deviceId))
                         .takeIf { it.ok }
                         ?.let { MoonlightXml.parseServerInfo(it.body) }
+                plain?.let { hostFacts.note(host.id, it) }
                 // "Do we hold a pairing" is the PAIRED FLAG, not a non-empty uniqueid.
                 // Real hosts publish no uniqueid TXT record, so reading it off that made
                 // every mDNS-discovered host report M5 ("never paired") when it went
@@ -321,6 +324,7 @@ class MoonlightConnectionManager
                     return@withContext MoonlightProbe(trust = trust)
                 }
                 val info = MoonlightXml.parseServerInfo(secure.body)
+                info?.let { hostFacts.note(host.id, it) }
                 if (info?.paired != true) {
                     val trust = if (record == null) MoonlightTrustState.NOT_PAIRED else MoonlightTrustState.TRUST_LOST
                     Log.i(TAG, "${host.address} answered mutual TLS unpaired: $trust")

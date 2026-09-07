@@ -133,6 +133,10 @@ struct Session {
     std::atomic<int8_t> vigemAvailable{-1};
     std::atomic<int8_t> activeControllerCount{-1};
 
+    hotpath::RttStats rtt;
+    std::atomic<uint32_t> sentByCtrl[16] = {};
+    std::atomic<uint32_t> motionByCtrl[16] = {};
+
     // Negotiated at session PUT; picks which MSG_TOUCHPAD frame this session encodes.
     std::atomic<int32_t> protocolVersion{1};
 
@@ -506,6 +510,7 @@ static void publishIfChanged(int32_t deviceId, DeviceState& s) {
         r->sThumbRX = s.sRX;
         r->sThumbRY = s.sRY;
         sendEncrypted(session.get(), MSG_GAMEPAD_DATA, payload, sizeof(payload));
+        session->sentByCtrl[binding.controllerIndex & 15].fetch_add(1, std::memory_order_relaxed);
         hotpath::markGamepadSent(); // stage-1 end: the URB-driven packet has left sendto()
     } else if (binding.kind == SLOT_BLUETOOTH || binding.kind == SLOT_MOONLIGHT) {
         if (binding.bridgeConnectionId.empty()) return;
@@ -653,6 +658,7 @@ void applyUsbMotion(int32_t deviceId, int16_t gyroX, int16_t gyroY, int16_t gyro
     auto session = getSession(binding.sessionHandle);
     if (!session) return;
     uint8_t payload[17];
+    session->motionByCtrl[binding.controllerIndex & 15].fetch_add(1, std::memory_order_relaxed);
     dish_wire::encodeMotionPayload(payload, (uint8_t)(binding.controllerIndex & 0xFF), gyroX, gyroY,
                                    gyroZ, accelX, accelY, accelZ, timestampDeltaUs);
     sendEncrypted(session.get(), MSG_MOTION, payload, sizeof(payload));
@@ -829,6 +835,7 @@ static void heartbeatLoop(std::shared_ptr<Session> s) {
     LOGI("Heartbeat thread started (sock=%d)", s->udpSock);
     while (s->heartbeatRunning.load(std::memory_order_relaxed)) {
         sendEncrypted(s.get(), MSG_HEARTBEAT_PING, nullptr, 0);
+        s->rtt.pings.fetch_add(1, std::memory_order_relaxed);
         if (hotpath::enabled()) {
             // stage-2: round-trip clock starts here, on this session's own clock.
             const int64_t now = hotpath::nowMonotonicNs();
@@ -1024,6 +1031,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendRe
     r->sThumbRX = (int16_t)sRX;
     r->sThumbRY = (int16_t)sRY;
     sendEncrypted(s.get(), MSG_GAMEPAD_DATA, payload, 13);
+    s->sentByCtrl[controllerIndex & 15].fetch_add(1, std::memory_order_relaxed);
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendMotion(
@@ -1036,6 +1044,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendMo
                                    (int16_t)gyroY, (int16_t)gyroZ, (int16_t)accelX, (int16_t)accelY,
                                    (int16_t)accelZ, (uint32_t)timestampDeltaUs);
     sendEncrypted(s.get(), MSG_MOTION, payload, sizeof(payload));
+    s->motionByCtrl[controllerIndex & 15].fetch_add(1, std::memory_order_relaxed);
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendBattery(
@@ -1241,9 +1250,10 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiv
     uint16_t msgLen = ((uint16_t)decrypted[2] << 8) | decrypted[3];
 
     if (msgType == MSG_HEARTBEAT_ACK) {
+        s->rtt.acks.fetch_add(1, std::memory_order_relaxed);
         if (hotpath::enabled()) {
             const int64_t sent = s->lastPingNs.exchange(0, std::memory_order_relaxed);
-            if (sent != 0) hotpath::addRttSample(sent, hotpath::nowMonotonicNs());
+            if (sent != 0) hotpath::addRttSample(&s->rtt, sent, hotpath::nowMonotonicNs());
         }
         s->missedAcks.store(0);
         s->connectionAlive.store(true);
@@ -1822,6 +1832,43 @@ JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDe
     return (jlong)usbhost::getMotionCount((int32_t)deviceId);
 }
 
+JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDeviceUrbErrorCount(
+    JNIEnv*, jobject, jint deviceId) {
+    return (jlong)usbhost::getUrbErrorCount((int32_t)deviceId);
+}
+
+JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_deviceInfoJson(
+    JNIEnv* env, jobject, jint deviceId) {
+    return env->NewStringUTF(usbhost::deviceInfoJson((int32_t)deviceId).c_str());
+}
+
+JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_deviceLatencyJson(
+    JNIEnv* env, jobject, jint deviceId) {
+    return env->NewStringUTF(hotpath::deviceLatencyJson((int32_t)deviceId).c_str());
+}
+
+JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sessionStatsJson(
+    JNIEnv* env, jobject, jint handle) {
+    auto s = getSession(handle);
+    if (!s) return env->NewStringUTF("");
+    return env->NewStringUTF(
+        hotpath::sessionStatsJson(s->rtt, s->missedAcks.load(std::memory_order_relaxed)).c_str());
+}
+
+JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getSlotSendCount(
+    JNIEnv*, jobject, jint handle, jint controllerIndex) {
+    auto s = getSession(handle);
+    if (!s) return 0;
+    return (jlong)s->sentByCtrl[controllerIndex & 15].load(std::memory_order_relaxed);
+}
+
+JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getSlotMotionCount(
+    JNIEnv*, jobject, jint handle, jint controllerIndex) {
+    auto s = getSession(handle);
+    if (!s) return 0;
+    return (jlong)s->motionByCtrl[controllerIndex & 15].load(std::memory_order_relaxed);
+}
+
 // Opt-in hot-path latency benchmark (stage 1 USB-direct + stage 2 heartbeat RTT).
 // Off by default; see hotpath_latency.h and satellite tools/bench/README.md.
 JNIEXPORT void JNICALL
@@ -1842,7 +1889,10 @@ Java_com_tinkernorth_dish_core_jni_SatelliteNative_setLatencyProbe(JNIEnv*, jobj
     g_heartbeatIntervalMs.store(on == JNI_TRUE ? HEARTBEAT_INTERVAL_PROBE_MS
                                                : HEARTBEAT_INTERVAL_DEFAULT_MS,
                                 std::memory_order_relaxed);
-    if (on == JNI_TRUE) hotpath::resetRttWindow();
+    if (on != JNI_TRUE) return;
+    hotpath::resetRttWindow();
+    std::lock_guard<std::mutex> lock(g_sessionsMtx);
+    for (auto& kv : g_sessions) hotpath::clearRtt(kv.second->rtt);
 }
 
 JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setInputInspection(

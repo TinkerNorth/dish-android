@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicLongArray
 
 /**
  * One Moonlight host session, the sibling of
@@ -52,6 +53,11 @@ class MoonlightConnection(
 
     @Volatile private var session: MoonlightControlSession? = null
     private var pumpJob: Job? = null
+    private val sentByNumber = AtomicLongArray(MAX_PADS)
+
+    fun controlRoundTripMs(): Long? = session?.roundTripMs()
+
+    fun reportsSentFor(controllerNumber: Int): Long = if (controllerNumber in 0 until MAX_PADS) sentByNumber.get(controllerNumber) else 0L
 
     @Volatile private var pinger: UdpMediaPinger? = null
     private var pingJob: Job? = null
@@ -253,6 +259,7 @@ class MoonlightConnection(
         // stream, not the pad report) can replay it with the click bit merged.
         val frame = PadFrame(buttons, leftTrigger, rightTrigger, leftX, leftY, rightX, rightY)
         lastPadFrames[controllerNumber] = frame
+        if (controllerNumber in 0 until MAX_PADS) sentByNumber.incrementAndGet(controllerNumber)
         val clickBit =
             if (touchClickByNumber[controllerNumber] == true) MoonlightControlProtocol.BTN_TOUCHPAD else 0
         live.sendControllerState(

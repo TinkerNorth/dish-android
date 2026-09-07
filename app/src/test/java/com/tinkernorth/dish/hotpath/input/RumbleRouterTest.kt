@@ -8,6 +8,7 @@ import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.store.FeedbackActivityStore
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import io.mockk.every
@@ -216,6 +217,7 @@ class RumbleRouterTest {
                 native = native,
                 scope = CoroutineScope(Dispatchers.Unconfined),
                 rumbleEnabled = rumbleEnabled,
+                feedbackActivity = FeedbackActivityStore(),
             )
     }
 

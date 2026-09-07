@@ -14,6 +14,8 @@ import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.store.FeedbackActivityStore
+import com.tinkernorth.dish.source.store.FeedbackKind
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -48,6 +50,7 @@ class RumbleRouter
         private val native: PhysicalInputNative,
         private val scope: CoroutineScope,
         private val rumbleEnabled: RumbleEnabledStore,
+        private val feedbackActivity: FeedbackActivityStore,
     ) {
         // A claimed USB pad has no oneshot duration, so a dropped session could leave it buzzing;
         // each rumble schedules a stop at the clamped duration, cancelled by the next rumble.
@@ -113,6 +116,7 @@ class RumbleRouter
             durationMs: Int,
         ) {
             if (target is RumbleTarget.None) return
+            feedbackActivity.note(slotIdOf(target), FeedbackKind.RUMBLE)
             if (!rumbleEnabled.isEnabled(slotIdOf(target))) return
             if (isRumbleStop(strongMagnitude, weakMagnitude, durationMs)) {
                 cancel(target)

@@ -64,6 +64,8 @@ class MoonlightControlSession(
             "acks ${enet.acksSent}, retransmits ${enet.retransmits}, unknown commands ${enet.unknownCommands}"
         }
 
+    fun roundTripMs(): Long? = synchronized(lock) { enet.roundTripMs }
+
     /**
      * Run the ENet handshake. Sends CONNECT, then pumps received datagrams until
      * VERIFY_CONNECT flips the client to CONNECTED or [handshakeTimeoutMs]

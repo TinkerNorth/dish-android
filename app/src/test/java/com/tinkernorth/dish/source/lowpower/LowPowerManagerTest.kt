@@ -284,4 +284,30 @@ class LowPowerManagerTest {
         verify(atLeast = 1) { streamingHint.visibility = capture(captured) }
         assertEquals(View.VISIBLE, captured.last())
     }
+
+    @Test
+    fun `a screen hold without streaming arms the dim but keeps the streaming hint hidden`() {
+        val inactivityHandler = mockk<Handler>(relaxed = true)
+        setPrivateField("inactivityHandler", inactivityHandler)
+
+        lpm.onLockStateChanged(active = true, streaming = false)
+
+        verify { inactivityHandler.postDelayed(any(), 15_000L) }
+        verify { streamingHint.visibility = View.GONE }
+        verify(exactly = 0) { streamingHint.visibility = View.VISIBLE }
+    }
+
+    @Test
+    fun `the dim body only names streaming while something streams`() {
+        val dimBody = mockk<TextView>(relaxed = true)
+        lpm.views = lpm.views?.copy(tvLowPowerDimBody = dimBody)
+        val inactivityHandler = mockk<Handler>(relaxed = true)
+        setPrivateField("inactivityHandler", inactivityHandler)
+
+        lpm.onLockStateChanged(active = true, streaming = false)
+        verify { dimBody.visibility = View.GONE }
+
+        lpm.onLockStateChanged(active = true, streaming = true)
+        verify { dimBody.visibility = View.VISIBLE }
+    }
 }

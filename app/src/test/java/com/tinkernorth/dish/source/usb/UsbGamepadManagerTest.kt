@@ -105,7 +105,7 @@ class UsbGamepadManagerTest {
         // an unstubbed choiceFor would read as Direct and short-circuit resolvePath. Pin it to "no pick".
         every { pathPrefs.choiceFor(vid, pid) } returns null
         val scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher())
-        return UsbGamepadManager(ctx, registry, Provider { hub }, notifications, scope, native, pathPrefs)
+        return UsbGamepadManager(ctx, registry, Provider { hub }, notifications, scope, native, pathPrefs, UsbDescriptorStore())
     }
 
     private fun mockConn(): UsbDeviceConnection =
@@ -274,7 +274,7 @@ class UsbGamepadManagerTest {
         every { native.modelExpectsFrameworkGamepad(vid, pid) } returns true
         every { pathPrefs.choiceFor(vid, pid) } returns null
         val scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher())
-        return UsbGamepadManager(ctx, registry, Provider { hub }, notifications, scope, native, pathPrefs)
+        return UsbGamepadManager(ctx, registry, Provider { hub }, notifications, scope, native, pathPrefs, UsbDescriptorStore())
     }
 
     @Test
@@ -425,7 +425,7 @@ class UsbGamepadManagerTest {
         every { native.modelExpectsFrameworkGamepad(vid, pid) } returns true
         every { pathPrefs.choiceFor(vid, pid) } returns null
         val scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher())
-        return UsbGamepadManager(ctx, reg, Provider { hub }, notifications, scope, native, pathPrefs)
+        return UsbGamepadManager(ctx, reg, Provider { hub }, notifications, scope, native, pathPrefs, UsbDescriptorStore())
     }
 
     @Test

@@ -19,6 +19,7 @@ import com.tinkernorth.dish.composer.MicIndicatorCoordinator
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
+import com.tinkernorth.dish.source.inputrate.FrameworkInputTimingStore
 import com.tinkernorth.dish.source.lowpower.LowPowerSignal
 import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.ui.donate.wireDonateButton
@@ -40,8 +41,9 @@ fun AppCompatActivity.attachGamepadHost(
     notifications: DishNotifications,
     lowPowerSignal: LowPowerSignal,
     micIndicator: MicIndicatorCoordinator?,
+    inputTiming: FrameworkInputTimingStore,
 ): GamepadActivityHost =
-    GamepadActivityHost(this, rootView, wakeState, gamepadRegistry, lowPowerSignal).also {
+    GamepadActivityHost(this, rootView, wakeState, gamepadRegistry, lowPowerSignal, inputTiming).also {
         it.install(notifications)
         if (micIndicator != null) MicChipController(this, rootView, micIndicator).install()
     }

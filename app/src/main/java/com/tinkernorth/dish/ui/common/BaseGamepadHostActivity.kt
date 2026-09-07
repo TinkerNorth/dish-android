@@ -17,6 +17,7 @@ import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.databinding.ScreenScaffoldBinding
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
+import com.tinkernorth.dish.source.inputrate.FrameworkInputTimingStore
 import com.tinkernorth.dish.source.lowpower.LowPowerSignal
 import com.tinkernorth.dish.source.notification.DishNotifications
 import javax.inject.Inject
@@ -35,6 +36,8 @@ abstract class BaseGamepadHostActivity : AppCompatActivity() {
 
     @Inject lateinit var micIndicator: MicIndicatorCoordinator
 
+    @Inject lateinit var inputTiming: FrameworkInputTimingStore
+
     private var gamepadHost: GamepadActivityHost? = null
 
     // The app-wide mic chip rides the same scaffolding as the low-power chrome, so a hot (or
@@ -42,6 +45,8 @@ abstract class BaseGamepadHostActivity : AppCompatActivity() {
     // out: its pad already carries the mute pill, and a floating tap target over a full-screen
     // control surface would steal pad touches.
     protected open val showsMicChip: Boolean get() = true
+
+    protected open val holdsScreenAwake: Boolean get() = false
 
     protected fun installGamepadHost(rootView: View) {
         gamepadHost =
@@ -52,7 +57,8 @@ abstract class BaseGamepadHostActivity : AppCompatActivity() {
                 notifications,
                 lowPowerSignal,
                 if (showsMicChip) micIndicator else null,
-            )
+                inputTiming,
+            ).also { it.setScreenHold(holdsScreenAwake) }
     }
 
     protected fun openExternalUrl(url: String) {

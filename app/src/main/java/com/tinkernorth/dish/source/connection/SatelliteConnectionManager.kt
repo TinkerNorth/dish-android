@@ -655,6 +655,7 @@ class SatelliteConnectionManager
             }
             noteNegotiated(id, negotiated)
             conn.protocolVersion = negotiated
+            conn.noteSessionFacts(resp.maxControllers, negotiated)
             store.rememberSatellite(server)
             clearStale(id)
             retryAttempts.remove(id)

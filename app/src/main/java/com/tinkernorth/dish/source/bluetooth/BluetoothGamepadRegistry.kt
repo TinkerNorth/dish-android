@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -40,6 +42,9 @@ class BluetoothGamepadRegistry
 
         private val lock = Any()
         private var activeConnId: String? = null
+        private val reportsSent = ConcurrentHashMap<String, AtomicLong>()
+
+        fun reportsSent(connId: String): Long = reportsSent[connId]?.get() ?: 0L
 
         private val _states = MutableStateFlow<Map<String, SlotState>>(emptyMap())
         val states: StateFlow<Map<String, SlotState>> = _states.asStateFlow()
@@ -132,7 +137,7 @@ class BluetoothGamepadRegistry
             val active = synchronized(lock) { activeConnId == connId }
             if (!active) return
             if (!state(connId).connected) return
-            session.sendReport(report)
+            if (session.sendReport(report)) reportsSent.computeIfAbsent(connId) { AtomicLong() }.incrementAndGet()
         }
 
         fun buildReport(
