@@ -84,7 +84,7 @@
             android:name=".ui.main.GamepadOverlayActivity"
             android:exported="false"
             android:resizeableActivity="true"
-            android:theme="@style/Theme.Dish"
+            android:theme="@style/Theme.Dish.Overlay"
             android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
             tools:ignore="DiscouragedApi" />
@@ -93,7 +93,7 @@
             android:name=".ui.main.TouchpadOverlayActivity"
             android:exported="false"
             android:resizeableActivity="true"
-            android:theme="@style/Theme.Dish"
+            android:theme="@style/Theme.Dish.Overlay"
             android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
             tools:ignore="DiscouragedApi" />
@@ -102,7 +102,7 @@
             android:name=".ui.main.MouseOverlayActivity"
             android:exported="false"
             android:resizeableActivity="true"
-            android:theme="@style/Theme.Dish"
+            android:theme="@style/Theme.Dish.Overlay"
             android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
             tools:ignore="DiscouragedApi" />
