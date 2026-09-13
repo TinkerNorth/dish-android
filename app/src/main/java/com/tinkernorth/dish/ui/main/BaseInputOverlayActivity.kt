@@ -11,7 +11,6 @@ import android.view.Surface
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
-import android.view.WindowManager
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -87,16 +86,6 @@ abstract class BaseInputOverlayActivity : BaseGamepadHostActivity() {
 
     protected fun installBaseScaffolding() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            // Default cutout mode letterboxes content away in landscape, hiding the asymmetry
-            // we need to mirror; short-edges surfaces the cutout as a reported inset instead.
-            window.attributes =
-                window.attributes.apply {
-                    layoutInDisplayCutoutMode =
-                        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-                }
-        }
-
         installGamepadHost(rootView())
         hideSystemBars()
 

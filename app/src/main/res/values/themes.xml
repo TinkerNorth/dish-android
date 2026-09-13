@@ -239,6 +239,8 @@
         <item name="materialAlertDialogTheme">@style/ThemeOverlay.Dish.MaterialAlertDialog</item>
     </style>
 
+    <style name="Theme.Dish.Overlay" parent="Theme.Dish" />
+
     <!-- Filled button: cyan-dark background, dark navy text (colorOnPrimary).
          Sentence-case + no letter-tracking: M3 dropped the all-caps button
          convention universally. Strings supply their own capitalisation. -->
