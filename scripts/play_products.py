@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Create or update the Play tip-jar products from play/products.json.
 
-Idempotent against the Play Developer API: one-time tips are inserted or
-replaced, the supporter subscription is created or patched, and every base
-plan that is not yet active gets activated. Existing base plans keep the
-prices Play already holds; changing a live price is a migration, not an
-edit, and stays a deliberate Play Console action.
+Idempotent against the Play Developer API: one-time tips are created or
+replaced through the one-time products API (the legacy inappproducts
+endpoint refuses apps on the current product model), the supporter
+subscription is created or patched, and every purchase option or base plan
+that is not yet active gets activated. Existing base plans keep the prices
+Play already holds; changing a live price is a migration, not an edit, and
+stays a deliberate Play Console action.
 
 Reads the service-account key path from PLAY_KEY_FILE. With --dry-run and
 no key file, nothing leaves the machine: payloads print as they would be
@@ -22,6 +24,7 @@ from pathlib import Path
 API = "https://androidpublisher.googleapis.com/androidpublisher/v3/applications"
 SCOPE = "https://www.googleapis.com/auth/androidpublisher"
 REGIONS_VERSION = "2022/02"
+PURCHASE_OPTION_ID = "buy"
 SPEC = Path(__file__).resolve().parent.parent / "play" / "products.json"
 
 
@@ -72,42 +75,47 @@ class PlayApi:
         return response.json()
 
 
-def micros(price):
-    return str(int(Decimal(price) * 1_000_000))
-
-
 def money(price, currency):
     amount = Decimal(price)
     units = int(amount)
     return {"currencyCode": currency, "units": str(units), "nanos": int((amount - units) * 1_000_000_000)}
 
 
-def tip_body(spec, product):
+def converted_prices(api, spec, price):
+    converted = api.convert(spec["packageName"], money(price, spec["currency"]))
+    if not converted:
+        return [], None
+    regions = [(entry["regionCode"], entry["price"]) for entry in converted["convertedRegionPrices"].values()]
+    return regions, converted["convertedOtherRegionsPrice"]
+
+
+def tip_body(api, spec, product):
+    regions, other = converted_prices(api, spec, product["price"])
+    option = {
+        "purchaseOptionId": PURCHASE_OPTION_ID,
+        "buyOption": {"legacyCompatible": True},
+        "regionalPricingAndAvailabilityConfigs": [
+            {"regionCode": code, "availability": "AVAILABLE", "price": price} for code, price in regions
+        ],
+    }
+    if other:
+        option["newRegionsConfig"] = dict(other, availability="AVAILABLE")
     return {
         "packageName": spec["packageName"],
-        "sku": product["sku"],
-        "status": "active",
-        "purchaseType": "managedUser",
-        "defaultPrice": {"priceMicros": micros(product["price"]), "currency": spec["currency"]},
-        "listings": {
-            lang: {"title": title, "description": spec["tips"]["description"][lang]}
+        "productId": product["sku"],
+        "listings": [
+            {"languageCode": lang, "title": title, "description": spec["tips"]["description"][lang]}
             for lang, title in product["title"].items()
-        },
-        "defaultLanguage": spec["defaultLanguage"],
+        ],
+        "purchaseOptions": [option],
     }
 
 
 def base_plan(api, spec, plan):
-    base = money(plan["price"], spec["currency"])
-    converted = api.convert(spec["packageName"], base)
-    regional = []
-    other = None
-    if converted:
-        regional = [
-            {"regionCode": entry["regionCode"], "newSubscriberAvailability": True, "price": entry["price"]}
-            for entry in converted["convertedRegionPrices"].values()
-        ]
-        other = dict(converted["convertedOtherRegionsPrice"], newSubscriberAvailability=True)
+    regions, other = converted_prices(api, spec, plan["price"])
+    regional = [{"regionCode": code, "newSubscriberAvailability": True, "price": price} for code, price in regions]
+    if other:
+        other = dict(other, newSubscriberAvailability=True)
     body = {
         "basePlanId": plan["basePlanId"],
         "autoRenewingBasePlanType": {
@@ -124,18 +132,32 @@ def base_plan(api, spec, plan):
     return body
 
 
-def sync_tips(api, spec):
-    created = updated = 0
+def sync_tips(api, spec, regions_version):
+    created = updated = activated = 0
     for product in spec["tips"]["products"]:
         package, sku = spec["packageName"], product["sku"]
-        body = tip_body(spec, product)
-        if api.get(f"{package}/inappproducts/{sku}") is None:
-            api.write("POST", f"{package}/inappproducts?autoConvertMissingPrices=true", body)
+        existing = api.get(f"{package}/oneTimeProducts/{sku}")
+        result = api.write(
+            "PATCH",
+            f"{package}/onetimeproducts/{sku}?updateMask=listings,purchaseOptions"
+            f"&regionsVersion.version={regions_version}&allowMissing=true",
+            tip_body(api, spec, product),
+        )
+        if existing is None:
             created += 1
         else:
-            api.write("PUT", f"{package}/inappproducts/{sku}?autoConvertMissingPrices=true", body)
             updated += 1
-    return created, updated
+        states = {option["purchaseOptionId"]: option.get("state") for option in (result or {}).get("purchaseOptions", [])}
+        if states.get(PURCHASE_OPTION_ID) == "ACTIVE":
+            continue
+        activate = {"packageName": package, "productId": sku, "purchaseOptionId": PURCHASE_OPTION_ID}
+        api.write(
+            "POST",
+            f"{package}/oneTimeProducts/{sku}/purchaseOptions:batchUpdateStates",
+            {"requests": [{"activatePurchaseOptionRequest": activate}]},
+        )
+        activated += 1
+    return created, updated, activated
 
 
 def sync_subscription(api, spec, regions_version):
@@ -185,13 +207,13 @@ def main():
     api = PlayApi(key_file, args.dry_run)
 
     print("== One-time tips")
-    created, updated = sync_tips(api, spec)
+    created, updated, tips_activated = sync_tips(api, spec, args.regions_version)
     print("== Supporter subscription")
-    sub_created, activated = sync_subscription(api, spec, args.regions_version)
+    sub_created, plans_activated = sync_subscription(api, spec, args.regions_version)
     verb = "would be" if args.dry_run or api.session is None else "were"
     print(
-        f"Tips: {created} {verb} created, {updated} {verb} updated. "
-        f"Subscription: {'created' if sub_created else 'patched'}, {activated} base plan(s) {verb} activated."
+        f"Tips: {created} {verb} created, {updated} {verb} updated, {tips_activated} {verb} activated. "
+        f"Subscription: {'created' if sub_created else 'patched'}, {plans_activated} base plan(s) {verb} activated."
     )
     return 0
 
