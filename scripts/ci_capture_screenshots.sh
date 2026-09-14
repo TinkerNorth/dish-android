@@ -32,7 +32,7 @@ for LOC in ${CAPTURE_LOCALES}; do
   # "keeps stopping" dialog over the next capture, while the runner still
   # reports OK because the instrumented process itself survived. Those
   # screenshots must never leave this job.
-  if adb logcat -d -b crash | grep -q "FATAL EXCEPTION"; then
+  if adb logcat -d -b crash | grep -qE "AndroidRuntime: Process: com\.tinkernorth\.dish(\.test)?, PID:"; then
     adb logcat -d -b crash | head -60
     echo "::error::A process crashed during the ${LOC} capture; its dialog would be in the screenshots. See the crash log above."
     exit 1

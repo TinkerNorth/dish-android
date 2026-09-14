@@ -86,7 +86,7 @@ jobs:
         # locale × form combinations rather than adding a leg of its own.
         include:
           - form: phone
-            size: 1080x2424
+            size: 1080x1920
             density: "420"
             crop: "1080 1920"
           - form: sevenInch
@@ -94,7 +94,7 @@ jobs:
             density: "240"
             crop: "1920 1080"
           - form: tenInch
-            size: 2560x1600
+            size: 2560x1440
             density: "320"
             crop: "2560 1440"
     steps:
