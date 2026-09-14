@@ -23,11 +23,13 @@ One-time tips (consumable managed products):
 | `tip_25` | 25.00 | Large tip |
 | `tip_50` | 50.00 | Big tip |
 | `tip_100` | 100.00 | Huge tip |
-| `tip_max` | 999.99 | Legendary tip |
+| `tip_max` | 500.00 | Legendary tip |
 
-`tip_max` is meant to sit at Play's price ceiling. The spec sets 999.99 so
-the create call cannot be refused; raise it in Play Console to whatever the
-console shows as the maximum for CAD.
+`tip_max` is meant to sit near Play's price ceiling, which Play sets per
+region, not per merchant currency: 999.99 CAD was refused because Korea
+caps a price at KRW 600,000, about 560 CAD at the time. The spec sets
+500.00 to leave room for exchange-rate drift, since every sync converts
+the CAD price again.
 
 Monthly supporter (one subscription, `supporter_monthly`, one base plan per
 amount, all `P1M` with a 30-day grace period):
