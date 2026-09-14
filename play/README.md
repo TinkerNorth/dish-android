@@ -51,14 +51,13 @@ no changelog in every locale.
 
 ## Visual assets: status
 
-Screenshots and feature graphics are committed under
-`play/metadata/android/<locale>/images/`. The store icon still needs to be
-exported, and the screenshots need re-capturing before submission (see the
-note below).
+Screenshots, feature graphics, and the store icon are committed under
+`play/metadata/android/<locale>/images/`. The screenshots need re-capturing
+before submission (see the note below).
 
 | Asset | Spec | Status |
 |---|---|---|
-| Store icon | 512x512 PNG, 32-bit, no alpha, 1 MB max | Not exported yet |
+| Store icon | 512x512 PNG, 32-bit, no alpha, 1 MB max | Present for every locale (same art, no text) |
 | Feature graphic | 1024x500 PNG or JPG | Present for every locale |
 | Phone screenshots | 2 to 8, 16:9 or 9:16, 320 to 3840 px short side | 9 per locale, committed (stale, see note) |
 | 7-inch tablet screenshots | 16:9 or 9:16, recommended for tablet surfacing | 9 per locale, committed (stale, see note) |
