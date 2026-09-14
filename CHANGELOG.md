@@ -7,6 +7,16 @@ computer. Those lines say "update Satellite too".
 
 ---
 
+## [2.1.1] - 2026-09-14
+
+### Fixed
+
+- The support screen in the Google Play build no longer sits on
+  "Contacting Google Play..." forever. 2.1.0 asked Google Play for the
+  tips and the monthly plan in one request, which Google Play's billing
+  library rejects, so the screen never got its prices; the two are now
+  fetched separately.
+
 ## [2.1.0] - 2026-09-07
 
 ### Added
