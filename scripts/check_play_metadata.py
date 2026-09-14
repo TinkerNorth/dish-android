@@ -8,7 +8,7 @@ is set (the release workflow passes the code derived from the tag), a
 locale missing changelogs/<code>.txt so a release can never ship without
 its per-locale release notes.
 Warnings (exit 0): assets Play treats as optional-but-recommended that are
-known to be pending (per-locale feature graphic, the 512x512 icon).
+missing from a locale (its feature graphic or the 512x512 icon).
 
 Zero dependencies: PNG dimensions come straight from the IHDR chunk.
 """
