@@ -9,10 +9,14 @@ that is not yet active gets activated. Existing base plans keep the prices
 Play already holds; changing a live price is a migration, not an edit, and
 stays a deliberate Play Console action.
 
-Regional prices come from Play's own converter, and every write names the
+Regional prices start from Play's own converter and every write names the
 regions version the converter priced at, so a region changing currency
-(Bulgaria to the euro in 2026) cannot strand the catalog on an old version.
---regions-version pins one instead.
+(Bulgaria to the euro in 2026) cannot strand the catalog on an old version;
+--regions-version pins one instead. The converter's charm prices (3.59 USD,
+620 JPY) are then replaced by round local amounts: currencies near par
+with the dollar take the CAD figure as-is, every other currency rounds to
+a round figure of its own. A region whose ceiling is below a tip's price
+gets the largest round amount under the ceiling Play reports.
 
 Reads the service-account key path from PLAY_KEY_FILE. With --dry-run and
 no key file, nothing leaves the machine: payloads print as they would be
@@ -22,6 +26,7 @@ sent, minus the regional prices that only Play can convert.
 import argparse
 import json
 import os
+import re
 import sys
 from decimal import Decimal
 from pathlib import Path
@@ -30,6 +35,10 @@ API = "https://androidpublisher.googleapis.com/androidpublisher/v3/applications"
 SCOPE = "https://www.googleapis.com/auth/androidpublisher"
 REGIONS_VERSION = "2022/02"
 PURCHASE_OPTION_ID = "buy"
+PARITY_CURRENCIES = {"USD", "EUR", "GBP", "AUD", "NZD", "CHF", "SGD"}
+ROUND_MANTISSAS = tuple(Decimal(m) for m in ("1", "1.5", "2", "2.5", "3", "4", "5", "6", "10"))
+PRICE_BOUNDS = re.compile(r"Price for ([A-Z]{2}) must be between \D*([\d,.]+) and \D*([\d,.]+)")
+MAX_CLAMPS = 12
 SPEC = Path(__file__).resolve().parent.parent / "play" / "products.json"
 
 
@@ -62,14 +71,20 @@ class PlayApi:
         return response.json()
 
     def write(self, method, path, body):
+        status, result = self.try_write(method, path, body)
+        if status != 200:
+            sys.exit(f"::error::{method} {path} failed with {status}: {result[:300]}")
+        return result
+
+    def try_write(self, method, path, body):
         print(f"  {method} {path}")
         print(json.dumps(body, indent=2, ensure_ascii=False))
         if self.dry_run or self.session is None:
-            return None
+            return 200, None
         response = self.session.request(method, f"{API}/{path}", json=body, timeout=60)
         if response.status_code != 200:
-            sys.exit(f"::error::{method} {path} failed with {response.status_code}: {response.text[:300]}")
-        return response.json()
+            return response.status_code, response.text
+        return 200, response.json()
 
     def convert(self, package, money):
         if self.session is None:
@@ -91,12 +106,37 @@ def money(price, currency):
     return {"currencyCode": currency, "units": str(units), "nanos": int((amount - units) * 1_000_000_000)}
 
 
+def amount(money_value):
+    return Decimal(money_value.get("units") or 0) + Decimal(money_value.get("nanos") or 0) / 1_000_000_000
+
+
+def round_local(value, floor=False):
+    scale = Decimal(10) ** value.adjusted()
+    mantissa = value / scale
+    if not floor:
+        return min(ROUND_MANTISSAS, key=lambda m: abs(m - mantissa)) * scale
+    return max([m for m in ROUND_MANTISSAS if m <= mantissa] or [ROUND_MANTISSAS[0] / 10]) * scale
+
+
+def local_price(converted, price):
+    currency = converted["currencyCode"]
+    if currency in PARITY_CURRENCIES:
+        return money(price, currency)
+    value = amount(converted)
+    if value <= 0:
+        return converted
+    return money(round_local(value), currency)
+
+
 def converted_prices(api, spec, price):
     converted = api.convert(spec["packageName"], money(price, spec["currency"]))
     if not converted:
         return [], None
-    regions = [(entry["regionCode"], entry["price"]) for entry in converted["convertedRegionPrices"].values()]
-    return regions, converted["convertedOtherRegionsPrice"]
+    regions = [
+        (entry["regionCode"], local_price(entry["price"], price)) for entry in converted["convertedRegionPrices"].values()
+    ]
+    other = converted["convertedOtherRegionsPrice"]
+    return regions, {key: local_price(other[key], price) for key in ("usdPrice", "eurPrice")}
 
 
 def tip_body(api, spec, product):
@@ -142,18 +182,37 @@ def base_plan(api, spec, plan):
     return body
 
 
+def clamp_to_ceiling(body, error_text):
+    found = PRICE_BOUNDS.search(error_text or "")
+    if not found:
+        return False
+    region, ceiling = found.group(1), Decimal(found.group(3).replace(",", ""))
+    for config in body["purchaseOptions"][0]["regionalPricingAndAvailabilityConfigs"]:
+        if config["regionCode"] == region and amount(config["price"]) > ceiling:
+            config["price"] = money(round_local(ceiling, floor=True), config["price"]["currencyCode"])
+            print(f"  {region}: clamped to {amount(config['price'])} under a ceiling of {ceiling}")
+            return True
+    return False
+
+
 def sync_tips(api, spec):
     created = updated = activated = 0
     for product in spec["tips"]["products"]:
         package, sku = spec["packageName"], product["sku"]
         existing = api.get(f"{package}/oneTimeProducts/{sku}")
         body = tip_body(api, spec, product)
-        result = api.write(
-            "PATCH",
+        path = (
             f"{package}/onetimeproducts/{sku}?updateMask=listings,purchaseOptions"
-            f"&regionsVersion.version={api.regions_version}&allowMissing=true",
-            body,
+            f"&regionsVersion.version={api.regions_version}&allowMissing=true"
         )
+        for _ in range(MAX_CLAMPS):
+            status, result = api.try_write("PATCH", path, body)
+            if status == 200:
+                break
+            if not clamp_to_ceiling(body, result):
+                sys.exit(f"::error::PATCH {path} failed with {status}: {result[:300]}")
+        else:
+            sys.exit(f"::error::{sku}: still outside a regional price ceiling after {MAX_CLAMPS} clamps")
         if existing is None:
             created += 1
         else:

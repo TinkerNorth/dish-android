@@ -12,7 +12,11 @@ in `docs/design-system.md` under "Distribution flavors".
 Product ids are permanent once created and name a tier, not an amount. The
 app reads titles and prices from Play at runtime, so every price below can
 be changed in Play Console without shipping an update. Default prices are
-in CAD, the merchant account's currency; Play converts them per country.
+in CAD, the merchant account's currency. Currencies near par with the
+dollar (USD, EUR, GBP, AUD, NZD, CHF, SGD) take the same figure, so a 5 tip
+is 5 in each of them; every other currency takes Play's conversion rounded
+to a round local amount (500 JPY, 5,000 KRW, 300 INR) rather than the
+charm price the console would suggest.
 
 One-time tips (consumable managed products):
 
@@ -25,11 +29,11 @@ One-time tips (consumable managed products):
 | `tip_100` | 100.00 | Huge tip |
 | `tip_max` | 500.00 | Legendary tip |
 
-`tip_max` is meant to sit near Play's price ceiling, which Play sets per
-region, not per merchant currency: 999.99 CAD was refused because Korea
-caps a price at KRW 600,000, about 560 CAD at the time. The spec sets
-500.00 to leave room for exchange-rate drift, since every sync converts
-the CAD price again.
+`tip_max` is meant to sit at Play's price ceiling, which Play sets per
+region (Korea caps a price at KRW 600,000). When a region's ceiling is
+below the converted price, the sync clamps that region to the largest
+round amount under the ceiling Play reports and retries, so the tier lands
+at the ceiling wherever 500 CAD would exceed it.
 
 Monthly supporter (one subscription, `supporter_monthly`, one base plan per
 amount, all `P1M` with a 30-day grace period):
