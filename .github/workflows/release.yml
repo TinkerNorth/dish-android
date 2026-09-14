@@ -50,8 +50,11 @@ on:
 #                                 capture. The committed screenshots are
 #                                 the reviewed baseline, never what ships.
 #                                 workflow_dispatch can pick another
-#                                 track or a draft status. When unset,
-#                                 both jobs are skipped. The app record
+#                                 track or a draft status; a PLAY_TRACK
+#                                 repository variable re-points tag pushes
+#                                 (delete it to return to production).
+#                                 When the secret is unset, both jobs are
+#                                 skipped. The app record
 #                                 and its FIRST build must be created
 #                                 manually in the Play Console before the
 #                                 API can publish.
@@ -470,7 +473,7 @@ jobs:
       - name: Upload to Play (AAB + store listing)
         if: ${{ steps.gate.outputs.enabled == 'true' && steps.artifacts.outputs.ready == 'true' }}
         env:
-          PLAY_TRACK: ${{ inputs.play_track || 'production' }}
+          PLAY_TRACK: ${{ inputs.play_track || vars.PLAY_TRACK || 'production' }}
           PLAY_RELEASE_STATUS: ${{ inputs.play_release_status || 'completed' }}
           AAB: ${{ steps.artifacts.outputs.aab }}
           MAPPING: ${{ steps.artifacts.outputs.mapping }}
