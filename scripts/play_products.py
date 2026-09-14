@@ -9,6 +9,11 @@ that is not yet active gets activated. Existing base plans keep the prices
 Play already holds; changing a live price is a migration, not an edit, and
 stays a deliberate Play Console action.
 
+Regional prices come from Play's own converter, and every write names the
+regions version the converter priced at, so a region changing currency
+(Bulgaria to the euro in 2026) cannot strand the catalog on an old version.
+--regions-version pins one instead.
+
 Reads the service-account key path from PLAY_KEY_FILE. With --dry-run and
 no key file, nothing leaves the machine: payloads print as they would be
 sent, minus the regional prices that only Play can convert.
@@ -29,8 +34,10 @@ SPEC = Path(__file__).resolve().parent.parent / "play" / "products.json"
 
 
 class PlayApi:
-    def __init__(self, key_file, dry_run):
+    def __init__(self, key_file, dry_run, regions_version=None):
         self.dry_run = dry_run
+        self.pinned_regions_version = regions_version
+        self.regions_version = regions_version or REGIONS_VERSION
         self.session = None
         if key_file:
             import google.auth.transport.requests
@@ -72,7 +79,10 @@ class PlayApi:
         )
         if response.status_code != 200:
             sys.exit(f"::error::convertRegionPrices failed with {response.status_code}: {response.text[:300]}")
-        return response.json()
+        converted = response.json()
+        if self.pinned_regions_version is None:
+            self.regions_version = converted.get("regionVersion", {}).get("version") or self.regions_version
+        return converted
 
 
 def money(price, currency):
@@ -132,16 +142,17 @@ def base_plan(api, spec, plan):
     return body
 
 
-def sync_tips(api, spec, regions_version):
+def sync_tips(api, spec):
     created = updated = activated = 0
     for product in spec["tips"]["products"]:
         package, sku = spec["packageName"], product["sku"]
         existing = api.get(f"{package}/oneTimeProducts/{sku}")
+        body = tip_body(api, spec, product)
         result = api.write(
             "PATCH",
             f"{package}/onetimeproducts/{sku}?updateMask=listings,purchaseOptions"
-            f"&regionsVersion.version={regions_version}&allowMissing=true",
-            tip_body(api, spec, product),
+            f"&regionsVersion.version={api.regions_version}&allowMissing=true",
+            body,
         )
         if existing is None:
             created += 1
@@ -160,7 +171,7 @@ def sync_tips(api, spec, regions_version):
     return created, updated, activated
 
 
-def sync_subscription(api, spec, regions_version):
+def sync_subscription(api, spec):
     sub = spec["subscription"]
     package, product_id = spec["packageName"], sub["productId"]
     existing = api.get(f"{package}/subscriptions/{product_id}")
@@ -176,12 +187,14 @@ def sync_subscription(api, spec, regions_version):
         "basePlans": plans,
     }
     if existing is None:
-        result = api.write("POST", f"{package}/subscriptions?productId={product_id}&regionsVersion.version={regions_version}", body)
+        result = api.write(
+            "POST", f"{package}/subscriptions?productId={product_id}&regionsVersion.version={api.regions_version}", body
+        )
     else:
         result = api.write(
             "PATCH",
             f"{package}/subscriptions/{product_id}?updateMask=listings,basePlans"
-            f"&regionsVersion.version={regions_version}&allowMissing=true",
+            f"&regionsVersion.version={api.regions_version}&allowMissing=true",
             body,
         )
     states = {plan["basePlanId"]: plan.get("state") for plan in (result or {}).get("basePlans", [])}
@@ -197,19 +210,19 @@ def sync_subscription(api, spec, regions_version):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dry-run", action="store_true", help="print payloads, write nothing")
-    parser.add_argument("--regions-version", default=REGIONS_VERSION, help="Play regions version for subscription writes")
+    parser.add_argument("--regions-version", help="pin a Play regions version instead of the one the converter answers with")
     args = parser.parse_args()
 
     key_file = os.environ.get("PLAY_KEY_FILE")
     if not key_file and not args.dry_run:
         sys.exit("::error::PLAY_KEY_FILE is not set; pass --dry-run to build payloads offline")
     spec = json.loads(SPEC.read_text(encoding="utf-8"))
-    api = PlayApi(key_file, args.dry_run)
+    api = PlayApi(key_file, args.dry_run, args.regions_version)
 
     print("== One-time tips")
-    created, updated, tips_activated = sync_tips(api, spec, args.regions_version)
+    created, updated, tips_activated = sync_tips(api, spec)
     print("== Supporter subscription")
-    sub_created, plans_activated = sync_subscription(api, spec, args.regions_version)
+    sub_created, plans_activated = sync_subscription(api, spec)
     verb = "would be" if args.dry_run or api.session is None else "were"
     print(
         f"Tips: {created} {verb} created, {updated} {verb} updated, {tips_activated} {verb} activated. "
