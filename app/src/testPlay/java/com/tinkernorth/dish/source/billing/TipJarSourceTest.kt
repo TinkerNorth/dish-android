@@ -47,6 +47,18 @@ class TipJarSourceTest {
         }
 
     @Test
+    fun `a catalog query that throws reads as unavailable instead of wedging on connecting`() =
+        runTest {
+            gateway.catalogFailure = IllegalArgumentException("All products should be of the same product type.")
+            val source = source()
+            source.open()
+            runCurrent()
+
+            assertEquals(BillingAvailability.UNAVAILABLE, source.state.value.availability)
+            assertEquals(0, gateway.ownedQueries)
+        }
+
+    @Test
     fun `tiers split by kind and sort by price regardless of catalog order`() =
         runTest {
             gateway.catalogResult =

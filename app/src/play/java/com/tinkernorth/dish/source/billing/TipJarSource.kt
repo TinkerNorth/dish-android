@@ -4,7 +4,9 @@
 package com.tinkernorth.dish.source.billing
 
 import android.app.Activity
+import android.util.Log
 import com.tinkernorth.dish.architecture.abstracts.AbstractStateSource
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.launchIn
@@ -57,9 +59,15 @@ class TipJarSource
             opening =
                 scope.launch {
                     val tiers =
-                        if (gateway.connect()) {
-                            gateway.catalog(TipCatalog.tipProductIds, TipCatalog.SUBSCRIPTION_PRODUCT_ID)
-                        } else {
+                        runCatching {
+                            if (gateway.connect()) {
+                                gateway.catalog(TipCatalog.tipProductIds, TipCatalog.SUBSCRIPTION_PRODUCT_ID)
+                            } else {
+                                null
+                            }
+                        }.getOrElse { failure ->
+                            if (failure is CancellationException) throw failure
+                            Log.w(TAG, "catalog query failed: ${failure.message}", failure)
                             null
                         }
                     if (tiers == null) {
@@ -125,4 +133,8 @@ class TipJarSource
 
         private fun kindOf(purchase: OwnedPurchase): TierKind =
             if (TipCatalog.SUBSCRIPTION_PRODUCT_ID in purchase.productIds) TierKind.MONTHLY else TierKind.TIP
+
+        private companion object {
+            private const val TAG = "TipJarSource"
+        }
     }
