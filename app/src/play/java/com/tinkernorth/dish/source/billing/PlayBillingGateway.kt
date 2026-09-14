@@ -75,8 +75,14 @@ class PlayBillingGateway
             tipProductIds: List<String>,
             subscriptionProductId: String,
         ): List<Tier>? {
-            val products =
-                tipProductIds.map { product(it, ProductType.INAPP) } + product(subscriptionProductId, ProductType.SUBS)
+            val tips = queryDetails(tipProductIds.map { product(it, ProductType.INAPP) }) ?: return null
+            val plans = queryDetails(listOf(product(subscriptionProductId, ProductType.SUBS))) ?: return null
+            val details = tips + plans
+            detailsByProductId = details.associateBy { it.productId }
+            return details.flatMap(::tiersOf)
+        }
+
+        private suspend fun queryDetails(products: List<QueryProductDetailsParams.Product>): List<ProductDetails>? {
             val params = QueryProductDetailsParams.newBuilder().setProductList(products).build()
             val (result, details) =
                 suspendCancellableCoroutine<Pair<BillingResult, QueryProductDetailsResult?>> { continuation ->
@@ -85,8 +91,7 @@ class PlayBillingGateway
                     }
                 }
             if (result.responseCode != BillingResponseCode.OK || details == null) return null
-            detailsByProductId = details.productDetailsList.associateBy { it.productId }
-            return details.productDetailsList.flatMap(::tiersOf)
+            return details.productDetailsList
         }
 
         private fun product(

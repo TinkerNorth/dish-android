@@ -18,6 +18,7 @@ class FakeBillingGateway : BillingGateway {
 
     var connectResult = true
     var catalogResult: List<Tier>? = emptyList()
+    var catalogFailure: Throwable? = null
     var owned: List<OwnedPurchase>? = emptyList()
     var launchResult = true
 
@@ -35,7 +36,7 @@ class FakeBillingGateway : BillingGateway {
     override suspend fun catalog(
         tipProductIds: List<String>,
         subscriptionProductId: String,
-    ): List<Tier>? = catalogResult
+    ): List<Tier>? = catalogFailure?.let { throw it } ?: catalogResult
 
     override suspend fun ownedPurchases(): List<OwnedPurchase>? {
         ownedQueries++
