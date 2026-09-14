@@ -1,7 +1,6 @@
 {
     "packageName": "com.tinkernorth.dish",
     "currency": "CAD",
-    "defaultLanguage": "en-US",
     "tips": {
         "description": {
             "en-US": "A one-time thank-you to the Dish developer. It unlocks nothing; Dish stays the same for everyone.",

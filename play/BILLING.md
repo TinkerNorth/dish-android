@@ -73,10 +73,12 @@ PLAY_KEY_FILE=path/to/service-account.json python scripts/play_products.py
 
 The workflow defaults to a dry run, which prints every payload and writes
 nothing; rerun it with `dry_run` off to apply. The script is idempotent:
-tips are inserted or replaced, the subscription is created or patched, base
-plans still in draft are activated, and base plans Play already holds keep
-their prices, since changing a live subscription price is a migration and
-stays a deliberate Play Console action.
+tips are created or replaced and their purchase option activated, the
+subscription is created or patched, base plans still in draft are
+activated, and base plans Play already holds keep their prices, since
+changing a live subscription price is a migration and stays a deliberate
+Play Console action. Tips go through the one-time products API; the legacy
+in-app products endpoint answers 403 for this app.
 
 Regional subscription prices come from Play's own converter
 (`pricing:convertRegionPrices`) applied to the CAD base price, so they
@@ -85,7 +87,9 @@ regions version to `2022/02`; pass `--regions-version` if Play announces a
 newer one.
 
 The same catalog can be entered by hand in Play Console. If you do, keep
-the ids exactly as listed or the app will show no tiers.
+the ids exactly as listed and mark each tip's purchase option as backwards
+compatible, or the app will show no tiers: it reads tips through the
+Billing Library's backwards-compatible accessor.
 
 ## Testing
 
