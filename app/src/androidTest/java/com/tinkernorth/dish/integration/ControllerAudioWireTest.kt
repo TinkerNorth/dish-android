@@ -137,7 +137,11 @@ class ControllerAudioWireTest {
         assertTrue("nothing may reach the wire from a mis-framed window", fake!!.micAudioFrames.isEmpty())
 
         // And the encoder is not wedged by the refusals.
-        assertTrue(SatelliteNative.sendMicFrame(conn.handle, ctrlIdx, tone(0)))
+        for (f in 0 until 10) {
+            SatelliteNative.sendMicFrame(conn.handle, ctrlIdx, tone(f))
+            Thread.sleep(20)
+        }
+        assertTrue("well-framed windows must reach the wire after the refusals", fake!!.awaitMicAudioFrames(1))
     }
 
     @Test
