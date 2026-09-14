@@ -80,11 +80,13 @@ changing a live subscription price is a migration and stays a deliberate
 Play Console action. Tips go through the one-time products API; the legacy
 in-app products endpoint answers 403 for this app.
 
-Regional subscription prices come from Play's own converter
+Regional prices come from Play's own converter
 (`pricing:convertRegionPrices`) applied to the CAD base price, so they
-match what the console would have generated. The script pins Play's
-regions version to `2022/02`; pass `--regions-version` if Play announces a
-newer one.
+match what the console would have generated, and every write names the
+regions version the converter priced at. A pinned version breaks the day a
+region changes currency (Bulgaria moved to the euro in 2026 and the old
+`2022/02` pin refused EUR for BG); pass `--regions-version` only to pin one
+deliberately.
 
 The same catalog can be entered by hand in Play Console. If you do, keep
 the ids exactly as listed and mark each tip's purchase option as backwards
