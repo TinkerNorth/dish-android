@@ -7,12 +7,13 @@
     <string name="donate_tip_body">Escolha um valor. O Google Play cuida do pagamento e do recibo. Uma gorjeta não desbloqueia nada; o Dish continua igual para todo mundo.</string>
     <string name="donate_monthly_title">Apoio mensal</string>
     <string name="donate_monthly_body">Renova todo mês pelo preço exibido até você cancelar. Cancele quando quiser no Google Play, em Pagamentos e assinaturas.</string>
-    <string name="donate_monthly_switch">Escolha outro valor para mudar seu plano. O Google Play faz o cálculo proporcional da mudança.</string>
+    <string name="donate_monthly_switch">Escolha outro valor para mudar seu plano. O Google Play cobra o novo valor a partir da sua próxima renovação.</string>
+    <string name="donate_supporter_title">Seu apoio mensal</string>
     <string name="donate_monthly_active">Você apoia o Dish todo mês. Obrigado.</string>
     <string name="donate_supporter_plan">Plano atual: %1$s</string>
     <string name="donate_supporter_plan_unknown">Seu plano é renovado todo mês pelo Google Play.</string>
     <string name="donate_plan_current">✓ %1$s</string>
-    <string name="donate_manage">Gerenciar no Google Play →</string>
+    <string name="donate_manage">Gerenciar ou cancelar no Google Play →</string>
     <string name="donate_per_month">%1$s / mês</string>
     <string name="donate_loading">Conectando ao Google Play…</string>
     <string name="donate_unavailable">O faturamento do Google Play não está disponível neste dispositivo agora.</string>
@@ -20,4 +21,5 @@
     <string name="donate_thanks_tip">Obrigado pela gorjeta!</string>
     <string name="donate_thanks_monthly">Obrigado por apoiar o Dish todo mês!</string>
     <string name="donate_error">O Google Play não conseguiu concluir a operação. Nada foi cobrado.</string>
+    <string name="donate_error_code">Código de resposta do Google Play %1$d</string>
 </resources>

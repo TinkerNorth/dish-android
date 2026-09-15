@@ -16,6 +16,8 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.ui.common.animationsDisabled
 
@@ -25,19 +27,22 @@ private const val DONATE_PILL_DISMISS_WINDOW_MS = 24L * 60L * 60L * 1000L
 private const val HEARTBEAT_SCALE = 1.12f
 
 fun AppCompatActivity.attachDonatePill() {
-    if (donatePillDismissed(this)) return
+    if (donatePillDismissed(this) || isSupporter()) return
 
     val docked = findViewById<View>(R.id.donatePill)
-    if (docked != null) {
-        docked.isVisible = true
-        wireDonatePill(docked) { hideDockedPill(docked) }
-    } else {
-        attachFloatingDonatePill()
-    }
+    val hide = if (docked != null) attachDockedDonatePill(docked) else attachFloatingDonatePill()
+    if (hide != null) hideOnceSupporting(hide)
 }
 
-private fun AppCompatActivity.attachFloatingDonatePill() {
-    val content = findViewById<ViewGroup>(android.R.id.content) ?: return
+private fun AppCompatActivity.attachDockedDonatePill(docked: View): () -> Unit {
+    docked.isVisible = true
+    val hide = { hidePill(docked) { docked.isVisible = false } }
+    wireDonatePill(docked, hide)
+    return hide
+}
+
+private fun AppCompatActivity.attachFloatingDonatePill(): (() -> Unit)? {
+    val content = findViewById<ViewGroup>(android.R.id.content) ?: return null
     val pill = layoutInflater.inflate(R.layout.view_donate_pill, content, false)
     val baseGap = resources.getDimensionPixelSize(R.dimen.spacing_5xl)
 
@@ -57,7 +62,21 @@ private fun AppCompatActivity.attachFloatingDonatePill() {
     }
 
     content.addView(pill)
-    wireDonatePill(pill) { dismissPill(pill, content) }
+    val hide = { hidePill(pill) { content.removeView(pill) } }
+    wireDonatePill(pill, hide)
+    return hide
+}
+
+private fun AppCompatActivity.hideOnceSupporting(hide: () -> Unit) {
+    lifecycle.addObserver(
+        object : DefaultLifecycleObserver {
+            override fun onResume(owner: LifecycleOwner) {
+                if (!isSupporter()) return
+                hide()
+                owner.lifecycle.removeObserver(this)
+            }
+        },
+    )
 }
 
 private fun AppCompatActivity.wireDonatePill(
@@ -99,26 +118,16 @@ private fun AppCompatActivity.animatePillIn(pill: View) {
         .start()
 }
 
-private fun dismissPill(
+private fun hidePill(
     pill: View,
-    content: ViewGroup,
+    onHidden: () -> Unit,
 ) {
     pill
         .animate()
         .alpha(0f)
         .translationY(pill.height.toFloat())
         .setDuration(pill.resources.getInteger(R.integer.motion_duration_medium).toLong())
-        .withEndAction { content.removeView(pill) }
-        .start()
-}
-
-private fun hideDockedPill(pill: View) {
-    pill
-        .animate()
-        .alpha(0f)
-        .translationY(pill.height.toFloat())
-        .setDuration(pill.resources.getInteger(R.integer.motion_duration_medium).toLong())
-        .withEndAction { pill.isVisible = false }
+        .withEndAction { onHidden() }
         .start()
 }
 

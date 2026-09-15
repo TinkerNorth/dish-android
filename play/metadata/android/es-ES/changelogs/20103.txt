@@ -1,0 +1,5 @@
+Dish 2.1.3: cambiar tu plan mensual ya funciona.
+
+• Elegir otro importe abre ahora la pantalla de cambio de plan de Google Play en lugar de un error; el nuevo importe se cobra a partir de tu próxima renovación.
+• La pantalla de apoyo vuelve a leer tu suscripción en Google Play cada vez que se abre y la muestra en su propia tarjeta, con un enlace para gestionarla o cancelarla.
+• El aviso de donación queda oculto mientras tengas un plan mensual.

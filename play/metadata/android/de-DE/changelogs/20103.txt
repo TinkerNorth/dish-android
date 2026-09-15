@@ -1,0 +1,5 @@
+Dish 2.1.3: Der Wechsel deines monatlichen Plans funktioniert.
+
+• Ein anderer Betrag öffnet jetzt den Planwechsel von Google Play statt einer Fehlermeldung; der neue Betrag wird ab der nächsten Verlängerung berechnet.
+• Die Support-Seite liest dein Abo bei jedem Öffnen neu aus Google Play und zeigt es in einer eigenen Karte, mit Link zum Verwalten oder Kündigen.
+• Der Spendenhinweis bleibt ausgeblendet, solange du einen monatlichen Plan hast.

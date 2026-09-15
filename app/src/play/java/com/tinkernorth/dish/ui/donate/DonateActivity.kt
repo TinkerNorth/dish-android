@@ -33,7 +33,7 @@ class DonateActivity : BaseGamepadHostActivity() {
         binding = setScaffoldContent(ActivityDonateBinding::inflate)
         setupDishToolbar(binding.toolbar)
         bindWhy()
-        binding.manageSubscription.setOnClickListener {
+        binding.supporterCard.manageSubscription.setOnClickListener {
             openExternalUrl(getString(R.string.url_play_subscriptions, TipCatalog.SUBSCRIPTION_PRODUCT_ID, packageName))
         }
         lifecycleScope.launch {
@@ -49,13 +49,12 @@ class DonateActivity : BaseGamepadHostActivity() {
             if (ui.availability == BillingAvailability.UNAVAILABLE) R.string.donate_unavailable else R.string.donate_loading,
         )
         renderTiers(binding.tipTiers, ui.tips, null, Tier::formattedPrice)
-        renderTiers(binding.planTiers, ui.plans, ui.supporterPlan, ::monthly)
+        renderTiers(binding.planTiers, ui.plans, ui.supporterPlan?.basePlanId, ::monthly)
         binding.monthlyBody.setText(if (ui.supporterActive) R.string.donate_monthly_switch else R.string.donate_monthly_body)
-        binding.supporterPanel.root.isVisible = ui.supporterActive
-        binding.supporterPanel.supporterPlan.text =
+        binding.supporterCard.root.isVisible = ui.supporterActive
+        binding.supporterCard.supporterPlan.text =
             ui.supporterPlan?.let { getString(R.string.donate_supporter_plan, monthly(it)) }
                 ?: getString(R.string.donate_supporter_plan_unknown)
-        binding.manageSubscription.isVisible = ui.supporterActive
         ui.notice?.let(::showNotice)
     }
 
@@ -64,15 +63,15 @@ class DonateActivity : BaseGamepadHostActivity() {
     private fun renderTiers(
         group: ChipGroup,
         tiers: List<Tier>,
-        current: Tier?,
+        currentPlanId: String?,
         label: (Tier) -> String,
     ) {
-        val key = tiers to current
+        val key = tiers to currentPlanId
         if (group.tag == key) return
         group.tag = key
         group.removeAllViews()
         tiers.forEach { tier ->
-            if (tier == current) {
+            if (currentPlanId != null && tier.basePlanId == currentPlanId) {
                 val button = DonateTierButtonCurrentBinding.inflate(layoutInflater, group, false).root
                 button.text = getString(R.string.donate_plan_current, label(tier))
                 group.addView(button)
@@ -94,7 +93,8 @@ class DonateActivity : BaseGamepadHostActivity() {
             TipJarNotice.PaymentPending -> notifications.info(getString(R.string.donate_pending))
             TipJarNotice.ThankedForTip -> notifications.success(getString(R.string.donate_thanks_tip))
             TipJarNotice.ThankedForMonthly -> notifications.success(getString(R.string.donate_thanks_monthly))
-            TipJarNotice.Failed -> notifications.warn(getString(R.string.donate_error))
+            is TipJarNotice.Failed ->
+                notifications.warn(getString(R.string.donate_error), getString(R.string.donate_error_code, notice.responseCode))
         }
         viewModel.noticeShown()
     }
