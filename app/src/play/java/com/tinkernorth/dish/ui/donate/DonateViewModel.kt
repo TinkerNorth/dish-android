@@ -23,6 +23,7 @@ data class DonateUiState(
     val tips: List<Tier>,
     val plans: List<Tier>,
     val supporterActive: Boolean,
+    val supporterPlan: Tier?,
     val notice: TipJarNotice?,
 )
 
@@ -55,5 +56,6 @@ private fun TipJarState.toUi() =
         tips = tips,
         plans = plans,
         supporterActive = supporter != null,
+        supporterPlan = supporterPlan,
         notice = notice,
     )

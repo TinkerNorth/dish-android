@@ -6,10 +6,12 @@ package com.tinkernorth.dish.ui.donate
 import android.app.Activity
 import com.tinkernorth.dish.source.billing.BillingAvailability
 import com.tinkernorth.dish.source.billing.FakeBillingGateway
+import com.tinkernorth.dish.source.billing.FakeSupporterPlanMemory
 import com.tinkernorth.dish.source.billing.PurchaseEvent
 import com.tinkernorth.dish.source.billing.TipJarNotice
 import com.tinkernorth.dish.source.billing.TipJarSource
 import com.tinkernorth.dish.source.billing.ownedPlan
+import com.tinkernorth.dish.source.billing.plan
 import com.tinkernorth.dish.source.billing.tip
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -33,6 +35,7 @@ import org.junit.Test
 class DonateViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private val gateway = FakeBillingGateway()
+    private val memory = FakeSupporterPlanMemory()
 
     @Before
     fun setUp() {
@@ -44,7 +47,7 @@ class DonateViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun TestScope.viewModel() = DonateViewModel(TipJarSource(gateway, backgroundScope))
+    private fun TestScope.viewModel() = DonateViewModel(TipJarSource(gateway, backgroundScope, memory))
 
     @Test
     fun `creating the view model opens the tip jar`() =
@@ -75,11 +78,31 @@ class DonateViewModelTest {
             gateway.events.emit(PurchaseEvent.Completed(ownedPlan("plan-token")))
             advanceUntilIdle()
             assertTrue(viewModel.ui.value.supporterActive)
+            assertNull(viewModel.ui.value.supporterPlan)
             assertEquals(TipJarNotice.ThankedForMonthly, viewModel.ui.value.notice)
 
             viewModel.noticeShown()
             advanceUntilIdle()
             assertNull(viewModel.ui.value.notice)
+            job.cancel()
+        }
+
+    @Test
+    fun `a remembered plan reaches the screen with its tier`() =
+        runTest(dispatcher.scheduler) {
+            gateway.catalogResult = listOf(plan("monthly-5", 5_000_000))
+            gateway.owned = listOf(ownedPlan("plan-token", acknowledged = true))
+            memory.remember("plan-token", "monthly-5")
+            val viewModel = viewModel()
+            val job = launch { viewModel.ui.collect {} }
+            advanceUntilIdle()
+
+            assertTrue(viewModel.ui.value.supporterActive)
+            assertEquals(
+                "monthly-5",
+                viewModel.ui.value.supporterPlan
+                    ?.basePlanId,
+            )
             job.cancel()
         }
 

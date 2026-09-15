@@ -7,6 +7,16 @@ computer. Those lines say "update Satellite too".
 
 ---
 
+## [2.1.2] - 2026-09-15
+
+### Fixed
+
+- The support screen in the Google Play build now shows your monthly plan:
+  a supporter panel names the amount you pay, your plan's button is marked,
+  and picking another amount changes the plan, with Google Play prorating
+  the difference. Before this fix the screen looked the same whether or
+  not you were subscribed.
+
 ## [2.1.1] - 2026-09-14
 
 ### Fixed

@@ -17,11 +17,12 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class TipJarSourceTest {
     private val gateway = FakeBillingGateway()
+    private val memory = FakeSupporterPlanMemory()
     private val activity = mockk<Activity>()
 
     // advanceUntilIdle stops once only backgroundScope work is left, and the event collector must
     // be subscribed before a test emits, so every source gets one scheduler pass on creation.
-    private fun TestScope.source() = TipJarSource(gateway, backgroundScope).also { runCurrent() }
+    private fun TestScope.source() = TipJarSource(gateway, backgroundScope, memory).also { runCurrent() }
 
     @Test
     fun `an unreachable Play Store reads as unavailable`() =
@@ -173,6 +174,77 @@ class TipJarSourceTest {
             gateway.events.emit(PurchaseEvent.Cancelled)
             runCurrent()
             assertNull(source.state.value.notice)
+        }
+
+    @Test
+    fun `a remembered plan resolves to its tier on open`() =
+        runTest {
+            gateway.catalogResult = listOf(plan("monthly-1", 1_000_000), plan("monthly-5", 5_000_000))
+            gateway.owned = listOf(ownedPlan("plan-token", acknowledged = true))
+            memory.remember("plan-token", "monthly-5")
+            val source = source()
+            source.open()
+            runCurrent()
+
+            assertEquals(
+                "monthly-5",
+                source.state.value.supporterPlan
+                    ?.basePlanId,
+            )
+        }
+
+    @Test
+    fun `a plan bought on another device reads as supporter without an amount`() =
+        runTest {
+            gateway.catalogResult = listOf(plan("monthly-1", 1_000_000))
+            gateway.owned = listOf(ownedPlan("plan-token", acknowledged = true))
+            val source = source()
+            source.open()
+            runCurrent()
+
+            assertEquals(
+                "plan-token",
+                source.state.value.supporter
+                    ?.token,
+            )
+            assertNull(source.state.value.supporterPlan)
+        }
+
+    @Test
+    fun `a completed plan purchase remembers the plan for its token`() =
+        runTest {
+            gateway.catalogResult = listOf(plan("monthly-1", 1_000_000), plan("monthly-25", 25_000_000))
+            val source = source()
+            source.open()
+            runCurrent()
+
+            source.purchase(activity, plan("monthly-25", 25_000_000))
+            gateway.events.emit(PurchaseEvent.Completed(ownedPlan("new-token")))
+            runCurrent()
+
+            assertEquals(mapOf("new-token" to "monthly-25"), memory.plans)
+            assertEquals(
+                "monthly-25",
+                source.state.value.supporterPlan
+                    ?.basePlanId,
+            )
+        }
+
+    @Test
+    fun `a cancelled plan purchase forgets the pending plan`() =
+        runTest {
+            gateway.catalogResult = listOf(plan("monthly-25", 25_000_000))
+            val source = source()
+            source.open()
+            runCurrent()
+
+            source.purchase(activity, plan("monthly-25", 25_000_000))
+            gateway.events.emit(PurchaseEvent.Cancelled)
+            gateway.events.emit(PurchaseEvent.Completed(ownedPlan("restored-token")))
+            runCurrent()
+
+            assertTrue(memory.plans.isEmpty())
+            assertNull(source.state.value.supporterPlan)
         }
 
     @Test
