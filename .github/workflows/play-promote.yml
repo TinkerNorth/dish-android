@@ -1,0 +1,84 @@
+name: Play Promote
+
+# Moves the release already sitting on one Play track to another, as the
+# Play Console's "Promote release" does, without rebuilding: the bundle that
+# was tested on the source track is the one that ships, and Play would
+# refuse a second upload of its version code anyway. Tag pushes land on the
+# track the PLAY_TRACK repository variable names (see release.yml), so this
+# is the way from internal testing to production.
+#
+# Requires the PLAY_SERVICE_ACCOUNT_JSON secret (raw JSON key).
+
+on:
+  workflow_dispatch:
+    inputs:
+      from_track:
+        description: "Track holding the release to promote"
+        required: true
+        default: "internal"
+      to_track:
+        description: "Track to promote it to"
+        required: true
+        default: "production"
+      version_code:
+        description: "Version code to promote when the source track holds more than one release (blank: its only release)"
+        required: false
+        default: ""
+      rollout:
+        description: "Staged rollout fraction, e.g. 0.1 for 10% (blank: full rollout)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: play-promote
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Promote release on Play
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Gate on Play credentials
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${PLAY_SERVICE_ACCOUNT_JSON:-}" ]; then
+            echo "::error::PLAY_SERVICE_ACCOUNT_JSON not set. Add the service-account key secret first."
+            exit 1
+          fi
+          printf '%s' "${PLAY_SERVICE_ACCOUNT_JSON}" > "${RUNNER_TEMP}/play-key.json"
+
+      - name: Install fastlane
+        run: sudo gem install fastlane -N -v "~> 2.226"
+
+      - name: Promote
+        env:
+          FROM_TRACK: ${{ inputs.from_track }}
+          TO_TRACK: ${{ inputs.to_track }}
+          VERSION_CODE: ${{ inputs.version_code }}
+          ROLLOUT: ${{ inputs.rollout }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          extra=()
+          [ -n "${VERSION_CODE}" ] && extra+=(--version_code "${VERSION_CODE}")
+          [ -n "${ROLLOUT}" ] && extra+=(--rollout "${ROLLOUT}")
+          fastlane supply \
+            --json_key "${RUNNER_TEMP}/play-key.json" \
+            --package_name com.tinkernorth.dish \
+            --track "${FROM_TRACK}" \
+            --track_promote_to "${TO_TRACK}" \
+            --track_promote_release_status completed \
+            --skip_upload_aab true \
+            --skip_upload_apk true \
+            --skip_upload_metadata true \
+            --skip_upload_changelogs true \
+            --skip_upload_images true \
+            --skip_upload_screenshots true \
+            "${extra[@]}"

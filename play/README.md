@@ -49,6 +49,18 @@ those five files is part of cutting a release: the release workflow's
 metadata lint hard-fails the Play upload for a tag whose versionCode has
 no changelog in every locale.
 
+## Tracks and promotion
+
+A tag push uploads to the track named by the `PLAY_TRACK` repository
+variable (`internal` while a release is being tested; delete the variable
+to return tag pushes to production). Moving a tested release on from there
+is the `Play Promote` workflow (`play-promote.yml`): it promotes the
+release on one track to another through the Play API, as the console's
+"Promote release" does, without rebuilding, since Play refuses a second
+upload of the same versionCode. Defaults are internal to production with a
+full rollout; `rollout` takes a fraction for a staged rollout and
+`version_code` picks a release when the source track holds several.
+
 ## Visual assets: status
 
 Screenshots, feature graphics, and the store icon are committed under
