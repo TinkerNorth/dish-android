@@ -23,6 +23,7 @@ class FakeBillingGateway : BillingGateway {
     var launchResult = true
 
     var connectCalls = 0
+    var catalogQueries = 0
     var ownedQueries = 0
     val consumed = mutableListOf<String>()
     val acknowledged = mutableListOf<String>()
@@ -36,7 +37,10 @@ class FakeBillingGateway : BillingGateway {
     override suspend fun catalog(
         tipProductIds: List<String>,
         subscriptionProductId: String,
-    ): List<Tier>? = catalogFailure?.let { throw it } ?: catalogResult
+    ): List<Tier>? {
+        catalogQueries++
+        return catalogFailure?.let { throw it } ?: catalogResult
+    }
 
     override suspend fun ownedPurchases(): List<OwnedPurchase>? {
         ownedQueries++

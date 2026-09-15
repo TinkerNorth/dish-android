@@ -5,6 +5,8 @@ package com.tinkernorth.dish.source.billing
 
 class FakeSupporterPlanMemory : SupporterPlanMemory {
     val plans = mutableMapOf<String, String>()
+    var expectedPlan: ExpectedPlan? = null
+    override var supporterActive = false
 
     override fun planFor(purchaseToken: String): String? = plans[purchaseToken]
 
@@ -13,5 +15,18 @@ class FakeSupporterPlanMemory : SupporterPlanMemory {
         basePlanId: String,
     ) {
         plans[purchaseToken] = basePlanId
+    }
+
+    override fun expect(
+        basePlanId: String,
+        replacingToken: String?,
+    ) {
+        expectedPlan = ExpectedPlan(basePlanId, replacingToken)
+    }
+
+    override fun expected(): ExpectedPlan? = expectedPlan
+
+    override fun forgetExpected() {
+        expectedPlan = null
     }
 }
