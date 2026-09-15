@@ -134,14 +134,13 @@
                         android:textColor="@color/colorPulse"
                         android:text="@string/donate_monthly_title" />
 
-                    <TextView
-                        android:id="@+id/supporterActive"
-                        style="@style/TextAppearance.Dish.Body"
+                    <include
+                        android:id="@+id/supporterPanel"
+                        layout="@layout/donate_supporter_panel"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/spacing_md"
-                        android:visibility="gone"
-                        android:text="@string/donate_monthly_active" />
+                        android:layout_marginTop="@dimen/spacing_lg"
+                        android:visibility="gone" />
 
                     <TextView
                         android:id="@+id/monthlyBody"

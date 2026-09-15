@@ -109,6 +109,10 @@ are never charged. Useful checks:
 - Buy a tip with the slow test card: a pending banner appears; the thanks
   arrives when Play completes the charge, or on the next visit to the
   screen if the app was closed in between.
+- Subscribe, then reopen the screen: the monthly card shows the supporter
+  panel with the current amount and marks that plan's button. The plan is
+  remembered on the device that bought it; a subscription restored on
+  another device shows the panel without the amount.
 - Subscribe, then pick a different amount: Play shows a plan-change sheet.
   Test subscriptions renew every five minutes, so cancellation and
   re-subscription can be exercised quickly.

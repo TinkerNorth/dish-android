@@ -13,6 +13,7 @@ import com.google.android.material.chip.ChipGroup
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivityDonateBinding
 import com.tinkernorth.dish.databinding.DonateTierButtonBinding
+import com.tinkernorth.dish.databinding.DonateTierButtonCurrentBinding
 import com.tinkernorth.dish.source.billing.BillingAvailability
 import com.tinkernorth.dish.source.billing.Tier
 import com.tinkernorth.dish.source.billing.TipCatalog
@@ -47,27 +48,40 @@ class DonateActivity : BaseGamepadHostActivity() {
         binding.donateStatus.setText(
             if (ui.availability == BillingAvailability.UNAVAILABLE) R.string.donate_unavailable else R.string.donate_loading,
         )
-        renderTiers(binding.tipTiers, ui.tips, Tier::formattedPrice)
-        renderTiers(binding.planTiers, ui.plans) { getString(R.string.donate_per_month, it.formattedPrice) }
+        renderTiers(binding.tipTiers, ui.tips, null, Tier::formattedPrice)
+        renderTiers(binding.planTiers, ui.plans, ui.supporterPlan, ::monthly)
         binding.monthlyBody.setText(if (ui.supporterActive) R.string.donate_monthly_switch else R.string.donate_monthly_body)
-        binding.supporterActive.isVisible = ui.supporterActive
+        binding.supporterPanel.root.isVisible = ui.supporterActive
+        binding.supporterPanel.supporterPlan.text =
+            ui.supporterPlan?.let { getString(R.string.donate_supporter_plan, monthly(it)) }
+                ?: getString(R.string.donate_supporter_plan_unknown)
         binding.manageSubscription.isVisible = ui.supporterActive
         ui.notice?.let(::showNotice)
     }
 
+    private fun monthly(tier: Tier): String = getString(R.string.donate_per_month, tier.formattedPrice)
+
     private fun renderTiers(
         group: ChipGroup,
         tiers: List<Tier>,
+        current: Tier?,
         label: (Tier) -> String,
     ) {
-        if (group.tag == tiers) return
-        group.tag = tiers
+        val key = tiers to current
+        if (group.tag == key) return
+        group.tag = key
         group.removeAllViews()
         tiers.forEach { tier ->
-            val button = DonateTierButtonBinding.inflate(layoutInflater, group, false).root
-            button.text = label(tier)
-            button.setOnClickListener { buy(tier) }
-            group.addView(button)
+            if (tier == current) {
+                val button = DonateTierButtonCurrentBinding.inflate(layoutInflater, group, false).root
+                button.text = getString(R.string.donate_plan_current, label(tier))
+                group.addView(button)
+            } else {
+                val button = DonateTierButtonBinding.inflate(layoutInflater, group, false).root
+                button.text = label(tier)
+                button.setOnClickListener { buy(tier) }
+                group.addView(button)
+            }
         }
     }
 

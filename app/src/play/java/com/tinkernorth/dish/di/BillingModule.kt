@@ -5,6 +5,8 @@ package com.tinkernorth.dish.di
 
 import com.tinkernorth.dish.source.billing.BillingGateway
 import com.tinkernorth.dish.source.billing.PlayBillingGateway
+import com.tinkernorth.dish.source.billing.SupporterPlanMemory
+import com.tinkernorth.dish.source.store.SupporterPlanStore
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -17,4 +19,8 @@ abstract class BillingModule {
     @Binds
     @Singleton
     abstract fun bindBillingGateway(gateway: PlayBillingGateway): BillingGateway
+
+    @Binds
+    @Singleton
+    abstract fun bindSupporterPlanMemory(store: SupporterPlanStore): SupporterPlanMemory
 }
