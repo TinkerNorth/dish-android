@@ -13,12 +13,13 @@
     <string name="donate_tip_body">Pick an amount. Google Play handles the payment and the receipt. A tip unlocks nothing; Dish stays the same for everyone.</string>
     <string name="donate_monthly_title">Monthly supporter</string>
     <string name="donate_monthly_body">Renews every month at the price shown until you cancel. Cancel any time in Google Play under Payments and subscriptions.</string>
-    <string name="donate_monthly_switch">Pick a different amount to change your plan. The change is prorated by Google Play.</string>
+    <string name="donate_monthly_switch">Pick a different amount to change your plan. Google Play charges the new amount from your next renewal.</string>
+    <string name="donate_supporter_title">Your monthly support</string>
     <string name="donate_monthly_active">You support Dish every month. Thank you.</string>
     <string name="donate_supporter_plan">Current plan: %1$s</string>
     <string name="donate_supporter_plan_unknown">Your plan renews every month through Google Play.</string>
     <string name="donate_plan_current">✓ %1$s</string>
-    <string name="donate_manage">Manage in Google Play →</string>
+    <string name="donate_manage">Manage or cancel in Google Play →</string>
     <string name="donate_per_month">%1$s / month</string>
     <string name="donate_loading">Contacting Google Play…</string>
     <string name="donate_unavailable">Google Play billing isn\'t available on this device right now.</string>
@@ -26,5 +27,6 @@
     <string name="donate_thanks_tip">Thank you for the tip!</string>
     <string name="donate_thanks_monthly">Thank you for supporting Dish every month!</string>
     <string name="donate_error">Google Play couldn\'t complete that. Nothing was charged.</string>
+    <string name="donate_error_code">Google Play response code %1$d</string>
     <string name="url_play_subscriptions" translatable="false">https://play.google.com/store/account/subscriptions?sku=%1$s&amp;package=%2$s</string>
 </resources>

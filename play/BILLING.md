@@ -49,7 +49,13 @@ amount, all `P1M` with a 30-day grace period):
 | `monthly-100` | 100.00 |
 
 A user holds one base plan at a time; picking another amount in the app is
-a plan change with time-based proration, not a second subscription.
+a plan change, not a second subscription. The app launches it with the
+`WITHOUT_PRORATION` replacement mode: the plan switches at once and the new
+amount is charged from the next renewal, which is what the base plans'
+charge-on-next-billing-date proration in Play Console does. Play accepts
+only `WITHOUT_PRORATION` or `CHARGE_FULL_PRICE` for a switch between base
+plans of one subscription; any other mode, including the time-prorated
+default, makes the purchase sheet fail with an error.
 
 The authoritative copy of this catalog is `play/products.json`. The app's
 copy of the ids is `TipCatalog` in `app/src/play`.
@@ -109,13 +115,25 @@ are never charged. Useful checks:
 - Buy a tip with the slow test card: a pending banner appears; the thanks
   arrives when Play completes the charge, or on the next visit to the
   screen if the app was closed in between.
-- Subscribe, then reopen the screen: the monthly card shows the supporter
-  panel with the current amount and marks that plan's button. The plan is
-  remembered on the device that bought it; a subscription restored on
-  another device shows the panel without the amount.
-- Subscribe, then pick a different amount: Play shows a plan-change sheet.
-  Test subscriptions renew every five minutes, so cancellation and
-  re-subscription can be exercised quickly.
+- Subscribe, then reopen the screen: a card of its own names the current
+  amount with a link to manage or cancel the subscription, and that plan's
+  button in the monthly card is marked by its base plan id. The screen asks
+  Play for the catalog and the owned purchases on every visit, so a
+  subscription cancelled or changed in Google Play shows up on the next
+  visit. The plan id is remembered on the device that bought it; a
+  subscription restored on another device shows the card without the
+  amount.
+- Subscribe, then pick a different amount: Play shows a plan-change sheet
+  and the new amount applies from the next renewal. Test subscriptions renew
+  every five minutes, so cancellation and re-subscription can be exercised
+  quickly.
+- Subscribe, then return to the main screen: the donate pill stays hidden.
+  It comes back once Play no longer reports a subscription, which the app
+  checks on every visit to the screen and once per launch for a device that
+  last saw one.
+- A failed purchase names Play's response code under the error banner, and
+  `adb logcat -s PlayBillingGateway:* TipJarSource:*` carries the debug
+  message.
 - Kill the app mid-purchase, reopen the screen: the purchase is settled on
   entry. Play refunds anything left unacknowledged for three days, which is
   why the screen reconciles on every visit.

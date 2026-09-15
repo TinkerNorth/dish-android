@@ -1,0 +1,5 @@
+Dish 2.1.3: changing your monthly plan works.
+
+• Picking another amount now opens Google Play's plan-change sheet instead of an error; the new amount is charged from your next renewal.
+• The support screen re-reads your subscription from Google Play every time it opens and shows it in its own card, with a link to manage or cancel it.
+• The donation banner stays hidden while you have a monthly plan.

@@ -115,6 +115,14 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
+            <include
+                android:id="@+id/supporterCard"
+                layout="@layout/donate_supporter_card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/card_margin_bottom"
+                android:visibility="gone" />
+
             <com.google.android.material.card.MaterialCardView
                 style="@style/Widget.Dish.Card"
                 android:layout_width="match_parent"
@@ -134,14 +142,6 @@
                         android:textColor="@color/colorPulse"
                         android:text="@string/donate_monthly_title" />
 
-                    <include
-                        android:id="@+id/supporterPanel"
-                        layout="@layout/donate_supporter_panel"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/spacing_lg"
-                        android:visibility="gone" />
-
                     <TextView
                         android:id="@+id/monthlyBody"
                         style="@style/TextAppearance.Dish.Body"
@@ -157,18 +157,6 @@
                         android:layout_marginTop="@dimen/spacing_lg"
                         app:chipSpacingHorizontal="@dimen/spacing_md"
                         app:chipSpacingVertical="@dimen/spacing_md" />
-
-                    <TextView
-                        android:id="@+id/manageSubscription"
-                        style="@style/TextAppearance.Dish.BodySmall"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/spacing_lg"
-                        android:padding="@dimen/spacing_sm"
-                        android:background="?attr/selectableItemBackground"
-                        android:textColor="@color/colorPulse"
-                        android:visibility="gone"
-                        android:text="@string/donate_manage" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

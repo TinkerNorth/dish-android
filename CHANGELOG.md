@@ -7,6 +7,21 @@ computer. Those lines say "update Satellite too".
 
 ---
 
+## [2.1.3] - 2026-09-15
+
+### Fixed
+
+- Changing your monthly supporter plan in the Google Play build works. Google
+  Play refuses a time-prorated switch between the plans of one subscription,
+  so 2.1.2 showed an error instead of the plan-change sheet; the switch now
+  takes effect immediately and the new amount is charged from your next
+  renewal.
+- The support screen re-reads your subscription from Google Play every time
+  it opens, shows it in its own card with a link to manage or cancel it, and
+  marks your plan among the amounts by its plan id rather than its price.
+- The donation banner no longer appears while you have an active monthly
+  plan.
+
 ## [2.1.2] - 2026-09-15
 
 ### Fixed

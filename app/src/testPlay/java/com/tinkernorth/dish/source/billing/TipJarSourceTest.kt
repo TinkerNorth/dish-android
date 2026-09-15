@@ -10,6 +10,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -114,16 +115,77 @@ class TipJarSourceTest {
         }
 
     @Test
-    fun `reopening a ready source reconciles without reconnecting`() =
+    fun `reopening a ready source refreshes the catalog and the purchases`() =
         runTest {
+            gateway.catalogResult = listOf(plan("monthly-5", 5_000_000))
             val source = source()
             source.open()
             runCurrent()
+            gateway.catalogResult = listOf(plan("monthly-5", 6_000_000))
+            gateway.owned = listOf(ownedPlan("plan-token", acknowledged = true))
             source.open()
             runCurrent()
 
-            assertEquals(1, gateway.connectCalls)
+            assertEquals(2, gateway.catalogQueries)
             assertEquals(2, gateway.ownedQueries)
+            assertEquals(BillingAvailability.READY, source.state.value.availability)
+            assertEquals(
+                6_000_000,
+                source.state.value.plans
+                    .single()
+                    .priceMicros,
+            )
+            assertEquals(
+                "plan-token",
+                source.state.value.supporter
+                    ?.token,
+            )
+        }
+
+    @Test
+    fun `a refresh the store refuses clears the tiers`() =
+        runTest {
+            gateway.catalogResult = listOf(plan("monthly-5", 5_000_000))
+            val source = source()
+            source.open()
+            runCurrent()
+            gateway.catalogResult = null
+            source.open()
+            runCurrent()
+
+            assertEquals(BillingAvailability.UNAVAILABLE, source.state.value.availability)
+            assertTrue(
+                source.state.value.plans
+                    .isEmpty(),
+            )
+        }
+
+    @Test
+    fun `opening records whether a subscription is active`() =
+        runTest {
+            memory.supporterActive = true
+            val source = source()
+            source.open()
+            runCurrent()
+            assertFalse(memory.supporterActive)
+
+            gateway.owned = listOf(ownedPlan("plan-token", acknowledged = true))
+            source.open()
+            runCurrent()
+            assertTrue(memory.supporterActive)
+        }
+
+    @Test
+    fun `verifying a supporter refreshes the cache without loading the catalog`() =
+        runTest {
+            memory.supporterActive = true
+            val source = source()
+            source.verifySupporter()
+            runCurrent()
+
+            assertFalse(memory.supporterActive)
+            assertEquals(0, gateway.catalogQueries)
+            assertEquals(BillingAvailability.IDLE, source.state.value.availability)
         }
 
     @Test
@@ -150,6 +212,7 @@ class TipJarSourceTest {
 
             assertEquals(listOf("plan-token"), gateway.acknowledged)
             assertEquals(TipJarNotice.ThankedForMonthly, source.state.value.notice)
+            assertTrue(memory.supporterActive)
             assertEquals(
                 "plan-token",
                 source.state.value.supporter
@@ -168,7 +231,7 @@ class TipJarSourceTest {
 
             gateway.events.emit(PurchaseEvent.Failed(responseCode = 3))
             runCurrent()
-            assertEquals(TipJarNotice.Failed, source.state.value.notice)
+            assertEquals(TipJarNotice.Failed(3), source.state.value.notice)
 
             source.dismissNotice()
             gateway.events.emit(PurchaseEvent.Cancelled)
@@ -177,7 +240,7 @@ class TipJarSourceTest {
         }
 
     @Test
-    fun `a remembered plan resolves to its tier on open`() =
+    fun `a remembered plan resolves by its id on open`() =
         runTest {
             gateway.catalogResult = listOf(plan("monthly-1", 1_000_000), plan("monthly-5", 5_000_000))
             gateway.owned = listOf(ownedPlan("plan-token", acknowledged = true))
@@ -186,15 +249,11 @@ class TipJarSourceTest {
             source.open()
             runCurrent()
 
-            assertEquals(
-                "monthly-5",
-                source.state.value.supporterPlan
-                    ?.basePlanId,
-            )
+            assertEquals("monthly-5", source.state.value.supporterPlanId)
         }
 
     @Test
-    fun `a plan bought on another device reads as supporter without an amount`() =
+    fun `a plan bought on another device reads as supporter without a plan`() =
         runTest {
             gateway.catalogResult = listOf(plan("monthly-1", 1_000_000))
             gateway.owned = listOf(ownedPlan("plan-token", acknowledged = true))
@@ -207,7 +266,7 @@ class TipJarSourceTest {
                 source.state.value.supporter
                     ?.token,
             )
-            assertNull(source.state.value.supporterPlan)
+            assertNull(source.state.value.supporterPlanId)
         }
 
     @Test
@@ -223,15 +282,12 @@ class TipJarSourceTest {
             runCurrent()
 
             assertEquals(mapOf("new-token" to "monthly-25"), memory.plans)
-            assertEquals(
-                "monthly-25",
-                source.state.value.supporterPlan
-                    ?.basePlanId,
-            )
+            assertNull(memory.expectedPlan)
+            assertEquals("monthly-25", source.state.value.supporterPlanId)
         }
 
     @Test
-    fun `a cancelled plan purchase forgets the pending plan`() =
+    fun `a cancelled plan purchase forgets the expected plan`() =
         runTest {
             gateway.catalogResult = listOf(plan("monthly-25", 25_000_000))
             val source = source()
@@ -244,7 +300,48 @@ class TipJarSourceTest {
             runCurrent()
 
             assertTrue(memory.plans.isEmpty())
-            assertNull(source.state.value.supporterPlan)
+            assertNull(source.state.value.supporterPlanId)
+        }
+
+    @Test
+    fun `a plan change completed while the app was gone lands on the new token`() =
+        runTest {
+            gateway.catalogResult = listOf(plan("monthly-5", 5_000_000), plan("monthly-25", 25_000_000))
+            gateway.owned = listOf(ownedPlan("new-token", acknowledged = true))
+            memory.remember("old-token", "monthly-5")
+            memory.expect("monthly-25", replacingToken = "old-token")
+            val source = source()
+            source.open()
+            runCurrent()
+
+            assertEquals("monthly-25", memory.plans["new-token"])
+            assertNull(memory.expectedPlan)
+            assertEquals("monthly-25", source.state.value.supporterPlanId)
+        }
+
+    @Test
+    fun `an expected plan is dropped when the subscription did not change`() =
+        runTest {
+            gateway.owned = listOf(ownedPlan("plan-token", acknowledged = true))
+            memory.expect("monthly-25", replacingToken = "plan-token")
+            val source = source()
+            source.open()
+            runCurrent()
+
+            assertTrue(memory.plans.isEmpty())
+            assertNull(memory.expectedPlan)
+        }
+
+    @Test
+    fun `an expected plan waits while its purchase is pending`() =
+        runTest {
+            gateway.owned = listOf(ownedPlan("plan-token", acknowledged = true), ownedPlan("pending-token", pending = true))
+            memory.expect("monthly-25", replacingToken = "plan-token")
+            val source = source()
+            source.open()
+            runCurrent()
+
+            assertEquals(ExpectedPlan("monthly-25", "plan-token"), memory.expectedPlan)
         }
 
     @Test
@@ -260,14 +357,16 @@ class TipJarSourceTest {
 
             assertEquals("plan-token", gateway.launches[0].replacing?.token)
             assertNull(gateway.launches[1].replacing)
+            assertEquals(ExpectedPlan("monthly-25", "plan-token"), memory.expectedPlan)
         }
 
     @Test
-    fun `a launch the store refuses is reported to the caller`() =
+    fun `a launch the store refuses is reported to the caller and expects nothing`() =
         runTest {
             gateway.launchResult = false
             val source = source()
 
-            assertEquals(false, source.purchase(activity, tip("tip_5", 5_000_000)))
+            assertEquals(false, source.purchase(activity, plan("monthly-25", 25_000_000)))
+            assertNull(memory.expectedPlan)
         }
 }

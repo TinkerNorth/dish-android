@@ -5,6 +5,7 @@ package com.tinkernorth.dish.source.billing
 
 import android.app.Activity
 import android.content.Context
+import android.util.Log
 import com.android.billingclient.api.AcknowledgePurchaseParams
 import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClient.BillingResponseCode
@@ -143,6 +144,9 @@ class PlayBillingGateway
             return purchases.map(::owned)
         }
 
+        // Play refuses a switch between base plans of one subscription under any replacement mode
+        // other than WITHOUT_PRORATION or CHARGE_FULL_PRICE; the first matches the base plans'
+        // charge-on-next-billing-date proration in Play Console.
         override fun launchPurchase(
             activity: Activity,
             tier: Tier,
@@ -166,12 +170,16 @@ class PlayBillingGateway
                                     .newBuilder()
                                     .setOldPurchaseToken(replacing.token)
                                     .setSubscriptionReplacementMode(
-                                        BillingFlowParams.SubscriptionUpdateParams.ReplacementMode.WITH_TIME_PRORATION,
+                                        BillingFlowParams.SubscriptionUpdateParams.ReplacementMode.WITHOUT_PRORATION,
                                     ).build(),
                             )
                         }
                     }.build()
-            return client.launchBillingFlow(activity, params).responseCode == BillingResponseCode.OK
+            val result = client.launchBillingFlow(activity, params)
+            if (result.responseCode != BillingResponseCode.OK) {
+                Log.w(TAG, "launch refused: ${result.responseCode} ${result.debugMessage}")
+            }
+            return result.responseCode == BillingResponseCode.OK
         }
 
         override suspend fun consume(purchaseToken: String): Boolean =
@@ -206,7 +214,10 @@ class PlayBillingGateway
                         events.tryEmit(event)
                     }
                 BillingResponseCode.USER_CANCELED -> events.tryEmit(PurchaseEvent.Cancelled)
-                else -> events.tryEmit(PurchaseEvent.Failed(result.responseCode))
+                else -> {
+                    Log.w(TAG, "purchase failed: ${result.responseCode} ${result.debugMessage}")
+                    events.tryEmit(PurchaseEvent.Failed(result.responseCode))
+                }
             }
         }
 
@@ -217,4 +228,8 @@ class PlayBillingGateway
                 acknowledged = purchase.isAcknowledged,
                 pending = purchase.purchaseState == Purchase.PurchaseState.PENDING,
             )
+
+        private companion object {
+            private const val TAG = "PlayBillingGateway"
+        }
     }

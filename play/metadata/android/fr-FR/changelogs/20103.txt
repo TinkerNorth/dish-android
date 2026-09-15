@@ -1,0 +1,5 @@
+Dish 2.1.3 : le changement de formule mensuelle fonctionne.
+
+• Choisir un autre montant ouvre désormais l’écran de changement de formule de Google Play au lieu d’une erreur ; le nouveau montant est facturé à partir du prochain renouvellement.
+• L’écran de soutien relit votre abonnement dans Google Play à chaque ouverture et l’affiche dans sa propre carte, avec un lien pour le gérer ou l’annuler.
+• La bannière de don reste masquée tant que vous avez une formule mensuelle.

@@ -7,12 +7,13 @@
     <string name="donate_tip_body">Wähle einen Betrag. Google Play übernimmt Zahlung und Beleg. Ein Trinkgeld schaltet nichts frei; Dish bleibt für alle gleich.</string>
     <string name="donate_monthly_title">Monatliche Unterstützung</string>
     <string name="donate_monthly_body">Verlängert sich jeden Monat zum angezeigten Preis, bis du kündigst. Kündigen kannst du jederzeit in Google Play unter Zahlungen und Abos.</string>
-    <string name="donate_monthly_switch">Wähle einen anderen Betrag, um deinen Plan zu ändern. Google Play rechnet die Änderung anteilig ab.</string>
+    <string name="donate_monthly_switch">Wähle einen anderen Betrag, um deinen Plan zu ändern. Google Play berechnet den neuen Betrag ab deiner nächsten Verlängerung.</string>
+    <string name="donate_supporter_title">Deine monatliche Unterstützung</string>
     <string name="donate_monthly_active">Du unterstützt Dish jeden Monat. Danke.</string>
     <string name="donate_supporter_plan">Aktueller Plan: %1$s</string>
     <string name="donate_supporter_plan_unknown">Dein Plan verlängert sich jeden Monat über Google Play.</string>
     <string name="donate_plan_current">✓ %1$s</string>
-    <string name="donate_manage">In Google Play verwalten →</string>
+    <string name="donate_manage">In Google Play verwalten oder kündigen →</string>
     <string name="donate_per_month">%1$s / Monat</string>
     <string name="donate_loading">Verbindung zu Google Play…</string>
     <string name="donate_unavailable">Die Abrechnung über Google Play ist auf diesem Gerät gerade nicht verfügbar.</string>
@@ -20,4 +21,5 @@
     <string name="donate_thanks_tip">Danke für das Trinkgeld!</string>
     <string name="donate_thanks_monthly">Danke, dass du Dish jeden Monat unterstützt!</string>
     <string name="donate_error">Google Play konnte das nicht abschließen. Es wurde nichts abgebucht.</string>
+    <string name="donate_error_code">Google Play-Antwortcode %1$d</string>
 </resources>

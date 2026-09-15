@@ -56,6 +56,6 @@ private fun TipJarState.toUi() =
         tips = tips,
         plans = plans,
         supporterActive = supporter != null,
-        supporterPlan = supporterPlan,
+        supporterPlan = plans.firstOrNull { it.basePlanId == supporterPlanId },
         notice = notice,
     )

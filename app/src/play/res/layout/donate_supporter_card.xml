@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/supporterCard"
+    style="@style/Widget.Dish.Card"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="@dimen/card_padding">
+
+        <TextView
+            style="@style/TextAppearance.Dish.Title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/colorPulse"
+            android:text="@string/donate_supporter_title" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_lg"
+            android:orientation="horizontal"
+            android:baselineAligned="false"
+            android:gravity="center_vertical">
+
+            <FrameLayout
+                android:layout_width="@dimen/donate_heart_badge_size"
+                android:layout_height="@dimen/donate_heart_badge_size"
+                android:layout_marginEnd="@dimen/spacing_lg"
+                android:background="@drawable/bg_pulse_badge">
+
+                <ImageView
+                    android:layout_width="@dimen/donate_heart_size"
+                    android:layout_height="@dimen/donate_heart_size"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_heart"
+                    android:importantForAccessibility="no" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/TextAppearance.Dish.BodyLarge.Bold"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/donate_monthly_active" />
+
+                <TextView
+                    android:id="@+id/supporterPlan"
+                    style="@style/TextAppearance.Dish.Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_sm"
+                    android:textColor="@color/colorPulse"
+                    tools:text="Current plan: CA$5.00 / month" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/manageSubscription"
+            style="@style/TextAppearance.Dish.BodySmall"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_lg"
+            android:padding="@dimen/spacing_sm"
+            android:background="?attr/selectableItemBackground"
+            android:textColor="@color/colorPulse"
+            android:text="@string/donate_manage" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

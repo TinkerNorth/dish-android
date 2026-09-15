@@ -682,15 +682,22 @@ locales:
   Library behind it, `TipJarSource` owning the catalog and purchase state,
   `TipCatalog` with the product ids, and `SupporterPlanMemory`, which
   `source/store/SupporterPlanStore.kt` backs with SharedPreferences to
-  remember which base plan a purchase token bought, since Play reports only
-  the product; `DonateViewModel` maps that state for the screen,
-  `donate_tier_button.xml` and `donate_tier_button_current.xml` are the
-  inflated tier buttons, `donate_supporter_panel.xml` is the subscribed
-  state of the monthly card, and `di/BillingModule.kt` binds the gateway
-  and the store. Product ids are permanent in
-  Play Console and name tiers, not amounts; prices are read from Play at
-  runtime. The billing client connects only when the donate screen opens,
-  so the stream path never pays for it.
+  remember which base plan a purchase token bought (Play reports only the
+  product), the plan a launched change is expected to produce, and whether
+  a subscription was active the last time Play answered; `DonateViewModel`
+  maps that state for the screen, `donate_tier_button.xml` and
+  `donate_tier_button_current.xml` are the inflated tier buttons,
+  `donate_supporter_card.xml` is the card for the active subscription, and
+  `di/BillingModule.kt` binds the gateway and the store. Product ids are
+  permanent in Play Console and name tiers, not amounts; prices are read
+  from Play at runtime. The billing client connects only when the donate
+  screen opens, plus one purchase check per launch on a device that last
+  saw a subscription, so the stream path never pays for it.
+
+Both flavors also supply `ui/donate/SupporterStatus.kt`, whose
+`Context.isSupporter()` lets the shared pill in `src/main` stay away from a
+monthly supporter: `src/github` answers false, `src/play` reads the cached
+answer and asks the tip jar to re-verify it.
 
 Adding a donation touchpoint means adding it to `src/main` and letting it
 call `openDonateScreen()`; adding a payment path means changing one

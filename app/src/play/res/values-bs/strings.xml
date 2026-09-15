@@ -7,12 +7,13 @@
     <string name="donate_tip_body">Odaberite iznos. Google Play obavlja plaćanje i izdaje račun. Bakšiš ne otključava ništa; Dish ostaje isti za sve.</string>
     <string name="donate_monthly_title">Mjesečna podrška</string>
     <string name="donate_monthly_body">Obnavlja se svakog mjeseca po prikazanoj cijeni dok ne otkažete. Otkažite bilo kada u Google Playu pod Plaćanja i pretplate.</string>
-    <string name="donate_monthly_switch">Odaberite drugi iznos da promijenite plan. Google Play proporcionalno obračunava promjenu.</string>
+    <string name="donate_monthly_switch">Odaberite drugi iznos da promijenite plan. Google Play naplaćuje novi iznos od vaše sljedeće obnove.</string>
+    <string name="donate_supporter_title">Vaša mjesečna podrška</string>
     <string name="donate_monthly_active">Podržavate Dish svakog mjeseca. Hvala.</string>
     <string name="donate_supporter_plan">Trenutni plan: %1$s</string>
     <string name="donate_supporter_plan_unknown">Vaš plan se obnavlja svakog mjeseca preko Google Playa.</string>
     <string name="donate_plan_current">✓ %1$s</string>
-    <string name="donate_manage">Upravljajte u Google Playu →</string>
+    <string name="donate_manage">Upravljajte ili otkažite u Google Playu →</string>
     <string name="donate_per_month">%1$s / mjesec</string>
     <string name="donate_loading">Povezivanje s Google Playem…</string>
     <string name="donate_unavailable">Naplata preko Google Playa trenutno nije dostupna na ovom uređaju.</string>
@@ -20,4 +21,5 @@
     <string name="donate_thanks_tip">Hvala za bakšiš!</string>
     <string name="donate_thanks_monthly">Hvala što podržavate Dish svakog mjeseca!</string>
     <string name="donate_error">Google Play to nije mogao završiti. Ništa nije naplaćeno.</string>
+    <string name="donate_error_code">Kod odgovora Google Playa %1$d</string>
 </resources>

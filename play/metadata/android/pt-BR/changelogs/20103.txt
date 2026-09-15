@@ -1,0 +1,5 @@
+Dish 2.1.3: mudar seu plano mensal funciona.
+
+• Escolher outro valor agora abre a tela de mudança de plano do Google Play em vez de um erro; o novo valor é cobrado a partir da próxima renovação.
+• A tela de apoio relê sua assinatura no Google Play sempre que é aberta e a mostra em um cartão próprio, com um link para gerenciar ou cancelar.
+• O aviso de doação fica oculto enquanto você tiver um plano mensal.
