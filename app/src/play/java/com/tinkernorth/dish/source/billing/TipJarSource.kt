@@ -32,6 +32,7 @@ data class TipJarState(
     val tips: List<Tier> = emptyList(),
     val plans: List<Tier> = emptyList(),
     val supporter: OwnedPurchase? = null,
+    val supporterPlan: Tier? = null,
     val notice: TipJarNotice? = null,
 )
 
@@ -42,8 +43,12 @@ class TipJarSource
     constructor(
         private val gateway: BillingGateway,
         private val scope: CoroutineScope,
+        private val memory: SupporterPlanMemory,
     ) : AbstractStateSource<TipJarState>(TipJarState()) {
         private var opening: Job? = null
+
+        @Volatile
+        private var pendingPlanId: String? = null
 
         init {
             gateway.purchaseEvents.onEach(::onPurchaseEvent).launchIn(scope)
@@ -90,6 +95,7 @@ class TipJarSource
             tier: Tier,
         ): Boolean {
             val replacing = state.value.supporter?.takeIf { tier.kind == TierKind.MONTHLY }
+            if (tier.kind == TierKind.MONTHLY) pendingPlanId = tier.basePlanId
             return gateway.launchPurchase(activity, tier, replacing)
         }
 
@@ -103,7 +109,7 @@ class TipJarSource
             val owned = gateway.ownedPurchases() ?: return
             owned.filterNot(OwnedPurchase::pending).forEach { settle(it) }
             val supporter = owned.firstOrNull { kindOf(it) == TierKind.MONTHLY && !it.pending }
-            setState { it.copy(supporter = supporter?.copy(acknowledged = true)) }
+            setState { it.copy(supporter = supporter?.copy(acknowledged = true), supporterPlan = supporter?.let(::planOf)) }
         }
 
         private suspend fun settle(purchase: OwnedPurchase) {
@@ -116,19 +122,30 @@ class TipJarSource
         private suspend fun onPurchaseEvent(event: PurchaseEvent) {
             when (event) {
                 PurchaseEvent.Pending -> setState { it.copy(notice = TipJarNotice.PaymentPending) }
-                PurchaseEvent.Cancelled -> Unit
-                is PurchaseEvent.Failed -> setState { it.copy(notice = TipJarNotice.Failed) }
+                PurchaseEvent.Cancelled -> pendingPlanId = null
+                is PurchaseEvent.Failed -> {
+                    pendingPlanId = null
+                    setState { it.copy(notice = TipJarNotice.Failed) }
+                }
                 is PurchaseEvent.Completed -> {
                     settle(event.purchase)
                     if (kindOf(event.purchase) == TierKind.MONTHLY) {
+                        pendingPlanId?.let { memory.remember(event.purchase.token, it) }
+                        pendingPlanId = null
+                        val purchase = event.purchase.copy(acknowledged = true)
                         setState {
-                            it.copy(supporter = event.purchase.copy(acknowledged = true), notice = TipJarNotice.ThankedForMonthly)
+                            it.copy(supporter = purchase, supporterPlan = planOf(purchase), notice = TipJarNotice.ThankedForMonthly)
                         }
                     } else {
                         setState { it.copy(notice = TipJarNotice.ThankedForTip) }
                     }
                 }
             }
+        }
+
+        private fun planOf(purchase: OwnedPurchase): Tier? {
+            val planId = memory.planFor(purchase.token) ?: return null
+            return state.value.plans.firstOrNull { it.basePlanId == planId }
         }
 
         private fun kindOf(purchase: OwnedPurchase): TierKind =

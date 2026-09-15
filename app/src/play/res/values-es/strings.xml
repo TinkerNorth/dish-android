@@ -9,6 +9,9 @@
     <string name="donate_monthly_body">Se renueva cada mes al precio indicado hasta que canceles. Puedes cancelar en cualquier momento en Google Play, en Pagos y suscripciones.</string>
     <string name="donate_monthly_switch">Elige otro importe para cambiar tu plan. Google Play prorratea el cambio.</string>
     <string name="donate_monthly_active">Apoyas a Dish cada mes. Gracias.</string>
+    <string name="donate_supporter_plan">Plan actual: %1$s</string>
+    <string name="donate_supporter_plan_unknown">Tu plan se renueva cada mes a través de Google Play.</string>
+    <string name="donate_plan_current">✓ %1$s</string>
     <string name="donate_manage">Gestionar en Google Play →</string>
     <string name="donate_per_month">%1$s / mes</string>
     <string name="donate_loading">Conectando con Google Play…</string>
