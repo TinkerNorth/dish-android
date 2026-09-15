@@ -28,6 +28,7 @@ import json
 import os
 import re
 import sys
+import time
 from decimal import Decimal
 from pathlib import Path
 
@@ -39,6 +40,7 @@ PARITY_CURRENCIES = {"USD", "EUR", "GBP", "AUD", "NZD", "CHF", "SGD"}
 ROUND_MANTISSAS = tuple(Decimal(m) for m in ("1", "1.5", "2", "2.5", "3", "4", "5", "6", "10"))
 PRICE_BOUNDS = re.compile(r"Price for ([A-Z]{2}) must be between \D*([\d,.]+) and \D*([\d,.]+)")
 MAX_CLAMPS = 12
+TRANSIENT_ATTEMPTS = 5
 SPEC = Path(__file__).resolve().parent.parent / "play" / "products.json"
 
 
@@ -58,11 +60,30 @@ class PlayApi:
             self.session = requests.Session()
             self.session.headers["Authorization"] = f"Bearer {creds.token}"
 
+    def request(self, method, url, **kwargs):
+        for attempt in range(1, TRANSIENT_ATTEMPTS + 1):
+            try:
+                response = self.session.request(method, url, **kwargs)
+            except OSError as failure:
+                response, reason = None, str(failure)
+            else:
+                if response.status_code < 500:
+                    return response
+                reason = f"{response.status_code}: {response.text[:120]}"
+            if attempt == TRANSIENT_ATTEMPTS:
+                break
+            delay = 2**attempt
+            print(f"::notice::{method} {url.removeprefix(API + '/')} transient failure ({reason}); retrying in {delay}s")
+            time.sleep(delay)
+        if response is None:
+            sys.exit(f"::error::{method} {url} kept failing: {reason}")
+        return response
+
     def get(self, path):
         if self.session is None:
             print(f"  offline: skipping GET {path}")
             return None
-        response = self.session.get(f"{API}/{path}", timeout=30)
+        response = self.request("GET", f"{API}/{path}", timeout=30)
         if response.status_code == 404:
             return None
         if response.status_code != 200:
@@ -81,7 +102,7 @@ class PlayApi:
         print(json.dumps(body, indent=2, ensure_ascii=False))
         if self.dry_run or self.session is None:
             return 200, None
-        response = self.session.request(method, f"{API}/{path}", json=body, timeout=60)
+        response = self.request(method, f"{API}/{path}", json=body, timeout=60)
         if response.status_code != 200:
             return response.status_code, response.text
         return 200, response.json()
@@ -89,8 +110,8 @@ class PlayApi:
     def convert(self, package, money):
         if self.session is None:
             return None
-        response = self.session.post(
-            f"{API}/{package}/pricing:convertRegionPrices", json={"price": money}, timeout=60
+        response = self.request(
+            "POST", f"{API}/{package}/pricing:convertRegionPrices", json={"price": money}, timeout=60
         )
         if response.status_code != 200:
             sys.exit(f"::error::convertRegionPrices failed with {response.status_code}: {response.text[:300]}")
