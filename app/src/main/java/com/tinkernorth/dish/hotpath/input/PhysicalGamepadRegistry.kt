@@ -12,6 +12,7 @@ import android.view.MotionEvent
 import com.tinkernorth.dish.core.input.resolveGamepadQuirk
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.bluetooth.BluetoothConnections
+import com.tinkernorth.dish.source.lights.FrameworkLightProbe
 import com.tinkernorth.dish.source.sensor.PhysicalMotionProbe
 import com.tinkernorth.dish.source.usb.DirectClaimFailure
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -44,6 +45,10 @@ class PhysicalGamepadRegistry
             val disconnectingTimeLeftSec: Int? = null,
             val hasGyro: Boolean = false,
             val hasRumble: Boolean = false,
+            // The pad's driver exposes an RGB light the Android lights API can drive. Only meaningful
+            // on a Bluetooth-transport pad (the API can write a uhid pad's LEDs, not a USB one's);
+            // the capability layer gates on transport, this is just the presence probe.
+            val hasLightbar: Boolean = false,
             val isUsbSynthetic: Boolean = false,
             // A loader placeholder held visible while the manager switches this controller's path. Its
             // backing device (framework or synthetic) is being torn down/brought up; not actionable.
@@ -69,6 +74,7 @@ class PhysicalGamepadRegistry
         data class FrameworkCaps(
             val hasGyro: Boolean,
             val hasRumble: Boolean,
+            val hasLightbar: Boolean = false,
         )
 
         // Build the pure transient projection of a Device. restoreStuck is gated on isUsbSynthetic, so
@@ -153,14 +159,16 @@ class PhysicalGamepadRegistry
             val pid = runCatching { dev.productId }.getOrDefault(0)
             val hasGyro = PhysicalMotionProbe.hasGyro(deviceId)
             val hasRumble = probeRumble(dev)
+            val hasLightbar = FrameworkLightProbe.hasLightbar(dev)
             if (vid != 0 && pid != 0) {
-                lastFrameworkCaps[vpKey(vid, pid)] = FrameworkCaps(hasGyro, hasRumble)
+                lastFrameworkCaps[vpKey(vid, pid)] = FrameworkCaps(hasGyro, hasRumble, hasLightbar)
             }
             return Device(
                 id = deviceId,
                 name = dev.name,
                 hasGyro = hasGyro,
                 hasRumble = hasRumble,
+                hasLightbar = hasLightbar,
                 // A model that just failed a Direct claim re-enumerates with the cause already attached.
                 directFailure = directFailed[vpKey(vid, pid)],
                 vendorId = vid,
@@ -382,16 +390,19 @@ class PhysicalGamepadRegistry
                 return
             }
             cancelDisconnect(deviceId)
-            // Bluetooth Switch Pro Controllers enumerate sensors after onInputDeviceAdded; re-probe to catch a late gyro or vibrator.
+            // Sensors and lights can enumerate after onInputDeviceAdded (Bluetooth Switch Pro gyro; a
+            // pad's light bar as its merged device gains a sub-device); re-probe to catch a late one.
             val nextHasGyro = PhysicalMotionProbe.hasGyro(deviceId)
             val nextHasRumble = probeRumble(dev)
+            val nextHasLightbar = FrameworkLightProbe.hasLightbar(dev)
             val current = _devices.value[deviceId]
             val needsUpdate =
                 current == null ||
                     current.name != dev.name ||
                     current.isDisconnecting ||
                     current.hasGyro != nextHasGyro ||
-                    current.hasRumble != nextHasRumble
+                    current.hasRumble != nextHasRumble ||
+                    current.hasLightbar != nextHasLightbar
             if (needsUpdate) {
                 if (current?.hasGyro != nextHasGyro) {
                     Log.i(

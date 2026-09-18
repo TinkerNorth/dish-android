@@ -287,7 +287,8 @@ class CapabilityComposer
             }
             if (direct) {
                 // A Direct pad has no framework InputDevice to probe; everything, including the
-                // LED / trigger surfaces the framework can never reach, comes from the native tables.
+                // trigger and player-LED surfaces the framework path never reaches, comes from the
+                // native tables. (The light bar is the one framework pads also drive, over Bluetooth.)
                 if (native.modelHasImu(vid, pid)) out += Feature.MOTION
                 if (native.modelHasRumble(vid, pid)) out += Feature.RUMBLE
                 if (native.modelHasLightbar(vid, pid)) out += Feature.LIGHTBAR
@@ -298,6 +299,12 @@ class CapabilityComposer
                 val framework = frameworkFactsFor(device)
                 if (framework?.hasGyro == true) out += Feature.MOTION
                 if (framework?.hasRumble == true) out += Feature.RUMBLE
+                // The light bar rides the Android lights API, which reaches a uhid pad's LEDs but
+                // not a USB one's (the input service cannot write generic-sysfs LED nodes), so it is
+                // advertised on the Bluetooth transport only. A USB pad's bar comes from Direct.
+                if (device.transport == Transport.Bluetooth && framework?.hasLightbar == true) {
+                    out += Feature.LIGHTBAR
+                }
             }
             // The pad's own audio endpoints are Android's to route, not ours: we claim only
             // the HID interface (or, on the framework path, nothing at all), so its USB-audio
@@ -318,7 +325,11 @@ class CapabilityComposer
             if (device.isUsbSynthetic) {
                 registry.frameworkCapsFor(device.vendorId, device.productId)
             } else {
-                PhysicalGamepadRegistry.FrameworkCaps(hasGyro = device.hasGyro, hasRumble = device.hasRumble)
+                PhysicalGamepadRegistry.FrameworkCaps(
+                    hasGyro = device.hasGyro,
+                    hasRumble = device.hasRumble,
+                    hasLightbar = device.hasLightbar,
+                )
             }
 
         fun inputFunctionsFor(

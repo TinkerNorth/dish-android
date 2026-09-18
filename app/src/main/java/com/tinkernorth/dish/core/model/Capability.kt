@@ -34,8 +34,8 @@ enum class Feature(
     // the satellite protocol has no source for it, so its transport crosses it out.
     TRIGGER_RUMBLE(Direction.RECEIVE, null),
 
-    // Actuated on a Direct-claimed DS4/DualSense; the framework exposes no controller
-    // LED, so framework-path pads and the phone never produce it.
+    // Actuated on a Direct-claimed DS4/DualSense, and on a Bluetooth one through the Android
+    // lights API (API 31+); a USB framework pad's bar is unreachable there and comes from Direct.
     LIGHTBAR(Direction.RECEIVE, "lightbar"),
 
     // DualSense adaptive-trigger effect blocks, replayed verbatim into a Direct-claimed

@@ -6,6 +6,7 @@ import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.lights.FrameworkLightGateway
 import com.tinkernorth.dish.source.store.FeedbackActivityStore
 import com.tinkernorth.dish.source.store.MIC_LED_OFF
 import com.tinkernorth.dish.source.store.MIC_LED_ON
@@ -23,14 +24,16 @@ import org.junit.Test
 
 /**
  * The router's one job: land feedback on what the slot can actuate — a
- * Direct-claimed pad's OUT endpoint, or the virtual pad's skin/vibrator.
- * Framework pads have no reachable LED or trigger motors and must swallow
- * everything silently.
+ * Direct-claimed pad's OUT endpoint, the virtual pad's skin/vibrator, or a
+ * framework pad's light bar through the Android lights gateway. The other
+ * framework surfaces (trigger effects, player LEDs, the mic lamp) have no
+ * Android API and are swallowed silently.
  */
 class FeedbackRouterTest {
     private val native: PhysicalInputNative = mockk(relaxed = true)
     private val store = VirtualPadFeedbackStore()
     private val rumble: RumbleRouter = mockk(relaxed = true)
+    private val frameworkLights: FrameworkLightGateway = mockk(relaxed = true)
 
     private fun managerWith(
         handle: Int,
@@ -50,7 +53,7 @@ class FeedbackRouterTest {
     }
 
     private fun router(manager: SatelliteConnectionManager = mockk(relaxed = true)) =
-        FeedbackRouter(manager, native, store, rumble, FeedbackActivityStore())
+        FeedbackRouter(manager, native, store, rumble, FeedbackActivityStore(), frameworkLights)
 
     @Test
     fun `lightbar reaches a Direct-claimed pad through the session resolve`() {
@@ -144,11 +147,35 @@ class FeedbackRouterTest {
     }
 
     @Test
-    fun `framework targets swallow feedback silently`() {
+    fun `a framework pad's lightbar reaches the framework light gateway, not the USB writer or the skin`() {
         router(managerWith(handle = 7, slotId = "9"))
             .dispatchLightbar(7, 0, 1, 2, 3)
+        verify(exactly = 1) { frameworkLights.setColor(9, 1, 2, 3) }
         verify(exactly = 0) { native.sendUsbLightbar(any(), any(), any(), any()) }
         assertEquals(null, store.state.value.lightbarColor)
+    }
+
+    @Test
+    fun `a framework pad still drops the surfaces Android cannot reach`() {
+        // Lightbar is the one framework surface with an Android API; trigger effects, player LEDs
+        // and the mic lamp have none, so they stay dropped for a framework target.
+        val r = router(managerWith(handle = 7, slotId = "9"))
+        r.dispatchTriggerEffects(7, 0, ByteArray(22) { it.toByte() })
+        r.dispatchPlayerLeds(7, 0, 0x1F)
+        r.dispatchMicLed(7, 0, 1)
+        verify(exactly = 0) { native.sendUsbTriggerEffects(any(), any()) }
+        verify(exactly = 0) { native.sendUsbPlayerLeds(any(), any()) }
+        verify(exactly = 0) { native.sendUsbMicMuteLed(any(), any()) }
+        verify(exactly = 0) { frameworkLights.setColor(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `the slot-addressed lightbar reaches the framework gateway for a framework pad`() {
+        // The Moonlight path and the diagnostics bench come in slot-addressed; a framework slot id
+        // must land on the gateway the same way the session-addressed satellite path does.
+        router().dispatchLightbarToSlot("9", 5, 6, 7)
+        verify(exactly = 1) { frameworkLights.setColor(9, 5, 6, 7) }
+        verify(exactly = 0) { native.sendUsbLightbar(any(), any(), any(), any()) }
     }
 
     @Test
