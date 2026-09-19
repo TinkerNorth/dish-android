@@ -217,14 +217,14 @@ class SatelliteConnectionManagerTest {
         runMgrTest { mgr, _ ->
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } returns ok("")
 
             mgr.connect(server)
             scope.testScheduler.advanceUntilIdle()
 
             coVerify(exactly = 0) { discoveryRepo.pair(any(), any(), any(), any(), any()) }
-            coVerify { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any()) }
+            coVerify { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
         }
 
     @Test
@@ -235,7 +235,7 @@ class SatelliteConnectionManagerTest {
             var sentProof: String? = null
             var sentDescriptors: String? = null
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } coAnswers {
                 sentProof = arg(4)
                 sentDescriptors = arg(5)
@@ -261,7 +261,7 @@ class SatelliteConnectionManagerTest {
             val keyHex = "aa".repeat(32)
             every { store.satelliteSharedKey(serverId) } returns keyHex
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } returns
                 ok(
                     """{"connectionId":"conn_1","token":"00000001","sessionSalt":"0102030405060708",""" +
@@ -300,7 +300,7 @@ class SatelliteConnectionManagerTest {
         runMgrTest { mgr, events ->
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } returns reply(401, """{"error":"unauthorized","code":"NOT_PAIRED"}""")
 
             mgr.connect(server, ConnectIntent.AUTO_RECONNECT)
@@ -311,7 +311,7 @@ class SatelliteConnectionManagerTest {
             assertEquals(SatelliteSessionState.Idle, mgr.get(serverId)?.state?.value)
             // Terminal: exactly one PUT, no scheduled retry hammering the same dead key.
             coVerify(exactly = 1) {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             }
             assertTrue(events.none { it is ConnectionEvent.PairingRequired })
         }
@@ -321,7 +321,7 @@ class SatelliteConnectionManagerTest {
         runMgrTest { mgr, _ ->
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } returns ok("")
 
             mgr.connect(server, ConnectIntent.AUTO_RECONNECT)
@@ -329,13 +329,13 @@ class SatelliteConnectionManagerTest {
             scope.testScheduler.runCurrent()
 
             coVerify(atLeast = 2) {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             }
 
             // Terminate the retry chain (a coded 401 is terminal) so the
             // trailing advanceUntilIdle can drain instead of chasing backoffs.
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } returns reply(401, """{"error":"unauthorized","code":"NOT_PAIRED"}""")
         }
 
@@ -344,7 +344,7 @@ class SatelliteConnectionManagerTest {
         runMgrTest { mgr, _ ->
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } returns ok("")
 
             mgr.connect(server, ConnectIntent.USER_INITIATED)
@@ -352,7 +352,7 @@ class SatelliteConnectionManagerTest {
             scope.testScheduler.runCurrent()
 
             coVerify(exactly = 1) {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             }
         }
 
@@ -503,7 +503,7 @@ class SatelliteConnectionManagerTest {
             coEvery { discoveryRepo.pair(any(), any(), any(), any(), "1234") } returns
                 ok("""{"ok":true,"sharedKey":"${"bb".repeat(32)}"}""")
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } returns ok("")
             every { store.satelliteSharedKey(serverId) } returns "bb".repeat(32)
 
@@ -521,7 +521,7 @@ class SatelliteConnectionManagerTest {
         runMgrTest { mgr, _ ->
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } returns ok("")
             mgr.connect(server)
             scope.testScheduler.advanceUntilIdle()
@@ -593,7 +593,7 @@ class SatelliteConnectionManagerTest {
             scope.testScheduler.advanceUntilIdle()
 
             assertEquals("no pairStatus calls after forget", afterForget, pollCount)
-            coVerify(exactly = 0) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any()) }
+            coVerify(exactly = 0) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
             verify(exactly = 0) { controllerRepo.openSocket(any(), any()) }
         }
 
@@ -618,7 +618,7 @@ class SatelliteConnectionManagerTest {
             scope.testScheduler.advanceUntilIdle()
 
             assertEquals("no pairStatus calls after disconnect", afterDisconnect, pollCount)
-            coVerify(exactly = 0) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any()) }
+            coVerify(exactly = 0) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
             verify(exactly = 0) { controllerRepo.openSocket(any(), any()) }
         }
 
@@ -629,7 +629,7 @@ class SatelliteConnectionManagerTest {
             // Auth-shape OK (connectionId + token present) but the token is non-hex,
             // so hexToBytes throws. The session must fail closed, not crash the coroutine.
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } returns ok("""{"connectionId":"c1","token":"zzzz","sessionSalt":"0102030405060708"}""")
 
             mgr.connect(server)
@@ -647,7 +647,7 @@ class SatelliteConnectionManagerTest {
             // Stored key routes both straight to openSession (the IP choke point).
             every { store.satelliteSharedKey(publicId) } returns "aa".repeat(32)
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
-            coEvery { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any()) } returns ok("")
+            coEvery { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) } returns ok("")
 
             mgr.connect(publicServer)
             scope.testScheduler.advanceUntilIdle()
@@ -668,7 +668,7 @@ class SatelliteConnectionManagerTest {
         runMgrTest { mgr, _ ->
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } returns
                 ok(
                     """{"connectionId":"conn_1","token":"00000001","sessionSalt":"0102030405060708",""" +
@@ -705,7 +705,7 @@ class SatelliteConnectionManagerTest {
             assertEquals(9, conn.lastAppliedEpoch)
             assertEquals(SatelliteSessionState.Live, conn.state.value)
             coVerify(exactly = 1) { discoveryRepo.getSession(any(), any(), any(), any(), any()) }
-            coVerify(exactly = 1) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any()) }
+            coVerify(exactly = 1) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
         }
 
     @Test
@@ -713,7 +713,7 @@ class SatelliteConnectionManagerTest {
         runMgrTest { mgr, _ ->
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } returns
                 ok(
                     """{"connectionId":"conn_1","token":"00000001","sessionSalt":"0102030405060708",""" +
@@ -728,21 +728,21 @@ class SatelliteConnectionManagerTest {
             mgr.connect(server)
             scope.testScheduler.runCurrent()
             assertEquals(SatelliteSessionState.Live, mgr.get(serverId)?.state?.value)
-            coVerify(exactly = 1) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any()) }
+            coVerify(exactly = 1) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
 
             sendCounter = COUNTER_REPUSH_THRESHOLD
             scope.testScheduler.advanceTimeBy(1100) // one alive-poll tick
             scope.testScheduler.runCurrent()
 
             // Exactly one full re-PUT: fresh token/salt/key installed, session Live again.
-            coVerify(exactly = 2) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any()) }
+            coVerify(exactly = 2) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
             verify(exactly = 2) { controllerRepo.setConnectionParams(5, any(), any(), any()) }
             assertEquals(SatelliteSessionState.Live, mgr.get(serverId)?.state?.value)
 
             // The rotated counter sits back under the threshold: no re-PUT storm.
             scope.testScheduler.advanceTimeBy(5000)
             scope.testScheduler.runCurrent()
-            coVerify(exactly = 2) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any()) }
+            coVerify(exactly = 2) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
         }
 
     @Test
@@ -750,7 +750,7 @@ class SatelliteConnectionManagerTest {
         runMgrTest { mgr, _ ->
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } returns
                 ok(
                     """{"connectionId":"conn_1","token":"00000001","sessionSalt":"0102030405060708",""" +
@@ -775,7 +775,7 @@ class SatelliteConnectionManagerTest {
             // Terminal: nothing rides the backoff curve afterwards.
             scope.testScheduler.advanceTimeBy(120_000)
             scope.testScheduler.runCurrent()
-            coVerify(exactly = 1) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any()) }
+            coVerify(exactly = 1) { discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any()) }
         }
 
     @Test
@@ -785,7 +785,7 @@ class SatelliteConnectionManagerTest {
             val mouseRequests = mutableListOf<Boolean>()
             val sentDescriptors = mutableListOf<String>()
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } coAnswers {
                 sentDescriptors += arg<String>(5)
                 mouseRequests += arg<Boolean>(6)
@@ -916,7 +916,7 @@ class SatelliteConnectionManagerTest {
         runMgrTest { mgr, events ->
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } returns reply(409, """{"error":"protocol version unsupported","supported":9}""")
 
             mgr.connect(server, ConnectIntent.USER_INITIATED)
@@ -1014,7 +1014,7 @@ class SatelliteConnectionManagerTest {
         runMgrTest { mgr, events ->
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } returns reply(409, """{"error":"protocol version unsupported","supported":9}""")
 
             mgr.connect(server, ConnectIntent.AUTO_RECONNECT)
@@ -1022,7 +1022,7 @@ class SatelliteConnectionManagerTest {
             scope.testScheduler.runCurrent()
 
             coVerify(exactly = 1) {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             }
             assertTrue(events.isEmpty())
         }
@@ -1032,7 +1032,7 @@ class SatelliteConnectionManagerTest {
         runMgrTest { mgr, events ->
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } returns identityMismatch()
 
             mgr.connect(server, ConnectIntent.USER_INITIATED)
@@ -1051,7 +1051,7 @@ class SatelliteConnectionManagerTest {
         runMgrTest { mgr, _ ->
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } returns identityMismatch()
 
             mgr.connect(server, ConnectIntent.AUTO_RECONNECT)
@@ -1059,7 +1059,7 @@ class SatelliteConnectionManagerTest {
             scope.testScheduler.runCurrent()
 
             coVerify(exactly = 1) {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             }
         }
 
@@ -1128,7 +1128,7 @@ class SatelliteConnectionManagerTest {
             val midId = SatelliteConnection.idFor(midServer)
             every { store.satelliteSharedKey(midId) } returns "aa".repeat(32)
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } returns
                 ok(
                     """{"connectionId":"conn_1","token":"00000001","sessionSalt":"0102030405060708",""" +
@@ -1162,7 +1162,7 @@ class SatelliteConnectionManagerTest {
             val midId = SatelliteConnection.idFor(midServer)
             every { store.satelliteSharedKey(midId) } returns "aa".repeat(32)
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } returns unreachable()
 
             mgr.connect(midServer, ConnectIntent.AUTO_RECONNECT)
@@ -1187,7 +1187,7 @@ class SatelliteConnectionManagerTest {
             coVerify { discoveryRepo.putSession("10.0.0.99", any(), any(), any(), any(), any(), any()) }
 
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } returns reply(401, """{"error":"unauthorized","code":"NOT_PAIRED"}""")
         }
 
@@ -1197,7 +1197,7 @@ class SatelliteConnectionManagerTest {
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } coAnswers {
                 gate.await()
                 ok(
@@ -1243,7 +1243,7 @@ class SatelliteConnectionManagerTest {
         runMgrTest { mgr, _ ->
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } returns
                 ok(
                     """{"connectionId":"conn_1","token":"00000001","sessionSalt":"0102030405060708",""" +
@@ -1277,7 +1277,7 @@ class SatelliteConnectionManagerTest {
 
             val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } coAnswers {
                 gate.await()
                 ok(
@@ -1310,7 +1310,7 @@ class SatelliteConnectionManagerTest {
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } coAnswers {
                 gate.await()
                 ok(
@@ -1364,7 +1364,7 @@ class SatelliteConnectionManagerTest {
                 }
             }
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any())
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), any())
             } returns ok("")
 
             mgr.requestApproval(server, "4242")

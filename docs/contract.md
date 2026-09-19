@@ -3,8 +3,10 @@
 The protocol contract (REST surface, UDP streams, crypto, liveness, identity)
 lives in ONE place: **`satellite/docs/contract.md`** in the
 [TinkerNorth/satellite](https://github.com/TinkerNorth/satellite) repo. This
-client implements protocol 2 against it; this file only records the
-Android-side mapping. The former `wire-format.md` is replaced by the contract.
+client implements protocol 3 against it; this file only records the
+Android-side mapping. Of protocol 3's one addition, HAPTIC_AUDIO 0x0015, this
+client takes the satellite's rumble reduction rather than the stream (see
+`core/net/DishProtocol.kt`). The former `wire-format.md` is replaced by the contract.
 
 ## Where the contract lands in this app
 
