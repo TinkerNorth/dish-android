@@ -305,8 +305,9 @@ class FakeSatellite(
             method == "PUT" && plainPath == "/api/connections" -> putSession(headers, body)
             method == "GET" && plainPath.startsWith("/api/connections/") ->
                 reconcile(headers, plainPath.removePrefix("/api/connections/"))
+            method == "DELETE" && plainPath.contains("/controllers/") -> deleteController(headers, plainPath)
             method == "DELETE" && plainPath.startsWith("/api/connections/") -> "200 OK" to """{"ok":true}"""
-            method == "PUT" && plainPath.contains("/controllers/") -> putController(headers, body)
+            method == "PUT" && plainPath.contains("/controllers/") -> putController(headers, plainPath, body)
             method == "GET" && plainPath == "/api/server/capabilities" -> "200 OK" to CAPABILITIES_JSON
             method == "GET" && rawPath.startsWith("/api/pair/status") -> pairStatus()
             else -> "404 Not Found" to """{"error":"unknown route"}"""
@@ -397,8 +398,9 @@ class FakeSatellite(
                 hexToBytes(tokenHex),
             )
         val applied = JSONArray()
-        for (i in 0 until lastControllers.length()) {
-            val ctrl = lastControllers.getJSONObject(i)
+        val declared = lastControllers
+        for (i in 0 until declared.length()) {
+            val ctrl = declared.getJSONObject(i)
             applied.put(
                 JSONObject()
                     .put("ctrlIdx", ctrl.optInt("ctrlIdx"))
@@ -428,8 +430,9 @@ class FakeSatellite(
         if (!authorized(headers)) return UNAUTHORIZED
         reconcileGets += connectionId
         val controllers = JSONArray()
-        for (i in 0 until lastControllers.length()) {
-            val ctrl = lastControllers.getJSONObject(i)
+        val applied = lastControllers
+        for (i in 0 until applied.length()) {
+            val ctrl = applied.getJSONObject(i)
             controllers.put(
                 JSONObject()
                     .put("ctrlIdx", ctrl.optInt("ctrlIdx"))
@@ -449,22 +452,61 @@ class FakeSatellite(
 
     private fun putController(
         headers: Map<String, String>,
+        path: String,
         body: String,
     ): Pair<String, String> {
         if (!authorized(headers)) return UNAUTHORIZED
-        val ctrl = JSONObject(body)
+        val ctrlIdx = controllerIndexOf(path)
+        val ctrl = JSONObject(body).put("ctrlIdx", ctrlIdx)
+        // Applied state, kept the way a real satellite keeps it: a slot
+        // registered on its own joins the session's controller list, so the
+        // heartbeat ack's active bitmap and the reconcile view both carry it.
+        // Without this the first ack after a registration shows the client a
+        // bitmap missing the slot it just registered, which by contract means
+        // the satellite lost topology, and the client re-declares the whole
+        // session with a fresh token in the middle of whatever a test is doing.
+        lastControllers = withController(lastControllers, ctrl)
         val response =
             JSONObject()
                 .put("epoch", epoch)
                 .put(
                     "controller",
                     JSONObject()
-                        .put("ctrlIdx", ctrl.optInt("ctrlIdx"))
+                        .put("ctrlIdx", ctrlIdx)
                         .put("result", "ok")
                         .put("appliedType", ctrl.optInt("type"))
                         .put("motion", JSONObject().put("sinkSupportedForType", true).put("backendOk", true)),
                 )
         return "200 OK" to response.toString()
+    }
+
+    private fun deleteController(
+        headers: Map<String, String>,
+        path: String,
+    ): Pair<String, String> {
+        if (!authorized(headers)) return UNAUTHORIZED
+        lastControllers = withoutController(lastControllers, controllerIndexOf(path))
+        return "200 OK" to """{"ok":true}"""
+    }
+
+    // .../controllers/{ctrlIdx}: the slot is in the path, as the client sends it.
+    private fun controllerIndexOf(path: String): Int = path.substringAfterLast("/controllers/").toInt()
+
+    private fun withController(
+        controllers: JSONArray,
+        ctrl: JSONObject,
+    ): JSONArray = withoutController(controllers, ctrl.optInt("ctrlIdx")).put(ctrl)
+
+    private fun withoutController(
+        controllers: JSONArray,
+        ctrlIdx: Int,
+    ): JSONArray {
+        val kept = JSONArray()
+        for (i in 0 until controllers.length()) {
+            val existing = controllers.getJSONObject(i)
+            if (existing.optInt("ctrlIdx") != ctrlIdx) kept.put(existing)
+        }
+        return kept
     }
 
     private fun udpLoop() {
@@ -531,10 +573,11 @@ class FakeSatellite(
 
     private fun sendHeartbeatAck() {
         val ackEpoch = ackEpochOverride ?: epoch
-        val active = lastControllers.length()
+        val live = lastControllers
+        val active = live.length()
         var bitmap = 0
-        for (i in 0 until lastControllers.length()) {
-            bitmap = bitmap or (1 shl lastControllers.getJSONObject(i).optInt("ctrlIdx"))
+        for (i in 0 until live.length()) {
+            bitmap = bitmap or (1 shl live.getJSONObject(i).optInt("ctrlIdx"))
         }
         val payload =
             ByteBuffer
