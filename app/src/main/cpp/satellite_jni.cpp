@@ -34,6 +34,7 @@
 #include "audio_jitter.h"
 #include "dispatch.h"
 #include "gamepad_input.h"
+#include "heartbeat_thread.h"
 #include "hotpath_latency.h"
 #include "send_counter.h"
 #include "thread_priority.h"
@@ -123,8 +124,7 @@ struct Session {
     std::atomic<uint64_t> counter{1};
     // Linux UDP sendto is thread-safe per-socket; userspace lock would only serialise stalls.
 
-    std::thread heartbeatThread;
-    std::atomic<bool> heartbeatRunning{false};
+    dish::HeartbeatThread heartbeat;
     std::atomic<int> missedAcks{0};
     std::atomic<bool> connectionAlive{true};
     std::atomic<int64_t> lastPingNs{0};
@@ -852,7 +852,7 @@ static bool sendEncrypted(Session* s, uint16_t msgType, const uint8_t* payload,
 
 static void heartbeatLoop(std::shared_ptr<Session> s) {
     LOGI("Heartbeat thread started (sock=%d)", s->udpSock);
-    while (s->heartbeatRunning.load(std::memory_order_relaxed)) {
+    while (s->heartbeat.running()) {
         sendEncrypted(s.get(), MSG_HEARTBEAT_PING, nullptr, 0);
         s->rtt.pings.fetch_add(1, std::memory_order_relaxed);
         if (hotpath::enabled()) {
@@ -871,7 +871,7 @@ static void heartbeatLoop(std::shared_ptr<Session> s) {
         }
 
         for (int i = 0; i < intervalMs / 50; i++) {
-            if (!s->heartbeatRunning.load(std::memory_order_relaxed)) break;
+            if (!s->heartbeat.running()) break;
             usleep(50000);
         }
     }
@@ -984,8 +984,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_closeS
         s = it->second;
         g_sessions.erase(it);
     }
-    s->heartbeatRunning.store(false);
-    if (s->heartbeatThread.joinable()) s->heartbeatThread.join();
+    s->heartbeat.stop();
     // Before the codecs go: a speaker frame already queued still holds a strong
     // reference to this session, and decoding it now would deliver audio to a
     // slot that no longer exists.
@@ -1153,19 +1152,17 @@ JNIEXPORT void JNICALL
 Java_com_tinkernorth_dish_core_jni_SatelliteNative_startHeartbeat(JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return;
-    if (s->heartbeatRunning.load()) return;
-    s->heartbeatRunning.store(true);
+    if (s->heartbeat.running()) return;
     s->missedAcks.store(0);
     s->connectionAlive.store(true);
-    s->heartbeatThread = std::thread(heartbeatLoop, s);
+    s->heartbeat.start([s] { heartbeatLoop(s); });
 }
 
 JNIEXPORT void JNICALL
 Java_com_tinkernorth_dish_core_jni_SatelliteNative_stopHeartbeat(JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return;
-    s->heartbeatRunning.store(false);
-    if (s->heartbeatThread.joinable()) s->heartbeatThread.join();
+    s->heartbeat.stop();
 }
 
 JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_isConnectionAlive(

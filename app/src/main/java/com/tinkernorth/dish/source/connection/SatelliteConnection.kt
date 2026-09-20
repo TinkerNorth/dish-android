@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicReference
 
 // Contract §Crypto: counters never wrap; clients SHOULD re-PUT once their send
 // counter crosses 0xF0000000. Rotating token/salt/key restarts the counter at 1.
@@ -66,11 +67,11 @@ class SatelliteConnection(
         val connectionId: String,
     )
 
-    @Volatile private var live: LiveHandle? = null
+    private val live = AtomicReference<LiveHandle?>(null)
 
-    val connectionId: String? get() = live?.connectionId
+    val connectionId: String? get() = live.get()?.connectionId
 
-    val handle: Int get() = live?.handle ?: -1
+    val handle: Int get() = live.get()?.handle ?: -1
 
     // The epoch the satellite stamped on our last PUT/GET: the reference the
     // heartbeat-ack epoch is compared against.
@@ -152,7 +153,7 @@ class SatelliteConnection(
     ) {
         if (_state.value != SatelliteSessionState.Linking) return
         // Publish tuple before state flip so concurrent sendReport never sees Live with null/-1.
-        live = LiveHandle(handle, connectionId)
+        live.set(LiveHandle(handle, connectionId))
         lastAppliedEpoch = epoch
         this.mouseControlGranted = mouseControlGranted
         applyResults(applied, onApplyFailures)
@@ -210,7 +211,7 @@ class SatelliteConnection(
     // (failed replug, reap, sibling close). Self-heal via the reconcile
     // endpoint instead of streaming into a dead slot.
     private fun checkReconcile(onReconcileNeeded: () -> Unit) {
-        val snap = live ?: return
+        val snap = live.get() ?: return
         val serverEpoch = controllerRepo.getServerEpoch(snap.handle)
         if (serverEpoch < 0) return // no enriched ack seen yet
         val serverBitmap = controllerRepo.getActiveBitmap(snap.handle)
@@ -228,7 +229,7 @@ class SatelliteConnection(
         alreadyRequested: Boolean,
         onRekeyNeeded: () -> Unit,
     ): Boolean {
-        val snap = live ?: return alreadyRequested
+        val snap = live.get() ?: return alreadyRequested
         if (!counterNeedsRepush(controllerRepo.getSendCounter(snap.handle))) return false
         if (!alreadyRequested) onRekeyNeeded()
         return true
@@ -249,14 +250,13 @@ class SatelliteConnection(
     }
 
     internal fun markDisconnected() {
-        val snap = live
+        // Null tuple before native teardown so concurrent sendReport bails instead of racing a half-closed handle.
+        val snap = live.getAndSet(null)
         if (_state.value == SatelliteSessionState.Idle && snap == null) return
         aliveJob?.cancel()
         aliveJob = null
         ackJob?.cancel()
         ackJob = null
-        // Null tuple before native teardown so concurrent sendReport bails instead of racing a half-closed handle.
-        live = null
         lastAppliedEpoch = -1
         mouseControlGranted = false
         if (snap != null) {
@@ -484,7 +484,7 @@ class SatelliteConnection(
         rx: Int,
         ry: Int,
     ) {
-        val snap = live ?: return
+        val snap = live.get() ?: return
         val info = _slots.value[slotId] ?: return
         // Gate: reports for an unapplied descriptor would be dropped server-side as unknown.
         if (!info.registered) return
@@ -504,7 +504,7 @@ class SatelliteConnection(
         slotId: String,
         pcmMono: ShortArray,
     ): Boolean {
-        val snap = live ?: return false
+        val snap = live.get() ?: return false
         val info = _slots.value[slotId] ?: return false
         // Same gate as every other stream: audio for an unapplied descriptor is dropped
         // server-side as an unknown controller, so it never reaches the wire from here.
@@ -523,7 +523,7 @@ class SatelliteConnection(
         accelZ: Short,
         timestampDeltaUs: Int,
     ) {
-        val snap = live ?: return
+        val snap = live.get() ?: return
         val info = _slots.value[slotId] ?: return
         if (!info.registered) return
         controllerRepo.sendMotion(
@@ -544,7 +544,7 @@ class SatelliteConnection(
         level: Int,
         status: Int,
     ) {
-        val snap = live ?: return
+        val snap = live.get() ?: return
         val info = _slots.value[slotId] ?: return
         if (!info.registered) return
         controllerRepo.sendBattery(snap.handle, info.controllerIndex, level, status)
@@ -567,7 +567,7 @@ class SatelliteConnection(
         eventTimeMs: Long,
         scrollDelta: Short,
     ) {
-        val snap = live ?: return
+        val snap = live.get() ?: return
         val info = _slots.value[slotId] ?: return
         if (!info.registered) return
         controllerRepo.sendTouchpad(
