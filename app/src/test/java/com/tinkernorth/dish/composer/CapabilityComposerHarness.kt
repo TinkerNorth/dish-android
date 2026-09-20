@@ -53,6 +53,7 @@ internal fun device(
     productId: Int = 0,
     isUsbSynthetic: Boolean = false,
     transport: Transport = Transport.Usb,
+    touchpadDeviceId: Int? = null,
 ) = PhysicalGamepadRegistry.Device(
     id = id,
     name = "Pad-$id",
@@ -62,6 +63,7 @@ internal fun device(
     productId = productId,
     isUsbSynthetic = isUsbSynthetic,
     transport = transport,
+    touchpadDeviceId = touchpadDeviceId,
 )
 
 @Suppress("LongParameterList")

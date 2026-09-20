@@ -329,6 +329,7 @@ class CapabilityComposer
                     hasGyro = device.hasGyro,
                     hasRumble = device.hasRumble,
                     hasLightbar = device.hasLightbar,
+                    hasTouchpad = device.touchpadDeviceId != null,
                 )
             }
 
@@ -359,10 +360,14 @@ class CapabilityComposer
                 known = framework != null,
                 rumble = framework?.hasRumble == true,
                 gyro = framework?.hasGyro == true,
-                touchpad = false,
+                // The surface the framework exposed, read through pointer capture; only a
+                // model with a trackpad is routed through it (deviceTouchpadSource).
+                touchpad = framework?.hasTouchpad == true && native.modelHasTouchpad(vid, pid),
             )
         }
 
+        // The app reads the pad's surface itself on Direct (the raw report) and, on a framework
+        // path, through pointer capture of the surface Android exposed (Device.touchpadDeviceId).
         private fun deviceTouchpadSource(
             device: PhysicalGamepadRegistry.Device,
             direct: Boolean = device.isUsbSynthetic,
@@ -370,7 +375,7 @@ class CapabilityComposer
             TouchpadRouting.sourceFor(
                 isVirtual = false,
                 padHasTouchpad = native.modelHasTouchpad(device.vendorId, device.productId),
-                padCaptured = direct,
+                padCaptured = direct || (!device.isUsbSynthetic && device.touchpadDeviceId != null),
             )
 
         /** Who produces touch for [slotId] right now: the pad, the phone screen, or nobody. */

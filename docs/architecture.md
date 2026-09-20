@@ -325,10 +325,14 @@ each layer reads its own source of truth:
   vibrator for rumble; a physical pad rumbles only with its own motor (routing
   never falls back to the phone for a physical controller, see "Rumble path").
   Touch is pad-first: a trackpad-bearing pad (DS4/DualSense families) sources
-  its own touch, which the app can only read on the USB-direct path (the
-  framework paths surface it as a system mouse); the phone screen substitutes
-  only for a pad with no trackpad at all, never alongside one
-  (`composer/TouchpadRouting.sourceFor`, one producer per slot).
+  its own touch, read from the raw report on the USB-direct path and, on a
+  framework path, through pointer capture of the surface Android exposed
+  (the registry's `Device.touchpadDeviceId`; `hotpath/overlay/PadTouchpadCapture`
+  holds capture only while such a pad is bound to a live link and the window
+  is focused, since the cursor stops while it is held); the phone screen
+  substitutes only for a pad with no trackpad at all, never alongside one
+  (`composer/TouchpadRouting.sourceFor`, one producer per slot). Pre-26 has no
+  pointer capture, so there the surface stays a system mouse and is not offered.
 - **transport** (`composer/TransportProfiles.kt`, static): a Bluetooth host
   carries only the gamepad axes; a Satellite carries everything.
 - **type** (the emulated controller): the satellite's own per-type features from

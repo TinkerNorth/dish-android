@@ -21,6 +21,15 @@ computer. Those lines say "update Satellite too".
   "Controller sound" switch and the host's own haptics switch, and shows as a
   Haptics row where it applies. Update Satellite too. The app now speaks
   protocol 3; older Satellites keep working as before.
+- **The touchpad works without Direct.** A DualShock 4 or DualSense on
+  Bluetooth, or on USB in Standard mode, used to give the game nothing from
+  its touchpad: Android treats the pad's surface as a mouse. While such a
+  controller is streaming and the app is on screen, the app now reads the
+  surface itself (Android's pointer capture, Android 8 and up) and forwards
+  both fingers and the click, exactly as it does in Direct mode; the pad's
+  touchpad stops moving Android's cursor for as long as that lasts, and goes
+  back to being a mouse when the app leaves the screen or the controller
+  disconnects. It works over Satellite and over Moonlight hosts alike.
 - **A Direct controller shows its own battery.** In Direct mode the app
   reads the DualShock 4, DualSense and Switch Pro's charge straight out of
   their input reports (the same bytes Linux's own drivers read), so the

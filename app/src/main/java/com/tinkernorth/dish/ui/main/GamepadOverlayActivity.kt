@@ -16,7 +16,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.core.input.hidToXusb
@@ -51,8 +50,6 @@ class GamepadOverlayActivity :
     BaseInputOverlayActivity(),
     GamepadTouchView.Listener {
     @Inject lateinit var btRegistry: BluetoothGamepadRegistry
-
-    @Inject lateinit var capabilityComposer: CapabilityComposer
 
     @Inject lateinit var virtualFeedback: com.tinkernorth.dish.source.store.VirtualPadFeedbackStore
 

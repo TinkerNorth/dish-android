@@ -49,6 +49,16 @@ class PhysicalGamepadRegistry
             // on a Bluetooth-transport pad (the API can write a uhid pad's LEDs, not a USB one's);
             // the capability layer gates on transport, this is just the presence probe.
             val hasLightbar: Boolean = false,
+            // The InputDevice carrying this pad's own touch surface on the framework path: the
+            // pad's merged device itself when the kernel driver's touchpad node merged into it
+            // (hid-playstation, hid-sony: same phys and uniq, so Android folds them), a sibling
+            // device of the same identity otherwise, null when the framework exposes none. What
+            // marks it is a pointer source: Android reads such a surface as a system mouse until
+            // a view captures the pointer, which is how the app reads it as fingers
+            // (hotpath/overlay/PadTouchpadCapture). Never set on a Direct synthetic, whose raw
+            // reports carry the surface; and only a model with a trackpad can be routed through
+            // it (the composer's TouchpadRouting gate).
+            val touchpadDeviceId: Int? = null,
             val isUsbSynthetic: Boolean = false,
             // A loader placeholder held visible while the manager switches this controller's path. Its
             // backing device (framework or synthetic) is being torn down/brought up; not actionable.
@@ -75,6 +85,8 @@ class PhysicalGamepadRegistry
             val hasGyro: Boolean,
             val hasRumble: Boolean,
             val hasLightbar: Boolean = false,
+            // The framework exposed the pad's touch surface (see Device.touchpadDeviceId).
+            val hasTouchpad: Boolean = false,
         )
 
         // Build the pure transient projection of a Device. restoreStuck is gated on isUsbSynthetic, so
@@ -132,7 +144,12 @@ class PhysicalGamepadRegistry
 
         override fun onInputDeviceAdded(deviceId: Int) {
             val dev = InputDevice.getDevice(deviceId) ?: return
-            if (!isGamepad(dev)) return
+            if (!isGamepad(dev)) {
+                // A pad's touch surface can enumerate as a device of its own, a beat after the
+                // pad: re-resolve the surfaces so the pad it belongs to picks it up.
+                if (hasPointerSource(dev.sources)) refreshTouchpadSurfaces()
+                return
+            }
             pushDeadzones(dev)
             cancelDisconnect(deviceId)
             val device = makeRoutedDevice(deviceId, dev)
@@ -160,8 +177,10 @@ class PhysicalGamepadRegistry
             val hasGyro = PhysicalMotionProbe.hasGyro(deviceId)
             val hasRumble = probeRumble(dev)
             val hasLightbar = FrameworkLightProbe.hasLightbar(dev)
+            val touchpadDeviceId = touchpadSurfaceFor(deviceId, dev, vid, pid)
             if (vid != 0 && pid != 0) {
-                lastFrameworkCaps[vpKey(vid, pid)] = FrameworkCaps(hasGyro, hasRumble, hasLightbar)
+                lastFrameworkCaps[vpKey(vid, pid)] =
+                    FrameworkCaps(hasGyro, hasRumble, hasLightbar, hasTouchpad = touchpadDeviceId != null)
             }
             return Device(
                 id = deviceId,
@@ -169,12 +188,49 @@ class PhysicalGamepadRegistry
                 hasGyro = hasGyro,
                 hasRumble = hasRumble,
                 hasLightbar = hasLightbar,
+                touchpadDeviceId = touchpadDeviceId,
                 // A model that just failed a Direct claim re-enumerates with the cause already attached.
                 directFailure = directFailed[vpKey(vid, pid)],
                 vendorId = vid,
                 productId = pid,
                 transport = resolveTransport(dev.name, vid, pid),
             )
+        }
+
+        // The pad's own surface, the merged device first (the common case), then a sibling
+        // device of the same identity. Pointer capture is what turns the surface into finger
+        // positions, and it does not exist before API 26: there the surface stays a system
+        // mouse and the app reports none, so nothing offers what it cannot read.
+        private fun touchpadSurfaceFor(
+            deviceId: Int,
+            dev: InputDevice,
+            vid: Int,
+            pid: Int,
+        ): Int? {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null
+            if (hasPointerSource(dev.sources)) return deviceId
+            if (vid == 0 && pid == 0) return null
+            return InputDevice.getDeviceIds().firstOrNull { id ->
+                if (id == deviceId) return@firstOrNull false
+                val other = InputDevice.getDevice(id) ?: return@firstOrNull false
+                hasPointerSource(other.sources) &&
+                    !isGamepad(other) &&
+                    runCatching { other.vendorId }.getOrDefault(0) == vid &&
+                    runCatching { other.productId }.getOrDefault(0) == pid
+            }
+        }
+
+        // Re-resolve every framework pad's surface; cheap (a few devices) and only on a
+        // pointer-bearing device's arrival or departure.
+        private fun refreshTouchpadSurfaces() {
+            _devices.update { map ->
+                map.mapValues { (id, d) ->
+                    if (d.isUsbSynthetic || d.transitioning || d.needsReplug) return@mapValues d
+                    val dev = InputDevice.getDevice(id) ?: return@mapValues d
+                    val next = touchpadSurfaceFor(id, dev, d.vendorId, d.productId)
+                    if (next == d.touchpadDeviceId) d else d.copy(touchpadDeviceId = next)
+                }
+            }
         }
 
         private fun probeRumble(dev: InputDevice): Boolean {
@@ -377,7 +433,12 @@ class PhysicalGamepadRegistry
         }
 
         override fun onInputDeviceRemoved(deviceId: Int) {
-            val current = _devices.value[deviceId] ?: return
+            val current = _devices.value[deviceId]
+            if (current == null) {
+                // Not a pad: perhaps a pad's separately enumerated surface going away.
+                if (_devices.value.values.any { it.touchpadDeviceId == deviceId }) refreshTouchpadSurfaces()
+                return
+            }
             if (isModelTransitioning(current)) holdAsTransitioning(deviceId) else scheduleDisconnect(current)
         }
 
@@ -396,13 +457,15 @@ class PhysicalGamepadRegistry
             val nextHasRumble = probeRumble(dev)
             val nextHasLightbar = FrameworkLightProbe.hasLightbar(dev)
             val current = _devices.value[deviceId]
+            val nextTouchpad = touchpadSurfaceFor(deviceId, dev, current?.vendorId ?: 0, current?.productId ?: 0)
             val needsUpdate =
                 current == null ||
                     current.name != dev.name ||
                     current.isDisconnecting ||
                     current.hasGyro != nextHasGyro ||
                     current.hasRumble != nextHasRumble ||
-                    current.hasLightbar != nextHasLightbar
+                    current.hasLightbar != nextHasLightbar ||
+                    current.touchpadDeviceId != nextTouchpad
             if (needsUpdate) {
                 if (current?.hasGyro != nextHasGyro) {
                     Log.i(
@@ -572,6 +635,14 @@ class PhysicalGamepadRegistry
             fun isSyntheticId(deviceId: Int): Boolean = deviceId < 0
         }
     }
+
+// A device Android reads as a pointer: a touchpad in its default (system mouse) mode reports
+// SOURCE_MOUSE, and only switches to SOURCE_TOUCHPAD while a view holds pointer capture, so the
+// mouse bit is the presence test and the touchpad bit the captured-event test. Lifted out so it
+// is JVM-testable like the gamepad classifier.
+internal fun hasPointerSource(sources: Int): Boolean =
+    (sources and InputDevice.SOURCE_MOUSE) == InputDevice.SOURCE_MOUSE ||
+        (sources and InputDevice.SOURCE_TOUCHPAD) == InputDevice.SOURCE_TOUCHPAD
 
 // Lifted out so the classifier is JVM-testable without mocking InputDevice (final class with many native methods).
 internal fun isGamepadDeviceFromCapabilities(
