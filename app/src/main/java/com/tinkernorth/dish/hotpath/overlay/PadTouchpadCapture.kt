@@ -77,7 +77,8 @@ class PadTouchpadCapture(
     // pool, the same shape as the overlays'. Started on the first capture, since every screen
     // hosts one of these and most never capture anything.
     private var resendThread: HandlerThread? = null
-    private var resendJob: Job? = null
+
+    @Volatile private var resendJob: Job? = null
 
     // Resend-thread-only.
     private val pacers = HashMap<String, ResendPacer>()
@@ -117,8 +118,11 @@ class PadTouchpadCapture(
             startResend()
         } else {
             if (rootView.hasPointerCapture()) rootView.releasePointerCapture()
+            // The lift is a final frame like any other, and the resend loop
+            // is what heals a lost one: it keeps ticking until the burst has
+            // gone out and forgets the slot itself (resendDue). Stopping it
+            // here would send the lift exactly once.
             liftAll()
-            stopResend()
         }
     }
 
@@ -219,16 +223,26 @@ class PadTouchpadCapture(
 
     // Resend thread. A changed frame is re-sent EDGE_BURST_RESENDS ticks in a row, then on the
     // slow keepalive, so a lost finger-up heals at the next tick; the receiver drops a duplicate
-    // by its equal event time.
+    // by its equal event time. A slot no longer routed (capture released, pad unbound) is kept
+    // only through its lift's burst, then forgotten: nothing should keep pacing a surface the
+    // app stopped reading. With every slot forgotten the loop stops itself; the next capture
+    // starts it again.
     private fun resendDue() {
+        val routedSlots = routes.values.toSet()
         for ((slotId, frame) in lastFrame) {
-            val sink = reachability.state.value[slotId] ?: continue
+            val sink = reachability.state.value[slotId]
             val changed = frame != lastResent[slotId]
             if (changed) lastResent[slotId] = frame
             val pacer = pacers.getOrPut(slotId) { ResendPacer() }
-            if (!pacer.resendDue(changed)) continue
-            send(sink, slotId, frame)
+            val due = pacer.resendDue(changed)
+            if (due && sink != null) send(sink, slotId, frame)
+            if (!due && slotId !in routedSlots) {
+                lastFrame.remove(slotId)
+                lastResent.remove(slotId)
+                pacers.remove(slotId)
+            }
         }
+        if (lastFrame.isEmpty() && !PadTouchpadCapturePolicy.shouldCapture(routes, focused)) stopResend()
     }
 
     private fun send(
