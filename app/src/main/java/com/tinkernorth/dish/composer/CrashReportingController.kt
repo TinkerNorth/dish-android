@@ -43,6 +43,15 @@ class CrashReportingController
             }
         }
 
+        fun recordNonFatal(throwable: Throwable) {
+            if (FirebaseApp.getApps(context).isEmpty()) return
+            runCatching {
+                FirebaseCrashlytics.getInstance().recordException(throwable)
+            }.onFailure {
+                Log.e(TAG, "Failed to record a non-fatal", it)
+            }
+        }
+
         private companion object {
             const val TAG = "CrashReportingCtrl"
         }
