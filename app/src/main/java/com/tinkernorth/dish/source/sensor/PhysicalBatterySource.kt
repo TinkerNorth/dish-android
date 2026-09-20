@@ -2,19 +2,15 @@
 
 package com.tinkernorth.dish.source.sensor
 
-import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.os.Build
 import android.util.Log
-import android.view.InputDevice
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.composer.PhysicalReachabilityComposer
-import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.source.connection.TelemetrySink
@@ -36,37 +32,21 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-@Suppress("LongParameterList")
 class PhysicalBatterySource
-    internal constructor(
-        private val context: Context,
+    @Inject
+    constructor(
+        @ApplicationContext private val context: Context,
         private val registry: PhysicalGamepadRegistry,
         private val reachability: PhysicalReachabilityComposer,
         private val statusStore: BatteryStatusStore,
         private val scope: CoroutineScope,
-        private val native: PhysicalInputNative,
-        private val sdkInt: Int,
-        private val lookup: (deviceId: Int) -> InputDevice?,
+        private val reader: PadBatteryReader,
     ) : DefaultLifecycleObserver {
-        @Inject
-        constructor(
-            @ApplicationContext context: Context,
-            registry: PhysicalGamepadRegistry,
-            reachability: PhysicalReachabilityComposer,
-            statusStore: BatteryStatusStore,
-            scope: CoroutineScope,
-            native: PhysicalInputNative,
-        ) : this(context, registry, reachability, statusStore, scope, native, Build.VERSION.SDK_INT, InputDevice::getDevice)
-
         private val phoneBattery = PhoneBatterySource(context)
-
-        private val bluetoothBattery = BluetoothBatteryReader(context)
 
         private val validator = BatteryValidator()
 
         private val polls = Channel<Unit>(Channel.CONFLATED)
-
-        private val frameworkDevices = HashMap<Int, InputDevice>()
 
         private var reachableJob: Job? = null
         private var devicesJob: Job? = null
@@ -165,25 +145,18 @@ class PhysicalBatterySource
 
         private fun pollOnce() {
             val devices = registry.devices.value
-            frameworkDevices.keys.retainAll(devices.keys)
+            reader.retain(devices.keys)
             val phone = phoneBattery.readBattery()
             for ((deviceId, device) in devices) {
                 if (device.transitioning || device.isDisconnecting) continue
                 val slotId = deviceId.toString()
-                val routed = BatteryRouting.route(device.transport, controllerSample(device), phone)
+                val routed = BatteryRouting.route(device.transport, reader.sample(device), phone)
                 publishDisplay(slotId, routed.display)
                 val conn = reachable[slotId] ?: continue
                 validator.publish(routed.wire) { s ->
                     conn.sendBattery(slotId, s.level, s.status)
                 }
             }
-        }
-
-        private fun frameworkDevice(deviceId: Int): InputDevice? {
-            frameworkDevices[deviceId]?.let { return it }
-            val device = lookup(deviceId) ?: return null
-            frameworkDevices[deviceId] = device
-            return device
         }
 
         private fun publishDisplay(
@@ -195,38 +168,6 @@ class PhysicalBatterySource
                 return
             }
             validator.publish(sample) { s -> statusStore.put(slotId, s) }
-        }
-
-        // A Direct-claimed pad has no InputDevice to ask; its own reader decoded the charge out
-        // of the last report, and the card shows that. (The wire is the USB rule's, see
-        // BatteryRouting: the phone battery, whatever the pad says.)
-        private fun controllerSample(device: PhysicalGamepadRegistry.Device): BatterySample? =
-            if (device.isUsbSynthetic) directPadSample(device.id) else frameworkPadSample(device.id)
-
-        private fun directPadSample(deviceId: Int): BatterySample? {
-            val sample = PhysicalBatteryMapping.directPadSample(native.getDirectPadBattery(deviceId))
-            if (sample != null) Log.d(TAG, "pad $deviceId own battery (Direct) $sample")
-            return sample
-        }
-
-        @SuppressLint("NewApi")
-        private fun frameworkPadSample(deviceId: Int): BatterySample? {
-            val device = frameworkDevice(deviceId) ?: return null
-            if (sdkInt >= Build.VERSION_CODES.S) {
-                val state = device.batteryState
-                val sample =
-                    PhysicalBatteryMapping.controllerSample(
-                        isPresent = state.isPresent,
-                        capacity = state.capacity,
-                        status = state.status,
-                    )
-                if (sample != null) Log.d(TAG, "pad $deviceId own battery $sample")
-                return sample
-            }
-            // API 24-30: no getBatteryState(), use BT reflection fallback.
-            val level = bluetoothBattery.readLevel(device.name) ?: return null
-            Log.d(TAG, "pad $deviceId BT battery level=$level (API<31 reflection)")
-            return BatterySample(level, BatteryValidator.STATUS_UNKNOWN)
         }
 
         private fun chargingStatusOf(intent: Intent): Int =

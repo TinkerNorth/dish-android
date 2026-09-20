@@ -43,6 +43,10 @@ class PhysicalBatterySourceTest {
         }
     private val store = BatteryStatusStore()
     private val native = mockk<PhysicalInputNative>(relaxed = true)
+    private val bluetoothBattery =
+        mockk<BluetoothBatteryReader> {
+            every { readLevel(any()) } returns null
+        }
     private val receiver = slot<BroadcastReceiver>()
     private val context =
         mockk<Context>(relaxed = true) {
@@ -88,16 +92,19 @@ class PhysicalBatterySourceTest {
         transport = transport,
     )
 
-    private fun source(sdkInt: Int = 31): PhysicalBatterySource =
-        PhysicalBatterySource(context, registry, reachability, store, scope, native, sdkInt) { deviceId ->
-            lookups += deviceId
-            pads[deviceId]
-        }
+    private fun source(): PhysicalBatterySource {
+        val reader =
+            PadBatteryReader(native, bluetoothBattery, sdkInt = 31) { deviceId ->
+                lookups += deviceId
+                pads[deviceId]
+            }
+        return PhysicalBatterySource(context, registry, reachability, store, scope, reader)
+    }
 
     private fun settle() = scope.testScheduler.runCurrent()
 
-    private fun started(sdkInt: Int = 31): PhysicalBatterySource {
-        val s = source(sdkInt)
+    private fun started(): PhysicalBatterySource {
+        val s = source()
         s.onStart(owner)
         settle()
         return s
@@ -183,15 +190,6 @@ class PhysicalBatterySourceTest {
         assertEquals(50, store.samples.value["7"]?.level)
         reachableChange("cached")
         assertEquals(misses + 1, lookups.size)
-    }
-
-    @Test
-    fun `below API 31 the battery state API is never touched`() {
-        pads[7] = pad(7)
-        deviceFlow.value = mapOf(7 to device(7))
-        started(sdkInt = 30)
-        assertEquals(listOf(7), lookups)
-        assertTrue(batteryReads.isEmpty())
     }
 
     @Test
