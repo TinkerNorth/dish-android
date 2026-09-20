@@ -2,7 +2,6 @@
 
 package com.tinkernorth.dish.ui.setup
 
-import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import androidx.activity.addCallback
@@ -10,7 +9,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
-import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -270,7 +268,7 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
     }
 
     private fun openGitHub() {
-        startActivity(Intent(Intent.ACTION_VIEW, getString(R.string.url_github).toUri()))
+        openExternalUrl(getString(R.string.url_github))
     }
 
     // Request before scanning: a pre-grant blocked scan would shadow the real one via the single-flight guard.
