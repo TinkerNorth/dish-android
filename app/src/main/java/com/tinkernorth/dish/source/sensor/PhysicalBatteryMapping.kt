@@ -27,6 +27,23 @@ object PhysicalBatteryMapping {
         return BatterySample(level, statusToWire(status))
     }
 
+    /**
+     * A Direct-claimed pad's reading, as the native reader packs it (level shl 8 or status, in
+     * the wire's own codes, or -1 for none). The decoder already speaks the wire's codes, so
+     * there is nothing to map beyond unpacking; an unknown level with an unknown status is a
+     * fault reading the pad did report, and it clears the card rather than leaving a stale
+     * number.
+     */
+    fun directPadSample(packed: Int): BatterySample? {
+        if (packed < 0) return null
+        val level = (packed ushr 8) and 0xFF
+        val status = packed and 0xFF
+        if (level == BatteryValidator.LEVEL_UNKNOWN && status == BatteryValidator.STATUS_UNKNOWN) {
+            return null
+        }
+        return BatterySample(level, status)
+    }
+
     fun statusToWire(status: Int): Int =
         when (status) {
             ANDROID_STATUS_CHARGING -> BatteryValidator.STATUS_CHARGING

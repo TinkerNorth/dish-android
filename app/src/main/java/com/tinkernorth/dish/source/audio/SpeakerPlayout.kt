@@ -27,11 +27,18 @@ interface SpeakerPlayoutSession : AutoCloseable {
     override fun close()
 }
 
-/** Opens one output at the wire's format, or reports that this device would not. */
+/**
+ * Opens one output, or reports that this device would not. [channels] is the width to open the
+ * endpoint at (the wire's stereo, or a DualSense's own 4) and [lane] which pair of it the
+ * session's stereo windows land in; the other pair stays at zero. The same endpoint may be open
+ * more than once, one session per lane, and the platform mixes them.
+ */
 fun interface SpeakerPlayoutSink {
     fun open(
         frameSamples: Int,
         preferredDeviceId: Int,
+        channels: Int,
+        lane: PlayoutLane,
     ): SpeakerPlayoutSession?
 }
 
@@ -61,22 +68,55 @@ class AudioTrackSpeakerSink
         override fun open(
             frameSamples: Int,
             preferredDeviceId: Int,
+            channels: Int,
+            lane: PlayoutLane,
         ): SpeakerPlayoutSession? {
-            val minBytes = AudioTrack.getMinBufferSize(SAMPLE_RATE, CHANNEL_MASK, ENCODING)
-            if (minBytes <= 0) return null
+            // A lane needs its pair to exist at the offset it writes, and the platform only
+            // has masks for the two widths a pad's endpoint comes in.
+            val channelMask = channelMaskFor(channels)
+            if (channelMask == null || lane.pairOffset + PlayoutLane.STEREO_CHANNELS > channels) return null
             // Room for a few windows so a scheduling hiccup on the dispatch thread does not empty
-            // the track; the start threshold below is what decides the latency, not this.
-            val bufferBytes = max(minBytes, frameSamples * BYTES_PER_SAMPLE * BUFFERED_FRAMES)
-            val track = buildTrack(bufferBytes) ?: return null
+            // the track; the start threshold below is what decides the latency, not this. Sized
+            // at the device's width: a quad window is twice a stereo one.
+            val deviceFrameSamples = frameSamples / PlayoutLane.STEREO_CHANNELS * channels
+            val track = openTrack(deviceFrameSamples, channelMask) ?: return null
+            preferOwnEndpoint(track, preferredDeviceId)
+            return TrackSession(
+                track,
+                startThresholdSamples = deviceFrameSamples * START_THRESHOLD_FRAMES,
+                channels = channels,
+                pairOffset = lane.pairOffset,
+            )
+        }
+
+        private fun channelMaskFor(channels: Int): Int? =
+            when (channels) {
+                PlayoutLane.STEREO_CHANNELS -> AudioFormat.CHANNEL_OUT_STEREO
+                PlayoutLane.QUAD_CHANNELS -> AudioFormat.CHANNEL_OUT_QUAD
+                else -> null
+            }
+
+        // An initialized track at the device's width, or null when the platform refused the
+        // format or the track never came up (released here, so nothing leaks).
+        private fun openTrack(
+            deviceFrameSamples: Int,
+            channelMask: Int,
+        ): AudioTrack? {
+            val minBytes = AudioTrack.getMinBufferSize(SAMPLE_RATE, channelMask, ENCODING)
+            if (minBytes <= 0) return null
+            val bufferBytes = max(minBytes, deviceFrameSamples * BYTES_PER_SAMPLE * BUFFERED_FRAMES)
+            val track = buildTrack(bufferBytes, channelMask) ?: return null
             if (track.state != AudioTrack.STATE_INITIALIZED) {
                 track.release()
                 return null
             }
-            preferOwnEndpoint(track, preferredDeviceId)
-            return TrackSession(track, startThresholdSamples = frameSamples * START_THRESHOLD_FRAMES)
+            return track
         }
 
-        private fun buildTrack(bufferBytes: Int): AudioTrack? =
+        private fun buildTrack(
+            bufferBytes: Int,
+            channelMask: Int,
+        ): AudioTrack? =
             try {
                 AudioTrack
                     .Builder()
@@ -91,7 +131,7 @@ class AudioTrackSpeakerSink
                             .Builder()
                             .setEncoding(ENCODING)
                             .setSampleRate(SAMPLE_RATE)
-                            .setChannelMask(CHANNEL_MASK)
+                            .setChannelMask(channelMask)
                             .build(),
                     ).setBufferSizeInBytes(bufferBytes)
                     .setTransferMode(AudioTrack.MODE_STREAM)
@@ -141,6 +181,8 @@ class AudioTrackSpeakerSink
         private class TrackSession(
             private val track: AudioTrack,
             private val startThresholdSamples: Int,
+            private val channels: Int,
+            private val pairOffset: Int,
         ) : SpeakerPlayoutSession {
             private val lock = Any()
             private var buffered = 0
@@ -150,14 +192,20 @@ class AudioTrackSpeakerSink
             private var lastSeenUnderruns = 0
             private val cushion = ShortArray(startThresholdSamples)
 
+            // The wire's stereo window spread to the device's width, this lane's pair filled
+            // and the rest left at zero. Reused across writes; the dispatch thread is the only
+            // writer and the lock covers the whole write.
+            private var spread = ShortArray(0)
+
             override fun write(pcmStereo: ShortArray): Int =
                 synchronized(lock) {
                     if (closed) return 0
                     refillCushion()
+                    val out = spreadToDevice(pcmStereo)
                     // WRITE_NON_BLOCKING accounts in whole frames, so a partial write never leaves
-                    // half a stereo pair behind and the channels cannot swap; the tail is simply
+                    // half a pair behind and the channels cannot swap; the tail is simply
                     // dropped, which is the right thing for a live stream whose buffer is full.
-                    val written = track.write(pcmStereo, 0, pcmStereo.size, AudioTrack.WRITE_NON_BLOCKING)
+                    val written = track.write(out, 0, out.size, AudioTrack.WRITE_NON_BLOCKING)
                     if (written < 0) {
                         if (!reportedFailure) {
                             reportedFailure = true
@@ -166,8 +214,21 @@ class AudioTrackSpeakerSink
                         return 0
                     }
                     if (!playing) startWhenPrimed(written)
-                    written
+                    // Reported in the caller's stereo samples, whatever the device's width.
+                    written / channels * PlayoutLane.STEREO_CHANNELS
                 }
+
+            private fun spreadToDevice(pcmStereo: ShortArray): ShortArray {
+                if (channels == PlayoutLane.STEREO_CHANNELS) return pcmStereo
+                val frames = pcmStereo.size / PlayoutLane.STEREO_CHANNELS
+                if (spread.size != frames * channels) spread = ShortArray(frames * channels)
+                for (f in 0 until frames) {
+                    val o = f * channels + pairOffset
+                    spread[o] = pcmStereo[f * PlayoutLane.STEREO_CHANNELS]
+                    spread[o + 1] = pcmStereo[f * PlayoutLane.STEREO_CHANNELS + 1]
+                }
+                return spread
+            }
 
             private fun startWhenPrimed(written: Int) {
                 buffered += written
@@ -208,7 +269,6 @@ class AudioTrackSpeakerSink
         private companion object {
             const val TAG = "SpeakerPlayout"
             const val SAMPLE_RATE = SpeakerEngine.SAMPLE_RATE
-            const val CHANNEL_MASK = AudioFormat.CHANNEL_OUT_STEREO
             const val ENCODING = AudioFormat.ENCODING_PCM_16BIT
             const val BYTES_PER_SAMPLE = 2
             const val BUFFERED_FRAMES = 4

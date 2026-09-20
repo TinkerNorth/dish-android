@@ -7,6 +7,48 @@ computer. Those lines say "update Satellite too".
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **DualSense haptics on a USB DualSense.** Games like 007 First Light and
+  God of War drive the DualSense's vibration as audio into its actuators and
+  never touch the motors, so a controller streamed through Satellite stayed
+  still in them. With a DualSense on USB whose sound output the phone opens at
+  four channels, the app now plays that vibration straight into the
+  controller, exactly as the game intended; for any other controller, or the
+  on-screen pad, Satellite turns it into ordinary rumble instead. It rides the
+  "Controller sound" switch and the host's own haptics switch, and shows as a
+  Haptics row where it applies. Update Satellite too. The app now speaks
+  protocol 3; older Satellites keep working as before.
+- **The touchpad works without Direct.** A DualShock 4 or DualSense on
+  Bluetooth, or on USB in Standard mode, used to give the game nothing from
+  its touchpad: Android treats the pad's surface as a mouse. While such a
+  controller is streaming and the app is on screen, the app now reads the
+  surface itself (Android's pointer capture, Android 8 and up) and forwards
+  both fingers and the click, exactly as it does in Direct mode; the pad's
+  touchpad stops moving Android's cursor for as long as that lasts, and goes
+  back to being a mouse when the app leaves the screen or the controller
+  disconnects. It works over Satellite and over Moonlight hosts alike.
+- **A Direct controller shows its own battery.** In Direct mode the app
+  reads the DualShock 4, DualSense and Switch Pro's charge straight out of
+  their input reports (the same bytes Linux's own drivers read), so the
+  controller card shows the pad's charge and whether it is charging instead
+  of the phone's. What Satellite is told stays the phone battery, the rule
+  for any USB controller.
+- **Controller sound and microphone without Direct.** A DualSense or
+  DualShock 4 left on Android's own USB path now gets the same microphone,
+  speaker and haptics routes as a Direct one: the pad's audio function is the
+  system's on either path. Bluetooth pads are unchanged (they have none).
+- The controller light bar follows the game over Bluetooth now, not just on a
+  USB controller in Direct mode. On Android 12 or newer, a DualShock 4 or
+  DualSense paired over Bluetooth shows the color the game picks, as long as
+  your phone's controller driver exposes the light. It works over Satellite
+  (update Satellite too) and over Moonlight hosts, the same as the USB light
+  bar. When a controller stops streaming, its light bar turns off. A USB
+  controller left in Standard mode still needs Direct mode for its light bar,
+  because Android does not let an app write those lights over USB.
+
 ## [2.1.3] - 2026-09-15
 
 ### Fixed

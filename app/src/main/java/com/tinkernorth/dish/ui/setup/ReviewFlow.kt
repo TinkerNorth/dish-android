@@ -47,6 +47,7 @@ internal fun destinationSendFlows(potential: CapabilitySet): List<ReviewFlow> =
         }
         if (Feature.PLAYER_LEDS in potential) add(ReviewFlow(R.drawable.ic_player_leds, R.string.setup_cap_player_leds))
         if (Feature.SPEAKER in potential) add(ReviewFlow(R.drawable.ic_speaker, R.string.setup_cap_speaker))
+        if (Feature.HAPTIC_AUDIO in potential) add(ReviewFlow(R.drawable.ic_rumble, R.string.setup_cap_haptics))
     }
 
 // Fills a sends/gets chip row, hiding the whole row when there is nothing to show.

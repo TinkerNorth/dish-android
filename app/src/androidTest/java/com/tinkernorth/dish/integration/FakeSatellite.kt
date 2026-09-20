@@ -591,7 +591,7 @@ class FakeSatellite(
     private companion object {
         val INSTANCES = AtomicInteger(0)
 
-        const val PROTOCOL_VERSION = 2
+        const val PROTOCOL_VERSION = 3
         const val PROTOCOL_VERSION_MIN = 1
 
         const val OP_HEARTBEAT = 0x0002

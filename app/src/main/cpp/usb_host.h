@@ -26,6 +26,12 @@ uint64_t getMotionCount(int32_t deviceId);
 // URBs that reaped with an error status, failed to submit, or failed to reap.
 uint64_t getUrbErrorCount(int32_t deviceId);
 
+// The claimed pad's own charge, as its last report carried it: level << 8 | status in
+// usbparsers::PAD_BATTERY_* terms, or -1 when the device is gone or no report has carried a
+// reading yet. Kotlin's battery source polls this on its own 30 s cadence for the slot card; the
+// wire never carries it (a USB pad puts the phone battery on the wire).
+int32_t getPadBattery(int32_t deviceId);
+
 // {"model","parser","init","reportBytes","endpointOut","lastUrbStatus"} for a claimed device.
 std::string deviceInfoJson(int32_t deviceId);
 

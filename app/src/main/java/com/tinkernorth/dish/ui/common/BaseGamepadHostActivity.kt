@@ -12,7 +12,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.net.toUri
 import androidx.viewbinding.ViewBinding
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.MicIndicatorCoordinator
+import com.tinkernorth.dish.composer.PhysicalReachabilityComposer
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.databinding.ScreenScaffoldBinding
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
@@ -38,6 +40,10 @@ abstract class BaseGamepadHostActivity : AppCompatActivity() {
 
     @Inject lateinit var inputTiming: FrameworkInputTimingStore
 
+    @Inject lateinit var reachability: PhysicalReachabilityComposer
+
+    @Inject lateinit var capabilityComposer: CapabilityComposer
+
     private var gamepadHost: GamepadActivityHost? = null
 
     // The app-wide mic chip rides the same scaffolding as the low-power chrome, so a hot (or
@@ -58,6 +64,8 @@ abstract class BaseGamepadHostActivity : AppCompatActivity() {
                 lowPowerSignal,
                 if (showsMicChip) micIndicator else null,
                 inputTiming,
+                reachability,
+                capabilityComposer,
             ).also { it.setScreenHold(holdsScreenAwake) }
     }
 

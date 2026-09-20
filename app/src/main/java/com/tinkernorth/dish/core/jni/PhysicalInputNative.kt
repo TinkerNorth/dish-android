@@ -39,6 +39,11 @@ class PhysicalInputNative
             productId: Int,
         ): Boolean = SatelliteNative.modelHasTriggerEffects(vendorId, productId)
 
+        fun modelHasHapticLanes(
+            vendorId: Int,
+            productId: Int,
+        ): Boolean = SatelliteNative.modelHasHapticLanes(vendorId, productId)
+
         fun modelHasTriggerRumble(
             vendorId: Int,
             productId: Int,
@@ -158,6 +163,8 @@ class PhysicalInputNative
         }
 
         fun getDeviceUrbCount(deviceId: Int): Long = SatelliteNative.getDeviceUrbCount(deviceId)
+
+        fun getDirectPadBattery(deviceId: Int): Int = SatelliteNative.getDirectPadBattery(deviceId)
 
         fun getDeviceMotionCount(deviceId: Int): Long = SatelliteNative.getDeviceMotionCount(deviceId)
 

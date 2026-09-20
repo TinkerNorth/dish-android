@@ -5,6 +5,7 @@ package com.tinkernorth.dish.hotpath.input
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.lights.FrameworkLightGateway
 import com.tinkernorth.dish.source.store.FeedbackActivityStore
 import com.tinkernorth.dish.source.store.FeedbackKind
 import com.tinkernorth.dish.source.store.VirtualPadFeedbackStore
@@ -21,8 +22,12 @@ import javax.inject.Singleton
  * - The virtual pad renders lights on its skin ([VirtualPadFeedbackStore]) and
  *   folds trigger rumble into the phone vibrator through the rumble path, so
  *   the per-slot rumble toggle and stop rules keep applying.
- * - Framework pads drop everything: Android exposes no controller LED or
- *   trigger-motor API, and folding trigger rumble into the pad's main vibrator
+ * - A framework pad gets its light bar through the Android lights API
+ *   ([FrameworkLightGateway]); the composer advertises that only where it can
+ *   land (a Bluetooth DualShock 4 / DualSense on API 31+ whose driver exposes an
+ *   RGB light), so the writer only ever runs for such a pad. Trigger effects,
+ *   player LEDs and the mic lamp still drop for framework pads: Android exposes
+ *   no API for them, and folding trigger rumble into the pad's main vibrator
  *   would fight the real rumble stream.
  *
  * Session resolution reuses [resolveRumble]: the slot the (session, controller
@@ -37,6 +42,7 @@ class FeedbackRouter
         private val virtualFeedback: VirtualPadFeedbackStore,
         private val rumble: RumbleRouter,
         private val feedbackActivity: FeedbackActivityStore,
+        private val frameworkLights: FrameworkLightGateway,
     ) {
         fun dispatchLightbar(
             sessionHandle: Int,
@@ -171,8 +177,9 @@ class FeedbackRouter
         ) {
             when (target) {
                 is RumbleTarget.DirectUsb -> native.sendUsbLightbar(target.deviceId, r, g, b)
+                is RumbleTarget.Framework -> frameworkLights.setColor(target.deviceId, r, g, b)
                 RumbleTarget.Phone -> virtualFeedback.setLightbar(r, g, b)
-                else -> Unit
+                RumbleTarget.None -> Unit
             }
         }
 

@@ -122,6 +122,7 @@ internal fun declaredFeatures(caps: Int): List<Feature> =
         if (caps and CAP_PLAYER_LEDS != 0) add(Feature.PLAYER_LEDS)
         if (caps and CAP_MIC != 0) add(Feature.MIC)
         if (caps and CAP_SPEAKER != 0) add(Feature.SPEAKER)
+        if (caps and CAP_HAPTIC_AUDIO != 0) add(Feature.HAPTIC_AUDIO)
     }
 
 private const val CAP_ANALOG_TRIGGERS = 0x0001
@@ -132,3 +133,4 @@ private const val CAP_TRIGGER_EFFECTS = 0x0010
 private const val CAP_PLAYER_LEDS = 0x0020
 private const val CAP_MIC = 0x0040
 private const val CAP_SPEAKER = 0x0080
+private const val CAP_HAPTIC_AUDIO = 0x0100

@@ -110,6 +110,7 @@
     <string name="setup_cap_player_leds">LED de jugador</string>
     <string name="setup_cap_mic">Micrófono</string>
     <string name="setup_cap_speaker">Sonido del mando</string>
+    <string name="setup_cap_haptics">Háptica</string>
     <string name="setup_cap_available">Compatible</string>
     <string name="setup_cap_off">Apagado</string>
     <string name="setup_cap_unknown">Desconocido</string>

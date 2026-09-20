@@ -793,6 +793,13 @@ bool decodeXboxOneGip(const uint8_t* buf, size_t len, DeviceState& s, ParserStat
 // DualShock 4 USB report 0x01. Sticks are uint8 with 128 = center. Y axes are down-positive so
 // they're inverted to match XUSB's up-positive convention. Face buttons are remapped to the
 // XInput "muscle memory" positions: Cross is A, Circle is B, Square is X, Triangle is Y.
+// The Sony pads report charge in tenths (0 = 0..9 %, 1 = 10..19 %, ...), and the platforms show
+// the midpoint of each band, capped at 100.
+static uint8_t sonyTenthsToPercent(uint8_t tenths) {
+    const unsigned pct = (unsigned)tenths * 10u + 5u;
+    return (uint8_t)(pct > 100u ? 100u : pct);
+}
+
 bool decodeDualShock4(const uint8_t* buf, size_t len, DeviceState& s, const PsImuCalib* calib) {
     if (len < 10) return false;
     if (buf[0] != 0x01) return false;
@@ -844,6 +851,28 @@ bool decodeDualShock4(const uint8_t* buf, size_t len, DeviceState& s, const PsIm
                                s.touch1Id, s.touch1X, s.touch1Y);
             s.touchClick = (buf[7] & 0x02) != 0;
             s.touchValid = true;
+        }
+    }
+
+    // Battery at buf[30] (hid-playstation's status[0]): the low nibble is the charge in tenths,
+    // bit 0x10 the cable. With the cable in, 10 is still charging, 11 is full, and 12..15 are the
+    // firmware's error states.
+    if (len >= 31) {
+        const uint8_t tenths = (uint8_t)(buf[30] & 0x0F);
+        const bool cable = (buf[30] & 0x10) != 0;
+        s.batteryValid = true;
+        if (!cable) {
+            s.batteryLevel = sonyTenthsToPercent(tenths);
+            s.batteryStatus = PAD_BATTERY_STATUS_DISCHARGING;
+        } else if (tenths <= 10) {
+            s.batteryLevel = sonyTenthsToPercent(tenths);
+            s.batteryStatus = PAD_BATTERY_STATUS_CHARGING;
+        } else if (tenths == 11) {
+            s.batteryLevel = 100;
+            s.batteryStatus = PAD_BATTERY_STATUS_FULL;
+        } else {
+            s.batteryLevel = PAD_BATTERY_LEVEL_UNKNOWN;
+            s.batteryStatus = PAD_BATTERY_STATUS_UNKNOWN;
         }
     }
     return true;
@@ -912,6 +941,33 @@ bool decodeDualSense(const uint8_t* buf, size_t len, DeviceState& s, ParserState
         s.touchClick = (buf[10] & 0x02) != 0;
         s.touchValid = true;
     }
+
+    // Battery at buf[53] (hid-playstation's status): the low nibble is the charge in tenths, the
+    // high nibble the state: 0 discharging, 1 charging, 2 full, 0xA/0xB a temperature or voltage
+    // fault, 0xF a charging fault. A fault has no charge worth showing.
+    if (len >= 54) {
+        const uint8_t tenths = (uint8_t)(buf[53] & 0x0F);
+        const uint8_t state = (uint8_t)(buf[53] >> 4);
+        s.batteryValid = true;
+        switch (state) {
+        case 0x0:
+            s.batteryLevel = sonyTenthsToPercent(tenths);
+            s.batteryStatus = PAD_BATTERY_STATUS_DISCHARGING;
+            break;
+        case 0x1:
+            s.batteryLevel = sonyTenthsToPercent(tenths);
+            s.batteryStatus = PAD_BATTERY_STATUS_CHARGING;
+            break;
+        case 0x2:
+            s.batteryLevel = 100;
+            s.batteryStatus = PAD_BATTERY_STATUS_FULL;
+            break;
+        default:
+            s.batteryLevel = PAD_BATTERY_LEVEL_UNKNOWN;
+            s.batteryStatus = PAD_BATTERY_STATUS_UNKNOWN;
+            break;
+        }
+    }
     return true;
 }
 
@@ -958,6 +1014,25 @@ bool decodeSwitchProUsb(const uint8_t* buf, size_t len, DeviceState& s, ParserSt
     s.sLY = scaleSwitchStickAuto(ly, sticks.ly);
     s.sRX = scaleSwitchStickAuto(rx, sticks.rx);
     s.sRY = scaleSwitchStickAuto(ry, sticks.ry);
+
+    // Battery in buf[2] (hid-nintendo's bat_con): bits 7..5 the charge in five steps (empty,
+    // critical, low, medium, full), bit 4 charging, bit 0 host-powered. The percent is the step's
+    // midpoint, the same coarse number the framework shows for this pad.
+    {
+        static constexpr uint8_t kStepPercent[] = {5, 25, 50, 75, 100};
+        const uint8_t step = (uint8_t)(buf[2] >> 5);
+        const bool charging = (buf[2] & 0x10) != 0;
+        const bool hostPowered = (buf[2] & 0x01) != 0;
+        s.batteryValid = true;
+        s.batteryLevel = step <= 4 ? kStepPercent[step] : PAD_BATTERY_LEVEL_UNKNOWN;
+        if (charging) {
+            s.batteryStatus = PAD_BATTERY_STATUS_CHARGING;
+        } else if (hostPowered && step == 4) {
+            s.batteryStatus = PAD_BATTERY_STATUS_FULL;
+        } else {
+            s.batteryStatus = PAD_BATTERY_STATUS_DISCHARGING;
+        }
+    }
 
     // Average the bundled IMU subframes (the pad packs up to three ~5ms samples per report; one
     // 12-byte frame = accel int16 LE x3 then gyro x3, first at byte 13), then rotate the Switch IMU
@@ -1438,6 +1513,8 @@ bool parserHasLightbar(Parser p) { return p == Parser::DUALSHOCK4 || p == Parser
 bool parserHasPlayerLeds(Parser p) { return p == Parser::DUALSENSE || p == Parser::SWITCH_PRO_USB; }
 
 bool parserHasTriggerEffects(Parser p) { return p == Parser::DUALSENSE; }
+
+bool parserHasHapticLanes(Parser p) { return p == Parser::DUALSENSE; }
 
 bool parserHasTriggerRumble(Parser p) { return p == Parser::XBOX_ONE_GIP; }
 

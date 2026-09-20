@@ -49,8 +49,11 @@ class ControllerAudioWireTest {
     fun setUp() {
         AppSingletons.resetConnections()
         speakerFrames.clear()
-        SpeakerAudioBridge.install { handle, ctrlIdx, pcm, concealed ->
-            speakerFrames += SpeakerFrame(handle, ctrlIdx, pcm, concealed)
+        SpeakerAudioBridge.install { handle, ctrlIdx, lane, pcm, concealed ->
+            // The speaker lane only: this test drives MSG_SPEAKER_AUDIO.
+            if (lane == SpeakerAudioBridge.LANE_SPEAKER) {
+                speakerFrames += SpeakerFrame(handle, ctrlIdx, pcm, concealed)
+            }
         }
     }
 

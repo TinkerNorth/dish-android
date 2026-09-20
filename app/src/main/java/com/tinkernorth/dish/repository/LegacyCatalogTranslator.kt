@@ -61,6 +61,6 @@ class LegacyCatalogTranslator
             const val CATALOG_VERSION_CURRENT = 2
             private const val LEGACY_V1 = 1
 
-            private val AUDIO_FEATURES = setOf(Feature.MIC, Feature.SPEAKER)
+            private val AUDIO_FEATURES = setOf(Feature.MIC, Feature.SPEAKER, Feature.HAPTIC_AUDIO)
         }
     }

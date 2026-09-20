@@ -15,7 +15,9 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.MicIndicatorCoordinator
+import com.tinkernorth.dish.composer.PhysicalReachabilityComposer
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.overlay.GamepadActivityHost
@@ -33,6 +35,7 @@ fun AppCompatActivity.setupDishToolbar(toolbar: Toolbar) {
 // micIndicator null means the screen suppresses the app-wide mic chip; every screen but the
 // gamepad overlay passes it (that one already carries the mute pill on the pad itself, and a
 // floating tap target over a full-screen control surface would steal pad touches).
+@Suppress("LongParameterList")
 fun AppCompatActivity.attachGamepadHost(
     rootView: View,
     wakeState: WakeStateController,
@@ -41,8 +44,10 @@ fun AppCompatActivity.attachGamepadHost(
     lowPowerSignal: LowPowerSignal,
     micIndicator: MicIndicatorCoordinator?,
     inputTiming: FrameworkInputTimingStore,
+    reachability: PhysicalReachabilityComposer,
+    capabilities: CapabilityComposer,
 ): GamepadActivityHost =
-    GamepadActivityHost(this, rootView, wakeState, gamepadRegistry, lowPowerSignal, inputTiming).also {
+    GamepadActivityHost(this, rootView, wakeState, gamepadRegistry, lowPowerSignal, inputTiming, reachability, capabilities).also {
         it.install(notifications)
         if (micIndicator != null) MicChipController(this, rootView, micIndicator).install()
     }

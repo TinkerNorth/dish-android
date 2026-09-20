@@ -10,7 +10,16 @@ package com.tinkernorth.dish.core.net
 // both ends surface a soft "update for the newest features" hint.
 object DishProtocol {
     const val MIN = 1
-    const val CURRENT = 2
+
+    // 3 added the satellite's HAPTIC_AUDIO return path (0x0015, cap `hapticAudio`): the
+    // DualSense's two actuator lanes as a stereo Opus stream, for a client that can play
+    // the waveform into the pad's own audio function. This client advertises the cap for
+    // a USB DualSense whose endpoint the platform opens at four channels (a second quad
+    // AudioTrack on the same endpoint, see source/audio/SpeakerPlayoutPlan.kt); every
+    // other slot (a phone-only virtual pad, a Bluetooth pad, a stereo-only endpoint) leaves
+    // it off and the satellite reduces the lanes to RUMBLE 0x0009, which the rumble paths
+    // already render. No frame shape changed between 2 and 3.
+    const val CURRENT = 3
 
     // v2 replaced the appended touchpad fields with the pointer frame that carries the
     // mouse buttons and the wheel, so extended mouse is exactly "the satellite is v2+".
