@@ -288,7 +288,9 @@ The base (`architecture/abstracts/AbstractController.kt`) provides:
 - an open `onStop`, because teardown genuinely differs:
   `WakeStateController` cancels and releases its wakelock under the
   `stopped` guard that drops a post-stop emission;
-  `StreamingServiceController` cancels and stops the service;
+  `StreamingServiceController` only cancels: the service stops itself
+  once idle, because a stop that lands before its `startForeground`
+  crashes the app;
   `CrashReportingController` deliberately does not cancel, so the
   opt-in survives an Activity restart.
 

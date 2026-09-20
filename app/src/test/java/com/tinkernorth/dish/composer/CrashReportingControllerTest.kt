@@ -5,6 +5,7 @@ package com.tinkernorth.dish.composer
 import android.content.Context
 import android.util.Log
 import com.google.firebase.FirebaseApp
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.tinkernorth.dish.architecture.testing.probe
 import com.tinkernorth.dish.source.store.CrashReportingStore
 import io.mockk.every
@@ -30,7 +31,7 @@ class CrashReportingControllerTest {
 
     @Before
     fun setUp() {
-        mockkStatic(Log::class, FirebaseApp::class)
+        mockkStatic(Log::class, FirebaseApp::class, FirebaseCrashlytics::class)
         every { Log.i(any<String>(), any<String>()) } returns 0
         every { Log.e(any<String>(), any<String>(), any<Throwable>()) } returns 0
         // Drives apply down the "Firebase not initialised" branch: no real Crashlytics on the JVM
@@ -45,7 +46,7 @@ class CrashReportingControllerTest {
 
     @After
     fun tearDown() {
-        unmockkStatic(Log::class, FirebaseApp::class)
+        unmockkStatic(Log::class, FirebaseApp::class, FirebaseCrashlytics::class)
     }
 
     private fun controller() = CrashReportingController(context, store, scope)
@@ -76,5 +77,29 @@ class CrashReportingControllerTest {
         enabledFlow.value = true
         scope.testScheduler.runCurrent()
         verify(exactly = 2) { FirebaseApp.getApps(context) }
+    }
+
+    @Test
+    fun `a non-fatal is dropped when Firebase is not initialised`() {
+        controller().recordNonFatal(IllegalStateException("refused"))
+        verify(exactly = 0) { FirebaseCrashlytics.getInstance() }
+    }
+
+    @Test
+    fun `a non-fatal reaches Crashlytics when Firebase is initialised`() {
+        every { FirebaseApp.getApps(any()) } returns listOf(mockk())
+        val crashlytics = mockk<FirebaseCrashlytics>(relaxed = true)
+        every { FirebaseCrashlytics.getInstance() } returns crashlytics
+        val error = IllegalStateException("refused")
+        controller().recordNonFatal(error)
+        verify(exactly = 1) { crashlytics.recordException(error) }
+    }
+
+    @Test
+    fun `a Crashlytics failure while recording is swallowed`() {
+        every { FirebaseApp.getApps(any()) } returns listOf(mockk())
+        every { FirebaseCrashlytics.getInstance() } throws IllegalStateException("not ready")
+        controller().recordNonFatal(IllegalStateException("refused"))
+        verify(exactly = 1) { FirebaseCrashlytics.getInstance() }
     }
 }

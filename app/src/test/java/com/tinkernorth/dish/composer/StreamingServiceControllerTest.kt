@@ -3,9 +3,8 @@
 package com.tinkernorth.dish.composer
 
 import android.content.Context
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.LifecycleRegistry
+import com.tinkernorth.dish.architecture.testing.ControllerProbe
+import com.tinkernorth.dish.architecture.testing.probe
 import com.tinkernorth.dish.source.usb.UsbController
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.source.usb.UsbPhase
@@ -17,18 +16,17 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
 import org.junit.Test
+import kotlin.random.Random
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class StreamingServiceControllerTest {
-    private class TestOwner : LifecycleOwner {
-        val registry: LifecycleRegistry = LifecycleRegistry.createUnsafe(this)
-        override val lifecycle: Lifecycle get() = registry
-    }
-
     private val scope = TestScope(StandardTestDispatcher())
     private val slots = MutableStateFlow(0)
     private val claims = MutableStateFlow<Map<Int, UsbController>>(emptyMap())
+    private val liveness = StreamingServiceLiveness()
+    private val crashReporting = mockk<CrashReportingController>(relaxed = true)
     private val wakeState =
         mockk<WakeStateController> {
             every { streamingSlotCount } returns slots
@@ -50,42 +48,34 @@ class StreamingServiceControllerTest {
                 ),
         )
 
-    private fun start(context: Context): TestOwner {
-        val controller = StreamingServiceController(context, wakeState, usbGamepadManager, scope)
-        val owner = TestOwner()
-        owner.registry.addObserver(controller)
-        owner.registry.currentState = Lifecycle.State.STARTED
-        scope.testScheduler.runCurrent()
-        return owner
+    private fun start(context: Context): ControllerProbe<StreamingServiceController.Input> {
+        val probe =
+            StreamingServiceController(context, wakeState, usbGamepadManager, liveness, crashReporting, scope).probe()
+        probe.start()
+        settle()
+        return probe
     }
 
-    @Test
-    fun `a refused service start is swallowed instead of crashing the collector`() =
-        runTest(scope.testScheduler) {
-            val context =
-                mockk<Context>(relaxed = true) {
-                    every { startService(any()) } throws IllegalStateException("fgs refused")
-                    every { startForegroundService(any()) } throws IllegalStateException("fgs refused")
-                }
-            start(context)
+    private fun settle() = scope.testScheduler.runCurrent()
 
-            slots.value = 1
-            scope.testScheduler.runCurrent()
+    private fun serviceComesUp() {
+        liveness.markLive()
+        settle()
+    }
 
-            // Reaching the assert at all proves the thrown IllegalStateException did not escape apply().
-            verify { context.startService(any()) }
-        }
+    private fun serviceGoesAway() {
+        liveness.markGone()
+        settle()
+    }
 
     @Test
     fun `a positive slot count starts the service`() =
         runTest(scope.testScheduler) {
             val context = mockk<Context>(relaxed = true)
             start(context)
-
             slots.value = 1
-            scope.testScheduler.runCurrent()
-
-            verify { context.startService(any()) }
+            settle()
+            verify(exactly = 1) { context.startService(any()) }
         }
 
     @Test
@@ -93,65 +83,205 @@ class StreamingServiceControllerTest {
         runTest(scope.testScheduler) {
             val context = mockk<Context>(relaxed = true)
             start(context)
-
             claims.value = directClaim()
-            scope.testScheduler.runCurrent()
-
-            verify { context.startService(any()) }
+            settle()
+            verify(exactly = 1) { context.startService(any()) }
         }
 
-    // The claimed pad has been reconfigured at the device level; only a live process can run the
-    // restore a later release performs, so backgrounding must not drop the service that keeps it.
     @Test
-    fun `process stop with a held claim keeps the service running`() =
+    fun `a refused start is swallowed and recorded as a non-fatal`() =
+        runTest(scope.testScheduler) {
+            val refusal = IllegalStateException("fgs refused")
+            val context =
+                mockk<Context>(relaxed = true) {
+                    every { startService(any()) } throws refusal
+                }
+            start(context)
+            slots.value = 1
+            settle()
+            verify(exactly = 1) { context.startService(any()) }
+            verify(exactly = 1) { crashReporting.recordNonFatal(refusal) }
+        }
+
+    @Test
+    fun `work falling back to zero never stops the service`() =
         runTest(scope.testScheduler) {
             val context = mockk<Context>(relaxed = true)
-            val owner = start(context)
-
+            start(context)
             slots.value = 1
-            claims.value = directClaim()
-            scope.testScheduler.runCurrent()
-
-            owner.registry.currentState = Lifecycle.State.CREATED
-            scope.testScheduler.runCurrent()
-
+            settle()
+            slots.value = 0
+            settle()
+            serviceComesUp()
+            slots.value = 2
+            settle()
+            slots.value = 0
+            settle()
             verify(exactly = 0) { context.stopService(any()) }
         }
 
     @Test
-    fun `process stop without claims stops the service`() =
+    fun `a process stop never stops the service, with or without a held claim`() =
         runTest(scope.testScheduler) {
             val context = mockk<Context>(relaxed = true)
-            val owner = start(context)
-
+            val probe = start(context)
             slots.value = 1
-            scope.testScheduler.runCurrent()
-
-            owner.registry.currentState = Lifecycle.State.CREATED
-            scope.testScheduler.runCurrent()
-
-            verify { context.stopService(any()) }
+            settle()
+            serviceComesUp()
+            probe.stop()
+            settle()
+            probe.start()
+            settle()
+            claims.value = directClaim()
+            settle()
+            probe.stop()
+            settle()
+            verify(exactly = 0) { context.stopService(any()) }
         }
 
-    // The service can stop itself while collection is down (claims released in the background), so
-    // a foreground return must re-derive instead of trusting the stale running flag.
     @Test
-    fun `a foreground return re-asserts the service for work still held`() =
+    fun `a live service is not started again on a foreground return`() =
         runTest(scope.testScheduler) {
             val context = mockk<Context>(relaxed = true)
-            val owner = start(context)
-
+            val probe = start(context)
             claims.value = directClaim()
-            scope.testScheduler.runCurrent()
+            settle()
+            serviceComesUp()
+            probe.stop()
+            settle()
+            probe.start()
+            settle()
             verify(exactly = 1) { context.startService(any()) }
+        }
 
-            owner.registry.currentState = Lifecycle.State.CREATED
-            scope.testScheduler.runCurrent()
-            owner.registry.currentState = Lifecycle.State.STARTED
-            scope.testScheduler.runCurrent()
+    @Test
+    fun `a foreground return starts a service that is not live while work is held`() =
+        runTest(scope.testScheduler) {
+            var attempts = 0
+            val context =
+                mockk<Context>(relaxed = true) {
+                    every { startService(any()) } answers {
+                        attempts += 1
+                        if (attempts == 1) error("fgs refused")
+                        null
+                    }
+                }
+            val probe = start(context)
+            slots.value = 1
+            settle()
+            probe.stop()
+            settle()
+            probe.start()
+            settle()
+            assertEquals(2, attempts)
+        }
 
-            // A second start against a live service is a harmless refresh; against one that
-            // self-stopped in the background it is the restart that keeps the claim protected.
+    @Test
+    fun `a start that never reported live is not repeated before the next foreground return`() =
+        runTest(scope.testScheduler) {
+            val context = mockk<Context>(relaxed = true)
+            val probe = start(context)
+            slots.value = 1
+            settle()
+            claims.value = directClaim()
+            settle()
+            slots.value = 0
+            settle()
+            slots.value = 1
+            settle()
+            verify(exactly = 1) { context.startService(any()) }
+            probe.stop()
+            settle()
+            probe.start()
+            settle()
             verify(exactly = 2) { context.startService(any()) }
+        }
+
+    @Test
+    fun `a service that went away is started again when work rises`() =
+        runTest(scope.testScheduler) {
+            val context = mockk<Context>(relaxed = true)
+            start(context)
+            slots.value = 1
+            settle()
+            serviceComesUp()
+            slots.value = 0
+            settle()
+            serviceGoesAway()
+            slots.value = 1
+            settle()
+            verify(exactly = 2) { context.startService(any()) }
+        }
+
+    @Test
+    fun `a service that stopped itself under held work waits for work to rise again`() =
+        runTest(scope.testScheduler) {
+            val context = mockk<Context>(relaxed = true)
+            start(context)
+            slots.value = 1
+            settle()
+            serviceComesUp()
+            serviceGoesAway()
+            verify(exactly = 1) { context.startService(any()) }
+            slots.value = 0
+            settle()
+            slots.value = 1
+            settle()
+            verify(exactly = 2) { context.startService(any()) }
+        }
+
+    @Test
+    fun `more work while the service is up never starts it again`() =
+        runTest(scope.testScheduler) {
+            val context = mockk<Context>(relaxed = true)
+            start(context)
+            slots.value = 1
+            settle()
+            serviceComesUp()
+            claims.value = directClaim()
+            settle()
+            slots.value = 3
+            settle()
+            verify(exactly = 1) { context.startService(any()) }
+        }
+
+    @Test
+    fun `no sequence of work, liveness and lifecycle changes stops the service or starts a live one`() =
+        runTest(scope.testScheduler) {
+            for (seed in 1..8) {
+                val random = Random(seed)
+                val startsWhileLive = mutableListOf<Int>()
+                var step = 0
+                val context =
+                    mockk<Context>(relaxed = true) {
+                        every { startService(any()) } answers {
+                            if (liveness.state.value) startsWhileLive += step
+                            null
+                        }
+                    }
+                slots.value = 0
+                claims.value = emptyMap()
+                liveness.markGone()
+                val probe = start(context)
+                var collecting = true
+                repeat(400) {
+                    step = it
+                    when (random.nextInt(5)) {
+                        0 -> slots.value = random.nextInt(3)
+                        1 -> claims.value = if (claims.value.isEmpty()) directClaim() else emptyMap()
+                        2 -> liveness.markLive()
+                        3 -> liveness.markGone()
+                        else -> {
+                            if (collecting) probe.stop() else probe.start()
+                            collecting = !collecting
+                        }
+                    }
+                    settle()
+                }
+                if (collecting) probe.stop()
+                settle()
+                verify(exactly = 0) { context.stopService(any()) }
+                assertEquals("seed $seed", emptyList<Int>(), startsWhileLive)
+            }
         }
 }

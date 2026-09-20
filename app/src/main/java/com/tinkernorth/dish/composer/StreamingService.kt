@@ -16,6 +16,7 @@ import android.util.Log
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import com.tinkernorth.dish.DishApplication
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.source.audio.MicIndicatorPolicy
@@ -49,6 +50,10 @@ class StreamingService : Service() {
 
     @Inject lateinit var micIndicator: MicIndicatorCoordinator
 
+    @Inject lateinit var liveness: StreamingServiceLiveness
+
+    @Inject lateinit var crashReporting: CrashReportingController
+
     private var observerJob: Job? = null
 
     // The microphone type bit we last actually asserted. The service type only changes through
@@ -65,6 +70,7 @@ class StreamingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        liveness.markLive()
         ensureChannel()
         // Refused foreground start: the service is already stopping, so don't wire observers that would
         // notify for a service that never entered the foreground.
@@ -88,6 +94,7 @@ class StreamingService : Service() {
     override fun onDestroy() {
         observerJob?.cancel()
         observerJob = null
+        liveness.markGone()
         super.onDestroy()
     }
 
@@ -98,25 +105,14 @@ class StreamingService : Service() {
         flags: Int,
         startId: Int,
     ): Int {
-        when (streamingCommandFor(intent?.action)) {
-            StreamingCommand.STOP_ALL -> {
-                stopAllSessions()
-                // Stop means all of it: release held Direct claims too, so each pad gets its
-                // device-side restore instead of staying captured by a process about to idle out.
-                usbGamepadManager.releaseAllDirect()
-                stopSelf()
+        for (step in serviceStepsFor(streamingCommandFor(intent?.action))) {
+            when (step) {
+                ServiceStep.STOP_SESSIONS -> stopAllSessions()
+                ServiceStep.RELEASE_DIRECT -> usbGamepadManager.releaseAllDirect()
+                ServiceStep.STOP_SELF -> stopSelf()
+                ServiceStep.TOGGLE_MIC -> micIndicator.toggleAll()
+                ServiceStep.PROMOTE -> startForegroundInitial()
             }
-            // The notification's mute action, so the shade works outside the app: the same
-            // all-armed-slots toggle the in-app chip lands. The plan change flows back through
-            // the observer, which repaints this notification (and every other mic surface).
-            StreamingCommand.TOGGLE_MIC -> micIndicator.toggleAll()
-            StreamingCommand.REASSERT ->
-                if (observerJob != null) {
-                    // A repeat startForegroundService (the controller re-asserting after a foreground
-                    // return) obliges another startForeground call; against a live service it just
-                    // refreshes the notification.
-                    startForegroundInitial()
-                }
         }
         // START_NOT_STICKY: tightly coupled to process state; an OS-respawned bare service helps nobody.
         return START_NOT_STICKY
@@ -260,6 +256,7 @@ class StreamingService : Service() {
         } catch (e: IllegalStateException) {
             // A background-initiated FGS start can be refused on Android 12+; stop instead of crashing.
             Log.w(TAG, "foreground start refused: ${e.message}")
+            crashReporting.recordNonFatal(e)
             stopSelf()
             false
         }
@@ -270,15 +267,12 @@ class StreamingService : Service() {
         micArmed: Boolean,
     ): Boolean =
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIFICATION_ID, notification, foregroundServiceTypes(micArmed))
-            } else {
-                startForeground(NOTIFICATION_ID, notification)
-            }
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, foregroundServiceTypes(micArmed))
             micTypeHeld = micArmed
             true
         } catch (e: SecurityException) {
             Log.w(TAG, "foreground type (mic=$micArmed) denied: ${e.message}")
+            crashReporting.recordNonFatal(e)
             false
         }
 
@@ -312,7 +306,7 @@ class StreamingService : Service() {
     }
 }
 
-/** What one start command asks of the service; every unknown action is the re-assert no-op. */
+/** What one start command asks of the service; every unknown action is a re-assert. */
 internal enum class StreamingCommand {
     STOP_ALL,
     TOGGLE_MIC,
@@ -324,6 +318,26 @@ internal fun streamingCommandFor(action: String?): StreamingCommand =
         StreamingService.ACTION_STOP_ALL -> StreamingCommand.STOP_ALL
         StreamingService.ACTION_TOGGLE_MIC -> StreamingCommand.TOGGLE_MIC
         else -> StreamingCommand.REASSERT
+    }
+
+internal enum class ServiceStep {
+    STOP_SESSIONS,
+    RELEASE_DIRECT,
+    STOP_SELF,
+    TOGGLE_MIC,
+    PROMOTE,
+}
+
+internal fun serviceStepsFor(command: StreamingCommand): List<ServiceStep> =
+    when (command) {
+        // Stop means all of it: release held Direct claims too, so each pad gets its
+        // device-side restore instead of staying captured by a process about to idle out.
+        StreamingCommand.STOP_ALL -> listOf(ServiceStep.STOP_SESSIONS, ServiceStep.RELEASE_DIRECT, ServiceStep.STOP_SELF)
+        // The notification's mute action, so the shade works outside the app: the same
+        // all-armed-slots toggle the in-app chip lands. The plan change flows back through
+        // the observer, which repaints this notification (and every other mic surface).
+        StreamingCommand.TOGGLE_MIC -> listOf(ServiceStep.TOGGLE_MIC)
+        StreamingCommand.REASSERT -> listOf(ServiceStep.PROMOTE)
     }
 
 /**
