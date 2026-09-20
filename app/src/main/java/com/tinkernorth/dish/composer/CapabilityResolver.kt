@@ -93,6 +93,9 @@ object CapabilityResolver {
         if (Feature.SPEAKER in slot.controller && Feature.SPEAKER in slot.userEnabled) {
             caps = caps or ControllerDescriptor.CAP_SPEAKER
         }
+        if (Feature.HAPTIC_AUDIO in slot.controller && Feature.HAPTIC_AUDIO in slot.userEnabled) {
+            caps = caps or ControllerDescriptor.CAP_HAPTIC_AUDIO
+        }
         return caps
     }
 
@@ -124,7 +127,13 @@ object CapabilityResolver {
             out += Feature.TRIGGER_RUMBLE
         }
         if (micOn) out += Feature.MIC
-        if (speakerOn) out += Feature.SPEAKER
+        if (speakerOn) {
+            out += Feature.SPEAKER
+            // One endpoint, one switch: haptics play into the same output the speaker
+            // does, and a user who turned that output off wants the host's rumble
+            // fallback, not a waveform nobody plays.
+            out += Feature.HAPTIC_AUDIO
+        }
         return CapabilitySet(out)
     }
 }

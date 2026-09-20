@@ -9,15 +9,22 @@ computer. Those lines say "update Satellite too".
 
 ## [Unreleased]
 
-### Changed
+### Added
 
-- **DualSense games that vibrate through Sony's own library now rumble.**
-  Games like 007 First Light and God of War drive the DualSense's vibration as
-  audio into its actuators and never touch the motors, so a controller
-  streamed through Satellite stayed still in them. Satellite now turns that
-  vibration into ordinary rumble for this app, which reaches your phone or
-  your controller the way rumble always has. Update Satellite too. The app
-  now speaks protocol 3; older Satellites keep working as before.
+- **DualSense haptics on a USB DualSense.** Games like 007 First Light and
+  God of War drive the DualSense's vibration as audio into its actuators and
+  never touch the motors, so a controller streamed through Satellite stayed
+  still in them. With a DualSense on USB whose sound output the phone opens at
+  four channels, the app now plays that vibration straight into the
+  controller, exactly as the game intended; for any other controller, or the
+  on-screen pad, Satellite turns it into ordinary rumble instead. It rides the
+  "Controller sound" switch and the host's own haptics switch, and shows as a
+  Haptics row where it applies. Update Satellite too. The app now speaks
+  protocol 3; older Satellites keep working as before.
+- **Controller sound and microphone without Direct.** A DualSense or
+  DualShock 4 left on Android's own USB path now gets the same microphone,
+  speaker and haptics routes as a Direct one: the pad's audio function is the
+  system's on either path. Bluetooth pads are unchanged (they have none).
 
 ## [2.1.3] - 2026-09-15
 

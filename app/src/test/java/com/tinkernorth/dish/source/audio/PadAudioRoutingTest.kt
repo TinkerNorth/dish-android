@@ -3,6 +3,7 @@
 package com.tinkernorth.dish.source.audio
 
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
+import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import io.mockk.every
 import io.mockk.mockk
@@ -27,12 +28,14 @@ class PadAudioRoutingTest {
     private fun device(
         id: Int,
         direct: Boolean,
+        transport: Transport = Transport.Usb,
     ) = PhysicalGamepadRegistry.Device(
         id = id,
         name = "DualSense",
         isUsbSynthetic = direct,
         vendorId = DS5_VID,
         productId = DS5_PID,
+        transport = transport,
     )
 
     private fun publishDs5Route() {
@@ -66,10 +69,21 @@ class PadAudioRoutingTest {
     }
 
     @Test
-    fun `a framework pad has no route, whatever its model publishes`() {
-        // Same vendor:product, but the OS owns the pad: we never claimed its HID interface, so its
-        // audio function is not ours to point at either.
+    fun `a framework pad on USB gets its own endpoints too`() {
+        // Same vendor:product, and the OS owns the pad's HID; its audio function is the OS's
+        // on either path, so the route is the same one a claim would get.
         devices.value = mapOf(FRAMEWORK_ID to device(FRAMEWORK_ID, direct = false))
+        publishDs5Route()
+        val route = routing.forSlot(FRAMEWORK_ID.toString())
+        assertEquals(12, route.captureDeviceId)
+        assertEquals(11, route.playbackDeviceId)
+    }
+
+    @Test
+    fun `a Bluetooth pad never routes, even with a USB twin's route published`() {
+        // No audio function over Bluetooth, and the same vendor:product as a USB DualSense:
+        // keying it would hand it that twin's endpoint.
+        devices.value = mapOf(FRAMEWORK_ID to device(FRAMEWORK_ID, direct = false, transport = Transport.Bluetooth))
         publishDs5Route()
         assertEquals(PadAudioRoute.NONE, routing.forSlot(FRAMEWORK_ID.toString()))
     }

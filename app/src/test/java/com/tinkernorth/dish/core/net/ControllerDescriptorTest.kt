@@ -22,7 +22,8 @@ class ControllerDescriptorTest {
             )
         assertEquals(
             """{"ctrlIdx":2,"type":1,"caps":{"rumble":true,"motion":true,"analogTriggers":true,""" +
-                """"lightbar":false,"triggerEffects":false,"playerLeds":false,"mic":false,"speaker":false},""" +
+                """"lightbar":false,"triggerEffects":false,"playerLeds":false,"mic":false,"speaker":false,""" +
+                """"hapticAudio":false},""" +
                 """"touchpadMode":"ds4"}""",
             d.toJson(),
         )
@@ -71,6 +72,7 @@ class ControllerDescriptorTest {
         assertEquals(0x0020, ControllerDescriptor.CAP_PLAYER_LEDS)
         assertEquals(0x0040, ControllerDescriptor.CAP_MIC)
         assertEquals(0x0080, ControllerDescriptor.CAP_SPEAKER)
+        assertEquals(0x0100, ControllerDescriptor.CAP_HAPTIC_AUDIO)
     }
 
     @Test
@@ -85,10 +87,11 @@ class ControllerDescriptorTest {
                 ControllerDescriptor.CAP_PLAYER_LEDS,
                 ControllerDescriptor.CAP_MIC,
                 ControllerDescriptor.CAP_SPEAKER,
+                ControllerDescriptor.CAP_HAPTIC_AUDIO,
             )
         assertEquals(bits.size, bits.toSet().size)
         val union: Int = bits.fold(0) { acc, bit -> acc or bit }
-        assertEquals(0x00FF, union)
+        assertEquals(0x01FF, union)
     }
 
     @Test
@@ -102,7 +105,8 @@ class ControllerDescriptorTest {
             )
         assertEquals(
             """{"ctrlIdx":0,"type":2,"caps":{"rumble":false,"motion":false,"analogTriggers":false,""" +
-                """"lightbar":false,"triggerEffects":false,"playerLeds":false,"mic":true,"speaker":true},""" +
+                """"lightbar":false,"triggerEffects":false,"playerLeds":false,"mic":true,"speaker":true,""" +
+                """"hapticAudio":false},""" +
                 """"touchpadMode":"off"}""",
             d.toJson(),
         )
@@ -119,5 +123,10 @@ class ControllerDescriptorTest {
         val speakerOnly = ControllerDescriptor(0, 2, ControllerDescriptor.CAP_SPEAKER, "off").toJson()
         assertTrue(speakerOnly.contains("\"mic\":false"))
         assertTrue(speakerOnly.contains("\"speaker\":true"))
+        // Protocol 3: the haptic bit is its own, apart from the speaker's.
+        assertTrue(speakerOnly.contains("\"hapticAudio\":false"))
+        val hapticOnly = ControllerDescriptor(0, 2, ControllerDescriptor.CAP_HAPTIC_AUDIO, "off").toJson()
+        assertTrue(hapticOnly.contains("\"speaker\":false"))
+        assertTrue(hapticOnly.contains("\"hapticAudio\":true"))
     }
 }

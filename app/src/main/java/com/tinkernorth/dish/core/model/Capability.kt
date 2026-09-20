@@ -53,6 +53,14 @@ enum class Feature(
     // The emulated pad's OWN speaker/headset endpoint, played out the phone or the pad.
     // Independent of MIC: neither direction implies the other.
     SPEAKER(Direction.RECEIVE, "speaker"),
+
+    // Protocol 3: the DualSense's HD-haptics lanes (channels 3/4 of its audio OUT
+    // stream), played straight into a physical DualSense's own 4-channel endpoint.
+    // Advertised only where that endpoint is reachable at full width; everywhere else
+    // the host reduces the lanes to RUMBLE, which the rumble paths already render. Rides
+    // the speaker toggle: it is the same endpoint, and a user who switched the pad's
+    // sound off wants rumble back, not a waveform nobody plays.
+    HAPTIC_AUDIO(Direction.RECEIVE, "hapticAudio"),
 }
 
 @JvmInline
@@ -130,6 +138,9 @@ data class HostFeatureSet(
     // controller audio, or one that switched it off, offers neither.
     val controllerMic: Boolean = false,
     val controllerSpeaker: Boolean = false,
+    // Protocol 3, the haptics lane. Never taken from the per-backend fallback: a host too
+    // old for the block is too old for the lane.
+    val controllerHapticAudio: Boolean = false,
     // The protocol version the satellite advertised (catalog + capabilities documents);
     // 0 = never fetched. This is the verified truth behind the update chips and the
     // extended-mouse gate: only a version that decodes the v2 pointer frame reports 2+.
@@ -164,6 +175,7 @@ data class HostFeatureSet(
         // One direction at a time: the two switches are the host's to move separately.
         if (controllerMic) out += Feature.MIC
         if (controllerSpeaker) out += Feature.SPEAKER
+        if (controllerHapticAudio) out += Feature.HAPTIC_AUDIO
         return CapabilitySet(out)
     }
 
@@ -228,6 +240,7 @@ data class HostFeatureSet(
                 rumbleReturn = caps.host.rumble.supported,
                 controllerMic = block?.let { it.enabled && it.mic } ?: perBackend,
                 controllerSpeaker = block?.let { it.enabled && it.speaker } ?: perBackend,
+                controllerHapticAudio = block?.let { it.enabled && it.hapticAudio } ?: false,
                 protocolVersion = caps.protocolVersion,
             )
         }

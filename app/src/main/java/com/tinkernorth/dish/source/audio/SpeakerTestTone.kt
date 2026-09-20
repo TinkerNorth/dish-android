@@ -48,7 +48,13 @@ class SpeakerTestTone internal constructor(
     constructor(sink: AudioTrackSpeakerSink, routing: PadAudioRouting) : this(sink, routing, TestTonePolicy.FRAMES)
 
     suspend fun play(slotId: String): Boolean {
-        val session = sink.open(SpeakerEngine.FRAME_SAMPLES, routing.forSlot(slotId).playbackDeviceId) ?: return false
+        // The tone is a speaker test: it opens the endpoint at its own width, like the
+        // engine does, so a 4-channel pad hears it on its speaker pair and not its actuators.
+        val route = routing.forSlot(slotId)
+        val channels = if (route.playbackChannels > 0) route.playbackChannels else PlayoutLane.STEREO_CHANNELS
+        val session =
+            sink.open(SpeakerEngine.FRAME_SAMPLES, route.playbackDeviceId, channels, PlayoutLane.SPEAKER)
+                ?: return false
         try {
             for (index in 0 until frames) {
                 session.write(TestTonePolicy.frame(index))

@@ -10,6 +10,7 @@ import com.tinkernorth.dish.core.model.HostFeatureSet
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
+import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.repository.SatelliteCatalogRepository
 import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.audio.PadAudioRoutes
@@ -293,18 +294,22 @@ class CapabilityComposer
                 if (native.modelHasTriggerEffects(vid, pid)) out += Feature.TRIGGER_EFFECTS
                 if (native.modelHasPlayerLeds(vid, pid)) out += Feature.PLAYER_LEDS
                 if (native.modelHasTriggerRumble(vid, pid)) out += Feature.TRIGGER_RUMBLE
-                // The pad's own audio endpoints are Android's to route, not ours: we claim
-                // only the HID interface, so its USB-audio function stays with the OS. That
-                // makes the model tables the wrong source here, and the OS route table the
-                // right one: a pad whose audio function the OS never enumerated can't be
-                // captured from or played to, whatever its model says it has.
-                val audio = padAudioRoutes.routeFor(vid, pid)
-                if (audio.microphone) out += Feature.MIC
-                if (audio.speaker) out += Feature.SPEAKER
             } else {
                 val framework = frameworkFactsFor(device)
                 if (framework?.hasGyro == true) out += Feature.MOTION
                 if (framework?.hasRumble == true) out += Feature.RUMBLE
+            }
+            // The pad's own audio endpoints are Android's to route, not ours: we claim only
+            // the HID interface (or, on the framework path, nothing at all), so its USB-audio
+            // function stays with the OS on either path. That makes the model tables the wrong
+            // source here, and the OS route table the right one: a pad whose audio function
+            // the OS never enumerated can't be captured from or played to, whatever its model
+            // says it has. A Bluetooth pad has no such function and resolves to nothing.
+            if (device.transport == Transport.Usb) {
+                val audio = padAudioRoutes.routeFor(vid, pid)
+                if (audio.microphone) out += Feature.MIC
+                if (audio.speaker) out += Feature.SPEAKER
+                if (audio.haptics) out += Feature.HAPTIC_AUDIO
             }
             return CapabilitySet(out)
         }

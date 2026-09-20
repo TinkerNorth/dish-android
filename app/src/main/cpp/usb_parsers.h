@@ -159,6 +159,7 @@ bool parserFrameworkRumbleUnreliable(Parser p);
 bool parserHasLightbar(Parser p);       // DS4 / DualSense RGB lightbar
 bool parserHasPlayerLeds(Parser p);     // DualSense 5-LED bar, Switch Pro 4 player lights
 bool parserHasTriggerEffects(Parser p); // DualSense adaptive-trigger effect blocks
+bool parserHasHapticLanes(Parser p);    // DualSense HD-haptics lanes on its USB audio OUT
 bool parserHasTriggerRumble(Parser p);  // Xbox One GIP impulse-trigger motors
 bool parserHasMicMuteLed(Parser p);     // DualSense mic-mute lamp (and its mic amp)
 

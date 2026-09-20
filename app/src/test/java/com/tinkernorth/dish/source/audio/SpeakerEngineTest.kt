@@ -45,6 +45,7 @@ class SpeakerEngineTest {
     /** A sink that records what it was asked for and how much of it it took. */
     private class FakeSink : SpeakerPlayoutSink {
         val opens = ConcurrentLinkedQueue<Int>()
+        val openedWidths = ConcurrentLinkedQueue<Pair<Int, PlayoutLane>>()
         val closes = AtomicInteger()
         val written = ConcurrentLinkedQueue<ShortArray>()
         val refuse = AtomicBoolean(false)
@@ -61,10 +62,13 @@ class SpeakerEngineTest {
         override fun open(
             frameSamples: Int,
             preferredDeviceId: Int,
+            channels: Int,
+            lane: PlayoutLane,
         ): SpeakerPlayoutSession? {
             lastFrameSamples.set(frameSamples)
             if (refuse.get()) return null
             opens += preferredDeviceId
+            openedWidths += channels to lane
             return Session()
         }
 
@@ -113,10 +117,14 @@ class SpeakerEngineTest {
         handle: Int = HANDLE,
         index: Int = CTRL_IDX,
         playbackDeviceId: Int = NO_AUDIO_DEVICE,
-    ) = SpeakerTarget(slotId, handle, index, playbackDeviceId)
+        lane: PlayoutLane = PlayoutLane.SPEAKER,
+        channels: Int = PlayoutLane.STEREO_CHANNELS,
+    ) = SpeakerTarget(slotId, handle, index, playbackDeviceId, lane, channels)
 
     private fun plan(vararg targets: SpeakerTarget) =
-        SpeakerPlayoutPlan(targets.associateBy { SpeakerPlayoutPlan.routeKey(it.sessionHandle, it.controllerIndex) })
+        SpeakerPlayoutPlan(
+            targets.associateBy { SpeakerPlayoutPlan.routeKey(it.sessionHandle, it.controllerIndex, it.lane) },
+        )
 
     private fun window(fill: Short = TONE) = ShortArray(SpeakerEngine.FRAME_SAMPLES) { fill }
 
@@ -125,7 +133,8 @@ class SpeakerEngineTest {
         index: Int = CTRL_IDX,
         pcm: ShortArray = window(),
         concealed: Boolean = false,
-    ) = engine.onSpeakerFrame(handle, index, pcm, concealed)
+        lane: Int = SpeakerAudioBridge.LANE_SPEAKER,
+    ) = engine.onAudioFrame(handle, index, lane, pcm, concealed)
 
     // ---- lifecycle ----
 
@@ -268,7 +277,7 @@ class SpeakerEngineTest {
     fun `frames arriving through the installed sink reach the slot's output`() {
         engine.apply(plan(target()))
         val installed = frames.sink!!
-        installed.onSpeakerFrame(HANDLE, CTRL_IDX, window(), false)
+        installed.onAudioFrame(HANDLE, CTRL_IDX, SpeakerAudioBridge.LANE_SPEAKER, window(), false)
         assertEquals(1, sink.written.size)
     }
 
@@ -365,5 +374,45 @@ class SpeakerEngineTest {
         const val OTHER_TONE: Short = -1234
         const val PARK_TIMEOUT_MS = 2_000L
         const val POLL_MS = 2L
+    }
+
+    // ---- protocol 3: the haptic lane ----
+
+    @Test
+    fun `a haptic voice is its own output on the same endpoint, opened at the pad's width`() {
+        engine.apply(
+            plan(
+                target(playbackDeviceId = 7, lane = PlayoutLane.SPEAKER, channels = PlayoutLane.QUAD_CHANNELS),
+                target(playbackDeviceId = 7, lane = PlayoutLane.HAPTICS, channels = PlayoutLane.QUAD_CHANNELS),
+            ),
+        )
+        assertEquals(2, sink.opens.size)
+        assertEquals(
+            setOf(PlayoutLane.QUAD_CHANNELS to PlayoutLane.SPEAKER, PlayoutLane.QUAD_CHANNELS to PlayoutLane.HAPTICS),
+            sink.openedWidths.toSet(),
+        )
+    }
+
+    @Test
+    fun `frames route by lane, never across`() {
+        engine.apply(plan(target(lane = PlayoutLane.SPEAKER, channels = 4), target(lane = PlayoutLane.HAPTICS, channels = 4)))
+        deliver(lane = SpeakerAudioBridge.LANE_HAPTICS, pcm = window(0x31))
+        assertEquals(1, sink.written.size)
+        assertEquals(0x31.toShort(), sink.written.first()[0])
+        // A haptic frame for a slot with only a speaker voice is dropped, not played as sound.
+        engine.apply(plan(target(lane = PlayoutLane.SPEAKER)))
+        deliver(lane = SpeakerAudioBridge.LANE_HAPTICS, pcm = window(0x32))
+        assertEquals(1, sink.written.size)
+        // And an unknown lane number is dropped too.
+        deliver(lane = 9)
+        assertEquals(1, sink.written.size)
+    }
+
+    @Test
+    fun `a change of endpoint width reopens the voice`() {
+        engine.apply(plan(target(playbackDeviceId = 7, channels = PlayoutLane.STEREO_CHANNELS)))
+        engine.apply(plan(target(playbackDeviceId = 7, channels = PlayoutLane.QUAD_CHANNELS)))
+        assertEquals(1, sink.closes.get())
+        assertEquals(2, sink.opens.size)
     }
 }

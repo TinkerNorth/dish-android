@@ -39,6 +39,11 @@ class PhysicalInputNative
             productId: Int,
         ): Boolean = SatelliteNative.modelHasTriggerEffects(vendorId, productId)
 
+        fun modelHasHapticLanes(
+            vendorId: Int,
+            productId: Int,
+        ): Boolean = SatelliteNative.modelHasHapticLanes(vendorId, productId)
+
         fun modelHasTriggerRumble(
             vendorId: Int,
             productId: Int,

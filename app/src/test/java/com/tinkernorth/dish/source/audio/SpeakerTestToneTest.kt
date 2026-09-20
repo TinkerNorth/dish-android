@@ -20,12 +20,19 @@ class SpeakerTestToneTest {
         val written = mutableListOf<ShortArray>()
         var closed = false
 
+        var openedChannels: Int? = null
+        var openedLane: PlayoutLane? = null
+
         override fun open(
             frameSamples: Int,
             preferredDeviceId: Int,
+            channels: Int,
+            lane: PlayoutLane,
         ): SpeakerPlayoutSession? {
             if (refuse) return null
             openedEndpoint = preferredDeviceId
+            openedChannels = channels
+            openedLane = lane
             return object : SpeakerPlayoutSession {
                 override fun write(pcmStereo: ShortArray): Int {
                     written += pcmStereo

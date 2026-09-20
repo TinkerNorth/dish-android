@@ -99,7 +99,8 @@ class SpeakerEngine
         fun droppedSamplesFor(
             sessionHandle: Int,
             controllerIndex: Int,
-        ): Long = droppedByRoute[SpeakerPlayoutPlan.routeKey(sessionHandle, controllerIndex)]?.get() ?: 0L
+            lane: PlayoutLane = PlayoutLane.SPEAKER,
+        ): Long = droppedByRoute[SpeakerPlayoutPlan.routeKey(sessionHandle, controllerIndex, lane)]?.get() ?: 0L
 
         private class Voice(
             val target: SpeakerTarget,
@@ -138,10 +139,11 @@ class SpeakerEngine
         private fun reconcile(desired: Map<Long, SpeakerTarget>) {
             val current = voices
             // A route change (the pad's endpoint appeared, moved or went away) is a reopen: an
-            // AudioTrack's preferred device is settled when it is built.
+            // AudioTrack's preferred device and its width are settled when it is built.
             val kept =
                 current.filterKeys { key ->
-                    desired[key]?.playbackDeviceId == current[key]?.target?.playbackDeviceId
+                    desired[key]?.playbackDeviceId == current[key]?.target?.playbackDeviceId &&
+                        desired[key]?.deviceChannels == current[key]?.target?.deviceChannels
                 }
             val gone = current.filterKeys { it !in kept.keys }
             if (gone.isNotEmpty()) {
@@ -158,7 +160,7 @@ class SpeakerEngine
                     open[key] = Voice(target, existing.session)
                     continue
                 }
-                val session = sink.open(FRAME_SAMPLES, target.playbackDeviceId)
+                val session = sink.open(FRAME_SAMPLES, target.playbackDeviceId, target.deviceChannels, target.lane)
                 if (session == null) {
                     refused++
                     continue
@@ -198,20 +200,26 @@ class SpeakerEngine
          * very samples, so there is nothing left to do but play them. It rides the call because the
          * sink is the only place that could ever meter it.
          */
-        override fun onSpeakerFrame(
+        override fun onAudioFrame(
             sessionHandle: Int,
             controllerIndex: Int,
+            lane: Int,
             pcmStereo: ShortArray,
             concealed: Boolean,
         ) {
-            val voice = voices[SpeakerPlayoutPlan.routeKey(sessionHandle, controllerIndex)] ?: return
+            val playoutLane =
+                when (lane) {
+                    SpeakerAudioBridge.LANE_SPEAKER -> PlayoutLane.SPEAKER
+                    SpeakerAudioBridge.LANE_HAPTICS -> PlayoutLane.HAPTICS
+                    else -> return
+                }
+            val key = SpeakerPlayoutPlan.routeKey(sessionHandle, controllerIndex, playoutLane)
+            val voice = voices[key] ?: return
             val written = voice.session.write(pcmStereo)
             if (written < pcmStereo.size) {
                 val dropped = (pcmStereo.size - written).toLong()
                 droppedSamples.addAndGet(dropped)
-                droppedByRoute
-                    .computeIfAbsent(SpeakerPlayoutPlan.routeKey(sessionHandle, controllerIndex)) { AtomicLong() }
-                    .addAndGet(dropped)
+                droppedByRoute.computeIfAbsent(key) { AtomicLong() }.addAndGet(dropped)
             }
         }
 

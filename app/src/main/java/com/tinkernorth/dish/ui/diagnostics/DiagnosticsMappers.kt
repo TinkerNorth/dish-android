@@ -26,6 +26,7 @@ private val FUNCTION_FEATURES =
         Feature.PLAYER_LEDS,
         Feature.MIC,
         Feature.SPEAKER,
+        Feature.HAPTIC_AUDIO,
     )
 
 internal fun boundHostDiag(

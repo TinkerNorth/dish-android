@@ -118,6 +118,7 @@
     <string name="setup_cap_player_leds">Player LEDs</string>
     <string name="setup_cap_mic">Microphone</string>
     <string name="setup_cap_speaker">Controller sound</string>
+    <string name="setup_cap_haptics">Haptics</string>
     <string name="setup_cap_available">Supported</string>
     <string name="setup_cap_off">Off</string>
     <string name="setup_cap_unknown">Unknown</string>

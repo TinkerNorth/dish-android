@@ -13,11 +13,12 @@ object DishProtocol {
 
     // 3 added the satellite's HAPTIC_AUDIO return path (0x0015, cap `hapticAudio`): the
     // DualSense's two actuator lanes as a stereo Opus stream, for a client that can play
-    // the waveform into the pad's own audio function. This client cannot (Android's USB
-    // audio route to a pad is stereo, and the virtual pad has a vibrator), so it never
-    // advertises the cap and the satellite reduces those lanes to RUMBLE 0x0009 for it,
-    // which the rumble paths already render. Offering 3 says so and clears the "update
-    // the app" hint; no frame shape changed between 2 and 3.
+    // the waveform into the pad's own audio function. This client advertises the cap for
+    // a USB DualSense whose endpoint the platform opens at four channels (a second quad
+    // AudioTrack on the same endpoint, see source/audio/SpeakerPlayoutPlan.kt); every
+    // other slot (a phone-only virtual pad, a Bluetooth pad, a stereo-only endpoint) leaves
+    // it off and the satellite reduces the lanes to RUMBLE 0x0009, which the rumble paths
+    // already render. No frame shape changed between 2 and 3.
     const val CURRENT = 3
 
     // v2 replaced the appended touchpad fields with the pointer frame that carries the

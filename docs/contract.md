@@ -4,9 +4,11 @@ The protocol contract (REST surface, UDP streams, crypto, liveness, identity)
 lives in ONE place: **`satellite/docs/contract.md`** in the
 [TinkerNorth/satellite](https://github.com/TinkerNorth/satellite) repo. This
 client implements protocol 3 against it; this file only records the
-Android-side mapping. Of protocol 3's one addition, HAPTIC_AUDIO 0x0015, this
-client takes the satellite's rumble reduction rather than the stream (see
-`core/net/DishProtocol.kt`). The former `wire-format.md` is replaced by the contract.
+Android-side mapping. Protocol 3's one addition, HAPTIC_AUDIO 0x0015, plays into
+a USB DualSense's own 4-channel endpoint as a second quad `AudioTrack` beside the
+speaker one (`source/audio/SpeakerPlayoutPlan.kt`, `SpeakerPlayout.kt`); a slot
+that cannot play the waveform advertises no `hapticAudio` cap and takes the
+satellite's rumble reduction instead (see `core/net/DishProtocol.kt`). The former `wire-format.md` is replaced by the contract.
 
 ## Where the contract lands in this app
 
@@ -22,6 +24,7 @@ client takes the satellite's rumble reduction rather than the stream (see
 | Catalog cache (ETag, per-satellite) | `repository/SatelliteCatalogRepository.kt` |
 | Host capabilities (`GET /api/server/capabilities`) pre-bind read | `repository/SatelliteCapabilitiesRepository.kt` → host layer + `source/store/SatelliteHostRuntimeStore.kt` |
 | Feedback return paths (RUMBLE 0x0009, LIGHTBAR 0x000D, TRIGGER_EFFECTS 0x0010, PLAYER_LEDS 0x0011) | native decode in `satellite_jni.cpp` → `hotpath/input/RumbleBridge.kt` + `hotpath/input/FeedbackBridge.kt` → `RumbleRouter` / `FeedbackRouter` |
+| Controller audio down (SPEAKER_AUDIO 0x0013, HAPTIC_AUDIO 0x0015) | native reorder + Opus decode per lane in `satellite_jni.cpp` → `hotpath/audio/SpeakerAudioBridge.kt` → `source/audio/SpeakerEngine.kt`, one `AudioTrack` per slot and lane at the pad endpoint's own width |
 | Outbound telemetry destinations (satellite UDP vs Moonlight control stream) | `source/connection/TelemetrySink.kt`, resolved per slot by `composer/PhysicalReachabilityComposer.kt` |
 
 ## Client behaviours required by the contract

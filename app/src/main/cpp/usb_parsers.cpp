@@ -1439,6 +1439,8 @@ bool parserHasPlayerLeds(Parser p) { return p == Parser::DUALSENSE || p == Parse
 
 bool parserHasTriggerEffects(Parser p) { return p == Parser::DUALSENSE; }
 
+bool parserHasHapticLanes(Parser p) { return p == Parser::DUALSENSE; }
+
 bool parserHasTriggerRumble(Parser p) { return p == Parser::XBOX_ONE_GIP; }
 
 bool parserHasMicMuteLed(Parser p) { return p == Parser::DUALSENSE; }

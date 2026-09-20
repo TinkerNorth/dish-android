@@ -262,6 +262,11 @@ object SatelliteNative {
         productId: Int,
     ): Boolean
 
+    external fun modelHasHapticLanes(
+        vendorId: Int,
+        productId: Int,
+    ): Boolean
+
     external fun modelHasTriggerRumble(
         vendorId: Int,
         productId: Int,

@@ -71,6 +71,12 @@ static constexpr uint16_t MSG_PLAYER_LEDS = 0x0011;
 static constexpr uint16_t MSG_MIC_AUDIO = 0x0012;
 static constexpr uint16_t MSG_SPEAKER_AUDIO = 0x0013;
 static constexpr uint16_t MSG_MIC_LED = 0x0014;
+// Protocol 3: the DualSense's haptic lanes, the speaker stream's exact shape.
+static constexpr uint16_t MSG_HAPTIC_AUDIO = 0x0015;
+
+// The two outbound lanes as SpeakerAudioBridge numbers them.
+static constexpr int AUDIO_LANE_SPEAKER = 0;
+static constexpr int AUDIO_LANE_HAPTICS = 1;
 
 // Nonce direction byte: the two directions of one session key never share a
 // nonce (contract §Crypto).
@@ -99,8 +105,13 @@ struct ControllerAudio {
     std::unique_ptr<dish_audio::OpusStreamEncoder> micEncoder;
     uint16_t micSeq = 0;
 
+    // One reorder window and decoder per outbound lane: the two streams are
+    // independent on the wire (own seq, own silence suppression), so their
+    // gaps and their concealment state must never mix.
     dish_audio::AudioJitterWindow speakerWindow;
     std::unique_ptr<dish_audio::OpusStreamDecoder> speakerDecoder;
+    dish_audio::AudioJitterWindow hapticWindow;
+    std::unique_ptr<dish_audio::OpusStreamDecoder> hapticDecoder;
 };
 
 struct Session {
@@ -334,7 +345,7 @@ static void startBridgeDispatchThread() {
     g_bridgeDispatchThread = std::thread(bridgeDispatchLoop);
 }
 
-// The inbound MSG_SPEAKER_AUDIO path.
+// The inbound MSG_SPEAKER_AUDIO / MSG_HAPTIC_AUDIO path.
 //
 // Its own queue and thread rather than the input bridge's, for two reasons: an
 // audio frame must never evict a gamepad report from that queue, and the sink
@@ -350,6 +361,7 @@ struct SpeakerFrame {
     std::shared_ptr<Session> session;
     int handle = -1;
     uint8_t ctrlIdx = 0;
+    int lane = AUDIO_LANE_SPEAKER;
     uint16_t seq = 0;
     std::vector<uint8_t> opus;
 };
@@ -384,29 +396,36 @@ static int decodeSpeakerFrame(const SpeakerFrame& f, std::vector<int16_t>& pcm,
                               bool concealed[dish_audio::AUDIO_JITTER_MAX_EVENTS_PER_PUSH]) {
     std::lock_guard<std::mutex> lock(f.session->audioMtx);
     ControllerAudio& ca = f.session->audio[f.ctrlIdx];
-    if (!ca.speakerDecoder) {
-        ca.speakerDecoder = dish_audio::OpusStreamDecoder::create(dish_audio::Stream::Speaker);
-        if (!ca.speakerDecoder) {
-            LOGE("speaker audio: no Opus decoder for ctrl %u", (unsigned)f.ctrlIdx);
+    // The haptic lane is the speaker's wire format, so one decoder shape
+    // serves both; only the state is per lane.
+    const bool haptics = f.lane == AUDIO_LANE_HAPTICS;
+    std::unique_ptr<dish_audio::OpusStreamDecoder>& decoder =
+        haptics ? ca.hapticDecoder : ca.speakerDecoder;
+    dish_audio::AudioJitterWindow& window = haptics ? ca.hapticWindow : ca.speakerWindow;
+    if (!decoder) {
+        decoder = dish_audio::OpusStreamDecoder::create(dish_audio::Stream::Speaker);
+        if (!decoder) {
+            LOGE("%s audio: no Opus decoder for ctrl %u", haptics ? "haptic" : "speaker",
+                 (unsigned)f.ctrlIdx);
             return 0;
         }
     }
 
-    const auto r = ca.speakerWindow.push(f.seq, f.opus.data(), f.opus.size());
+    const auto r = window.push(f.seq, f.opus.data(), f.opus.size());
     int produced = 0;
     for (int i = 0; i < r.count; i++) {
         const auto& e = r.events[i];
         int16_t* out = pcm.data() + produced * dish_audio::AUDIO_SPEAKER_FRAME_SAMPLES;
         size_t frames = 0;
         if (e.kind == dish_audio::AudioJitterWindow::Event::Kind::Packet) {
-            frames = ca.speakerDecoder->decode(e.data, e.len, out, dish_audio::AUDIO_FRAME_SAMPLES);
+            frames = decoder->decode(e.data, e.len, out, dish_audio::AUDIO_FRAME_SAMPLES);
         } else {
             // Unconditionally the FEC entry: whether the carrier holds a
             // redundant copy of the missing frame is an encoder-side decision
             // we cannot see, and libopus falls back to plain concealment by
             // itself when it does not. A null carrier means conceal blind.
-            frames = ca.speakerDecoder->decodeFec(e.fecCarrier, e.fecCarrierLen, out,
-                                                  dish_audio::AUDIO_FRAME_SAMPLES);
+            frames = decoder->decodeFec(e.fecCarrier, e.fecCarrierLen, out,
+                                        dish_audio::AUDIO_FRAME_SAMPLES);
         }
         if (frames != static_cast<size_t>(dish_audio::AUDIO_FRAME_SAMPLES)) continue;
         concealed[produced] = e.kind == dish_audio::AudioJitterWindow::Event::Kind::Gap;
@@ -415,8 +434,8 @@ static int decodeSpeakerFrame(const SpeakerFrame& f, std::vector<int16_t>& pcm,
     return produced;
 }
 
-static void deliverSpeakerPcm(JNIEnv* env, int handle, uint8_t ctrlIdx, const int16_t* pcm,
-                              bool concealed) {
+static void deliverSpeakerPcm(JNIEnv* env, int handle, uint8_t ctrlIdx, int lane,
+                              const int16_t* pcm, bool concealed) {
     if (g_speakerAudioBridgeClass == nullptr || g_speakerAudioFrameMethod == nullptr) return;
     // A fresh array per 20 ms frame: 3.8 KB of short-lived garbage 50 times a
     // second is far below what a pinned reusable buffer would cost in JNI
@@ -430,7 +449,7 @@ static void deliverSpeakerPcm(JNIEnv* env, int handle, uint8_t ctrlIdx, const in
     env->SetShortArrayRegion(samples, 0, dish_audio::AUDIO_SPEAKER_FRAME_SAMPLES,
                              reinterpret_cast<const jshort*>(pcm));
     env->CallStaticVoidMethod(g_speakerAudioBridgeClass, g_speakerAudioFrameMethod, (jint)handle,
-                              (jint)ctrlIdx, samples, (jboolean)concealed);
+                              (jint)ctrlIdx, (jint)lane, samples, (jboolean)concealed);
     env->DeleteLocalRef(samples);
     if (env->ExceptionCheck()) env->ExceptionClear();
 }
@@ -466,7 +485,7 @@ static void audioDispatchLoop() {
         if (!f.session || f.session->closed.load(std::memory_order_acquire)) continue;
         const int produced = decodeSpeakerFrame(f, pcm, concealed);
         for (int i = 0; i < produced; i++) {
-            deliverSpeakerPcm(env, f.handle, f.ctrlIdx,
+            deliverSpeakerPcm(env, f.handle, f.ctrlIdx, f.lane,
                               pcm.data() + i * dish_audio::AUDIO_SPEAKER_FRAME_SAMPLES,
                               concealed[i]);
         }
@@ -1315,12 +1334,14 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiv
         env->CallStaticVoidMethod(g_feedbackBridgeClass, g_feedbackPlayerLedsMethod, handle,
                                   (jint)decrypted[4], (jint)decrypted[5]);
         if (env->ExceptionCheck()) env->ExceptionClear();
-    } else if (msgType == MSG_SPEAKER_AUDIO && msgLen >= dish_wire::AUDIO_WIRE_MIN_PAYLOAD_BYTES &&
+    } else if ((msgType == MSG_SPEAKER_AUDIO || msgType == MSG_HAPTIC_AUDIO) &&
+               msgLen >= dish_wire::AUDIO_WIRE_MIN_PAYLOAD_BYTES &&
                decLen >= 4 + (unsigned long long)msgLen) {
         // Queued, not decoded here: see the audio dispatch thread. With no
         // playback engine installed there is nothing to decode FOR, so the
         // frame is dropped before it costs a copy (same shape as the feedback
-        // arms, which bail on a missing bridge class).
+        // arms, which bail on a missing bridge class). The haptic lane rides
+        // the same queue and thread: same shape, same cadence, its own window.
         if (g_speakerAudioBridgeClass == nullptr) return 1;
         const dish_wire::AudioFrameHeader h = dish_wire::decodeAudioFrameHeader(decrypted + 4);
         const uint8_t* opus = decrypted + 4 + dish_wire::AUDIO_WIRE_HEADER_BYTES;
@@ -1329,6 +1350,7 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiv
         f.session = s;
         f.handle = handle;
         f.ctrlIdx = h.ctrlIdx;
+        f.lane = msgType == MSG_HAPTIC_AUDIO ? AUDIO_LANE_HAPTICS : AUDIO_LANE_SPEAKER;
         f.seq = h.seq;
         f.opus.assign(opus, opus + opusLen);
         enqueueSpeakerFrame(std::move(f));
@@ -1689,9 +1711,9 @@ Java_com_tinkernorth_dish_hotpath_audio_SpeakerAudioBridge_nativeInstall(JNIEnv*
     }
     if (g_speakerAudioFrameMethod == nullptr) {
         g_speakerAudioFrameMethod =
-            env->GetStaticMethodID(g_speakerAudioBridgeClass, "dispatchSpeakerFrame", "(II[SZ)V");
+            env->GetStaticMethodID(g_speakerAudioBridgeClass, "dispatchAudioFrame", "(III[SZ)V");
         if (g_speakerAudioFrameMethod == nullptr) {
-            LOGE("SpeakerAudioBridge.dispatchSpeakerFrame not found");
+            LOGE("SpeakerAudioBridge.dispatchAudioFrame not found");
             env->ExceptionClear();
         }
     }
@@ -1794,6 +1816,15 @@ Java_com_tinkernorth_dish_core_jni_SatelliteNative_modelHasTriggerEffects(JNIEnv
         usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
     if (!k) return JNI_FALSE;
     return usbparsers::parserHasTriggerEffects(k->parser) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_tinkernorth_dish_core_jni_SatelliteNative_modelHasHapticLanes(JNIEnv*, jobject, jint vid,
+                                                                       jint pid) {
+    const usbparsers::KnownDevice* k =
+        usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
+    if (!k) return JNI_FALSE;
+    return usbparsers::parserHasHapticLanes(k->parser) ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_modelHasTriggerRumble(
