@@ -29,6 +29,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import javax.inject.Provider
@@ -449,5 +450,26 @@ class UsbGamepadManagerTest {
         m.reconcileForeground()
         // The auto path attempted the claim (open was reached) instead of settling Standard.
         verify { usbManager.openDevice(device) }
+    }
+
+    private fun buildManagerWithoutUsbService(): UsbGamepadManager {
+        val ctx = mockk<Context>(relaxed = true)
+        every { ctx.getSystemService(Context.USB_SERVICE) } returns null
+        every { registry.devices } returns MutableStateFlow(emptyMap())
+        every { pathPrefs.choiceFor(vid, pid) } returns null
+        val scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher())
+        return UsbGamepadManager(ctx, registry, Provider { hub }, notifications, scope, native, pathPrefs, UsbDescriptorStore())
+    }
+
+    @Test
+    fun `a device with no USB service builds the manager and tracks nothing`() {
+        val m = buildManagerWithoutUsbService()
+        m.reconcileForeground()
+        m.tryDirectMode(vid, pid)
+        m.setPathChoice(vid, pid, PathChoice.Standard)
+        m.releaseAllDirect()
+        assertTrue(m.controllers.value.isEmpty())
+        verify(exactly = 0) { registry.markDirectFailed(any(), any(), any()) }
+        verify(exactly = 0) { registry.addUsbSynthetic(any(), any(), any(), any(), any(), any()) }
     }
 }
