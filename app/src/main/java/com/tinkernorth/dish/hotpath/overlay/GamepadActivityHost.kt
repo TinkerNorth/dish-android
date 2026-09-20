@@ -132,6 +132,10 @@ class GamepadActivityHost(
     }
 
     fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        // A captured touchpad's fingers come this way too (see PadTouchpadCapture) and are
+        // the pad's, never a stick: taken first, before the joystick fold below could read
+        // their coordinates as axes.
+        if (padTouchpad.onGenericMotionEvent(event)) return true
         val isJoy =
             isJoystickMotionSource(event.source) ||
                 event.deviceId in gamepadRegistry.devices.value

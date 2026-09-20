@@ -48,6 +48,13 @@ import java.util.concurrent.ConcurrentHashMap
  * [TelemetrySink] exactly as the on-screen touchpad's would, so the satellite and a Moonlight
  * host see one shape whichever surface produced it.
  *
+ * The events are taken at the activity's `dispatchGenericMotionEvent`, not through a view's
+ * captured-pointer listener: the platform hands a captured touchpad event down the FOCUS chain
+ * (`ViewGroup.dispatchCapturedPointerEvent` forwards to the focused child), so a listener on
+ * the root only fires while the root itself is the focused view, and what no view consumed
+ * falls through to the activity as an ordinary generic motion event. The activity path holds
+ * whatever the focus is, which on these screens is a button or a list.
+ *
  * Pre-26 devices have no pointer capture; there the surface stays a system mouse and the
  * capability layer never offers it (the registry reports no surface).
  */
@@ -67,9 +74,9 @@ class PadTouchpadCapture(
     private val lastFrame = ConcurrentHashMap<String, PadTouchFrame>()
 
     // Dedicated URGENT_AUDIO thread so edge-burst resends aren't jittered by the shared Default
-    // pool, the same shape as the overlays'.
-    private val resendThread = HandlerThread("dish-pad-touch-resend", Process.THREAD_PRIORITY_URGENT_AUDIO).also { it.start() }
-    private val resendDispatcher = Handler(resendThread.looper).asCoroutineDispatcher()
+    // pool, the same shape as the overlays'. Started on the first capture, since every screen
+    // hosts one of these and most never capture anything.
+    private var resendThread: HandlerThread? = null
     private var resendJob: Job? = null
 
     // Resend-thread-only.
@@ -80,7 +87,6 @@ class PadTouchpadCapture(
 
     fun install() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        rootView.setOnCapturedPointerListener { _, event -> onCapturedPointerEvent(event) }
         combine(registry.devices, reachability.state) { devices, reachable ->
             PadTouchpadCapturePolicy.routes(devices, reachable.keys, capabilities::touchpadSource)
         }.distinctUntilChanged()
@@ -100,7 +106,8 @@ class PadTouchpadCapture(
 
     override fun onDestroy(owner: LifecycleOwner) {
         stopResend()
-        resendThread.quitSafely()
+        resendThread?.quitSafely()
+        resendThread = null
     }
 
     private fun apply() {
@@ -115,11 +122,14 @@ class PadTouchpadCapture(
         }
     }
 
-    // Main thread. True consumes the event: a captured touchpad event that reached us is the
-    // pad's, and letting it fall through would turn it back into UI navigation.
-    private fun onCapturedPointerEvent(event: MotionEvent): Boolean {
-        if (event.source and InputDevice.SOURCE_TOUCHPAD != InputDevice.SOURCE_TOUCHPAD) return false
-        val slotId = routes[event.deviceId] ?: return false
+    /**
+     * The activity's generic-motion hook, ahead of the gamepad forwarding. True consumes the
+     * event: a captured touchpad event for a routed pad is the pad's, and letting it fall
+     * through would hand the UI a motion event it has no use for. Anything else (a joystick
+     * axis, a mouse the app never captured, a surface it does not route) is left alone.
+     */
+    fun onGenericMotionEvent(event: MotionEvent): Boolean {
+        val slotId = PadTouchpadCapturePolicy.slotForEvent(routes, event.source, event.deviceId) ?: return false
         val device = event.device
         val xRange =
             device
@@ -183,8 +193,13 @@ class PadTouchpadCapture(
 
     private fun startResend() {
         if (resendJob?.isActive == true) return
+        val thread =
+            resendThread ?: HandlerThread("dish-pad-touch-resend", Process.THREAD_PRIORITY_URGENT_AUDIO).also {
+                it.start()
+                resendThread = it
+            }
         resendJob =
-            scope.launch(resendDispatcher) {
+            scope.launch(Handler(thread.looper).asCoroutineDispatcher()) {
                 var nextTickNs = System.nanoTime() + RESEND_INTERVAL_NS
                 while (isActive) {
                     val now = System.nanoTime()

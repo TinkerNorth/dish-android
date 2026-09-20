@@ -66,4 +66,16 @@ class PadTouchpadCapturePolicyTest {
         assertFalse(PadTouchpadCapturePolicy.shouldCapture(mapOf(1 to "1"), focused = false))
         assertTrue(PadTouchpadCapturePolicy.shouldCapture(mapOf(1 to "1"), focused = true))
     }
+
+    @Test
+    fun `only a captured touchpad event for a routed device names a slot`() {
+        val routes = mapOf(7 to "7")
+        val touchpad = PadTouchpadCapturePolicy.SOURCE_TOUCHPAD
+        assertEquals("7", PadTouchpadCapturePolicy.slotForEvent(routes, touchpad, 7))
+        // The pad's joystick axes and its mouse-mode cursor moves keep their own path.
+        assertEquals(null, PadTouchpadCapturePolicy.slotForEvent(routes, 0x01000010, 7)) // SOURCE_JOYSTICK
+        assertEquals(null, PadTouchpadCapturePolicy.slotForEvent(routes, 0x00002002, 7)) // SOURCE_MOUSE
+        // A surface the app does not route is not consumed either.
+        assertEquals(null, PadTouchpadCapturePolicy.slotForEvent(routes, touchpad, 8))
+    }
 }

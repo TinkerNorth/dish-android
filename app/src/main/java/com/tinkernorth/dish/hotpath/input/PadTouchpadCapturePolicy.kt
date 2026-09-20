@@ -50,4 +50,22 @@ object PadTouchpadCapturePolicy {
         routes: Map<Int, String>,
         focused: Boolean,
     ): Boolean = focused && routes.isNotEmpty()
+
+    /**
+     * The slot a motion event feeds, or null when it is not a captured touchpad event for a
+     * routed pad. Only the touchpad source counts: a captured surface reports SOURCE_TOUCHPAD,
+     * while the same device's joystick axes and its uncaptured mouse-mode cursor moves carry
+     * other sources and must keep going where they went.
+     */
+    fun slotForEvent(
+        routes: Map<Int, String>,
+        source: Int,
+        deviceId: Int,
+    ): String? {
+        if ((source and SOURCE_TOUCHPAD) != SOURCE_TOUCHPAD) return null
+        return routes[deviceId]
+    }
+
+    // android.view.InputDevice.SOURCE_TOUCHPAD, restated so the policy stays JVM-testable.
+    const val SOURCE_TOUCHPAD = 0x00100008
 }
