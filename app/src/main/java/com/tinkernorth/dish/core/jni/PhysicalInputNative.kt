@@ -164,6 +164,8 @@ class PhysicalInputNative
 
         fun getDeviceUrbCount(deviceId: Int): Long = SatelliteNative.getDeviceUrbCount(deviceId)
 
+        fun getDirectPadBattery(deviceId: Int): Int = SatelliteNative.getDirectPadBattery(deviceId)
+
         fun getDeviceMotionCount(deviceId: Int): Long = SatelliteNative.getDeviceMotionCount(deviceId)
 
         fun getDeviceInputEventCount(deviceId: Int): Long = SatelliteNative.getDeviceInputEventCount(deviceId)

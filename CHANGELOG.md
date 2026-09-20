@@ -21,6 +21,12 @@ computer. Those lines say "update Satellite too".
   "Controller sound" switch and the host's own haptics switch, and shows as a
   Haptics row where it applies. Update Satellite too. The app now speaks
   protocol 3; older Satellites keep working as before.
+- **A Direct controller shows its own battery.** In Direct mode the app
+  reads the DualShock 4, DualSense and Switch Pro's charge straight out of
+  their input reports (the same bytes Linux's own drivers read), so the
+  controller card shows the pad's charge and whether it is charging instead
+  of the phone's. What Satellite is told stays the phone battery, the rule
+  for any USB controller.
 - **Controller sound and microphone without Direct.** A DualSense or
   DualShock 4 left on Android's own USB path now gets the same microphone,
   speaker and haptics routes as a Direct one: the pad's audio function is the

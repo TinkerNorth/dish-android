@@ -1867,6 +1867,11 @@ JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDe
     return (jlong)usbhost::getUrbErrorCount((int32_t)deviceId);
 }
 
+JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDirectPadBattery(
+    JNIEnv*, jobject, jint deviceId) {
+    return (jint)usbhost::getPadBattery((int32_t)deviceId);
+}
+
 JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_deviceInfoJson(
     JNIEnv* env, jobject, jint deviceId) {
     return env->NewStringUTF(usbhost::deviceInfoJson((int32_t)deviceId).c_str());

@@ -298,6 +298,11 @@ object SatelliteNative {
 
     external fun getDeviceUrbCount(deviceId: Int): Long
 
+    // A Direct-claimed pad's own charge as its last report carried it, packed level shl 8 or
+    // status (usb_parsers.h PAD_BATTERY_*), or -1 when the device is gone or nothing has
+    // carried a reading yet. See PhysicalBatteryMapping.directPadSample.
+    external fun getDirectPadBattery(deviceId: Int): Int
+
     // Direct-mode MSG_MOTION sends for a synthetic device (post 125 Hz throttle).
     external fun getDeviceMotionCount(deviceId: Int): Long
 
