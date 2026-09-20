@@ -58,7 +58,7 @@ class UsbGamepadManager
         private val pathPrefs: UsbPathPreferenceStore,
         private val descriptors: UsbDescriptorStore,
     ) {
-        private val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
+        private val usbManager = context.getSystemService(Context.USB_SERVICE) as? UsbManager
 
         // Single source of truth for USB controller path state, keyed by vpKey (vid<<16|pid).
         private val _controllers = MutableStateFlow<Map<Int, UsbController>>(emptyMap())
@@ -112,7 +112,7 @@ class UsbGamepadManager
         fun reconcileForeground() = scanExistingUsb()
 
         private fun scanExistingUsb() {
-            for (device in usbManager.deviceList.values) onUsbPresent(device)
+            for (device in usbManager?.deviceList?.values.orEmpty()) onUsbPresent(device)
         }
 
         fun tryDirectMode(
@@ -127,7 +127,7 @@ class UsbGamepadManager
         ) {
             pathPrefs.setChoice(vendorId, productId, choice)
             val device =
-                usbManager.deviceList.values.firstOrNull { it.vendorId == vendorId && it.productId == productId }
+                usbManager?.deviceList?.values?.firstOrNull { it.vendorId == vendorId && it.productId == productId }
             if (device != null) onUsbPresent(device)
             applyEvent(vpk(vendorId, productId), UsbEvent.Choose(choice, userInitiated = true))
         }
@@ -197,7 +197,7 @@ class UsbGamepadManager
                                     phase = UsbPhase.Routed,
                                     usbPresent = true,
                                     frameworkId = fwId,
-                                    hasPermission = usbManager.hasPermission(device),
+                                    hasPermission = usbManager?.hasPermission(device) == true,
                                     desired = resolvePath(vid, pid),
                                     frameworkExpected = native.modelExpectsFrameworkGamepad(vid, pid),
                                 ).withCapturedBinding(fwId)
@@ -206,7 +206,7 @@ class UsbGamepadManager
                 lastFrameworkId[key] = fwId
                 // Drive toward the resolved path automatically (not user-initiated).
                 applyEvent(key, UsbEvent.Choose(resolvePath(vid, pid), userInitiated = false))
-            } else if (usbManager.hasPermission(device) && !existing.hasPermission) {
+            } else if (usbManager?.hasPermission(device) == true && !existing.hasPermission) {
                 applyEvent(key, UsbEvent.PermissionGranted)
             }
         }
@@ -236,8 +236,10 @@ class UsbGamepadManager
             for (dev in devices.values) {
                 if (dev.isUsbSynthetic || dev.vendorId == 0 || dev.productId == 0) continue
                 if (vpk(dev.vendorId, dev.productId) in _controllers.value) continue
-                usbManager.deviceList.values
-                    .firstOrNull { it.vendorId == dev.vendorId && it.productId == dev.productId }
+                usbManager
+                    ?.deviceList
+                    ?.values
+                    ?.firstOrNull { it.vendorId == dev.vendorId && it.productId == dev.productId }
                     ?.let { onUsbPresent(it) }
             }
         }
@@ -336,6 +338,7 @@ class UsbGamepadManager
         // and whether the framework interface was stolen (so the FSM knows if it must wait for re-enum).
         @Suppress("ReturnCount")
         private fun doClaim(device: UsbDevice): ClaimOutcome {
+            val usb = usbManager ?: return ClaimOutcome.Fail(DirectClaimFailure.InitFailed, frameworkStolen = false)
             val key = vpk(device.vendorId, device.productId)
             val (intf, epIn, epOut) =
                 findInterruptInPair(device)
@@ -347,7 +350,7 @@ class UsbGamepadManager
                     }?.id
             val conn =
                 try {
-                    usbManager.openDevice(device)
+                    usb.openDevice(device)
                 } catch (e: SecurityException) {
                     Log.w(TAG, "openDevice denied for ${device.vendorId.toHex4()}:${device.productId.toHex4()}", e)
                     return ClaimOutcome.Fail(DirectClaimFailure.PermissionDenied, frameworkStolen = false)
@@ -477,7 +480,7 @@ class UsbGamepadManager
                     PendingIntent.FLAG_UPDATE_CURRENT
                 }
             val pending = PendingIntent.getBroadcast(context, device.deviceId, intent, flags)
-            scope.launch(Dispatchers.Main) { usbManager.requestPermission(device, pending) }
+            scope.launch(Dispatchers.Main) { usbManager?.requestPermission(device, pending) }
         }
 
         // ── Pure-ish helpers ─────────────────────────────────────────────────

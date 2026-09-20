@@ -4,11 +4,14 @@ package com.tinkernorth.dish.hotpath.input
 
 import android.content.Context
 import android.hardware.input.InputManager
+import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.view.InputDevice
 import com.tinkernorth.dish.source.usb.DirectClaimFailure
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import org.junit.Assert.assertEquals
@@ -276,5 +279,89 @@ class PhysicalGamepadRegistryTest {
         assertFalse(hasPointerSource(InputDevice.SOURCE_KEYBOARD))
         // The pointer class bit alone (a joystick shares it) is not a mouse.
         assertFalse(hasPointerSource(InputDevice.SOURCE_CLASS_POINTER))
+    }
+
+    // ---- a device without a USB service ----
+
+    private fun buildRegistry(usb: UsbManager?): PhysicalGamepadRegistry {
+        val ctx = mockk<Context>()
+        every { ctx.getSystemService(Context.INPUT_SERVICE) } returns mockk<InputManager>(relaxed = true)
+        every { ctx.getSystemService(Context.USB_SERVICE) } returns usb
+        return PhysicalGamepadRegistry(ctx, CoroutineScope(SupervisorJob()), mockk(relaxed = true), mockk(relaxed = true))
+    }
+
+    private fun frameworkPad(
+        deviceId: Int,
+        vid: Int,
+        pid: Int,
+    ): InputDevice =
+        mockk(relaxed = true) {
+            every { id } returns deviceId
+            every { name } returns "Pad"
+            every { sources } returns (InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_JOYSTICK)
+            every { keyboardType } returns InputDevice.KEYBOARD_TYPE_NON_ALPHABETIC
+            every { vendorId } returns vid
+            every { productId } returns pid
+        }
+
+    private fun addFrameworkPad(
+        registry: PhysicalGamepadRegistry,
+        pad: InputDevice,
+    ) {
+        val deviceId = pad.id
+        mockkStatic(InputDevice::class)
+        try {
+            every { InputDevice.getDevice(deviceId) } returns pad
+            registry.onInputDeviceAdded(deviceId)
+        } finally {
+            unmockkStatic(InputDevice::class)
+        }
+    }
+
+    @Test
+    fun `the registry builds on a device with no USB service`() {
+        val registry = buildRegistry(usb = null)
+        assertTrue(registry.devices.value.isEmpty())
+    }
+
+    @Test
+    fun `a framework pad on a device with no USB service is classified as Bluetooth`() {
+        val registry = buildRegistry(usb = null)
+        addFrameworkPad(registry, frameworkPad(deviceId = 7, vid = 0x054C, pid = 0x0CE6))
+        assertEquals(Transport.Bluetooth, registry.devices.value[7]?.transport)
+    }
+
+    @Test
+    fun `a framework pad the USB service also lists is classified as USB`() {
+        val listed =
+            mockk<UsbDevice> {
+                every { vendorId } returns 0x054C
+                every { productId } returns 0x0CE6
+            }
+        val usb =
+            mockk<UsbManager> {
+                every { deviceList } returns hashMapOf("d" to listed)
+            }
+        val registry = buildRegistry(usb)
+        addFrameworkPad(registry, frameworkPad(deviceId = 8, vid = 0x054C, pid = 0x0CE6))
+        assertEquals(Transport.Usb, registry.devices.value[8]?.transport)
+    }
+
+    @Test
+    fun `a synthetic pad needs no USB service to register`() {
+        val registry = buildRegistry(usb = null)
+        registry.addUsbSynthetic(
+            deviceId = -1000,
+            name = "DualSense",
+            hasGyro = true,
+            pollRateHz = 250,
+            vendorId = 0x054C,
+            productId = 0x0CE6,
+        )
+        assertTrue(
+            registry.devices.value
+                .getValue(-1000)
+                .isUsbSynthetic,
+        )
     }
 }
