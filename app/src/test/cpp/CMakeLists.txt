@@ -88,6 +88,14 @@ target_include_directories(audio_jitter_test PRIVATE "${SATELLITE_CPP}")
 target_compile_options(audio_jitter_test PRIVATE -Wall -Wextra -Wpedantic)
 target_link_libraries(audio_jitter_test PRIVATE GTest::gtest_main)
 
+find_package(Threads REQUIRED)
+add_executable(heartbeat_thread_test
+    heartbeat_thread_test.cpp
+)
+target_include_directories(heartbeat_thread_test PRIVATE "${SATELLITE_CPP}")
+target_compile_options(heartbeat_thread_test PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(heartbeat_thread_test PRIVATE GTest::gtest_main Threads::Threads)
+
 # The libopus wrapper, round-tripped through real encoders and decoders. Needs
 # the codec, so it fetches the same pinned release the app builds against (see
 # src/main/cpp/CMakeLists.txt): testing the settings against a different libopus
@@ -129,4 +137,5 @@ gtest_discover_tests(usb_parsers_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(usb_hid_descriptor_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(send_counter_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(audio_jitter_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(heartbeat_thread_test DISCOVERY_MODE PRE_TEST)
 gtest_discover_tests(audio_codec_test DISCOVERY_MODE PRE_TEST)

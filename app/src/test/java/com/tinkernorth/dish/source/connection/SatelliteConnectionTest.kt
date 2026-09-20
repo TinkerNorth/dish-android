@@ -31,6 +31,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.util.concurrent.CountDownLatch
+import kotlin.concurrent.thread
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SatelliteConnectionTest {
@@ -1019,6 +1021,38 @@ class SatelliteConnectionTest {
 
         assertEquals(fwIndex, conn.slots.value["slot-usb"]?.controllerIndex)
         assertEquals(2, conn.slots.value.size)
+    }
+
+    @Test
+    fun `concurrent disconnects tear the native session down exactly once`() {
+        repeat(50) { round ->
+            val handle = 100 + round
+            connectLive(handle = handle)
+            val gate = CountDownLatch(1)
+            val workers =
+                List(4) {
+                    thread {
+                        gate.await()
+                        conn.markDisconnected()
+                    }
+                }
+            gate.countDown()
+            workers.forEach { it.join() }
+            assertEquals(SatelliteSessionState.Idle, conn.state.value)
+            assertEquals(-1, conn.handle)
+            verify(exactly = 1) { repo.stopHeartbeat(handle) }
+            verify(exactly = 1) { repo.closeSocket(handle) }
+        }
+    }
+
+    @Test
+    fun `a repeated disconnect still settles the session without touching native twice`() {
+        connectLive(handle = 9)
+        conn.markDisconnected()
+        conn.markDisconnected()
+        assertEquals(SatelliteSessionState.Idle, conn.state.value)
+        verify(exactly = 1) { repo.stopHeartbeat(9) }
+        verify(exactly = 1) { repo.closeSocket(9) }
     }
 
     private companion object {

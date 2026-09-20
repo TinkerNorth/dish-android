@@ -281,6 +281,8 @@ val nativeTestConfigure =
         inputs.file(nativeTestSrcDir.file("wire_encoders_test.cpp"))
         inputs.file(nativeTestSrcDir.file("audio_jitter_test.cpp"))
         inputs.file(nativeTestSrcDir.file("audio_codec_test.cpp"))
+        inputs.file(nativeTestSrcDir.file("heartbeat_thread_test.cpp"))
+        inputs.file(layout.projectDirectory.file("src/main/cpp/heartbeat_thread.h"))
         inputs.file(layout.projectDirectory.file("src/main/cpp/gamepad_input.h"))
         inputs.file(layout.projectDirectory.file("src/main/cpp/gamepad_input.cpp"))
         inputs.file(layout.projectDirectory.file("src/main/cpp/wire_encoders.h"))
