@@ -114,7 +114,7 @@ class PhysicalGamepadRegistry
             context.getSystemService(Context.INPUT_SERVICE) as InputManager
 
         private val usbManager =
-            context.getSystemService(Context.USB_SERVICE) as UsbManager
+            context.getSystemService(Context.USB_SERVICE) as? UsbManager
 
         private val _devices = MutableStateFlow<Map<Int, Device>>(emptyMap())
         val devices: StateFlow<Map<Int, Device>> = _devices.asStateFlow()
@@ -253,7 +253,7 @@ class PhysicalGamepadRegistry
         ): Transport =
             when {
                 btConnections.isConnected(name) -> Transport.Bluetooth
-                usbManager.deviceList.values.any { it.vendorId == vendorId && it.productId == productId } ->
+                usbManager?.deviceList?.values?.any { it.vendorId == vendorId && it.productId == productId } == true ->
                     Transport.Usb
                 else -> Transport.Bluetooth
             }
