@@ -12,6 +12,7 @@ import com.tinkernorth.dish.core.jni.SatelliteNative
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.lights.FrameworkLightGateway
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -196,6 +197,7 @@ class PhysicalSlotBindingObserver
         private val satellite: SatelliteConnectionManager,
         private val bt: BluetoothGamepadRegistry,
         private val moonlight: com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager,
+        private val frameworkLights: FrameworkLightGateway,
         private val scope: CoroutineScope,
     ) : DefaultLifecycleObserver {
         private data class BindingState(
@@ -217,6 +219,10 @@ class PhysicalSlotBindingObserver
             job?.cancel()
             job = null
             SatelliteNative.clearAllPhysicalSlots()
+            // A framework light bar the app opened is given back here too: physical-slot streaming
+            // ends when the last activity stops, so a bar left mid-color would otherwise hold the
+            // last game color with nothing driving it.
+            frameworkLights.releaseAll()
             lastBoundDeviceIds = emptySet()
             lastAppliedBinds = emptyMap()
         }
@@ -286,7 +292,12 @@ class PhysicalSlotBindingObserver
 
         private fun execute(op: BindOp) {
             when (op) {
-                is BindOp.Unbind -> SatelliteNative.unbindPhysicalSlot(op.deviceId)
+                is BindOp.Unbind -> {
+                    SatelliteNative.unbindPhysicalSlot(op.deviceId)
+                    // The slot stopped streaming (unbound, host gone, or the device departed): give
+                    // any framework light bar back. A no-op for a device the gateway never lit.
+                    frameworkLights.release(op.deviceId)
+                }
                 is BindOp.Forget -> SatelliteNative.forgetPhysicalDevice(op.deviceId)
                 is BindOp.ReleaseHubBinding -> hub.unbind(op.deviceId.toString())
                 is BindOp.BindSatellite ->

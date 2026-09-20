@@ -21,6 +21,7 @@ enum class SetupCapabilityKind {
     PLAYER_LEDS,
     MICROPHONE,
     SPEAKER,
+    HAPTICS,
 }
 
 data class SetupCapabilityRow(
@@ -68,6 +69,10 @@ private val EXTENDED_ROWS =
         // host with no audio endpoints never grows two crossed-out rows.
         SetupCapabilityKind.MICROPHONE to Feature.MIC,
         SetupCapabilityKind.SPEAKER to Feature.SPEAKER,
+        // The DualSense's haptic lanes, right after the speaker they share an endpoint
+        // with. Relevance-filtered like the rest: only a type with the lanes and a
+        // host that streams them ever grows the row.
+        SetupCapabilityKind.HAPTICS to Feature.HAPTIC_AUDIO,
     )
 
 private fun rowFor(

@@ -107,4 +107,95 @@ class SpeakerPlayoutPolicyTest {
         const val HANDLE = 7
         const val CTRL_IDX = 0
     }
+
+    // ---- protocol 3: the haptic lane ----
+
+    @Test
+    fun `haptics plan a second voice on a 4-channel endpoint and none on a stereo one`() {
+        val quad =
+            SpeakerPlayoutPolicy.plan(
+                listOf(
+                    SpeakerSlotInput(
+                        "s",
+                        1,
+                        0,
+                        streaming = true,
+                        speakerEnabled = true,
+                        playbackDeviceId = 7,
+                        hapticEnabled = true,
+                        playbackChannels = 4,
+                    ),
+                ),
+            )
+        assertEquals(2, quad.voices.size)
+        val speaker = quad.voices.getValue(SpeakerPlayoutPlan.routeKey(1, 0, PlayoutLane.SPEAKER))
+        val haptic = quad.voices.getValue(SpeakerPlayoutPlan.routeKey(1, 0, PlayoutLane.HAPTICS))
+        assertEquals(PlayoutLane.SPEAKER, speaker.lane)
+        assertEquals(4, speaker.deviceChannels) // the speaker opens at the pad's width too
+        assertEquals(PlayoutLane.HAPTICS, haptic.lane)
+        assertEquals(4, haptic.deviceChannels)
+        assertEquals(7, haptic.playbackDeviceId)
+
+        val stereo =
+            SpeakerPlayoutPolicy.plan(
+                listOf(
+                    SpeakerSlotInput(
+                        "s",
+                        1,
+                        0,
+                        streaming = true,
+                        speakerEnabled = true,
+                        playbackDeviceId = 7,
+                        hapticEnabled = true,
+                        playbackChannels = 2,
+                    ),
+                ),
+            )
+        assertEquals(1, stereo.voices.size)
+        assertEquals(
+            2,
+            stereo.voices.values
+                .single()
+                .deviceChannels,
+        )
+
+        // Unknown width opens as stereo and cannot carry the lane.
+        val unknown =
+            SpeakerPlayoutPolicy.plan(
+                listOf(SpeakerSlotInput("s", 1, 0, streaming = true, speakerEnabled = true, hapticEnabled = true)),
+            )
+        assertEquals(1, unknown.voices.size)
+        assertEquals(
+            2,
+            unknown.voices.values
+                .single()
+                .deviceChannels,
+        )
+    }
+
+    @Test
+    fun `the haptic lane has its own gate and does not need the speaker's`() {
+        val plan =
+            SpeakerPlayoutPolicy.plan(
+                listOf(
+                    SpeakerSlotInput(
+                        "s",
+                        1,
+                        0,
+                        streaming = true,
+                        speakerEnabled = false,
+                        playbackDeviceId = 7,
+                        hapticEnabled = true,
+                        playbackChannels = 4,
+                    ),
+                ),
+            )
+        assertEquals(1, plan.voices.size)
+        assertEquals(
+            PlayoutLane.HAPTICS,
+            plan.voices.values
+                .single()
+                .lane,
+        )
+    }
 }

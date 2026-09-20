@@ -23,6 +23,7 @@ private val CAPABILITY_ROWS =
         Feature.PLAYER_LEDS,
         Feature.MIC,
         Feature.SPEAKER,
+        Feature.HAPTIC_AUDIO,
         Feature.BATTERY,
     )
 

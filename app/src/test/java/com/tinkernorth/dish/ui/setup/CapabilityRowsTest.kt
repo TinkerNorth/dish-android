@@ -49,6 +49,7 @@ class CapabilityRowsTest {
                 SetupCapabilityKind.PLAYER_LEDS,
                 SetupCapabilityKind.MICROPHONE,
                 SetupCapabilityKind.SPEAKER,
+                SetupCapabilityKind.HAPTICS,
             ),
             capabilityRows(full).map { it.kind },
         )

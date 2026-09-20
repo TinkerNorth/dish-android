@@ -12,6 +12,7 @@ import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -36,6 +37,7 @@ class PadAudioRouteResolver
     constructor(
         @ApplicationContext private val context: Context,
         private val routes: PadAudioRoutes,
+        private val native: PhysicalInputNative,
     ) {
         private val audioManager: AudioManager? =
             context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
@@ -80,6 +82,7 @@ class PadAudioRouteResolver
                     productId = device.productId,
                     productName = device.productName,
                     hasAudioFunction = hasAudioInterface(device),
+                    hasHapticLanes = native.modelHasHapticLanes(device.vendorId, device.productId),
                 )
             }
         }
@@ -105,6 +108,7 @@ class PadAudioRouteResolver
                     productName = it.productName?.toString(),
                     sink = it.isSink,
                     source = it.isSource,
+                    channelCounts = it.channelCounts.toList(),
                 )
             }
         }

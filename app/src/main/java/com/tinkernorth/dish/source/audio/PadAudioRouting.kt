@@ -3,6 +3,7 @@
 package com.tinkernorth.dish.source.audio
 
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
+import com.tinkernorth.dish.hotpath.input.Transport
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
@@ -36,11 +37,13 @@ interface SlotAudioRoutes {
 /**
  * The real answer, from the published table and the device registry.
  *
- * Only a Direct-claimed pad ever names an endpoint. The virtual pad IS the phone's own microphone
- * and speaker, and a framework pad is one we never claimed, so its audio function (if it even has
- * one) is not ours to point at either. Both fall through to [PadAudioRoute.NONE], which the engines
- * read as "let the platform route", and which is the right answer for a phone standing in for the
- * emulated pad's endpoints.
+ * Any USB pad names its endpoints, claimed or not: the app claims only the HID interface, so the
+ * pad's audio function is the platform's on both paths and a track can be pointed at it either
+ * way. The virtual pad IS the phone's own microphone and speaker, and a Bluetooth pad has no audio
+ * function (and shares a USB twin's vendor:product, so keying it would hand it that twin's
+ * endpoint). Both fall through to [PadAudioRoute.NONE], which the engines read as "let the
+ * platform route", and which is the right answer for a phone standing in for the emulated pad's
+ * endpoints.
  *
  * Kept apart from [PadAudioRoutes] so the table stays a plain published map: this is the only place
  * that knows a slot id is a device id, and it is the same lookup the capability composer does when
@@ -58,7 +61,7 @@ class PadAudioRouting
         override fun forSlot(slotId: String): PadAudioRoute {
             val deviceId = slotId.toIntOrNull() ?: return PadAudioRoute.NONE
             val device = registry.devices.value[deviceId] ?: return PadAudioRoute.NONE
-            if (!device.isUsbSynthetic) return PadAudioRoute.NONE
+            if (device.transport != Transport.Usb) return PadAudioRoute.NONE
             return routes.routeFor(device.vendorId, device.productId)
         }
     }

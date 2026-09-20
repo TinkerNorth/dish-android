@@ -261,4 +261,20 @@ class PhysicalGamepadRegistryTest {
         assertFalse(PhysicalGamepadRegistry.isSyntheticId(0))
         assertFalse(PhysicalGamepadRegistry.isSyntheticId(42))
     }
+
+    // ---- the pad's own touch surface ----
+
+    @Test
+    fun `a touch surface in system-mouse mode reads as a pointer source`() {
+        assertTrue(hasPointerSource(InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_JOYSTICK or InputDevice.SOURCE_MOUSE))
+        assertTrue(hasPointerSource(InputDevice.SOURCE_TOUCHPAD))
+    }
+
+    @Test
+    fun `a plain pad has no pointer source`() {
+        assertFalse(hasPointerSource(InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_JOYSTICK))
+        assertFalse(hasPointerSource(InputDevice.SOURCE_KEYBOARD))
+        // The pointer class bit alone (a joystick shares it) is not a mouse.
+        assertFalse(hasPointerSource(InputDevice.SOURCE_CLASS_POINTER))
+    }
 }

@@ -32,10 +32,11 @@ internal fun feedbackFuncFacts(caps: SlotCapabilities): List<FeedbackPillFact> =
 // The emulated pad's own audio endpoints. Their own reducer rather than a pair of
 // feedback facts because they are not feedback: one goes up and one comes back, and both
 // are things the user switched ON, so unlike the surfaces above they read `enabled`.
-internal enum class AudioPillFact { MIC, SPEAKER }
+internal enum class AudioPillFact { MIC, SPEAKER, HAPTICS }
 
 internal fun audioFuncFacts(caps: SlotCapabilities): List<AudioPillFact> =
     buildList {
         if (Feature.MIC in caps.enabled) add(AudioPillFact.MIC)
         if (Feature.SPEAKER in caps.enabled) add(AudioPillFact.SPEAKER)
+        if (Feature.HAPTIC_AUDIO in caps.enabled) add(AudioPillFact.HAPTICS)
     }

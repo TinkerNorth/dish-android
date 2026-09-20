@@ -10,6 +10,7 @@ import com.tinkernorth.dish.core.model.HostFeatureSet
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
+import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.repository.SatelliteCatalogRepository
 import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.audio.PadAudioRoutes
@@ -286,25 +287,36 @@ class CapabilityComposer
             }
             if (direct) {
                 // A Direct pad has no framework InputDevice to probe; everything, including the
-                // LED / trigger surfaces the framework can never reach, comes from the native tables.
+                // trigger and player-LED surfaces the framework path never reaches, comes from the
+                // native tables. (The light bar is the one framework pads also drive, over Bluetooth.)
                 if (native.modelHasImu(vid, pid)) out += Feature.MOTION
                 if (native.modelHasRumble(vid, pid)) out += Feature.RUMBLE
                 if (native.modelHasLightbar(vid, pid)) out += Feature.LIGHTBAR
                 if (native.modelHasTriggerEffects(vid, pid)) out += Feature.TRIGGER_EFFECTS
                 if (native.modelHasPlayerLeds(vid, pid)) out += Feature.PLAYER_LEDS
                 if (native.modelHasTriggerRumble(vid, pid)) out += Feature.TRIGGER_RUMBLE
-                // The pad's own audio endpoints are Android's to route, not ours: we claim
-                // only the HID interface, so its USB-audio function stays with the OS. That
-                // makes the model tables the wrong source here, and the OS route table the
-                // right one: a pad whose audio function the OS never enumerated can't be
-                // captured from or played to, whatever its model says it has.
-                val audio = padAudioRoutes.routeFor(vid, pid)
-                if (audio.microphone) out += Feature.MIC
-                if (audio.speaker) out += Feature.SPEAKER
             } else {
                 val framework = frameworkFactsFor(device)
                 if (framework?.hasGyro == true) out += Feature.MOTION
                 if (framework?.hasRumble == true) out += Feature.RUMBLE
+                // The light bar rides the Android lights API, which reaches a uhid pad's LEDs but
+                // not a USB one's (the input service cannot write generic-sysfs LED nodes), so it is
+                // advertised on the Bluetooth transport only. A USB pad's bar comes from Direct.
+                if (device.transport == Transport.Bluetooth && framework?.hasLightbar == true) {
+                    out += Feature.LIGHTBAR
+                }
+            }
+            // The pad's own audio endpoints are Android's to route, not ours: we claim only
+            // the HID interface (or, on the framework path, nothing at all), so its USB-audio
+            // function stays with the OS on either path. That makes the model tables the wrong
+            // source here, and the OS route table the right one: a pad whose audio function
+            // the OS never enumerated can't be captured from or played to, whatever its model
+            // says it has. A Bluetooth pad has no such function and resolves to nothing.
+            if (device.transport == Transport.Usb) {
+                val audio = padAudioRoutes.routeFor(vid, pid)
+                if (audio.microphone) out += Feature.MIC
+                if (audio.speaker) out += Feature.SPEAKER
+                if (audio.haptics) out += Feature.HAPTIC_AUDIO
             }
             return CapabilitySet(out)
         }
@@ -313,7 +325,12 @@ class CapabilityComposer
             if (device.isUsbSynthetic) {
                 registry.frameworkCapsFor(device.vendorId, device.productId)
             } else {
-                PhysicalGamepadRegistry.FrameworkCaps(hasGyro = device.hasGyro, hasRumble = device.hasRumble)
+                PhysicalGamepadRegistry.FrameworkCaps(
+                    hasGyro = device.hasGyro,
+                    hasRumble = device.hasRumble,
+                    hasLightbar = device.hasLightbar,
+                    hasTouchpad = device.touchpadDeviceId != null,
+                )
             }
 
         fun inputFunctionsFor(
@@ -343,10 +360,14 @@ class CapabilityComposer
                 known = framework != null,
                 rumble = framework?.hasRumble == true,
                 gyro = framework?.hasGyro == true,
-                touchpad = false,
+                // The surface the framework exposed, read through pointer capture; only a
+                // model with a trackpad is routed through it (deviceTouchpadSource).
+                touchpad = framework?.hasTouchpad == true && native.modelHasTouchpad(vid, pid),
             )
         }
 
+        // The app reads the pad's surface itself on Direct (the raw report) and, on a framework
+        // path, through pointer capture of the surface Android exposed (Device.touchpadDeviceId).
         private fun deviceTouchpadSource(
             device: PhysicalGamepadRegistry.Device,
             direct: Boolean = device.isUsbSynthetic,
@@ -354,7 +375,7 @@ class CapabilityComposer
             TouchpadRouting.sourceFor(
                 isVirtual = false,
                 padHasTouchpad = native.modelHasTouchpad(device.vendorId, device.productId),
-                padCaptured = direct,
+                padCaptured = direct || (!device.isUsbSynthetic && device.touchpadDeviceId != null),
             )
 
         /** Who produces touch for [slotId] right now: the pad, the phone screen, or nobody. */

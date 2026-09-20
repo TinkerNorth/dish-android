@@ -15,6 +15,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.tinkernorth.dish.composer.CapabilityComposer
+import com.tinkernorth.dish.composer.PhysicalReachabilityComposer
 import com.tinkernorth.dish.composer.WakeStateController
 import com.tinkernorth.dish.core.jni.SatelliteNative
 import com.tinkernorth.dish.databinding.OverlayLowPowerBinding
@@ -39,8 +41,14 @@ class GamepadActivityHost(
     private val gamepadRegistry: PhysicalGamepadRegistry,
     private val lowPowerSignal: LowPowerSignal,
     private val inputTiming: FrameworkInputTimingStore,
+    reachability: PhysicalReachabilityComposer,
+    capabilities: CapabilityComposer,
 ) {
     private val window = activity.window
+
+    // A framework pad's own touch surface, through pointer capture (see the class). Owned here
+    // because it needs the same window this host reads gamepad events through.
+    private val padTouchpad = PadTouchpadCapture(rootView, gamepadRegistry, reachability, capabilities, activity.lifecycleScope)
     private val lowPowerTouchGate = LowPowerTouchGate()
     private val lowPowerManager: LowPowerManager
     private val countdownBannerView: View
@@ -72,6 +80,8 @@ class GamepadActivityHost(
     }
 
     fun install(notifications: DishNotifications? = null) {
+        padTouchpad.install()
+        activity.lifecycle.addObserver(padTouchpad)
         lowPowerManager.state
             .onEach { lowPowerSignal.setActive(it == LowPowerManager.State.ACTIVE) }
             .launchIn(activity.lifecycleScope)
@@ -122,6 +132,10 @@ class GamepadActivityHost(
     }
 
     fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        // A captured touchpad's fingers come this way too (see PadTouchpadCapture) and are
+        // the pad's, never a stick: taken first, before the joystick fold below could read
+        // their coordinates as axes.
+        if (padTouchpad.onGenericMotionEvent(event)) return true
         val isJoy =
             isJoystickMotionSource(event.source) ||
                 event.deviceId in gamepadRegistry.devices.value
@@ -162,6 +176,7 @@ class GamepadActivityHost(
 
     // Release reports on focus loss so no button stays held across shades, calls, or back-button nav.
     fun onWindowFocusChanged(hasFocus: Boolean) {
+        padTouchpad.onWindowFocusChanged(hasFocus)
         if (!hasFocus) {
             SatelliteNative.releaseAllPhysicalReports()
             return

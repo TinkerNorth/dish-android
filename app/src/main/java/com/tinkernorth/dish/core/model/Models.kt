@@ -252,6 +252,9 @@ data class ServerControllerAudioDto(
     val enabled: Boolean = false,
     val mic: Boolean = false,
     val speaker: Boolean = false,
+    // Protocol 3; absent on an older host, which reads false: that host never sends
+    // the stream either.
+    val hapticAudio: Boolean = false,
 )
 
 @Serializable

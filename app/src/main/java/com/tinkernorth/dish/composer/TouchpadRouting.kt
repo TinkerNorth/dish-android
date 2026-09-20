@@ -14,9 +14,12 @@ enum class TouchpadSource { PHONE, PAD, NONE }
 // Reducer: pure touchpad routing decisions shared by the descriptor (wire), the dashboard pill,
 // and the overlay launcher, so what the satellite routes and what the UI claims cannot drift.
 object TouchpadRouting {
-    // A pad's own trackpad is only readable on the USB-direct path (raw reports); the framework
-    // paths surface it as a system mouse the app must not hijack. A trackpad-less input falls
-    // back to the phone screen; a trackpad-bearing one on a framework path gets neither.
+    // A pad's own trackpad is readable where the app can get at the fingers: on the USB-direct
+    // path from the raw report, and on a framework path through pointer capture of the surface
+    // Android exposed (padCaptured covers both). A trackpad-less input falls back to the phone
+    // screen; a trackpad-bearing one whose surface the app cannot reach (no capture: pre-26, or
+    // a driver that exposed no surface) gets neither, because the surface is then a system
+    // mouse the app must not fight over with a second producer.
     fun sourceFor(
         isVirtual: Boolean,
         padHasTouchpad: Boolean,

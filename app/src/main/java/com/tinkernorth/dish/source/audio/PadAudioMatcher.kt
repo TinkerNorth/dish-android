@@ -15,6 +15,11 @@ data class UsbAudioPad(
     val productId: Int,
     val productName: String?,
     val hasAudioFunction: Boolean,
+    // Whether that function's render endpoint carries the HD-haptics lanes (channels 3/4
+    // driving the voice-coil actuators). The DualSense alone; the DualShock 4 v2 function
+    // is headset-only. A candidacy fact like [hasAudioFunction]: the endpoint still has
+    // to present the lanes before a route names them.
+    val hasHapticLanes: Boolean = false,
 )
 
 /**
@@ -28,6 +33,10 @@ data class UsbAudioEndpoint(
     val productName: String?,
     val sink: Boolean,
     val source: Boolean,
+    // The channel counts the platform will open this endpoint at ([android.media.AudioDeviceInfo.getChannelCounts]);
+    // empty means it would not say. A sink that lists 4 is one whose actuator lanes a
+    // quad track can reach.
+    val channelCounts: List<Int> = emptyList(),
 )
 
 /**
@@ -52,6 +61,9 @@ data class UsbAudioEndpoint(
  * pad whose audio function this device cannot confidently name.
  */
 object PadAudioMatcher {
+    /** The DualSense's own render endpoint: speaker pair then haptic pair. */
+    const val HAPTIC_ENDPOINT_CHANNELS = 4
+
     fun resolve(
         pads: List<UsbAudioPad>,
         endpoints: List<UsbAudioEndpoint>,
@@ -69,12 +81,17 @@ object PadAudioMatcher {
             val sink = sinks[name]
             val source = sources[name]
             if (sink == null && source == null) continue
+            // The widest count the platform offers, so a pad that lists both stereo
+            // and quad opens at quad and keeps its lane pairs apart.
+            val playbackChannels = sink?.channelCounts?.maxOrNull() ?: 0
             out[PadAudioRoutes.key(pad.vendorId, pad.productId)] =
                 PadAudioRoute(
                     microphone = source != null,
                     speaker = sink != null,
                     captureDeviceId = source?.deviceId ?: NO_AUDIO_DEVICE,
                     playbackDeviceId = sink?.deviceId ?: NO_AUDIO_DEVICE,
+                    haptics = sink != null && pad.hasHapticLanes && playbackChannels >= HAPTIC_ENDPOINT_CHANNELS,
+                    playbackChannels = playbackChannels,
                 )
         }
         return out

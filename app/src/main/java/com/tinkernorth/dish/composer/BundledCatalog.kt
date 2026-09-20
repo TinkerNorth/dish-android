@@ -38,6 +38,9 @@ object BundledCatalog {
                     Feature.LIGHTBAR,
                     Feature.MIC,
                     Feature.SPEAKER,
+                    // The haptic lanes ride the DualSense's endpoint alone; the DualShock 4
+                    // v2 audio function is headset-only.
+                    Feature.HAPTIC_AUDIO,
                 )
             SLUG_SWITCHPRO -> padType(Feature.RUMBLE, Feature.MOTION)
             else -> null

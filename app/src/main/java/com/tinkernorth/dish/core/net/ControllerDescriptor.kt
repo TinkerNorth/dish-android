@@ -29,6 +29,7 @@ data class ControllerDescriptor(
             append(",\"playerLeds\":").append((caps and CAP_PLAYER_LEDS) != 0)
             append(",\"mic\":").append((caps and CAP_MIC) != 0)
             append(",\"speaker\":").append((caps and CAP_SPEAKER) != 0)
+            append(",\"hapticAudio\":").append((caps and CAP_HAPTIC_AUDIO) != 0)
             append("}")
             append(",\"touchpadMode\":\"").append(sanitizedMode()).append("\"}")
         }
@@ -53,6 +54,10 @@ data class ControllerDescriptor(
         // lamp back), `speaker` lets it send MSG_SPEAKER_AUDIO. Independent directions.
         const val CAP_MIC = 0x0040
         const val CAP_SPEAKER = 0x0080
+
+        // Protocol 3: this client plays the DualSense's haptic WAVEFORM into the pad's own
+        // 4-channel endpoint. Without it the host reduces those lanes to RUMBLE.
+        const val CAP_HAPTIC_AUDIO = 0x0100
 
         // Protocol constants (never localized): valid descriptor touchpadMode values.
         const val TOUCHPAD_MODE_DS4 = "ds4"

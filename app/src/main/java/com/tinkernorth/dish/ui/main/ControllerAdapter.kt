@@ -440,6 +440,8 @@ class ControllerAdapter(
                     PillSpec(ctx.getString(R.string.setup_cap_mic), R.drawable.ic_mic, PillTone.ON)
                 AudioPillFact.SPEAKER ->
                     PillSpec(ctx.getString(R.string.setup_cap_speaker), R.drawable.ic_speaker, PillTone.ON)
+                AudioPillFact.HAPTICS ->
+                    PillSpec(ctx.getString(R.string.setup_cap_haptics), R.drawable.ic_rumble, PillTone.ON)
             }
 
         private fun pointerFactPill(fact: PointerPillFact): PillSpec =

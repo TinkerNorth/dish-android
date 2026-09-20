@@ -248,7 +248,8 @@ TEST(Feedback, MergedGipRumbleCarriesAllFourMotors) {
     st.leftTrigger = 0x4000;
     st.rightTrigger = 0x2000;
     uint8_t out[64];
-    size_t n = usbparsers::buildMergedRumbleReport(Parser::XBOX_ONE_GIP, st, 0x11, out, sizeof(out));
+    size_t n =
+        usbparsers::buildMergedRumbleReport(Parser::XBOX_ONE_GIP, st, 0x11, out, sizeof(out));
     ASSERT_EQ(13u, n);
     // Mask 0x0F keeps all four motors addressed; trigger magnitudes ride bytes
     // 6/7 with the same /512 scale as the mains.
@@ -295,8 +296,8 @@ TEST(Feedback, DualSenseLightbarSetupHandoffFiresExactlyOnce) {
     size_t n = usbparsers::buildLightbarReport(Parser::DUALSENSE, st, 9, 8, 7, out, sizeof(out));
     ASSERT_EQ(63u, n);
     EXPECT_EQ(0x02, out[0]);
-    EXPECT_EQ(0x00, out[1]); // no motor/trigger claims
-    EXPECT_EQ(0x04, out[2]); // valid_flag1 lightbar control
+    EXPECT_EQ(0x00, out[1]);  // no motor/trigger claims
+    EXPECT_EQ(0x04, out[2]);  // valid_flag1 lightbar control
     EXPECT_EQ(0x02, out[39]); // valid_flag2 LIGHTBAR_SETUP on the first write
     EXPECT_EQ(0x02, out[42]); // lightbar_setup = LIGHT_OUT
     EXPECT_EQ(9, out[45]);
@@ -313,9 +314,12 @@ TEST(Feedback, DualSenseLightbarSetupHandoffFiresExactlyOnce) {
 TEST(Feedback, LightbarUnsupportedFamiliesReturnZero) {
     usbparsers::FeedbackState st;
     uint8_t out[64];
-    EXPECT_EQ(0u, usbparsers::buildLightbarReport(Parser::XBOX_ONE_GIP, st, 1, 2, 3, out, sizeof(out)));
-    EXPECT_EQ(0u, usbparsers::buildLightbarReport(Parser::SWITCH_PRO_USB, st, 1, 2, 3, out, sizeof(out)));
-    EXPECT_EQ(0u, usbparsers::buildLightbarReport(Parser::XINPUT_360, st, 1, 2, 3, out, sizeof(out)));
+    EXPECT_EQ(0u,
+              usbparsers::buildLightbarReport(Parser::XBOX_ONE_GIP, st, 1, 2, 3, out, sizeof(out)));
+    EXPECT_EQ(
+        0u, usbparsers::buildLightbarReport(Parser::SWITCH_PRO_USB, st, 1, 2, 3, out, sizeof(out)));
+    EXPECT_EQ(0u,
+              usbparsers::buildLightbarReport(Parser::XINPUT_360, st, 1, 2, 3, out, sizeof(out)));
 }
 
 TEST(Feedback, DualSensePlayerLedsMaskedToFiveBits) {
@@ -363,9 +367,9 @@ TEST(Feedback, TriggerEffectsAreDualSenseOnlyAndByteExact) {
         EXPECT_EQ(left[i], out[22 + i]) << "left byte " << i;
     }
     EXPECT_EQ(0u, usbparsers::buildTriggerEffectsReport(Parser::DUALSHOCK4, st, left, right, out,
-                                                       sizeof(out)));
+                                                        sizeof(out)));
     EXPECT_EQ(0u, usbparsers::buildTriggerEffectsReport(Parser::XBOX_ONE_GIP, st, left, right, out,
-                                                       sizeof(out)));
+                                                        sizeof(out)));
 }
 
 // ---- DualSense mic-mute lamp (MSG_MIC_LED) ----
@@ -378,7 +382,8 @@ TEST(MicMuteLed, DualSenseStatesAreByteExact) {
     for (uint8_t state : states) {
         usbparsers::FeedbackState st;
         uint8_t out[64];
-        size_t n = usbparsers::buildMicMuteLedReport(Parser::DUALSENSE, st, state, out, sizeof(out));
+        size_t n =
+            usbparsers::buildMicMuteLedReport(Parser::DUALSENSE, st, state, out, sizeof(out));
         ASSERT_EQ(63u, n) << "state " << (int)state;
         EXPECT_EQ(0x02, out[0]);
         EXPECT_EQ(0x00, out[1]); // no motor or trigger claims
@@ -426,13 +431,14 @@ TEST(MicMuteLed, EveryOtherDualSenseReportReassertsTheLamp) {
     uint8_t block[11] = {};
     for (int i = 0; i < 11; i++) block[i] = (uint8_t)(0x70 + i);
 
-    ASSERT_EQ(63u, usbparsers::buildMicMuteLedReport(Parser::DUALSENSE, st,
-                                                     usbparsers::MIC_MUTE_LED_ON, out, sizeof(out)));
+    ASSERT_EQ(63u, usbparsers::buildMicMuteLedReport(
+                       Parser::DUALSENSE, st, usbparsers::MIC_MUTE_LED_ON, out, sizeof(out)));
 
     // A colour written after the lamp carries both: the firmware applies whatever the valid flags
     // claim, so a lightbar report that flagged the lamp field and left it zeroed would turn the
     // lamp off as a side effect of changing colour.
-    ASSERT_EQ(63u, usbparsers::buildLightbarReport(Parser::DUALSENSE, st, 9, 8, 7, out, sizeof(out)));
+    ASSERT_EQ(63u,
+              usbparsers::buildLightbarReport(Parser::DUALSENSE, st, 9, 8, 7, out, sizeof(out)));
     EXPECT_EQ(0x04 | 0x01 | 0x02, out[2]) << "lightbar + lamp + power-save claims";
     EXPECT_EQ(usbparsers::MIC_MUTE_LED_ON, out[9]);
     EXPECT_EQ(0x10, out[10]);
@@ -440,7 +446,8 @@ TEST(MicMuteLed, EveryOtherDualSenseReportReassertsTheLamp) {
     EXPECT_EQ(8, out[46]);
     EXPECT_EQ(7, out[47]);
 
-    ASSERT_EQ(63u, usbparsers::buildPlayerLedsReport(Parser::DUALSENSE, st, 0x1F, 0, out, sizeof(out)));
+    ASSERT_EQ(63u,
+              usbparsers::buildPlayerLedsReport(Parser::DUALSENSE, st, 0x1F, 0, out, sizeof(out)));
     EXPECT_EQ(0x10 | 0x01 | 0x02, out[2]);
     EXPECT_EQ(usbparsers::MIC_MUTE_LED_ON, out[9]);
     EXPECT_EQ(0x1F, out[44]);
@@ -472,9 +479,8 @@ TEST(MicMuteLed, TheLampWrittenAfterOtherEffectsSurvivesToo) {
     for (int i = 0; i < 11; i++) block[i] = (uint8_t)(0x50 + i);
     ASSERT_EQ(63u, usbparsers::buildTriggerEffectsReport(Parser::DUALSENSE, st, block, block, out,
                                                          sizeof(out)));
-    ASSERT_EQ(63u, usbparsers::buildMicMuteLedReport(Parser::DUALSENSE, st,
-                                                     usbparsers::MIC_MUTE_LED_PULSE, out,
-                                                     sizeof(out)));
+    ASSERT_EQ(63u, usbparsers::buildMicMuteLedReport(
+                       Parser::DUALSENSE, st, usbparsers::MIC_MUTE_LED_PULSE, out, sizeof(out)));
     EXPECT_EQ(0x00, out[1]) << "a lamp write must not claim the trigger blocks";
     EXPECT_EQ(0x01 | 0x02, out[2]);
     EXPECT_EQ(usbparsers::MIC_MUTE_LED_PULSE, out[9]);
@@ -492,17 +498,17 @@ TEST(MicMuteLed, TheLampWrittenAfterOtherEffectsSurvivesToo) {
 TEST(MicMuteLed, ALampTurnedOffStaysAssertedAndUnmutesTheAmp) {
     usbparsers::FeedbackState st;
     uint8_t out[64];
-    ASSERT_EQ(63u, usbparsers::buildMicMuteLedReport(Parser::DUALSENSE, st,
-                                                     usbparsers::MIC_MUTE_LED_ON, out, sizeof(out)));
-    ASSERT_EQ(63u, usbparsers::buildMicMuteLedReport(Parser::DUALSENSE, st,
-                                                     usbparsers::MIC_MUTE_LED_OFF, out,
-                                                     sizeof(out)));
+    ASSERT_EQ(63u, usbparsers::buildMicMuteLedReport(
+                       Parser::DUALSENSE, st, usbparsers::MIC_MUTE_LED_ON, out, sizeof(out)));
+    ASSERT_EQ(63u, usbparsers::buildMicMuteLedReport(
+                       Parser::DUALSENSE, st, usbparsers::MIC_MUTE_LED_OFF, out, sizeof(out)));
     EXPECT_EQ(usbparsers::MIC_MUTE_LED_OFF, out[9]);
     EXPECT_EQ(0x00, out[10]);
     // Still shadowed: an off lamp is a state the host asked for, so later reports must keep saying
     // off rather than dropping the claim and letting the pad's own button state show through.
     EXPECT_TRUE(st.ds5MicMuteLedSet);
-    ASSERT_EQ(63u, usbparsers::buildLightbarReport(Parser::DUALSENSE, st, 1, 2, 3, out, sizeof(out)));
+    ASSERT_EQ(63u,
+              usbparsers::buildLightbarReport(Parser::DUALSENSE, st, 1, 2, 3, out, sizeof(out)));
     EXPECT_EQ(0x04 | 0x01 | 0x02, out[2]);
     EXPECT_EQ(usbparsers::MIC_MUTE_LED_OFF, out[9]);
     EXPECT_EQ(0x00, out[10]);
@@ -513,11 +519,13 @@ TEST(MicMuteLed, ReportsAreUntouchedUntilTheHostDrivesTheLamp) {
     usbparsers::FeedbackState st;
     uint8_t out[64];
     uint8_t block[11] = {};
-    ASSERT_EQ(63u, usbparsers::buildLightbarReport(Parser::DUALSENSE, st, 1, 2, 3, out, sizeof(out)));
+    ASSERT_EQ(63u,
+              usbparsers::buildLightbarReport(Parser::DUALSENSE, st, 1, 2, 3, out, sizeof(out)));
     EXPECT_EQ(0x04, out[2]);
     EXPECT_EQ(0x00, out[9]);
     EXPECT_EQ(0x00, out[10]);
-    ASSERT_EQ(63u, usbparsers::buildPlayerLedsReport(Parser::DUALSENSE, st, 0x03, 0, out, sizeof(out)));
+    ASSERT_EQ(63u,
+              usbparsers::buildPlayerLedsReport(Parser::DUALSENSE, st, 0x03, 0, out, sizeof(out)));
     EXPECT_EQ(0x10, out[2]);
     ASSERT_EQ(63u, usbparsers::buildTriggerEffectsReport(Parser::DUALSENSE, st, block, block, out,
                                                          sizeof(out)));
@@ -530,10 +538,10 @@ TEST(FeedbackCapability, PredicatesMatchTheBuilders) {
     using usbparsers::parserHasPlayerLeds;
     using usbparsers::parserHasTriggerEffects;
     using usbparsers::parserHasTriggerRumble;
-    for (auto p : {Parser::NONE, Parser::XINPUT_360, Parser::XBOX_ONE_GIP, Parser::DUALSHOCK4,
-                   Parser::DUALSENSE, Parser::SWITCH_PRO_USB, Parser::STADIA,
-                   Parser::GENERIC_HID_GAMEPAD, Parser::XINPUT_360_WIRELESS,
-                   Parser::STEAM_CONTROLLER}) {
+    for (auto p :
+         {Parser::NONE, Parser::XINPUT_360, Parser::XBOX_ONE_GIP, Parser::DUALSHOCK4,
+          Parser::DUALSENSE, Parser::SWITCH_PRO_USB, Parser::STADIA, Parser::GENERIC_HID_GAMEPAD,
+          Parser::XINPUT_360_WIRELESS, Parser::STEAM_CONTROLLER}) {
         usbparsers::FeedbackState st;
         uint8_t out[64];
         uint8_t block[11] = {};
@@ -1608,4 +1616,144 @@ TEST(SteamClassify, OnlySteamModelsSettleWithoutAFrameworkGamepad) {
     EXPECT_TRUE(modelExpectsFrameworkGamepad(0x045E, 0x028E));
     EXPECT_TRUE(modelExpectsFrameworkGamepad(0x054C, 0x05C4));
     EXPECT_TRUE(modelExpectsFrameworkGamepad(0x1234, 0x5678));
+}
+
+// ---- the pad's own battery ------------------------------------------------------------------
+
+namespace {
+
+DeviceState decodePs(Parser p, std::vector<uint8_t>& r) {
+    DeviceState s;
+    ParserState st;
+    EXPECT_TRUE(decodeReport(p, r.data(), r.size(), s, &st));
+    return s;
+}
+
+std::vector<uint8_t> psReport(size_t len, uint8_t buttonByte) {
+    std::vector<uint8_t> r(len, 0);
+    r[0] = 0x01;
+    r[1] = r[2] = r[3] = r[4] = 128;
+    r[buttonByte] = 0x08;
+    return r;
+}
+
+} // namespace
+
+TEST(Battery, DualShock4ReadsTheCableBitAndTheTenths) {
+    // hid-playstation's status[0] at byte 30: tenths low, cable in bit 4. Off the cable 10 is the
+    // 100 % cap; on it 10 still charges, 11 is full, and above that is a fault with no charge.
+    auto r = psReport(64, 5);
+    r[30] = 0x07;
+    DeviceState s = decodePs(Parser::DUALSHOCK4, r);
+    ASSERT_TRUE(s.batteryValid);
+    EXPECT_EQ(75, s.batteryLevel);
+    EXPECT_EQ(usbparsers::PAD_BATTERY_STATUS_DISCHARGING, s.batteryStatus);
+
+    r[30] = 0x0A;
+    s = decodePs(Parser::DUALSHOCK4, r);
+    EXPECT_EQ(100, s.batteryLevel);
+    EXPECT_EQ(usbparsers::PAD_BATTERY_STATUS_DISCHARGING, s.batteryStatus);
+
+    r[30] = 0x13;
+    s = decodePs(Parser::DUALSHOCK4, r);
+    EXPECT_EQ(35, s.batteryLevel);
+    EXPECT_EQ(usbparsers::PAD_BATTERY_STATUS_CHARGING, s.batteryStatus);
+
+    r[30] = 0x1B;
+    s = decodePs(Parser::DUALSHOCK4, r);
+    EXPECT_EQ(100, s.batteryLevel);
+    EXPECT_EQ(usbparsers::PAD_BATTERY_STATUS_FULL, s.batteryStatus);
+
+    r[30] = 0x1D;
+    s = decodePs(Parser::DUALSHOCK4, r);
+    ASSERT_TRUE(s.batteryValid);
+    EXPECT_EQ(usbparsers::PAD_BATTERY_LEVEL_UNKNOWN, s.batteryLevel);
+    EXPECT_EQ(usbparsers::PAD_BATTERY_STATUS_UNKNOWN, s.batteryStatus);
+
+    // A short report keeps whatever reading stood; it does not report unknown.
+    r.resize(30);
+    s = decodePs(Parser::DUALSHOCK4, r);
+    EXPECT_FALSE(s.batteryValid);
+}
+
+TEST(Battery, DualSenseReadsTheStateNibbleAndTheTenths) {
+    // hid-playstation's status at byte 53: tenths low, state high. 0/1/2 are
+    // discharging/charging/full; 0xA, 0xB and 0xF are faults.
+    auto r = psReport(64, 8);
+    r[53] = 0x04;
+    DeviceState s = decodePs(Parser::DUALSENSE, r);
+    ASSERT_TRUE(s.batteryValid);
+    EXPECT_EQ(45, s.batteryLevel);
+    EXPECT_EQ(usbparsers::PAD_BATTERY_STATUS_DISCHARGING, s.batteryStatus);
+
+    r[53] = 0x18;
+    s = decodePs(Parser::DUALSENSE, r);
+    EXPECT_EQ(85, s.batteryLevel);
+    EXPECT_EQ(usbparsers::PAD_BATTERY_STATUS_CHARGING, s.batteryStatus);
+
+    r[53] = 0x1A; // the tenths cannot exceed 100
+    s = decodePs(Parser::DUALSENSE, r);
+    EXPECT_EQ(100, s.batteryLevel);
+
+    r[53] = 0x2F; // full: the nibble is ignored
+    s = decodePs(Parser::DUALSENSE, r);
+    EXPECT_EQ(100, s.batteryLevel);
+    EXPECT_EQ(usbparsers::PAD_BATTERY_STATUS_FULL, s.batteryStatus);
+
+    for (uint8_t fault : {(uint8_t)0xA5, (uint8_t)0xB5, (uint8_t)0xF5}) {
+        r[53] = fault;
+        s = decodePs(Parser::DUALSENSE, r);
+        ASSERT_TRUE(s.batteryValid) << "state byte " << (int)fault;
+        EXPECT_EQ(usbparsers::PAD_BATTERY_LEVEL_UNKNOWN, s.batteryLevel);
+        EXPECT_EQ(usbparsers::PAD_BATTERY_STATUS_UNKNOWN, s.batteryStatus);
+    }
+
+    r.resize(53);
+    s = decodePs(Parser::DUALSENSE, r);
+    EXPECT_FALSE(s.batteryValid);
+}
+
+TEST(Battery, SwitchProReadsTheFiveStepsTheChargingBitAndTheHostBit) {
+    // hid-nintendo's bat_con at byte 2: the step in bits 7..5, charging in bit 4, host power in
+    // bit 0. Every 0x30 report is long enough to carry it.
+    auto r = switchReport(12);
+    r[2] = 0x40; // step 2 (low), on battery
+    DeviceState s = decodePs(Parser::SWITCH_PRO_USB, r);
+    ASSERT_TRUE(s.batteryValid);
+    EXPECT_EQ(50, s.batteryLevel);
+    EXPECT_EQ(usbparsers::PAD_BATTERY_STATUS_DISCHARGING, s.batteryStatus);
+
+    r[2] = 0x71; // step 3 (medium), host-powered, charging
+    s = decodePs(Parser::SWITCH_PRO_USB, r);
+    EXPECT_EQ(75, s.batteryLevel);
+    EXPECT_EQ(usbparsers::PAD_BATTERY_STATUS_CHARGING, s.batteryStatus);
+
+    r[2] = 0x81; // step 4 (full), host-powered, not charging: full
+    s = decodePs(Parser::SWITCH_PRO_USB, r);
+    EXPECT_EQ(100, s.batteryLevel);
+    EXPECT_EQ(usbparsers::PAD_BATTERY_STATUS_FULL, s.batteryStatus);
+
+    r[2] = 0x80; // full on battery is a full reading, discharging
+    s = decodePs(Parser::SWITCH_PRO_USB, r);
+    EXPECT_EQ(100, s.batteryLevel);
+    EXPECT_EQ(usbparsers::PAD_BATTERY_STATUS_DISCHARGING, s.batteryStatus);
+
+    r[2] = 0x00; // empty
+    s = decodePs(Parser::SWITCH_PRO_USB, r);
+    EXPECT_EQ(5, s.batteryLevel);
+
+    r[2] = 0xA0; // a step the pad never reports
+    s = decodePs(Parser::SWITCH_PRO_USB, r);
+    EXPECT_EQ(usbparsers::PAD_BATTERY_LEVEL_UNKNOWN, s.batteryLevel);
+}
+
+TEST(Battery, FamiliesWithoutAChargeInTheReportLeaveItUntouched) {
+    std::vector<uint8_t> r(20, 0);
+    r[0] = 0x03; // Stadia
+    DeviceState s;
+    ParserState st;
+    ASSERT_TRUE(decodeReport(Parser::STADIA, r.data(), r.size(), s, &st));
+    EXPECT_FALSE(s.batteryValid);
+    EXPECT_EQ(usbparsers::PAD_BATTERY_LEVEL_UNKNOWN, s.batteryLevel);
+    EXPECT_EQ(usbparsers::PAD_BATTERY_STATUS_UNKNOWN, s.batteryStatus);
 }

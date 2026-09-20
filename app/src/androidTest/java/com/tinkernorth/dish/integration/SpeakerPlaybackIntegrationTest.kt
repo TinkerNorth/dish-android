@@ -17,6 +17,7 @@ import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.hotpath.input.FeedbackRouter
 import com.tinkernorth.dish.integration.AppSingletons.fieldValue
 import com.tinkernorth.dish.source.audio.NativeSpeakerFrameSource
+import com.tinkernorth.dish.source.audio.PlayoutLane
 import com.tinkernorth.dish.source.audio.SlotAudioRoutes
 import com.tinkernorth.dish.source.audio.SpeakerEngine
 import com.tinkernorth.dish.source.audio.SpeakerPlayoutSession
@@ -75,6 +76,8 @@ class SpeakerPlaybackIntegrationTest {
         override fun open(
             frameSamples: Int,
             preferredDeviceId: Int,
+            channels: Int,
+            lane: PlayoutLane,
         ): SpeakerPlayoutSession {
             opens.incrementAndGet()
             return object : SpeakerPlayoutSession {

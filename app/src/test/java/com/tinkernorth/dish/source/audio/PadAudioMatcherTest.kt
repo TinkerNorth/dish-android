@@ -25,12 +25,14 @@ class PadAudioMatcherTest {
         productId: Int = DS5_PID,
         productName: String? = SONY_PAD_NAME,
         audio: Boolean = true,
-    ) = UsbAudioPad(vendorId, productId, productName, hasAudioFunction = audio)
+        hapticLanes: Boolean = productId == DS5_PID,
+    ) = UsbAudioPad(vendorId, productId, productName, hasAudioFunction = audio, hasHapticLanes = hapticLanes)
 
     private fun sink(
         deviceId: Int,
         name: String? = SONY_PAD_NAME,
-    ) = UsbAudioEndpoint(deviceId, name, sink = true, source = false)
+        channelCounts: List<Int> = emptyList(),
+    ) = UsbAudioEndpoint(deviceId, name, sink = true, source = false, channelCounts = channelCounts)
 
     private fun source(
         deviceId: Int,
@@ -169,5 +171,36 @@ class PadAudioMatcherTest {
 
         // The iProduct string a DualSense and a DualShock 4 both report.
         const val SONY_PAD_NAME = "Wireless Controller"
+    }
+
+    // ---- protocol 3: the haptic route ----
+
+    @Test
+    fun `the haptic route needs the family's lanes AND an endpoint that opens at four channels`() {
+        // A DualSense whose endpoint the platform will open at 4: the lanes are there.
+        val quad = PadAudioMatcher.resolve(listOf(pad()), listOf(sink(11, channelCounts = listOf(2, 4))))
+        assertTrue(quad.getValue(ds5).speaker)
+        assertTrue(quad.getValue(ds5).haptics)
+        assertEquals(4, quad.getValue(ds5).playbackChannels)
+
+        // Stereo only, or a platform that would not say: speaker only, and the width the
+        // track opens at rides the route either way.
+        val stereo = PadAudioMatcher.resolve(listOf(pad()), listOf(sink(11, channelCounts = listOf(2))))
+        assertTrue(stereo.getValue(ds5).speaker)
+        assertFalse(stereo.getValue(ds5).haptics)
+        assertEquals(2, stereo.getValue(ds5).playbackChannels)
+        val unknown = PadAudioMatcher.resolve(listOf(pad()), listOf(sink(11)))
+        assertFalse(unknown.getValue(ds5).haptics)
+        assertEquals(0, unknown.getValue(ds5).playbackChannels)
+
+        // A DualShock 4 v2 in front of a 4-channel endpoint is still no actuator: the
+        // family gate holds whatever the platform reports.
+        val ds4 =
+            PadAudioMatcher.resolve(
+                listOf(pad(productId = DS4V2_PID)),
+                listOf(sink(11, channelCounts = listOf(4))),
+            )
+        assertTrue(ds4.getValue(ds4v2).speaker)
+        assertFalse(ds4.getValue(ds4v2).haptics)
     }
 }

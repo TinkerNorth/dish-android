@@ -69,6 +69,7 @@ internal fun Context.hostFeatureList(features: HostFeatureSet): String {
             if (features.keyboardControl) add(R.string.diagnostics_feature_keyboard)
             if (features.controllerMic) add(R.string.setup_cap_mic)
             if (features.controllerSpeaker) add(R.string.setup_cap_speaker)
+            if (features.controllerHapticAudio) add(R.string.setup_cap_haptics)
         }
     if (labels.isEmpty()) return getString(R.string.diagnostics_none)
     return labels.joinToString(SEPARATOR) { getString(it) }

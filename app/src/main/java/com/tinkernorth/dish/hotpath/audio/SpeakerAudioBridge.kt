@@ -3,9 +3,10 @@
 package com.tinkernorth.dish.hotpath.audio
 
 /**
- * Native -> Kotlin upcall target for the emulated pad's speaker stream
- * (MSG_SPEAKER_AUDIO), the audio-side sibling of
- * [com.tinkernorth.dish.hotpath.input.FeedbackBridge].
+ * Native -> Kotlin upcall target for the emulated pad's outbound audio streams
+ * (MSG_SPEAKER_AUDIO and, on protocol 3, MSG_HAPTIC_AUDIO), the audio-side sibling of
+ * [com.tinkernorth.dish.hotpath.input.FeedbackBridge]. The two streams share the shape
+ * and the thread; [lane] says which pair of the pad's endpoint a window is for.
  *
  * Native owns everything up to PCM: the receive thread queues the Opus packet,
  * a dedicated dispatch thread runs the 2-frame reorder window, decodes, and
@@ -25,10 +26,15 @@ object SpeakerAudioBridge {
         System.loadLibrary("satellite")
     }
 
+    /** Wire lanes, as native numbers them: 0 speaker, 1 haptics. */
+    const val LANE_SPEAKER = 0
+    const val LANE_HAPTICS = 1
+
     fun interface Sink {
-        fun onSpeakerFrame(
+        fun onAudioFrame(
             sessionHandle: Int,
             controllerIndex: Int,
+            lane: Int,
             pcmStereo: ShortArray,
             concealed: Boolean,
         )
@@ -55,12 +61,13 @@ object SpeakerAudioBridge {
     private external fun nativeInstall()
 
     @JvmStatic
-    fun dispatchSpeakerFrame(
+    fun dispatchAudioFrame(
         sessionHandle: Int,
         controllerIndex: Int,
+        lane: Int,
         pcmStereo: ShortArray,
         concealed: Boolean,
     ) {
-        sink?.onSpeakerFrame(sessionHandle, controllerIndex, pcmStereo, concealed)
+        sink?.onAudioFrame(sessionHandle, controllerIndex, lane, pcmStereo, concealed)
     }
 }

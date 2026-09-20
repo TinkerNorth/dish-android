@@ -250,7 +250,8 @@ class CapabilityTest {
         enabled: Boolean = true,
         mic: Boolean = true,
         speaker: Boolean = true,
-    ): ServerControllerAudioDto = ServerControllerAudioDto(enabled = enabled, mic = mic, speaker = speaker)
+        hapticAudio: Boolean = false,
+    ): ServerControllerAudioDto = ServerControllerAudioDto(enabled = enabled, mic = mic, speaker = speaker, hapticAudio = hapticAudio)
 
     @Test
     fun `the audio pair rides the host layer only while the host carries audio`() {
@@ -356,6 +357,31 @@ class CapabilityTest {
         assertTrue(features.controllerSpeaker)
         assertTrue(Feature.MIC in features.toCapabilitySet())
         assertTrue(Feature.SPEAKER in features.toCapabilitySet())
+        // Never haptics: a host too old for the block is too old for the lane.
+        assertFalse(features.controllerHapticAudio)
+        assertFalse(Feature.HAPTIC_AUDIO in features.toCapabilitySet())
+    }
+
+    @Test
+    fun `the haptics lane is its own field, re-ANDed with enabled, absent reads off`() {
+        val on =
+            HostFeatureSet.fromServerCapabilities(
+                ServerCapabilitiesDto(controllerAudio = audioBlock(speaker = false, hapticAudio = true)),
+            )
+        assertTrue(on.controllerHapticAudio)
+        assertFalse(on.controllerSpeaker)
+        assertTrue(Feature.HAPTIC_AUDIO in on.toCapabilitySet())
+        assertFalse(Feature.SPEAKER in on.toCapabilitySet())
+
+        val off = HostFeatureSet.fromServerCapabilities(ServerCapabilitiesDto(controllerAudio = audioBlock()))
+        assertFalse(off.controllerHapticAudio)
+
+        val masterOff =
+            HostFeatureSet.fromServerCapabilities(
+                ServerCapabilitiesDto(controllerAudio = audioBlock(enabled = false, hapticAudio = true)),
+            )
+        assertFalse(masterOff.controllerHapticAudio)
+        assertFalse(HostFeatureSet.SATELLITE_DEFAULT.controllerHapticAudio)
     }
 
     @Test
@@ -413,6 +439,8 @@ class CapabilityTest {
         // The slugs are protocol constants; the catalog is matched on them by name.
         assertEquals("mic", Feature.MIC.catalogSlug)
         assertEquals("speaker", Feature.SPEAKER.catalogSlug)
+        assertEquals("hapticAudio", Feature.HAPTIC_AUDIO.catalogSlug)
+        assertEquals(Direction.RECEIVE, Feature.HAPTIC_AUDIO.direction)
         // The phone SOURCES the microphone and RECEIVES the pad's speaker audio.
         assertEquals(Direction.SEND, Feature.MIC.direction)
         assertEquals(Direction.RECEIVE, Feature.SPEAKER.direction)

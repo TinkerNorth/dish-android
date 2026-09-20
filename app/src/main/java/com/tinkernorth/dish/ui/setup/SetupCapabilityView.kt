@@ -45,6 +45,7 @@ private fun capabilityNameRes(kind: SetupCapabilityKind): Int =
         SetupCapabilityKind.PLAYER_LEDS -> R.string.setup_cap_player_leds
         SetupCapabilityKind.MICROPHONE -> R.string.setup_cap_mic
         SetupCapabilityKind.SPEAKER -> R.string.setup_cap_speaker
+        SetupCapabilityKind.HAPTICS -> R.string.setup_cap_haptics
     }
 
 private fun applyCheck(

@@ -45,6 +45,7 @@ class DestinationFlowsTest {
                 R.string.setup_cap_trigger_effects,
                 R.string.setup_cap_player_leds,
                 R.string.setup_cap_speaker,
+                R.string.setup_cap_haptics,
             ),
             labels,
         )

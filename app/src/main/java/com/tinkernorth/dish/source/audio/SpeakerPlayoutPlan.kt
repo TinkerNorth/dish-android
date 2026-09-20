@@ -18,7 +18,34 @@ data class SpeakerTarget(
     val controllerIndex: Int,
     /** [PadAudioRoute.playbackDeviceId] for the slot: the pad's own endpoint, or the platform's choice. */
     val playbackDeviceId: Int,
+    /** Which of the endpoint's lane pairs this voice writes. */
+    val lane: PlayoutLane = PlayoutLane.SPEAKER,
+    /**
+     * The width to open the endpoint at: the wire's stereo, or the pad's own 4 (the haptic lane
+     * needs 4; the speaker lane opens at 4 on the same pad so its stereo never lands on the
+     * actuators).
+     */
+    val deviceChannels: Int = PlayoutLane.STEREO_CHANNELS,
 )
+
+/**
+ * The two lane pairs of a DualSense's own render endpoint, speaker first, in the pad's own
+ * channel order. Each is its own voice on the same endpoint rather than a mix into one track:
+ * the two streams are independent on the wire (own seq, own silence suppression), so pairing
+ * their windows would need a clock the push model has not got; the platform mixes the tracks.
+ */
+enum class PlayoutLane(
+    val pairOffset: Int,
+) {
+    SPEAKER(0),
+    HAPTICS(2),
+    ;
+
+    companion object {
+        const val STEREO_CHANNELS = 2
+        const val QUAD_CHANNELS = 4
+    }
+}
 
 /**
  * Everything the eligibility rule knows about one slot, flattened out of the capability model and
@@ -37,6 +64,10 @@ data class SpeakerSlotInput(
     val streaming: Boolean,
     val speakerEnabled: Boolean,
     val playbackDeviceId: Int = NO_AUDIO_DEVICE,
+    /** The composed [com.tinkernorth.dish.core.model.Feature.HAPTIC_AUDIO] answer, like [speakerEnabled]. */
+    val hapticEnabled: Boolean = false,
+    /** [PadAudioRoute.playbackChannels]: 0 = unknown, which opens as stereo. */
+    val playbackChannels: Int = 0,
 )
 
 /**
@@ -53,15 +84,20 @@ data class SpeakerPlayoutPlan(
         val IDLE = SpeakerPlayoutPlan(emptyMap())
 
         /**
-         * (handle, controller index) as one key. Both are small non-negative ints by the time they
-         * get here, so the pack is exact and the unpack is never needed.
+         * (handle, controller index, lane) as one key. Handle and index are small non-negative
+         * ints by the time they get here, so the pack is exact and the unpack is never needed.
          */
         fun routeKey(
             sessionHandle: Int,
             controllerIndex: Int,
-        ): Long = (sessionHandle.toLong() shl Int.SIZE_BITS) or (controllerIndex.toLong() and INDEX_MASK)
+            lane: PlayoutLane = PlayoutLane.SPEAKER,
+        ): Long =
+            (sessionHandle.toLong() shl HANDLE_SHIFT) or
+                (lane.ordinal.toLong() shl Int.SIZE_BITS) or
+                (controllerIndex.toLong() and INDEX_MASK)
 
         private const val INDEX_MASK = 0xFFFFFFFFL
+        private const val HANDLE_SHIFT = Int.SIZE_BITS + 1
     }
 }
 
@@ -83,15 +119,35 @@ object SpeakerPlayoutPolicy {
     fun plan(slots: Collection<SpeakerSlotInput>): SpeakerPlayoutPlan {
         val voices = LinkedHashMap<Long, SpeakerTarget>()
         for (slot in slots) {
-            if (!slot.streaming || !slot.speakerEnabled) continue
+            if (!slot.streaming) continue
             if (slot.sessionHandle < 0 || slot.controllerIndex < 0) continue
-            voices[SpeakerPlayoutPlan.routeKey(slot.sessionHandle, slot.controllerIndex)] =
-                SpeakerTarget(
-                    slotId = slot.slotId,
-                    sessionHandle = slot.sessionHandle,
-                    controllerIndex = slot.controllerIndex,
-                    playbackDeviceId = slot.playbackDeviceId,
-                )
+            // The endpoint's own width when the platform reported one, so a 4-channel pad
+            // gets its stereo on the speaker pair and not spread across the actuators.
+            val channels =
+                if (slot.playbackChannels > 0) slot.playbackChannels else PlayoutLane.STEREO_CHANNELS
+            if (slot.speakerEnabled) {
+                voices[SpeakerPlayoutPlan.routeKey(slot.sessionHandle, slot.controllerIndex, PlayoutLane.SPEAKER)] =
+                    SpeakerTarget(
+                        slotId = slot.slotId,
+                        sessionHandle = slot.sessionHandle,
+                        controllerIndex = slot.controllerIndex,
+                        playbackDeviceId = slot.playbackDeviceId,
+                        lane = PlayoutLane.SPEAKER,
+                        deviceChannels = channels,
+                    )
+            }
+            // The haptic lane needs its pair to exist at the offset it writes.
+            if (slot.hapticEnabled && channels >= PlayoutLane.QUAD_CHANNELS) {
+                voices[SpeakerPlayoutPlan.routeKey(slot.sessionHandle, slot.controllerIndex, PlayoutLane.HAPTICS)] =
+                    SpeakerTarget(
+                        slotId = slot.slotId,
+                        sessionHandle = slot.sessionHandle,
+                        controllerIndex = slot.controllerIndex,
+                        playbackDeviceId = slot.playbackDeviceId,
+                        lane = PlayoutLane.HAPTICS,
+                        deviceChannels = channels,
+                    )
+            }
         }
         return SpeakerPlayoutPlan(voices)
     }

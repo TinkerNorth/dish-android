@@ -2,6 +2,7 @@
 
 package com.tinkernorth.dish.source.sensor
 
+import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -155,5 +156,39 @@ class PhysicalBatteryMappingTest {
             validator.publish(sample) { emitted = true }
             org.junit.Assert.assertTrue(emitted)
         }
+    }
+}
+
+class DirectPadSampleTest {
+    @Test
+    fun `unpacks the native reader's level and status`() {
+        assertEquals(
+            BatterySample(75, BatteryValidator.STATUS_CHARGING),
+            PhysicalBatteryMapping.directPadSample((75 shl 8) or BatteryValidator.STATUS_CHARGING),
+        )
+        assertEquals(
+            BatterySample(100, BatteryValidator.STATUS_FULL),
+            PhysicalBatteryMapping.directPadSample((100 shl 8) or BatteryValidator.STATUS_FULL),
+        )
+    }
+
+    @Test
+    fun `no reading yet, a gone device, and a fault reading all clear the card`() {
+        assertNull(PhysicalBatteryMapping.directPadSample(-1))
+        assertNull(
+            PhysicalBatteryMapping.directPadSample(
+                (BatteryValidator.LEVEL_UNKNOWN shl 8) or BatteryValidator.STATUS_UNKNOWN,
+            ),
+        )
+    }
+
+    @Test
+    fun `an unknown level with a known status still shows the status`() {
+        assertEquals(
+            BatterySample(BatteryValidator.LEVEL_UNKNOWN, BatteryValidator.STATUS_CHARGING),
+            PhysicalBatteryMapping.directPadSample(
+                (BatteryValidator.LEVEL_UNKNOWN shl 8) or BatteryValidator.STATUS_CHARGING,
+            ),
+        )
     }
 }

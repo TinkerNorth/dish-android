@@ -30,6 +30,13 @@ data class PadAudioRoute(
     val speaker: Boolean,
     val captureDeviceId: Int = NO_AUDIO_DEVICE,
     val playbackDeviceId: Int = NO_AUDIO_DEVICE,
+    // Protocol 3: the playback endpoint is the DualSense's own 4-channel one, so the
+    // haptic lanes have somewhere to play. Never set without [speaker].
+    val haptics: Boolean = false,
+    // The playback endpoint's channel count as the platform reports it (0 = unknown). A
+    // track opens the endpoint at this width and writes its lane pair into the right
+    // positions, which is what keeps stereo speaker audio off a 4-channel pad's actuators.
+    val playbackChannels: Int = 0,
 ) {
     companion object {
         val NONE = PadAudioRoute(microphone = false, speaker = false)

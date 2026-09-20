@@ -105,6 +105,14 @@ struct DeviceState {
     bool touchClick = false;
     uint8_t touch0Id = 0, touch1Id = 0;
     int16_t touch0X = 0, touch0Y = 0, touch1X = 0, touch1Y = 0;
+
+    // The pad's own charge, for the families whose report carries it (the two Sony pads and
+    // the Switch Pro): a percent or usbparsers::PAD_BATTERY_LEVEL_UNKNOWN, and MSG_BATTERY's own
+    // status value. Valid only when the report was long enough to carry the status byte; a
+    // short report leaves the last reading standing rather than reporting unknown.
+    bool batteryValid = false;
+    uint8_t batteryLevel = 0xFF;
+    uint8_t batteryStatus = 0;
 };
 
 // Wire-normalized (full-range int16) two-finger touchpad snapshot, the MSG_TOUCHPAD payload

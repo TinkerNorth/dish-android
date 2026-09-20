@@ -22,4 +22,5 @@ fun featureLabelRes(feature: Feature): Int? =
         Feature.PLAYER_LEDS -> R.string.setup_cap_player_leds
         Feature.MIC -> R.string.setup_cap_mic
         Feature.SPEAKER -> R.string.setup_cap_speaker
+        Feature.HAPTIC_AUDIO -> R.string.setup_cap_haptics
     }

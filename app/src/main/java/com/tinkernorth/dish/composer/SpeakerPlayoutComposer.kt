@@ -74,6 +74,8 @@ class SpeakerPlayoutComposer
                                     streaming = streaming(summariesById[connId]),
                                     speakerEnabled = Feature.SPEAKER in (caps[slotId] ?: SlotCapabilities.NONE).live,
                                     playbackDeviceId = routing.forSlot(slotId).playbackDeviceId,
+                                    hapticEnabled = Feature.HAPTIC_AUDIO in (caps[slotId] ?: SlotCapabilities.NONE).live,
+                                    playbackChannels = routing.forSlot(slotId).playbackChannels,
                                 )
                             }
                         SpeakerPlayoutPolicy.plan(slots)

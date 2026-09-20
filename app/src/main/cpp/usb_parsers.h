@@ -57,6 +57,16 @@ enum class ButtonOrder : uint8_t {
     SWITCH = 1,
 };
 
+// The pad battery a decoder reads (gamepad::DeviceState::battery*). The status is MSG_BATTERY's
+// own value, restated here like the wire's button bits so this header stays free of the wire
+// headers: 0 unknown, 1 discharging, 2 charging, 3 full. The readings are hid-playstation's and
+// hid-nintendo's byte for byte, so a Direct pad shows the number the kernel driver would.
+constexpr uint8_t PAD_BATTERY_LEVEL_UNKNOWN = 0xFF;
+constexpr uint8_t PAD_BATTERY_STATUS_UNKNOWN = 0;
+constexpr uint8_t PAD_BATTERY_STATUS_DISCHARGING = 1;
+constexpr uint8_t PAD_BATTERY_STATUS_CHARGING = 2;
+constexpr uint8_t PAD_BATTERY_STATUS_FULL = 3;
+
 struct KnownDevice {
     uint16_t vid;
     uint16_t pid;
@@ -159,6 +169,7 @@ bool parserFrameworkRumbleUnreliable(Parser p);
 bool parserHasLightbar(Parser p);       // DS4 / DualSense RGB lightbar
 bool parserHasPlayerLeds(Parser p);     // DualSense 5-LED bar, Switch Pro 4 player lights
 bool parserHasTriggerEffects(Parser p); // DualSense adaptive-trigger effect blocks
+bool parserHasHapticLanes(Parser p);    // DualSense HD-haptics lanes on its USB audio OUT
 bool parserHasTriggerRumble(Parser p);  // Xbox One GIP impulse-trigger motors
 bool parserHasMicMuteLed(Parser p);     // DualSense mic-mute lamp (and its mic amp)
 
