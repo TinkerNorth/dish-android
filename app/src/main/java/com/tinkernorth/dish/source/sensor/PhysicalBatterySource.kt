@@ -2,6 +2,7 @@
 
 package com.tinkernorth.dish.source.sensor
 
+import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -22,35 +23,54 @@ import com.tinkernorth.dish.source.store.BatteryStatusStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
+@Suppress("LongParameterList")
 class PhysicalBatterySource
-    @Inject
-    constructor(
-        @ApplicationContext private val context: Context,
+    internal constructor(
+        private val context: Context,
         private val registry: PhysicalGamepadRegistry,
         private val reachability: PhysicalReachabilityComposer,
         private val statusStore: BatteryStatusStore,
         private val scope: CoroutineScope,
         private val native: PhysicalInputNative,
+        private val sdkInt: Int,
+        private val lookup: (deviceId: Int) -> InputDevice?,
     ) : DefaultLifecycleObserver {
+        @Inject
+        constructor(
+            @ApplicationContext context: Context,
+            registry: PhysicalGamepadRegistry,
+            reachability: PhysicalReachabilityComposer,
+            statusStore: BatteryStatusStore,
+            scope: CoroutineScope,
+            native: PhysicalInputNative,
+        ) : this(context, registry, reachability, statusStore, scope, native, Build.VERSION.SDK_INT, InputDevice::getDevice)
+
         private val phoneBattery = PhoneBatterySource(context)
 
         private val bluetoothBattery = BluetoothBatteryReader(context)
 
         private val validator = BatteryValidator()
 
+        private val polls = Channel<Unit>(Channel.CONFLATED)
+
+        private val frameworkDevices = HashMap<Int, InputDevice>()
+
         private var reachableJob: Job? = null
         private var devicesJob: Job? = null
+        private var tickJob: Job? = null
         private var pollJob: Job? = null
 
         private var chargingReceiver: BroadcastReceiver? = null
@@ -62,7 +82,11 @@ class PhysicalBatterySource
         @Volatile private var lastChargingStatus: Int? = null
 
         override fun onStart(owner: LifecycleOwner) {
-            if (reachableJob != null) return
+            if (pollJob != null) return
+            pollJob =
+                scope.launch {
+                    polls.receiveAsFlow().collect { pollOnce() }
+                }
             reachableJob =
                 reachability.state
                     .onEach(::onReachableChanged)
@@ -73,10 +97,10 @@ class PhysicalBatterySource
                     .distinctUntilChanged()
                     .onEach(::onDevicesChanged)
                     .launchIn(scope)
-            pollJob =
+            tickJob =
                 scope.launch {
                     while (isActive) {
-                        pollOnce()
+                        requestPoll()
                         delay(BatteryValidator.REPORT_INTERVAL_SECONDS * 1000L)
                     }
                 }
@@ -88,6 +112,8 @@ class PhysicalBatterySource
             reachableJob = null
             devicesJob?.cancel()
             devicesJob = null
+            tickJob?.cancel()
+            tickJob = null
             pollJob?.cancel()
             pollJob = null
             chargingReceiver?.let { runCatching { context.unregisterReceiver(it) } }
@@ -96,6 +122,10 @@ class PhysicalBatterySource
             deviceKeys.forEach(statusStore::clear)
             deviceKeys = emptySet()
             reachable = emptyMap()
+        }
+
+        private fun requestPoll() {
+            polls.trySend(Unit)
         }
 
         private fun registerChargingReceiver() {
@@ -109,7 +139,7 @@ class PhysicalBatterySource
                         if (status == lastChargingStatus) return
                         lastChargingStatus = status
                         Log.d(TAG, "host charging state changed -> $status, polling pads")
-                        scope.launch { pollOnce() }
+                        requestPoll()
                     }
                 }
             ContextCompat.registerReceiver(
@@ -123,20 +153,22 @@ class PhysicalBatterySource
 
         private fun onReachableChanged(next: Map<String, TelemetrySink>) {
             reachable = next
-            // Hop off the flow-collector thread; pollOnce is synchronous.
-            scope.launch { pollOnce() }
+            requestPoll()
         }
 
         private fun onDevicesChanged(next: Map<Int, Transport>) {
             val keys = next.keys.mapTo(mutableSetOf(), Int::toString)
             (deviceKeys - keys).forEach(statusStore::clear)
             deviceKeys = keys
-            scope.launch { pollOnce() }
+            requestPoll()
         }
 
         private fun pollOnce() {
+            val devices = registry.devices.value
+            frameworkDevices.keys.retainAll(devices.keys)
             val phone = phoneBattery.readBattery()
-            for ((deviceId, device) in registry.devices.value) {
+            for ((deviceId, device) in devices) {
+                if (device.transitioning || device.isDisconnecting) continue
                 val slotId = deviceId.toString()
                 val routed = BatteryRouting.route(device.transport, controllerSample(device), phone)
                 publishDisplay(slotId, routed.display)
@@ -145,6 +177,13 @@ class PhysicalBatterySource
                     conn.sendBattery(slotId, s.level, s.status)
                 }
             }
+        }
+
+        private fun frameworkDevice(deviceId: Int): InputDevice? {
+            frameworkDevices[deviceId]?.let { return it }
+            val device = lookup(deviceId) ?: return null
+            frameworkDevices[deviceId] = device
+            return device
         }
 
         private fun publishDisplay(
@@ -170,9 +209,10 @@ class PhysicalBatterySource
             return sample
         }
 
+        @SuppressLint("NewApi")
         private fun frameworkPadSample(deviceId: Int): BatterySample? {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val device = InputDevice.getDevice(deviceId) ?: return null
+            val device = frameworkDevice(deviceId) ?: return null
+            if (sdkInt >= Build.VERSION_CODES.S) {
                 val state = device.batteryState
                 val sample =
                     PhysicalBatteryMapping.controllerSample(
@@ -184,8 +224,7 @@ class PhysicalBatterySource
                 return sample
             }
             // API 24-30: no getBatteryState(), use BT reflection fallback.
-            val name = InputDevice.getDevice(deviceId)?.name ?: return null
-            val level = bluetoothBattery.readLevel(name) ?: return null
+            val level = bluetoothBattery.readLevel(device.name) ?: return null
             Log.d(TAG, "pad $deviceId BT battery level=$level (API<31 reflection)")
             return BatterySample(level, BatteryValidator.STATUS_UNKNOWN)
         }
