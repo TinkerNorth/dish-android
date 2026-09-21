@@ -1,0 +1,7 @@
+Dish 2.2.0: háptica do DualSense, barra de luz por Bluetooth, mais touchpad.
+
+• Um DualSense por USB reproduz o áudio háptico do jogo nos próprios atuadores. Atualize o Satellite também.
+• A barra de luz segue o jogo também por Bluetooth (Android 12 ou mais recente).
+• O touchpad do DualShock 4 e do DualSense funciona por Bluetooth e no modo USB Padrão com o Dish na tela.
+• Um controle no modo Direto mostra a própria bateria.
+• O som e o microfone do controle não precisam mais do modo Direto.
