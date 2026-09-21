@@ -159,6 +159,12 @@ jobs:
       - name: Crop to Play dimensions
         run: python scripts/crop_play_screenshots.py captures ${{ matrix.crop }}
 
+      # The crop keeps Play's dimensions; this keeps Play's content. A capture
+      # with a system dialog over the app fails the leg here instead of
+      # replacing the store listing's screenshots downstream.
+      - name: Refuse captures with a foreign dialog
+        run: python scripts/check_capture_clean.py captures
+
       - name: Stage into play/metadata layout
         run: |
           set -euo pipefail
