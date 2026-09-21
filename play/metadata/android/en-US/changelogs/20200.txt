@@ -1,0 +1,7 @@
+Dish 2.2.0: DualSense haptics, light bar over Bluetooth, touchpad without Direct.
+
+• A USB DualSense plays a game's haptic audio through its own actuators. Update Satellite too.
+• The light bar follows the game over Bluetooth on Android 12 and newer.
+• The DualShock 4 and DualSense touchpad works over Bluetooth and in USB Standard mode while Dish is on screen.
+• A Direct controller shows its own battery.
+• Controller sound and microphone no longer need Direct mode.

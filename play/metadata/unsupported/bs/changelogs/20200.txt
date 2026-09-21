@@ -1,0 +1,7 @@
+Dish 2.2.0: haptika DualSensea, svjetlosna traka preko Bluetootha, dodirna ploča svugdje.
+
+• DualSense na USB-u reproducira haptički zvuk igre kroz vlastite aktuatore. Ažurirajte i Satellite.
+• Svjetlosna traka prati igru i preko Bluetootha (Android 12 ili noviji).
+• Dodirna ploča DualShocka 4 i DualSensea radi preko Bluetootha i u standardnom USB načinu dok je Dish na ekranu.
+• Kontroler u Brzom načinu prikazuje vlastitu bateriju.
+• Zvuk i mikrofon kontrolera više ne trebaju Brzi način.

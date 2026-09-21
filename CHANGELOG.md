@@ -7,7 +7,7 @@ computer. Those lines say "update Satellite too".
 
 ---
 
-## [Unreleased]
+## [2.2.0] - 2026-09-21
 
 ### Added
 

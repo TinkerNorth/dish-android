@@ -1,0 +1,7 @@
+Dish 2.2.0 : haptique DualSense, barre lumineuse en Bluetooth, pavé tactile.
+
+• Une DualSense en USB joue l’audio haptique du jeu sur ses actionneurs. Mettez aussi Satellite à jour.
+• La barre lumineuse suit le jeu en Bluetooth (Android 12 ou plus).
+• Le pavé tactile des DualShock 4 et DualSense fonctionne en Bluetooth et en mode USB Standard quand Dish est à l’écran.
+• Une manette en mode Direct affiche sa batterie.
+• Son et micro de la manette n’ont plus besoin du mode Direct.

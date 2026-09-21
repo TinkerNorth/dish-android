@@ -1,0 +1,7 @@
+Dish 2.2.0: DualSense-Haptik, Leuchtleiste per Bluetooth, mehr Touchpad.
+
+• Ein USB-DualSense spielt haptisches Spiel-Audio über die eigenen Aktuatoren ab. Aktualisiere auch Satellite.
+• Die Leuchtleiste folgt dem Spiel auch per Bluetooth (ab Android 12).
+• Das Touchpad von DualShock 4 und DualSense funktioniert per Bluetooth und im USB-Standardmodus, solange Dish sichtbar ist.
+• Direkt-Controller zeigen ihren eigenen Akku.
+• Controller-Ton und Mikrofon brauchen keinen Direkt-Modus mehr.
