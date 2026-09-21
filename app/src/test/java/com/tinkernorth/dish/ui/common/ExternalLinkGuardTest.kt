@@ -15,7 +15,7 @@ class ExternalLinkGuardTest {
 
     private val sourceRoot = File(mainDir, "java/com/tinkernorth/dish")
 
-    private val helperFile = "ui/common/BaseGamepadHostActivity.kt"
+    private val helperFile = "ui/common/ExternalLinks.kt"
 
     private fun kotlinSources(): List<File> = sourceRoot.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
 
@@ -42,5 +42,17 @@ class ExternalLinkGuardTest {
     fun `the setup screen's GitHub link goes through the helper`() {
         val setup = File(sourceRoot, "ui/setup/SetupConnectionActivity.kt").readText()
         assertTrue(setup.contains("openExternalUrl(getString(R.string.url_github))"))
+    }
+
+    @Test
+    fun `the base activity's opener is the helper`() {
+        val base = File(sourceRoot, "ui/common/BaseGamepadHostActivity.kt").readText()
+        assertTrue(base.contains("protected fun openExternalUrl(url: String) = openExternalLink(url, notifications)"))
+    }
+
+    @Test
+    fun `the main screen's update notice opens through the helper`() {
+        val main = File(sourceRoot, "ui/main/MainActivity.kt").readText()
+        assertTrue(main.contains("attachUpdatePill(updateNotices) { openExternalLink(it, notifications) }"))
     }
 }

@@ -11,6 +11,15 @@ computer. Those lines say "update Satellite too".
 
 ### Added
 
+- **The GitHub build tells you about new releases.** The APK from our
+  releases page had no way to learn that a newer Dish existed. It now asks
+  GitHub for the newest release while the app is on screen (about 15 seconds
+  after opening, at most once an hour, then every four hours) and, when
+  there is one, shows a notice on the main screen and a row in Settings that
+  open the release page in your browser. Skip a version you do not want, or
+  switch the check off in Settings; off means no request at all. The request
+  carries nothing about you, and the Play build never makes it, because Play
+  updates it. This is the same update check Dish for Windows and Linux run.
 - **DualSense haptics on a USB DualSense.** Games like 007 First Light and
   God of War drive the DualSense's vibration as audio into its actuators and
   never touch the motors, so a controller streamed through Satellite stayed

@@ -4,6 +4,7 @@ package com.tinkernorth.dish.ui.settings
 
 import android.os.Bundle
 import android.text.TextUtils
+import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -13,11 +14,14 @@ import com.tinkernorth.dish.databinding.ActivitySettingsBinding
 import com.tinkernorth.dish.source.store.CrashReportingStore
 import com.tinkernorth.dish.source.store.ThemeMode
 import com.tinkernorth.dish.source.store.ThemePreferenceStore
+import com.tinkernorth.dish.source.update.UpdateNoticePhase
+import com.tinkernorth.dish.source.update.UpdateNotices
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.donate.attachDonatePill
 import com.tinkernorth.dish.ui.donate.bindDonateSettingsCard
+import com.tinkernorth.dish.ui.update.updateStatusLine
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -27,6 +31,8 @@ class SettingsActivity : BaseGamepadHostActivity() {
     @Inject lateinit var crashReportingStore: CrashReportingStore
 
     @Inject lateinit var themePreferenceStore: ThemePreferenceStore
+
+    @Inject lateinit var updateNotices: UpdateNotices
 
     private lateinit var binding: ActivitySettingsBinding
     private val nav by lazy { DishNavigator(this) }
@@ -108,6 +114,7 @@ class SettingsActivity : BaseGamepadHostActivity() {
         binding.switchCrashReporting.setOnCheckedChangeListener { _, isChecked ->
             crashReportingStore.setEnabled(isChecked)
         }
+        bindUpdateSection()
 
         binding.cardPrivacyPolicy.setOnClickListener {
             openExternalUrl(getString(R.string.url_privacy_policy))
@@ -119,6 +126,43 @@ class SettingsActivity : BaseGamepadHostActivity() {
                 .removeSuffix("/")
 
         binding.tvVersion.text = formatVersion()
+    }
+
+    // GitHub build only: the switch mirrors the store the same observe-then-bind
+    // way as crash reporting, and the second row is a button whose text follows
+    // the coordinator's status (check now, or open the download on offer).
+    private fun bindUpdateSection() {
+        binding.groupUpdates.isVisible = updateNotices.supported
+        if (!updateNotices.supported) return
+        binding.sectionUpdates.labelSection.setText(R.string.settings_section_updates)
+        binding.cardRowUpdateChecks.cardRowIcon.setImageResource(R.drawable.ic_refresh)
+        binding.cardRowUpdateChecks.cardRowTitle.setText(R.string.settings_update_checks_title)
+        binding.cardRowUpdateChecks.cardRowSubtitle.setText(R.string.settings_update_checks_body)
+        binding.cardRowUpdateCheckNow.cardRowIcon.setImageResource(R.drawable.ic_arrow_upward)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                updateNotices.status.collect { status ->
+                    if (binding.switchUpdateChecks.isChecked != status.checksEnabled) {
+                        binding.switchUpdateChecks.isChecked = status.checksEnabled
+                    }
+                    val line = updateStatusLine(status)
+                    binding.cardRowUpdateCheckNow.cardRowTitle.setText(line.title)
+                    binding.cardRowUpdateCheckNow.cardRowSubtitle.text =
+                        line.versionArg?.let { getString(line.body, it) } ?: getString(line.body)
+                    binding.cardUpdateCheckNow.isEnabled = line.actionable
+                    binding.cardUpdateCheckNow.setOnClickListener {
+                        if (status.phase == UpdateNoticePhase.Available) {
+                            openExternalUrl(status.downloadUrl)
+                        } else {
+                            updateNotices.checkNow()
+                        }
+                    }
+                }
+            }
+        }
+        binding.switchUpdateChecks.setOnCheckedChangeListener { _, isChecked ->
+            updateNotices.setChecksEnabled(isChecked)
+        }
     }
 
     private fun chooseChip(mode: ThemeMode) {
