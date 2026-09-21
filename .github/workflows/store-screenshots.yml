@@ -38,8 +38,13 @@ on:
         required: false
         default: ""
   # Self-test: editing this workflow re-runs it for en-US only, and a
-  # branch push registers it so workflow_dispatch works pre-merge.
+  # branch push registers it so workflow_dispatch works pre-merge. Branches
+  # only: GitHub does not evaluate `paths` for tag pushes, so without the
+  # branch filter every release tag ran this capture a second time beside
+  # the one release.yml calls, competing with it for emulator runners.
   push:
+    branches:
+      - "**"
     paths:
       - ".github/workflows/store-screenshots.yml"
 
