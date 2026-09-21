@@ -11,6 +11,12 @@ adb shell wm size "${CAPTURE_SIZE}"
 adb shell wm density "${CAPTURE_DENSITY}"
 adb shell cmd uimode night yes
 adb shell settings put secure immersive_mode_confirmations confirmed
+# A CI emulator's launcher can ANR while the harness runs, and Android draws
+# its "isn't responding" dialog over whatever is in front, which on the 2.2.0
+# release was four whole legs of captures. Hide ANR and crash dialogs
+# system-wide; the crash-log check below still fails the leg on any crash in
+# the app's own processes, so nothing is papered over.
+adb shell settings put global hide_error_dialogs 1
 adb install -r -g app/build/outputs/apk/play/debug/app-play-debug.apk
 adb install -r app/build/outputs/apk/androidTest/play/debug/app-play-debug-androidTest.apk
 mkdir -p captures
