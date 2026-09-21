@@ -156,6 +156,13 @@
         android:gravity="center_horizontal">
 
         <include
+            layout="@layout/view_update_pill"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="@dimen/spacing_5xl"
+            android:visibility="gone" />
+
+        <include
             layout="@layout/view_donate_pill"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
