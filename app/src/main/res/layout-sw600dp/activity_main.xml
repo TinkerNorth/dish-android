@@ -137,7 +137,22 @@
         </LinearLayout>
     </LinearLayout>
 
-    <include layout="@layout/overlay_low_power_chip" />
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:orientation="vertical"
+        android:gravity="center_horizontal">
+
+        <include
+            layout="@layout/view_update_pill"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="@dimen/spacing_5xl"
+            android:visibility="gone" />
+
+        <include layout="@layout/overlay_low_power_chip" />
+    </LinearLayout>
 
     <include layout="@layout/overlay_mic_chip" />
 

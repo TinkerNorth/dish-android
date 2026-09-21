@@ -215,5 +215,6 @@
     <dimen name="donate_hero_heart_size">@dimen/size_56</dimen>
     <dimen name="donate_hero_heart_badge_size">@dimen/size_80</dimen>
     <dimen name="donate_pill_max_width">@dimen/size_280</dimen>
+    <dimen name="update_pill_max_width">@dimen/size_280</dimen>
     <dimen name="donate_content_max_width">@dimen/size_600</dimen>
 </resources>

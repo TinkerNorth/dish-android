@@ -43,6 +43,7 @@ import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
 import com.tinkernorth.dish.source.system.ConnectionForegroundObserver
 import com.tinkernorth.dish.source.system.MicPermissionGate
 import com.tinkernorth.dish.source.system.NetworkStateObserver
+import com.tinkernorth.dish.source.update.UpdateNotices
 import com.tinkernorth.dish.source.usb.PollRateSampler
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import dagger.hilt.android.HiltAndroidApp
@@ -89,6 +90,8 @@ class DishApplication : Application() {
 
     @Inject lateinit var networkStateObserver: NetworkStateObserver
 
+    @Inject lateinit var updateNotices: UpdateNotices
+
     @Inject lateinit var streamingServiceController: StreamingServiceController
 
     @Inject lateinit var slotTopologyController: SlotTopologyController
@@ -130,6 +133,9 @@ class DishApplication : Application() {
         themePreferenceStore.applyPersistedMode()
         // Must install before native-load try so the opt-in applies even when load fails.
         ProcessLifecycleOwner.get().lifecycle.addObserver(crashReportingController)
+        // The GitHub build's release check runs only while the app is on screen;
+        // the Play build binds a no-op here.
+        ProcessLifecycleOwner.get().lifecycle.addObserver(updateNotices)
         // Warm each satellite's catalog once its link is Live; independent of the native load.
         catalogPrewarmer.start()
         // And read its live host state on the same trigger. The controller-audio verdict lives

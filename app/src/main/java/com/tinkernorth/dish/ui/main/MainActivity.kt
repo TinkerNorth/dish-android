@@ -33,6 +33,7 @@ import com.tinkernorth.dish.source.lowpower.LowPowerSignal
 import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.source.system.LocalNetworkAccess
+import com.tinkernorth.dish.source.update.UpdateNotices
 import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.ui.common.DishNavigator
@@ -40,8 +41,10 @@ import com.tinkernorth.dish.ui.common.DishSpinnerDrawable
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachGamepadHost
+import com.tinkernorth.dish.ui.common.openExternalLink
 import com.tinkernorth.dish.ui.donate.attachDonatePill
 import com.tinkernorth.dish.ui.donate.wireDonateButton
+import com.tinkernorth.dish.ui.update.attachUpdatePill
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -77,6 +80,8 @@ class MainActivity :
     @Inject lateinit var capabilityComposer: CapabilityComposer
 
     @Inject lateinit var onboarding: OnboardingPreferenceStore
+
+    @Inject lateinit var updateNotices: UpdateNotices
 
     private lateinit var gamepadHost: GamepadActivityHost
 
@@ -156,6 +161,7 @@ class MainActivity :
         applyDishActivityTransitions()
         attachDonatePill()
         wireDonateButton()
+        attachUpdatePill(updateNotices) { openExternalLink(it, notifications) }
         controllerAdapter = ControllerAdapter(this)
         setupUI()
         observeViewModel()

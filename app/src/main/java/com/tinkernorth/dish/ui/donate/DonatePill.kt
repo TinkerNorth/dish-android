@@ -20,6 +20,8 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.ui.common.animationsDisabled
+import com.tinkernorth.dish.ui.common.slidePillIn
+import com.tinkernorth.dish.ui.common.slidePillOut
 
 private const val DONATE_PILL_PREFS = "user_preferences"
 private const val DONATE_PILL_DISMISSED_AT = "donate_pill_dismissed_at"
@@ -36,7 +38,7 @@ fun AppCompatActivity.attachDonatePill() {
 
 private fun AppCompatActivity.attachDockedDonatePill(docked: View): () -> Unit {
     docked.isVisible = true
-    val hide = { hidePill(docked) { docked.isVisible = false } }
+    val hide = { slidePillOut(docked) { docked.isVisible = false } }
     wireDonatePill(docked, hide)
     return hide
 }
@@ -62,7 +64,7 @@ private fun AppCompatActivity.attachFloatingDonatePill(): (() -> Unit)? {
     }
 
     content.addView(pill)
-    val hide = { hidePill(pill) { content.removeView(pill) } }
+    val hide = { slidePillOut(pill) { content.removeView(pill) } }
     wireDonatePill(pill, hide)
     return hide
 }
@@ -88,7 +90,7 @@ private fun AppCompatActivity.wireDonatePill(
         dismissDonatePill(this)
         onDismiss()
     }
-    animatePillIn(pill)
+    slidePillIn(pill)
     startHeartbeat(pill.findViewById(R.id.donatePillHeart))
 }
 
@@ -104,31 +106,6 @@ private fun dismissDonatePill(context: Context) {
     context
         .getSharedPreferences(DONATE_PILL_PREFS, Context.MODE_PRIVATE)
         .edit { putLong(DONATE_PILL_DISMISSED_AT, System.currentTimeMillis()) }
-}
-
-private fun AppCompatActivity.animatePillIn(pill: View) {
-    if (animationsDisabled()) return
-    pill.alpha = 0f
-    pill.translationY = resources.getDimensionPixelSize(R.dimen.spacing_6xl).toFloat()
-    pill
-        .animate()
-        .alpha(1f)
-        .translationY(0f)
-        .setDuration(resources.getInteger(R.integer.motion_duration_medium).toLong())
-        .start()
-}
-
-private fun hidePill(
-    pill: View,
-    onHidden: () -> Unit,
-) {
-    pill
-        .animate()
-        .alpha(0f)
-        .translationY(pill.height.toFloat())
-        .setDuration(pill.resources.getInteger(R.integer.motion_duration_medium).toLong())
-        .withEndAction { onHidden() }
-        .start()
 }
 
 private fun AppCompatActivity.startHeartbeat(heart: View) {

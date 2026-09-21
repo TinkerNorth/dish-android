@@ -18,6 +18,15 @@ on:
         required: false
         default: "completed"
 
+# Every tagged release also ships latest.json, the schema-1 update manifest
+# the GitHub build of the app fetches from the stable permalink
+# releases/latest/download/latest.json (the same shape dish-windows and
+# dish-linux read, with dish.apk as the asset). The release is uploaded as a
+# DRAFT and flipped to published afterwards: GitHub never points
+# releases/latest at a draft, so the assets upload while the permalink still
+# resolves to the previous release, and the flip is what makes publication
+# atomic for every client polling it.
+#
 # Required secrets (optional: workflow falls back to unsigned artifacts
 # for workflow_dispatch on feature branches; tagged releases on main are
 # blocked by `required-secrets` if any are missing):
@@ -282,6 +291,49 @@ jobs:
           symbols=$(find app/build/outputs/native-debug-symbols/playRelease -name 'native-debug-symbols.zip' 2>/dev/null | head -1)
           [ -n "$symbols" ] && cp "$symbols" "dist/dish-${tag}${suffix}-native-debug-symbols.zip"
           ls -l dist/
+
+      # Auto-update manifest, fetched by the GitHub build of the app from the
+      # stable permalink releases/latest/download/latest.json. The client only
+      # opens the release page, but the sha256 and size make the file a
+      # complete description of the release for anything that verifies it.
+      # The two version asserts prevent the drift where the shipped APK
+      # self-reports an older version than the manifest and every client is
+      # told about an update forever. minimumSupportedVersion comes from the
+      # reviewed packaging/update-policy.json, never from the tag.
+      - name: Emit update manifest (latest.json)
+        env:
+          TAG_INPUT: ${{ inputs.tag }}
+          VERSION_NAME: ${{ steps.ver.outputs.name }}
+        run: |
+          set -euo pipefail
+          tag="${TAG_INPUT:-${GITHUB_REF_NAME}}"
+          version="${tag#v}"
+          [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] \
+            || { echo "::error::tag '$tag' is not MAJOR.MINOR.PATCH"; exit 1; }
+          [ "$VERSION_NAME" = "$version" ] \
+            || { echo "::error::versionName '$VERSION_NAME' does not match tag '$tag'"; exit 1; }
+          [ -f dist/dish.apk ] \
+            || { echo "::error::dist/dish.apk is missing; no manifest without its asset"; exit 1; }
+          aapt2="$(ls -d "${ANDROID_HOME}"/build-tools/*/aapt2 | sort -V | tail -1)"
+          apk_version="$("$aapt2" dump badging dist/dish.apk | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -1)"
+          [ "$apk_version" = "$version" ] \
+            || { echo "::error::dish.apk reports versionName '$apk_version' but the tag says '$version'"; exit 1; }
+          min_supported="$(jq -r .minimumSupportedVersion packaging/update-policy.json)"
+          [[ "$min_supported" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+            || { echo "::error::update-policy.json minimumSupportedVersion is malformed"; exit 1; }
+          jq -n \
+            --arg version "$version" \
+            --arg publishedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg min "$min_supported" \
+            --arg notes "https://github.com/${GITHUB_REPOSITORY}/releases/tag/${tag}" \
+            --arg url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${tag}/dish.apk" \
+            --arg sha256 "$(sha256sum dist/dish.apk | cut -d' ' -f1)" \
+            --argjson size "$(stat -c %s dist/dish.apk)" \
+            '{schema: 1, product: "dish-android", version: $version, channel: "stable",
+              publishedAt: $publishedAt, minimumSupportedVersion: $min, releaseNotesUrl: $notes,
+              assets: {"dish.apk": {url: $url, sha256: $sha256, size: $size}}}' \
+            > dist/latest.json
+          cat dist/latest.json
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -656,9 +708,26 @@ jobs:
       - name: Show what we're about to publish
         run: find release -type f -printf '%p\n'
 
-      - name: Upload to GitHub Releases
+      # draft: true is load-bearing. GitHub never points releases/latest at a
+      # draft, so the assets upload while the update permalink still resolves
+      # to the previous release; the flip below is what makes publication
+      # atomic for every client polling latest.json.
+      - name: Upload to GitHub Releases (as draft)
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
           generate_release_notes: true
+          draft: true
           files: release/**/*
+          fail_on_unmatched_files: true
+
+      - name: Flip release from draft to published
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh release edit "$TAG" --draft=false
+          draft="$(gh release view "$TAG" --json isDraft --jq .isDraft)"
+          [ "$draft" = "false" ] || { echo "::error::release is still a draft"; exit 1; }

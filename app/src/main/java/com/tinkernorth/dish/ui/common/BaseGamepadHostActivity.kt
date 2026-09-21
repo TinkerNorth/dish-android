@@ -2,16 +2,13 @@
 
 package com.tinkernorth.dish.ui.common
 
-import android.content.Intent
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.net.toUri
 import androidx.viewbinding.ViewBinding
-import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.MicIndicatorCoordinator
 import com.tinkernorth.dish.composer.PhysicalReachabilityComposer
@@ -69,19 +66,7 @@ abstract class BaseGamepadHostActivity : AppCompatActivity() {
             ).also { it.setScreenHold(holdsScreenAwake) }
     }
 
-    protected fun openExternalUrl(url: String) {
-        val intent =
-            Intent(Intent.ACTION_VIEW, url.toUri())
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        runCatching { startActivity(intent) }
-            .onFailure {
-                notifications.warn(
-                    title = getString(R.string.error_open_url),
-                    body = url,
-                    key = "external-url-failed",
-                )
-            }
-    }
+    protected fun openExternalUrl(url: String) = openExternalLink(url, notifications)
 
     protected fun <B : ViewBinding> setScaffoldContent(inflate: (LayoutInflater, ViewGroup, Boolean) -> B): B {
         val scaffold = ScreenScaffoldBinding.inflate(layoutInflater)

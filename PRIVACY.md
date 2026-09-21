@@ -29,6 +29,10 @@ policy, as do the desktop clients; do not read one as describing another.
   Android version, and an auto-generated install ID. They do not contain
   the names of the satellites you pair with, your IP address, or your
   controller input.
+- The **GitHub build** (the APK from our releases page) checks for a newer
+  release by fetching one small file from GitHub while the app is open, at
+  most once an hour, and sends nothing about you. You can turn that off in
+  Settings. The Google Play build never does this: Play updates it.
 - Dish can act as your controller's **microphone**, so voice chat on your
   PC hears you through the emulated pad. That is off unless you switch it
   on for a controller, it needs the microphone permission, and the audio
@@ -63,6 +67,7 @@ The following data never leaves your phone except to your own
 | Gamepad input events (button presses, sticks, gyroscope) | In-memory only | Forwarded over encrypted UDP to the satellite you paired with, or over Bluetooth HID. Not logged or stored. |
 | Per-slot Microphone / Controller sound switches | App-private SharedPreferences (`user_preferences.xml`) | Remembering which controllers you gave a microphone or a speaker. The microphone switch defaults to off. |
 | Microphone audio, while the controller microphone is on and unmuted | In-memory only, one 20 ms window at a time | Encoded and forwarded over the same encrypted UDP session to the satellite you paired with. Never written to storage, never logged, never sent to TinkerNorth. |
+| Update preferences (GitHub build only): the *Check for updates automatically* switch, the one version you skipped, and when the last check ran | App-private SharedPreferences (`user_preferences.xml`) | Deciding whether and when to ask GitHub for a newer release (section 2.5). Included in cloud backup, like the crash-reporting choice. |
 
 ### 2.2 Sent to your own LAN (not to TinkerNorth)
 
@@ -168,6 +173,50 @@ policies apply once you leave the app.
 
 ---
 
+### 2.5 Sent to GitHub (update check, GitHub build only)
+
+The build you download from our GitHub releases page has no store to
+update it, so it checks for a newer release itself. When *Check for updates
+automatically* is on, which is the default, the app sends an HTTPS `GET` to
+`github.com` for the file `latest.json` attached to the newest release of
+this project. GitHub answers with a redirect to its own download CDN, so the
+request finishes against `objects.githubusercontent.com`. The file is about
+a kilobyte of JSON: a version number, a download link, a size and a SHA-256
+checksum.
+
+**When it happens.** About 15 seconds after the app comes on screen, at most
+once an hour; every four hours while it stays on screen; and whenever you tap
+*Check for updates* in Settings. Nothing runs while the app is in the
+background or closed. There is no service, no scheduled job, and no update
+agent.
+
+**What the request carries.** Your IP address, as GitHub sees it, which is
+unavoidable for any HTTPS request. A `User-Agent` header of the form
+`Dish/<version> (Android)`. Nothing else. No device id, no account data, no
+settings, no usage data, no cookies, no query parameters, and no
+conditional-request identifiers. GitHub's own
+[privacy statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement)
+governs what GitHub logs about the request.
+
+**What the app does with the answer.** It compares the version number with
+its own. If a newer release exists, a notice appears on the main screen and
+in Settings; tapping it opens the release page in your browser. The app never
+downloads or installs anything itself: you download the APK from GitHub and
+Android's installer takes it from there. *Skip this version* on the notice
+mutes that one version until a newer one is published. A release can declare
+an oldest supported version; below it the notice cannot be skipped, so a
+build with a security fix or a protocol break behind it keeps saying so.
+
+**Turning it off.** *Check for updates automatically* in Settings is the
+master switch. Off means the app makes no update-related network request of
+any kind, including from the *Check for updates* button.
+
+**The Google Play build** never contacts GitHub for this. Play updates it, as
+Google's policy requires, and the update code is not compiled into that
+build at all.
+
+---
+
 ## 3. Permissions and why we ask for them
 
 | Permission | Why | When asked |
@@ -195,6 +244,10 @@ microphone on, and it is never used for anything but that.
 - **Google LLC**, via Firebase Crashlytics, processes crash data on our
   behalf in the US/EU. We are the data controller; Google is the
   processor. See Google's [Data Processing and Security Terms](https://firebase.google.com/terms/data-processing-terms).
+- **GitHub, Inc.** receives the update check described in **section 2.5**
+  from the GitHub build: a plain HTTPS request carrying your IP address and
+  a `User-Agent` header, nothing else. GitHub is not our processor for it;
+  its own privacy statement applies, and you can turn the check off.
 - We do **not** share data with advertising networks, analytics vendors
   beyond Crashlytics (we have not enabled Firebase Analytics), or any
   TinkerNorth-operated server. Dish has no TinkerNorth-operated server.
@@ -214,6 +267,11 @@ or comparable laws in other jurisdictions.
   backup so it survives device transfers). The next app start applies
   the saved preference before any code path that could produce a crash
   report.
+- **Update check opt-out (GitHub build):** tap the gear icon on the main
+  screen, then flip *Check for updates automatically* off. Off means no
+  update-related request at all, including from the *Check for updates*
+  button. *Skip this version* on the update notice mutes that one version
+  instead. The Play build has neither, because Play updates it.
 - **Controller microphone opt-out:** it is off until you switch it on, per
   controller, on that controller's binding screen. Switching it off stops
   capture and stops the client advertising a microphone to the host at all.

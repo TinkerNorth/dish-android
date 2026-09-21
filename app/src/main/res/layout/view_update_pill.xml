@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The update notice, docked above the donate pill on the main screen. Same
+    silhouette as view_donate_pill so the two stack cleanly; the badge glyph
+    and stroke are the primary colour instead of the donation pulse.
+    UpdatePill.kt fills the text and wires the taps; the include starts gone.
+-->
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/updatePill"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground"
+    app:cardBackgroundColor="@color/colorSurface"
+    app:cardCornerRadius="@dimen/corner_pill"
+    app:cardElevation="@dimen/elevation_floating"
+    app:strokeColor="@color/colorPrimary"
+    app:strokeWidth="@dimen/border_thin">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="@dimen/spacing_md"
+        android:paddingEnd="@dimen/spacing_xs"
+        android:paddingVertical="@dimen/spacing_md"
+        android:baselineAligned="false">
+
+        <FrameLayout
+            android:layout_width="@dimen/donate_heart_badge_size"
+            android:layout_height="@dimen/donate_heart_badge_size"
+            android:background="@drawable/bg_update_badge">
+
+            <ImageView
+                android:layout_width="@dimen/donate_heart_size"
+                android:layout_height="@dimen/donate_heart_size"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_arrow_upward"
+                app:tint="@color/colorPrimary"
+                android:importantForAccessibility="no" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginStart="@dimen/spacing_lg"
+            android:layout_marginEnd="@dimen/spacing_sm">
+
+            <TextView
+                android:id="@+id/updatePillHeadline"
+                style="@style/TextAppearance.Dish.Title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxWidth="@dimen/update_pill_max_width"
+                tools:text="Dish 2.1.0 is available." />
+
+            <TextView
+                android:id="@+id/updatePillAsk"
+                style="@style/TextAppearance.Dish.BodySmall"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxWidth="@dimen/update_pill_max_width"
+                android:textColor="@color/colorPrimary"
+                android:text="@string/update_pill_ask" />
+        </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/updatePillDismiss"
+            android:layout_width="@dimen/icon_settings_button"
+            android:layout_height="@dimen/icon_settings_button"
+            android:src="@drawable/ic_close"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="@dimen/spacing_md"
+            android:scaleType="fitCenter"
+            app:tint="@color/colorMuted"
+            android:contentDescription="@string/update_pill_dismiss" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>
