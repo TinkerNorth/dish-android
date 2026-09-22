@@ -5,6 +5,7 @@ package com.tinkernorth.dish.ui.connections
 import android.Manifest
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -1281,11 +1282,23 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         pendingBtRegistration = PendingBtRegistration(connId, resolvedProfile)
     }
 
-    // SuppressLint: @RequiresPermission propagates from BluetoothAdapter field; gated by adapter-state banner and prior permission grant.
-    @android.annotation.SuppressLint("MissingPermission")
+    // The enable request needs BLUETOOTH_CONNECT from 31, and a cut-down build may carry no
+    // activity for either intent. Both failures land on the same answer they always did: the
+    // Bluetooth settings screen, which the user can act on without the grant.
     private fun requestEnableBt() {
-        runCatching { startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) }
-            .onFailure { runCatching { startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) } }
+        try {
+            startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+            return
+        } catch (e: SecurityException) {
+            Log.w(TAG, "enable request refused without BLUETOOTH_CONNECT: ${e.message}")
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "no activity for the Bluetooth enable request: ${e.message}")
+        }
+        try {
+            startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "no Bluetooth settings screen on this device: ${e.message}")
+        }
     }
 
     private fun openWifiSettings() {
