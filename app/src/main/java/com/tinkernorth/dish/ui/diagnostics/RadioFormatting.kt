@@ -104,15 +104,31 @@ internal fun Context.bluetoothHostValue(host: HostDiag): String {
 }
 
 internal fun Context.endpointValue(facts: UsbEndpointFacts): String {
-    val base = getString(R.string.diagnostics_endpoint_value, facts.pollRateHz, facts.maxPacketSize, facts.intervalRaw)
+    val base =
+        getString(
+            R.string.diagnostics_endpoint_value,
+            facts.pollRateHz,
+            resources.getQuantityString(R.plurals.diagnostics_bytes, facts.maxPacketSize, facts.maxPacketSize),
+            facts.intervalRaw,
+        )
     return if (facts.highSpeed) getString(R.string.diagnostics_joined, base, getString(R.string.diagnostics_high_speed)) else base
 }
 
 internal fun Context.usbLines(controllers: List<ControllerDiag>): List<String> {
     val usb = controllers.filter { it.transport == Transport.Usb }
     val direct = usb.count { it.isUsbSynthetic }
+    val standard = usb.size - direct
     val lines =
-        mutableListOf(diagKv(R.string.diagnostics_usb_pads, getString(R.string.diagnostics_usb_pads_value, usb.size - direct, direct)))
+        mutableListOf(
+            diagKv(
+                R.string.diagnostics_usb_pads,
+                getString(
+                    R.string.diagnostics_usb_pads_value,
+                    resources.getQuantityString(R.plurals.diagnostics_pads_standard, standard, standard),
+                    resources.getQuantityString(R.plurals.diagnostics_pads_direct, direct, direct),
+                ),
+            ),
+        )
     usb.forEach { pad ->
         val endpoint = pad.facts?.endpoint?.let { endpointValue(it) }
         lines += endpoint?.let { getString(R.string.diagnostics_joined, pad.name, it) } ?: pad.name

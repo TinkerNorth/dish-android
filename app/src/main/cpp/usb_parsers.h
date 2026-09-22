@@ -227,7 +227,8 @@ size_t buildGipInitPacket(InitKind init, int index, uint8_t seq, uint8_t* out, s
 // SET_REPORT.
 size_t buildSteamConfigPacket(SteamConfig stage, int index, uint8_t* out, size_t outCap);
 
-bool runInit(int fd, int interfaceNumber, uint8_t epOut, Parser p, InitKind init);
+// Sends the attach-time init sequence InitKind names over the claimed interface.
+bool runInit(int fd, int interfaceNumber, uint8_t epOut, InitKind init);
 
 // Undoes runInit's device-side changes. No-op for families that never changed the device.
 void runTeardown(int fd, int interfaceNumber, Parser p);

@@ -9,12 +9,7 @@
 
     <FrameLayout
         android:id="@+id/flLowPowerOverlay"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@color/colorOverlayScrim"
-        android:clickable="true"
-        android:focusable="true"
-        android:visibility="gone">
+        style="@style/Widget.Dish.Scrim">
 
         <LinearLayout
             android:layout_width="wrap_content"

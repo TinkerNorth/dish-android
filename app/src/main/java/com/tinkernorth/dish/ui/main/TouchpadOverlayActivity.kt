@@ -151,22 +151,7 @@ class TouchpadOverlayActivity : BaseInputOverlayActivity() {
         sink: com.tinkernorth.dish.source.connection.TelemetrySink,
         state: TouchpadSurfaceView.TouchpadState,
     ) {
-        sink.sendTouchpad(
-            slotId,
-            state.finger0Active,
-            state.finger1Active,
-            state.buttonPressed,
-            rightPressed = false,
-            middlePressed = false,
-            state.finger0TrackingId,
-            state.finger0X,
-            state.finger0Y,
-            state.finger1TrackingId,
-            state.finger1X,
-            state.finger1Y,
-            state.eventTimeMs,
-            scrollDelta = 0,
-        )
+        sink.sendTouchpad(slotId, state.toReport(buttonPressed = state.buttonPressed))
     }
 
     companion object {

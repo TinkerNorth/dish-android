@@ -33,8 +33,10 @@
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
         android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- usesPermissionFlags exists from API 31, where BLUETOOTH_SCAN itself starts to apply. -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
-        android:usesPermissionFlags="neverForLocation" />
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="s" />
 
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
@@ -84,28 +86,22 @@
             android:name=".ui.main.GamepadOverlayActivity"
             android:exported="false"
             android:resizeableActivity="true"
-            android:theme="@style/Theme.Dish.Overlay"
-            android:screenOrientation="landscape"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
-            tools:ignore="DiscouragedApi" />
+            android:theme="@style/Theme.Dish.Overlay.Surface"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
 
         <activity
             android:name=".ui.main.TouchpadOverlayActivity"
             android:exported="false"
             android:resizeableActivity="true"
             android:theme="@style/Theme.Dish.Overlay"
-            android:screenOrientation="landscape"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
-            tools:ignore="DiscouragedApi" />
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
 
         <activity
             android:name=".ui.main.MouseOverlayActivity"
             android:exported="false"
             android:resizeableActivity="true"
             android:theme="@style/Theme.Dish.Overlay"
-            android:screenOrientation="landscape"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
-            tools:ignore="DiscouragedApi" />
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
 
         <activity
             android:name=".ui.connections.ConnectionsActivity"

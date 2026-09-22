@@ -198,8 +198,7 @@ void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
                     if (wev == usbparsers::WirelessEvent::CONNECT) {
                         // The reboot wiped the quiet-mode settings, so re-run the attach init or
                         // the pad streams without motion while its lizard keyboard leaks through.
-                        usbparsers::runInit(ctx->fd, ctx->interfaceNumber, ctx->epOut, ctx->parser,
-                                            ctx->init);
+                        usbparsers::runInit(ctx->fd, ctx->interfaceNumber, ctx->epOut, ctx->init);
                     }
                 } else if (usbparsers::decodeReport(ctx->parser, completed->buf.data(),
                                                     (size_t)reaped->actual_length, scratch,
@@ -421,7 +420,7 @@ AttachResult attachDevice(int fd, uint16_t vid, uint16_t pid, int interfaceNumbe
 
     // Both bail-outs below run teardown first: a partly-applied init still changed the device, and
     // handing it back that way leaves it useless to its owner outside this app.
-    if (!usbparsers::runInit(fd, interfaceNumber, epOut, parser, init)) {
+    if (!usbparsers::runInit(fd, interfaceNumber, epOut, init)) {
         LOGI("attach %04X:%04X (%s): init failed, falling back to routed", vid, pid,
              modelName.c_str());
         usbparsers::runTeardown(fd, interfaceNumber, parser);

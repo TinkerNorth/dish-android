@@ -2,7 +2,6 @@
 
 package com.tinkernorth.dish.ui.common
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -18,6 +17,7 @@ import android.view.MotionEvent
 import android.view.View
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.ColorUtils
+import androidx.core.graphics.withClip
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.tinkernorth.dish.R
@@ -838,10 +838,9 @@ class GamepadTouchView
                 val fillTop = rect.bottom - (rect.bottom - boundaryY) * (value / GamepadConstants.TRIGGER_MAX.toFloat())
                 triggerClipPath.reset()
                 triggerClipPath.addRoundRect(rect, r, r, Path.Direction.CW)
-                c.save()
-                c.clipPath(triggerClipPath)
-                c.drawRect(rect.left, fillTop, rect.right, rect.bottom, paintTriggerFill)
-                c.restore()
+                c.withClip(triggerClipPath) {
+                    drawRect(rect.left, fillTop, rect.right, rect.bottom, paintTriggerFill)
+                }
             }
             val inset = GamepadConstants.TRIGGER_ZONE_DIVIDER_INSET_DP * density
             paintTriggerDivider.strokeWidth = GamepadConstants.TRIGGER_ZONE_DIVIDER_STROKE_DP * density
@@ -885,7 +884,6 @@ class GamepadTouchView
             }
         }
 
-        @SuppressLint("ClickableViewAccessibility")
         override fun onTouchEvent(event: MotionEvent): Boolean {
             val l = layout ?: return false
             // Opt out of vsync coalescing so each touch sensor sample is delivered as it
@@ -901,8 +899,18 @@ class GamepadTouchView
             if (recognizer.consumeTrackpadDirty()) {
                 listener?.onTrackpadStateChanged(recognizer.trackpadState)
             }
-            recognizer.takePendingTrackpadTap()?.let(::pulseTrackpadClick)
+            recognizer.takePendingTrackpadTap()?.let { tap ->
+                performClick()
+                pulseTrackpadClick(tap)
+            }
             invalidate()
+            return true
+        }
+
+        // A trackpad tap is the one gesture on this surface that is a click: the host gets it as
+        // the pad click pulse, accessibility services as the click event super sends.
+        override fun performClick(): Boolean {
+            super.performClick()
             return true
         }
 

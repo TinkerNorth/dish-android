@@ -72,8 +72,11 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    modelHasImu = true,
-                    modelHasRumble = true,
+                    model =
+                        ModelFacts(
+                            modelHasImu = true,
+                            modelHasRumble = true,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -97,8 +100,11 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    modelHasImu = false,
-                    modelHasRumble = false,
+                    model =
+                        ModelFacts(
+                            modelHasImu = false,
+                            modelHasRumble = false,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -122,8 +128,11 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    modelHasImu = true,
-                    modelHasRumble = true,
+                    model =
+                        ModelFacts(
+                            modelHasImu = true,
+                            modelHasRumble = true,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -172,9 +181,12 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    modelHasLightbar = true,
-                    modelHasPlayerLeds = true,
-                    modelHasTriggerEffects = true,
+                    model =
+                        ModelFacts(
+                            modelHasLightbar = true,
+                            modelHasPlayerLeds = true,
+                            modelHasTriggerEffects = true,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -200,10 +212,13 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    modelHasLightbar = true,
-                    modelHasPlayerLeds = true,
-                    modelHasTriggerEffects = true,
-                    modelHasTriggerRumble = true,
+                    model =
+                        ModelFacts(
+                            modelHasLightbar = true,
+                            modelHasPlayerLeds = true,
+                            modelHasTriggerEffects = true,
+                            modelHasTriggerRumble = true,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -229,8 +244,11 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    modelHasRumble = true,
-                    modelHasTriggerRumble = true,
+                    model =
+                        ModelFacts(
+                            modelHasRumble = true,
+                            modelHasTriggerRumble = true,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -251,8 +269,11 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    modelHasImu = false,
-                    modelHasRumble = false,
+                    model =
+                        ModelFacts(
+                            modelHasImu = false,
+                            modelHasRumble = false,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -275,7 +296,10 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    modelHasRumble = true,
+                    model =
+                        ModelFacts(
+                            modelHasRumble = true,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -302,9 +326,12 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    modelHasImu = true,
-                    modelHasRumble = true,
-                    knownFastLane = true,
+                    model =
+                        ModelFacts(
+                            modelHasImu = true,
+                            modelHasRumble = true,
+                            knownFastLane = true,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -344,9 +371,12 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    modelHasImu = true,
-                    modelHasRumble = true,
-                    frameworkCaps = PhysicalGamepadRegistry.FrameworkCaps(hasGyro = true, hasRumble = false),
+                    model =
+                        ModelFacts(
+                            modelHasImu = true,
+                            modelHasRumble = true,
+                            frameworkCaps = PhysicalGamepadRegistry.FrameworkCaps(hasGyro = true, hasRumble = false),
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -374,7 +404,10 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    knownFastLane = false,
+                    model =
+                        ModelFacts(
+                            knownFastLane = false,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -398,10 +431,13 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    modelHasImu = true,
-                    modelHasRumble = true,
-                    modelHasTouchpad = true,
-                    knownFastLane = true,
+                    model =
+                        ModelFacts(
+                            modelHasImu = true,
+                            modelHasRumble = true,
+                            modelHasTouchpad = true,
+                            knownFastLane = true,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -430,7 +466,10 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    frameworkCaps = null,
+                    model =
+                        ModelFacts(
+                            frameworkCaps = null,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -519,7 +558,10 @@ class CapabilityComposerTest {
                     bindings = bindings,
                     connections = conns,
                     scope = backgroundScope,
-                    hostFeaturesState = hostState,
+                    stores =
+                        StoreStates(
+                            hostFeaturesState = hostState,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -560,7 +602,10 @@ class CapabilityComposerTest {
                     bindings = bindings,
                     connections = conns,
                     scope = backgroundScope,
-                    motionEnabled = motionEnabled,
+                    stores =
+                        StoreStates(
+                            motionEnabled = motionEnabled,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -594,7 +639,10 @@ class CapabilityComposerTest {
                     bindings = bindings,
                     connections = conns,
                     scope = backgroundScope,
-                    backendStatus = backend,
+                    stores =
+                        StoreStates(
+                            backendStatus = backend,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -776,7 +824,10 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    hostRuntime = MutableStateFlow(mapOf("sat-A" to SatelliteHostRuntime(motionBackendOk = false))),
+                    stores =
+                        StoreStates(
+                            hostRuntime = MutableStateFlow(mapOf("sat-A" to SatelliteHostRuntime(motionBackendOk = false))),
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -803,7 +854,10 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    hostRuntime = MutableStateFlow(mapOf("sat-A" to SatelliteHostRuntime(motionBackendOk = true))),
+                    stores =
+                        StoreStates(
+                            hostRuntime = MutableStateFlow(mapOf("sat-A" to SatelliteHostRuntime(motionBackendOk = true))),
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -828,7 +882,10 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    hostRuntime = MutableStateFlow(mapOf("sat-A" to SatelliteHostRuntime(motionBackendOk = false))),
+                    stores =
+                        StoreStates(
+                            hostRuntime = MutableStateFlow(mapOf("sat-A" to SatelliteHostRuntime(motionBackendOk = false))),
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -852,7 +909,10 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    cachedCatalog = catalogWithDs4Touchpad(modes = listOf("mouse")),
+                    stores =
+                        StoreStates(
+                            cachedCatalog = catalogWithDs4Touchpad(modes = listOf("mouse")),
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -876,7 +936,10 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    cachedCatalog = catalogWithDs4Touchpad(modes = listOf("ds4")),
+                    stores =
+                        StoreStates(
+                            cachedCatalog = catalogWithDs4Touchpad(modes = listOf("ds4")),
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -972,8 +1035,11 @@ class CapabilityComposerTest {
                                 bindings = bindings,
                                 connections = conns,
                                 scope = backgroundScope,
-                                hostFeaturesState = audioHost(mic = hostMic, speaker = hostSpeaker),
-                                cachedCatalog = catalogWithAudio(typeHasAudio),
+                                stores =
+                                    StoreStates(
+                                        hostFeaturesState = audioHost(mic = hostMic, speaker = hostSpeaker),
+                                        cachedCatalog = catalogWithAudio(typeHasAudio),
+                                    ),
                             )
                         composer.probe(this)
                         testScheduler.runCurrent()
@@ -1004,7 +1070,10 @@ class CapabilityComposerTest {
                     bindings = bindings,
                     connections = conns,
                     scope = backgroundScope,
-                    cachedCatalog = catalogWithAudio(supported = true),
+                    stores =
+                        StoreStates(
+                            cachedCatalog = catalogWithAudio(supported = true),
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -1033,9 +1102,12 @@ class CapabilityComposerTest {
                     bindings = bindings,
                     connections = conns,
                     scope = backgroundScope,
-                    micEnabled = micEnabled,
-                    hostFeaturesState = audioHost(mic = true),
-                    cachedCatalog = catalogWithAudio(supported = true),
+                    stores =
+                        StoreStates(
+                            micEnabled = micEnabled,
+                            hostFeaturesState = audioHost(mic = true),
+                            cachedCatalog = catalogWithAudio(supported = true),
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -1067,10 +1139,13 @@ class CapabilityComposerTest {
                     bindings = bindings,
                     connections = conns,
                     scope = backgroundScope,
-                    micEnabled = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to true)),
-                    speakerEnabled = speakerEnabled,
-                    hostFeaturesState = audioHost(mic = true),
-                    cachedCatalog = catalogWithAudio(supported = true),
+                    stores =
+                        StoreStates(
+                            micEnabled = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to true)),
+                            speakerEnabled = speakerEnabled,
+                            hostFeaturesState = audioHost(mic = true),
+                            cachedCatalog = catalogWithAudio(supported = true),
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -1131,7 +1206,10 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    modelHasTouchpad = true,
+                    model =
+                        ModelFacts(
+                            modelHasTouchpad = true,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -1156,7 +1234,10 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    modelHasTouchpad = true,
+                    model =
+                        ModelFacts(
+                            modelHasTouchpad = true,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -1178,7 +1259,10 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    modelHasTouchpad = false,
+                    model =
+                        ModelFacts(
+                            modelHasTouchpad = false,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -1216,7 +1300,10 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A")),
                     connections = MutableStateFlow(listOf(summary("sat-A"))),
                     scope = backgroundScope,
-                    satTypes = MutableStateFlow(mapOf(("sat-A" to VIRTUAL_SLOT_ID) to CONTROLLER_TYPE_PLAYSTATION)),
+                    stores =
+                        StoreStates(
+                            satTypes = MutableStateFlow(mapOf(("sat-A" to VIRTUAL_SLOT_ID) to CONTROLLER_TYPE_PLAYSTATION)),
+                        ),
                 )
             assertEquals("ds4", composer.touchpadWireMode(VIRTUAL_SLOT_ID))
         }
@@ -1231,7 +1318,10 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A")),
                     connections = MutableStateFlow(listOf(summary("sat-A"))),
                     scope = backgroundScope,
-                    satTypes = MutableStateFlow(mapOf(("sat-A" to VIRTUAL_SLOT_ID) to CONTROLLER_TYPE_XBOX)),
+                    stores =
+                        StoreStates(
+                            satTypes = MutableStateFlow(mapOf(("sat-A" to VIRTUAL_SLOT_ID) to CONTROLLER_TYPE_XBOX)),
+                        ),
                 )
             assertEquals("mouse", composer.touchpadWireMode(VIRTUAL_SLOT_ID))
         }
@@ -1246,7 +1336,10 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A")),
                     connections = MutableStateFlow(listOf(summary("sat-A"))),
                     scope = backgroundScope,
-                    satTypes = MutableStateFlow(mapOf(("sat-A" to VIRTUAL_SLOT_ID) to CONTROLLER_TYPE_PLAYSTATION)),
+                    stores =
+                        StoreStates(
+                            satTypes = MutableStateFlow(mapOf(("sat-A" to VIRTUAL_SLOT_ID) to CONTROLLER_TYPE_PLAYSTATION)),
+                        ),
                 )
             assertEquals("off", composer.touchpadWireMode("unbound-slot"))
         }
@@ -1273,8 +1366,11 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A")),
                     connections = MutableStateFlow(listOf(summary("sat-A"))),
                     scope = backgroundScope,
-                    hostFeaturesState = withheld,
-                    satTypes = MutableStateFlow(mapOf(("sat-A" to VIRTUAL_SLOT_ID) to CONTROLLER_TYPE_XBOX)),
+                    stores =
+                        StoreStates(
+                            hostFeaturesState = withheld,
+                            satTypes = MutableStateFlow(mapOf(("sat-A" to VIRTUAL_SLOT_ID) to CONTROLLER_TYPE_XBOX)),
+                        ),
                 )
             assertEquals("off", composer.touchpadWireMode(VIRTUAL_SLOT_ID))
 
@@ -1294,8 +1390,14 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(mapOf("9" to "sat-A")),
                     connections = MutableStateFlow(listOf(summary("sat-A"))),
                     scope = backgroundScope,
-                    satTypes = MutableStateFlow(mapOf(("sat-A" to "9") to CONTROLLER_TYPE_PLAYSTATION)),
-                    modelHasTouchpad = true,
+                    stores =
+                        StoreStates(
+                            satTypes = MutableStateFlow(mapOf(("sat-A" to "9") to CONTROLLER_TYPE_PLAYSTATION)),
+                        ),
+                    model =
+                        ModelFacts(
+                            modelHasTouchpad = true,
+                        ),
                 )
             assertEquals("off", composer.touchpadWireMode("9"))
 
@@ -1315,8 +1417,11 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A")),
                     connections = MutableStateFlow(listOf(summary("sat-A"))),
                     scope = backgroundScope,
-                    mouseSurface = mouseSurface,
-                    satTypes = MutableStateFlow(mapOf(("sat-A" to VIRTUAL_SLOT_ID) to CONTROLLER_TYPE_PLAYSTATION)),
+                    stores =
+                        StoreStates(
+                            mouseSurface = mouseSurface,
+                            satTypes = MutableStateFlow(mapOf(("sat-A" to VIRTUAL_SLOT_ID) to CONTROLLER_TYPE_PLAYSTATION)),
+                        ),
                 )
             assertEquals("ds4", composer.touchpadWireMode(VIRTUAL_SLOT_ID))
 
@@ -1341,8 +1446,11 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A")),
                     connections = MutableStateFlow(listOf(summary("sat-A"))),
                     scope = backgroundScope,
-                    micEnabled = mic,
-                    speakerEnabled = speaker,
+                    stores =
+                        StoreStates(
+                            micEnabled = mic,
+                            speakerEnabled = speaker,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -1382,9 +1490,12 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(mapOf("-1000" to "sat-A")),
                     connections = MutableStateFlow(listOf(summary("sat-A"))),
                     scope = backgroundScope,
-                    modelHasLightbar = true,
-                    modelHasPlayerLeds = true,
-                    modelHasTriggerEffects = true,
+                    model =
+                        ModelFacts(
+                            modelHasLightbar = true,
+                            modelHasPlayerLeds = true,
+                            modelHasTriggerEffects = true,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -1408,7 +1519,10 @@ class CapabilityComposerTest {
                     bindings = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to "sat-A")),
                     connections = MutableStateFlow(listOf(summary("sat-A"))),
                     scope = backgroundScope,
-                    micEnabled = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to true)),
+                    stores =
+                        StoreStates(
+                            micEnabled = MutableStateFlow(mapOf(VIRTUAL_SLOT_ID to true)),
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()

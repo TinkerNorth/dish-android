@@ -20,6 +20,7 @@ import com.tinkernorth.dish.hotpath.input.PadTouchFrame
 import com.tinkernorth.dish.hotpath.input.PadTouchpadCapturePolicy
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.connection.TelemetrySink
+import com.tinkernorth.dish.source.connection.TouchpadReport
 import com.tinkernorth.dish.ui.common.ResendPacer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -252,19 +253,21 @@ class PadTouchpadCapture(
     ) {
         sink.sendTouchpad(
             slotId,
-            frame.finger0Active,
-            frame.finger1Active,
-            frame.buttonPressed,
-            rightPressed = false,
-            middlePressed = false,
-            frame.finger0Id,
-            frame.finger0X,
-            frame.finger0Y,
-            frame.finger1Id,
-            frame.finger1X,
-            frame.finger1Y,
-            frame.eventTimeMs,
-            scrollDelta = 0,
+            TouchpadReport(
+                finger0Active = frame.finger0Active,
+                finger1Active = frame.finger1Active,
+                buttonPressed = frame.buttonPressed,
+                rightPressed = false,
+                middlePressed = false,
+                finger0TrackingId = frame.finger0Id,
+                finger0X = frame.finger0X,
+                finger0Y = frame.finger0Y,
+                finger1TrackingId = frame.finger1Id,
+                finger1X = frame.finger1X,
+                finger1Y = frame.finger1Y,
+                eventTimeMs = frame.eventTimeMs,
+                scrollDelta = 0,
+            ),
         )
     }
 

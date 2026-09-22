@@ -2,7 +2,6 @@
 
 package com.tinkernorth.dish.source.bluetooth
 
-import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothHidDevice
 import android.bluetooth.BluetoothHidDeviceAppQosSettings
@@ -11,6 +10,7 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.os.Build
+import android.util.Log
 import androidx.annotation.RequiresApi
 import com.tinkernorth.dish.core.input.BluetoothGamepad
 import com.tinkernorth.dish.core.input.REPORT_ID
@@ -18,7 +18,6 @@ import com.tinkernorth.dish.core.input.REPORT_SIZE
 import com.tinkernorth.dish.core.input.buildHidDescriptor
 
 @RequiresApi(Build.VERSION_CODES.P)
-@SuppressLint("MissingPermission")
 class AndroidHidProxyClient(
     private val context: Context,
 ) : HidProxyClient {
@@ -86,54 +85,72 @@ class AndroidHidProxyClient(
         val hid = hidDevice ?: return
         val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
         val adapter = manager?.adapter ?: return
-        runCatching { hid.connect(adapter.getRemoteDevice(mac)) }
-            .onFailure { e ->
-                val msg =
-                    when (e) {
-                        is SecurityException ->
-                            "Bluetooth permission denied: ${e.message ?: "BLUETOOTH_CONNECT not granted"}"
-                        else -> "Invalid host address: $mac"
-                    }
-                events?.onError(msg)
-            }
+        try {
+            hid.connect(adapter.getRemoteDevice(mac))
+        } catch (e: SecurityException) {
+            events?.onError("Bluetooth permission denied: ${e.message ?: "BLUETOOTH_CONNECT not granted"}")
+        } catch (e: IllegalArgumentException) {
+            Log.w(TAG, "getRemoteDevice rejected $mac: ${e.message}")
+            events?.onError("Invalid host address: $mac")
+        }
     }
 
     override fun disconnectCurrentHost() {
         val hid = hidDevice ?: return
-        connectedDevice?.let { runCatching { hid.disconnect(it) } }
+        val device = connectedDevice ?: return
+        try {
+            hid.disconnect(device)
+        } catch (e: SecurityException) {
+            // Without the grant the link is the OS's to keep; the session state still drops it.
+            Log.w(TAG, "disconnect without BLUETOOTH_CONNECT: ${e.message}")
+        }
     }
 
     override fun findOsConnectedHost(mac: String): String? {
         val hid = hidDevice ?: return null
-        return runCatching {
+        return try {
             hid
                 .getDevicesMatchingConnectionStates(intArrayOf(BluetoothProfile.STATE_CONNECTED))
                 .firstOrNull { it.address.equals(mac, ignoreCase = true) }
                 ?.let { it.name ?: it.address }
-        }.getOrNull()
+        } catch (e: SecurityException) {
+            Log.w(TAG, "connected hosts unavailable without BLUETOOTH_CONNECT: ${e.message}")
+            null
+        }
     }
 
     override fun sendReport(report: ByteArray): Boolean {
-        // runCatching: a concurrent teardown can null the stack out from under us, so hid.sendReport
-        // may throw IllegalStateException after the proxy closed. This runs on the JNI report thread,
-        // which must never crash; swallow and report failure instead.
-        return runCatching {
-            val hid = hidDevice ?: return false
-            val device = connectedDevice ?: return false
-            // Strip report-id byte into per-thread scratch: sendReport takes it separately from the payload.
-            val payload = payloadScratch.get() ?: return false
-            System.arraycopy(report, 1, payload, 0, REPORT_SIZE - 1)
+        // A concurrent teardown can null the stack out from under us, so hid.sendReport may throw
+        // IllegalStateException after the proxy closed, and a revoked grant throws SecurityException.
+        // This runs on the JNI report thread at report rate, which must never crash and must not
+        // log per report: the false return is the whole answer, and the session state machine
+        // reports the teardown or the revocation once, on its own thread.
+        val hid = hidDevice ?: return false
+        val device = connectedDevice ?: return false
+        // Strip report-id byte into per-thread scratch: sendReport takes it separately from the payload.
+        val payload = payloadScratch.get() ?: return false
+        System.arraycopy(report, 1, payload, 0, REPORT_SIZE - 1)
+        return try {
             hid.sendReport(device, REPORT_ID, payload)
-        }.getOrDefault(false)
+        } catch (ignored: SecurityException) {
+            false
+        } catch (ignored: IllegalStateException) {
+            false
+        }
     }
 
     override fun unregisterAndRelease() {
         val hid = hidDevice
         val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
         if (hid != null) {
-            connectedDevice?.let { runCatching { hid.disconnect(it) } }
-            runCatching { hid.unregisterApp() }
-            runCatching { manager?.adapter?.closeProfileProxy(BluetoothProfile.HID_DEVICE, hid) }
+            try {
+                connectedDevice?.let { hid.disconnect(it) }
+                hid.unregisterApp()
+            } catch (e: SecurityException) {
+                // The proxy is still closed below; the OS tears the registration down with it.
+                Log.w(TAG, "release without BLUETOOTH_CONNECT: ${e.message}")
+            }
+            manager?.adapter?.closeProfileProxy(BluetoothProfile.HID_DEVICE, hid)
         }
         hidDevice = null
         connectedDevice = null
@@ -176,7 +193,7 @@ class AndroidHidProxyClient(
                 when (state) {
                     BluetoothProfile.STATE_CONNECTED -> {
                         connectedDevice = device
-                        events?.onHostConnected(device.address, device.name)
+                        events?.onHostConnected(device.address, hostName(device))
                     }
                     BluetoothProfile.STATE_DISCONNECTED -> {
                         if (connectedDevice?.address == device.address) connectedDevice = null
@@ -186,7 +203,18 @@ class AndroidHidProxyClient(
             }
         }
 
+    // The connected callback runs whatever the grant is; a host whose name we may not read is
+    // still connected, just unnamed.
+    private fun hostName(device: BluetoothDevice): String? =
+        try {
+            device.name
+        } catch (e: SecurityException) {
+            Log.w(TAG, "host name unavailable without BLUETOOTH_CONNECT: ${e.message}")
+            null
+        }
+
     private companion object {
+        const val TAG = "AndroidHidProxyClient"
         const val TOKEN_RATE = 3200
         const val BT_SLOT_US = 625
         const val JITTER_US = 1250

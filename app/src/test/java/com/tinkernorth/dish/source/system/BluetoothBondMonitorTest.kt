@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import androidx.core.content.IntentCompat
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedBt
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
@@ -36,7 +37,7 @@ class BluetoothBondMonitorTest {
     @Before
     fun setUp() {
         // android.util.Log is unmocked by default in JVM unit tests. Stub to no-ops so logging plumbing isn't under test.
-        mockkStatic(Log::class)
+        mockkStatic(Log::class, IntentCompat::class)
         every { Log.w(any(), any<String>()) } returns 0
         every { Log.d(any(), any<String>()) } returns 0
         every { Log.i(any(), any<String>()) } returns 0
@@ -67,8 +68,8 @@ class BluetoothBondMonitorTest {
         return intent
     }
 
-    // One-arg getParcelableExtra: the JVM stub's SDK_INT=0 drives the legacy path.
-    @Suppress("DEPRECATION")
+    // The monitor reads the device through IntentCompat, so the compat entry point is what the
+    // intent mock answers: the JVM stub cannot carry a real Parcelable extra.
     private fun intentForAction(
         action: String,
         mac: String,
@@ -82,10 +83,7 @@ class BluetoothBondMonitorTest {
                 every { this@mockk.action } returns action
             }
         every {
-            intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
-        } returns device
-        every {
-            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+            IntentCompat.getParcelableExtra(intent, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
         } returns device
         return intent
     }
@@ -114,16 +112,14 @@ class BluetoothBondMonitorTest {
     }
 
     @Test
-    @Suppress("DEPRECATION") // one-arg getParcelableExtra, as in intentForAction
     fun `KEY_MISSING with no EXTRA_DEVICE is ignored`() {
         val intent =
             mockk<Intent>(relaxed = true) {
                 every { action } returns "android.bluetooth.device.action.KEY_MISSING"
-                every { getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE) } returns null
-                every {
-                    getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-                } returns null
             }
+        every {
+            IntentCompat.getParcelableExtra(intent, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+        } returns null
 
         receive(intent)
 

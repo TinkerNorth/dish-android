@@ -161,6 +161,10 @@ android {
     kotlin {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+            // Every Kotlin warning (deprecations, unchecked casts, redundant code) fails the build:
+            // the tree carries none, and the few deprecated platform calls that have no
+            // replacement below their API gate are each marked in place with the reason.
+            allWarningsAsErrors.set(true)
         }
     }
     buildFeatures {
@@ -186,6 +190,9 @@ android {
         error += "MissingTranslation"
         abortOnError = true
         checkReleaseBuilds = true
+        // Lint warnings fail the build like errors do: the tree carries zero, and a new one
+        // is fixed at its cause rather than tolerated.
+        warningsAsErrors = true
     }
 
     testOptions {
@@ -220,6 +227,7 @@ dependencies {
     implementation(libs.androidx.viewpager2)
     implementation(libs.androidx.window)
     implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.constraintlayout)
     implementation(libs.material)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.lifecycle.runtime.ktx)

@@ -63,12 +63,11 @@ class RumbleRouter
                 null
             }
 
-        @Suppress("DEPRECATION")
         private val phoneVibrator: Vibrator? =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 null
             } else {
-                context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator?
+                context.getSystemService(Vibrator::class.java)
             }
 
         // Diagnostics-only: drive the slot's actuator directly, bypassing the session resolve
@@ -169,8 +168,7 @@ class RumbleRouter
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                         vibrateManager(dev.vibratorManager, strongMagnitude, weakMagnitude, durationMs)
                     } else {
-                        @Suppress("DEPRECATION")
-                        vibrateSingle(dev.vibrator, strongMagnitude, weakMagnitude, durationMs)
+                        dev.legacyVibrator()?.let { vibrateSingle(it, strongMagnitude, weakMagnitude, durationMs) }
                     }
                 }
                 is RumbleTarget.DirectUsb -> {
@@ -201,8 +199,7 @@ class RumbleRouter
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                         dev.vibratorManager.cancel()
                     } else {
-                        @Suppress("DEPRECATION")
-                        dev.vibrator.cancel()
+                        dev.legacyVibrator()?.cancel()
                     }
                 }
                 is RumbleTarget.DirectUsb -> {
@@ -248,9 +245,20 @@ class RumbleRouter
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 vibrator.vibrate(VibrationEffect.createOneShot(durationMs, amp))
             } else {
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(durationMs)
+                vibrateLegacy(vibrator, durationMs)
             }
+        }
+
+        // Marker: Vibrator.vibrate(long) is deprecated from 26, where VibrationEffect (the branch
+        // above) replaces it. On 24 and 25 every vibrate overload is this deprecated family and
+        // no AndroidX compat wraps it. The right fix is a minSdk of 26, which would drop the
+        // Android 7 devices; until then the deprecated call lives here and nowhere else.
+        @Suppress("DEPRECATION")
+        private fun vibrateLegacy(
+            vibrator: Vibrator,
+            durationMs: Long,
+        ) {
+            vibrator.vibrate(durationMs)
         }
     }
 

@@ -63,44 +63,71 @@ class MoonlightRtspClient(
      */
     private var stage = "connect"
 
-    @Suppress("ReturnCount") // each early return is a distinct RTSP step failing
     fun handshake(
         width: Int,
         height: Int,
         fps: Int,
     ): StreamPorts? {
         val target = "rtsp://$address:$rtspPort"
-        if (send(MoonlightRtsp.options(target, nextCseq())) == null) return null
-        if (send(MoonlightRtsp.describe(target, nextCseq())) == null) return null
+        if (!openSession(target)) return null
+        val streams = setupStreams() ?: return null
+        if (!startStreams(target, MoonlightRtsp.announceSdp(width, height, fps))) return null
 
-        val audioResp = setup("audio") ?: return null
-        val audio = audioResp.serverPort() ?: return null
-        val videoResp = setup("video") ?: return null
-        val video = videoResp.serverPort() ?: return null
-        val controlResp = setup("control") ?: return null
-        val controlPort = controlResp.serverPort() ?: return null
-        val connectData = controlResp.enetConnectData() ?: 0
-        val ping = audioResp.pingPayload() ?: videoResp.pingPayload().orEmpty()
-
-        val sdp = MoonlightRtsp.announceSdp(width, height, fps)
-        if (send(MoonlightRtsp.announce(target, nextCseq(), sdp)) == null) return null
-        if (send(MoonlightRtsp.play(target, nextCseq())) == null) return null
-
+        val connectData = streams.control.response.enetConnectData() ?: 0
+        val ping =
+            streams.audio.response.pingPayload() ?: streams.video.response
+                .pingPayload()
+                .orEmpty()
         Log.i(
             TAG,
-            "negotiated ports on $address: control $controlPort, video $video, audio $audio; " +
-                "connect-data $connectData, ping payload ${ping.length} chars",
+            "negotiated ports on $address: control ${streams.control.port}, video ${streams.video.port}, " +
+                "audio ${streams.audio.port}; connect-data $connectData, ping payload ${ping.length} chars",
         )
         if (ping.isEmpty()) Log.w(TAG, "host named no ping payload; falling back to the legacy 4-byte media ping")
-        return StreamPorts(controlPort, video, audio, connectData, ping)
+        return StreamPorts(streams.control.port, streams.video.port, streams.audio.port, connectData, ping)
     }
 
-    private fun setup(streamId: String): MoonlightRtsp.Response? {
+    // One SETUP answer the host bound a port for.
+    private class StreamSetup(
+        val port: Int,
+        val response: MoonlightRtsp.Response,
+    )
+
+    private class NegotiatedStreams(
+        val audio: StreamSetup,
+        val video: StreamSetup,
+        val control: StreamSetup,
+    )
+
+    // OPTIONS then DESCRIBE: the host is speaking RTSP to us at all.
+    private fun openSession(target: String): Boolean =
+        send(MoonlightRtsp.options(target, nextCseq())) != null &&
+            send(MoonlightRtsp.describe(target, nextCseq())) != null
+
+    // The three SETUPs in the order Moonlight hosts expect them; each must name a port.
+    private fun setupStreams(): NegotiatedStreams? {
+        val audio = setupStream("audio") ?: return null
+        val video = setupStream("video") ?: return null
+        val control = setupStream("control") ?: return null
+        return NegotiatedStreams(audio, video, control)
+    }
+
+    // ANNOUNCE the stream we want, then PLAY it.
+    private fun startStreams(
+        target: String,
+        sdp: String,
+    ): Boolean =
+        send(MoonlightRtsp.announce(target, nextCseq(), sdp)) != null &&
+            send(MoonlightRtsp.play(target, nextCseq())) != null
+
+    private fun setupStream(streamId: String): StreamSetup? {
         val response = send(MoonlightRtsp.setup(streamId, nextCseq())) ?: return null
-        if (response.serverPort() == null) {
+        val port = response.serverPort()
+        if (port == null) {
             Log.w(TAG, "SETUP $streamId carried no server_port, options ${response.options}")
+            return null
         }
-        return response
+        return StreamSetup(port, response)
     }
 
     /**

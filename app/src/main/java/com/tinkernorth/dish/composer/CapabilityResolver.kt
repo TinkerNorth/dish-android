@@ -12,7 +12,6 @@ import com.tinkernorth.dish.repository.TouchpadModeValue
 
 // Reducer: pure layer math. The composer reads live state once and hands the four layers in here.
 object CapabilityResolver {
-    @Suppress("LongParameterList")
     fun resolve(
         controller: CapabilitySet,
         transport: CapabilitySet,

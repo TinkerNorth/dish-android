@@ -2,12 +2,12 @@
 
 package com.tinkernorth.dish.ui.setup
 
-import android.content.res.ColorStateList
 import android.view.LayoutInflater
-import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.TextView
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.SetupCapabilityRowBinding
+import com.tinkernorth.dish.ui.common.setTrailingIcon
 
 // Renders the resolved capability rows into a type card's container so the
 // Bluetooth-host pick-type screen and the configure screen draw the table the
@@ -26,9 +26,9 @@ fun LinearLayout.bindCapabilityRows(rows: List<SetupCapabilityRow>) {
             }
         rowBinding.capStatus.setText(statusRes)
         rowBinding.capStatus.setTextColor(context.getColor(if (row.available) R.color.colorSuccess else R.color.colorMuted))
-        if (row.inputUnknown) applyUnknown(rowBinding.icInput) else applyCheck(rowBinding.icInput, row.inputOk)
-        applyCheck(rowBinding.icDestination, row.destinationOk)
-        applyCheck(rowBinding.icType, row.typeOk)
+        if (row.inputUnknown) applyUnknown(rowBinding.capInput) else applyCheck(rowBinding.capInput, row.inputOk)
+        applyCheck(rowBinding.capDestination, row.destinationOk)
+        applyCheck(rowBinding.capType, row.typeOk)
         addView(rowBinding.root)
     }
 }
@@ -49,14 +49,16 @@ private fun capabilityNameRes(kind: SetupCapabilityKind): Int =
     }
 
 private fun applyCheck(
-    view: ImageView,
+    view: TextView,
     ok: Boolean,
 ) {
-    view.setImageResource(if (ok) R.drawable.ic_check_circle else R.drawable.ic_cancel)
-    view.imageTintList = ColorStateList.valueOf(view.context.getColor(if (ok) R.color.colorSuccess else R.color.colorMuted))
+    view.setTrailingIcon(
+        if (ok) R.drawable.ic_check_circle else R.drawable.ic_cancel,
+        R.dimen.config_callout_icon_size,
+        view.context.getColor(if (ok) R.color.colorSuccess else R.color.colorMuted),
+    )
 }
 
-private fun applyUnknown(view: ImageView) {
-    view.setImageResource(R.drawable.ic_help)
-    view.imageTintList = ColorStateList.valueOf(view.context.getColor(R.color.colorMuted))
+private fun applyUnknown(view: TextView) {
+    view.setTrailingIcon(R.drawable.ic_help, R.dimen.config_callout_icon_size, view.context.getColor(R.color.colorMuted))
 }

@@ -2,14 +2,11 @@
 
 package com.tinkernorth.dish.source.bluetooth
 
-import android.Manifest
-import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.pm.PackageManager
-import android.os.Build
-import androidx.core.content.ContextCompat
+import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -24,24 +21,26 @@ class BluetoothPadLinkReader
     constructor(
         @ApplicationContext private val context: Context,
     ) {
-        @SuppressLint("MissingPermission")
         fun linkType(deviceName: String): BluetoothLinkType {
-            if (!connectGranted()) return BluetoothLinkType.UNKNOWN
+            if (context.checkBluetoothConnectPermission() != PackageManager.PERMISSION_GRANTED) return BluetoothLinkType.UNKNOWN
             val adapter =
                 (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter ?: return BluetoothLinkType.UNKNOWN
-            val bonded = runCatching { adapter.bondedDevices }.getOrNull().orEmpty()
-            val matches = bonded.filter { runCatching { it.name }.getOrNull() == deviceName }
-            val device = matches.singleOrNull() ?: return BluetoothLinkType.UNKNOWN
-            return when (runCatching { device.type }.getOrNull()) {
-                BluetoothDevice.DEVICE_TYPE_CLASSIC -> BluetoothLinkType.CLASSIC
-                BluetoothDevice.DEVICE_TYPE_LE -> BluetoothLinkType.LOW_ENERGY
-                BluetoothDevice.DEVICE_TYPE_DUAL -> BluetoothLinkType.DUAL
-                else -> BluetoothLinkType.UNKNOWN
+            return try {
+                val matches = adapter.bondedDevices.orEmpty().filter { it.name == deviceName }
+                when (matches.singleOrNull()?.type) {
+                    BluetoothDevice.DEVICE_TYPE_CLASSIC -> BluetoothLinkType.CLASSIC
+                    BluetoothDevice.DEVICE_TYPE_LE -> BluetoothLinkType.LOW_ENERGY
+                    BluetoothDevice.DEVICE_TYPE_DUAL -> BluetoothLinkType.DUAL
+                    else -> BluetoothLinkType.UNKNOWN
+                }
+            } catch (e: SecurityException) {
+                // Revoked between the check above and the reads: the link type stays unknown.
+                Log.w(TAG, "BLUETOOTH_CONNECT revoked while reading bonded devices: ${e.message}")
+                BluetoothLinkType.UNKNOWN
             }
         }
 
-        private fun connectGranted(): Boolean {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
-            return ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+        private companion object {
+            const val TAG = "BluetoothPadLinkReader"
         }
     }

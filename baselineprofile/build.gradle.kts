@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.android.test)
     alias(libs.plugins.androidx.baselineprofile)
+    alias(libs.plugins.ktlint)
+    alias(libs.plugins.detekt)
 }
 
 android {
@@ -25,6 +27,8 @@ android {
     kotlin {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+            // Same bar as :app: a Kotlin warning here fails the build too.
+            allWarningsAsErrors.set(true)
         }
     }
 
@@ -42,6 +46,18 @@ android {
             }
         }
     }
+}
+
+// The same style and static-analysis gates :app runs, so this module cannot drift.
+ktlint {
+    android.set(true)
+    verbose.set(true)
+}
+
+detekt {
+    config.setFrom(files("../app/detekt.yml"))
+    buildUponDefaultConfig = true
+    allRules = false
 }
 
 baselineProfile {

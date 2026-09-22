@@ -251,7 +251,6 @@ class EnetClient(
 
     // Each early return is a distinct malformed/short-command bail; splitting them would
     // obscure the one-command-per-branch parse.
-    @Suppress("ReturnCount", "LongParameterList", "CyclomaticComplexMethod")
     private fun handleCommand(
         header: EnetProtocol.CommandHeader,
         buf: ByteBuffer,

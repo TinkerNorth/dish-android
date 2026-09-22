@@ -12,6 +12,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import android.view.View
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
@@ -73,6 +74,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.Locale
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -647,7 +649,9 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         private val tempId: String,
         initialDiscoverableUntilMs: Long?,
     ) {
-        private val view = layoutInflater.inflate(R.layout.dialog_bt_device_picker, null)
+        // Inflated against a stand-in for the dialog's own FrameLayout so the root's layout
+        // params resolve; attachToRoot=false keeps it detached until setView.
+        private val view = layoutInflater.inflate(R.layout.dialog_bt_device_picker, FrameLayout(this@ConnectionsActivity), false)
         private val container = view.findViewById<LinearLayout>(R.id.deviceContainer)
         private val progress = view.findViewById<TextView>(R.id.scanProgress)
         private val empty = view.findViewById<TextView>(R.id.deviceEmpty)
@@ -821,8 +825,9 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         val hostField = view.findViewById<TextInputEditText>(R.id.etSatelliteHost)
         val httpsField = view.findViewById<TextInputEditText>(R.id.etSatelliteHttpsPort)
         val udpField = view.findViewById<TextInputEditText>(R.id.etSatelliteUdpPort)
-        httpsField.setText(DEFAULT_HTTPS_PORT.toString())
-        udpField.setText(DEFAULT_UDP_PORT.toString())
+        // Port fields parse back through toIntOrNull, so the defaults are written in ASCII digits.
+        httpsField.setText(String.format(Locale.ROOT, "%d", DEFAULT_HTTPS_PORT))
+        udpField.setText(String.format(Locale.ROOT, "%d", DEFAULT_UDP_PORT))
 
         val dialog =
             MaterialAlertDialogBuilder(this)

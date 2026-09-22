@@ -30,6 +30,7 @@ class MoonlightHotSealer(
     // Reused across every packet: the plaintext scratch, the GCM output, and the
     // final framed datagram body.
     private val plaintext = ByteBuffer.allocate(MoonlightInputEncoder.CONTROLLER_MULTI_LEN).order(ByteOrder.LITTLE_ENDIAN)
+    private val plaintextWriter = MoonlightInputEncoder.ControllerMultiWriter(plaintext)
     private val cipherOut = ByteArray(MoonlightInputEncoder.CONTROLLER_MULTI_LEN + MoonlightCrypto.GCM_TAG_LEN)
     private val iv = ByteArray(GCM_IV_LEN)
     private val framed =
@@ -47,7 +48,6 @@ class MoonlightHotSealer(
      * ENet reliable send. Only the returned array is allocated; the encode and
      * encrypt stages reuse buffers. Advances the seq.
      */
-    @Suppress("LongParameterList")
     fun sealControllerMulti(
         controllerNumber: Int,
         activeMask: Int,
@@ -59,8 +59,7 @@ class MoonlightHotSealer(
         rightStickX: Int,
         rightStickY: Int,
     ): ByteArray {
-        MoonlightInputEncoder.encodeControllerMulti(
-            plaintext,
+        plaintextWriter.encode(
             controllerNumber,
             activeMask,
             buttons,

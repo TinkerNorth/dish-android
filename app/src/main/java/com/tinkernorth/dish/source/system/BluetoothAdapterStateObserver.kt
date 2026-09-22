@@ -8,7 +8,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.os.Build
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.architecture.abstracts.AbstractStateSource
@@ -72,11 +71,5 @@ class BluetoothAdapterStateObserver
             return if (adapter.isEnabled) BluetoothAdapterState.ON else BluetoothAdapterState.OFF
         }
 
-        private fun adapter(): BluetoothAdapter? =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
-            } else {
-                @Suppress("DEPRECATION")
-                BluetoothAdapter.getDefaultAdapter()
-            }
+        private fun adapter(): BluetoothAdapter? = context.getSystemService(BluetoothManager::class.java)?.adapter
     }

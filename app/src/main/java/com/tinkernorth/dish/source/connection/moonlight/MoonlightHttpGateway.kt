@@ -4,25 +4,20 @@
 package com.tinkernorth.dish.source.connection.moonlight
 
 import android.util.Log
+import com.tinkernorth.dish.core.net.TofuTrustManager
 import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity
 import com.tinkernorth.dish.repository.SatellitePinRepository
-import com.tinkernorth.dish.repository.TofuVerdict
-import com.tinkernorth.dish.repository.sha256FingerprintHex
-import com.tinkernorth.dish.repository.tofuVerdict
 import java.net.Socket
 import java.security.KeyStore
 import java.security.SecureRandom
-import java.security.cert.X509Certificate
 import javax.inject.Inject
 import javax.inject.Singleton
 import javax.net.ssl.KeyManager
 import javax.net.ssl.KeyManagerFactory
 import javax.net.ssl.SSLContext
-import javax.net.ssl.SSLPeerUnverifiedException
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
 
 /**
  * Opens the Moonlight HTTP (47989, plaintext) and HTTPS (47984, mutual-TLS)
@@ -127,9 +122,10 @@ class MoonlightHttpGateway
 
         /**
          * Hands back a handshaken TLS socket that presents the dish's client
-         * certificate, or throws once the host's certificate fails the pin.
-         * Throwing is the rejection: [MoonlightHttp11Client] never writes a
-         * request through a socket it did not get back.
+         * certificate, or throws once the host's certificate fails the pin
+         * ([TofuTrustManager] decides inside the handshake, so a mismatch never
+         * completes one). Throwing is the rejection: [MoonlightHttp11Client]
+         * never writes a request through a socket it did not get back.
          *
          * A FRESH SSLContext PER CONNECTION, and that is the whole point of
          * building it here rather than once. An SSLContext owns the client
@@ -153,25 +149,16 @@ class MoonlightHttpGateway
             port: Int,
             hostId: String,
         ): Socket {
-            val tls = mutualTlsFactory().createSocket(socket, host, port, true) as SSLSocket
+            val tls = mutualTlsFactory(hostId).createSocket(socket, host, port, true) as SSLSocket
             tls.startHandshake()
-            val presented =
-                tls.session
-                    .peerCertificates
-                    ?.firstOrNull()
-                    ?: throw SSLPeerUnverifiedException("$host presented no certificate")
-            if (!pinAccepts(hostId, sha256FingerprintHex(presented.encoded))) {
-                tls.close()
-                throw SSLPeerUnverifiedException("cert pin mismatch for $hostId")
-            }
             return tls
         }
 
         /** A context of its own, and with it a session cache that is always empty. */
-        private fun mutualTlsFactory(): SSLSocketFactory =
+        private fun mutualTlsFactory(hostId: String): SSLSocketFactory =
             SSLContext
                 .getInstance("TLS")
-                .apply { init(clientCredential, arrayOf(trustAll), SecureRandom()) }
+                .apply { init(clientCredential, arrayOf<TrustManager>(TofuTrustManager(hostId, pins)), SecureRandom()) }
                 .socketFactory
 
         // Present the client certificate; the host authorises by it after pairing.
@@ -194,40 +181,6 @@ class MoonlightHttpGateway
                 .apply { init(keyStore, CharArray(0)) }
                 .keyManagers
         }
-
-        // TOFU: accept any self-signed host cert on first contact and pin it, then
-        // reject any future mismatch (the sole MITM gate; the LAN cert has no CA).
-        private fun pinAccepts(
-            hostId: String,
-            presented: String,
-        ): Boolean =
-            when (tofuVerdict(pins.pinnedFingerprint(hostId), presented)) {
-                TofuVerdict.TRUST_FIRST_USE -> {
-                    pins.pin(hostId, presented)
-                    true
-                }
-                TofuVerdict.MATCH -> true
-                TofuVerdict.MISMATCH -> {
-                    Log.e(TAG, "cert pin MISMATCH for $hostId, aborting (possible MITM)")
-                    false
-                }
-            }
-
-        @Suppress("CustomX509TrustManager", "TrustAllX509TrustManager")
-        private val trustAll: TrustManager =
-            object : X509TrustManager {
-                override fun checkClientTrusted(
-                    chain: Array<out X509Certificate>?,
-                    authType: String?,
-                ) = Unit
-
-                override fun checkServerTrusted(
-                    chain: Array<out X509Certificate>?,
-                    authType: String?,
-                ) = Unit
-
-                override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
-            }
 
         companion object {
             private const val TAG = "MoonlightHttpGateway"

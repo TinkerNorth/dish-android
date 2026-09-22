@@ -24,9 +24,11 @@ import com.tinkernorth.dish.source.sensor.BatteryValidator
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
+import com.tinkernorth.dish.source.store.SatelliteHostFacts
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.store.UsbPathPreferenceStore
 import com.tinkernorth.dish.source.usb.PathChoice
+import com.tinkernorth.dish.source.usb.PhysicalPadSources
 import com.tinkernorth.dish.source.usb.UsbController
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.source.usb.UsbPhase
@@ -114,15 +116,18 @@ class MainViewModelTest {
                 context,
                 satellite,
                 hub,
-                gamepadRegistry,
+                PhysicalPadSources(gamepadRegistry, native, usbGamepadManager, pathPrefs),
                 batteryStore,
                 motionEnabledStore,
                 capabilityComposer,
-                native,
-                pathPrefs,
-                usbGamepadManager,
                 inputRateStore,
-                hostFeaturesStore,
+                SatelliteHostFacts(
+                    features = hostFeaturesStore,
+                    runtime = mockk(),
+                    motionBackend = mockk(),
+                    catalog = mockk(),
+                    capabilities = mockk(),
+                ),
             )
     }
 

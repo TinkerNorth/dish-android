@@ -10,8 +10,7 @@ import com.tinkernorth.dish.source.connection.ConnectIntent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
 import com.tinkernorth.dish.source.store.ControllerTypeStore
-import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
-import com.tinkernorth.dish.source.store.SatelliteHostRuntimeStore
+import com.tinkernorth.dish.source.store.SatelliteHostFacts
 import com.tinkernorth.dish.source.store.SlotBindingStore
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
@@ -41,7 +40,6 @@ data class ConnectionSummary(
 
 @Singleton
 class ConnectionCoordinator
-    @Suppress("LongParameterList") // hub over every connection source; the extra Moonlight manager is one more sibling
     @Inject
     constructor(
         private val satellite: SatelliteConnectionManager,
@@ -50,8 +48,7 @@ class ConnectionCoordinator
         private val store: ConnectionStore,
         private val bindingStore: SlotBindingStore,
         private val typeStore: ControllerTypeStore,
-        private val hostFeaturesStore: SatelliteHostFeaturesStore,
-        private val hostRuntimeStore: SatelliteHostRuntimeStore,
+        private val hostFacts: SatelliteHostFacts,
         private val composer: ConnectionsComposer,
         private val gamepadRegistry: PhysicalGamepadRegistry,
     ) {
@@ -121,8 +118,8 @@ class ConnectionCoordinator
         fun forgetConnection(connectionId: String) {
             bindingStore.slotsFor(connectionId).toList().forEach(::unbind)
             typeStore.clearConnection(connectionId)
-            hostFeaturesStore.clearConnection(connectionId)
-            hostRuntimeStore.clearConnection(connectionId)
+            hostFacts.features.clearConnection(connectionId)
+            hostFacts.runtime.clearConnection(connectionId)
             when {
                 connectionId.startsWith(MoonlightHost.ID_PREFIX) ->
                     moonlight.forget(connectionId)

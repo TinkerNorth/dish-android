@@ -5,8 +5,8 @@ package com.tinkernorth.dish.source.connection
 import android.content.Context
 import androidx.core.content.edit
 import com.tinkernorth.dish.composer.CapabilityComposer
-import com.tinkernorth.dish.composer.CapabilityResolver
 import com.tinkernorth.dish.core.jni.ControllerRepository
+import com.tinkernorth.dish.core.model.ControllerApplyDto
 import com.tinkernorth.dish.core.model.ControllerPutResponse
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.PairResponse
@@ -22,9 +22,7 @@ import com.tinkernorth.dish.core.net.isPrivateHostLiteral
 import com.tinkernorth.dish.di.IoDispatcher
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedSatellite
-import com.tinkernorth.dish.source.store.MouseSurfaceStore
-import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
-import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
+import com.tinkernorth.dish.source.store.SatelliteHostFacts
 import com.tinkernorth.dish.source.system.LocalNetworkAccess
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
@@ -37,8 +35,6 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.updateAndGet
@@ -82,7 +78,6 @@ internal fun lateSlotConverge(
 @Singleton
 class SatelliteConnectionManager
     @Inject
-    @Suppress("LongParameterList")
     constructor(
         @ApplicationContext private val context: Context,
         private val scope: CoroutineScope,
@@ -93,9 +88,7 @@ class SatelliteConnectionManager
         @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
         // Provider (not direct injection) breaks the Hilt cycle: composer → hub → this manager.
         private val capabilityProvider: Provider<CapabilityComposer>,
-        private val motionBackendStatusStore: SatelliteMotionBackendStatusStore,
-        private val mouseSurfaceStore: MouseSurfaceStore,
-        private val hostFeaturesStore: SatelliteHostFeaturesStore,
+        private val hostFacts: SatelliteHostFacts,
     ) {
         private val _connections = MutableStateFlow<Map<String, SatelliteConnection>>(emptyMap())
         val connections: StateFlow<Map<String, SatelliteConnection>> = _connections.asStateFlow()
@@ -142,26 +135,14 @@ class SatelliteConnectionManager
         private val negotiatedProtocol = java.util.concurrent.ConcurrentHashMap<String, Int>()
 
         init {
-            // Project to the per-slot wire view (caps bits + touchpad mode) so unrelated composer
-            // emissions (host/type/runtime changes that don't move the descriptor) don't fire
-            // no-op wire updates. The mouse-surface store rides the combine because opening the
-            // mouse overlay flips a slot's derived mode without moving any capability, and the
-            // descriptor must still converge EVERY bound slot.
+            // The composer's wire projection moves only when a descriptor would (caps bits or
+            // touchpad mode), so every emission is a reason to converge EVERY bound slot.
             scope.launch {
-                combine(
-                    capabilityProvider.get().state,
-                    mouseSurfaceStore.state,
-                ) { caps, _ ->
-                    val composer = capabilityProvider.get()
-                    caps.mapValues { (slotId, slot) ->
-                        CapabilityResolver.wireCaps(slot) to composer.touchpadWireMode(slotId)
+                capabilityProvider.get().wireProjection.collect {
+                    _connections.value.values.forEach { conn ->
+                        conn.refreshCapsIfChanged()
                     }
-                }.distinctUntilChanged()
-                    .collect {
-                        _connections.value.values.forEach { conn ->
-                            conn.refreshCapsIfChanged()
-                        }
-                    }
+                }
             }
         }
 
@@ -172,7 +153,11 @@ class SatelliteConnectionManager
         // advertisement documents; settled by the 409 echo; remembered per satellite.
         private fun versionToSpeak(id: String): Int? {
             negotiatedProtocol[id]?.let { return it }
-            val advertised = hostFeaturesStore.featuresFor(id)?.protocolVersion?.takeIf { it > 0 }
+            val advertised =
+                hostFacts.features
+                    .featuresFor(id)
+                    ?.protocolVersion
+                    ?.takeIf { it > 0 }
             return DishProtocol.speakFor(advertised)
         }
 
@@ -181,7 +166,7 @@ class SatelliteConnectionManager
             version: Int,
         ) {
             negotiatedProtocol[id] = version
-            hostFeaturesStore.noteProtocolVersion(id, version)
+            hostFacts.features.noteProtocolVersion(id, version)
         }
 
         // A 409's `supported` echo we can also speak means one retry settles it; null
@@ -332,15 +317,14 @@ class SatelliteConnectionManager
                 scope,
                 controllerRepo,
                 ioDispatcher = ioDispatcher,
-                wireCapsFor = { slotId ->
-                    capabilityProvider.get().wireCapsFor(slotId)
-                },
-                touchpadModeFor = { slotId ->
-                    capabilityProvider.get().touchpadWireMode(slotId)
-                },
-                motionBackendStatusStore = motionBackendStatusStore,
-                onSlotChanged = { slotId -> scope.launch(ioDispatcher) { syncSlot(id, slotId) } },
-                onSlotRemoved = { ctrlIdx -> scope.launch(ioDispatcher) { deleteSlot(id, ctrlIdx) } },
+                hooks =
+                    SatelliteConnection.Hooks(
+                        wireCapsFor = { slotId -> capabilityProvider.get().wireCapsFor(slotId) },
+                        touchpadModeFor = { slotId -> capabilityProvider.get().touchpadWireMode(slotId) },
+                        onSlotChanged = { slotId -> scope.launch(ioDispatcher) { syncSlot(id, slotId) } },
+                        onSlotRemoved = { ctrlIdx -> scope.launch(ioDispatcher) { deleteSlot(id, ctrlIdx) } },
+                    ),
+                motionBackendStatusStore = hostFacts.motionBackend,
             )
 
         private fun findOrCreate(
@@ -660,28 +644,32 @@ class SatelliteConnectionManager
             clearStale(id)
             retryAttempts.remove(id)
             conn.markConnected(
-                handle,
-                connId,
-                resp.epoch,
-                resp.controllers,
-                mouseControlGranted = resp.hostFeatures.mouseControl.granted,
-                onDead = {
-                    disconnect(conn.id)
-                    scheduleRetry(conn, server, ConnectIntent.RETRY_AFTER_DEATH)
-                },
-                onClosedByServer = { reason -> handleServerClose(conn, server, reason) },
-                onReconcileNeeded = { scope.launch(ioDispatcher) { reconcile(conn, server) } },
-                onRekeyNeeded = { scope.launch(ioDispatcher) { rekey(conn, server) } },
-                onApplyFailures = { failures ->
-                    scope.launch {
-                        _events.emit(
-                            ConnectionEvent.Error(
-                                "Couldn't apply controller on ${server.name}: " +
-                                    failures.joinToString { "#${it.ctrlIdx}: ${it.result}" },
-                            ),
-                        )
-                    }
-                },
+                SatelliteConnection.SessionGrant(
+                    handle = handle,
+                    connectionId = connId,
+                    epoch = resp.epoch,
+                    applied = resp.controllers,
+                    mouseControlGranted = resp.hostFeatures.mouseControl.granted,
+                ),
+                SatelliteConnection.SessionCallbacks(
+                    onDead = {
+                        disconnect(conn.id)
+                        scheduleRetry(conn, server, ConnectIntent.RETRY_AFTER_DEATH)
+                    },
+                    onClosedByServer = { reason -> handleServerClose(conn, server, reason) },
+                    onReconcileNeeded = { scope.launch(ioDispatcher) { reconcile(conn, server) } },
+                    onRekeyNeeded = { scope.launch(ioDispatcher) { rekey(conn, server) } },
+                    onApplyFailures = { failures ->
+                        scope.launch {
+                            _events.emit(
+                                ConnectionEvent.Error(
+                                    "Couldn't apply controller on ${server.name}: " +
+                                        failures.joinToString { "#${it.ctrlIdx}: ${it.result}" },
+                                ),
+                            )
+                        }
+                    },
+                ),
             )
             convergeSlotChangesSinceSnapshot(id, conn, descriptors)
         }
@@ -755,7 +743,6 @@ class SatelliteConnectionManager
          * standalone PUT raced an ack). Otherwise re-PUT the full desired state.
          * The declarative converge makes the retry free.
          */
-        @Suppress("ReturnCount") // converge guard-chain: every early return is a distinct no-op case
         private suspend fun reconcile(
             conn: SatelliteConnection,
             server: DiscoveredServer,
@@ -763,34 +750,77 @@ class SatelliteConnectionManager
             val id = conn.id
             if (reconcileInFlight.putIfAbsent(id, true) != null) return
             try {
-                val connId = conn.connectionId ?: return
-                val creds = credentialsFor(id) ?: return
-                val raw =
-                    runCatching {
-                        discoveryRepo.getSession(server.ip, server.httpPort, connId, deviceId, creds.proof)
-                    }.getOrNull()?.takeIf { !it.unreachable }?.body ?: return
-                val view =
-                    runCatching { json.decodeFromString(SessionViewDto.serializer(), raw) }
-                        .getOrNull() ?: return
-                if (view.code == SessionResponse.CODE_NOT_PAIRED || view.code == SessionResponse.CODE_BAD_PROOF) {
-                    conn.markDisconnected()
-                    store.forgetSatelliteSharedKey(id)
-                    markStale(id)
-                    return
+                val live = liveSessionOf(conn) ?: return
+                val view = fetchSessionView(live) ?: return
+                when {
+                    rejectsOurCredentials(view.code) -> dropRejectedSession(conn)
+                    view.connectionId == live.connectionId && conn.matchesAppliedView(view) -> conn.adoptEpoch(view.epoch)
+                    else -> {
+                        // Applied ≠ desired (or the session is gone): converge with a
+                        // fresh session PUT. Tear the UDP tuple down first: the PUT
+                        // rotates token/key.
+                        conn.markDisconnected()
+                        conn.markConnecting()
+                        openSession(conn, server, ConnectIntent.RETRY_AFTER_DEATH)
+                    }
                 }
-                if (view.connectionId == connId && conn.matchesAppliedView(view)) {
-                    conn.adoptEpoch(view.epoch)
-                    return
-                }
-                // Applied ≠ desired (or the session is gone): converge with a
-                // fresh session PUT. Tear the UDP tuple down first: the PUT
-                // rotates token/key.
-                conn.markDisconnected()
-                conn.markConnecting()
-                openSession(conn, server, ConnectIntent.RETRY_AFTER_DEATH)
             } finally {
                 reconcileInFlight.remove(id)
             }
+        }
+
+        // A connection that can be spoken to over REST right now: its UDP tuple is up and
+        // the shared key is still remembered. Null is any of those missing, which every
+        // converge step treats as "nothing to do this round".
+        private class LiveSession(
+            val conn: SatelliteConnection,
+            val connectionId: String,
+            val server: DiscoveredServer,
+            val proof: String,
+        )
+
+        private fun liveSessionOf(conn: SatelliteConnection): LiveSession? {
+            val connectionId = conn.connectionId ?: return null
+            val creds = credentialsFor(conn.id) ?: return null
+            return LiveSession(conn, connectionId, conn.server.value, creds.proof)
+        }
+
+        private suspend fun fetchSessionView(live: LiveSession): SessionViewDto? {
+            val raw =
+                runCatching {
+                    discoveryRepo.getSession(live.server.ip, live.server.httpPort, live.connectionId, deviceId, live.proof)
+                }.getOrNull()?.takeIf { !it.unreachable }?.body ?: return null
+            return runCatching { json.decodeFromString(SessionViewDto.serializer(), raw) }.getOrNull()
+        }
+
+        private suspend fun putControllerFor(
+            live: LiveSession,
+            descriptor: ControllerDescriptor,
+        ): ControllerPutResponse? {
+            val raw =
+                runCatching {
+                    discoveryRepo.putController(
+                        live.server.ip,
+                        live.server.httpPort,
+                        live.connectionId,
+                        descriptor.ctrlIdx,
+                        deviceId,
+                        live.proof,
+                        descriptor.toJson(),
+                    )
+                }.getOrNull()?.takeIf { !it.unreachable }?.body ?: return null
+            return runCatching { json.decodeFromString(ControllerPutResponse.serializer(), raw) }.getOrNull()
+        }
+
+        private fun rejectsOurCredentials(code: String?): Boolean =
+            code == SessionResponse.CODE_NOT_PAIRED || code == SessionResponse.CODE_BAD_PROOF
+
+        // The satellite no longer knows us (unpaired there, or our proof stopped matching):
+        // the session is over and the key is worthless, and the row reads Stale until re-paired.
+        private fun dropRejectedSession(conn: SatelliteConnection) {
+            conn.markDisconnected()
+            store.forgetSatelliteSharedKey(conn.id)
+            markStale(conn.id)
         }
 
         // The send counter crossed the re-PUT threshold: converge with a fresh
@@ -809,50 +839,35 @@ class SatelliteConnectionManager
 
         // Single-slot converge while the session is live (PUT .../controllers/{idx}).
         // The session (and its UDP keys) never churn for a toggle.
-        @Suppress("ReturnCount") // converge guard-chain: every early return is a distinct no-op case
         private suspend fun syncSlot(
             id: String,
             slotId: String,
         ) {
-            val conn = _connections.value[id] ?: return
-            if (conn.state.value != SatelliteSessionState.Live) return
-            val connId = conn.connectionId ?: return
-            val server = conn.server.value
-            val creds = credentialsFor(id) ?: return
+            val conn = _connections.value[id]?.takeIf { it.state.value == SatelliteSessionState.Live } ?: return
+            val live = liveSessionOf(conn) ?: return
             val descriptor = conn.descriptorFor(slotId) ?: return
-            val raw =
-                runCatching {
-                    discoveryRepo.putController(
-                        server.ip,
-                        server.httpPort,
-                        connId,
-                        descriptor.ctrlIdx,
-                        deviceId,
-                        creds.proof,
-                        descriptor.toJson(),
-                    )
-                }.getOrNull()?.takeIf { !it.unreachable }?.body ?: return
-            val resp =
-                runCatching { json.decodeFromString(ControllerPutResponse.serializer(), raw) }
-                    .getOrNull() ?: return
-            if (resp.code == SessionResponse.CODE_NOT_PAIRED || resp.code == SessionResponse.CODE_BAD_PROOF) {
-                conn.markDisconnected()
-                store.forgetSatelliteSharedKey(id)
-                markStale(id)
-                return
-            }
-            val result = resp.controller
-            if (result == null) {
+            val resp = putControllerFor(live, descriptor) ?: return
+            when {
+                rejectsOurCredentials(resp.code) -> dropRejectedSession(conn)
                 // 404 connection-not-found: the session died under us; the
                 // alive-poll/close-notify path owns recovery. Nothing to fold in.
-                return
+                resp.controller == null -> Unit
+                else -> foldControllerPut(live, resp.epoch, resp.controller)
             }
-            conn.adoptEpoch(resp.epoch)
+        }
+
+        private suspend fun foldControllerPut(
+            live: LiveSession,
+            epoch: Int,
+            result: ControllerApplyDto,
+        ) {
+            val conn = live.conn
+            conn.adoptEpoch(epoch)
             conn.applyResults(listOf(result), onApplyFailures = { failures ->
                 scope.launch {
                     _events.emit(
                         ConnectionEvent.Error(
-                            "Couldn't apply controller on ${server.name}: " +
+                            "Couldn't apply controller on ${live.server.name}: " +
                                 failures.joinToString { "#${it.ctrlIdx}: ${it.result}" },
                         ),
                     )
@@ -862,7 +877,7 @@ class SatelliteConnectionManager
                 // The toggle changed the session-level desire, but the grant is
                 // only computed at session PUT (contract §hostFeatures).
                 // Converge the full session so the request rides along.
-                reconcile(conn, server)
+                reconcile(conn, live.server)
             }
         }
 
@@ -896,7 +911,6 @@ class SatelliteConnectionManager
         private fun unreachableMessage(reply: HttpReply?): String =
             if (reply?.pinMismatch == true) IDENTITY_CHANGED_MSG else SERVER_UNREACHABLE_MSG
 
-        @Suppress("LongParameterList")
         private suspend fun failSession(
             conn: SatelliteConnection,
             server: DiscoveredServer,

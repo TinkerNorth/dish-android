@@ -6,7 +6,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
 import com.tinkernorth.dish.composer.MicCaptureComposer
-import com.tinkernorth.dish.core.jni.SatelliteNative
+import com.tinkernorth.dish.core.jni.SlotReportNative
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.source.audio.MicCaptureLoop
 import com.tinkernorth.dish.source.audio.MicCaptureLoopFactory
@@ -266,7 +266,7 @@ class MicCaptureIntegrationTest {
         satellite.micAudioFrames.clear()
         assertTrue(
             "the drain marker must reach the satellite",
-            SatelliteNative.sendMicFrame(conn.handle, ctrlIdx, ShortArray(FRAME_SAMPLES)),
+            SlotReportNative.sendMicFrame(conn.handle, ctrlIdx, ShortArray(FRAME_SAMPLES)),
         )
         assertTrue("the drain marker must arrive", satellite.awaitMicAudioFrames(1))
         satellite.micAudioFrames.clear()

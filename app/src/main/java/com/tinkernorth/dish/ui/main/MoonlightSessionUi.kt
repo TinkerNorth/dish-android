@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-@file:Suppress("TooManyFunctions")
-
 package com.tinkernorth.dish.ui.main
 
-import androidx.annotation.ColorRes
 import androidx.annotation.StringRes
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
@@ -122,60 +119,133 @@ data class MoonlightSessionInput(
 // below is a single exhaustive `when` and no combination can be reached that nobody wrote
 // a string for.
 sealed interface MoonlightSessionUi {
-    data object Checking : MoonlightSessionUi
+    // The title and body every state renders with. Carried by the state itself so a new
+    // one cannot exist without both: the compiler, not a `when`, keeps the contract total.
+    // A 0 title means the state has none, and the view hides the line.
+    @get:StringRes
+    val titleRes: Int
 
-    data object NotPaired : MoonlightSessionUi
+    @get:StringRes
+    val bodyRes: Int
+
+    data object Checking : MoonlightSessionUi {
+        override val titleRes: Int = 0
+        override val bodyRes: Int = R.string.ml_state_checking
+    }
+
+    data object NotPaired : MoonlightSessionUi {
+        override val titleRes: Int = R.string.ml_state_unpaired_title
+        override val bodyRes: Int = R.string.ml_state_unpaired_body
+    }
 
     data class PairingPin(
         val pin: String,
-    ) : MoonlightSessionUi
+    ) : MoonlightSessionUi {
+        override val titleRes: Int = 0
+        override val bodyRes: Int = R.string.ml_pair_pin_body
+    }
 
-    data object PairFailed : MoonlightSessionUi
+    data object PairFailed : MoonlightSessionUi {
+        override val titleRes: Int = R.string.ml_pair_failed_title
+        override val bodyRes: Int = R.string.ml_pair_failed_body
+    }
 
-    data object Unreachable : MoonlightSessionUi
+    data object Unreachable : MoonlightSessionUi {
+        override val titleRes: Int = R.string.ml_state_unreachable_title
+        override val bodyRes: Int = R.string.ml_state_unreachable_body
+    }
 
-    data object Remembered : MoonlightSessionUi
+    data object Remembered : MoonlightSessionUi {
+        override val titleRes: Int = R.string.ml_state_unreachable_title
+        override val bodyRes: Int = R.string.ml_state_remembered_body
+    }
 
-    data object TrustLost : MoonlightSessionUi
+    data object TrustLost : MoonlightSessionUi {
+        override val titleRes: Int = R.string.ml_state_trust_lost_title
+        override val bodyRes: Int = R.string.ml_state_trust_lost_body
+    }
 
-    data object HostReplaced : MoonlightSessionUi
+    data object HostReplaced : MoonlightSessionUi {
+        override val titleRes: Int = R.string.ml_state_replaced_title
+        override val bodyRes: Int = R.string.ml_state_replaced_body
+    }
 
-    data object AppsLoading : MoonlightSessionUi
+    data object AppsLoading : MoonlightSessionUi {
+        override val titleRes: Int = 0
+        override val bodyRes: Int = R.string.ml_apps_loading
+    }
 
     data class NewSession(
         val apps: List<MoonlightAppUi>,
         val selectedAppId: String?,
-    ) : MoonlightSessionUi
+    ) : MoonlightSessionUi {
+        override val titleRes: Int = R.string.ml_session_new_title
+        override val bodyRes: Int = R.string.ml_session_new_body
+    }
 
-    data object AppsEmpty : MoonlightSessionUi
+    data object AppsEmpty : MoonlightSessionUi {
+        override val titleRes: Int = R.string.ml_apps_empty_title
+        override val bodyRes: Int = R.string.ml_apps_empty_body
+    }
 
-    data object AppsFailed : MoonlightSessionUi
+    data object AppsFailed : MoonlightSessionUi {
+        override val titleRes: Int = R.string.ml_apps_failed_title
+        override val bodyRes: Int = R.string.ml_apps_failed_body
+    }
 
     data class Joining(
         val controllerNumber: Int,
         val appName: String?,
-    ) : MoonlightSessionUi
+    ) : MoonlightSessionUi {
+        override val titleRes: Int
+            get() = if (appName.isNullOrBlank()) R.string.ml_session_join_title_unnamed else R.string.ml_session_join_title
+        override val bodyRes: Int = R.string.ml_session_join_body
+    }
 
-    data object HostFull : MoonlightSessionUi
+    data object HostFull : MoonlightSessionUi {
+        override val titleRes: Int = R.string.ml_full_title
+        override val bodyRes: Int = R.string.ml_full_body
+    }
 
-    data object BusyOther : MoonlightSessionUi
+    data object BusyOther : MoonlightSessionUi {
+        override val titleRes: Int = R.string.ml_busy_other_title
+        override val bodyRes: Int = R.string.ml_busy_other_body
+    }
 
-    data object ResumeFailed : MoonlightSessionUi
+    data object ResumeFailed : MoonlightSessionUi {
+        override val titleRes: Int = R.string.ml_resume_failed_title
+        override val bodyRes: Int = R.string.ml_resume_failed_body
+    }
 
     data class Refused(
         val hostMessage: String,
-    ) : MoonlightSessionUi
+    ) : MoonlightSessionUi {
+        override val titleRes: Int = R.string.ml_refused_title
+        override val bodyRes: Int = R.string.ml_refused_body
+    }
 
-    data object SetupFailed : MoonlightSessionUi
+    data object SetupFailed : MoonlightSessionUi {
+        override val titleRes: Int = R.string.ml_setup_failed_title
+        override val bodyRes: Int = R.string.ml_setup_failed_body
+    }
 
     data class Live(
         val controllerNumber: Int,
         val appName: String?,
-    ) : MoonlightSessionUi
+    ) : MoonlightSessionUi {
+        override val titleRes: Int = R.string.ml_session_live_title
+        override val bodyRes: Int = R.string.ml_session_live_body
+    }
 
-    data object Dropped : MoonlightSessionUi
+    data object Dropped : MoonlightSessionUi {
+        override val titleRes: Int = R.string.ml_dropped_title
+        override val bodyRes: Int = R.string.ml_dropped_body
+    }
 
-    data object EndedByHost : MoonlightSessionUi
+    data object EndedByHost : MoonlightSessionUi {
+        override val titleRes: Int = R.string.ml_ended_title
+        override val bodyRes: Int = R.string.ml_ended_body
+    }
 }
 
 // Precedence: pairing > trust > apps > joining > failure > live.
@@ -257,173 +327,3 @@ private fun liveUi(phase: MoonlightPhase): MoonlightSessionUi? =
         MoonlightPhase.Ended -> MoonlightSessionUi.EndedByHost
         else -> null
     }
-
-// One exhaustive branch per state is the render contract itself; splitting it would
-// hide which state carries which string rather than simplify anything.
-@StringRes
-@Suppress("CyclomaticComplexMethod")
-fun MoonlightSessionUi.titleRes(): Int =
-    when (this) {
-        MoonlightSessionUi.Checking, is MoonlightSessionUi.PairingPin, MoonlightSessionUi.AppsLoading -> 0
-        MoonlightSessionUi.NotPaired -> R.string.ml_state_unpaired_title
-        MoonlightSessionUi.PairFailed -> R.string.ml_pair_failed_title
-        MoonlightSessionUi.Unreachable, MoonlightSessionUi.Remembered -> R.string.ml_state_unreachable_title
-        MoonlightSessionUi.TrustLost -> R.string.ml_state_trust_lost_title
-        MoonlightSessionUi.HostReplaced -> R.string.ml_state_replaced_title
-        is MoonlightSessionUi.NewSession -> R.string.ml_session_new_title
-        MoonlightSessionUi.AppsEmpty -> R.string.ml_apps_empty_title
-        MoonlightSessionUi.AppsFailed -> R.string.ml_apps_failed_title
-        is MoonlightSessionUi.Joining ->
-            if (appName.isNullOrBlank()) R.string.ml_session_join_title_unnamed else R.string.ml_session_join_title
-        MoonlightSessionUi.HostFull -> R.string.ml_full_title
-        MoonlightSessionUi.BusyOther -> R.string.ml_busy_other_title
-        MoonlightSessionUi.ResumeFailed -> R.string.ml_resume_failed_title
-        is MoonlightSessionUi.Refused -> R.string.ml_refused_title
-        MoonlightSessionUi.SetupFailed -> R.string.ml_setup_failed_title
-        is MoonlightSessionUi.Live -> R.string.ml_session_live_title
-        MoonlightSessionUi.Dropped -> R.string.ml_dropped_title
-        MoonlightSessionUi.EndedByHost -> R.string.ml_ended_title
-    }
-
-@StringRes
-@Suppress("CyclomaticComplexMethod")
-fun MoonlightSessionUi.bodyRes(): Int =
-    when (this) {
-        MoonlightSessionUi.Checking -> R.string.ml_state_checking
-        MoonlightSessionUi.NotPaired -> R.string.ml_state_unpaired_body
-        is MoonlightSessionUi.PairingPin -> R.string.ml_pair_pin_body
-        MoonlightSessionUi.PairFailed -> R.string.ml_pair_failed_body
-        MoonlightSessionUi.Unreachable -> R.string.ml_state_unreachable_body
-        MoonlightSessionUi.Remembered -> R.string.ml_state_remembered_body
-        MoonlightSessionUi.TrustLost -> R.string.ml_state_trust_lost_body
-        MoonlightSessionUi.HostReplaced -> R.string.ml_state_replaced_body
-        MoonlightSessionUi.AppsLoading -> R.string.ml_apps_loading
-        is MoonlightSessionUi.NewSession -> R.string.ml_session_new_body
-        MoonlightSessionUi.AppsEmpty -> R.string.ml_apps_empty_body
-        MoonlightSessionUi.AppsFailed -> R.string.ml_apps_failed_body
-        is MoonlightSessionUi.Joining -> R.string.ml_session_join_body
-        MoonlightSessionUi.HostFull -> R.string.ml_full_body
-        MoonlightSessionUi.BusyOther -> R.string.ml_busy_other_body
-        MoonlightSessionUi.ResumeFailed -> R.string.ml_resume_failed_body
-        is MoonlightSessionUi.Refused -> R.string.ml_refused_body
-        MoonlightSessionUi.SetupFailed -> R.string.ml_setup_failed_body
-        is MoonlightSessionUi.Live -> R.string.ml_session_live_body
-        MoonlightSessionUi.Dropped -> R.string.ml_dropped_body
-        MoonlightSessionUi.EndedByHost -> R.string.ml_ended_body
-    }
-
-// Format arguments travel with the state that carries them, so a string that grows a
-// placeholder cannot quietly be handed the wrong one. A 0 resource means no line at all
-// rather than an empty one, so the view hides the row instead of leaving a gap.
-@StringRes
-fun MoonlightSessionUi.noteRes(): Int =
-    when {
-        this is MoonlightSessionUi.PairingPin -> R.string.ml_pair_waiting
-        this is MoonlightSessionUi.NewSession && selectedAppId == null -> R.string.ml_session_default_note
-        else -> 0
-    }
-
-fun MoonlightSessionUi.titleArgs(hostLabel: String): List<Any> =
-    when (this) {
-        is MoonlightSessionUi.Joining -> listOf(appName?.takeIf { it.isNotBlank() } ?: hostLabel)
-        is MoonlightSessionUi.Refused -> listOf(hostLabel, hostMessage)
-        else -> listOf(hostLabel)
-    }
-
-fun MoonlightSessionUi.bodyArgs(hostLabel: String): List<Any> =
-    when (this) {
-        is MoonlightSessionUi.PairingPin -> listOf(pin, hostLabel)
-        is MoonlightSessionUi.Joining -> listOf(hostLabel, controllerNumber)
-        is MoonlightSessionUi.Live -> listOf(appName?.takeIf { it.isNotBlank() } ?: hostLabel, controllerNumber)
-        else -> listOf(hostLabel)
-    }
-
-// An empty list is a decision, not a gap: NewSession's action is the app row itself,
-// Joining is transient, and the two loading states have nothing to offer until the
-// answer arrives.
-fun MoonlightSessionUi.actions(): List<MoonlightAction> =
-    when (this) {
-        MoonlightSessionUi.Checking, MoonlightSessionUi.AppsLoading -> emptyList()
-        is MoonlightSessionUi.NewSession, is MoonlightSessionUi.Joining -> emptyList()
-        MoonlightSessionUi.NotPaired -> listOf(MoonlightAction.PAIR)
-        is MoonlightSessionUi.PairingPin -> listOf(MoonlightAction.NEW_CODE, MoonlightAction.CANCEL)
-        MoonlightSessionUi.PairFailed -> listOf(MoonlightAction.TRY_AGAIN)
-        MoonlightSessionUi.Unreachable, MoonlightSessionUi.Remembered -> listOf(MoonlightAction.RETRY)
-        MoonlightSessionUi.TrustLost, MoonlightSessionUi.HostReplaced -> listOf(MoonlightAction.PAIR_AGAIN)
-        MoonlightSessionUi.AppsEmpty, MoonlightSessionUi.AppsFailed -> listOf(MoonlightAction.RETRY)
-        MoonlightSessionUi.HostFull -> listOf(MoonlightAction.SEE_BINDINGS)
-        MoonlightSessionUi.BusyOther, MoonlightSessionUi.ResumeFailed ->
-            listOf(MoonlightAction.QUIT_APP, MoonlightAction.RETRY)
-        is MoonlightSessionUi.Refused, MoonlightSessionUi.SetupFailed -> listOf(MoonlightAction.RETRY)
-        is MoonlightSessionUi.Live -> listOf(MoonlightAction.QUIT_APP)
-        MoonlightSessionUi.Dropped -> listOf(MoonlightAction.RECONNECT)
-        MoonlightSessionUi.EndedByHost -> listOf(MoonlightAction.START_SESSION)
-    }
-
-fun MoonlightSessionUi.tone(): MoonlightTone =
-    when (this) {
-        MoonlightSessionUi.Checking, is MoonlightSessionUi.PairingPin, MoonlightSessionUi.AppsLoading ->
-            MoonlightTone.PROGRESS
-        MoonlightSessionUi.NotPaired, is MoonlightSessionUi.NewSession,
-        MoonlightSessionUi.AppsEmpty, is MoonlightSessionUi.Joining,
-        -> MoonlightTone.NEUTRAL
-        MoonlightSessionUi.PairFailed, MoonlightSessionUi.AppsFailed,
-        is MoonlightSessionUi.Refused, MoonlightSessionUi.SetupFailed,
-        -> MoonlightTone.ERROR
-        is MoonlightSessionUi.Live -> MoonlightTone.SUCCESS
-        else -> MoonlightTone.WARN
-    }
-
-val MoonlightSessionUi.showsSpinner: Boolean
-    get() = this is MoonlightSessionUi.Checking || this is MoonlightSessionUi.PairingPin || this is MoonlightSessionUi.AppsLoading
-
-// The only state that stops the binding being saved. Everything else is recoverable
-// afterwards and a binding is a durable intent, so it may be applied against a host that
-// is unpaired, unreachable, or asleep. Four controllers is a protocol ceiling instead:
-// there is no fifth number to hand out.
-val MoonlightSessionUi.blocksApply: Boolean
-    get() = this is MoonlightSessionUi.HostFull
-
-@StringRes
-fun MoonlightAction.labelRes(): Int =
-    when (this) {
-        MoonlightAction.PAIR -> R.string.ml_action_pair
-        MoonlightAction.PAIR_AGAIN -> R.string.action_repair_short
-        MoonlightAction.NEW_CODE -> R.string.ml_action_new_code
-        MoonlightAction.CANCEL -> R.string.ml_action_cancel
-        MoonlightAction.TRY_AGAIN -> R.string.ml_action_try_again
-        MoonlightAction.RETRY -> R.string.ml_action_retry
-        MoonlightAction.QUIT_APP -> R.string.ml_action_quit_app
-        MoonlightAction.RECONNECT -> R.string.ml_action_reconnect
-        MoonlightAction.START_SESSION -> R.string.ml_action_start_session
-        MoonlightAction.SEE_BINDINGS -> R.string.ml_action_see_bindings
-    }
-
-fun MoonlightAction.labelArgs(hostLabel: String): List<Any> =
-    when (this) {
-        MoonlightAction.QUIT_APP, MoonlightAction.SEE_BINDINGS -> listOf(hostLabel)
-        else -> emptyList()
-    }
-
-@ColorRes
-fun MoonlightTone.colorRes(): Int =
-    when (this) {
-        MoonlightTone.NEUTRAL -> R.color.colorOnSurfaceVariant
-        MoonlightTone.PROGRESS -> R.color.colorPrimary
-        MoonlightTone.WARN -> R.color.colorWarning
-        MoonlightTone.ERROR -> R.color.colorError
-        MoonlightTone.SUCCESS -> R.color.colorSuccess
-    }
-
-// Seven states, two words. Holding a pairing record reads as paired, whether or not
-// this visit has re-proven it; only a state with no usable record reads as not paired.
-@StringRes
-fun MoonlightTrustState.chipTextRes(): Int =
-    when (this) {
-        MoonlightTrustState.PAIRED, MoonlightTrustState.REMEMBERED,
-        MoonlightTrustState.CHECKING, MoonlightTrustState.UNREACHABLE,
-        -> R.string.ml_trust_paired
-        MoonlightTrustState.NOT_PAIRED, MoonlightTrustState.TRUST_LOST, MoonlightTrustState.REPLACED -> R.string.ml_trust_not_paired
-    }
-
-fun MoonlightTrustState.holdsPairing(): Boolean = chipTextRes() == R.string.ml_trust_paired

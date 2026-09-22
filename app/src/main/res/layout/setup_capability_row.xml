@@ -35,6 +35,7 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:baselineAligned="false"
         android:orientation="horizontal"
         android:layout_marginTop="@dimen/spacing_xs">
 
@@ -46,18 +47,14 @@
             android:gravity="center">
 
             <TextView
+                android:id="@+id/capInput"
                 style="@style/TextAppearance.Dish.Label.Plain"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/setup_cap_input" />
-
-            <ImageView
-                android:id="@+id/icInput"
-                android:layout_width="@dimen/config_callout_icon_size"
-                android:layout_height="@dimen/config_callout_icon_size"
-                android:layout_marginStart="@dimen/spacing_xs"
-                android:importantForAccessibility="no"
-                tools:src="@drawable/ic_check_circle" />
+                android:drawablePadding="@dimen/spacing_xs"
+                android:gravity="center_vertical"
+                android:text="@string/setup_cap_input"
+                tools:drawableEnd="@drawable/ic_check_circle" />
         </LinearLayout>
 
         <LinearLayout
@@ -68,18 +65,14 @@
             android:gravity="center">
 
             <TextView
+                android:id="@+id/capDestination"
                 style="@style/TextAppearance.Dish.Label.Plain"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/setup_cap_destination" />
-
-            <ImageView
-                android:id="@+id/icDestination"
-                android:layout_width="@dimen/config_callout_icon_size"
-                android:layout_height="@dimen/config_callout_icon_size"
-                android:layout_marginStart="@dimen/spacing_xs"
-                android:importantForAccessibility="no"
-                tools:src="@drawable/ic_check_circle" />
+                android:drawablePadding="@dimen/spacing_xs"
+                android:gravity="center_vertical"
+                android:text="@string/setup_cap_destination"
+                tools:drawableEnd="@drawable/ic_check_circle" />
         </LinearLayout>
 
         <LinearLayout
@@ -90,18 +83,14 @@
             android:gravity="center">
 
             <TextView
+                android:id="@+id/capType"
                 style="@style/TextAppearance.Dish.Label.Plain"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/setup_cap_type" />
-
-            <ImageView
-                android:id="@+id/icType"
-                android:layout_width="@dimen/config_callout_icon_size"
-                android:layout_height="@dimen/config_callout_icon_size"
-                android:layout_marginStart="@dimen/spacing_xs"
-                android:importantForAccessibility="no"
-                tools:src="@drawable/ic_cancel" />
+                android:drawablePadding="@dimen/spacing_xs"
+                android:gravity="center_vertical"
+                android:text="@string/setup_cap_type"
+                tools:drawableEnd="@drawable/ic_cancel" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

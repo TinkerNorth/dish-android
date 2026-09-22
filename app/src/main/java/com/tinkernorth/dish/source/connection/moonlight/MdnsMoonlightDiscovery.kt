@@ -10,15 +10,14 @@ import android.net.wifi.WifiManager
 import android.util.Log
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import com.tinkernorth.dish.di.IoDispatcher
+import com.tinkernorth.dish.source.connection.NsdServiceResolver
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.coroutines.resume
 
 /**
  * Discovers Moonlight hosts over mDNS (`_nvstream._tcp`). Mirrors the satellite
@@ -103,43 +102,13 @@ class MdnsMoonlightDiscovery
                 ) = Unit
             }
 
-        @Suppress("DEPRECATION")
         private suspend fun resolveOne(
             nsd: NsdManager,
             info: NsdServiceInfo,
-        ): MoonlightHost? =
-            suspendCancellableCoroutine { cont ->
-                val listener =
-                    object : NsdManager.ResolveListener {
-                        override fun onResolveFailed(
-                            si: NsdServiceInfo,
-                            errorCode: Int,
-                        ) {
-                            if (cont.isActive) cont.resume(null)
-                        }
+        ): MoonlightHost? = NsdServiceResolver.resolve(nsd, info)?.let(::toHost)
 
-                        override fun onServiceResolved(si: NsdServiceInfo) {
-                            if (cont.isActive) cont.resume(toHost(si))
-                        }
-                    }
-                try {
-                    nsd.resolveService(info, listener)
-                } catch (e: IllegalArgumentException) {
-                    if (cont.isActive) cont.resume(null)
-                }
-            }
-
-        @Suppress("DEPRECATION")
-        private fun toHost(info: NsdServiceInfo): MoonlightHost? {
-            val hostAddress =
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    val addresses = info.hostAddresses
-                    (addresses.firstOrNull { it is java.net.Inet4Address } ?: addresses.firstOrNull())?.hostAddress
-                } else {
-                    info.host?.hostAddress
-                }
-            return mdnsServiceToHost(info.serviceName.orEmpty(), hostAddress, info.attributes.orEmpty())
-        }
+        private fun toHost(info: NsdServiceInfo): MoonlightHost? =
+            mdnsServiceToHost(info.serviceName.orEmpty(), NsdServiceResolver.hostAddress(info), info.attributes.orEmpty())
 
         private companion object {
             const val TAG = "MdnsMoonlightDiscovery"

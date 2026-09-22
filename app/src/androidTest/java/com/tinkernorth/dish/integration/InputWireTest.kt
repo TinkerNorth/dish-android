@@ -7,6 +7,7 @@ import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
+import com.tinkernorth.dish.source.connection.TouchpadReport
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -99,19 +100,21 @@ class InputWireTest {
             pollSend(satellite, 0x000C) {
                 conn.sendTouchpad(
                     VIRTUAL_SLOT_ID,
-                    finger0Active = true,
-                    finger1Active = false,
-                    buttonPressed = false,
-                    rightPressed = false,
-                    middlePressed = false,
-                    finger0TrackingId = 1,
-                    finger0X = 500,
-                    finger0Y = 300,
-                    finger1TrackingId = 0,
-                    finger1X = 0,
-                    finger1Y = 0,
-                    eventTimeMs = 1_000,
-                    scrollDelta = 0,
+                    TouchpadReport(
+                        finger0Active = true,
+                        finger1Active = false,
+                        buttonPressed = false,
+                        rightPressed = false,
+                        middlePressed = false,
+                        finger0TrackingId = 1,
+                        finger0X = 500,
+                        finger0Y = 300,
+                        finger1TrackingId = 0,
+                        finger1X = 0,
+                        finger1Y = 0,
+                        eventTimeMs = 1_000,
+                        scrollDelta = 0,
+                    ),
                 )
             },
         )
@@ -128,19 +131,21 @@ class InputWireTest {
             pollSend(satellite, 0x000C) {
                 conn.sendTouchpad(
                     VIRTUAL_SLOT_ID,
-                    finger0Active = true,
-                    finger1Active = false,
-                    buttonPressed = true,
-                    rightPressed = true,
-                    middlePressed = true,
-                    finger0TrackingId = 3,
-                    finger0X = -1200,
-                    finger0Y = 900,
-                    finger1TrackingId = 0,
-                    finger1X = 0,
-                    finger1Y = 0,
-                    eventTimeMs = 2_000,
-                    scrollDelta = -240,
+                    TouchpadReport(
+                        finger0Active = true,
+                        finger1Active = false,
+                        buttonPressed = true,
+                        rightPressed = true,
+                        middlePressed = true,
+                        finger0TrackingId = 3,
+                        finger0X = -1200,
+                        finger0Y = 900,
+                        finger1TrackingId = 0,
+                        finger1X = 0,
+                        finger1Y = 0,
+                        eventTimeMs = 2_000,
+                        scrollDelta = -240,
+                    ),
                 )
             },
         )

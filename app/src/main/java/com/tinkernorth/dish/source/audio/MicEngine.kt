@@ -338,7 +338,7 @@ class MicEngine
             /** Fixed by the wire (contract §Controller audio), not by the device. */
             const val SAMPLE_RATE = 48_000
 
-            /** 20 ms at 48 kHz. SatelliteNative.sendMicFrame refuses any other window. */
+            /** 20 ms at 48 kHz. SlotReportNative.sendMicFrame refuses any other window. */
             const val FRAME_SAMPLES = 960
         }
     }

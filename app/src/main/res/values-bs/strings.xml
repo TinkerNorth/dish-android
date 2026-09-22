@@ -492,7 +492,12 @@
     <string name="diagnostics_hz">%1$d Hz</string>
     <string name="diagnostics_ms">%1$.2f ms</string>
     <string name="diagnostics_ms_approx">~%1$.2f ms</string>
-    <string name="diagnostics_ms_approx_window">~%1$.2f ms · zadnjih %2$d pingova</string>
+    <string name="diagnostics_ms_approx_window">~%1$.2f ms · %2$s</string>
+    <plurals name="diagnostics_last_pings">
+        <item quantity="one">zadnji %1$d ping</item>
+        <item quantity="few">zadnja %1$d pinga</item>
+        <item quantity="other">zadnjih %1$d pingova</item>
+    </plurals>
     <string name="diagnostics_ms_p50_p99">%1$.2f ms (p50) · %2$.2f ms (p99)</string>
     <string name="diagnostics_unknown">Nepoznato</string>
     <string name="diagnostics_present">Prisutno</string>
@@ -618,9 +623,24 @@
     <string name="diagnostics_bt_waiting">Čeka PC</string>
     <string name="diagnostics_bt_no_round_trip">Nema povratnog puta preko Bluetooth HID-a.</string>
     <string name="diagnostics_usb_pads">Kontroleri</string>
-    <string name="diagnostics_usb_pads_value">%1$d standardnih · %2$d direktnih</string>
+    <string name="diagnostics_usb_pads_value">%1$s · %2$s</string>
+    <plurals name="diagnostics_pads_standard">
+        <item quantity="one">%1$d standardni</item>
+        <item quantity="few">%1$d standardna</item>
+        <item quantity="other">%1$d standardnih</item>
+    </plurals>
+    <plurals name="diagnostics_pads_direct">
+        <item quantity="one">%1$d direktni</item>
+        <item quantity="few">%1$d direktna</item>
+        <item quantity="other">%1$d direktnih</item>
+    </plurals>
     <string name="diagnostics_endpoint">Krajnja tačka</string>
-    <string name="diagnostics_endpoint_value">%1$d Hz · %2$d bajta · interval %3$d</string>
+    <string name="diagnostics_endpoint_value">%1$d Hz · %2$s · interval %3$d</string>
+    <plurals name="diagnostics_bytes">
+        <item quantity="one">%1$d bajt</item>
+        <item quantity="few">%1$d bajta</item>
+        <item quantity="other">%1$d bajtova</item>
+    </plurals>
     <string name="diagnostics_high_speed">velika brzina</string>
     <string name="diagnostics_section_device">UREĐAJ</string>
     <string name="diagnostics_model">Model</string>
@@ -679,9 +699,29 @@
     <string name="diagnostics_host_profile">Profil</string>
     <string name="diagnostics_host_connected_as">Povezan s</string>
     <string name="diagnostics_round_trip">Povratni put</string>
-    <string name="diagnostics_rtt_value">%1$.1f ms (p50) · %2$.1f ms (p99) · ~%3$.1f ms u jednom smjeru · %4$d pingova</string>
+    <string name="diagnostics_rtt_value">%1$.1f ms (p50) · %2$.1f ms (p99) · ~%3$.1f ms u jednom smjeru · %4$s</string>
+    <plurals name="diagnostics_pings_count">
+        <item quantity="one">%1$d ping</item>
+        <item quantity="few">%1$d pinga</item>
+        <item quantity="other">%1$d pingova</item>
+    </plurals>
     <string name="diagnostics_pings">Pingovi</string>
-    <string name="diagnostics_pings_value">%1$d poslano · %2$d potvrđeno · %3$d propušteno zaredom</string>
+    <string name="diagnostics_pings_value">%1$s · %2$s · %3$s</string>
+    <plurals name="diagnostics_pings_sent">
+        <item quantity="one">%1$d poslano</item>
+        <item quantity="few">%1$d poslano</item>
+        <item quantity="other">%1$d poslano</item>
+    </plurals>
+    <plurals name="diagnostics_pings_acked">
+        <item quantity="one">%1$d potvrđeno</item>
+        <item quantity="few">%1$d potvrđeno</item>
+        <item quantity="other">%1$d potvrđeno</item>
+    </plurals>
+    <plurals name="diagnostics_pings_missed">
+        <item quantity="one">%1$d propušteno zaredom</item>
+        <item quantity="few">%1$d propušteno zaredom</item>
+        <item quantity="other">%1$d propušteno zaredom</item>
+    </plurals>
     <string name="diagnostics_packets_sent">Poslani paketi</string>
     <string name="diagnostics_control_round_trip">Povratni put kontrole</string>
     <string name="diagnostics_binding_button">Povezivanje</string>
@@ -720,14 +760,23 @@
     <string name="diagnostics_mic_capturing">snima</string>
     <string name="diagnostics_speaker_playing">reproducira</string>
     <string name="diagnostics_speaker_idle">neaktivan</string>
-    <string name="diagnostics_dropped_samples">%1$d uzoraka ispušteno</string>
+    <plurals name="diagnostics_dropped_samples">
+        <item quantity="one">%1$d uzorak ispušten</item>
+        <item quantity="few">%1$d uzorka ispuštena</item>
+        <item quantity="other">%1$d uzoraka ispušteno</item>
+    </plurals>
     <string name="diagnostics_rumble_target">Vibracija ide na</string>
     <string name="diagnostics_target_phone">vibrator telefona</string>
     <string name="diagnostics_target_pad">motori kontrolera</string>
     <string name="diagnostics_target_pad_framework">motori kontrolera preko Androida</string>
     <string name="diagnostics_target_none">nigdje</string>
     <string name="diagnostics_last_feedback">Zadnji povratni efekat hosta</string>
-    <string name="diagnostics_feedback_value">%1$s · %2$s · ukupno %3$d</string>
+    <string name="diagnostics_feedback_value">%1$s · %2$s · %3$s</string>
+    <plurals name="diagnostics_total_count">
+        <item quantity="one">ukupno %1$d</item>
+        <item quantity="few">ukupno %1$d</item>
+        <item quantity="other">ukupno %1$d</item>
+    </plurals>
     <string name="diagnostics_latency_estimate">Od unosa do hosta</string>
     <string name="diagnostics_estimate_parts">poll %1$s · telefon %2$s · mreža %3$s</string>
 

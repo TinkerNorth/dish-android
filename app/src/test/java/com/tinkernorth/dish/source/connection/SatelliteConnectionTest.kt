@@ -80,11 +80,14 @@ class SatelliteConnectionTest {
             server = server,
             scope = scope,
             controllerRepo = repo,
-            wireCapsFor = wireCapsFor,
-            touchpadModeFor = { touchpadModes[it] ?: ControllerDescriptor.TOUCHPAD_MODE_OFF },
+            hooks =
+                SatelliteConnection.Hooks(
+                    wireCapsFor = wireCapsFor,
+                    touchpadModeFor = { touchpadModes[it] ?: ControllerDescriptor.TOUCHPAD_MODE_OFF },
+                    onSlotChanged = { slotSyncs += it },
+                    onSlotRemoved = { slotRemovals += it },
+                ),
             motionBackendStatusStore = store,
-            onSlotChanged = { slotSyncs += it },
-            onSlotRemoved = { slotRemovals += it },
         )
 
     @Before
@@ -111,33 +114,41 @@ class SatelliteConnectionTest {
         clearAllMocks()
     }
 
-    @Suppress("LongParameterList")
     private fun connectLive(
         target: SatelliteConnection = conn,
         handle: Int = 7,
         epoch: Int = 1,
         applied: List<ControllerApplyDto> = emptyList(),
         mouseControlGranted: Boolean = false,
+        callbacks: SatelliteConnection.SessionCallbacks = callbacks(),
+    ) {
+        target.markConnecting()
+        target.markConnected(
+            SatelliteConnection.SessionGrant(
+                handle = handle,
+                connectionId = "conn_abc",
+                epoch = epoch,
+                applied = applied,
+                mouseControlGranted = mouseControlGranted,
+            ),
+            callbacks,
+        )
+    }
+
+    // Every callback defaults to a no-op here: a test wires only the one it watches.
+    private fun callbacks(
         onDead: () -> Unit = {},
         onClosedByServer: (Int) -> Unit = {},
         onReconcileNeeded: () -> Unit = {},
         onRekeyNeeded: () -> Unit = {},
         onApplyFailures: (List<ControllerApplyDto>) -> Unit = {},
-    ) {
-        target.markConnecting()
-        target.markConnected(
-            handle = handle,
-            connectionId = "conn_abc",
-            epoch = epoch,
-            applied = applied,
-            mouseControlGranted = mouseControlGranted,
-            onDead = onDead,
-            onClosedByServer = onClosedByServer,
-            onReconcileNeeded = onReconcileNeeded,
-            onRekeyNeeded = onRekeyNeeded,
-            onApplyFailures = onApplyFailures,
-        )
-    }
+    ) = SatelliteConnection.SessionCallbacks(
+        onDead = onDead,
+        onClosedByServer = onClosedByServer,
+        onReconcileNeeded = onReconcileNeeded,
+        onRekeyNeeded = onRekeyNeeded,
+        onApplyFailures = onApplyFailures,
+    )
 
     // The alive-poll loop never goes idle on its own, so a connected test MUST
     // stop the connection before the body returns: runTest drains the shared
@@ -679,7 +690,7 @@ class SatelliteConnectionTest {
 
             var reconciles = 0
             conn.attachSlot("slot-1", controllerType = 0)
-            connectLive(epoch = 5, applied = listOf(okApply(0)), onReconcileNeeded = { reconciles++ })
+            connectLive(epoch = 5, applied = listOf(okApply(0)), callbacks = callbacks(onReconcileNeeded = { reconciles++ }))
 
             scope.advanceTimeBy(1100)
             assertTrue(reconciles > 0)
@@ -695,7 +706,7 @@ class SatelliteConnectionTest {
 
             var reconciles = 0
             conn.attachSlot("slot-1", controllerType = 0)
-            connectLive(epoch = 5, applied = listOf(okApply(0)), onReconcileNeeded = { reconciles++ })
+            connectLive(epoch = 5, applied = listOf(okApply(0)), callbacks = callbacks(onReconcileNeeded = { reconciles++ }))
 
             scope.advanceTimeBy(1100)
             assertTrue(reconciles > 0)
@@ -710,7 +721,7 @@ class SatelliteConnectionTest {
 
             var reconciles = 0
             conn.attachSlot("slot-1", controllerType = 0)
-            connectLive(epoch = 5, applied = listOf(okApply(0)), onReconcileNeeded = { reconciles++ })
+            connectLive(epoch = 5, applied = listOf(okApply(0)), callbacks = callbacks(onReconcileNeeded = { reconciles++ }))
 
             scope.advanceTimeBy(3100)
             assertEquals(0, reconciles)
@@ -724,7 +735,7 @@ class SatelliteConnectionTest {
 
             var reconciles = 0
             conn.attachSlot("slot-1", controllerType = 0)
-            connectLive(epoch = 5, applied = listOf(okApply(0)), onReconcileNeeded = { reconciles++ })
+            connectLive(epoch = 5, applied = listOf(okApply(0)), callbacks = callbacks(onReconcileNeeded = { reconciles++ }))
 
             scope.advanceTimeBy(3100)
             assertEquals(0, reconciles)
@@ -745,7 +756,7 @@ class SatelliteConnectionTest {
             every { repo.getSendCounter(any()) } returns COUNTER_REPUSH_THRESHOLD
 
             var rekeys = 0
-            connectLive(onRekeyNeeded = { rekeys++ })
+            connectLive(callbacks = callbacks(onRekeyNeeded = { rekeys++ }))
 
             // Several alive-poll ticks: the latch must not re-fire while the
             // rotation is still in flight (a re-PUT per tick would storm the server).
@@ -760,7 +771,7 @@ class SatelliteConnectionTest {
             every { repo.getSendCounter(any()) } returns COUNTER_REPUSH_THRESHOLD - 1
 
             var rekeys = 0
-            connectLive(onRekeyNeeded = { rekeys++ })
+            connectLive(callbacks = callbacks(onRekeyNeeded = { rekeys++ }))
 
             scope.advanceTimeBy(3100)
             assertEquals(0, rekeys)
@@ -774,7 +785,7 @@ class SatelliteConnectionTest {
             every { repo.getSendCounter(any()) } answers { counter }
 
             var rekeys = 0
-            connectLive(onRekeyNeeded = { rekeys++ })
+            connectLive(callbacks = callbacks(onRekeyNeeded = { rekeys++ }))
 
             scope.advanceTimeBy(2100)
             assertEquals(1, rekeys)
@@ -794,7 +805,7 @@ class SatelliteConnectionTest {
 
             var closedReason = -1
             var died = false
-            connectLive(onDead = { died = true }, onClosedByServer = { closedReason = it })
+            connectLive(callbacks = callbacks(onDead = { died = true }, onClosedByServer = { closedReason = it }))
 
             // One alive-poll tick, not the 5-miss death window.
             scope.advanceTimeBy(1100)
@@ -808,7 +819,7 @@ class SatelliteConnectionTest {
             every { repo.isConnectionAlive(any()) } returns false
 
             var died = false
-            connectLive(onDead = { died = true })
+            connectLive(callbacks = callbacks(onDead = { died = true }))
 
             scope.advanceTimeBy(5100)
             assertTrue(died)
@@ -875,7 +886,7 @@ class SatelliteConnectionTest {
 
     @Test
     fun `markConnected from IDLE is rejected and leaves state IDLE`() {
-        conn.markConnected(handle = 11, connectionId = "c", epoch = 0, applied = emptyList(), onDead = {})
+        conn.markConnected(SatelliteConnection.SessionGrant(handle = 11, connectionId = "c", epoch = 0, applied = emptyList()), callbacks())
 
         assertEquals(SatelliteSessionState.Idle, conn.state.value)
         assertEquals(-1, conn.handle)
@@ -887,7 +898,10 @@ class SatelliteConnectionTest {
         every { repo.isConnectionAlive(any()) } returns true
 
         connectLive(handle = 1)
-        conn.markConnected(handle = 2, connectionId = "second", epoch = 0, applied = emptyList(), onDead = {})
+        conn.markConnected(
+            SatelliteConnection.SessionGrant(handle = 2, connectionId = "second", epoch = 0, applied = emptyList()),
+            callbacks(),
+        )
 
         assertEquals(SatelliteSessionState.Live, conn.state.value)
         assertEquals(1, conn.handle)

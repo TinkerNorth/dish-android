@@ -56,57 +56,59 @@ object MoonlightInputEncoder {
     private const val MOUSE_SCROLL_DATA_SIZE = 10
 
     /**
-     * Encode a CONTROLLER_MULTI packet into [dst] starting at position 0 and
-     * leave the buffer positioned/limited to the 38-byte message. [dst] must be
-     * little-endian and hold at least [CONTROLLER_MULTI_LEN] bytes; it is reused
-     * across every input change with zero allocation.
-     *
-     * [buttons] is the full 32-bit button field; it is split into the low
-     * `button_flags` and high `buttonFlags2` halves per input-data.adoc
-     * (effective = flags | (flags2 << 16)). [activeMask] carries the present-
-     * controller bitfield (dropping a bit signals an unplug).
+     * Encodes CONTROLLER_MULTI packets into one buffer it owns for its lifetime: the hot
+     * path binds a writer to its reused plaintext scratch once and then pays nothing per
+     * input change. [dst] must hold at least [CONTROLLER_MULTI_LEN] bytes; every [encode]
+     * starts at position 0 and leaves it positioned/limited to the 38-byte message.
      */
-    @Suppress("LongParameterList")
-    fun encodeControllerMulti(
-        dst: ByteBuffer,
-        controllerNumber: Int,
-        activeMask: Int,
-        buttons: Int,
-        leftTrigger: Int,
-        rightTrigger: Int,
-        leftStickX: Int,
-        leftStickY: Int,
-        rightStickX: Int,
-        rightStickY: Int,
+    class ControllerMultiWriter(
+        private val dst: ByteBuffer,
     ) {
-        dst.clear()
-        dst.order(ByteOrder.LITTLE_ENDIAN)
-        // Control header.
-        dst.putShort(MoonlightControlProtocol.CTRL_INPUT_DATA.toShort())
-        dst.putShort((CONTROLLER_MULTI_LEN - CONTROL_HEADER_LEN).toShort())
-        // INPUT wrapper: size is BIG-endian, type is LITTLE-endian.
-        putIntBE(dst, MULTI_DATA_SIZE)
-        dst.putInt(MoonlightControlProtocol.INPUT_CONTROLLER_MULTI)
-        // Struct body (all little-endian).
-        dst.putShort(MoonlightControlProtocol.MULTI_HEADER_B.toShort())
-        dst.putShort(controllerNumber.toShort())
-        dst.putShort(activeMask.toShort())
-        dst.putShort(MoonlightControlProtocol.MULTI_MID_B.toShort())
-        dst.putShort((buttons and 0xFFFF).toShort())
-        dst.put((leftTrigger and 0xFF).toByte())
-        dst.put((rightTrigger and 0xFF).toByte())
-        dst.putShort(leftStickX.toShort())
-        dst.putShort(leftStickY.toShort())
-        dst.putShort(rightStickX.toShort())
-        dst.putShort(rightStickY.toShort())
-        dst.putShort(MoonlightControlProtocol.MULTI_TAIL_A.toShort())
-        dst.putShort((buttons ushr 16).toShort())
-        dst.putShort(MoonlightControlProtocol.MULTI_TAIL_B.toShort())
-        dst.flip()
+        /**
+         * [buttons] is the full 32-bit button field; it is split into the low
+         * `button_flags` and high `buttonFlags2` halves per input-data.adoc
+         * (effective = flags | (flags2 << 16)). [activeMask] carries the present-
+         * controller bitfield (dropping a bit signals an unplug).
+         */
+        fun encode(
+            controllerNumber: Int,
+            activeMask: Int,
+            buttons: Int,
+            leftTrigger: Int,
+            rightTrigger: Int,
+            leftStickX: Int,
+            leftStickY: Int,
+            rightStickX: Int,
+            rightStickY: Int,
+        ) {
+            dst.clear()
+            dst.order(ByteOrder.LITTLE_ENDIAN)
+            // Control header.
+            dst.putShort(MoonlightControlProtocol.CTRL_INPUT_DATA.toShort())
+            dst.putShort((CONTROLLER_MULTI_LEN - CONTROL_HEADER_LEN).toShort())
+            // INPUT wrapper: size is BIG-endian, type is LITTLE-endian.
+            putIntBE(dst, MULTI_DATA_SIZE)
+            dst.putInt(MoonlightControlProtocol.INPUT_CONTROLLER_MULTI)
+            // Struct body (all little-endian).
+            dst.putShort(MoonlightControlProtocol.MULTI_HEADER_B.toShort())
+            dst.putShort(controllerNumber.toShort())
+            dst.putShort(activeMask.toShort())
+            dst.putShort(MoonlightControlProtocol.MULTI_MID_B.toShort())
+            dst.putShort((buttons and 0xFFFF).toShort())
+            dst.put((leftTrigger and 0xFF).toByte())
+            dst.put((rightTrigger and 0xFF).toByte())
+            dst.putShort(leftStickX.toShort())
+            dst.putShort(leftStickY.toShort())
+            dst.putShort(rightStickX.toShort())
+            dst.putShort(rightStickY.toShort())
+            dst.putShort(MoonlightControlProtocol.MULTI_TAIL_A.toShort())
+            dst.putShort((buttons ushr 16).toShort())
+            dst.putShort(MoonlightControlProtocol.MULTI_TAIL_B.toShort())
+            dst.flip()
+        }
     }
 
     /** Convenience allocating form for tests and the arrival/teardown paths. */
-    @Suppress("LongParameterList")
     fun controllerMulti(
         controllerNumber: Int,
         activeMask: Int,
@@ -119,8 +121,7 @@ object MoonlightInputEncoder {
         rightStickY: Int,
     ): ByteArray {
         val buf = ByteBuffer.allocate(CONTROLLER_MULTI_LEN)
-        encodeControllerMulti(
-            buf,
+        ControllerMultiWriter(buf).encode(
             controllerNumber,
             activeMask,
             buttons,

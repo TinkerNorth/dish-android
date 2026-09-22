@@ -118,26 +118,17 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/card_margin_bottom">
 
-                    <LinearLayout
-                        style="@style/Widget.Dish.Card.RowContainer"
-                        android:gravity="center_vertical">
-
-                        <ImageView
-                            android:layout_width="@dimen/icon_picker_glyph"
-                            android:layout_height="@dimen/icon_picker_glyph"
-                            android:importantForAccessibility="no"
-                            android:src="@drawable/ic_lock"
-                            app:tint="@color/colorMuted" />
-
-                        <TextView
-                            style="@style/TextAppearance.Dish.Body"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:layout_marginStart="@dimen/spacing_2xl"
-                            android:textColor="@color/colorMuted"
-                            android:text="@string/setup_btc_locked_placeholder" />
-                    </LinearLayout>
+                    <TextView
+                        style="@style/TextAppearance.Dish.Body"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:padding="@dimen/card_padding"
+                        app:drawableStartCompat="@drawable/ic_lock_picker"
+                        android:drawablePadding="@dimen/spacing_2xl"
+                        app:drawableTint="@color/colorMuted"
+                        android:gravity="center_vertical"
+                        android:textColor="@color/colorMuted"
+                        android:text="@string/setup_btc_locked_placeholder" />
                 </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
 

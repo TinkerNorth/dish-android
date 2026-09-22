@@ -12,18 +12,12 @@ import com.tinkernorth.dish.core.net.moonlight.MoonlightControlProtocol
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
-import com.tinkernorth.dish.repository.SatelliteCatalogRepository
 import com.tinkernorth.dish.source.audio.PadAudioRoute
 import com.tinkernorth.dish.source.audio.PadAudioRoutes
 import com.tinkernorth.dish.source.sensor.PhoneMotionAvailability
-import com.tinkernorth.dish.source.store.MicEnabledStore
-import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.MouseSurfaceStore
-import com.tinkernorth.dish.source.store.RumbleEnabledStore
-import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
-import com.tinkernorth.dish.source.store.SatelliteHostRuntimeStore
-import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
-import com.tinkernorth.dish.source.store.SpeakerEnabledStore
+import com.tinkernorth.dish.source.store.SatelliteHostFacts
+import com.tinkernorth.dish.source.store.SlotToggleStores
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
@@ -102,26 +96,34 @@ class CapabilityComposerLightbarTest {
                 every { state } returns MutableStateFlow(emptySet())
                 every { isOpen(any()) } returns false
             }
-        val hostFeatures: SatelliteHostFeaturesStore =
-            mockk {
-                every { state } returns MutableStateFlow(emptyMap())
-                every { featuresFor(any()) } returns null
-            }
+        val hostFacts =
+            SatelliteHostFacts(
+                features =
+                    mockk {
+                        every { state } returns MutableStateFlow(emptyMap())
+                        every { featuresFor(any()) } returns null
+                    },
+                runtime = mockk { every { runtimeFor(any()) } returns null },
+                motionBackend = mockk { every { state } returns MutableStateFlow(emptyMap()) },
+                catalog = mockk { every { cached(any()) } returns null },
+                capabilities = mockk(),
+            )
+        val toggles =
+            SlotToggleStores(
+                motion = mockk { every { state } returns MutableStateFlow(emptyMap()) },
+                rumble = mockk { every { state } returns MutableStateFlow(emptyMap()) },
+                mic = mockk { every { state } returns MutableStateFlow(emptyMap()) },
+                speaker = mockk { every { state } returns MutableStateFlow(emptyMap()) },
+            )
         return CapabilityComposer(
             availability,
             registry,
             hub,
             native,
-            mockk<MotionEnabledStore> { every { state } returns MutableStateFlow(emptyMap()) },
-            mockk<RumbleEnabledStore> { every { state } returns MutableStateFlow(emptyMap()) },
-            mockk<MicEnabledStore> { every { state } returns MutableStateFlow(emptyMap()) },
-            mockk<SpeakerEnabledStore> { every { state } returns MutableStateFlow(emptyMap()) },
+            toggles,
             routes,
             mouseSurface,
-            hostFeatures,
-            mockk<SatelliteMotionBackendStatusStore> { every { state } returns MutableStateFlow(emptyMap()) },
-            mockk<SatelliteHostRuntimeStore> { every { runtimeFor(any()) } returns null },
-            mockk<SatelliteCatalogRepository> { every { cached(any()) } returns null },
+            hostFacts,
             scope,
         )
     }
