@@ -139,18 +139,41 @@ class AndroidHidProxyClient(
         }
     }
 
+    // Release runs from BluetoothHidSession.teardownLocked, which holds the session lock and is
+    // reached from the profile callbacks on a binder thread, so it must not throw and must not
+    // stop half way: the three steps are independent, and a stack that has already gone away
+    // must not keep the ones after it from running.
     override fun unregisterAndRelease() {
         val hid = hidDevice
         val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
         if (hid != null) {
+            val device = connectedDevice
+            if (device != null) {
+                try {
+                    hid.disconnect(device)
+                } catch (e: SecurityException) {
+                    // Without the grant the link is the OS's to drop; the rest of the release stands.
+                    Log.w(TAG, "disconnect without BLUETOOTH_CONNECT: ${e.message}")
+                } catch (e: IllegalStateException) {
+                    Log.w(TAG, "disconnect after the stack went away: ${e.message}")
+                }
+            }
             try {
-                connectedDevice?.let { hid.disconnect(it) }
                 hid.unregisterApp()
             } catch (e: SecurityException) {
                 // The proxy is still closed below; the OS tears the registration down with it.
-                Log.w(TAG, "release without BLUETOOTH_CONNECT: ${e.message}")
+                Log.w(TAG, "unregisterApp without BLUETOOTH_CONNECT: ${e.message}")
+            } catch (e: IllegalStateException) {
+                Log.w(TAG, "unregisterApp after the stack went away: ${e.message}")
             }
-            manager?.adapter?.closeProfileProxy(BluetoothProfile.HID_DEVICE, hid)
+            try {
+                manager?.adapter?.closeProfileProxy(BluetoothProfile.HID_DEVICE, hid)
+            } catch (e: IllegalArgumentException) {
+                // Closing a proxy whose service binding is already gone.
+                Log.w(TAG, "the HID proxy was already released: ${e.message}")
+            } catch (e: IllegalStateException) {
+                Log.w(TAG, "closeProfileProxy after the stack went away: ${e.message}")
+            }
         }
         hidDevice = null
         connectedDevice = null
