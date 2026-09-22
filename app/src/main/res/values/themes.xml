@@ -241,6 +241,15 @@
 
     <style name="Theme.Dish.Overlay" parent="Theme.Dish" />
 
+    <!-- The gamepad overlay sits on the card surface rather than the app background: the
+         touch pad, sticks and buttons are drawn as cards on it. Pinning the colour on the
+         window instead of on the layout root means the frame is filled once, and the
+         pre-content window already shows the colour the overlay lands on. The cutout
+         handling comes from Theme.Dish.Overlay, including its v28 / v30 variants. -->
+    <style name="Theme.Dish.Overlay.Surface" parent="Theme.Dish.Overlay">
+        <item name="android:windowBackground">@color/colorSurface</item>
+    </style>
+
     <!-- Filled button: cyan-dark background, dark navy text (colorOnPrimary).
          Sentence-case + no letter-tracking: M3 dropped the all-caps button
          convention universally. Strings supply their own capitalisation. -->

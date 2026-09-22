@@ -11,7 +11,7 @@ import java.io.File
 // MainActivity wires GamepadActivityHost itself on top of GameActivity.
 class StreamingScreenCoverageTest {
     private val mainDir: File =
-        generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
+        generateSequence(File(checkNotNull(System.getProperty("user.dir"))).absoluteFile) { it.parentFile }
             .flatMap { sequenceOf(File(it, "src/main"), File(it, "app/src/main")) }
             .first { File(it, "AndroidManifest.xml").exists() }
 
@@ -53,11 +53,11 @@ class StreamingScreenCoverageTest {
             File(mainDir, "res")
                 .listFiles { dir -> dir.name.startsWith("layout") }
                 .orEmpty()
-                .flatMap { dir -> dir.listFiles { f -> f.name.startsWith("activity_") }.orEmpty().toList() }
-                .filterNot { it.name in exemptLayouts }
-                .filter { it.readText().contains("CoordinatorLayout") }
-                .filterNot { hasOverlayIncludes(it) }
-                .map { "${it.parentFile.name}/${it.name}" }
+                .flatMap { dir -> dir.listFiles { f -> f.name.startsWith("activity_") }.orEmpty().map { dir.name to it } }
+                .filterNot { (_, layout) -> layout.name in exemptLayouts }
+                .filter { (_, layout) -> layout.readText().contains("CoordinatorLayout") }
+                .filterNot { (_, layout) -> hasOverlayIncludes(layout) }
+                .map { (dirName, layout) -> "$dirName/${layout.name}" }
         assertTrue("full-screen activity layouts without the low-power overlays: $missing", missing.isEmpty())
     }
 

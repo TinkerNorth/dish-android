@@ -241,8 +241,7 @@ class PhysicalGamepadRegistry
             return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 dev.vibratorManager.vibratorIds.isNotEmpty()
             } else {
-                @Suppress("DEPRECATION")
-                dev.vibrator?.hasVibrator() == true
+                dev.legacyVibrator()?.hasVibrator() == true
             }
         }
 

@@ -91,7 +91,9 @@ class DishSpinnerDrawable(
         strokePaint.color = tinted
     }
 
-    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+    // Abstract on Drawable, so it must be implemented; deprecated there since API 29 because the
+    // framework ignores it, which is why this override carries the same mark.
+    @Deprecated("Drawable.getOpacity is unused by the framework from API 29.")
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
 
     override fun start() {
@@ -173,7 +175,9 @@ class DishDotsDrawable(
         fillPaint.color = tinted
     }
 
-    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+    // Abstract on Drawable, so it must be implemented; deprecated there since API 29 because the
+    // framework ignores it, which is why this override carries the same mark.
+    @Deprecated("Drawable.getOpacity is unused by the framework from API 29.")
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
 
     override fun start() {
@@ -269,7 +273,9 @@ class DishBarDrawable(
         trackPaint.alpha = (0.22f * 255f).toInt()
     }
 
-    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+    // Abstract on Drawable, so it must be implemented; deprecated there since API 29 because the
+    // framework ignores it, which is why this override carries the same mark.
+    @Deprecated("Drawable.getOpacity is unused by the framework from API 29.")
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
 
     override fun start() {

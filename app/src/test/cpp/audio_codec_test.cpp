@@ -260,8 +260,9 @@ TEST(AudioCodec, GarbageAndTruncatedPacketsLeaveAUsableDecoder) {
     std::vector<int16_t> out(SPEAKER_FRAME, 0);
     const uint8_t garbage[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     // Not asserting failure: some byte strings ARE valid Opus. Asserting only
-    // that nothing reads out of bounds and the decoder survives.
-    (void)dec->decode(garbage, sizeof(garbage), out.data(), MIC_FRAME);
+    // that nothing reads out of bounds (the frame count stays within the buffer)
+    // and the decoder survives.
+    EXPECT_LE(dec->decode(garbage, sizeof(garbage), out.data(), MIC_FRAME), MIC_FRAME);
     EXPECT_EQ(dec->decode(nullptr, 4, out.data(), MIC_FRAME), 0u);
     EXPECT_EQ(dec->decode(garbage, 0, out.data(), MIC_FRAME), 0u);
     EXPECT_EQ(dec->decode(garbage, sizeof(garbage), nullptr, MIC_FRAME), 0u);
@@ -272,7 +273,7 @@ TEST(AudioCodec, GarbageAndTruncatedPacketsLeaveAUsableDecoder) {
     uint8_t packet[MAX_PACKET];
     const size_t bytes = enc->encode(src.data(), MIC_FRAME, packet, sizeof(packet));
     ASSERT_GT(bytes, 4u);
-    (void)dec->decode(packet, bytes / 2, out.data(), MIC_FRAME); // truncated
+    EXPECT_LE(dec->decode(packet, bytes / 2, out.data(), MIC_FRAME), MIC_FRAME); // truncated
     // Whatever the malformed input did, a real packet still decodes.
     EXPECT_EQ(dec->decode(packet, bytes, out.data(), MIC_FRAME), MIC_FRAME);
 }

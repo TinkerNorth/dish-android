@@ -184,7 +184,8 @@ The full cross-repo verification recipe lives in
 
 The Kotlin → JNI → `sendto()` chain runs at gamepad polling rate and
 must never block. If you're modifying `MainActivity.dispatchGenericMotionEvent`,
-`SatelliteNative`, or the native input path (`gamepad_input.cpp`,
+the `core.jni` objects (`SlotReportNative`, `PhysicalSlotNative`), or the native
+input path (`gamepad_input.cpp`,
 `satellite_jni.cpp::sendReport`):
 
 - No `withContext`, no `runBlocking`, no `Dispatchers.IO` on the send path.

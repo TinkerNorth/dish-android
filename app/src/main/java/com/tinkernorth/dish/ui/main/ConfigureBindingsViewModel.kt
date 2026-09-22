@@ -38,10 +38,13 @@ import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
 import com.tinkernorth.dish.source.store.MicEnabledStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
+import com.tinkernorth.dish.source.store.SatelliteHostFacts
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
+import com.tinkernorth.dish.source.store.SlotToggleStores
 import com.tinkernorth.dish.source.store.SpeakerEnabledStore
 import com.tinkernorth.dish.source.system.MicPermissionGate
 import com.tinkernorth.dish.source.usb.PathChoice
+import com.tinkernorth.dish.source.usb.PhysicalPadSources
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.source.usb.UsbPhase
 import com.tinkernorth.dish.ui.common.bundledControllerTypeLabelRes
@@ -271,25 +274,27 @@ sealed interface ApplyState {
 @HiltViewModel
 class ConfigureBindingsViewModel
     @Inject
-    @Suppress("LongParameterList")
     constructor(
         @ApplicationContext private val context: Context,
         private val hub: ConnectionCoordinator,
-        private val gamepadRegistry: PhysicalGamepadRegistry,
-        private val motionEnabledStore: MotionEnabledStore,
-        private val rumbleEnabledStore: RumbleEnabledStore,
-        private val micEnabledStore: MicEnabledStore,
-        private val speakerEnabledStore: SpeakerEnabledStore,
+        private val pads: PhysicalPadSources,
+        private val toggles: SlotToggleStores,
         private val micPermission: MicPermissionGate,
         private val capabilityComposer: CapabilityComposer,
         private val satellite: SatelliteConnectionManager,
         private val moonlight: MoonlightConnectionManager,
-        private val usbGamepadManager: UsbGamepadManager,
-        private val catalogRepo: SatelliteCatalogRepository,
-        private val capabilitiesRepo: SatelliteCapabilitiesRepository,
-        private val native: PhysicalInputNative,
-        private val hostFeaturesStore: SatelliteHostFeaturesStore,
+        private val hostFacts: SatelliteHostFacts,
     ) : ViewModel() {
+        private val gamepadRegistry: PhysicalGamepadRegistry get() = pads.registry
+        private val usbGamepadManager: UsbGamepadManager get() = pads.usb
+        private val native: PhysicalInputNative get() = pads.native
+        private val motionEnabledStore: MotionEnabledStore get() = toggles.motion
+        private val rumbleEnabledStore: RumbleEnabledStore get() = toggles.rumble
+        private val micEnabledStore: MicEnabledStore get() = toggles.mic
+        private val speakerEnabledStore: SpeakerEnabledStore get() = toggles.speaker
+        private val catalogRepo: SatelliteCatalogRepository get() = hostFacts.catalog
+        private val capabilitiesRepo: SatelliteCapabilitiesRepository get() = hostFacts.capabilities
+        private val hostFeaturesStore: SatelliteHostFeaturesStore get() = hostFacts.features
         private val _ui = MutableStateFlow(ConfigUiState())
         val ui: StateFlow<ConfigUiState> = _ui.asStateFlow()
 

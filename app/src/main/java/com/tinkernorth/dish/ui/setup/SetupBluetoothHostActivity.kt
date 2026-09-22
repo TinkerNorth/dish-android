@@ -27,6 +27,7 @@ import com.tinkernorth.dish.databinding.SetupTypeCardBinding
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.ui.common.setLeadingIcon
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -184,10 +185,9 @@ class SetupBluetoothHostActivity : BaseGamepadHostActivity() {
         binding.tvDiscoverable.setText(
             if (state.discoverable) R.string.setup_bth_discoverable_on else R.string.setup_bth_discoverable_waiting,
         )
-        binding.icDiscoverable.setImageResource(
+        binding.tvDiscoverable.setLeadingIcon(
             if (state.discoverable) R.drawable.ic_bluetooth_connected else R.drawable.ic_bluetooth_searching,
-        )
-        binding.icDiscoverable.setColorFilter(
+            R.dimen.icon_card_glyph,
             getColor(if (state.discoverable) R.color.colorPrimary else R.color.colorMuted),
         )
         // The system discoverable prompt can be denied or dismissed with no result
@@ -196,6 +196,11 @@ class SetupBluetoothHostActivity : BaseGamepadHostActivity() {
     }
 
     private fun requestBluetoothPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            // Pre-S relies on install-time grants; nothing to prompt for.
+            viewModel.onPermissionResult()
+            return
+        }
         permissionLauncher.launch(
             arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN),
         )

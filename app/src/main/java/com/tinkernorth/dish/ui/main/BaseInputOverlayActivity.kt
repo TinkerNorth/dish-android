@@ -2,18 +2,18 @@
 
 package com.tinkernorth.dish.ui.main
 
+import android.content.pm.ActivityInfo
 import android.content.res.ColorStateList
-import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Process
-import android.view.Surface
 import android.view.View
-import android.view.WindowInsets
-import android.view.WindowInsetsController
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.updatePadding
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -43,6 +43,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.Locale
 import javax.inject.Inject
 import kotlin.math.max
 
@@ -83,6 +84,14 @@ abstract class BaseInputOverlayActivity : BaseGamepadHostActivity() {
 
     // Physical-controller presence behind the slot; null for slots with no controller.
     protected open fun slotDeviceStates(): Flow<SlotDeviceState?> = flowOf(null)
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // Every input surface is drawn for landscape (pad skin, trackpad, mouse pad), and each
+        // subclass declares the orientation config changes so the turn never recreates it.
+        // Requested here, before the first layout, rather than fixed in the manifest.
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+    }
 
     protected fun installBaseScaffolding() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -168,7 +177,7 @@ abstract class BaseInputOverlayActivity : BaseGamepadHostActivity() {
         val graceSec = ui.countdownSec
         if (graceSec != null) {
             g.guardCountdownRow.visibility = View.VISIBLE
-            g.tvGuardCountdown.text = graceSec.toString()
+            g.tvGuardCountdown.text = String.format(Locale.getDefault(), "%d", graceSec)
         } else if (!ui.autoClose) {
             g.guardCountdownRow.visibility = View.GONE
         }
@@ -178,7 +187,7 @@ abstract class BaseInputOverlayActivity : BaseGamepadHostActivity() {
                     var left = GUARD_AUTO_CLOSE_SEC
                     g.guardCountdownRow.visibility = View.VISIBLE
                     while (left > 0) {
-                        g.tvGuardCountdown.text = left.toString()
+                        g.tvGuardCountdown.text = String.format(Locale.getDefault(), "%d", left)
                         delay(1000L)
                         left--
                     }
@@ -348,13 +357,7 @@ abstract class BaseInputOverlayActivity : BaseGamepadHostActivity() {
         )
     }
 
-    protected fun currentRotation(): Int =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            display?.rotation ?: Surface.ROTATION_0
-        } else {
-            @Suppress("DEPRECATION")
-            windowManager.defaultDisplay?.rotation ?: Surface.ROTATION_0
-        }
+    protected fun currentRotation(): Int = ContextCompat.getDisplayOrDefault(this).rotation
 
     private fun installFoldAwareness() {
         val content = rootView().findViewById<View>(R.id.overlayContentFrame) ?: return
@@ -382,20 +385,12 @@ abstract class BaseInputOverlayActivity : BaseGamepadHostActivity() {
         content.updatePadding(top = origTop + insets.top)
     }
 
+    // Sticky immersive on every API level: the platform insets controller from R, the
+    // SYSTEM_UI_FLAG_IMMERSIVE_STICKY | FULLSCREEN | HIDE_NAVIGATION set below it.
     private fun hideSystemBars() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            window.insetsController?.let {
-                it.hide(WindowInsets.Type.systemBars())
-                it.systemBarsBehavior =
-                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            }
-        } else {
-            @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility = (
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                    or View.SYSTEM_UI_FLAG_FULLSCREEN
-                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-            )
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            hide(WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
     }
 

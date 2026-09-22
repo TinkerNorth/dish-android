@@ -35,8 +35,11 @@ class CapabilityComposerTouchpadTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    modelHasTouchpad = true,
-                    frameworkCaps = PhysicalGamepadRegistry.FrameworkCaps(hasGyro = false, hasRumble = true, hasTouchpad = true),
+                    model =
+                        ModelFacts(
+                            modelHasTouchpad = true,
+                            frameworkCaps = PhysicalGamepadRegistry.FrameworkCaps(hasGyro = false, hasRumble = true, hasTouchpad = true),
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -62,8 +65,11 @@ class CapabilityComposerTouchpadTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    modelHasTouchpad = true,
-                    frameworkCaps = PhysicalGamepadRegistry.FrameworkCaps(hasGyro = false, hasRumble = true, hasTouchpad = false),
+                    model =
+                        ModelFacts(
+                            modelHasTouchpad = true,
+                            frameworkCaps = PhysicalGamepadRegistry.FrameworkCaps(hasGyro = false, hasRumble = true, hasTouchpad = false),
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -86,8 +92,11 @@ class CapabilityComposerTouchpadTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    modelHasTouchpad = false,
-                    frameworkCaps = PhysicalGamepadRegistry.FrameworkCaps(hasGyro = false, hasRumble = true, hasTouchpad = true),
+                    model =
+                        ModelFacts(
+                            modelHasTouchpad = false,
+                            frameworkCaps = PhysicalGamepadRegistry.FrameworkCaps(hasGyro = false, hasRumble = true, hasTouchpad = true),
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -109,8 +118,11 @@ class CapabilityComposerTouchpadTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    modelHasTouchpad = true,
-                    knownFastLane = true,
+                    model =
+                        ModelFacts(
+                            modelHasTouchpad = true,
+                            knownFastLane = true,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()

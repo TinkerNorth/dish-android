@@ -38,7 +38,7 @@ SODIUM_EXPORT int sodium_library_minimal(void);\n\
 file(GLOB_RECURSE SODIUM_SOURCES ${SODIUM_SRC}/*.c)
 
 add_library(sodium_static STATIC ${SODIUM_SOURCES})
-target_include_directories(sodium_static
+target_include_directories(sodium_static SYSTEM
     PUBLIC  ${SODIUM_SRC}/include
     PRIVATE ${SODIUM_SRC}/include/sodium
 )
@@ -104,11 +104,13 @@ add_library(satellite SHARED
 # Release (RelWithDebInfo) is the streaming hot path: -O3 + ThinLTO cross-inlines the JNI dispatch,
 # parsers, and encoders; --gc-sections drops the dead code that opens up. Debug stays -O0 for fast
 # iteration (AGP still supplies -g).
+# -Werror on the first-party target only: libsodium and opus build with their own flags above
+# and their headers are SYSTEM includes below, so a warning here is always ours to fix.
 target_compile_options(satellite PRIVATE
     $<IF:$<CONFIG:Debug>,-O0,-O3>
     $<$<NOT:$<CONFIG:Debug>>:-flto=thin>
     -ffunction-sections -fdata-sections
-    -Wall -Wextra -Wpedantic)
+    -Wall -Wextra -Wpedantic -Werror)
 target_link_options(satellite PRIVATE
     "-Wl,-z,max-page-size=16384"
     -Wl,--gc-sections

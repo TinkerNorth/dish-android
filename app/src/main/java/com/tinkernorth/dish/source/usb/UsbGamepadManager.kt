@@ -16,10 +16,12 @@ import android.hardware.usb.UsbManager
 import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
+import com.tinkernorth.dish.core.jni.UsbInterfaceClaim
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.store.UsbPathPreferenceStore
@@ -263,7 +265,6 @@ class UsbGamepadManager
         }
 
         // A flat effect dispatch: many arms, each trivial. The branch count trips the complexity rule.
-        @Suppress("CyclomaticComplexMethod")
         private fun execute(
             key: Int,
             c: UsbController,
@@ -334,44 +335,86 @@ class UsbGamepadManager
             }
         }
 
+        // The open+claim step's answer: a connection that holds the interface, or why not.
+        private sealed interface Opened {
+            data class Ready(
+                val connection: UsbDeviceConnection,
+            ) : Opened
+
+            data class Refused(
+                val outcome: ClaimOutcome.Fail,
+            ) : Opened
+        }
+
+        // The endpoints of the interface a claim targets, as findInterruptInPair picked them.
+        private class ClaimTarget(
+            val intf: UsbInterface,
+            val epIn: UsbEndpoint,
+            val epOut: UsbEndpoint?,
+        )
+
         // Open + claim + native attach + register synthetic + initial bind. Reports the cause on failure
         // and whether the framework interface was stolen (so the FSM knows if it must wait for re-enum).
-        @Suppress("ReturnCount")
         private fun doClaim(device: UsbDevice): ClaimOutcome {
             val usb = usbManager ?: return ClaimOutcome.Fail(DirectClaimFailure.InitFailed, frameworkStolen = false)
-            val key = vpk(device.vendorId, device.productId)
             val (intf, epIn, epOut) =
                 findInterruptInPair(device)
                     ?: return ClaimOutcome.Fail(DirectClaimFailure.InitFailed, frameworkStolen = false)
+            // Read before the claim detaches the kernel driver and the framework device starts going.
             val routedFrameworkId =
                 registry.devices.value.values
                     .firstOrNull {
                         !it.isUsbSynthetic && it.vendorId == device.vendorId && it.productId == device.productId
                     }?.id
+            return when (val opened = openAndClaim(usb, device, intf)) {
+                is Opened.Refused -> opened.outcome
+                is Opened.Ready -> attachClaimed(device, opened.connection, ClaimTarget(intf, epIn, epOut), routedFrameworkId)
+            }
+        }
+
+        private fun openAndClaim(
+            usb: UsbManager,
+            device: UsbDevice,
+            intf: UsbInterface,
+        ): Opened {
             val conn =
                 try {
                     usb.openDevice(device)
                 } catch (e: SecurityException) {
                     Log.w(TAG, "openDevice denied for ${device.vendorId.toHex4()}:${device.productId.toHex4()}", e)
-                    return ClaimOutcome.Fail(DirectClaimFailure.PermissionDenied, frameworkStolen = false)
-                } ?: return ClaimOutcome.Fail(DirectClaimFailure.Busy, frameworkStolen = false)
+                    return Opened.Refused(ClaimOutcome.Fail(DirectClaimFailure.PermissionDenied, frameworkStolen = false))
+                } ?: return Opened.Refused(ClaimOutcome.Fail(DirectClaimFailure.Busy, frameworkStolen = false))
             if (!conn.claimInterface(intf, true)) {
                 conn.close()
-                return ClaimOutcome.Fail(DirectClaimFailure.Busy, frameworkStolen = false)
+                return Opened.Refused(ClaimOutcome.Fail(DirectClaimFailure.Busy, frameworkStolen = false))
             }
-            // The interface is ours now: the kernel HID driver has been detached (framework stolen).
+            return Opened.Ready(conn)
+        }
+
+        // The interface is ours now: the kernel HID driver has been detached (framework stolen).
+        private fun attachClaimed(
+            device: UsbDevice,
+            conn: UsbDeviceConnection,
+            target: ClaimTarget,
+            routedFrameworkId: Int?,
+        ): ClaimOutcome {
+            val intf = target.intf
+            val epIn = target.epIn
             val synthetic =
                 native.attachUsbDevice(
                     fd = conn.fileDescriptor,
                     vendorId = device.vendorId,
                     productId = device.productId,
-                    interfaceNumber = intf.id,
-                    endpointIn = epIn.address,
-                    endpointInMaxPacket = epIn.maxPacketSize,
-                    endpointOut = epOut?.address ?: 0,
-                    interfaceClass = intf.interfaceClass,
-                    interfaceSubclass = intf.interfaceSubclass,
-                    interfaceProtocol = intf.interfaceProtocol,
+                    claim =
+                        UsbInterfaceClaim(
+                            interfaceNumber = intf.id,
+                            endpointIn = epIn.address,
+                            endpointInMaxPacket = epIn.maxPacketSize,
+                            endpointOut = target.epOut?.address ?: 0,
+                            interfaceClass = intf.interfaceClass,
+                            interfaceSubclass = intf.interfaceSubclass,
+                            interfaceProtocol = intf.interfaceProtocol,
+                        ),
                 )
             if (synthetic == 0) {
                 runCatching {
@@ -380,7 +423,7 @@ class UsbGamepadManager
                 }
                 return ClaimOutcome.Fail(DirectClaimFailure.InitFailed, frameworkStolen = true)
             }
-            claimedConns[key] = ClaimedConn(conn, intf, synthetic)
+            claimedConns[vpk(device.vendorId, device.productId)] = ClaimedConn(conn, intf, synthetic)
             registry.addUsbSynthetic(
                 deviceId = synthetic,
                 name = friendlyName(device),
@@ -573,12 +616,7 @@ class UsbGamepadManager
         }
 
         private fun deviceFromIntent(intent: Intent): UsbDevice? =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
-            }
+            IntentCompat.getParcelableExtra(intent, UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
 
         private fun Int.toHex4(): String = "%04x".format(this and 0xFFFF)
 

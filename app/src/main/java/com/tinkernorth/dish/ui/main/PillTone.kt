@@ -3,7 +3,6 @@
 package com.tinkernorth.dish.ui.main
 
 import android.content.Context
-import android.content.res.ColorStateList
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -12,6 +11,7 @@ import androidx.annotation.DrawableRes
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.core.net.DishProtocol
 import com.tinkernorth.dish.databinding.BindingPillBinding
+import com.tinkernorth.dish.ui.common.setLeadingIcon
 
 internal enum class PillTone(
     @DrawableRes val background: Int,
@@ -39,13 +39,7 @@ internal fun BindingPillBinding.bindPill(spec: PillSpec) {
     tvPillText.text = spec.text
     tvPillText.setTextColor(fg)
     root.setBackgroundResource(spec.tone.background)
-    if (spec.icon != null) {
-        ivPillIcon.visibility = View.VISIBLE
-        ivPillIcon.setImageResource(spec.icon)
-        ivPillIcon.imageTintList = ColorStateList.valueOf(fg)
-    } else {
-        ivPillIcon.visibility = View.GONE
-    }
+    tvPillText.setLeadingIcon(spec.icon, R.dimen.binding_pill_icon_size, fg)
     root.alpha = if (spec.tone == PillTone.OFF) PILL_ALPHA_OFF else 1f
 }
 

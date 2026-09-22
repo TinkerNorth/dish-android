@@ -14,6 +14,14 @@ import org.junit.Test
 // evaluated top to bottom, with the strings and actions each one owns. Every state
 // keeps Apply reachable except the host that already carries its four controllers.
 class MoonlightSessionUiTest {
+    // Renders "res|arg1,arg2" so a test pins the resource and its arguments in one string.
+    private val strings = StringLookup { res, args -> rendered(res, *args) }
+
+    private fun rendered(
+        res: Int,
+        vararg args: Any,
+    ): String = "$res|" + args.joinToString(",")
+
     private fun ui(
         trust: MoonlightTrustState = MoonlightTrustState.PAIRED,
         pairing: MoonlightPairingUi? = null,
@@ -36,8 +44,8 @@ class MoonlightSessionUiTest {
     fun `M1 a probe in flight with nothing cached is checking`() {
         val state = ui(trust = MoonlightTrustState.CHECKING)
         assertEquals(MoonlightSessionUi.Checking, state)
-        assertEquals(0, state.titleRes())
-        assertEquals(R.string.ml_state_checking, state.bodyRes())
+        assertEquals(0, state.titleRes)
+        assertEquals(R.string.ml_state_checking, state.bodyRes)
         assertTrue(state.showsSpinner)
         assertEquals(emptyList<MoonlightAction>(), state.actions())
     }
@@ -45,8 +53,8 @@ class MoonlightSessionUiTest {
     @Test
     fun `M2 an answering host with no stored cert is not paired`() {
         val state = ui(trust = MoonlightTrustState.NOT_PAIRED)
-        assertEquals(R.string.ml_state_unpaired_title, state.titleRes())
-        assertEquals(R.string.ml_state_unpaired_body, state.bodyRes())
+        assertEquals(R.string.ml_state_unpaired_title, state.titleRes)
+        assertEquals(R.string.ml_state_unpaired_body, state.bodyRes)
         assertEquals(listOf(MoonlightAction.PAIR), state.actions())
     }
 
@@ -54,9 +62,9 @@ class MoonlightSessionUiTest {
     fun `M3 the PIN outranks the trust word that produced it`() {
         val state = ui(trust = MoonlightTrustState.NOT_PAIRED, pairing = MoonlightPairingUi.Pin("1234"))
         assertEquals(MoonlightSessionUi.PairingPin("1234"), state)
-        assertEquals(R.string.ml_pair_pin_body, state.bodyRes())
+        assertEquals(R.string.ml_pair_pin_body, state.bodyRes)
         assertEquals(R.string.ml_pair_waiting, state.noteRes())
-        assertEquals(listOf("1234", "PC"), state.bodyArgs("PC"))
+        assertEquals(rendered(R.string.ml_pair_pin_body, "1234", "PC"), state.body("PC", strings))
         assertEquals(listOf(MoonlightAction.NEW_CODE, MoonlightAction.CANCEL), state.actions())
         assertTrue(state.showsSpinner)
     }
@@ -64,8 +72,8 @@ class MoonlightSessionUiTest {
     @Test
     fun `M4 a refused PIN offers another go`() {
         val state = ui(trust = MoonlightTrustState.NOT_PAIRED, pairing = MoonlightPairingUi.Failed)
-        assertEquals(R.string.ml_pair_failed_title, state.titleRes())
-        assertEquals(R.string.ml_pair_failed_body, state.bodyRes())
+        assertEquals(R.string.ml_pair_failed_title, state.titleRes)
+        assertEquals(R.string.ml_pair_failed_body, state.bodyRes)
         assertEquals(listOf(MoonlightAction.TRY_AGAIN), state.actions())
         assertEquals(MoonlightTone.ERROR, state.tone())
     }
@@ -73,32 +81,32 @@ class MoonlightSessionUiTest {
     @Test
     fun `M5 a never-paired host that does not answer is unreachable`() {
         val state = ui(trust = MoonlightTrustState.UNREACHABLE)
-        assertEquals(R.string.ml_state_unreachable_title, state.titleRes())
-        assertEquals(R.string.ml_state_unreachable_body, state.bodyRes())
+        assertEquals(R.string.ml_state_unreachable_title, state.titleRes)
+        assertEquals(R.string.ml_state_unreachable_body, state.bodyRes)
         assertEquals(listOf(MoonlightAction.RETRY), state.actions())
     }
 
     @Test
     fun `M6 a remembered host that does not answer says the pairing still stands`() {
         val state = ui(trust = MoonlightTrustState.REMEMBERED)
-        assertEquals(R.string.ml_state_unreachable_title, state.titleRes())
-        assertEquals(R.string.ml_state_remembered_body, state.bodyRes())
+        assertEquals(R.string.ml_state_unreachable_title, state.titleRes)
+        assertEquals(R.string.ml_state_remembered_body, state.bodyRes)
         assertEquals(listOf(MoonlightAction.RETRY), state.actions())
     }
 
     @Test
     fun `M7 trust lost asks for a new pairing`() {
         val state = ui(trust = MoonlightTrustState.TRUST_LOST)
-        assertEquals(R.string.ml_state_trust_lost_title, state.titleRes())
-        assertEquals(R.string.ml_state_trust_lost_body, state.bodyRes())
+        assertEquals(R.string.ml_state_trust_lost_title, state.titleRes)
+        assertEquals(R.string.ml_state_trust_lost_body, state.bodyRes)
         assertEquals(listOf(MoonlightAction.PAIR_AGAIN), state.actions())
     }
 
     @Test
     fun `M8 a replaced host asks for a new pairing and says why`() {
         val state = ui(trust = MoonlightTrustState.REPLACED)
-        assertEquals(R.string.ml_state_replaced_title, state.titleRes())
-        assertEquals(R.string.ml_state_replaced_body, state.bodyRes())
+        assertEquals(R.string.ml_state_replaced_title, state.titleRes)
+        assertEquals(R.string.ml_state_replaced_body, state.bodyRes)
         assertEquals(listOf(MoonlightAction.PAIR_AGAIN), state.actions())
     }
 
@@ -106,8 +114,8 @@ class MoonlightSessionUiTest {
     fun `M9 a paired host with the app list in flight is loading`() {
         val state = ui(apps = MoonlightApps.Loading)
         assertEquals(MoonlightSessionUi.AppsLoading, state)
-        assertEquals(0, state.titleRes())
-        assertEquals(R.string.ml_apps_loading, state.bodyRes())
+        assertEquals(0, state.titleRes)
+        assertEquals(R.string.ml_apps_loading, state.bodyRes)
         assertTrue(state.showsSpinner)
     }
 
@@ -116,8 +124,8 @@ class MoonlightSessionUiTest {
         val apps = listOf(MoonlightAppUi("1", "Desktop"), MoonlightAppUi("2", "Steam Big Picture"))
         val unpicked = ui(apps = MoonlightApps.Ready(apps))
         assertEquals(MoonlightSessionUi.NewSession(apps, null), unpicked)
-        assertEquals(R.string.ml_session_new_title, unpicked.titleRes())
-        assertEquals(R.string.ml_session_new_body, unpicked.bodyRes())
+        assertEquals(R.string.ml_session_new_title, unpicked.titleRes)
+        assertEquals(R.string.ml_session_new_body, unpicked.bodyRes)
         assertEquals(R.string.ml_session_default_note, unpicked.noteRes())
         assertEquals(emptyList<MoonlightAction>(), unpicked.actions())
 
@@ -130,8 +138,8 @@ class MoonlightSessionUiTest {
         assertEquals(MoonlightSessionUi.AppsEmpty, ui(apps = MoonlightApps.Empty))
         val fetchedEmpty = ui(apps = MoonlightApps.Ready(emptyList()))
         assertEquals(MoonlightSessionUi.AppsEmpty, fetchedEmpty)
-        assertEquals(R.string.ml_apps_empty_title, fetchedEmpty.titleRes())
-        assertEquals(R.string.ml_apps_empty_body, fetchedEmpty.bodyRes())
+        assertEquals(R.string.ml_apps_empty_title, fetchedEmpty.titleRes)
+        assertEquals(R.string.ml_apps_empty_body, fetchedEmpty.bodyRes)
         assertEquals(listOf(MoonlightAction.RETRY), fetchedEmpty.actions())
         assertEquals(MoonlightTone.NEUTRAL, fetchedEmpty.tone())
     }
@@ -139,8 +147,8 @@ class MoonlightSessionUiTest {
     @Test
     fun `M12 an unreadable app list is an error with a retry`() {
         val state = ui(apps = MoonlightApps.Failed)
-        assertEquals(R.string.ml_apps_failed_title, state.titleRes())
-        assertEquals(R.string.ml_apps_failed_body, state.bodyRes())
+        assertEquals(R.string.ml_apps_failed_title, state.titleRes)
+        assertEquals(R.string.ml_apps_failed_body, state.bodyRes)
         assertEquals(listOf(MoonlightAction.RETRY), state.actions())
         assertEquals(MoonlightTone.ERROR, state.tone())
     }
@@ -148,26 +156,26 @@ class MoonlightSessionUiTest {
     @Test
     fun `M13 joining our own session names the app and shows no picker`() {
         val state = ui(phase = MoonlightPhase.Joining(controllerNumber = 2, appName = "Steam Big Picture"))
-        assertEquals(R.string.ml_session_join_title, state.titleRes())
-        assertEquals(listOf<Any>("Steam Big Picture"), state.titleArgs("PC"))
-        assertEquals(R.string.ml_session_join_body, state.bodyRes())
-        assertEquals(listOf<Any>("PC", 2), state.bodyArgs("PC"))
+        assertEquals(R.string.ml_session_join_title, state.titleRes)
+        assertEquals(rendered(R.string.ml_session_join_title, "Steam Big Picture"), state.title("PC", strings))
+        assertEquals(R.string.ml_session_join_body, state.bodyRes)
+        assertEquals(rendered(R.string.ml_session_join_body, "PC", 2), state.body("PC", strings))
         assertEquals(emptyList<MoonlightAction>(), state.actions())
     }
 
     @Test
     fun `M13 an unresolvable app name falls back to the host, still with no picker`() {
         val state = ui(phase = MoonlightPhase.Joining(controllerNumber = 1, appName = null))
-        assertEquals(R.string.ml_session_join_title_unnamed, state.titleRes())
-        assertEquals(listOf<Any>("PC"), state.titleArgs("PC"))
+        assertEquals(R.string.ml_session_join_title_unnamed, state.titleRes)
+        assertEquals(rendered(R.string.ml_session_join_title_unnamed, "PC"), state.title("PC", strings))
         assertEquals(emptyList<MoonlightAction>(), state.actions())
     }
 
     @Test
     fun `M14 a full host is the one state that blocks Apply`() {
         val state = ui(failure = MoonlightFailure.HostFull)
-        assertEquals(R.string.ml_full_title, state.titleRes())
-        assertEquals(R.string.ml_full_body, state.bodyRes())
+        assertEquals(R.string.ml_full_title, state.titleRes)
+        assertEquals(R.string.ml_full_body, state.bodyRes)
         assertEquals(listOf(MoonlightAction.SEE_BINDINGS), state.actions())
         assertTrue(state.blocksApply)
     }
@@ -175,43 +183,43 @@ class MoonlightSessionUiTest {
     @Test
     fun `M15 a session held by another device offers the close and a retry`() {
         val state = ui(failure = MoonlightFailure.BusyOther)
-        assertEquals(R.string.ml_busy_other_title, state.titleRes())
-        assertEquals(R.string.ml_busy_other_body, state.bodyRes())
+        assertEquals(R.string.ml_busy_other_title, state.titleRes)
+        assertEquals(R.string.ml_busy_other_body, state.bodyRes)
         assertEquals(listOf(MoonlightAction.QUIT_APP, MoonlightAction.RETRY), state.actions())
     }
 
     @Test
     fun `M16 a refused rejoin offers the close and a retry`() {
         val state = ui(failure = MoonlightFailure.ResumeFailed)
-        assertEquals(R.string.ml_resume_failed_title, state.titleRes())
-        assertEquals(R.string.ml_resume_failed_body, state.bodyRes())
+        assertEquals(R.string.ml_resume_failed_title, state.titleRes)
+        assertEquals(R.string.ml_resume_failed_body, state.bodyRes)
         assertEquals(listOf(MoonlightAction.QUIT_APP, MoonlightAction.RETRY), state.actions())
     }
 
     @Test
     fun `M17 a refusal quotes the hosts own wording`() {
         val state = ui(failure = MoonlightFailure.Refused("Unauthorized"))
-        assertEquals(R.string.ml_refused_title, state.titleRes())
-        assertEquals(listOf<Any>("PC", "Unauthorized"), state.titleArgs("PC"))
-        assertEquals(R.string.ml_refused_body, state.bodyRes())
+        assertEquals(R.string.ml_refused_title, state.titleRes)
+        assertEquals(rendered(R.string.ml_refused_title, "PC", "Unauthorized"), state.title("PC", strings))
+        assertEquals(R.string.ml_refused_body, state.bodyRes)
         assertEquals(listOf(MoonlightAction.RETRY), state.actions())
     }
 
     @Test
     fun `M18 a stream that never came up says the app was closed again`() {
         val state = ui(failure = MoonlightFailure.SetupFailed)
-        assertEquals(R.string.ml_setup_failed_title, state.titleRes())
-        assertEquals(R.string.ml_setup_failed_body, state.bodyRes())
+        assertEquals(R.string.ml_setup_failed_title, state.titleRes)
+        assertEquals(R.string.ml_setup_failed_body, state.bodyRes)
         assertEquals(listOf(MoonlightAction.RETRY), state.actions())
     }
 
     @Test
     fun `M19 a live session names the app and the controller number`() {
         val state = ui(phase = MoonlightPhase.Live(controllerNumber = 3, appName = "Desktop"))
-        assertEquals(R.string.ml_session_live_title, state.titleRes())
-        assertEquals(listOf<Any>("PC"), state.titleArgs("PC"))
-        assertEquals(R.string.ml_session_live_body, state.bodyRes())
-        assertEquals(listOf<Any>("Desktop", 3), state.bodyArgs("PC"))
+        assertEquals(R.string.ml_session_live_title, state.titleRes)
+        assertEquals(rendered(R.string.ml_session_live_title, "PC"), state.title("PC", strings))
+        assertEquals(R.string.ml_session_live_body, state.bodyRes)
+        assertEquals(rendered(R.string.ml_session_live_body, "Desktop", 3), state.body("PC", strings))
         assertEquals(listOf(MoonlightAction.QUIT_APP), state.actions())
         assertEquals(MoonlightTone.SUCCESS, state.tone())
     }
@@ -219,16 +227,16 @@ class MoonlightSessionUiTest {
     @Test
     fun `M20 a drop is recoverable and offers a reconnect`() {
         val state = ui(phase = MoonlightPhase.Dropped)
-        assertEquals(R.string.ml_dropped_title, state.titleRes())
-        assertEquals(R.string.ml_dropped_body, state.bodyRes())
+        assertEquals(R.string.ml_dropped_title, state.titleRes)
+        assertEquals(R.string.ml_dropped_body, state.bodyRes)
         assertEquals(listOf(MoonlightAction.RECONNECT), state.actions())
     }
 
     @Test
     fun `M21 a host-ended session is not a drop and offers a new session`() {
         val state = ui(phase = MoonlightPhase.Ended)
-        assertEquals(R.string.ml_ended_title, state.titleRes())
-        assertEquals(R.string.ml_ended_body, state.bodyRes())
+        assertEquals(R.string.ml_ended_title, state.titleRes)
+        assertEquals(R.string.ml_ended_body, state.bodyRes)
         assertEquals(listOf(MoonlightAction.START_SESSION), state.actions())
     }
 
@@ -282,9 +290,9 @@ class MoonlightSessionUiTest {
 
     @Test
     fun `the host-scoped actions carry the host name and the rest carry nothing`() {
-        assertEquals(listOf<Any>("PC"), MoonlightAction.QUIT_APP.labelArgs("PC"))
-        assertEquals(listOf<Any>("PC"), MoonlightAction.SEE_BINDINGS.labelArgs("PC"))
-        assertEquals(emptyList<Any>(), MoonlightAction.RETRY.labelArgs("PC"))
+        assertEquals(rendered(R.string.ml_action_quit_app, "PC"), MoonlightAction.QUIT_APP.label("PC", strings))
+        assertEquals(rendered(R.string.ml_action_see_bindings, "PC"), MoonlightAction.SEE_BINDINGS.label("PC", strings))
+        assertEquals(rendered(R.string.ml_action_retry), MoonlightAction.RETRY.label("PC", strings))
         assertEquals(R.string.ml_action_quit_app, MoonlightAction.QUIT_APP.labelRes())
     }
 

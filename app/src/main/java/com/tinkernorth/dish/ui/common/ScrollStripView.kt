@@ -73,7 +73,6 @@ class ScrollStripView
         private var scrolled = false
         private var touching = false
 
-        @Suppress("ClickableViewAccessibility")
         override fun onTouchEvent(event: MotionEvent): Boolean {
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {

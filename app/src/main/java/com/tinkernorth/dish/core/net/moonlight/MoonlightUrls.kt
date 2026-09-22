@@ -49,7 +49,6 @@ object MoonlightUrls {
      * rikeyid (u32) that key the control stream, a minimal display mode, and the
      * audio play mode (Wolf endpoints.hpp create_run_session).
      */
-    @Suppress("LongParameterList")
     fun launch(
         address: String,
         httpsPort: Int,

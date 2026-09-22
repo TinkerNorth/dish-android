@@ -5,27 +5,16 @@
     android:layout_height="wrap_content"
     android:orientation="vertical">
 
-    <LinearLayout
+    <TextView
+        style="@style/TextAppearance.Dish.Label.Accent"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        app:drawableStartCompat="@drawable/ic_tune_section"
+        android:drawablePadding="@dimen/config_section_icon_gap"
+        app:drawableTint="@color/colorPrimary"
         android:gravity="center_vertical"
-        android:orientation="horizontal">
-
-        <ImageView
-            android:layout_width="@dimen/config_section_icon_size"
-            android:layout_height="@dimen/config_section_icon_size"
-            android:layout_marginEnd="@dimen/config_section_icon_gap"
-            android:importantForAccessibility="no"
-            android:src="@drawable/ic_tune"
-            app:tint="@color/colorPrimary" />
-
-        <TextView
-            style="@style/TextAppearance.Dish.Label.Accent"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/binding_label_binding"
-            android:textAllCaps="true" />
-    </LinearLayout>
+        android:text="@string/binding_label_binding"
+        android:textAllCaps="true" />
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -69,6 +58,7 @@
 
             <ImageView
                 style="@style/Widget.Dish.Pill.Icon"
+                android:importantForAccessibility="no"
                 android:visibility="gone" />
 
             <TextView

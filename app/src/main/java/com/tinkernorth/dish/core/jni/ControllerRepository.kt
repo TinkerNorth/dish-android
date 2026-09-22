@@ -2,6 +2,7 @@
 
 package com.tinkernorth.dish.core.jni
 
+import com.tinkernorth.dish.source.connection.TouchpadReport
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -12,10 +13,10 @@ class ControllerRepository
         fun openSocket(
             ip: String,
             port: Int,
-        ): Int = SatelliteNative.openSocket(ip, port)
+        ): Int = SessionNative.openSocket(ip, port)
 
         fun closeSocket(handle: Int) {
-            SatelliteNative.closeSocket(handle)
+            SessionNative.closeSocket(handle)
         }
 
         fun setConnectionParams(
@@ -24,7 +25,7 @@ class ControllerRepository
             key: ByteArray,
             protocolVersion: Int,
         ) {
-            SatelliteNative.setConnectionParams(handle, token, key, protocolVersion)
+            SessionNative.setConnectionParams(handle, token, key, protocolVersion)
         }
 
         fun sendReport(
@@ -38,40 +39,39 @@ class ControllerRepository
             rx: Int,
             ry: Int,
         ) {
-            SatelliteNative.sendReport(handle, index, buttons, lt, rt, lx, ly, rx, ry)
+            SlotReportNative.sendReport(handle, index, buttons, lt, rt, lx, ly, rx, ry)
         }
 
         fun sendMicFrame(
             handle: Int,
             index: Int,
             pcmMono: ShortArray,
-        ): Boolean = SatelliteNative.sendMicFrame(handle, index, pcmMono)
+        ): Boolean = SlotReportNative.sendMicFrame(handle, index, pcmMono)
 
-        fun getVigemAvailable(handle: Int): Int = SatelliteNative.getVigemAvailable(handle)
+        fun getVigemAvailable(handle: Int): Int = SessionNative.getVigemAvailable(handle)
 
-        fun getActiveControllerCount(handle: Int): Int = SatelliteNative.getActiveControllerCount(handle)
+        fun getActiveControllerCount(handle: Int): Int = SessionNative.getActiveControllerCount(handle)
 
-        fun getServerEpoch(handle: Int): Int = SatelliteNative.getServerEpoch(handle)
+        fun getServerEpoch(handle: Int): Int = SessionNative.getServerEpoch(handle)
 
-        fun getActiveBitmap(handle: Int): Int = SatelliteNative.getActiveBitmap(handle)
+        fun getActiveBitmap(handle: Int): Int = SessionNative.getActiveBitmap(handle)
 
-        fun getSessionCloseReason(handle: Int): Int = SatelliteNative.getSessionCloseReason(handle)
+        fun getSessionCloseReason(handle: Int): Int = SessionNative.getSessionCloseReason(handle)
 
-        fun getSendCounter(handle: Int): Long = SatelliteNative.getSendCounter(handle)
+        fun getSendCounter(handle: Int): Long = SessionNative.getSendCounter(handle)
 
-        fun sessionStatsJson(handle: Int): String = SatelliteNative.sessionStatsJson(handle)
+        fun sessionStatsJson(handle: Int): String = SessionNative.sessionStatsJson(handle)
 
         fun getSlotSendCount(
             handle: Int,
             controllerIndex: Int,
-        ): Long = SatelliteNative.getSlotSendCount(handle, controllerIndex)
+        ): Long = SlotReportNative.getSlotSendCount(handle, controllerIndex)
 
         fun getSlotMotionCount(
             handle: Int,
             controllerIndex: Int,
-        ): Long = SatelliteNative.getSlotMotionCount(handle, controllerIndex)
+        ): Long = SlotReportNative.getSlotMotionCount(handle, controllerIndex)
 
-        @Suppress("LongParameterList")
         fun sendMotion(
             handle: Int,
             index: Int,
@@ -83,7 +83,7 @@ class ControllerRepository
             accelZ: Short,
             timestampDeltaUs: Int,
         ) {
-            SatelliteNative.sendMotion(
+            SlotReportNative.sendMotion(
                 handle,
                 index,
                 gyroX,
@@ -102,55 +102,42 @@ class ControllerRepository
             level: Int,
             status: Int,
         ) {
-            SatelliteNative.sendBattery(handle, index, level, status)
+            SlotReportNative.sendBattery(handle, index, level, status)
         }
 
-        @Suppress("LongParameterList")
         fun sendTouchpad(
             handle: Int,
             index: Int,
-            finger0Active: Boolean,
-            finger1Active: Boolean,
-            buttonPressed: Boolean,
-            rightPressed: Boolean,
-            middlePressed: Boolean,
-            finger0TrackingId: Int,
-            finger0X: Short,
-            finger0Y: Short,
-            finger1TrackingId: Int,
-            finger1X: Short,
-            finger1Y: Short,
-            eventTimeMs: Long,
-            scrollDelta: Short,
+            report: TouchpadReport,
         ) {
-            SatelliteNative.sendTouchpad(
+            SlotReportNative.sendTouchpad(
                 handle,
                 index,
-                finger0Active,
-                finger1Active,
-                buttonPressed,
-                rightPressed,
-                middlePressed,
-                finger0TrackingId,
-                finger0X,
-                finger0Y,
-                finger1TrackingId,
-                finger1X,
-                finger1Y,
-                eventTimeMs,
-                scrollDelta,
+                report.finger0Active,
+                report.finger1Active,
+                report.buttonPressed,
+                report.rightPressed,
+                report.middlePressed,
+                report.finger0TrackingId,
+                report.finger0X,
+                report.finger0Y,
+                report.finger1TrackingId,
+                report.finger1X,
+                report.finger1Y,
+                report.eventTimeMs,
+                report.scrollDelta,
             )
         }
 
         fun startHeartbeat(handle: Int) {
-            SatelliteNative.startHeartbeat(handle)
+            SessionNative.startHeartbeat(handle)
         }
 
         fun stopHeartbeat(handle: Int) {
-            SatelliteNative.stopHeartbeat(handle)
+            SessionNative.stopHeartbeat(handle)
         }
 
-        fun isConnectionAlive(handle: Int): Boolean = SatelliteNative.isConnectionAlive(handle)
+        fun isConnectionAlive(handle: Int): Boolean = SessionNative.isConnectionAlive(handle)
 
-        fun receiveAck(handle: Int): Int = SatelliteNative.receiveAck(handle)
+        fun receiveAck(handle: Int): Int = SessionNative.receiveAck(handle)
     }

@@ -26,7 +26,6 @@
     <string name="donate_tier_bmac_blurb">Quick one-time gift or a monthly membership. Card, Apple Pay, or Google Pay. Great if you don\'t have a GitHub account.</string>
     <string name="donate_tier_bmac_currencies">Card, Apple Pay, Google Pay</string>
     <string name="settings_support_body">Donate via GitHub Sponsors, Ko-fi, or Buy Me a Coffee.</string>
-    <string name="url_donate" translatable="false">https://dish.tinkernorth.com/donate/</string>
     <string name="url_sponsors" translatable="false">https://github.com/sponsors/TinkerNorth</string>
     <string name="url_kofi" translatable="false">https://ko-fi.com/tinkernorth</string>
     <string name="url_bmac" translatable="false">https://buymeacoffee.com/tinkernorth</string>

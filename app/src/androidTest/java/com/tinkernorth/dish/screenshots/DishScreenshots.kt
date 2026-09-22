@@ -353,12 +353,14 @@ class DishScreenshots {
         error("field $name not found on ${javaClass.name}")
     }
 
-    @Suppress("UNCHECKED_CAST")
+    // The flow is reached by field name, so its value is set the same way: through the
+    // MutableStateFlow.setValue the interface declares, which erases to (Object).
     private fun pushFlow(
         owner: Any,
         field: String,
         value: Any?,
     ) {
-        (owner.fieldValue(field) as MutableStateFlow<Any?>).value = value
+        val flow = owner.fieldValue(field) as MutableStateFlow<*>
+        MutableStateFlow::class.java.getMethod("setValue", Any::class.java).invoke(flow, value)
     }
 }

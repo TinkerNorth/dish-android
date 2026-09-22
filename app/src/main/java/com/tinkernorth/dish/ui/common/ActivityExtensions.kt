@@ -35,7 +35,6 @@ fun AppCompatActivity.setupDishToolbar(toolbar: Toolbar) {
 // micIndicator null means the screen suppresses the app-wide mic chip; every screen but the
 // gamepad overlay passes it (that one already carries the mute pill on the pad itself, and a
 // floating tap target over a full-screen control surface would steal pad touches).
-@Suppress("LongParameterList")
 fun AppCompatActivity.attachGamepadHost(
     rootView: View,
     wakeState: WakeStateController,
@@ -81,9 +80,21 @@ fun AppCompatActivity.applyDishActivityTransitions() {
             R.anim.fade_through_exit,
         )
     } else {
-        @Suppress("DEPRECATION")
-        overridePendingTransition(R.anim.fade_through_enter, R.anim.fade_through_exit)
+        overridePendingTransitionLegacy(R.anim.fade_through_enter, R.anim.fade_through_exit)
     }
+}
+
+// Marker: Activity.overridePendingTransition is deprecated from 34, where overrideActivityTransition
+// (the branch above) replaces it. Below 34 it is the only per-activity transition override, and
+// the theme-level alternative (windowAnimationStyle) would also change the close animation
+// and the accessibility gate this path honours. The right fix is a minSdk of 34; until then the
+// deprecated call lives here and nowhere else.
+@Suppress("DEPRECATION")
+private fun Activity.overridePendingTransitionLegacy(
+    enterAnim: Int,
+    exitAnim: Int,
+) {
+    overridePendingTransition(enterAnim, exitAnim)
 }
 
 /**

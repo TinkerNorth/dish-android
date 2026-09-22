@@ -73,7 +73,7 @@ section (snapshot the report under the lock, encrypt+send outside it) without br
 
 ## 5. Framework device state leaked on lane switch (resolved)
 
-**Resolved.** `SatelliteNative.forgetPhysicalDevice` (calling `dispatch::forgetDevice`) is invoked by
+**Resolved.** `PhysicalSlotNative.forgetPhysicalDevice` (calling `dispatch::forgetDevice`) is invoked by
 `PhysicalSlotBindingObserver` for every departed framework device id (claimed synthetics are still
 freed by `detachUsbDevice`), so `g_devices` returns to baseline a few seconds after a plug, claim,
 unplug cycle.
@@ -120,7 +120,7 @@ counter handling, and sources are in `docs/rumble.md`.
 
 **Where:** `app/src/main/cpp/usb_parsers.cpp` (`runRumble`, `switchEncodeMotor`, `runInit`),
 `app/src/main/cpp/usb_host.cpp` (`sendRumble`, `DeviceCtx`), `app/src/main/cpp/satellite_jni.cpp`
-(`sendUsbRumble` JNI), `SatelliteNative.kt` / `PhysicalInputNative.kt`,
+(`sendUsbRumble` JNI), `UsbDirectNative.kt` / `PhysicalInputNative.kt`,
 `app/src/main/java/.../hotpath/input/RumbleRouter.kt`.
 
 **Acceptance:** A claimed USB-direct pad of each verified family rumbles on `MSG_RUMBLE` and stops on

@@ -12,7 +12,6 @@ import com.tinkernorth.dish.core.jni.ControllerRepository
 import com.tinkernorth.dish.core.model.HostFeatureSet
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
-import com.tinkernorth.dish.repository.SatelliteCatalogRepository
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
@@ -21,7 +20,7 @@ import com.tinkernorth.dish.source.inputrate.InputRateStore
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
 import com.tinkernorth.dish.source.sensor.BatteryValidator.BatterySample
 import com.tinkernorth.dish.source.store.BatteryStatusStore
-import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
+import com.tinkernorth.dish.source.store.SatelliteHostFacts
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -42,40 +41,66 @@ private data class LiveInputs(
     val satellites: Map<String, SatelliteSnapshot>,
 )
 
-private data class FactInputs(
+internal data class FactInputs(
     val rates: Map<String, SlotInputRates>,
     val batteries: Map<String, BatterySample>,
     val caps: Map<String, SlotCapabilities>,
     val hostFeatures: Map<String, HostFeatureSet>,
 )
 
-private data class ExtraInputs(
+internal data class ExtraInputs(
     val radios: RadioFacts,
     val pads: PadWorld,
     val links: LinkWorld,
     val audio: AudioWorld,
 )
 
-@Suppress("LongParameterList")
+// The per-slot facts the report overlays on the live topology.
+class FactSources
+    @Inject
+    constructor(
+        private val inputRates: InputRateStore,
+        private val batteries: BatteryStatusStore,
+        private val capabilities: CapabilityComposer,
+        private val hostFacts: SatelliteHostFacts,
+    ) {
+        internal val flow: Flow<FactInputs> =
+            combine(inputRates.state, batteries.samples, capabilities.state, hostFacts.features.state) { rates, bat, caps, hf ->
+                FactInputs(rates.slots, bat, caps, hf)
+            }
+    }
+
+// The four side worlds (radios, pads, links, audio), each polled on the shared telemetry tick.
+class ExtraSources
+    @Inject
+    constructor(
+        private val radioSources: RadioSources,
+        private val padSources: PadSources,
+        private val linkSources: LinkSources,
+        private val audioSources: AudioSources,
+    ) {
+        internal fun flow(ticks: Flow<Unit>): Flow<ExtraInputs> =
+            combine(
+                radioSources.flow(ticks),
+                padSources.flow(ticks),
+                linkSources.flow(ticks),
+                audioSources.flow(ticks),
+                ::ExtraInputs,
+            )
+    }
+
 class DiagnosticsSources
     @Inject
     constructor(
         @ApplicationContext private val context: Context,
         private val registry: PhysicalGamepadRegistry,
         private val hub: ConnectionCoordinator,
-        private val satellite: SatelliteConnectionManager,
-        private val controllerRepo: ControllerRepository,
+        private val satelliteSnapshots: SatelliteSnapshotSources,
         private val capabilities: CapabilityComposer,
-        private val inputRates: InputRateStore,
-        private val batteries: BatteryStatusStore,
-        private val hostFeatures: SatelliteHostFeaturesStore,
-        private val catalogRepo: SatelliteCatalogRepository,
+        private val facts: FactSources,
+        private val hostFacts: SatelliteHostFacts,
         private val timing: FrameworkInputTimingStore,
-        private val json: Json,
-        radioSources: RadioSources,
-        padSources: PadSources,
-        linkSources: LinkSources,
-        audioSources: AudioSources,
+        private val extras: ExtraSources,
     ) {
         fun touchpadMode(slotId: String): String = capabilities.touchpadWireMode(slotId)
 
@@ -87,35 +112,13 @@ class DiagnosticsSources
                 }
             }
 
-        @OptIn(ExperimentalCoroutinesApi::class)
-        val satellites: Flow<Map<String, SatelliteSnapshot>> =
-            satellite.connections.flatMapLatest { conns ->
-                if (conns.isEmpty()) return@flatMapLatest flowOf(emptyMap())
-                val perConnection =
-                    conns.map { (id, conn) ->
-                        combine(conn.state, conn.slots, conn.sessionFacts, telemetryTicks) { state, slots, facts, _ ->
-                            id to snapshotOf(conn, state, slots, facts)
-                        }
-                    }
-                combine(perConnection) { it.toMap() }
-            }
-
-        private val extras: Flow<ExtraInputs> =
-            combine(
-                radioSources.flow(telemetryTicks),
-                padSources.flow(telemetryTicks),
-                linkSources.flow(telemetryTicks),
-                audioSources.flow(telemetryTicks),
-                ::ExtraInputs,
-            )
+        val satellites: Flow<Map<String, SatelliteSnapshot>> = satelliteSnapshots.flow(telemetryTicks)
 
         internal val world: Flow<DiagnosticsWorld> =
             combine(
                 combine(registry.devices, hub.bindings, hub.connections, satellites, ::LiveInputs),
-                combine(inputRates.state, batteries.samples, capabilities.state, hostFeatures.state) { rates, bat, caps, hf ->
-                    FactInputs(rates.slots, bat, caps, hf)
-                },
-                extras,
+                facts.flow,
+                extras.flow(telemetryTicks),
             ) { live, facts, extra ->
                 DiagnosticsWorld(
                     devices = live.devices,
@@ -136,6 +139,44 @@ class DiagnosticsSources
                 )
             }.onStart { timing.arm() }
                 .onCompletion { timing.disarm() }
+
+        private fun serverVersions(summaries: List<ConnectionSummary>): Map<String, String> =
+            summaries
+                .filter { it.kind == ConnectionKind.SATELLITE }
+                .mapNotNull { summary ->
+                    hostFacts.catalog
+                        .cached(summary.id)
+                        ?.serverVersion
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { summary.id to it }
+                }.toMap()
+
+        private companion object {
+            const val TELEMETRY_POLL_MS = 1000L
+        }
+    }
+
+// One snapshot per live satellite session: its FSM state, slot table, session facts and, while
+// a socket is open, the native counters behind it, re-read on every telemetry tick.
+class SatelliteSnapshotSources
+    @Inject
+    constructor(
+        private val satellite: SatelliteConnectionManager,
+        private val controllerRepo: ControllerRepository,
+        private val json: Json,
+    ) {
+        @OptIn(ExperimentalCoroutinesApi::class)
+        fun flow(ticks: Flow<Unit>): Flow<Map<String, SatelliteSnapshot>> =
+            satellite.connections.flatMapLatest { conns ->
+                if (conns.isEmpty()) return@flatMapLatest flowOf(emptyMap())
+                val perConnection =
+                    conns.map { (id, conn) ->
+                        combine(conn.state, conn.slots, conn.sessionFacts, ticks) { state, slots, facts, _ ->
+                            id to snapshotOf(conn, state, slots, facts)
+                        }
+                    }
+                combine(perConnection) { it.toMap() }
+            }
 
         private fun snapshotOf(
             conn: SatelliteConnection,
@@ -166,20 +207,5 @@ class DiagnosticsSources
                 slotSends = indices.associateWith { controllerRepo.getSlotSendCount(handle, it) },
                 slotMotion = indices.associateWith { controllerRepo.getSlotMotionCount(handle, it) },
             )
-        }
-
-        private fun serverVersions(summaries: List<ConnectionSummary>): Map<String, String> =
-            summaries
-                .filter { it.kind == ConnectionKind.SATELLITE }
-                .mapNotNull { summary ->
-                    catalogRepo
-                        .cached(summary.id)
-                        ?.serverVersion
-                        ?.takeIf { it.isNotBlank() }
-                        ?.let { summary.id to it }
-                }.toMap()
-
-        private companion object {
-            const val TELEMETRY_POLL_MS = 1000L
         }
     }

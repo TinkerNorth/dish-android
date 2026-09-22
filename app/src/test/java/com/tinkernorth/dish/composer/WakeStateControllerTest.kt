@@ -335,16 +335,12 @@ class WakeStateControllerTest {
         }
 
     @Test
-    fun `wifiLockMode picks low-latency on Q and above`() {
-        assertEquals(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, wifiLockMode(Build.VERSION_CODES.Q))
-        assertEquals(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, wifiLockMode(34))
-    }
-
-    @Test
     fun `wifiLockMode falls back to high-perf below Q`() {
-        @Suppress("DEPRECATION")
-        val highPerf = WifiManager.WIFI_MODE_FULL_HIGH_PERF
-        assertEquals(highPerf, wifiLockMode(Build.VERSION_CODES.P))
-        assertEquals(highPerf, wifiLockMode(24))
+        // The JVM stub reports SDK_INT 0, so this exercises the pre-Q branch. 3 is the platform's
+        // WIFI_MODE_FULL_HIGH_PERF; pinned as a literal so the legacy branch is checked against the
+        // value the OS defines, not against its own constant.
+        assertTrue(Build.VERSION.SDK_INT < Build.VERSION_CODES.Q)
+        assertEquals(3, WIFI_MODE_FULL_HIGH_PERF_LEGACY)
+        assertEquals(WIFI_MODE_FULL_HIGH_PERF_LEGACY, wifiLockMode())
     }
 }

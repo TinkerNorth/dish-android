@@ -134,12 +134,26 @@ internal fun Context.hostNetworkLines(host: HostDiag): List<String> {
             val stats = host.satellite?.stats
             val rtt =
                 stats?.rttP50Ms?.let { p50 ->
-                    getString(R.string.diagnostics_rtt_value, p50, stats.rttP99Ms ?: p50, p50 / 2, stats.rttSamples)
+                    getString(
+                        R.string.diagnostics_rtt_value,
+                        p50,
+                        stats.rttP99Ms ?: p50,
+                        p50 / 2,
+                        resources.getQuantityString(R.plurals.diagnostics_pings_count, stats.rttSamples, stats.rttSamples),
+                    )
                 } ?: getString(R.string.diagnostics_unknown)
             lines += diagKv(R.string.diagnostics_round_trip, rtt)
             stats?.let {
                 lines +=
-                    diagKv(R.string.diagnostics_pings, getString(R.string.diagnostics_pings_value, it.pings, it.acks, it.missed))
+                    diagKv(
+                        R.string.diagnostics_pings,
+                        getString(
+                            R.string.diagnostics_pings_value,
+                            resources.getQuantityString(R.plurals.diagnostics_pings_sent, it.pings.pluralCount(), it.pings),
+                            resources.getQuantityString(R.plurals.diagnostics_pings_acked, it.acks.pluralCount(), it.acks),
+                            resources.getQuantityString(R.plurals.diagnostics_pings_missed, it.missed, it.missed),
+                        ),
+                    )
             }
             host.satellite?.let { lines += diagKv(R.string.diagnostics_packets_sent, it.packetsSent.toString()) }
         }

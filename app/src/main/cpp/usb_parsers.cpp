@@ -1669,13 +1669,11 @@ size_t buildMicMuteLedReport(Parser p, FeedbackState& st, uint8_t state, uint8_t
 }
 
 #ifdef __ANDROID__
-bool runInit(int fd, int interfaceNumber, uint8_t epOut, Parser p, InitKind init) {
+bool runInit(int fd, int interfaceNumber, uint8_t epOut, InitKind init) {
     switch (init) {
     case InitKind::NONE:
         return true;
     case InitKind::STEAM_QUIET: {
-        (void)p;
-        (void)epOut;
         uint8_t buf[16];
         for (int i = 0;; i++) {
             size_t n = buildSteamConfigPacket(SteamConfig::QUIET, i, buf, sizeof(buf));
@@ -1706,7 +1704,6 @@ bool runInit(int fd, int interfaceNumber, uint8_t epOut, Parser p, InitKind init
         return true;
     }
     case InitKind::SWITCH_PRO_HANDSHAKE: {
-        (void)p;
         if (epOut == 0) {
             LOGE("Switch Pro: no OUT endpoint, cannot init");
             return false;

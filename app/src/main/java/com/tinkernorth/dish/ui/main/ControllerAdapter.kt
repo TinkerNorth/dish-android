@@ -39,6 +39,7 @@ import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
 import com.tinkernorth.dish.ui.common.bundledControllerTypeLabelRes
 import com.tinkernorth.dish.ui.common.moonlightTypeLabelRes
+import java.util.Locale
 
 interface SlotActionListener {
     fun onConfigure(slotId: String)
@@ -144,7 +145,6 @@ class ControllerAdapter(
         val hostCompat: DishProtocol.Compat = DishProtocol.Compat.UNKNOWN,
     )
 
-    @Suppress("LongParameterList")
     fun submitSlots(
         slots: List<ControllerSlot>,
         connections: List<ConnectionSummary>,
@@ -319,8 +319,8 @@ class ControllerAdapter(
                     else -> R.string.binding_link_usb to R.drawable.ic_usb
                 }
             val specs = mutableListOf(PillSpec(ctx.getString(label), icon, PillTone.FACT))
-            if (isUsb && card != null) specs.add(usbModeSpec(card))
-            if (isBt && card?.wiredSwitchAvailable == true) {
+            if (isUsb) specs.add(usbModeSpec(card))
+            if (isBt && card.wiredSwitchAvailable) {
                 specs.add(PillSpec(ctx.getString(R.string.binding_usb_available), R.drawable.ic_usb, PillTone.WARN))
             }
             return specs
@@ -655,7 +655,7 @@ class ControllerAdapter(
                         b.tvEdgeTitle.setText(R.string.binding_edge_input_lost_title)
                         b.tvEdgeDetail.setText(R.string.binding_edge_input_lost_detail)
                         b.edgeCountdownRow.visibility = View.VISIBLE
-                        b.tvEdgeCountdown.text = slot.disconnectTimeLeft.toString()
+                        b.tvEdgeCountdown.text = String.format(Locale.getDefault(), "%d", slot.disconnectTimeLeft)
                         setEdgePrimary(R.drawable.ic_link_off, R.string.action_unbind) { listener.onUnbind(slot.id) }
                         hideEdgeSecondary()
                         R.color.colorWarning

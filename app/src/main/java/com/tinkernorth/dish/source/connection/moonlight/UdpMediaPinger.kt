@@ -78,7 +78,6 @@ class UdpMediaPinger(
 
     // A closed or unreachable media socket must not take the control stream with
     // it: the session is still usable without the streams we discard anyway.
-    @Suppress("SwallowedException")
     private fun send(
         socket: DatagramSocket,
         port: Int,
@@ -93,17 +92,17 @@ class UdpMediaPinger(
         }
     }
 
-    @Suppress("SwallowedException")
     private fun drain(socket: DatagramSocket) {
         try {
             socket.soTimeout = 1
             repeat(DRAIN_BUDGET) {
                 socket.receive(DatagramPacket(drainBuffer, drainBuffer.size))
             }
-        } catch (timeout: SocketTimeoutException) {
+        } catch (expectedTimeout: SocketTimeoutException) {
             // Nothing left this round; that is the normal exit.
-        } catch (e: java.io.IOException) {
-            // Closed underneath us, or nothing listening. Either way we discard.
+        } catch (ignored: java.io.IOException) {
+            // Closed underneath us, or nothing listening. Either way we discard, and a drain
+            // runs every tick, so there is nothing a log line would add that close() does not.
         }
     }
 

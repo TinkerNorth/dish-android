@@ -2,7 +2,6 @@
 
 package com.tinkernorth.dish.ui.setup
 
-import android.content.res.ColorStateList
 import android.view.View
 import android.view.ViewGroup
 import androidx.annotation.DrawableRes
@@ -13,6 +12,7 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.databinding.BindingPillBinding
+import com.tinkernorth.dish.ui.common.setLeadingIcon
 
 // One thing a node in the data-flow sends or gets: a feature icon plus its label.
 // Shared by the configure review and the destination picker so a destination's
@@ -61,8 +61,11 @@ fun AppCompatActivity.bindReviewFlows(
     flows.forEach { flow ->
         val pill = BindingPillBinding.inflate(layoutInflater, chips, false)
         pill.root.setBackgroundResource(R.drawable.bg_binding_pill_cap)
-        pill.ivPillIcon.setImageResource(flow.icon)
-        pill.ivPillIcon.imageTintList = ColorStateList.valueOf(getColor(R.color.colorOnSurfaceVariant))
+        pill.tvPillText.setLeadingIcon(
+            flow.icon,
+            R.dimen.binding_pill_icon_size,
+            getColor(R.color.colorOnSurfaceVariant),
+        )
         pill.tvPillText.setText(flow.label)
         pill.tvPillText.setTextColor(getColor(R.color.colorOnSurfaceVariant))
         chips.addView(pill.root)

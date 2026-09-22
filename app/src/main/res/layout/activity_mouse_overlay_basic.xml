@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
@@ -13,27 +14,33 @@
             style="@style/Widget.Dish.Toolbar"
             android:layout_width="match_parent" />
 
+        <!-- Last child under the toolbar: match_parent is the rest of the window. -->
         <FrameLayout
             android:id="@+id/overlayContentFrame"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1">
+            android:layout_height="match_parent">
 
-            <LinearLayout
+            <!-- The button column and the pad split the width 1:2. A constraint chain makes
+                 that split without a weight above the column, whose own children divide its
+                 height: one weighted level, so nothing inside is measured twice over. -->
+            <androidx.constraintlayout.widget.ConstraintLayout
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:orientation="horizontal"
                 android:paddingHorizontal="@dimen/spacing_2xl"
                 android:paddingTop="@dimen/spacing_lg"
-                android:paddingBottom="@dimen/spacing_2xl"
-                android:weightSum="3">
+                android:paddingBottom="@dimen/spacing_2xl">
 
                 <LinearLayout
+                    android:id="@+id/mouseButtons"
                     android:layout_width="0dp"
-                    android:layout_height="match_parent"
+                    android:layout_height="0dp"
                     android:layout_marginEnd="@dimen/spacing_md"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                    android:orientation="vertical"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toStartOf="@+id/mouseMovePad"
+                    app:layout_constraintHorizontal_weight="1"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent">
 
                     <com.tinkernorth.dish.ui.common.HoldButtonView
                         android:id="@+id/btnMouseLeft"
@@ -59,10 +66,14 @@
                 <com.tinkernorth.dish.ui.common.TouchpadSurfaceView
                     android:id="@+id/mouseMovePad"
                     android:layout_width="0dp"
-                    android:layout_height="match_parent"
+                    android:layout_height="0dp"
                     android:layout_marginStart="@dimen/spacing_md"
-                    android:layout_weight="2" />
-            </LinearLayout>
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintHorizontal_weight="2"
+                    app:layout_constraintStart_toEndOf="@+id/mouseButtons"
+                    app:layout_constraintTop_toTopOf="parent" />
+            </androidx.constraintlayout.widget.ConstraintLayout>
 
             <include
                 android:id="@+id/linkGuard"

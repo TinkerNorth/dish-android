@@ -45,7 +45,7 @@ class PhysicalReachabilityTest {
         val conn = connection(MutableStateFlow(mapOf("9" to slot(registered = true))))
         assertSame(
             conn,
-            PhysicalReachability.connectionFor(
+            PhysicalReachabilityComposer.connectionFor(
                 slotId = "9",
                 bindings = mapOf("9" to "c"),
                 summariesById = mapOf("c" to summary("c")),
@@ -57,7 +57,7 @@ class PhysicalReachabilityTest {
     @Test
     fun `connectionFor is null for an unbound pad`() {
         assertNull(
-            PhysicalReachability.connectionFor(
+            PhysicalReachabilityComposer.connectionFor(
                 slotId = "9",
                 bindings = emptyMap(),
                 summariesById = mapOf("c" to summary("c")),
@@ -70,7 +70,7 @@ class PhysicalReachabilityTest {
     fun `connectionFor is null for a Bluetooth-bound pad, no motion or battery channel`() {
         val conn = connection(MutableStateFlow(mapOf("9" to slot(registered = true))))
         assertNull(
-            PhysicalReachability.connectionFor(
+            PhysicalReachabilityComposer.connectionFor(
                 slotId = "9",
                 bindings = mapOf("9" to "c"),
                 summariesById = mapOf("c" to summary("c", kind = ConnectionKind.BLUETOOTH)),
@@ -83,7 +83,7 @@ class PhysicalReachabilityTest {
     fun `connectionFor is null while the satellite is still CONNECTING`() {
         val conn = connection(MutableStateFlow(mapOf("9" to slot(registered = true))))
         assertNull(
-            PhysicalReachability.connectionFor(
+            PhysicalReachabilityComposer.connectionFor(
                 slotId = "9",
                 bindings = mapOf("9" to "c"),
                 summariesById = mapOf("c" to summary("c", live = LinkState.Connecting)),
@@ -96,7 +96,7 @@ class PhysicalReachabilityTest {
     fun `connectionFor is null until the slot has registered`() {
         val conn = connection(MutableStateFlow(mapOf("9" to slot(registered = false))))
         assertNull(
-            PhysicalReachability.connectionFor(
+            PhysicalReachabilityComposer.connectionFor(
                 slotId = "9",
                 bindings = mapOf("9" to "c"),
                 summariesById = mapOf("c" to summary("c")),
@@ -108,7 +108,7 @@ class PhysicalReachabilityTest {
     @Test
     fun `connectionFor is null when the connection object is gone`() {
         assertNull(
-            PhysicalReachability.connectionFor(
+            PhysicalReachabilityComposer.connectionFor(
                 slotId = "9",
                 bindings = mapOf("9" to "c"),
                 summariesById = mapOf("c" to summary("c")),
@@ -121,7 +121,7 @@ class PhysicalReachabilityTest {
     fun `resolve keeps only the reachable pads`() {
         val reachableConn = connection(MutableStateFlow(mapOf("9" to slot(registered = true))))
         val resolved =
-            PhysicalReachability.resolve(
+            PhysicalReachabilityComposer.resolve(
                 deviceIds = setOf(9, 11),
                 bindings = mapOf("9" to "c"),
                 summaries = listOf(summary("c")),
@@ -140,7 +140,7 @@ class PhysicalReachabilityTest {
             val summaries = MutableStateFlow(listOf(summary("c")))
             val connections = MutableStateFlow(mapOf("c" to conn))
 
-            PhysicalReachability
+            PhysicalReachabilityComposer
                 .reachableSlots(devices, bindings, summaries, connections)
                 .test {
                     assertEquals(emptyMap<String, SatelliteConnection>(), awaitItem())
@@ -162,7 +162,7 @@ class PhysicalReachabilityTest {
             val summaries = MutableStateFlow(listOf(summary("c")))
             val connections = MutableStateFlow(mapOf("c" to conn))
 
-            PhysicalReachability
+            PhysicalReachabilityComposer
                 .reachableSlots(devices, bindings, summaries, connections)
                 .test {
                     assertEquals(mapOf("9" to conn), awaitItem())
@@ -181,7 +181,7 @@ class PhysicalReachabilityTest {
             val summaries = MutableStateFlow<List<ConnectionSummary>>(emptyList())
             val connections = MutableStateFlow<Map<String, SatelliteConnection>>(emptyMap())
 
-            PhysicalReachability
+            PhysicalReachabilityComposer
                 .reachableSlots(devices, bindings, summaries, connections)
                 .test {
                     assertEquals(emptyMap<String, SatelliteConnection>(), awaitItem())

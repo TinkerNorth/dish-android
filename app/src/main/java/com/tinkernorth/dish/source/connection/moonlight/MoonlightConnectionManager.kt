@@ -537,56 +537,20 @@ class MoonlightConnectionManager
             return paired
         }
 
+        // The host stopped a pairing phase short: a missing field or a challenge that did not
+        // verify. Its message is the reason the user sees.
+        private class PairingRefused(
+            reason: String,
+        ) : Exception(reason)
+
         /** Runs the 5-phase pairing; phase 1 blocks until the user enters the PIN. */
-        @Suppress("ReturnCount") // each early return is a distinct phase-failure bail
         private suspend fun pair(host: MoonlightHost): Boolean {
             val pin = randomPin()
             Log.i(TAG, "pairing ${host.address}: PIN issued, phase 1 will wait up to ${PAIR_WAIT_S}s for it")
             _events.emit(MoonlightConnectionEvent.PairingPinReady(host, pin))
             val pairing = MoonlightPairing(identity, pin)
             return runCatching {
-                // Phase 1 (HTTP): the host prompts for the PIN and blocks until
-                // entered, so this one waits on a human rather than on the network.
-                val p1 =
-                    gateway.getHttp(
-                        MoonlightUrls.pairHttp(host.address, host.httpPort, pairing.phase1Params(deviceId)),
-                        MoonlightHttpGateway.PAIR_PIN_TIMEOUT_MS,
-                    )
-                val cert =
-                    MoonlightXml.parsePairReply(p1.body)?.plainCert
-                        ?: return pairingRefused(host, "phase 1 returned no host certificate (HTTP ${p1.status})")
-                pairing.onPhase1(
-                    String(
-                        com.tinkernorth.dish.core.net
-                            .hexToBytes(cert),
-                        Charsets.US_ASCII,
-                    ),
-                )
-
-                val p2 = gateway.getHttp(MoonlightUrls.pairHttp(host.address, host.httpPort, pairing.phase2Params(deviceId)))
-                val challenge =
-                    MoonlightXml.parsePairReply(p2.body)?.challengeResponse
-                        ?: return pairingRefused(host, "phase 2 returned no challenge response")
-                if (!pairing.onPhase2(challenge)) return pairingRefused(host, "phase 2 challenge did not verify (wrong PIN)")
-
-                val p3 = gateway.getHttp(MoonlightUrls.pairHttp(host.address, host.httpPort, pairing.phase3Params(deviceId)))
-                val secret =
-                    MoonlightXml.parsePairReply(p3.body)?.pairingSecret
-                        ?: return pairingRefused(host, "phase 3 returned no pairing secret")
-                if (!pairing.onPhase3(secret)) return pairingRefused(host, "phase 3 signature did not verify")
-
-                val p4 = gateway.getHttp(MoonlightUrls.pairHttp(host.address, host.httpPort, pairing.phase4Params(deviceId)))
-                if (MoonlightXml.parsePairReply(p4.body)?.paired != true) {
-                    return pairingRefused(host, "phase 4 did not confirm the pairing")
-                }
-
-                // Phases 1-4 proved the peer holds the PIN-derived key and signed with
-                // the certificate it presented, which outranks the pin this would keep.
-                // Without re-arming, a rebuilt host is refused with no way past it.
-                gateway.forgetPin(host.id)
-
-                // Phase 5 (HTTPS): confirm the client-cert-authenticated channel.
-                gateway.getHttps(MoonlightUrls.pairHttps(host.address, host.httpsPort, pairing.phase5Params(deviceId)), host.id)
+                runPairingPhases(host, pairing)
                 Log.i(TAG, "paired with ${host.name} at ${host.address}")
                 rememberPaired(host, paired = true)
                 _events.emit(MoonlightConnectionEvent.Paired(host))
@@ -596,9 +560,65 @@ class MoonlightConnectionManager
                 // runCatching turn it into one would raise "the host did not accept the
                 // PIN" the moment they pressed Cancel.
                 if (failure is kotlinx.coroutines.CancellationException) throw failure
-                Log.w(TAG, "pairing failed for ${host.address}: ${failure.message}", failure)
+                if (failure !is PairingRefused) Log.w(TAG, "pairing failed for ${host.address}: ${failure.message}", failure)
                 pairingRefused(host, failure.message ?: failure.javaClass.simpleName)
             }
+        }
+
+        // Phases 1 to 5 in order; any phase the host cuts short throws PairingRefused.
+        private fun runPairingPhases(
+            host: MoonlightHost,
+            pairing: MoonlightPairing,
+        ) {
+            // Phase 1 (HTTP): the host prompts for the PIN and blocks until
+            // entered, so this one waits on a human rather than on the network.
+            val p1 =
+                gateway.getHttp(
+                    MoonlightUrls.pairHttp(host.address, host.httpPort, pairing.phase1Params(deviceId)),
+                    MoonlightHttpGateway.PAIR_PIN_TIMEOUT_MS,
+                )
+            val cert =
+                required(MoonlightXml.parsePairReply(p1.body)?.plainCert) { "phase 1 returned no host certificate (HTTP ${p1.status})" }
+            pairing.onPhase1(
+                String(
+                    com.tinkernorth.dish.core.net
+                        .hexToBytes(cert),
+                    Charsets.US_ASCII,
+                ),
+            )
+
+            val p2 = gateway.getHttp(MoonlightUrls.pairHttp(host.address, host.httpPort, pairing.phase2Params(deviceId)))
+            val challenge = required(MoonlightXml.parsePairReply(p2.body)?.challengeResponse) { "phase 2 returned no challenge response" }
+            verified(pairing.onPhase2(challenge)) { "phase 2 challenge did not verify (wrong PIN)" }
+
+            val p3 = gateway.getHttp(MoonlightUrls.pairHttp(host.address, host.httpPort, pairing.phase3Params(deviceId)))
+            val secret = required(MoonlightXml.parsePairReply(p3.body)?.pairingSecret) { "phase 3 returned no pairing secret" }
+            verified(pairing.onPhase3(secret)) { "phase 3 signature did not verify" }
+
+            val p4 = gateway.getHttp(MoonlightUrls.pairHttp(host.address, host.httpPort, pairing.phase4Params(deviceId)))
+            verified(MoonlightXml.parsePairReply(p4.body)?.paired == true) { "phase 4 did not confirm the pairing" }
+
+            // Phases 1-4 proved the peer holds the PIN-derived key and signed with
+            // the certificate it presented, which outranks the pin this would keep.
+            // Without re-arming, a rebuilt host is refused with no way past it.
+            gateway.forgetPin(host.id)
+
+            // Phase 5 (HTTPS): confirm the client-cert-authenticated channel.
+            gateway.getHttps(MoonlightUrls.pairHttps(host.address, host.httpsPort, pairing.phase5Params(deviceId)), host.id)
+        }
+
+        // A phase's answer that must be there; the host refusing to give it ends the pairing.
+        private fun <T : Any> required(
+            value: T?,
+            reason: () -> String,
+        ): T = value ?: throw PairingRefused(reason())
+
+        // A phase's check that must hold; the host failing it ends the pairing.
+        private fun verified(
+            holds: Boolean,
+            reason: () -> String,
+        ) {
+            if (!holds) throw PairingRefused(reason())
         }
 
         private suspend fun pairingRefused(

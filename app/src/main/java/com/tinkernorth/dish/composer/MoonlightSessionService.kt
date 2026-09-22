@@ -140,7 +140,7 @@ class MoonlightSessionService : Service() {
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
                 .apply { acquire(WAKE_LOCK_TIMEOUT_MS) }
         val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        wifiLock = wifi.createWifiLock(wifiLockMode(Build.VERSION.SDK_INT), WIFI_LOCK_TAG).apply { acquire() }
+        wifiLock = wifi.createWifiLock(wifiLockMode(), WIFI_LOCK_TAG).apply { acquire() }
     }
 
     private fun releaseLocks() {

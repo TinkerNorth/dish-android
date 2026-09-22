@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Text and icons on top of the pulse pink: the donate screens ship in this flavour only,
+     so the colour they read lives here rather than in the shared palette. -->
+<resources>
+    <color name="colorOnPulse">@color/navy_900</color>
+</resources>

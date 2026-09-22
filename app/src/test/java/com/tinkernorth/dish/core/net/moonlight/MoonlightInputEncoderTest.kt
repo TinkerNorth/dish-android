@@ -67,10 +67,11 @@ class MoonlightInputEncoderTest {
     @Test
     fun `hot-path encode into a reused buffer matches the allocating form`() {
         val reused = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN)
-        MoonlightInputEncoder.encodeControllerMulti(reused, 0, 1, MoonlightControlProtocol.BTN_B, 0, 0, 0, 0, 0, 0)
+        val writer = MoonlightInputEncoder.ControllerMultiWriter(reused)
+        writer.encode(0, 1, MoonlightControlProtocol.BTN_B, 0, 0, 0, 0, 0, 0)
         val first = ByteArray(reused.remaining()).also { reused.get(it) }
         // Re-encode a different state into the SAME buffer with no reallocation.
-        MoonlightInputEncoder.encodeControllerMulti(reused, 0, 1, MoonlightControlProtocol.BTN_A, 0, 0, 0, 0, 0, 0)
+        writer.encode(0, 1, MoonlightControlProtocol.BTN_A, 0, 0, 0, 0, 0, 0)
         val second = ByteArray(reused.remaining()).also { reused.get(it) }
         assertEquals(MoonlightInputEncoder.CONTROLLER_MULTI_LEN, first.size)
         assertEquals(

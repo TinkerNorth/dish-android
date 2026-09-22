@@ -11,6 +11,7 @@ import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.SatelliteCatalogRepository
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.store.ControllerTypeStore
+import com.tinkernorth.dish.source.store.SatelliteHostFacts
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.store.SlotBindingStore
 import com.tinkernorth.dish.ui.main.MainActivity
@@ -80,8 +81,11 @@ object AppSingletons {
                     .getMethod("get")
                     .invoke(provider) as CapabilityComposer
             }
-        catalogRepo = capabilityComposer.fieldValue("catalogRepo") as SatelliteCatalogRepository
-        hostFeaturesStore = capabilityComposer.fieldValue("hostFeatures") as SatelliteHostFeaturesStore
+        // The composer takes the per-host facts as one bundle; the two the tests drive
+        // are reached through it.
+        val hostFacts = capabilityComposer.fieldValue("hostFacts") as SatelliteHostFacts
+        catalogRepo = hostFacts.catalog
+        hostFeaturesStore = hostFacts.features
         grabbed = true
     }
 

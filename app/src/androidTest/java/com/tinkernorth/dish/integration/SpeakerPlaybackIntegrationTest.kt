@@ -10,7 +10,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.tinkernorth.dish.DishApplication
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
 import com.tinkernorth.dish.composer.SpeakerPlayoutComposer
-import com.tinkernorth.dish.core.jni.SatelliteNative
+import com.tinkernorth.dish.core.jni.SlotReportNative
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
@@ -27,6 +27,7 @@ import com.tinkernorth.dish.source.connection.SatelliteSessionState
 import com.tinkernorth.dish.source.store.MIC_LED_OFF
 import com.tinkernorth.dish.source.store.MIC_LED_ON
 import com.tinkernorth.dish.source.store.MIC_LED_PULSE
+import com.tinkernorth.dish.source.store.SlotToggleStores
 import com.tinkernorth.dish.source.store.SpeakerEnabledStore
 import com.tinkernorth.dish.source.store.VirtualPadFeedbackStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
@@ -95,8 +96,9 @@ class SpeakerPlaybackIntegrationTest {
 
     private val sink = RecordingSink()
 
+    // The composer takes the four per-slot toggles as one bundle.
     private val speakerEnabled: SpeakerEnabledStore
-        get() = AppSingletons.capabilityComposer.fieldValue("speakerEnabled") as SpeakerEnabledStore
+        get() = (AppSingletons.capabilityComposer.fieldValue("toggles") as SlotToggleStores).speaker
 
     /** What every layer of the model has settled on for the bound slot, the engine's own input. */
     private fun slotCapabilities(): SlotCapabilities =
@@ -193,7 +195,7 @@ class SpeakerPlaybackIntegrationTest {
         val conn = manager.get(SatelliteConnection.idFor(server))!!
         val ctrlIdx = conn.slots.value[VIRTUAL_SLOT_ID]!!.controllerIndex
         for (f in 0 until count + 2) {
-            SatelliteNative.sendMicFrame(conn.handle, ctrlIdx, tone(f))
+            SlotReportNative.sendMicFrame(conn.handle, ctrlIdx, tone(f))
             Thread.sleep(FRAME_MS)
         }
         assertTrue("the fixture run must reach the fake", satellite.awaitMicAudioFrames(count + 2))

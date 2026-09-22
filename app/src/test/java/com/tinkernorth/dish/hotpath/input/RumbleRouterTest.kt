@@ -11,6 +11,7 @@ import com.tinkernorth.dish.source.connection.SatelliteSessionState
 import com.tinkernorth.dish.source.store.FeedbackActivityStore
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
+import io.mockk.Called
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -191,10 +192,9 @@ class RumbleRouterTest {
         val rumbleEnabled =
             mockk<RumbleEnabledStore> { every { isEnabled(any()) } returns rumbleOn }
 
-        @Suppress("DEPRECATION") // VIBRATOR_SERVICE: the SDK_INT=0 legacy path resolves it
         private val context =
             mockk<Context>(relaxed = true) {
-                every { getSystemService(Context.VIBRATOR_SERVICE) } returns vibrator
+                every { getSystemService(Vibrator::class.java) } returns vibrator
             }
         private val connection =
             mockk<SatelliteConnection> {
@@ -222,26 +222,24 @@ class RumbleRouterTest {
     }
 
     @Test
-    @Suppress("DEPRECATION") // Vibrator.vibrate(Long): what the SDK_INT=0 legacy path calls
     fun `dispatch suppresses the phone vibrator when the virtual slot is rumble-off`() {
         val h = DispatchHarness(slotId = VIRTUAL_SLOT_ID, controllerIndex = 0, rumbleOn = false)
 
         h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 500, weakMagnitude = 500, durationMs = 100)
 
         verify { h.rumbleEnabled.isEnabled(VIRTUAL_SLOT_ID) }
-        verify(exactly = 0) { h.vibrator.vibrate(any<Long>()) }
+        verify { h.vibrator wasNot Called }
         verify(exactly = 0) { h.native.sendUsbRumble(any(), any(), any()) }
     }
 
     @Test
-    @Suppress("DEPRECATION") // Vibrator.vibrate(Long): what the SDK_INT=0 legacy path calls
     fun `dispatch actuates the phone vibrator when the virtual slot is rumble-on`() {
         val h = DispatchHarness(slotId = VIRTUAL_SLOT_ID, controllerIndex = 0, rumbleOn = true)
 
         h.router.dispatch(sessionHandle = 7, controllerIndex = 0, strongMagnitude = 500, weakMagnitude = 500, durationMs = 100)
 
         verify { h.rumbleEnabled.isEnabled(VIRTUAL_SLOT_ID) }
-        verify { h.vibrator.vibrate(any<Long>()) }
+        verifyLegacyVibrate(h.vibrator)
     }
 
     @Test
@@ -265,7 +263,6 @@ class RumbleRouterTest {
     }
 
     @Test
-    @Suppress("DEPRECATION") // Vibrator.vibrate(Long): what the SDK_INT=0 legacy path calls
     fun `dispatch consults the gate with the framework device id and suppresses when off`() {
         val h = DispatchHarness(slotId = "1234", controllerIndex = 0, rumbleOn = false)
 
@@ -273,7 +270,15 @@ class RumbleRouterTest {
 
         // slotIdOf maps a framework target to its device id string; with the gate off nothing actuates.
         verify { h.rumbleEnabled.isEnabled("1234") }
-        verify(exactly = 0) { h.vibrator.vibrate(any<Long>()) }
+        verify { h.vibrator wasNot Called }
         verify(exactly = 0) { h.native.sendUsbRumble(any(), any(), any()) }
+    }
+
+    // Marker: under the JVM stub SDK_INT is 0, so the router takes its API 24/25 branch, and the
+    // only thing that branch can call is the deprecated Vibrator.vibrate(long) (RumbleRouter has
+    // the reason). Verifying that branch means naming that overload; it is named here, once.
+    @Suppress("DEPRECATION")
+    private fun verifyLegacyVibrate(vibrator: Vibrator) {
+        verify { vibrator.vibrate(any<Long>()) }
     }
 }

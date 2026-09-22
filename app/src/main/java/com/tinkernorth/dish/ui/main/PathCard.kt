@@ -42,56 +42,66 @@ data class PathCard(
     val wiredSwitchAvailable: Boolean = false,
 )
 
+// Where one device is in the Direct claim lifecycle, as the registry tracks it.
+data class ClaimState(
+    val isClaimedDirect: Boolean,
+    val restoring: Boolean,
+    // Only a live synthetic (not mid-release, not stuck) is actually streaming Direct.
+    val directPollHz: Int,
+    val needsReplug: Boolean = false,
+    val restoreStuck: Boolean = false,
+    val directFailure: DirectClaimFailure? = null,
+)
+
+// What is known about the model on each path.
+data class PathFacts(
+    val recognized: Boolean,
+    val standard: PathCapabilities,
+    val direct: PathCapabilities,
+    val padHasTouchpad: Boolean = false,
+)
+
 object PathCardMapper {
-    @Suppress("LongParameterList")
     fun map(
-        isClaimedDirect: Boolean,
         transport: Transport,
-        recognized: Boolean,
-        restoring: Boolean,
-        standard: PathCapabilities,
-        direct: PathCapabilities,
-        directPollHz: Int,
-        needsReplug: Boolean = false,
-        restoreStuck: Boolean = false,
-        directFailure: DirectClaimFailure? = null,
-        padHasTouchpad: Boolean = false,
+        claim: ClaimState,
+        facts: PathFacts,
         wiredUsbPresent: Boolean = false,
     ): PathCard {
         // The card reflects the mode the controller is ACTUALLY in: Direct only when a synthetic is live
         // (claimed, not mid-release, not stuck). Badge and toggle both derive from this so they can never
         // disagree; intent (stored pref / verified default) drives the auto-claim, not what the switch shows.
-        val onDirect = isClaimedDirect && !restoring && !restoreStuck
+        val onDirect = claim.isClaimedDirect && !claim.restoring && !claim.restoreStuck
         val risk =
             when {
                 transport == Transport.Bluetooth -> PathRisk.None
-                !recognized -> PathRisk.GuessedLayout
+                !facts.recognized -> PathRisk.GuessedLayout
                 else -> PathRisk.None
             }
         // A pad's own trackpad streams only on Direct and has no phone-overlay fallback: nudge only when
         // cleanly on Standard USB with Direct actually reachable (a recent failure is left to settle first).
         val suggestDirectForTouch =
-            padHasTouchpad &&
+            facts.padHasTouchpad &&
                 transport == Transport.Usb &&
-                !isClaimedDirect &&
-                !restoring &&
-                !restoreStuck &&
-                !needsReplug &&
-                directFailure == null
+                !claim.isClaimedDirect &&
+                !claim.restoring &&
+                !claim.restoreStuck &&
+                !claim.needsReplug &&
+                claim.directFailure == null
         return PathCard(
             currentMode = if (onDirect) InputPathMode.Direct else InputPathMode.Standard,
             selected = if (onDirect) PathChoice.Direct else PathChoice.Standard,
             transport = transport,
             directAvailable = transport == Transport.Usb,
-            recognized = recognized,
-            restoring = restoring,
-            standard = standard,
-            direct = direct,
-            directPollHz = directPollHz,
+            recognized = facts.recognized,
+            restoring = claim.restoring,
+            standard = facts.standard,
+            direct = facts.direct,
+            directPollHz = claim.directPollHz,
             risk = risk,
-            needsReplug = needsReplug,
-            restoreStuck = restoreStuck,
-            failure = directFailure,
+            needsReplug = claim.needsReplug,
+            restoreStuck = claim.restoreStuck,
+            failure = claim.directFailure,
             suggestDirectForTouch = suggestDirectForTouch,
             wiredSwitchAvailable = wiredUsbPresent && transport == Transport.Bluetooth,
         )

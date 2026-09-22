@@ -3,8 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@color/colorBackground">
+    android:layout_height="match_parent">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -143,13 +142,8 @@
 
     <FrameLayout
         android:id="@+id/blockerOverlay"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@color/colorOverlayScrim"
-        android:clickable="true"
-        android:focusable="true"
-        android:padding="@dimen/spacing_6xl"
-        android:visibility="gone">
+        style="@style/Widget.Dish.Scrim"
+        android:padding="@dimen/spacing_6xl">
 
         <com.google.android.material.card.MaterialCardView
             style="@style/Widget.Dish.Card"
@@ -163,25 +157,13 @@
                 android:orientation="vertical"
                 android:padding="@dimen/spacing_4xl">
 
-                <LinearLayout
+                <TextView
+                    android:id="@+id/tvBlockerTitle"
+                    style="@style/TextAppearance.Dish.Title"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <ImageView
-                        android:id="@+id/ivBlockerIcon"
-                        android:layout_width="@dimen/icon_battery"
-                        android:layout_height="@dimen/icon_battery"
-                        android:importantForAccessibility="no" />
-
-                    <TextView
-                        android:id="@+id/tvBlockerTitle"
-                        style="@style/TextAppearance.Dish.Title"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="@dimen/spacing_xl" />
-                </LinearLayout>
+                    android:drawablePadding="@dimen/spacing_xl"
+                    android:gravity="center_vertical" />
 
                 <TextView
                     android:id="@+id/tvBlockerBody"
@@ -234,13 +216,8 @@
 
     <FrameLayout
         android:id="@+id/applyOverlay"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@color/colorOverlayScrim"
-        android:clickable="true"
-        android:focusable="true"
-        android:padding="@dimen/spacing_6xl"
-        android:visibility="gone">
+        style="@style/Widget.Dish.Scrim"
+        android:padding="@dimen/spacing_6xl">
 
         <com.google.android.material.card.MaterialCardView
             style="@style/Widget.Dish.Card"

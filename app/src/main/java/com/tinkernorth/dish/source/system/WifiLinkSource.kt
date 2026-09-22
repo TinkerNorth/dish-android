@@ -108,8 +108,9 @@ object WifiSubnet {
 /**
  * On-demand Wi-Fi link probe for the diagnostics screen. RSSI, link speed, and frequency
  * are populated without a location grant (only SSID/BSSID are redacted on API 29+), so no
- * new permission flow is needed. Deprecated API accepted: the NetworkCallback replacement
- * demands a live callback registration for what is here a 2 s pull on one screen.
+ * new permission flow is needed. From 31 the info is read off the default network's
+ * transport capabilities, a synchronous pull with no callback registration; below that it
+ * is the WifiManager's own connection info.
  */
 @Singleton
 class WifiLinkSource
@@ -117,10 +118,8 @@ class WifiLinkSource
     constructor(
         @ApplicationContext private val context: Context,
     ) {
-        @Suppress("DEPRECATION")
         fun read(): WifiLink? {
-            val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager ?: return null
-            val info = runCatching { wifi.connectionInfo }.getOrNull() ?: return null
+            val info = currentWifiInfo() ?: return null
             if (info.networkId == -1 && info.rssi >= 0) return null
             val address = phoneAddress()
             return WifiLink(
@@ -133,6 +132,25 @@ class WifiLinkSource
                 ipv4 = address?.first,
                 prefixLength = address?.second ?: 0,
             )
+        }
+
+        private fun currentWifiInfo(): WifiInfo? =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return null
+                val network = cm.activeNetwork ?: return null
+                runCatching { cm.getNetworkCapabilities(network)?.transportInfo as? WifiInfo }.getOrNull()
+            } else {
+                legacyConnectionInfo()
+            }
+
+        // Marker: WifiManager.getConnectionInfo is deprecated from 31, where the network's
+        // TransportInfo (the branch above) replaces it. Below 31 it is the only synchronous
+        // read of the link's RSSI, speed and frequency. The right fix is a minSdk of 31; until
+        // then the deprecated call lives here and nowhere else.
+        @Suppress("DEPRECATION")
+        private fun legacyConnectionInfo(): WifiInfo? {
+            val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager ?: return null
+            return runCatching { wifi.connectionInfo }.getOrNull()
         }
 
         private fun generationOf(info: WifiInfo): WifiGeneration =

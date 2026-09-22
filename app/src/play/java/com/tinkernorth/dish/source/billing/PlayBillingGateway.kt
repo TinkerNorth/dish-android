@@ -146,32 +146,48 @@ class PlayBillingGateway
 
         // Play refuses a switch between base plans of one subscription under any replacement mode
         // other than WITHOUT_PRORATION or CHARGE_FULL_PRICE; the first matches the base plans'
-        // charge-on-next-billing-date proration in Play Console.
+        // charge-on-next-billing-date proration in Play Console. Billing 8.1 moved the mode onto
+        // the product being bought (SubscriptionProductReplacementParams); the purchase-level
+        // params still name the purchase being left by its token.
         override fun launchPurchase(
             activity: Activity,
             tier: Tier,
             replacing: OwnedPurchase?,
         ): Boolean {
             val details = detailsByProductId[tier.productId] ?: return false
+            val replaced = replacing?.takeIf { tier.kind == TierKind.MONTHLY }
             val product =
                 BillingFlowParams.ProductDetailsParams
                     .newBuilder()
                     .setProductDetails(details)
                     .apply { tier.offerToken?.let(::setOfferToken) }
-                    .build()
+                    .apply {
+                        if (replaced != null) {
+                            setSubscriptionProductReplacementParams(
+                                BillingFlowParams.ProductDetailsParams.SubscriptionProductReplacementParams
+                                    .newBuilder()
+                                    // One subscription product with several base plans: the plan
+                                    // being left belongs to the product the owned purchase names,
+                                    // which is the tier's own product.
+                                    .setOldProductId(replaced.productIds.firstOrNull() ?: tier.productId)
+                                    .setReplacementMode(
+                                        BillingFlowParams.ProductDetailsParams.SubscriptionProductReplacementParams
+                                            .ReplacementMode.WITHOUT_PRORATION,
+                                    ).build(),
+                            )
+                        }
+                    }.build()
             val params =
                 BillingFlowParams
                     .newBuilder()
                     .setProductDetailsParamsList(listOf(product))
                     .apply {
-                        if (replacing != null && tier.kind == TierKind.MONTHLY) {
+                        if (replaced != null) {
                             setSubscriptionUpdateParams(
                                 BillingFlowParams.SubscriptionUpdateParams
                                     .newBuilder()
-                                    .setOldPurchaseToken(replacing.token)
-                                    .setSubscriptionReplacementMode(
-                                        BillingFlowParams.SubscriptionUpdateParams.ReplacementMode.WITHOUT_PRORATION,
-                                    ).build(),
+                                    .setOldPurchaseToken(replaced.token)
+                                    .build(),
                             )
                         }
                     }.build()

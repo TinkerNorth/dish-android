@@ -14,6 +14,10 @@ internal fun Context.diagKv(
     value: String,
 ): String = getString(R.string.diagnostics_kv, getString(label), value)
 
+// A plural form is chosen from an Int, and the wire counters are Long. Anything past
+// Int.MAX_VALUE takes the same form as any other large count in every language shipped.
+internal fun Long.pluralCount(): Int = coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
+
 internal fun Context.diagYesNo(value: Boolean): String = getString(if (value) R.string.diagnostics_yes else R.string.diagnostics_no)
 
 internal fun Context.hostValue(host: BoundHostDiag?): String =

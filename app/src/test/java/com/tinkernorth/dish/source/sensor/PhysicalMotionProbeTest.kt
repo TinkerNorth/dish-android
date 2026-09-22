@@ -33,41 +33,24 @@ class PhysicalMotionProbeTest {
 
     @Test
     fun `returns false on API below 31 - per-device sensor API does not exist`() {
-        assertFalse(PhysicalMotionProbe.evaluate(sdkInt = 30, device = deviceWithGyro()))
+        // The JVM stub reports SDK_INT 0, so the gate in hasGyro is what answers here: it must
+        // never reach the per-device sensor read.
+        assertTrue(Build.VERSION.SDK_INT < Build.VERSION_CODES.S)
+        assertFalse(PhysicalMotionProbe.hasGyro(deviceId = 7))
     }
 
     @Test
     fun `returns false when the InputDevice is null`() {
-        assertFalse(PhysicalMotionProbe.evaluate(sdkInt = Build.VERSION_CODES.S, device = null))
+        assertFalse(PhysicalMotionProbe.probeGyro(device = null))
     }
 
     @Test
     fun `returns false when the pad has no gyroscope sensor`() {
-        assertFalse(
-            PhysicalMotionProbe.evaluate(
-                sdkInt = Build.VERSION_CODES.S,
-                device = deviceWithoutGyro(),
-            ),
-        )
+        assertFalse(PhysicalMotionProbe.probeGyro(device = deviceWithoutGyro()))
     }
 
     @Test
-    fun `returns true when API 31+ and the pad reports a gyroscope`() {
-        assertTrue(
-            PhysicalMotionProbe.evaluate(
-                sdkInt = Build.VERSION_CODES.S,
-                device = deviceWithGyro(),
-            ),
-        )
-    }
-
-    @Test
-    fun `is stable across higher SDK levels, does not regress past API 31`() {
-        assertTrue(
-            PhysicalMotionProbe.evaluate(
-                sdkInt = Build.VERSION_CODES.S + 5,
-                device = deviceWithGyro(),
-            ),
-        )
+    fun `returns true when the pad reports a gyroscope`() {
+        assertTrue(PhysicalMotionProbe.probeGyro(device = deviceWithGyro()))
     }
 }

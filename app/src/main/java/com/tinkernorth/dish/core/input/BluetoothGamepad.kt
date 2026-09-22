@@ -24,131 +24,74 @@ object BluetoothGamepad {
     }
 }
 
-@Suppress("MagicNumber", "LongMethod")
+// The HID report descriptor, one item per line as the HID 1.11 spec writes them: a tag byte
+// followed by its data bytes. Kept as text so the structure reads the way a descriptor tool
+// prints it; hidItems turns it into the bytes the SDP record carries.
 internal fun buildHidDescriptor(): ByteArray =
-    byteArrayOf(
-        0x05,
-        0x01, // Usage Page (Generic Desktop)
-        0x09,
-        0x05, // Usage (Gamepad)
-        0xA1.toByte(),
-        0x01, // Collection (Application)
-        0x85.toByte(),
-        0x01, // Report ID (1)
-        0x05,
-        0x09, // Usage Page (Buttons)
-        0x19,
-        0x01, // Usage Minimum (1)
-        0x29,
-        0x0E, // Usage Maximum (14)
-        0x15,
-        0x00, // Logical Minimum (0)
-        0x25,
-        0x01, // Logical Maximum (1)
-        0x75,
-        0x01, // Report Size (1)
-        0x95.toByte(),
-        0x0E, // Report Count (14)
-        0x81.toByte(),
-        0x02, // Input (Variable)
-        0x75,
-        0x01,
-        0x95.toByte(),
-        0x02,
-        0x81.toByte(),
-        0x03, // 2-bit padding to byte boundary
-        0x05,
-        0x01,
-        0x09,
-        0x39, // Usage (Hat Switch)
-        0x15,
-        0x01, // Logical Minimum (1)
-        0x25,
-        0x08, // Logical Maximum (8)
-        0x35,
-        0x00, // Physical Minimum (0)
-        0x46,
-        0x3B,
-        0x01, // Physical Maximum (315)
-        0x65,
-        0x14, // Unit (Degrees)
-        0x75,
-        0x04, // Report Size (4)
-        0x95.toByte(),
-        0x01, // Report Count (1)
-        0x81.toByte(),
-        0x42, // Input (Variable, Null State)
-        0x75,
-        0x04,
-        0x95.toByte(),
-        0x01,
-        0x81.toByte(),
-        0x03,
-        0x35,
-        0x00,
-        0x45,
-        0x00,
-        0x65,
-        0x00, // Reset globals leaked by Hat Switch
-        0x05,
-        0x01,
-        0x09,
-        0x30, // Usage (X)
-        0x09,
-        0x31, // Usage (Y)
-        0x16,
-        0x00,
-        0x80.toByte(), // Logical Minimum (-32768)
-        0x26,
-        0xFF.toByte(),
-        0x7F, // Logical Maximum (32767)
-        0x75,
-        0x10, // Report Size (16)
-        0x95.toByte(),
-        0x02, // Report Count (2)
-        0x81.toByte(),
-        0x02,
-        0x09,
-        0x33, // Usage (Rx)
-        0x09,
-        0x34, // Usage (Ry)
-        0x16,
-        0x00,
-        0x80.toByte(),
-        0x26,
-        0xFF.toByte(),
-        0x7F,
-        0x75,
-        0x10,
-        0x95.toByte(),
-        0x02,
-        0x81.toByte(),
-        0x02,
-        0x05,
-        0x02, // Usage Page (Simulation)
-        0x09,
-        0xC5.toByte(), // Usage (Brake / Left Trigger)
-        0x09,
-        0xC4.toByte(), // Usage (Accelerator / Right Trigger)
-        0x15,
-        0x00,
-        0x26,
-        0xFF.toByte(),
-        0x00,
-        0x75,
-        0x08,
-        0x95.toByte(),
-        0x02,
-        0x81.toByte(),
-        0x02,
-        0xC0.toByte(), // End Collection
+    hidItems(
+        "05 01", // Usage Page (Generic Desktop)
+        "09 05", // Usage (Gamepad)
+        "A1 01", // Collection (Application)
+        "85 01", // Report ID (1)
+        "05 09", // Usage Page (Buttons)
+        "19 01", // Usage Minimum (1)
+        "29 0E", // Usage Maximum (14)
+        "15 00", // Logical Minimum (0)
+        "25 01", // Logical Maximum (1)
+        "75 01", // Report Size (1)
+        "95 0E", // Report Count (14)
+        "81 02", // Input (Variable)
+        "75 01 95 02 81 03", // 2-bit padding to byte boundary
+        "05 01", // Usage Page (Generic Desktop)
+        "09 39", // Usage (Hat Switch)
+        "15 01", // Logical Minimum (1)
+        "25 08", // Logical Maximum (8)
+        "35 00", // Physical Minimum (0)
+        "46 3B 01", // Physical Maximum (315)
+        "65 14", // Unit (Degrees)
+        "75 04", // Report Size (4)
+        "95 01", // Report Count (1)
+        "81 42", // Input (Variable, Null State)
+        "75 04 95 01 81 03", // 4-bit padding to byte boundary
+        "35 00 45 00 65 00", // Reset globals leaked by Hat Switch
+        "05 01", // Usage Page (Generic Desktop)
+        "09 30", // Usage (X)
+        "09 31", // Usage (Y)
+        "16 00 80", // Logical Minimum (-32768)
+        "26 FF 7F", // Logical Maximum (32767)
+        "75 10", // Report Size (16)
+        "95 02", // Report Count (2)
+        "81 02", // Input (Variable)
+        "09 33", // Usage (Rx)
+        "09 34", // Usage (Ry)
+        "16 00 80", // Logical Minimum (-32768)
+        "26 FF 7F", // Logical Maximum (32767)
+        "75 10", // Report Size (16)
+        "95 02", // Report Count (2)
+        "81 02", // Input (Variable)
+        "05 02", // Usage Page (Simulation)
+        "09 C5", // Usage (Brake / Left Trigger)
+        "09 C4", // Usage (Accelerator / Right Trigger)
+        "15 00", // Logical Minimum (0)
+        "26 FF 00", // Logical Maximum (255)
+        "75 08", // Report Size (8)
+        "95 02", // Report Count (2)
+        "81 02", // Input (Variable)
+        "C0", // End Collection
     )
+
+// Each item is space-separated hex bytes; the descriptor is their concatenation.
+private fun hidItems(vararg items: String): ByteArray =
+    items
+        .flatMap { item -> item.split(' ').map { it.toInt(HEX_RADIX).toByte() } }
+        .toByteArray()
+
+private const val HEX_RADIX = 16
 
 internal const val REPORT_ID = 1
 internal const val REPORT_SIZE = 14
 
 // Caller passes XInput axes (stick-up = +Y); HID Generic Desktop Y is the opposite sign, so Y is negated here.
-@Suppress("MagicNumber")
 internal fun buildHidReport(
     buttons: Int,
     hatSwitch: Int,

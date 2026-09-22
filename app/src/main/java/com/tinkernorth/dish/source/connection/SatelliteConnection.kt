@@ -34,27 +34,59 @@ internal fun counterNeedsRepush(sendCounter: Long): Boolean = sendCounter >= COU
  * per-controller PUT/DELETE while live). UDP carries streams only. It can
  * never mutate topology (satellite docs/contract.md).
  */
-@Suppress("LongParameterList")
 class SatelliteConnection(
     val id: String,
     server: DiscoveredServer,
     private val scope: CoroutineScope,
     private val controllerRepo: ControllerRepository,
     private val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO,
-    // The WHOLE caps word for a slot, pulled at descriptor-build time from the composer
-    // (CapabilityResolver.wireCaps). Not a base plus one bit: every cap the client advertises
-    // is a live per-slot fact, and computing part of it here would let the descriptor drift
-    // from the capability model the rest of the app renders.
-    private val wireCapsFor: (slotId: String) -> Int = { DEFAULT_WIRE_CAPABILITIES },
-    // Pulled at descriptor-build time like wireCapsFor, so the mode a slot declares can
-    // never drift from the store-derived routing the rest of the app displays.
-    private val touchpadModeFor: (slotId: String) -> String = { ControllerDescriptor.TOUCHPAD_MODE_OFF },
+    private val hooks: Hooks = Hooks(),
     private val motionBackendStatusStore: SatelliteMotionBackendStatusStore? = null,
-    // Manager-provided REST sync hooks. Slot-level changes ride the
-    // per-controller routes so the session (and its UDP keys) never churns.
-    private val onSlotChanged: (slotId: String) -> Unit = {},
-    private val onSlotRemoved: (ctrlIdx: Int) -> Unit = {},
 ) : TelemetrySink {
+    /** What the owning manager lends a connection: descriptor-time lookups and REST sync hooks. */
+    class Hooks(
+        // The WHOLE caps word for a slot, pulled at descriptor-build time from the composer
+        // (CapabilityResolver.wireCaps). Not a base plus one bit: every cap the client advertises
+        // is a live per-slot fact, and computing part of it here would let the descriptor drift
+        // from the capability model the rest of the app renders.
+        val wireCapsFor: (slotId: String) -> Int = { DEFAULT_WIRE_CAPABILITIES },
+        // Pulled at descriptor-build time like wireCapsFor, so the mode a slot declares can
+        // never drift from the store-derived routing the rest of the app displays.
+        val touchpadModeFor: (slotId: String) -> String = { ControllerDescriptor.TOUCHPAD_MODE_OFF },
+        // Manager-provided REST sync hooks. Slot-level changes ride the
+        // per-controller routes so the session (and its UDP keys) never churns.
+        val onSlotChanged: (slotId: String) -> Unit = {},
+        val onSlotRemoved: (ctrlIdx: Int) -> Unit = {},
+    )
+
+    /** What the session PUT granted: the UDP tuple and the applied topology it confirmed. */
+    data class SessionGrant(
+        val handle: Int,
+        val connectionId: String,
+        val epoch: Int,
+        val applied: List<ControllerApplyDto>,
+        val mouseControlGranted: Boolean = false,
+    )
+
+    /**
+     * How the manager hears about a live session's fate. [onDead] fires on heartbeat death;
+     * [onClosedByServer] on an authenticated close-notify (immediate, no death-timeout wait);
+     * [onReconcileNeeded] when the heartbeat-ack epoch/bitmap stops matching what we believe
+     * is applied; [onRekeyNeeded] once per session when the send counter crosses the re-PUT
+     * threshold; [onApplyFailures] with the slots the satellite refused.
+     */
+    class SessionCallbacks(
+        val onDead: () -> Unit,
+        val onClosedByServer: (reason: Int) -> Unit = { onDead() },
+        val onReconcileNeeded: () -> Unit = {},
+        val onRekeyNeeded: () -> Unit = {},
+        val onApplyFailures: (failures: List<ControllerApplyDto>) -> Unit = {},
+    )
+
+    private val wireCapsFor: (slotId: String) -> Int get() = hooks.wireCapsFor
+    private val touchpadModeFor: (slotId: String) -> String get() = hooks.touchpadModeFor
+    private val onSlotChanged: (slotId: String) -> Unit get() = hooks.onSlotChanged
+    private val onSlotRemoved: (ctrlIdx: Int) -> Unit get() = hooks.onSlotRemoved
     private val _server = MutableStateFlow(server)
     val server: StateFlow<DiscoveredServer> = _server.asStateFlow()
 
@@ -132,31 +164,24 @@ class SatelliteConnection(
     }
 
     /**
-     * Session PUT succeeded: adopt the UDP tuple + the applied state from the
-     * response. [onDead] fires on heartbeat death; [onClosedByServer] on an
-     * authenticated close-notify (immediate, no death-timeout wait);
-     * [onReconcileNeeded] when the heartbeat-ack epoch/bitmap stops matching
-     * what we believe is applied; [onRekeyNeeded] once per session when the
-     * send counter crosses the re-PUT threshold.
+     * Session PUT succeeded: adopt the UDP tuple + the applied state from the response
+     * ([grant]) and report the session's fate through [callbacks].
      */
     internal fun markConnected(
-        handle: Int,
-        connectionId: String,
-        epoch: Int,
-        applied: List<ControllerApplyDto>,
-        mouseControlGranted: Boolean = false,
-        onDead: () -> Unit,
-        onClosedByServer: (reason: Int) -> Unit = { onDead() },
-        onReconcileNeeded: () -> Unit = {},
-        onRekeyNeeded: () -> Unit = {},
-        onApplyFailures: (failures: List<ControllerApplyDto>) -> Unit = {},
+        grant: SessionGrant,
+        callbacks: SessionCallbacks,
     ) {
         if (_state.value != SatelliteSessionState.Linking) return
+        val handle = grant.handle
+        val onDead = callbacks.onDead
+        val onClosedByServer = callbacks.onClosedByServer
+        val onReconcileNeeded = callbacks.onReconcileNeeded
+        val onRekeyNeeded = callbacks.onRekeyNeeded
         // Publish tuple before state flip so concurrent sendReport never sees Live with null/-1.
-        live.set(LiveHandle(handle, connectionId))
-        lastAppliedEpoch = epoch
-        this.mouseControlGranted = mouseControlGranted
-        applyResults(applied, onApplyFailures)
+        live.set(LiveHandle(handle, grant.connectionId))
+        lastAppliedEpoch = grant.epoch
+        this.mouseControlGranted = grant.mouseControlGranted
+        applyResults(grant.applied, callbacks.onApplyFailures)
         _state.value = SatelliteSessionState.Live
         // Drain the downstream socket (acks, rumble, close-notify); receiveAck
         // blocks ≤500 ms. Negative status = socket gone and every further call
@@ -512,7 +537,6 @@ class SatelliteConnection(
         return controllerRepo.sendMicFrame(snap.handle, info.controllerIndex, pcmMono)
     }
 
-    @Suppress("LongParameterList")
     override fun sendMotion(
         slotId: String,
         gyroX: Short,
@@ -550,43 +574,14 @@ class SatelliteConnection(
         controllerRepo.sendBattery(snap.handle, info.controllerIndex, level, status)
     }
 
-    @Suppress("LongParameterList")
     override fun sendTouchpad(
         slotId: String,
-        finger0Active: Boolean,
-        finger1Active: Boolean,
-        buttonPressed: Boolean,
-        rightPressed: Boolean,
-        middlePressed: Boolean,
-        finger0TrackingId: Int,
-        finger0X: Short,
-        finger0Y: Short,
-        finger1TrackingId: Int,
-        finger1X: Short,
-        finger1Y: Short,
-        eventTimeMs: Long,
-        scrollDelta: Short,
+        report: TouchpadReport,
     ) {
         val snap = live.get() ?: return
         val info = _slots.value[slotId] ?: return
         if (!info.registered) return
-        controllerRepo.sendTouchpad(
-            snap.handle,
-            info.controllerIndex,
-            finger0Active,
-            finger1Active,
-            buttonPressed,
-            rightPressed,
-            middlePressed,
-            finger0TrackingId,
-            finger0X,
-            finger0Y,
-            finger1TrackingId,
-            finger1X,
-            finger1Y,
-            eventTimeMs,
-            scrollDelta,
-        )
+        controllerRepo.sendTouchpad(snap.handle, info.controllerIndex, report)
     }
 
     companion object {

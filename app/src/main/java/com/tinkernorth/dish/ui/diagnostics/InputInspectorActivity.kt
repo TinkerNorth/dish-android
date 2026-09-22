@@ -36,7 +36,6 @@ import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import kotlin.math.roundToInt
 
-@Suppress("TooManyFunctions")
 @AndroidEntryPoint
 class InputInspectorActivity : BaseGamepadHostActivity() {
     @Inject lateinit var physicalInputNative: PhysicalInputNative

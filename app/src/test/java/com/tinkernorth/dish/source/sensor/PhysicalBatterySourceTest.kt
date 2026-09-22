@@ -8,6 +8,7 @@ import android.content.Intent
 import android.hardware.BatteryState
 import android.os.BatteryManager
 import android.view.InputDevice
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.composer.PhysicalReachabilityComposer
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
@@ -17,12 +18,15 @@ import com.tinkernorth.dish.source.connection.TelemetrySink
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
 import io.mockk.slot
+import io.mockk.unmockkStatic
 import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -48,11 +52,20 @@ class PhysicalBatterySourceTest {
             every { readLevel(any()) } returns null
         }
     private val receiver = slot<BroadcastReceiver>()
-    private val context =
-        mockk<Context>(relaxed = true) {
-            every { registerReceiver(capture(receiver), any(), any(), any()) } returns null
-        }
+    private val context = mockk<Context>(relaxed = true)
+
+    init {
+        mockkStatic(ContextCompat::class)
+        every { ContextCompat.registerReceiver(context, capture(receiver), any(), any()) } returns null
+    }
+
     private val owner = mockk<LifecycleOwner>()
+
+    @After
+    fun tearDown() {
+        unmockkStatic(ContextCompat::class)
+    }
+
     private val pads = mutableMapOf<Int, InputDevice>()
     private val lookups = mutableListOf<Int>()
     private val batteryReads = mutableListOf<Int>()

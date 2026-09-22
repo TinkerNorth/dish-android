@@ -35,7 +35,6 @@ fun MaterialButton.setLoading(
     }
 }
 
-@Suppress("unused")
 fun View.applyDishDisabledAlpha() {
     alpha = if (isEnabled) 1f else 0.4f
 }

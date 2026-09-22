@@ -33,8 +33,8 @@ and only `NativeUnavailableActivity` is exempt.
 `StreamingScreenCoverageTest` enforces this against the manifest.
 USB Direct never touches an Activity: native per-device poller
 threads read URBs and send straight to the wire. Events get
-normalised on the JVM, cross into the native layer via
-`SatelliteNative`, and the native side runs the encoder + `sendto` on
+normalised on the JVM, cross into the native layer via the `core.jni`
+objects (`PhysicalSlotNative`, `SlotReportNative`), and the native side runs the encoder + `sendto` on
 the same thread the event arrived on. Discovery, motion, battery, and
 touchpad take the same JNI path with their own opcodes.
 
@@ -230,7 +230,9 @@ into IO and back.
   trust manager and trust-on-first-use pinning live here, not in
   callers.
 - The JNI wrappers (`ControllerRepository`, `PhysicalInputNative`) are
-  gateways over `SatelliteNative`.
+  gateways over the `core.jni` native objects (`SessionNative`,
+  `SlotReportNative`, `PhysicalSlotNative`, `UsbDirectNative`,
+  `ModelTableNative`, `InstrumentationNative`), one per native responsibility.
 
 A gateway is mockable by construction: callers depend on the gateway
 type, never on the raw socket or JNI object, so a test injects a fake.
@@ -454,7 +456,7 @@ through `SatelliteConnection.slots`) instead of always buzzing the
 phone: the on-screen pad drives the phone vibrator, a framework gamepad
 drives its own `InputDevice` vibrator, and a claimed USB-direct pad
 gets a device-specific report written to its USB OUT endpoint
-(`SatelliteNative.sendUsbRumble` to `usbhost::sendRumble` to
+(`UsbDirectNative.sendUsbRumble` to `usbhost::sendRumble` to
 `usbparsers::runRumble`). Routing is strict: a pad with no usable
 actuator stays silent rather than buzzing the phone. Slot-kind routing,
 magnitude/duration mapping, the USB report layouts, and the satellite

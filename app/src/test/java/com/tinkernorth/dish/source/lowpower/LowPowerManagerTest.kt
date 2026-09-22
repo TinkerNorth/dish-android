@@ -82,13 +82,12 @@ class LowPowerManagerTest {
         update.invoke(lpm)
     }
 
+    // Drives the state through the source's own protected setter (AbstractStateSource.setState),
+    // which is what the manager's transitions call, rather than reaching into the flow.
     private fun setStateDirect(state: LowPowerManager.State) {
-        val superClass = LowPowerManager::class.java.superclass!!
-        val field = superClass.getDeclaredField("_state")
-        field.isAccessible = true
-        @Suppress("UNCHECKED_CAST")
-        val flow = field.get(lpm) as kotlinx.coroutines.flow.MutableStateFlow<LowPowerManager.State>
-        flow.value = state
+        val setter = LowPowerManager::class.java.superclass!!.getDeclaredMethod("setState", Any::class.java)
+        setter.isAccessible = true
+        setter.invoke(lpm, state)
     }
 
     private fun statusTextHistory(): List<String> {
@@ -167,8 +166,7 @@ class LowPowerManagerTest {
         lpm.views = null
         lpm.activeControllerCount = { 1 }
         lpm.refreshStatus()
-        @Suppress("UNUSED_VARIABLE")
-        val unused = View.NO_ID
+        verify(exactly = 0) { statusView.text = any() }
     }
 
     @Test

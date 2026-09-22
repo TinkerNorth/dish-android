@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<View xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- The rule between the satellite list and the bluetooth list. MaterialDivider paints its
+     own line, so the row carries no background of its own. -->
+<com.google.android.material.divider.MaterialDivider xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="@dimen/divider_height"
+    android:layout_height="wrap_content"
     android:layout_marginVertical="@dimen/spacing_5xl"
-    android:background="@color/colorOutline" />
+    app:dividerColor="@color/colorOutline"
+    app:dividerThickness="@dimen/divider_height" />

@@ -39,6 +39,7 @@ import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.moonlightTypeLabelRes
+import com.tinkernorth.dish.ui.common.setLeadingIcon
 import com.tinkernorth.dish.ui.common.tierPillSpec
 import com.tinkernorth.dish.ui.donate.wireDonateButton
 import com.tinkernorth.dish.ui.setup.ReviewFlow
@@ -206,7 +207,7 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
     ) {
         val s = binding.sectionInput
         s.ivInputIcon.setImageResource(snapshot.link.iconRes())
-        s.tvInputName.text = " · ${snapshot.name}"
+        s.tvInputName.text = getString(R.string.binding_input_name_after_link, snapshot.name)
 
         val (linkLabel, linkIcon) =
             when {
@@ -270,7 +271,11 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
         snapshot: BindingSnapshot,
     ) {
         val d = binding.sectionDestination
-        d.ivDestIcon.setImageResource(destinationGlyph(state.selectedHost?.kind))
+        d.tvDestLabel.setLeadingIcon(
+            destinationGlyph(state.selectedHost?.kind),
+            R.dimen.config_section_icon_size,
+            getColor(R.color.colorMuted),
+        )
         d.tvDestLabel.text = getString(R.string.binding_label_destination)
 
         val noHosts = state.noHosts
@@ -477,8 +482,7 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
         @StringRes title: Int,
         body: String,
     ) {
-        binding.ivBlockerIcon.setImageResource(icon)
-        binding.ivBlockerIcon.imageTintList = ColorStateList.valueOf(getColor(tint))
+        binding.tvBlockerTitle.setLeadingIcon(icon, R.dimen.icon_battery, getColor(tint))
         binding.tvBlockerTitle.setText(title)
         binding.tvBlockerBody.text = body
     }

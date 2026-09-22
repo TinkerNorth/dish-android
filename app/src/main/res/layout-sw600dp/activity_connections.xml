@@ -41,10 +41,11 @@
                 android:text="@string/action_scan" />
         </LinearLayout>
 
+        <!-- Last child of an exactly measured column, so match_parent measures to the space
+             left under the scan row: the two lists below hold the only weights. -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
+            android:layout_height="match_parent"
             android:orientation="horizontal"
             android:paddingHorizontal="@dimen/spacing_5xl"
             android:paddingTop="@dimen/spacing_lg"

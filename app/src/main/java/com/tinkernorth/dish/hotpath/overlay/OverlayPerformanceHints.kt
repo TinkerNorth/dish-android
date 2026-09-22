@@ -1,17 +1,8 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-@file:Suppress("MatchingDeclarationName")
-
 package com.tinkernorth.dish.hotpath.overlay
 
 import android.view.InputDevice
-
-internal data class DisplayModeInfo(
-    val modeId: Int,
-    val width: Int,
-    val height: Int,
-    val refreshRate: Float,
-)
 
 // Highest-refresh mode at the CURRENT physical resolution; switching resolution would force a reconfigure
 // and is not worth it. Returns 0 (no preference) when the current mode already has the best available rate.

@@ -25,7 +25,12 @@ class WakeStateComposerTest {
         )
 
     private fun composerFor(
-        bindings: MutableStateFlow<Map<String, String>>,
+        bindings: MutableStateFlow<
+            Map<
+                String,
+                String,
+            >,
+        >,
         connections: MutableStateFlow<List<ConnectionSummary>>,
         scope: kotlinx.coroutines.CoroutineScope,
     ): WakeStateComposer {

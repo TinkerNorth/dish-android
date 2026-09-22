@@ -12,13 +12,14 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.PhysicalReachabilityComposer
 import com.tinkernorth.dish.composer.WakeStateController
-import com.tinkernorth.dish.core.jni.SatelliteNative
+import com.tinkernorth.dish.core.jni.PhysicalSlotNative
 import com.tinkernorth.dish.databinding.OverlayLowPowerBinding
 import com.tinkernorth.dish.databinding.OverlayLowPowerChipBinding
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
@@ -122,7 +123,7 @@ class GamepadActivityHost(
         val isKnownGamepad = event.deviceId in gamepadRegistry.devices.value
         if (!isGamepadSource(event.source) && !isKnownGamepad) return false
         if (inputTiming.enabled) inputTiming.record(event.deviceId, event.eventTime, SystemClock.uptimeMillis())
-        SatelliteNative.processGamepadKeyEvent(
+        PhysicalSlotNative.processGamepadKeyEvent(
             event.deviceId,
             event.source,
             event.action,
@@ -145,7 +146,7 @@ class GamepadActivityHost(
         }
         if (isJoy && inputTiming.enabled) inputTiming.record(event.deviceId, event.eventTime, SystemClock.uptimeMillis())
         return isJoy &&
-            SatelliteNative.processGamepadMotionEvent(
+            PhysicalSlotNative.processGamepadMotionEvent(
                 event.deviceId,
                 event.source,
                 event.action,
@@ -178,7 +179,7 @@ class GamepadActivityHost(
     fun onWindowFocusChanged(hasFocus: Boolean) {
         padTouchpad.onWindowFocusChanged(hasFocus)
         if (!hasFocus) {
-            SatelliteNative.releaseAllPhysicalReports()
+            PhysicalSlotNative.releaseAllPhysicalReports()
             return
         }
         if (performanceHintsApplied) return
@@ -218,7 +219,7 @@ class GamepadActivityHost(
         if (powerManager?.isSustainedPerformanceModeSupported == true) {
             window.setSustainedPerformanceMode(true)
         }
-        val display = currentDisplay() ?: return
+        val display = ContextCompat.getDisplayOrDefault(activity)
         val current = display.mode ?: return
         val modeId =
             highestRefreshRateModeId(
@@ -229,14 +230,6 @@ class GamepadActivityHost(
             window.attributes = window.attributes.apply { preferredDisplayModeId = modeId }
         }
     }
-
-    private fun currentDisplay(): Display? =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            activity.display
-        } else {
-            @Suppress("DEPRECATION")
-            activity.windowManager.defaultDisplay
-        }
 
     private fun Display.Mode.toInfo(): DisplayModeInfo = DisplayModeInfo(modeId, physicalWidth, physicalHeight, refreshRate)
 }

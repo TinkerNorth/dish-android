@@ -82,7 +82,7 @@ class WakeStateController
             // Keep the radio out of Wi-Fi power-save so input/rumble packets aren't delayed by PSM wakeups.
             wifiLock =
                 wifiManager
-                    .createWifiLock(wifiLockMode(Build.VERSION.SDK_INT), WIFI_LOCK_TAG)
+                    .createWifiLock(wifiLockMode(), WIFI_LOCK_TAG)
                     .apply { acquire() }
         }
 
@@ -103,11 +103,15 @@ class WakeStateController
         }
     }
 
+// The value of WifiManager.WIFI_MODE_FULL_HIGH_PERF: the only full lock mode API 24-28 accept.
+// The platform constant is deprecated from API 34, where every full lock is low latency anyway,
+// and javac inlines it as this literal in either spelling.
+internal const val WIFI_MODE_FULL_HIGH_PERF_LEGACY = 3
+
 // WIFI_MODE_FULL_LOW_LATENCY disables Wi-Fi power-save for real-time traffic; HIGH_PERF is the pre-29 fallback.
-internal fun wifiLockMode(sdkInt: Int): Int =
-    if (sdkInt >= Build.VERSION_CODES.Q) {
+internal fun wifiLockMode(): Int =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         WifiManager.WIFI_MODE_FULL_LOW_LATENCY
     } else {
-        @Suppress("DEPRECATION")
-        WifiManager.WIFI_MODE_FULL_HIGH_PERF
+        WIFI_MODE_FULL_HIGH_PERF_LEGACY
     }

@@ -2,15 +2,15 @@
 
 package com.tinkernorth.dish.source.bluetooth
 
-import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.os.Build
+import android.util.Log
 import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -65,26 +65,49 @@ class BluetoothDeviceScanner(
         cancelDiscovery()
     }
 
-    @SuppressLint("MissingPermission")
+    // The caller decides whether scanning is allowed; the reads below still answer a revoked
+    // grant with what they can (no bonded seed, no name, no scan) instead of an exception.
     private fun seedBondedLocked() {
+        val adapter = adapterProvider() ?: return
         val bonded =
-            adapterProvider()?.let { adapter -> runCatching { adapter.bondedDevices }.getOrNull() } ?: return
+            try {
+                adapter.bondedDevices
+            } catch (e: SecurityException) {
+                Log.w(TAG, "bonded devices unavailable without BLUETOOTH_CONNECT: ${e.message}")
+                null
+            } ?: return
         for (device in bonded) {
             val mac = device.address ?: continue
-            byMac[mac] = Device(mac, runCatching { device.name }.getOrNull(), bonded = true)
+            byMac[mac] = Device(mac, nameOf(device), bonded = true)
         }
     }
 
-    @SuppressLint("MissingPermission")
+    private fun nameOf(device: BluetoothDevice): String? =
+        try {
+            device.name
+        } catch (e: SecurityException) {
+            Log.w(TAG, "device name unavailable without BLUETOOTH_CONNECT: ${e.message}")
+            null
+        }
+
     private fun startDiscovery(): Boolean {
         val adapter = adapterProvider() ?: return false
-        return runCatching { adapter.startDiscovery() }.getOrDefault(false)
+        return try {
+            adapter.startDiscovery()
+        } catch (e: SecurityException) {
+            Log.w(TAG, "discovery unavailable without BLUETOOTH_SCAN: ${e.message}")
+            false
+        }
     }
 
-    @SuppressLint("MissingPermission")
     private fun cancelDiscovery() {
         val adapter = adapterProvider() ?: return
-        runCatching { adapter.cancelDiscovery() }
+        try {
+            adapter.cancelDiscovery()
+        } catch (e: SecurityException) {
+            // Nothing of ours is scanning without the grant, so there is nothing to cancel.
+            Log.d(TAG, "cancelDiscovery without BLUETOOTH_SCAN: ${e.message}")
+        }
     }
 
     private fun registerReceiverLocked(): BroadcastReceiver {
@@ -109,11 +132,10 @@ class BluetoothDeviceScanner(
         return rx
     }
 
-    @SuppressLint("MissingPermission")
     private fun onFound(intent: Intent) {
         val device = intentDevice(intent) ?: return
         val mac = device.address ?: return
-        val name = runCatching { device.name }.getOrNull()
+        val name = nameOf(device)
         synchronized(lock) {
             // Drop broadcasts delivered after stop(): a stale receiver must not resurrect state.
             if (receiver == null) return
@@ -139,11 +161,10 @@ class BluetoothDeviceScanner(
         _state.value = State(ordered, scanning)
     }
 
-    @Suppress("DEPRECATION")
     private fun intentDevice(intent: Intent): BluetoothDevice? =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-        } else {
-            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-        }
+        IntentCompat.getParcelableExtra(intent, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+
+    private companion object {
+        const val TAG = "BluetoothDeviceScanner"
+    }
 }

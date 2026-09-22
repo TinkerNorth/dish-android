@@ -14,7 +14,6 @@ import org.junit.Test
 class PathCardMapperTest {
     private val caps = PathCapabilities(rumble = true, motion = false)
 
-    @Suppress("LongParameterList")
     private fun map(
         isClaimedDirect: Boolean = false,
         transport: Transport = Transport.Usb,
@@ -26,17 +25,17 @@ class PathCardMapperTest {
         padHasTouchpad: Boolean = false,
         wiredUsbPresent: Boolean = false,
     ) = PathCardMapper.map(
-        isClaimedDirect = isClaimedDirect,
         transport = transport,
-        recognized = recognized,
-        restoring = restoring,
-        standard = caps,
-        direct = caps,
-        directPollHz = 1000,
-        needsReplug = needsReplug,
-        restoreStuck = restoreStuck,
-        directFailure = directFailure,
-        padHasTouchpad = padHasTouchpad,
+        claim =
+            ClaimState(
+                isClaimedDirect = isClaimedDirect,
+                restoring = restoring,
+                directPollHz = 1000,
+                needsReplug = needsReplug,
+                restoreStuck = restoreStuck,
+                directFailure = directFailure,
+            ),
+        facts = PathFacts(recognized = recognized, standard = caps, direct = caps, padHasTouchpad = padHasTouchpad),
         wiredUsbPresent = wiredUsbPresent,
     )
 

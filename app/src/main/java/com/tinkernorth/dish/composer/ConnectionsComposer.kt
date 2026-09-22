@@ -31,31 +31,6 @@ import kotlinx.coroutines.flow.flowOf
 import javax.inject.Inject
 import javax.inject.Singleton
 
-@Suppress("UNCHECKED_CAST", "LongParameterList")
-private inline fun <T1, T2, T3, T4, T5, T6, T7, T8, R> combine8(
-    f1: Flow<T1>,
-    f2: Flow<T2>,
-    f3: Flow<T3>,
-    f4: Flow<T4>,
-    f5: Flow<T5>,
-    f6: Flow<T6>,
-    f7: Flow<T7>,
-    f8: Flow<T8>,
-    crossinline transform: suspend (T1, T2, T3, T4, T5, T6, T7, T8) -> R,
-): Flow<R> =
-    combine(f1, f2, f3, f4, f5, f6, f7, f8) { args ->
-        transform(
-            args[0] as T1,
-            args[1] as T2,
-            args[2] as T3,
-            args[3] as T4,
-            args[4] as T5,
-            args[5] as T6,
-            args[6] as T7,
-            args[7] as T8,
-        )
-    }
-
 // Maps the satellite session FSM to the UI LinkState. Pulled out of the composer so it is unit-testable
 // without standing up the whole graph, and so the dashboard and connections screen agree by construction.
 internal fun satelliteLinkState(
@@ -75,10 +50,26 @@ internal fun satelliteLinkState(
             }
     }
 
-private data class KnownSatellites(
-    val discovered: List<DiscoveredServer>,
+// The satellite side folded into one value: live connections, what discovery currently sees,
+// what the store remembers, and which remembered ids have gone stale.
+private data class SatelliteWorld(
+    val connections: Map<String, SatelliteConnection>,
+    val discoveredIds: Set<String>,
     val remembered: List<RememberedSatellite>,
-    val rememberedBt: List<RememberedBt>,
+    val staleIds: Set<String>,
+)
+
+// The Bluetooth side: live slot states, remembered hosts, and the stale ones among them.
+private data class BluetoothWorld(
+    val states: Map<String, BluetoothGamepadRegistry.SlotState>,
+    val remembered: List<RememberedBt>,
+    val staleIds: Set<String>,
+)
+
+// The slot tables every kind of host is summarised against.
+private data class SlotWorld(
+    val bindings: Map<String, String>,
+    val types: Map<Pair<String, String>, Int>,
 )
 
 @Singleton
@@ -119,93 +110,70 @@ class ConnectionsComposer
                 ) { _, discovered, remembered -> MoonlightWorld(connMap, discovered, remembered) }
             }
 
-        // The persisted "known" universe, folded into the combine so a remember/forget re-derives the
-        // list instead of an out-of-band store read that could leave a ghost or a missing row.
-        private val knownSatellites: Flow<KnownSatellites> =
+        // The persisted "known" universe rides each world's combine so a remember/forget re-derives
+        // the list instead of an out-of-band store read that could leave a ghost or a missing row.
+        private val satelliteWorld: Flow<SatelliteWorld> =
             combine(
+                flatSatConnections,
                 satellite.discoveredServers,
                 store.rememberedSatellitesFlow,
-                store.rememberedBtFlow,
-            ) { discovered, remembered, rememberedBt ->
-                KnownSatellites(discovered, remembered, rememberedBt)
+                satellite.staleSatelliteIds,
+            ) { connections, discovered, remembered, stale ->
+                SatelliteWorld(connections, discoveredIdSet(discovered), remembered, stale)
             }
 
+        private val bluetoothWorld: Flow<BluetoothWorld> =
+            combine(bt.states, store.rememberedBtFlow, bt.staleBtIds) { states, remembered, stale ->
+                BluetoothWorld(states, remembered, stale.keys)
+            }
+
+        private val slotWorld: Flow<SlotWorld> = combine(bindingStore.state, typeStore.state, ::SlotWorld)
+
         override fun upstream(): Flow<List<ConnectionSummary>> =
-            combine8(
-                flatSatConnections,
-                bt.states,
-                knownSatellites,
-                bindingStore.state,
-                typeStore.state,
-                satellite.staleSatelliteIds,
-                bt.staleBtIds,
-                moonlightWorld,
-            ) { satMap, btStates, known, bindings, satTypes, staleSat, staleBt, moonlight ->
-                buildSummaries(
-                    satMap = satMap,
-                    btStates = btStates,
-                    discoveredIds = discoveredIdSet(known.discovered),
-                    remembered = known.remembered,
-                    rememberedBt = known.rememberedBt,
-                    bindings = bindings,
-                    satTypes = satTypes,
-                    staleSatIds = staleSat,
-                    staleBtIds = staleBt.keys,
-                    moonlight = moonlight,
-                    moonlightTypes = satTypes,
-                )
-            }.distinctUntilChanged()
+            combine(satelliteWorld, bluetoothWorld, slotWorld, moonlightWorld, ::buildSummaries)
+                .distinctUntilChanged()
 
         private fun discoveredIdSet(discovered: List<DiscoveredServer>): Set<String> =
             discovered.mapTo(mutableSetOf()) { SatelliteConnection.idFor(it) }
 
-        @Suppress("LongParameterList")
         private fun buildSummaries(
-            satMap: Map<String, SatelliteConnection>,
-            btStates: Map<String, BluetoothGamepadRegistry.SlotState>,
-            discoveredIds: Set<String>,
-            remembered: List<RememberedSatellite>,
-            rememberedBt: List<RememberedBt>,
-            bindings: Map<String, String>,
-            satTypes: Map<Pair<String, String>, Int>,
-            staleSatIds: Set<String> = emptySet(),
-            staleBtIds: Set<String> = emptySet(),
-            moonlight: MoonlightWorld = MoonlightWorld(emptyMap(), emptyList(), emptyList()),
-            moonlightTypes: Map<Pair<String, String>, Int> = emptyMap(),
+            satellites: SatelliteWorld,
+            bluetooth: BluetoothWorld,
+            slots: SlotWorld,
+            moonlight: MoonlightWorld,
         ): List<ConnectionSummary> {
             val result = mutableListOf<ConnectionSummary>()
 
-            val rememberedById = remembered.associateBy { it.id }
-            val satIds = (rememberedById.keys + satMap.keys).toSet()
+            val rememberedById = satellites.remembered.associateBy { it.id }
+            val satIds = (rememberedById.keys + satellites.connections.keys).toSet()
             for (id in satIds) {
                 buildSatelliteSummary(
                     id,
-                    satMap[id],
+                    satellites.connections[id],
                     rememberedById[id],
-                    bindings,
-                    satTypes,
-                    discoveredIds,
-                    isStale = id in staleSatIds,
+                    slots,
+                    satellites.discoveredIds,
+                    isStale = id in satellites.staleIds,
                 )?.let(result::add)
             }
 
-            result += buildMoonlightSummaries(moonlight, bindings, moonlightTypes)
+            result += buildMoonlightSummaries(moonlight, slots.bindings, slots.types)
 
             val rememberedBtIds = mutableSetOf<String>()
-            for (entry in rememberedBt) {
+            for (entry in bluetooth.remembered) {
                 rememberedBtIds += entry.id
                 result +=
                     buildRememberedBtSummary(
                         entry,
-                        btStates[entry.id],
-                        bindings,
-                        isStale = entry.id in staleBtIds,
+                        bluetooth.states[entry.id],
+                        slots.bindings,
+                        isStale = entry.id in bluetooth.staleIds,
                     )
             }
 
-            for ((id, slotState) in btStates) {
+            for ((id, slotState) in bluetooth.states) {
                 if (id in rememberedBtIds) continue
-                result += buildTransientBtSummary(id, slotState, bindings)
+                result += buildTransientBtSummary(id, slotState, slots.bindings)
             }
             return result
         }
@@ -214,14 +182,16 @@ class ConnectionsComposer
             id: String,
             conn: SatelliteConnection?,
             remembered: RememberedSatellite?,
-            bindings: Map<String, String>,
-            satTypes: Map<Pair<String, String>, Int>,
+            slots: SlotWorld,
             discoveredIds: Set<String>,
             isStale: Boolean,
         ): ConnectionSummary? {
             val server = conn?.server?.value ?: remembered?.toDiscovered() ?: return null
             val live = satelliteLinkState(conn?.state?.value, isStale = isStale, isDiscovered = id in discoveredIds)
-            val bound = bindings.entries.filter { it.value == id }.map { it.key }
+            val bound =
+                slots.bindings.entries
+                    .filter { it.value == id }
+                    .map { it.key }
             return ConnectionSummary(
                 id = id,
                 kind = ConnectionKind.SATELLITE,
@@ -229,7 +199,7 @@ class ConnectionsComposer
                 detail = context.getString(R.string.discovered_row_detail, server.ip, server.udpPort),
                 live = live,
                 boundSlotIds = bound,
-                satelliteControllerTypes = buildSlotTypes(id, bound, satTypes),
+                satelliteControllerTypes = buildSlotTypes(id, bound, slots.types),
             )
         }
 

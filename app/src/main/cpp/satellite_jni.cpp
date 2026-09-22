@@ -700,7 +700,7 @@ void applyUsbTouchpad(int32_t deviceId, const gamepad::TouchpadState& t, uint32_
         r.connectionId = binding.bridgeConnectionId;
         r.controllerNumber = binding.controllerIndex;
         r.touch = t;
-        (void)eventTimeMs; // events are re-timed by the reliable control stream
+        // eventTimeMs is not carried: events are re-timed by the reliable control stream.
         enqueueBridgeReport(std::move(r));
         return;
     }
@@ -927,10 +927,10 @@ static void ensureSodiumInit() {
     });
 }
 
-JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_openSocket(JNIEnv* env,
-                                                                                     jobject,
-                                                                                     jstring ip,
-                                                                                     jint port) {
+JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_openSocket(JNIEnv* env,
+                                                                                   jobject,
+                                                                                   jstring ip,
+                                                                                   jint port) {
     ensureSodiumInit();
     int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (sock < 0) {
@@ -973,9 +973,9 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_openSo
     return handle;
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_closeSocket(JNIEnv*,
-                                                                                      jobject,
-                                                                                      jint handle) {
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_closeSocket(JNIEnv*,
+                                                                                    jobject,
+                                                                                    jint handle) {
     std::shared_ptr<Session> s;
     {
         std::lock_guard<std::mutex> lock(g_sessionsMtx);
@@ -1000,7 +1000,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_closeS
     LOGI("UDP session %d closed", handle);
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setConnectionParams(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_setConnectionParams(
     JNIEnv* env, jobject, jint handle, jbyteArray tokenArr, jbyteArray keyArr,
     jint protocolVersion) {
     ensureSodiumInit();
@@ -1033,7 +1033,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setCon
          s->token[1], s->token[2], s->token[3], (int)protocolVersion);
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendReport(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendReport(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jint wB, jint bLT, jint bRT, jint sLX,
     jint sLY, jint sRX, jint sRY) {
     auto s = getSession(handle);
@@ -1052,7 +1052,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendRe
     s->sentByCtrl[controllerIndex & 15].fetch_add(1, std::memory_order_relaxed);
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendMotion(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendMotion(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jshort gyroX, jshort gyroY, jshort gyroZ,
     jshort accelX, jshort accelY, jshort accelZ, jint timestampDeltaUs) {
     auto s = getSession(handle);
@@ -1065,7 +1065,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendMo
     s->motionByCtrl[controllerIndex & 15].fetch_add(1, std::memory_order_relaxed);
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendBattery(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendBattery(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jint level, jint status) {
     auto s = getSession(handle);
     if (!s) return;
@@ -1075,7 +1075,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendBa
     sendEncrypted(s.get(), MSG_BATTERY, payload, sizeof(payload));
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendTouchpad(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendTouchpad(
     JNIEnv*, jobject, jint handle, jint controllerIndex, jboolean f0Active, jboolean f1Active,
     jboolean buttonPressed, jboolean rightPressed, jboolean middlePressed, jint f0TrackingId,
     jshort f0x, jshort f0y, jint f1TrackingId, jshort f1x, jshort f1y, jlong eventTimeMs,
@@ -1110,7 +1110,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendTo
 // Refusing a window that is not exactly AUDIO_FRAME_SAMPLES is the encoder's
 // job, not a check duplicated here: a mis-framed buffer must not become a
 // packet the satellite cannot place in its timeline.
-JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendMicFrame(
+JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_sendMicFrame(
     JNIEnv* env, jobject, jint handle, jint controllerIndex, jshortArray pcmMono) {
     auto s = getSession(handle);
     if (!s || pcmMono == nullptr) return JNI_FALSE;
@@ -1149,7 +1149,7 @@ JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_se
 }
 
 JNIEXPORT void JNICALL
-Java_com_tinkernorth_dish_core_jni_SatelliteNative_startHeartbeat(JNIEnv*, jobject, jint handle) {
+Java_com_tinkernorth_dish_core_jni_SessionNative_startHeartbeat(JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return;
     if (s->heartbeat.running()) return;
@@ -1158,35 +1158,36 @@ Java_com_tinkernorth_dish_core_jni_SatelliteNative_startHeartbeat(JNIEnv*, jobje
     s->heartbeat.start([s] { heartbeatLoop(s); });
 }
 
-JNIEXPORT void JNICALL
-Java_com_tinkernorth_dish_core_jni_SatelliteNative_stopHeartbeat(JNIEnv*, jobject, jint handle) {
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_stopHeartbeat(JNIEnv*,
+                                                                                      jobject,
+                                                                                      jint handle) {
     auto s = getSession(handle);
     if (!s) return;
     s->heartbeat.stop();
 }
 
-JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_isConnectionAlive(
-    JNIEnv*, jobject, jint handle) {
+JNIEXPORT jboolean JNICALL
+Java_com_tinkernorth_dish_core_jni_SessionNative_isConnectionAlive(JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return JNI_FALSE;
     return s->connectionAlive.load() ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT jint JNICALL
-Java_com_tinkernorth_dish_core_jni_SatelliteNative_getServerEpoch(JNIEnv*, jobject, jint handle) {
+Java_com_tinkernorth_dish_core_jni_SessionNative_getServerEpoch(JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return -1;
     return s->serverEpoch.load(std::memory_order_acquire);
 }
 
 JNIEXPORT jint JNICALL
-Java_com_tinkernorth_dish_core_jni_SatelliteNative_getActiveBitmap(JNIEnv*, jobject, jint handle) {
+Java_com_tinkernorth_dish_core_jni_SessionNative_getActiveBitmap(JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return -1;
     return s->activeBitmap.load(std::memory_order_acquire);
 }
 
-JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getSessionCloseReason(
+JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_getSessionCloseReason(
     JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return -1;
@@ -1194,29 +1195,29 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getSes
 }
 
 JNIEXPORT jlong JNICALL
-Java_com_tinkernorth_dish_core_jni_SatelliteNative_getSendCounter(JNIEnv*, jobject, jint handle) {
+Java_com_tinkernorth_dish_core_jni_SessionNative_getSendCounter(JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return 0;
     return (jlong)dish_counter::sendCounterView(s->counter);
 }
 
-JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getVigemAvailable(
-    JNIEnv*, jobject, jint handle) {
+JNIEXPORT jint JNICALL
+Java_com_tinkernorth_dish_core_jni_SessionNative_getVigemAvailable(JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return -1;
     return (jint)s->vigemAvailable.load(std::memory_order_acquire);
 }
 
-JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getActiveControllerCount(
+JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_getActiveControllerCount(
     JNIEnv*, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return -1;
     return (jint)s->activeControllerCount.load(std::memory_order_acquire);
 }
 
-JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiveAck(JNIEnv* env,
-                                                                                     jobject,
-                                                                                     jint handle) {
+JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_receiveAck(JNIEnv* env,
+                                                                                   jobject,
+                                                                                   jint handle) {
     auto s = getSession(handle);
     if (!s || s->udpSock < 0) return -1;
     // A whole datagram: MSG_SPEAKER_AUDIO carries an Opus packet, and a short
@@ -1367,7 +1368,7 @@ JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_receiv
     return 1;
 }
 
-JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_discoverServers(
+JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_discoverServers(
     JNIEnv* env, jobject, jint discPort, jint timeoutMs) {
     int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (sock < 0) return env->NewStringUTF("[]");
@@ -1421,7 +1422,8 @@ JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_dis
     return env->NewStringUTF(result.c_str());
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_bindPhysicalSlotSatellite(
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_bindPhysicalSlotSatellite(
     JNIEnv*, jobject, jint deviceId, jint sessionHandle, jint controllerIndex) {
     {
         std::lock_guard<std::mutex> lock(g_slotsMtx);
@@ -1450,34 +1452,36 @@ static void bindPhysicalSlotBridge(JNIEnv* env, jint deviceId, jstring connectio
     syncSlotBaseline(deviceId);
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_bindPhysicalSlotBluetooth(
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_bindPhysicalSlotBluetooth(
     JNIEnv* env, jobject, jint deviceId, jstring connectionId) {
     bindPhysicalSlotBridge(env, deviceId, connectionId, SLOT_BLUETOOTH, -1);
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_bindPhysicalSlotMoonlight(
+JNIEXPORT void JNICALL
+Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_bindPhysicalSlotMoonlight(
     JNIEnv* env, jobject, jint deviceId, jstring connectionId, jint controllerNumber) {
     bindPhysicalSlotBridge(env, deviceId, connectionId, SLOT_MOONLIGHT, controllerNumber);
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_unbindPhysicalSlot(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_unbindPhysicalSlot(
     JNIEnv*, jobject, jint deviceId) {
     std::lock_guard<std::mutex> lock(g_slotsMtx);
     g_slots.erase(deviceId);
 }
 
 JNIEXPORT void JNICALL
-Java_com_tinkernorth_dish_core_jni_SatelliteNative_clearAllPhysicalSlots(JNIEnv*, jobject) {
+Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_clearAllPhysicalSlots(JNIEnv*, jobject) {
     std::lock_guard<std::mutex> lock(g_slotsMtx);
     g_slots.clear();
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_forgetPhysicalDevice(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_forgetPhysicalDevice(
     JNIEnv*, jobject, jint deviceId) {
     dispatch::forgetDevice((int32_t)deviceId);
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setDeviceDeadzones(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_setDeviceDeadzones(
     JNIEnv*, jobject, jint deviceId, jfloat flatX, jfloat flatY, jfloat flatZ, jfloat flatRZ) {
     std::lock_guard<std::mutex> lock(g_devicesMtx);
     auto& s = g_devices[deviceId];
@@ -1487,7 +1491,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setDev
     s.flatRZ = flatRZ;
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setDeviceQuirk(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_setDeviceQuirk(
     JNIEnv*, jobject, jint deviceId, jint quirk) {
     std::lock_guard<std::mutex> lock(g_devicesMtx);
     g_devices[deviceId].quirk = (uint8_t)(quirk & 0xFF);
@@ -1496,7 +1500,7 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setDev
 // Activity-level dispatch is needed because GameActivity's SurfaceView sits below the
 // input layer that synthesizes DPAD keys from stick motion on some controllers.
 JNIEXPORT jboolean JNICALL
-Java_com_tinkernorth_dish_core_jni_SatelliteNative_processGamepadKeyEvent(
+Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_processGamepadKeyEvent(
     JNIEnv*, jobject, jint deviceId, jint /*source*/, jint action, jint keyCode) {
     // Source bits are unreliable; gate on the mapped-keycode check instead.
     std::lock_guard<std::mutex> lock(g_devicesMtx);
@@ -1518,7 +1522,7 @@ Java_com_tinkernorth_dish_core_jni_SatelliteNative_processGamepadKeyEvent(
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_tinkernorth_dish_core_jni_SatelliteNative_processGamepadMotionEvent(
+Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_processGamepadMotionEvent(
     JNIEnv*, jobject, jint deviceId, jint source, jint action, jfloat x, jfloat y, jfloat z,
     jfloat rz, jfloat rx, jfloat ry, jfloat hatX, jfloat hatY, jfloat lTrigger, jfloat rTrigger,
     jfloat brake, jfloat gas) {
@@ -1544,7 +1548,7 @@ Java_com_tinkernorth_dish_core_jni_SatelliteNative_processGamepadMotionEvent(
 }
 
 JNIEXPORT void JNICALL
-Java_com_tinkernorth_dish_core_jni_SatelliteNative_releaseAllPhysicalReports(JNIEnv*, jobject) {
+Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_releaseAllPhysicalReports(JNIEnv*, jobject) {
     std::lock_guard<std::mutex> lock(g_devicesMtx);
     for (auto& kv : g_devices) {
         gamepad::resetState(kv.second);
@@ -1615,27 +1619,66 @@ Java_com_tinkernorth_dish_hotpath_input_RumbleBridge_nativeInstall(JNIEnv* env, 
     }
 }
 
-JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_attachUsbDevice(
-    JNIEnv*, jobject, jint fd, jint vid, jint pid, jint interfaceNumber, jint epIn,
-    jint epInMaxPacket, jint epOut, jint ifClass, jint ifSubclass, jint ifProtocol) {
+// The claim is a Kotlin UsbInterfaceClaim; its Int fields are read by name (proguard-rules.pro
+// keeps them). A missing field means the two sides disagree, which is a build defect, not a
+// device condition: the attach is refused rather than guessed at.
+struct ClaimFields {
+    jint interfaceNumber;
+    jint epIn;
+    jint epInMaxPacket;
+    jint epOut;
+    jint ifClass;
+    jint ifSubclass;
+    jint ifProtocol;
+};
+
+static bool readClaimField(JNIEnv* env, jclass cls, jobject claim, const char* name, jint* out) {
+    jfieldID id = env->GetFieldID(cls, name, "I");
+    if (id == nullptr) {
+        env->ExceptionClear();
+        LOGE("attachUsbDevice: UsbInterfaceClaim.%s missing", name);
+        return false;
+    }
+    *out = env->GetIntField(claim, id);
+    return true;
+}
+
+static bool readClaim(JNIEnv* env, jobject claim, ClaimFields* out) {
+    jclass cls = env->GetObjectClass(claim);
+    bool ok = readClaimField(env, cls, claim, "interfaceNumber", &out->interfaceNumber) &&
+              readClaimField(env, cls, claim, "endpointIn", &out->epIn) &&
+              readClaimField(env, cls, claim, "endpointInMaxPacket", &out->epInMaxPacket) &&
+              readClaimField(env, cls, claim, "endpointOut", &out->epOut) &&
+              readClaimField(env, cls, claim, "interfaceClass", &out->ifClass) &&
+              readClaimField(env, cls, claim, "interfaceSubclass", &out->ifSubclass) &&
+              readClaimField(env, cls, claim, "interfaceProtocol", &out->ifProtocol);
+    env->DeleteLocalRef(cls);
+    return ok;
+}
+
+JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_attachUsbDevice(
+    JNIEnv* env, jobject, jint fd, jint vid, jint pid, jobject claim) {
+    ClaimFields c{};
+    if (claim == nullptr || !readClaim(env, claim, &c)) return 0;
     int dupFd = dup(fd);
     if (dupFd < 0) {
         LOGE("attachUsbDevice: dup(%d) failed: %s", fd, strerror(errno));
         return 0;
     }
     usbhost::AttachResult r = usbhost::attachDevice(
-        dupFd, (uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF), interfaceNumber,
-        (uint8_t)(epIn & 0xFF), (uint16_t)(epInMaxPacket & 0xFFFF), (uint8_t)(epOut & 0xFF),
-        (uint8_t)(ifClass & 0xFF), (uint8_t)(ifSubclass & 0xFF), (uint8_t)(ifProtocol & 0xFF));
+        dupFd, (uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF), c.interfaceNumber,
+        (uint8_t)(c.epIn & 0xFF), (uint16_t)(c.epInMaxPacket & 0xFFFF), (uint8_t)(c.epOut & 0xFF),
+        (uint8_t)(c.ifClass & 0xFF), (uint8_t)(c.ifSubclass & 0xFF),
+        (uint8_t)(c.ifProtocol & 0xFF));
     return r.ok ? (jint)r.syntheticDeviceId : 0;
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_detachUsbDevice(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_detachUsbDevice(
     JNIEnv*, jobject, jint syntheticDeviceId) {
     usbhost::detachDevice((int32_t)syntheticDeviceId);
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendUsbRumble(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_sendUsbRumble(
     JNIEnv*, jobject, jint syntheticDeviceId, jint strong, jint weak) {
     usbhost::sendRumble((int32_t)syntheticDeviceId, (uint16_t)(strong & 0xFFFF),
                         (uint16_t)(weak & 0xFFFF));
@@ -1717,24 +1760,24 @@ Java_com_tinkernorth_dish_hotpath_audio_SpeakerAudioBridge_nativeInstall(JNIEnv*
     startAudioDispatchThread();
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendUsbTriggerRumble(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_sendUsbTriggerRumble(
     JNIEnv*, jobject, jint syntheticDeviceId, jint leftMag, jint rightMag) {
     usbhost::sendTriggerRumble((int32_t)syntheticDeviceId, (uint16_t)(leftMag & 0xFFFF),
                                (uint16_t)(rightMag & 0xFFFF));
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendUsbLightbar(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_sendUsbLightbar(
     JNIEnv*, jobject, jint syntheticDeviceId, jint r, jint g, jint b) {
     usbhost::sendLightbar((int32_t)syntheticDeviceId, (uint8_t)(r & 0xFF), (uint8_t)(g & 0xFF),
                           (uint8_t)(b & 0xFF));
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendUsbPlayerLeds(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_sendUsbPlayerLeds(
     JNIEnv*, jobject, jint syntheticDeviceId, jint ledMask) {
     usbhost::sendPlayerLeds((int32_t)syntheticDeviceId, (uint8_t)(ledMask & 0xFF));
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendUsbTriggerEffects(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_sendUsbTriggerEffects(
     JNIEnv* env, jobject, jint syntheticDeviceId, jbyteArray blocks) {
     if (blocks == nullptr) return;
     if (env->GetArrayLength(blocks) < 2 * usbparsers::TRIGGER_EFFECT_BLOCK_LEN) return;
@@ -1745,26 +1788,26 @@ JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendUs
                                 buf + usbparsers::TRIGGER_EFFECT_BLOCK_LEN);
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sendUsbMicMuteLed(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_sendUsbMicMuteLed(
     JNIEnv*, jobject, jint syntheticDeviceId, jint state) {
     usbhost::sendMicMuteLed((int32_t)syntheticDeviceId, (uint8_t)(state & 0xFF));
 }
 
-JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_lookupKnownModelName(
+JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_lookupKnownModelName(
     JNIEnv* env, jobject, jint vid, jint pid) {
     const usbparsers::KnownDevice* k =
         usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
     return env->NewStringUTF(k ? k->name : "");
 }
 
-JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_isKnownFastLaneModel(
+JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_isKnownFastLaneModel(
     JNIEnv*, jobject, jint vid, jint pid) {
     return usbparsers::isVerifiedFastLane((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF))
                ? JNI_TRUE
                : JNI_FALSE;
 }
 
-JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_modelHasImu(
+JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasImu(
     JNIEnv*, jobject, jint vid, jint pid) {
     const usbparsers::KnownDevice* k =
         usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
@@ -1773,16 +1816,16 @@ JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_mo
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_tinkernorth_dish_core_jni_SatelliteNative_modelExpectsFrameworkGamepad(JNIEnv*, jobject,
-                                                                                jint vid,
-                                                                                jint pid) {
+Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelExpectsFrameworkGamepad(JNIEnv*, jobject,
+                                                                                 jint vid,
+                                                                                 jint pid) {
     return usbparsers::modelExpectsFrameworkGamepad((uint16_t)(vid & 0xFFFF),
                                                     (uint16_t)(pid & 0xFFFF))
                ? JNI_TRUE
                : JNI_FALSE;
 }
 
-JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_modelHasRumble(
+JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasRumble(
     JNIEnv*, jobject, jint vid, jint pid) {
     const usbparsers::KnownDevice* k =
         usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
@@ -1790,7 +1833,7 @@ JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_mo
     return usbparsers::parserHasRumble(k->parser) ? JNI_TRUE : JNI_FALSE;
 }
 
-JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_modelHasLightbar(
+JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasLightbar(
     JNIEnv*, jobject, jint vid, jint pid) {
     const usbparsers::KnownDevice* k =
         usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
@@ -1798,7 +1841,7 @@ JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_mo
     return usbparsers::parserHasLightbar(k->parser) ? JNI_TRUE : JNI_FALSE;
 }
 
-JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_modelHasPlayerLeds(
+JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasPlayerLeds(
     JNIEnv*, jobject, jint vid, jint pid) {
     const usbparsers::KnownDevice* k =
         usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
@@ -1807,15 +1850,15 @@ JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_mo
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_tinkernorth_dish_core_jni_SatelliteNative_modelHasTriggerEffects(JNIEnv*, jobject,
-                                                                          jint vid, jint pid) {
+Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasTriggerEffects(JNIEnv*, jobject,
+                                                                           jint vid, jint pid) {
     const usbparsers::KnownDevice* k =
         usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
     if (!k) return JNI_FALSE;
     return usbparsers::parserHasTriggerEffects(k->parser) ? JNI_TRUE : JNI_FALSE;
 }
 
-JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_modelHasHapticLanes(
+JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasHapticLanes(
     JNIEnv*, jobject, jint vid, jint pid) {
     const usbparsers::KnownDevice* k =
         usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
@@ -1823,15 +1866,16 @@ JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_mo
     return usbparsers::parserHasHapticLanes(k->parser) ? JNI_TRUE : JNI_FALSE;
 }
 
-JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_modelHasTriggerRumble(
-    JNIEnv*, jobject, jint vid, jint pid) {
+JNIEXPORT jboolean JNICALL
+Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasTriggerRumble(JNIEnv*, jobject,
+                                                                          jint vid, jint pid) {
     const usbparsers::KnownDevice* k =
         usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
     if (!k) return JNI_FALSE;
     return usbparsers::parserHasTriggerRumble(k->parser) ? JNI_TRUE : JNI_FALSE;
 }
 
-JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_modelHasTouchpad(
+JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelHasTouchpad(
     JNIEnv*, jobject, jint vid, jint pid) {
     const usbparsers::KnownDevice* k =
         usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
@@ -1840,46 +1884,46 @@ JNIEXPORT jboolean JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_mo
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_tinkernorth_dish_core_jni_SatelliteNative_modelFrameworkRumbleUnreliable(JNIEnv*, jobject,
-                                                                                  jint vid,
-                                                                                  jint pid) {
+Java_com_tinkernorth_dish_core_jni_ModelTableNative_modelFrameworkRumbleUnreliable(JNIEnv*, jobject,
+                                                                                   jint vid,
+                                                                                   jint pid) {
     const usbparsers::KnownDevice* k =
         usbparsers::lookupKnown((uint16_t)(vid & 0xFFFF), (uint16_t)(pid & 0xFFFF));
     if (!k) return JNI_FALSE;
     return usbparsers::parserFrameworkRumbleUnreliable(k->parser) ? JNI_TRUE : JNI_FALSE;
 }
 
-JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDeviceUrbCount(
+JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_getDeviceUrbCount(
     JNIEnv*, jobject, jint deviceId) {
     return (jlong)usbhost::getUrbCount((int32_t)deviceId);
 }
 
-JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDeviceMotionCount(
+JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_getDeviceMotionCount(
     JNIEnv*, jobject, jint deviceId) {
     return (jlong)usbhost::getMotionCount((int32_t)deviceId);
 }
 
-JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDeviceUrbErrorCount(
+JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_getDeviceUrbErrorCount(
     JNIEnv*, jobject, jint deviceId) {
     return (jlong)usbhost::getUrbErrorCount((int32_t)deviceId);
 }
 
-JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDirectPadBattery(
+JNIEXPORT jint JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_getDirectPadBattery(
     JNIEnv*, jobject, jint deviceId) {
     return (jint)usbhost::getPadBattery((int32_t)deviceId);
 }
 
-JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_deviceInfoJson(
+JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_deviceInfoJson(
     JNIEnv* env, jobject, jint deviceId) {
     return env->NewStringUTF(usbhost::deviceInfoJson((int32_t)deviceId).c_str());
 }
 
-JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_deviceLatencyJson(
+JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_UsbDirectNative_deviceLatencyJson(
     JNIEnv* env, jobject, jint deviceId) {
     return env->NewStringUTF(hotpath::deviceLatencyJson((int32_t)deviceId).c_str());
 }
 
-JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_sessionStatsJson(
+JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SessionNative_sessionStatsJson(
     JNIEnv* env, jobject, jint handle) {
     auto s = getSession(handle);
     if (!s) return env->NewStringUTF("");
@@ -1887,14 +1931,14 @@ JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_ses
         hotpath::sessionStatsJson(s->rtt, s->missedAcks.load(std::memory_order_relaxed)).c_str());
 }
 
-JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getSlotSendCount(
+JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_getSlotSendCount(
     JNIEnv*, jobject, jint handle, jint controllerIndex) {
     auto s = getSession(handle);
     if (!s) return 0;
     return (jlong)s->sentByCtrl[controllerIndex & 15].load(std::memory_order_relaxed);
 }
 
-JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getSlotMotionCount(
+JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SlotReportNative_getSlotMotionCount(
     JNIEnv*, jobject, jint handle, jint controllerIndex) {
     auto s = getSession(handle);
     if (!s) return 0;
@@ -1903,12 +1947,12 @@ JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getSl
 
 // Opt-in hot-path latency benchmark (stage 1 USB-direct + stage 2 heartbeat RTT).
 // Off by default; see hotpath_latency.h and satellite tools/bench/README.md.
-JNIEXPORT void JNICALL
-Java_com_tinkernorth_dish_core_jni_SatelliteNative_setHotPathBench(JNIEnv*, jobject, jboolean on) {
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_InstrumentationNative_setHotPathBench(
+    JNIEnv*, jobject, jboolean on) {
     hotpath::setEnabled(on == JNI_TRUE);
 }
 
-JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_hotPathBenchJson(
+JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_InstrumentationNative_hotPathBenchJson(
     JNIEnv* env, jobject, jboolean reset) {
     return env->NewStringUTF(hotpath::statsJson(reset == JNI_TRUE).c_str());
 }
@@ -1916,8 +1960,8 @@ JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_hot
 // Densify heartbeat pings for RTT measurement while the diagnostics latency panel is
 // open. The RTT window is dropped on enable so the readout reflects probe-era samples,
 // not the idle-radio tail accumulated before the panel opened.
-JNIEXPORT void JNICALL
-Java_com_tinkernorth_dish_core_jni_SatelliteNative_setLatencyProbe(JNIEnv*, jobject, jboolean on) {
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_InstrumentationNative_setLatencyProbe(
+    JNIEnv*, jobject, jboolean on) {
     g_heartbeatIntervalMs.store(on == JNI_TRUE ? HEARTBEAT_INTERVAL_PROBE_MS
                                                : HEARTBEAT_INTERVAL_DEFAULT_MS,
                                 std::memory_order_relaxed);
@@ -1927,12 +1971,12 @@ Java_com_tinkernorth_dish_core_jni_SatelliteNative_setLatencyProbe(JNIEnv*, jobj
     for (auto& kv : g_sessions) hotpath::clearRtt(kv.second->rtt);
 }
 
-JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_setInputInspection(
+JNIEXPORT void JNICALL Java_com_tinkernorth_dish_core_jni_InstrumentationNative_setInputInspection(
     JNIEnv*, jobject, jboolean on) {
     dispatch::g_inspect.store(on == JNI_TRUE, std::memory_order_relaxed);
 }
 
-JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_deviceStateJson(
+JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_deviceStateJson(
     JNIEnv* env, jobject, jint deviceId) {
     char buf[512];
     size_t n = 0;
@@ -1944,8 +1988,9 @@ JNIEXPORT jstring JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_dev
     return env->NewStringUTF(n > 0 ? buf : "");
 }
 
-JNIEXPORT jlong JNICALL Java_com_tinkernorth_dish_core_jni_SatelliteNative_getDeviceInputEventCount(
-    JNIEnv*, jobject, jint deviceId) {
+JNIEXPORT jlong JNICALL
+Java_com_tinkernorth_dish_core_jni_PhysicalSlotNative_getDeviceInputEventCount(JNIEnv*, jobject,
+                                                                               jint deviceId) {
     std::lock_guard<std::mutex> lock(g_devicesMtx);
     auto it = g_frameworkEventCounts.find((int32_t)deviceId);
     return it == g_frameworkEventCounts.end() ? 0 : (jlong)it->second;

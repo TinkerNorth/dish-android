@@ -2,23 +2,21 @@
 
 package com.tinkernorth.dish.source.bluetooth
 
-import android.Manifest
-import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
-import android.os.Build
+import android.util.Log
 import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-@SuppressLint("MissingPermission")
 class BluetoothConnections
     @Inject
     constructor(
@@ -67,20 +65,20 @@ class BluetoothConnections
             }
 
         private fun deviceName(intent: Intent?): String? {
-            if (!hasPermission()) return null
-            val device =
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    intent?.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    intent?.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+            if (context.checkBluetoothConnectPermission() != PackageManager.PERMISSION_GRANTED) return null
+            val device = intent?.let { IntentCompat.getParcelableExtra(it, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java) }
+            val name =
+                try {
+                    device?.name
+                } catch (e: SecurityException) {
+                    // Revoked between the check above and the read: the broadcast carries no name for us.
+                    Log.w(TAG, "BLUETOOTH_CONNECT revoked while reading a device name: ${e.message}")
+                    null
                 }
-            return runCatching { device?.name }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+            return name?.trim()?.takeIf { it.isNotEmpty() }
         }
 
-        private fun hasPermission(): Boolean {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
-            return ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
-                PackageManager.PERMISSION_GRANTED
+        private companion object {
+            const val TAG = "BluetoothConnections"
         }
     }

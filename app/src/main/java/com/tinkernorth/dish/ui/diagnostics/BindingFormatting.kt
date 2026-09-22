@@ -115,7 +115,15 @@ private fun Context.streamLines(b: BindingDiag): List<String> {
     val speaker = getString(if (b.speakerPlaying) R.string.diagnostics_speaker_playing else R.string.diagnostics_speaker_idle)
     val speakerValue =
         if (b.speakerDropped > 0) {
-            getString(R.string.diagnostics_joined, speaker, getString(R.string.diagnostics_dropped_samples, b.speakerDropped))
+            getString(
+                R.string.diagnostics_joined,
+                speaker,
+                resources.getQuantityString(
+                    R.plurals.diagnostics_dropped_samples,
+                    b.speakerDropped.pluralCount(),
+                    b.speakerDropped,
+                ),
+            )
         } else {
             speaker
         }
@@ -138,7 +146,12 @@ private fun Context.feedbackLines(
     lines += diagKv(R.string.diagnostics_rumble_target, getString(target))
     val last =
         b.feedback?.let {
-            getString(R.string.diagnostics_feedback_value, getString(feedbackKindRes(it.lastKind)), agoLabel(nowMs, it.atMs), it.count)
+            getString(
+                R.string.diagnostics_feedback_value,
+                getString(feedbackKindRes(it.lastKind)),
+                agoLabel(nowMs, it.atMs),
+                resources.getQuantityString(R.plurals.diagnostics_total_count, it.count.pluralCount(), it.count),
+            )
         } ?: getString(R.string.diagnostics_none)
     lines += diagKv(R.string.diagnostics_last_feedback, last)
     return lines

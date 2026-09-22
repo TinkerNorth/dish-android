@@ -151,7 +151,7 @@ class UsbGamepadManagerTest {
         every { usbManager.openDevice(device) } returns conn
         every { conn.claimInterface(any(), true) } returns true
         every {
-            native.attachUsbDevice(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            native.attachUsbDevice(any(), any(), any(), any())
         } returns 0
         val m = buildManager()
         m.tryDirectMode(vid, pid)
@@ -166,7 +166,7 @@ class UsbGamepadManagerTest {
         every { usbManager.openDevice(device) } returns conn
         every { conn.claimInterface(any(), true) } returns true
         every {
-            native.attachUsbDevice(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            native.attachUsbDevice(any(), any(), any(), any())
         } returns -1000
         val m = buildManager()
         m.tryDirectMode(vid, pid)
@@ -183,7 +183,7 @@ class UsbGamepadManagerTest {
         every { hub.bindings } returns MutableStateFlow(emptyMap())
         every { hub.satTypes } returns MutableStateFlow(emptyMap())
         every {
-            native.attachUsbDevice(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            native.attachUsbDevice(any(), any(), any(), any())
         } returns syntheticId
         return buildManager()
     }
@@ -285,7 +285,7 @@ class UsbGamepadManagerTest {
         every { usbManager.openDevice(dev) } returns conn
         every { conn.claimInterface(any(), true) } returns true
         every {
-            native.attachUsbDevice(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            native.attachUsbDevice(any(), any(), any(), any())
         } returns -1000
         val m = buildManagerForDevice(dev)
         m.tryDirectMode(vid, pid)
@@ -294,13 +294,14 @@ class UsbGamepadManagerTest {
                 fd = any(),
                 vendorId = vid,
                 productId = pid,
-                interfaceNumber = 1,
-                endpointIn = 0x82,
-                endpointInMaxPacket = any(),
-                endpointOut = any(),
-                interfaceClass = UsbConstants.USB_CLASS_VENDOR_SPEC,
-                interfaceSubclass = 0x5D,
-                interfaceProtocol = 0x01,
+                claim =
+                    match {
+                        it.interfaceNumber == 1 &&
+                            it.endpointIn == 0x82 &&
+                            it.interfaceClass == UsbConstants.USB_CLASS_VENDOR_SPEC &&
+                            it.interfaceSubclass == 0x5D &&
+                            it.interfaceProtocol == 0x01
+                    },
             )
         }
     }
@@ -362,7 +363,7 @@ class UsbGamepadManagerTest {
         every { usbManager.openDevice(dev) } returns conn
         every { conn.claimInterface(any(), true) } returns true
         every {
-            native.attachUsbDevice(any(), any(), any(), any(), any(), any(), any(), any(), any(), any())
+            native.attachUsbDevice(any(), any(), any(), any())
         } returns -1000
         return buildManagerForDevice(dev)
     }
@@ -376,13 +377,14 @@ class UsbGamepadManagerTest {
                 fd = any(),
                 vendorId = vid,
                 productId = pid,
-                interfaceNumber = 2,
-                endpointIn = 0x83,
-                endpointInMaxPacket = any(),
-                endpointOut = any(),
-                interfaceClass = UsbConstants.USB_CLASS_HID,
-                interfaceSubclass = 0x00,
-                interfaceProtocol = 0x00,
+                claim =
+                    match {
+                        it.interfaceNumber == 2 &&
+                            it.endpointIn == 0x83 &&
+                            it.interfaceClass == UsbConstants.USB_CLASS_HID &&
+                            it.interfaceSubclass == 0x00 &&
+                            it.interfaceProtocol == 0x00
+                    },
             )
         }
     }
@@ -397,13 +399,14 @@ class UsbGamepadManagerTest {
                 fd = any(),
                 vendorId = vid,
                 productId = pid,
-                interfaceNumber = 0,
-                endpointIn = 0x81,
-                endpointInMaxPacket = any(),
-                endpointOut = any(),
-                interfaceClass = UsbConstants.USB_CLASS_HID,
-                interfaceSubclass = 0x01,
-                interfaceProtocol = 0x01,
+                claim =
+                    match {
+                        it.interfaceNumber == 0 &&
+                            it.endpointIn == 0x81 &&
+                            it.interfaceClass == UsbConstants.USB_CLASS_HID &&
+                            it.interfaceSubclass == 0x01 &&
+                            it.interfaceProtocol == 0x01
+                    },
             )
         }
     }

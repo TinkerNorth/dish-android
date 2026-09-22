@@ -136,28 +136,17 @@
                     app:iconGravity="end"
                     android:text="@string/setup_bth_permission_action" />
 
-                <LinearLayout
-                    android:layout_width="match_parent"
+                <TextView
+                    style="@style/TextAppearance.Dish.BodySmall"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
+                    android:layout_marginTop="@dimen/spacing_2xl"
+                    app:drawableStartCompat="@drawable/ic_lock_callout"
+                    android:drawablePadding="@dimen/spacing_sm"
+                    app:drawableTint="@color/colorMuted"
                     android:gravity="center_vertical"
-                    android:layout_marginTop="@dimen/spacing_2xl">
-
-                    <ImageView
-                        android:layout_width="@dimen/config_callout_icon_size"
-                        android:layout_height="@dimen/config_callout_icon_size"
-                        android:importantForAccessibility="no"
-                        android:src="@drawable/ic_lock"
-                        app:tint="@color/colorMuted" />
-
-                    <TextView
-                        style="@style/TextAppearance.Dish.BodySmall"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="@dimen/spacing_sm"
-                        android:textColor="@color/colorMuted"
-                        android:text="@string/setup_bth_type_locked_until_permission" />
-                </LinearLayout>
+                    android:textColor="@color/colorMuted"
+                    android:text="@string/setup_bth_type_locked_until_permission" />
             </LinearLayout>
 
             <LinearLayout
@@ -183,12 +172,17 @@
                     android:id="@+id/cardPlaystation"
                     layout="@layout/setup_type_card" />
 
+                <!-- The padlock sits on the first line of a note that wraps, which a compound
+                     drawable cannot do: it is centred against the whole block. Collapsing
+                     these two views would mean giving that alignment up.
+                     tools:ignore reason: no compound-drawable form of a top-aligned glyph. -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="top"
-                    android:layout_marginTop="@dimen/spacing_2xl">
+                    android:layout_marginTop="@dimen/spacing_2xl"
+                    tools:ignore="UseCompoundDrawables">
 
                     <ImageView
                         android:layout_width="@dimen/config_callout_icon_size"
@@ -250,31 +244,18 @@
                     android:layout_marginTop="@dimen/spacing_2xl"
                     tools:text="On the PC open Bluetooth, choose Add a device, and pick &quot;Dish Xbox Controller&quot;." />
 
-                <LinearLayout
+                <TextView
+                    android:id="@+id/tvDiscoverable"
+                    style="@style/TextAppearance.Dish.Label"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
+                    android:layout_marginTop="@dimen/spacing_2xl"
+                    app:drawableStartCompat="@drawable/ic_bluetooth_searching_card"
+                    android:drawablePadding="@dimen/spacing_md"
+                    app:drawableTint="@color/colorMuted"
                     android:gravity="center_vertical"
-                    android:layout_marginTop="@dimen/spacing_2xl">
-
-                    <ImageView
-                        android:id="@+id/icDiscoverable"
-                        android:layout_width="@dimen/icon_card_glyph"
-                        android:layout_height="@dimen/icon_card_glyph"
-                        android:importantForAccessibility="no"
-                        android:src="@drawable/ic_bluetooth_searching"
-                        app:tint="@color/colorMuted" />
-
-                    <TextView
-                        android:id="@+id/tvDiscoverable"
-                        style="@style/TextAppearance.Dish.Label"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:layout_marginStart="@dimen/spacing_md"
-                        android:textAllCaps="true"
-                        tools:text="Waiting for your PC" />
-                </LinearLayout>
+                    android:textAllCaps="true"
+                    tools:text="Waiting for your PC" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnTryAgain"

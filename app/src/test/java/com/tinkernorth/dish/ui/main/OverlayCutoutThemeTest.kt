@@ -9,7 +9,7 @@ import java.io.File
 
 class OverlayCutoutThemeTest {
     private val mainDir: File =
-        generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
+        generateSequence(File(checkNotNull(System.getProperty("user.dir"))).absoluteFile) { it.parentFile }
             .flatMap { sequenceOf(File(it, "src/main"), File(it, "app/src/main")) }
             .first { File(it, "AndroidManifest.xml").exists() }
 
@@ -20,7 +20,7 @@ class OverlayCutoutThemeTest {
         val wrongTheme =
             manifestActivities()
                 .filter { (name, _) -> isInputOverlay(name) }
-                .filterNot { (_, theme) -> theme == "@style/Theme.Dish.Overlay" }
+                .filterNot { (_, theme) -> isOverlayTheme(theme) }
                 .map { (name, theme) -> "$name -> $theme" }
         assertTrue("input overlays not on Theme.Dish.Overlay: $wrongTheme", wrongTheme.isEmpty())
     }
@@ -29,10 +29,21 @@ class OverlayCutoutThemeTest {
     fun `only input overlay activities use the overlay theme`() {
         val leaked =
             manifestActivities()
-                .filter { (_, theme) -> theme == "@style/Theme.Dish.Overlay" }
+                .filter { (_, theme) -> isOverlayTheme(theme) }
                 .filterNot { (name, _) -> isInputOverlay(name) }
                 .map { (name, _) -> name }
         assertTrue("non-overlay screens on Theme.Dish.Overlay: $leaked", leaked.isEmpty())
+    }
+
+    @Test
+    fun `every overlay theme variant extends the overlay theme`() {
+        val strays =
+            Regex("""<style name="(Theme\.Dish\.Overlay\.[^"]+)" parent="([^"]+)"""")
+                .findAll(File(mainDir, "res/values/themes.xml").readText())
+                .filterNot { it.groupValues[2] == "Theme.Dish.Overlay" }
+                .map { "${it.groupValues[1]} -> ${it.groupValues[2]}" }
+                .toList()
+        assertTrue("overlay theme variants must extend Theme.Dish.Overlay: $strays", strays.isEmpty())
     }
 
     @Test
@@ -72,6 +83,10 @@ class OverlayCutoutThemeTest {
         assertTrue("runtime cutout mode in: $sources", sources.isEmpty())
     }
 
+    // Theme.Dish.Overlay, or a variant of it: a variant extends it by name, which the
+    // variant test above holds to, so it carries the same cutout handling.
+    private fun isOverlayTheme(theme: String?): Boolean = theme == OVERLAY_THEME || theme?.startsWith("$OVERLAY_THEME.") == true
+
     private fun isInputOverlay(name: String): Boolean =
         BaseInputOverlayActivity::class.java.isAssignableFrom(Class.forName(name, false, javaClass.classLoader))
 
@@ -98,4 +113,8 @@ class OverlayCutoutThemeTest {
             .find(overlayStyle(qualifier).orEmpty())
             ?.groupValues
             ?.get(1)
+
+    private companion object {
+        const val OVERLAY_THEME = "@style/Theme.Dish.Overlay"
+    }
 }

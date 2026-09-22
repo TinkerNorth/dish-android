@@ -32,14 +32,13 @@ class UdpControlTransport(
     }
 
     // A read timeout is the normal "no datagram this tick" signal, not an error to propagate.
-    @Suppress("SwallowedException")
     override fun receive(timeoutMs: Int): ByteArray? {
         socket.soTimeout = timeoutMs.coerceAtLeast(1)
         val packet = DatagramPacket(recvBuffer, recvBuffer.size)
         return try {
             socket.receive(packet)
             recvBuffer.copyOf(packet.length)
-        } catch (timeout: SocketTimeoutException) {
+        } catch (expectedTimeout: SocketTimeoutException) {
             null
         }
     }

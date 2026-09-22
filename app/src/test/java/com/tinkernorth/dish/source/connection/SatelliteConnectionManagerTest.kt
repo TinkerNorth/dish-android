@@ -12,7 +12,7 @@ import com.tinkernorth.dish.core.net.DishProtocol
 import com.tinkernorth.dish.core.net.HttpReply
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedSatellite
-import com.tinkernorth.dish.source.store.MouseSurfaceStore
+import com.tinkernorth.dish.source.store.SatelliteHostFacts
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
 import com.tinkernorth.dish.source.system.LocalNetworkAccess
@@ -105,13 +105,12 @@ class SatelliteConnectionManagerTest {
                 )
             every { wireCapsFor(any()) } returns BASE_WIRE_CAPS
             every { touchpadWireMode(any()) } returns "off"
+            every { wireProjection } returns kotlinx.coroutines.flow.MutableStateFlow(emptyMap())
         }
 
     private val capabilityProvider = javax.inject.Provider<CapabilityComposer> { capabilityComposer }
 
     private val motionBackendStatusStore = SatelliteMotionBackendStatusStore()
-
-    private val mouseSurfaceStore = MouseSurfaceStore()
 
     private val hostFeaturesStore = SatelliteHostFeaturesStore()
 
@@ -125,9 +124,14 @@ class SatelliteConnectionManagerTest {
             json = json,
             ioDispatcher = ioDispatcher,
             capabilityProvider = capabilityProvider,
-            motionBackendStatusStore = motionBackendStatusStore,
-            mouseSurfaceStore = mouseSurfaceStore,
-            hostFeaturesStore = hostFeaturesStore,
+            hostFacts =
+                SatelliteHostFacts(
+                    features = hostFeaturesStore,
+                    runtime = mockk(),
+                    motionBackend = motionBackendStatusStore,
+                    catalog = mockk(),
+                    capabilities = mockk(),
+                ),
         )
 
     private fun runMgrTest(block: suspend (SatelliteConnectionManager, MutableList<ConnectionEvent>) -> Unit) =

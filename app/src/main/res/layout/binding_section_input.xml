@@ -60,6 +60,7 @@
                 <ImageView
                     android:id="@+id/ivConnIcon"
                     style="@style/Widget.Dish.Pill.Icon"
+                    android:importantForAccessibility="no"
                     app:tint="@color/colorOnSurface" />
 
                 <TextView
@@ -84,6 +85,7 @@
                 <ImageView
                     android:id="@+id/ivDirectBolt"
                     style="@style/Widget.Dish.Pill.Icon"
+                    android:importantForAccessibility="no"
                     android:src="@drawable/ic_bolt" />
 
                 <TextView

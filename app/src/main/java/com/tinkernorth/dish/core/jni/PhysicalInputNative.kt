@@ -12,62 +12,62 @@ class PhysicalInputNative
         fun isKnownFastLaneModel(
             vendorId: Int,
             productId: Int,
-        ): Boolean = SatelliteNative.isKnownFastLaneModel(vendorId, productId)
+        ): Boolean = ModelTableNative.isKnownFastLaneModel(vendorId, productId)
 
         fun modelHasImu(
             vendorId: Int,
             productId: Int,
-        ): Boolean = SatelliteNative.modelHasImu(vendorId, productId)
+        ): Boolean = ModelTableNative.modelHasImu(vendorId, productId)
 
         fun modelHasRumble(
             vendorId: Int,
             productId: Int,
-        ): Boolean = SatelliteNative.modelHasRumble(vendorId, productId)
+        ): Boolean = ModelTableNative.modelHasRumble(vendorId, productId)
 
         fun modelHasLightbar(
             vendorId: Int,
             productId: Int,
-        ): Boolean = SatelliteNative.modelHasLightbar(vendorId, productId)
+        ): Boolean = ModelTableNative.modelHasLightbar(vendorId, productId)
 
         fun modelHasPlayerLeds(
             vendorId: Int,
             productId: Int,
-        ): Boolean = SatelliteNative.modelHasPlayerLeds(vendorId, productId)
+        ): Boolean = ModelTableNative.modelHasPlayerLeds(vendorId, productId)
 
         fun modelHasTriggerEffects(
             vendorId: Int,
             productId: Int,
-        ): Boolean = SatelliteNative.modelHasTriggerEffects(vendorId, productId)
+        ): Boolean = ModelTableNative.modelHasTriggerEffects(vendorId, productId)
 
         fun modelHasHapticLanes(
             vendorId: Int,
             productId: Int,
-        ): Boolean = SatelliteNative.modelHasHapticLanes(vendorId, productId)
+        ): Boolean = ModelTableNative.modelHasHapticLanes(vendorId, productId)
 
         fun modelHasTriggerRumble(
             vendorId: Int,
             productId: Int,
-        ): Boolean = SatelliteNative.modelHasTriggerRumble(vendorId, productId)
+        ): Boolean = ModelTableNative.modelHasTriggerRumble(vendorId, productId)
 
         fun modelFrameworkRumbleUnreliable(
             vendorId: Int,
             productId: Int,
-        ): Boolean = SatelliteNative.modelFrameworkRumbleUnreliable(vendorId, productId)
+        ): Boolean = ModelTableNative.modelFrameworkRumbleUnreliable(vendorId, productId)
 
         fun modelHasTouchpad(
             vendorId: Int,
             productId: Int,
-        ): Boolean = SatelliteNative.modelHasTouchpad(vendorId, productId)
+        ): Boolean = ModelTableNative.modelHasTouchpad(vendorId, productId)
 
         fun modelExpectsFrameworkGamepad(
             vendorId: Int,
             productId: Int,
-        ): Boolean = SatelliteNative.modelExpectsFrameworkGamepad(vendorId, productId)
+        ): Boolean = ModelTableNative.modelExpectsFrameworkGamepad(vendorId, productId)
 
         fun lookupKnownModelName(
             vendorId: Int,
             productId: Int,
-        ): String = SatelliteNative.lookupKnownModelName(vendorId, productId)
+        ): String = ModelTableNative.lookupKnownModelName(vendorId, productId)
 
         fun setDeviceDeadzones(
             deviceId: Int,
@@ -76,44 +76,25 @@ class PhysicalInputNative
             flatZ: Float,
             flatRZ: Float,
         ) {
-            SatelliteNative.setDeviceDeadzones(deviceId, flatX, flatY, flatZ, flatRZ)
+            PhysicalSlotNative.setDeviceDeadzones(deviceId, flatX, flatY, flatZ, flatRZ)
         }
 
         fun setDeviceQuirk(
             deviceId: Int,
             quirk: Int,
         ) {
-            SatelliteNative.setDeviceQuirk(deviceId, quirk)
+            PhysicalSlotNative.setDeviceQuirk(deviceId, quirk)
         }
 
-        @Suppress("LongParameterList")
         fun attachUsbDevice(
             fd: Int,
             vendorId: Int,
             productId: Int,
-            interfaceNumber: Int,
-            endpointIn: Int,
-            endpointInMaxPacket: Int,
-            endpointOut: Int,
-            interfaceClass: Int,
-            interfaceSubclass: Int,
-            interfaceProtocol: Int,
-        ): Int =
-            SatelliteNative.attachUsbDevice(
-                fd = fd,
-                vendorId = vendorId,
-                productId = productId,
-                interfaceNumber = interfaceNumber,
-                endpointIn = endpointIn,
-                endpointInMaxPacket = endpointInMaxPacket,
-                endpointOut = endpointOut,
-                interfaceClass = interfaceClass,
-                interfaceSubclass = interfaceSubclass,
-                interfaceProtocol = interfaceProtocol,
-            )
+            claim: UsbInterfaceClaim,
+        ): Int = UsbDirectNative.attachUsbDevice(fd, vendorId, productId, claim)
 
         fun detachUsbDevice(syntheticDeviceId: Int) {
-            SatelliteNative.detachUsbDevice(syntheticDeviceId)
+            UsbDirectNative.detachUsbDevice(syntheticDeviceId)
         }
 
         fun sendUsbRumble(
@@ -121,7 +102,7 @@ class PhysicalInputNative
             strong: Int,
             weak: Int,
         ) {
-            SatelliteNative.sendUsbRumble(syntheticDeviceId, strong, weak)
+            UsbDirectNative.sendUsbRumble(syntheticDeviceId, strong, weak)
         }
 
         fun sendUsbTriggerRumble(
@@ -129,7 +110,7 @@ class PhysicalInputNative
             leftMagnitude: Int,
             rightMagnitude: Int,
         ) {
-            SatelliteNative.sendUsbTriggerRumble(syntheticDeviceId, leftMagnitude, rightMagnitude)
+            UsbDirectNative.sendUsbTriggerRumble(syntheticDeviceId, leftMagnitude, rightMagnitude)
         }
 
         fun sendUsbLightbar(
@@ -138,52 +119,52 @@ class PhysicalInputNative
             g: Int,
             b: Int,
         ) {
-            SatelliteNative.sendUsbLightbar(syntheticDeviceId, r, g, b)
+            UsbDirectNative.sendUsbLightbar(syntheticDeviceId, r, g, b)
         }
 
         fun sendUsbPlayerLeds(
             syntheticDeviceId: Int,
             ledMask: Int,
         ) {
-            SatelliteNative.sendUsbPlayerLeds(syntheticDeviceId, ledMask)
+            UsbDirectNative.sendUsbPlayerLeds(syntheticDeviceId, ledMask)
         }
 
         fun sendUsbTriggerEffects(
             syntheticDeviceId: Int,
             blocks: ByteArray,
         ) {
-            SatelliteNative.sendUsbTriggerEffects(syntheticDeviceId, blocks)
+            UsbDirectNative.sendUsbTriggerEffects(syntheticDeviceId, blocks)
         }
 
         fun sendUsbMicMuteLed(
             syntheticDeviceId: Int,
             state: Int,
         ) {
-            SatelliteNative.sendUsbMicMuteLed(syntheticDeviceId, state)
+            UsbDirectNative.sendUsbMicMuteLed(syntheticDeviceId, state)
         }
 
-        fun getDeviceUrbCount(deviceId: Int): Long = SatelliteNative.getDeviceUrbCount(deviceId)
+        fun getDeviceUrbCount(deviceId: Int): Long = UsbDirectNative.getDeviceUrbCount(deviceId)
 
-        fun getDirectPadBattery(deviceId: Int): Int = SatelliteNative.getDirectPadBattery(deviceId)
+        fun getDirectPadBattery(deviceId: Int): Int = UsbDirectNative.getDirectPadBattery(deviceId)
 
-        fun getDeviceMotionCount(deviceId: Int): Long = SatelliteNative.getDeviceMotionCount(deviceId)
+        fun getDeviceMotionCount(deviceId: Int): Long = UsbDirectNative.getDeviceMotionCount(deviceId)
 
-        fun getDeviceInputEventCount(deviceId: Int): Long = SatelliteNative.getDeviceInputEventCount(deviceId)
+        fun getDeviceInputEventCount(deviceId: Int): Long = PhysicalSlotNative.getDeviceInputEventCount(deviceId)
 
-        fun getDeviceUrbErrorCount(deviceId: Int): Long = SatelliteNative.getDeviceUrbErrorCount(deviceId)
+        fun getDeviceUrbErrorCount(deviceId: Int): Long = UsbDirectNative.getDeviceUrbErrorCount(deviceId)
 
-        fun deviceInfoJson(deviceId: Int): String = SatelliteNative.deviceInfoJson(deviceId)
+        fun deviceInfoJson(deviceId: Int): String = UsbDirectNative.deviceInfoJson(deviceId)
 
-        fun deviceLatencyJson(deviceId: Int): String = SatelliteNative.deviceLatencyJson(deviceId)
+        fun deviceLatencyJson(deviceId: Int): String = UsbDirectNative.deviceLatencyJson(deviceId)
 
         // Opt-in latency benchmark (stage-1 USB-direct hot path + stage-2 heartbeat RTT).
-        fun setHotPathBench(on: Boolean) = SatelliteNative.setHotPathBench(on)
+        fun setHotPathBench(on: Boolean) = InstrumentationNative.setHotPathBench(on)
 
-        fun hotPathBenchJson(reset: Boolean): String = SatelliteNative.hotPathBenchJson(reset)
+        fun hotPathBenchJson(reset: Boolean): String = InstrumentationNative.hotPathBenchJson(reset)
 
-        fun setLatencyProbe(on: Boolean) = SatelliteNative.setLatencyProbe(on)
+        fun setLatencyProbe(on: Boolean) = InstrumentationNative.setLatencyProbe(on)
 
-        fun setInputInspection(on: Boolean) = SatelliteNative.setInputInspection(on)
+        fun setInputInspection(on: Boolean) = InstrumentationNative.setInputInspection(on)
 
-        fun deviceStateJson(deviceId: Int): String = SatelliteNative.deviceStateJson(deviceId)
+        fun deviceStateJson(deviceId: Int): String = PhysicalSlotNative.deviceStateJson(deviceId)
     }

@@ -13,6 +13,7 @@ import com.tinkernorth.dish.core.net.moonlight.MoonlightMotionGate
 import com.tinkernorth.dish.core.net.moonlight.MoonlightTelemetry
 import com.tinkernorth.dish.core.net.moonlight.MoonlightTouchDiffer
 import com.tinkernorth.dish.source.connection.TelemetrySink
+import com.tinkernorth.dish.source.connection.TouchpadReport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
@@ -243,7 +244,6 @@ class MoonlightConnection(
     }
 
     /** HOT PATH: forward one pad's controller state to the live session. */
-    @Suppress("LongParameterList")
     fun sendControllerState(
         controllerNumber: Int,
         buttons: Int,
@@ -326,7 +326,6 @@ class MoonlightConnection(
      * packets the host asked for (accel and gyro are independent MOTION_EVENT
      * subscriptions) and paced to each requested rate.
      */
-    @Suppress("LongParameterList")
     override fun sendMotion(
         slotId: String,
         gyroX: Short,
@@ -380,44 +379,31 @@ class MoonlightConnection(
      * flags, and the mouse-mode buttons/wheel ride the native mouse packets,
      * so this carries contacts only.
      */
-    @Suppress("LongParameterList")
     override fun sendTouchpad(
         slotId: String,
-        finger0Active: Boolean,
-        finger1Active: Boolean,
-        buttonPressed: Boolean,
-        rightPressed: Boolean,
-        middlePressed: Boolean,
-        finger0TrackingId: Int,
-        finger0X: Short,
-        finger0Y: Short,
-        finger1TrackingId: Int,
-        finger1X: Short,
-        finger1Y: Short,
-        eventTimeMs: Long,
-        scrollDelta: Short,
+        report: TouchpadReport,
     ) {
         val live = session ?: return
         val pad = padFor(slotId) ?: return
         // The pad-surface click has no packet of its own: it is BTN_TOUCHPAD in
         // the pad report. On an edge, replay the last cached frame with the bit
         // merged so a click with no stick/button change still reaches the host.
-        if (touchClickByNumber[pad.number] != buttonPressed) {
-            touchClickByNumber[pad.number] = buttonPressed
+        if (touchClickByNumber[pad.number] != report.buttonPressed) {
+            touchClickByNumber[pad.number] = report.buttonPressed
             val f = lastPadFrames[pad.number] ?: PadFrame(0, 0, 0, 0, 0, 0, 0)
             sendControllerState(pad.number, f.buttons, f.leftTrigger, f.rightTrigger, f.leftX, f.leftY, f.rightX, f.rightY)
         }
         val differ = touchDiffers.getOrPut(slotId) { MoonlightTouchDiffer() }
         val events =
             differ.diff(
-                finger0Active = finger0Active,
-                finger0Id = finger0TrackingId,
-                finger0X = MoonlightTelemetry.touchNorm(finger0X),
-                finger0Y = MoonlightTelemetry.touchNorm(finger0Y),
-                finger1Active = finger1Active,
-                finger1Id = finger1TrackingId,
-                finger1X = MoonlightTelemetry.touchNorm(finger1X),
-                finger1Y = MoonlightTelemetry.touchNorm(finger1Y),
+                finger0Active = report.finger0Active,
+                finger0Id = report.finger0TrackingId,
+                finger0X = MoonlightTelemetry.touchNorm(report.finger0X),
+                finger0Y = MoonlightTelemetry.touchNorm(report.finger0Y),
+                finger1Active = report.finger1Active,
+                finger1Id = report.finger1TrackingId,
+                finger1X = MoonlightTelemetry.touchNorm(report.finger1X),
+                finger1Y = MoonlightTelemetry.touchNorm(report.finger1Y),
             )
         for (e in events) {
             live.sendControllerTouch(

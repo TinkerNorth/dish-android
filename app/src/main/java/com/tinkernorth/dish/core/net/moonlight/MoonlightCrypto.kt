@@ -64,6 +64,11 @@ object MoonlightCrypto {
         data: ByteArray,
     ): ByteArray = ecb(Cipher.DECRYPT_MODE, key, data)
 
+    // Marker: lint's GetInstance rejects ECB as a mode, rightly for data. Here it is the block
+    // primitive the Moonlight pairing protocol prescribes (Wolf moonlight.cpp: the challenge and
+    // the server-challenge response are AES-128-ECB blobs), and a client that used any other mode
+    // could not pair with a Sunshine or Wolf host. The fix is a protocol revision upstream.
+    @Suppress("GetInstance")
     private fun ecb(
         mode: Int,
         key: ByteArray,
