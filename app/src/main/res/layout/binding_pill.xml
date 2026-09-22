@@ -1,14 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    style="@style/Widget.Dish.Pill"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content">
-
-    <ImageView
-        android:id="@+id/ivPillIcon"
-        style="@style/Widget.Dish.Pill.Icon" />
-
-    <TextView
-        android:id="@+id/tvPillText"
-        style="@style/Widget.Dish.Pill.Text" />
-</LinearLayout>
+<!-- One pill: a label, sometimes with a glyph in front of it, on a toned background.
+     The glyph is a compound drawable, so a pill is a single view wherever it is used. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/tvPillText"
+    style="@style/Widget.Dish.Pill.Label" />

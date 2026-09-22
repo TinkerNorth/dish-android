@@ -11,7 +11,6 @@ import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
-import com.tinkernorth.dish.repository.SatelliteCatalogRepository
 import com.tinkernorth.dish.repository.TouchpadModeValue
 import com.tinkernorth.dish.source.audio.PadAudioRoutes
 import com.tinkernorth.dish.source.sensor.PhoneMotionAvailability
@@ -19,10 +18,9 @@ import com.tinkernorth.dish.source.store.MicEnabledStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.MouseSurfaceStore
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
-import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
-import com.tinkernorth.dish.source.store.SatelliteHostRuntimeStore
+import com.tinkernorth.dish.source.store.SatelliteHostFacts
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatus
-import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
+import com.tinkernorth.dish.source.store.SlotToggleStores
 import com.tinkernorth.dish.source.store.SpeakerEnabledStore
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import kotlinx.coroutines.CoroutineScope
@@ -39,80 +37,71 @@ data class InputFunctions(
     val touchpad: Boolean,
 )
 
-// The per-slot audio toggles, folded into one upstream so the composer's combine keeps
-// its arity. The pad route table rides the same fold without being carried: the
-// controller layer reads it through PadAudioRoutes the way it reads the native model
-// tables, and it is here so a pad's endpoints appearing or vanishing re-publishes.
-private data class AudioToggles(
+// The per-slot user toggles as one upstream value. The pad route table rides the same fold
+// without being carried: the controller layer reads it through PadAudioRoutes the way it reads
+// the native model tables, and it is here so a pad's endpoints appearing or vanishing
+// re-publishes.
+private data class SlotToggles(
+    val motion: Map<String, Boolean>,
+    val rumble: Map<String, Boolean>,
     val mic: Map<String, Boolean>,
     val speaker: Map<String, Boolean>,
 )
 
-@Suppress("UNCHECKED_CAST", "LongParameterList")
-private inline fun <T1, T2, T3, T4, T5, T6, T7, T8, R> combine8(
-    f1: Flow<T1>,
-    f2: Flow<T2>,
-    f3: Flow<T3>,
-    f4: Flow<T4>,
-    f5: Flow<T5>,
-    f6: Flow<T6>,
-    f7: Flow<T7>,
-    f8: Flow<T8>,
-    crossinline transform: suspend (T1, T2, T3, T4, T5, T6, T7, T8) -> R,
-): Flow<R> =
-    combine(f1, f2, f3, f4, f5, f6, f7, f8) { args ->
-        transform(
-            args[0] as T1,
-            args[1] as T2,
-            args[2] as T3,
-            args[3] as T4,
-            args[4] as T5,
-            args[5] as T6,
-            args[6] as T7,
-            args[7] as T8,
-        )
-    }
+// What the bound satellite hosts report: their feature sets and the per-controller motion
+// backend status.
+private data class HostInputs(
+    val features: Map<String, HostFeatureSet>,
+    val motionBackend: Map<Pair<String, String>, SatelliteMotionBackendStatus>,
+)
+
+// The wire-facing projection of one slot's capabilities: the caps word the descriptor carries
+// and its touchpadMode. Only these two move the descriptor, so consumers converging the wire
+// key on this rather than on every capability emission.
+data class WireProjection(
+    val caps: Int,
+    val touchpadMode: String,
+)
 
 @Singleton
 class CapabilityComposer
     @Inject
-    @Suppress("LongParameterList")
     constructor(
         phoneAvailability: PhoneMotionAvailability,
         private val registry: PhysicalGamepadRegistry,
         private val hub: ConnectionCoordinator,
         private val native: PhysicalInputNative,
-        private val motionEnabled: MotionEnabledStore,
-        private val rumbleEnabled: RumbleEnabledStore,
-        private val micEnabled: MicEnabledStore,
-        private val speakerEnabled: SpeakerEnabledStore,
+        private val toggles: SlotToggleStores,
         private val padAudioRoutes: PadAudioRoutes,
         private val mouseSurface: MouseSurfaceStore,
-        private val hostFeatures: SatelliteHostFeaturesStore,
-        private val motionBackend: SatelliteMotionBackendStatusStore,
-        private val hostRuntime: SatelliteHostRuntimeStore,
-        private val catalogRepo: SatelliteCatalogRepository,
+        private val hostFacts: SatelliteHostFacts,
         scope: CoroutineScope,
     ) : AbstractComposer<Map<String, SlotCapabilities>>(scope, emptyMap()) {
-        // Fixed hardware fact, captured at construction so the combine arity stays at the eight live flows.
+        // Fixed hardware fact, captured at construction so it needs no flow of its own.
         private val phoneHasGyro: Boolean = phoneAvailability.hasGyro
 
-        private val audioToggles: Flow<AudioToggles> =
-            combine(micEnabled.state, speakerEnabled.state, padAudioRoutes.state) { mic, speaker, _ ->
-                AudioToggles(mic, speaker)
+        private val slotToggles: Flow<SlotToggles> =
+            combine(
+                toggles.motion.state,
+                toggles.rumble.state,
+                toggles.mic.state,
+                toggles.speaker.state,
+                padAudioRoutes.state,
+            ) { motion, rumble, mic, speaker, _ ->
+                SlotToggles(motion, rumble, mic, speaker)
             }
 
+        private val hostInputs: Flow<HostInputs> =
+            combine(hostFacts.features.state, hostFacts.motionBackend.state, ::HostInputs)
+
         override fun upstream(): Flow<Map<String, SlotCapabilities>> =
-            combine8(
+            combine(
                 registry.devices,
                 hub.bindings,
                 hub.connections,
-                motionEnabled.state,
-                rumbleEnabled.state,
-                hostFeatures.state,
-                motionBackend.state,
-                audioToggles,
-            ) { devices, bindings, summaries, motionMap, rumbleMap, hostMap, backendMap, audioMap ->
+                slotToggles,
+                hostInputs,
+            ) { devices, bindings, summaries, userToggles, hosts ->
                 val summariesById = summaries.associateBy { it.id }
                 val out = HashMap<String, SlotCapabilities>(devices.size + 1)
 
@@ -122,11 +111,8 @@ class CapabilityComposer
                         controller = virtualControllerLayer(),
                         bindings = bindings,
                         summariesById = summariesById,
-                        motionMap = motionMap,
-                        rumbleMap = rumbleMap,
-                        hostMap = hostMap,
-                        backendMap = backendMap,
-                        audioMap = audioMap,
+                        userToggles = userToggles,
+                        hosts = hosts,
                     )
 
                 for ((deviceId, device) in devices) {
@@ -137,14 +123,25 @@ class CapabilityComposer
                             controller = deviceControllerLayer(device),
                             bindings = bindings,
                             summariesById = summariesById,
-                            motionMap = motionMap,
-                            rumbleMap = rumbleMap,
-                            hostMap = hostMap,
-                            backendMap = backendMap,
-                            audioMap = audioMap,
+                            userToggles = userToggles,
+                            hosts = hosts,
                         )
                 }
                 out
+            }.distinctUntilChanged()
+
+        /**
+         * The per-slot wire projection ([wireCapsFor] plus [touchpadWireMode]), re-derived on
+         * every capability emission and on every mouse-surface flip: opening the mouse overlay
+         * changes a slot's derived mode without moving any capability, and the descriptor must
+         * still converge. Distinct, so unrelated composer emissions (host, type or runtime
+         * changes that do not move the descriptor) never fire a no-op wire update.
+         */
+        val wireProjection: Flow<Map<String, WireProjection>> =
+            combine(state, mouseSurface.state) { caps, _ ->
+                caps.mapValues { (slotId, slot) ->
+                    WireProjection(CapabilityResolver.wireCaps(slot), touchpadWireMode(slotId))
+                }
             }.distinctUntilChanged()
 
         // The live per-slot map is the reactive read-surface for consumers that show a
@@ -185,7 +182,7 @@ class CapabilityComposer
                             .firstOrNull { it.id == connId }
                             ?.kind ?: ConnectionKind.SATELLITE,
                     ),
-                host = (hostFeatures.featuresFor(connId) ?: HostFeatureSet.SATELLITE_DEFAULT).toCapabilitySet(),
+                host = (hostFacts.features.featuresFor(connId) ?: HostFeatureSet.SATELLITE_DEFAULT).toCapabilitySet(),
             )
         }
 
@@ -212,31 +209,27 @@ class CapabilityComposer
                 runtimeDown = candidateRuntimeDownLayer(candidateHostKind, candidateHostId),
             )
 
-        @Suppress("LongParameterList")
         private fun slotFor(
             slotId: String,
             controller: CapabilitySet,
             bindings: Map<String, String>,
             summariesById: Map<String, ConnectionSummary>,
-            motionMap: Map<String, Boolean>,
-            rumbleMap: Map<String, Boolean>,
-            hostMap: Map<String, HostFeatureSet>,
-            backendMap: Map<Pair<String, String>, SatelliteMotionBackendStatus>,
-            audioMap: AudioToggles,
+            userToggles: SlotToggles,
+            hosts: HostInputs,
         ): SlotCapabilities {
             val connId = bindings[slotId]
             val summary = connId?.let { summariesById[it] }
-            val motionOn = motionMap[slotId] ?: MotionEnabledStore.DEFAULT_ENABLED
-            val rumbleOn = rumbleMap[slotId] ?: RumbleEnabledStore.DEFAULT_ENABLED
-            val micOn = audioMap.mic[slotId] ?: MicEnabledStore.DEFAULT_ENABLED
-            val speakerOn = audioMap.speaker[slotId] ?: SpeakerEnabledStore.DEFAULT_ENABLED
+            val motionOn = userToggles.motion[slotId] ?: MotionEnabledStore.DEFAULT_ENABLED
+            val rumbleOn = userToggles.rumble[slotId] ?: RumbleEnabledStore.DEFAULT_ENABLED
+            val micOn = userToggles.mic[slotId] ?: MicEnabledStore.DEFAULT_ENABLED
+            val speakerOn = userToggles.speaker[slotId] ?: SpeakerEnabledStore.DEFAULT_ENABLED
             return CapabilityResolver.resolve(
                 controller = controller,
                 transport = transportLayer(summary),
                 type = typeLayer(slotId, summary),
-                host = hostLayer(connId, summary, hostMap),
+                host = hostLayer(connId, summary, hosts.features),
                 userEnabled = CapabilityResolver.userEnabledCapabilities(motionOn, rumbleOn, micOn, speakerOn),
-                runtimeDown = runtimeDownLayer(connId, slotId, backendMap),
+                runtimeDown = runtimeDownLayer(connId, slotId, hosts.motionBackend),
             )
         }
 
@@ -433,7 +426,7 @@ class CapabilityComposer
             }
             val catalogType =
                 connId
-                    ?.let { catalogRepo.cached(it) }
+                    ?.let { hostFacts.catalog.cached(it) }
                     ?.controllerTypes
                     ?.firstOrNull { it.id == typeId }
             return catalogType?.let { CapabilityResolver.typeCapabilities(it) }
@@ -459,7 +452,7 @@ class CapabilityComposer
         ): CapabilitySet {
             if (kind == ConnectionKind.MOONLIGHT) return MoonlightCatalog.HOST_LAYER
             if (kind != ConnectionKind.SATELLITE) return ALL
-            val features = hostId?.let { hostFeatures.featuresFor(it) } ?: HostFeatureSet.SATELLITE_DEFAULT
+            val features = hostId?.let { hostFacts.features.featuresFor(it) } ?: HostFeatureSet.SATELLITE_DEFAULT
             return features.toCapabilitySet()
         }
 
@@ -481,7 +474,7 @@ class CapabilityComposer
             hostId: String?,
         ): CapabilitySet {
             if (kind != ConnectionKind.SATELLITE) return CapabilitySet.EMPTY
-            val runtime = hostId?.let { hostRuntime.runtimeFor(it) } ?: return CapabilitySet.EMPTY
+            val runtime = hostId?.let { hostFacts.runtime.runtimeFor(it) } ?: return CapabilitySet.EMPTY
             return if (!runtime.motionBackendOk) CapabilitySet.of(Feature.MOTION) else CapabilitySet.EMPTY
         }
 

@@ -30,9 +30,12 @@ class CapabilityComposerPadAudioTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    modelHasLightbar = true,
-                    modelHasPlayerLeds = true,
-                    modelHasTriggerEffects = true,
+                    model =
+                        ModelFacts(
+                            modelHasLightbar = true,
+                            modelHasPlayerLeds = true,
+                            modelHasTriggerEffects = true,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -61,7 +64,10 @@ class CapabilityComposerPadAudioTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    padAudioRoutes = routes,
+                    stores =
+                        StoreStates(
+                            padAudioRoutes = routes,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -94,7 +100,10 @@ class CapabilityComposerPadAudioTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    padAudioRoutes = routes,
+                    stores =
+                        StoreStates(
+                            padAudioRoutes = routes,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -124,7 +133,10 @@ class CapabilityComposerPadAudioTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    padAudioRoutes = routes,
+                    stores =
+                        StoreStates(
+                            padAudioRoutes = routes,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -154,7 +166,10 @@ class CapabilityComposerPadAudioTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    padAudioRoutes = routes,
+                    stores =
+                        StoreStates(
+                            padAudioRoutes = routes,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()
@@ -184,7 +199,10 @@ class CapabilityComposerPadAudioTest {
                     bindings = MutableStateFlow(emptyMap()),
                     connections = MutableStateFlow(emptyList()),
                     scope = backgroundScope,
-                    padAudioRoutes = routes,
+                    stores =
+                        StoreStates(
+                            padAudioRoutes = routes,
+                        ),
                 )
             composer.probe(this)
             testScheduler.runCurrent()

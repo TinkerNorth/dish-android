@@ -23,9 +23,9 @@ import com.tinkernorth.dish.source.inputrate.InputRateStore
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
 import com.tinkernorth.dish.source.store.BatteryStatusStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
-import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
-import com.tinkernorth.dish.source.store.UsbPathPreferenceStore
+import com.tinkernorth.dish.source.store.SatelliteHostFacts
 import com.tinkernorth.dish.source.usb.PathChoice
+import com.tinkernorth.dish.source.usb.PhysicalPadSources
 import com.tinkernorth.dish.source.usb.UsbController
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import com.tinkernorth.dish.ui.common.GamepadSkin
@@ -44,23 +44,23 @@ import kotlinx.coroutines.flow.update
 import javax.inject.Inject
 
 @HiltViewModel
-@Suppress("LongParameterList")
 class MainViewModel
     @Inject
     constructor(
         @ApplicationContext private val context: Context,
         val satellite: SatelliteConnectionManager,
         val hub: ConnectionCoordinator,
-        private val gamepadRegistry: PhysicalGamepadRegistry,
+        private val pads: PhysicalPadSources,
         private val batteryStatusStore: BatteryStatusStore,
         private val motionEnabledStore: MotionEnabledStore,
         private val capabilityComposer: CapabilityComposer,
-        private val native: PhysicalInputNative,
-        private val pathPrefs: UsbPathPreferenceStore,
-        private val usbGamepadManager: UsbGamepadManager,
         private val inputRateStore: InputRateStore,
-        private val hostFeaturesStore: SatelliteHostFeaturesStore,
+        private val hostFacts: SatelliteHostFacts,
     ) : ViewModel() {
+        private val gamepadRegistry: PhysicalGamepadRegistry get() = pads.registry
+        private val native: PhysicalInputNative get() = pads.native
+        private val usbGamepadManager: UsbGamepadManager get() = pads.usb
+
         // Absence means "user has not toggled"; use isMotionEnabled() for default rather than reading directly.
         val motionEnabled: StateFlow<Map<String, Boolean>> = motionEnabledStore.state
 
@@ -118,7 +118,7 @@ class MainViewModel
             // derived from the live device state, so the badge and toggle always show the actual mode.
             combine(
                 slotsBase,
-                pathPrefs.state,
+                pads.pathPrefs.state,
                 inputRateStore.state,
                 usbGamepadManager.controllers,
             ) { base, _, rates, usbControllers ->
@@ -179,7 +179,7 @@ class MainViewModel
                     _uiState.update { it.copy(pointerBySlot = map) }
                 }.launchIn(viewModelScope)
 
-            hostFeaturesStore.state
+            hostFacts.features.state
                 .onEach { features ->
                     _uiState.update { it.copy(hostCompat = features.mapValues { (_, f) -> f.compat }) }
                 }.launchIn(viewModelScope)
@@ -275,22 +275,27 @@ class MainViewModel
                     PathCapabilities(rumble = device.hasRumble, motion = device.hasGyro)
                 }
             return PathCardMapper.map(
-                isClaimedDirect = device.isUsbSynthetic,
                 transport = device.transport,
-                recognized = native.isKnownFastLaneModel(vid, pid),
-                restoring = device.transitioning,
-                standard = standard,
-                direct =
-                    PathCapabilities(
-                        rumble = native.modelHasRumble(vid, pid),
-                        motion = native.modelHasImu(vid, pid),
+                claim =
+                    ClaimState(
+                        isClaimedDirect = device.isUsbSynthetic,
+                        restoring = device.transitioning,
+                        directPollHz = if (device.isUsbSynthetic && !device.transitioning && !device.restoreStuck) device.pollRateHz else 0,
+                        needsReplug = device.needsReplug,
+                        restoreStuck = device.restoreStuck,
+                        directFailure = device.directFailure,
                     ),
-                // Only a live synthetic (not mid-release, not stuck) is actually streaming Direct.
-                directPollHz = if (device.isUsbSynthetic && !device.transitioning && !device.restoreStuck) device.pollRateHz else 0,
-                needsReplug = device.needsReplug,
-                restoreStuck = device.restoreStuck,
-                directFailure = device.directFailure,
-                padHasTouchpad = native.modelHasTouchpad(vid, pid),
+                facts =
+                    PathFacts(
+                        recognized = native.isKnownFastLaneModel(vid, pid),
+                        standard = standard,
+                        direct =
+                            PathCapabilities(
+                                rumble = native.modelHasRumble(vid, pid),
+                                motion = native.modelHasImu(vid, pid),
+                            ),
+                        padHasTouchpad = native.modelHasTouchpad(vid, pid),
+                    ),
                 wiredUsbPresent = wiredUsbPresentFor(device, usbControllers.values),
             )
         }

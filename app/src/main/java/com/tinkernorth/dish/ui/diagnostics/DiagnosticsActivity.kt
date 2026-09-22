@@ -36,7 +36,6 @@ import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
 
-@Suppress("TooManyFunctions")
 @AndroidEntryPoint
 class DiagnosticsActivity : BaseGamepadHostActivity() {
     @Inject lateinit var physicalInputNative: PhysicalInputNative
@@ -260,7 +259,12 @@ class DiagnosticsActivity : BaseGamepadHostActivity() {
             when {
                 row.kind == ConnectionKind.MOONLIGHT ->
                     row.controlRttMs?.let { getString(R.string.diagnostics_ms_whole, it) } ?: getString(R.string.diagnostics_unknown)
-                row.oneWayMs != null -> getString(R.string.diagnostics_ms_approx_window, row.oneWayMs, row.samples)
+                row.oneWayMs != null ->
+                    getString(
+                        R.string.diagnostics_ms_approx_window,
+                        row.oneWayMs,
+                        resources.getQuantityString(R.plurals.diagnostics_last_pings, row.samples, row.samples),
+                    )
                 else -> getString(R.string.diagnostics_unknown)
             }
         return getString(R.string.diagnostics_joined, row.label, value)

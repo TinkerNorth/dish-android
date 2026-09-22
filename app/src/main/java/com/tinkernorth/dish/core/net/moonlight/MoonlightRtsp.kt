@@ -195,7 +195,6 @@ object MoonlightRtsp {
      * `200 OK`, with either line ending. Nothing here is decoration, and an
      * attribute dropped as unused is a host that stops talking to us.
      */
-    @Suppress("LongMethod") // one attribute per line; the list is the point
     fun announceSdp(
         width: Int,
         height: Int,

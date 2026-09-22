@@ -13,14 +13,10 @@ import android.view.InputDevice
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.composer.CapabilityComposer
-import com.tinkernorth.dish.composer.ConnectionCoordinator
-import com.tinkernorth.dish.composer.PhysicalReachability
+import com.tinkernorth.dish.composer.PhysicalReachabilityComposer
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
-import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
-import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.TelemetrySink
-import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
 import com.tinkernorth.dish.source.inputrate.InputRateStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -34,10 +30,7 @@ import javax.inject.Singleton
 class PhysicalMotionSource
     @Inject
     constructor(
-        private val registry: PhysicalGamepadRegistry,
-        private val hub: ConnectionCoordinator,
-        private val satellite: SatelliteConnectionManager,
-        private val moonlight: MoonlightConnectionManager,
+        private val reachability: PhysicalReachabilityComposer,
         private val capabilityComposer: CapabilityComposer,
         private val scope: CoroutineScope,
         private val inputRateStore: InputRateStore,
@@ -154,14 +147,8 @@ class PhysicalMotionSource
             if (bindingsJob != null) return
             sensorHandler = sensorDispatch.acquire()
             bindingsJob =
-                PhysicalReachability
-                    .reachableSlots(
-                        registry.devices,
-                        hub.bindings,
-                        hub.connections,
-                        satellite.connections,
-                        moonlight.connections,
-                    ).combine(capabilityComposer.state, ::filterByCapability)
+                reachability.state
+                    .combine(capabilityComposer.state, ::filterByCapability)
                     .onEach(::onReachableChanged)
                     .launchIn(scope)
         }

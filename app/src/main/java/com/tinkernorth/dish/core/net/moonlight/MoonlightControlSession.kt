@@ -105,7 +105,6 @@ class MoonlightControlSession(
      * beyond the ENet frame. Silently drops when not connected so a dead session
      * never blocks the input thread.
      */
-    @Suppress("LongParameterList")
     fun sendControllerState(
         controllerNumber: Int,
         activeMask: Int,
@@ -175,7 +174,6 @@ class MoonlightControlSession(
         }
     }
 
-    @Suppress("LongParameterList")
     fun sendControllerTouch(
         controllerNumber: Int,
         eventType: Int,

@@ -10,6 +10,12 @@
 cmake_minimum_required(VERSION 3.22)
 project(satellite_host_tests CXX)
 
+# Extracted archives take the extraction time, as the app build's CMakeLists also asks: the
+# FetchContent tarballs below are content-addressed by URL_HASH, so a changed URL rebuilds.
+if(POLICY CMP0135)
+  cmake_policy(SET CMP0135 NEW)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -35,7 +41,7 @@ add_executable(gamepad_input_test
     "${SATELLITE_CPP}/gamepad_input.cpp"
 )
 target_include_directories(gamepad_input_test PRIVATE "${SATELLITE_CPP}")
-target_compile_options(gamepad_input_test PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_options(gamepad_input_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_link_libraries(gamepad_input_test PRIVATE GTest::gtest_main)
 
 # Pure wire-encoder unit tests: no Android / JNI dependency, just the LE
@@ -44,7 +50,7 @@ add_executable(wire_encoders_test
     wire_encoders_test.cpp
 )
 target_include_directories(wire_encoders_test PRIVATE "${SATELLITE_CPP}")
-target_compile_options(wire_encoders_test PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_options(wire_encoders_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_link_libraries(wire_encoders_test PRIVATE GTest::gtest_main)
 
 # usb_parsers.cpp fences its USB I/O behind __ANDROID__, so the decoders and rumble
@@ -55,7 +61,7 @@ add_executable(usb_parsers_test
     "${SATELLITE_CPP}/usb_hid_descriptor.cpp"
 )
 target_include_directories(usb_parsers_test PRIVATE "${SATELLITE_CPP}")
-target_compile_options(usb_parsers_test PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_options(usb_parsers_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_link_libraries(usb_parsers_test PRIVATE GTest::gtest_main)
 
 # Pure HID report-descriptor parser + layout-driven decode (no Android/USB I/O).
@@ -64,7 +70,7 @@ add_executable(usb_hid_descriptor_test
     "${SATELLITE_CPP}/usb_hid_descriptor.cpp"
 )
 target_include_directories(usb_hid_descriptor_test PRIVATE "${SATELLITE_CPP}")
-target_compile_options(usb_hid_descriptor_test PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_options(usb_hid_descriptor_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_link_libraries(usb_hid_descriptor_test PRIVATE GTest::gtest_main)
 
 # UDP send-counter exhaustion guard: the header the JNI send path draws every
@@ -73,7 +79,7 @@ add_executable(send_counter_test
     send_counter_test.cpp
 )
 target_include_directories(send_counter_test PRIVATE "${SATELLITE_CPP}")
-target_compile_options(send_counter_test PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_options(send_counter_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_link_libraries(send_counter_test PRIVATE GTest::gtest_main)
 
 # Controller-audio reorder window. Header-only and dependency-free by design, so
@@ -85,7 +91,7 @@ add_executable(audio_jitter_test
     audio_jitter_test.cpp
 )
 target_include_directories(audio_jitter_test PRIVATE "${SATELLITE_CPP}")
-target_compile_options(audio_jitter_test PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_options(audio_jitter_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_link_libraries(audio_jitter_test PRIVATE GTest::gtest_main)
 
 find_package(Threads REQUIRED)
@@ -93,7 +99,7 @@ add_executable(heartbeat_thread_test
     heartbeat_thread_test.cpp
 )
 target_include_directories(heartbeat_thread_test PRIVATE "${SATELLITE_CPP}")
-target_compile_options(heartbeat_thread_test PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_options(heartbeat_thread_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_link_libraries(heartbeat_thread_test PRIVATE GTest::gtest_main Threads::Threads)
 
 # The libopus wrapper, round-tripped through real encoders and decoders. Needs
@@ -117,7 +123,7 @@ add_executable(audio_codec_test
     "${SATELLITE_CPP}/audio_codec.cpp"
 )
 target_include_directories(audio_codec_test PRIVATE "${SATELLITE_CPP}")
-target_compile_options(audio_codec_test PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_options(audio_codec_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
 target_link_libraries(audio_codec_test PRIVATE GTest::gtest_main opus)
 
 include(GoogleTest)

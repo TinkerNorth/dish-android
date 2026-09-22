@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ic_lock at callout size, for rows that carry it as a TextView compound drawable: a compound
+     drawable is drawn at its intrinsic size, and the vector's own is 24dp. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:width="@dimen/config_callout_icon_size"
+        android:height="@dimen/config_callout_icon_size"
+        android:drawable="@drawable/ic_lock"
+        android:gravity="center" />
+</layer-list>

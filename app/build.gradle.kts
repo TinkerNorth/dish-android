@@ -161,6 +161,10 @@ android {
     kotlin {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+            // Every Kotlin warning (deprecations, unchecked casts, redundant code) fails the build:
+            // the tree carries none, and the few deprecated platform calls that have no
+            // replacement below their API gate are each marked in place with the reason.
+            allWarningsAsErrors.set(true)
         }
     }
     buildFeatures {
@@ -186,6 +190,23 @@ android {
         error += "MissingTranslation"
         abortOnError = true
         checkReleaseBuilds = true
+        // Lint warnings fail the build like errors do: the tree carries zero, and a new one
+        // is fixed at its cause rather than tolerated.
+        warningsAsErrors = true
+        // The three upstream-availability checks are the exception, because they are not
+        // statements about this code: they fire when someone else publishes a release, so a
+        // pull request that was green turns red with nothing changed here and no cause to
+        // fix. Gating on them leaves only two answers, a marker in the catalog or an
+        // unplanned bump inside an unrelated change, and both are worse than the finding.
+        // They stay on and stay in the report CI uploads, so the signal is still on every
+        // run; .github/dependabot.yml is what acts on it, weekly, as a pull request that
+        // carries the diff and its own verification.
+        informational +=
+            listOf(
+                "AndroidGradlePluginVersion",
+                "GradleDependency",
+                "NewerVersionAvailable",
+            )
     }
 
     testOptions {
@@ -220,6 +241,7 @@ dependencies {
     implementation(libs.androidx.viewpager2)
     implementation(libs.androidx.window)
     implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.constraintlayout)
     implementation(libs.material)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.lifecycle.runtime.ktx)

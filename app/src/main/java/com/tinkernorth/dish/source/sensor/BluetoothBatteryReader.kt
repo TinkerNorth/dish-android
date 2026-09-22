@@ -6,7 +6,6 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.Context
-import android.os.Build
 import android.util.Log
 
 class BluetoothBatteryReader(
@@ -57,13 +56,7 @@ class BluetoothBatteryReader(
         return byName[matchName]
     }
 
-    private fun adapter(): BluetoothAdapter? =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
-        } else {
-            @Suppress("DEPRECATION")
-            BluetoothAdapter.getDefaultAdapter()
-        }
+    private fun adapter(): BluetoothAdapter? = context.getSystemService(BluetoothManager::class.java)?.adapter
 
     private fun batteryLevelMethod(): java.lang.reflect.Method? {
         if (resolved) return batteryLevelMethod

@@ -324,6 +324,17 @@
         <item name="android:paddingBottom">@dimen/binding_pill_padding_vertical</item>
     </style>
 
+    <!-- The pill itself when it is one view: the pill's box plus the label's type, and the
+         gap the glyph keeps from the text. -->
+    <style name="Widget.Dish.Pill.Label" parent="Widget.Dish.Pill">
+        <item name="android:textAppearance">@style/TextAppearance.Dish.BodySmall</item>
+        <item name="android:includeFontPadding">false</item>
+        <!-- Pills are one-line labels: a squeezed pill must trim, never wrap into a column. -->
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:drawablePadding">@dimen/binding_pill_icon_gap</item>
+    </style>
+
     <style name="Widget.Dish.Pill.Icon" parent="">
         <item name="android:layout_width">@dimen/binding_pill_icon_size</item>
         <item name="android:layout_height">@dimen/binding_pill_icon_size</item>
@@ -345,6 +356,28 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:textAppearance">@style/TextAppearance.Dish.Label.Micro</item>
         <item name="android:textAllCaps">true</item>
+    </style>
+
+    <!-- Borderless icon button in a header row: the donate heart and the settings cog are
+         the same shape, and any future one should be too. -->
+    <style name="Widget.Dish.IconButton" parent="">
+        <item name="android:layout_width">@dimen/icon_settings_button</item>
+        <item name="android:layout_height">@dimen/icon_settings_button</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:padding">@dimen/spacing_md</item>
+        <item name="android:scaleType">fitCenter</item>
+    </style>
+
+    <!-- Full-bleed modal scrim: the link guard, the low-power dim, the bindings blocker and
+         apply sheets, and the controller card's edge state all dim what is behind them with
+         the same translucent fill and swallow taps while they are up. -->
+    <style name="Widget.Dish.Scrim" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:background">@color/colorOverlayScrim</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:visibility">gone</item>
     </style>
 
     <style name="Widget.Dish.Divider" parent="">

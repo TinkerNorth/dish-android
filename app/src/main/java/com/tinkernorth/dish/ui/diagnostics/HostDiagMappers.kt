@@ -67,6 +67,6 @@ private fun hostSlots(
                 slotIndex = binding?.controllerIndex,
                 touchpadMode = binding?.let { touchpadMode(slotId) },
                 registered = binding?.registered,
-                streaming = binding?.let { b -> snapshot?.telemetry?.let { streamingOn(it.activeBitmap, b.controllerIndex) } },
+                streaming = binding?.let { b -> snapshot.telemetry?.let { streamingOn(it.activeBitmap, b.controllerIndex) } },
             )
         }.sortedBy { it.slotIndex ?: Int.MAX_VALUE }

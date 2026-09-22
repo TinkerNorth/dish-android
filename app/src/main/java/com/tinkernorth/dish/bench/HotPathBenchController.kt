@@ -10,7 +10,7 @@ import android.content.IntentFilter
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.tinkernorth.dish.BuildConfig
-import com.tinkernorth.dish.core.jni.SatelliteNative
+import com.tinkernorth.dish.core.jni.InstrumentationNative
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -65,13 +65,13 @@ object HotPathBenchController {
 
     private fun enable(scope: CoroutineScope) {
         if (logJob?.isActive == true) return
-        SatelliteNative.setHotPathBench(true)
+        InstrumentationNative.setHotPathBench(true)
         Log.i(TAG, "enabled; stream a USB-direct controller now")
         logJob =
             scope.launch {
                 while (isActive) {
                     delay(LOG_INTERVAL_MS)
-                    Log.i(TAG, SatelliteNative.hotPathBenchJson(false))
+                    Log.i(TAG, InstrumentationNative.hotPathBenchJson(false))
                 }
             }
     }
@@ -79,8 +79,8 @@ object HotPathBenchController {
     private fun disable() {
         logJob?.cancel()
         logJob = null
-        Log.i(TAG, "final " + SatelliteNative.hotPathBenchJson(true))
-        SatelliteNative.setHotPathBench(false)
+        Log.i(TAG, "final " + InstrumentationNative.hotPathBenchJson(true))
+        InstrumentationNative.setHotPathBench(false)
         Log.i(TAG, "disabled")
     }
 }

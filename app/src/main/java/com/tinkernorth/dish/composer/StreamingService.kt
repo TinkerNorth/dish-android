@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.annotation.DrawableRes
+import androidx.annotation.RequiresApi
 import androidx.annotation.StringRes
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -267,7 +268,7 @@ class StreamingService : Service() {
         micArmed: Boolean,
     ): Boolean =
         try {
-            ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, foregroundServiceTypes(micArmed))
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, foregroundServiceTypesForThisApi(micArmed))
             micTypeHeld = micArmed
             true
         } catch (e: SecurityException) {
@@ -381,6 +382,16 @@ internal fun micNotificationUiFor(state: MicIndicatorState): MicNotificationUi? 
  * only start while the app is in the foreground. Muted still means zero packets, enforced where it
  * belongs, in the capture engine.
  */
+@RequiresApi(Build.VERSION_CODES.R)
 internal fun foregroundServiceTypes(micArmed: Boolean): Int =
     ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
         if (micArmed) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0
+
+// Typed foreground services arrived in 29 with the connected-device type and gained the
+// microphone type in 30; below 29 ServiceCompat ignores the value, so 0 is that API's "none".
+private fun foregroundServiceTypesForThisApi(micArmed: Boolean): Int =
+    when {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> foregroundServiceTypes(micArmed)
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+        else -> 0
+    }

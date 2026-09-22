@@ -37,7 +37,6 @@ enum class MotionIndicatorState(
 
     companion object {
         // Precedence: UNAVAILABLE > USER_DISABLED > NOT_FORWARDED > NO_HOST_SINK > BACKEND_BROKEN > STALLED > STREAMING > PAUSED.
-        @Suppress("LongParameterList")
         fun of(
             isAvailable: Boolean,
             isStreaming: Boolean,

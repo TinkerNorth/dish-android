@@ -3,12 +3,11 @@
 package com.tinkernorth.dish.core.net
 
 import android.util.Log
-import com.tinkernorth.dish.core.jni.SatelliteNative
+import com.tinkernorth.dish.core.jni.SessionNative
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.DiscoverySource
 import com.tinkernorth.dish.core.model.stableKey
 import com.tinkernorth.dish.di.IoDispatcher
-import com.tinkernorth.dish.repository.SatellitePinRepository
 import com.tinkernorth.dish.source.connection.MdnsDiscovery
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.async
@@ -24,7 +23,7 @@ class DiscoveryGateway
     @Inject
     constructor(
         private val mdns: MdnsDiscovery,
-        private val pins: SatellitePinRepository,
+        private val http: SatelliteHttpClient,
         @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     ) {
         // Guards ONLY the native+mDNS discovery single-flight. Per-host HTTP is deliberately
@@ -39,7 +38,7 @@ class DiscoveryGateway
                 discoveryMutex.withLock {
                     coroutineScope {
                         val broadcast =
-                            async { parseServers(SatelliteNative.discoverServers(port, timeoutMs)) }
+                            async { parseServers(SessionNative.discoverServers(port, timeoutMs)) }
                         val viaMdns = async { mdns.discover(timeoutMs) }
                         val broadcastList = broadcast.await()
                         val mdnsList = viaMdns.await()
@@ -57,7 +56,6 @@ class DiscoveryGateway
         // satelliteId is an optional trailing param (constant "" default, resolved to the host
         // in-body) so existing positional callers stay source-compatible. The cert pin protects
         // "the box at this address", which is the right key for TLS pinning on a CA-less LAN.
-        @Suppress("LongParameterList")
         suspend fun pair(
             ip: String,
             port: Int,
@@ -69,14 +67,13 @@ class DiscoveryGateway
             protocolVersion: Int = DishProtocol.CURRENT,
         ): HttpReply =
             withContext(ioDispatcher) {
-                SatelliteHttpClient.pair(
+                http.pair(
                     ip,
                     port,
                     deviceId,
                     deviceName,
                     pin,
                     pinId(satelliteId, ip),
-                    pins,
                     clientPin,
                     protocolVersion,
                 )
@@ -89,10 +86,9 @@ class DiscoveryGateway
             satelliteId: String = "",
         ): HttpReply =
             withContext(ioDispatcher) {
-                SatelliteHttpClient.pairStatus(ip, port, deviceId, pinId(satelliteId, ip), pins)
+                http.pairStatus(ip, port, deviceId, pinId(satelliteId, ip))
             }
 
-        @Suppress("LongParameterList")
         suspend fun putSession(
             ip: String,
             port: Int,
@@ -105,7 +101,7 @@ class DiscoveryGateway
             satelliteId: String = "",
         ): HttpReply =
             withContext(ioDispatcher) {
-                SatelliteHttpClient.putSession(
+                http.putSession(
                     ip,
                     port,
                     deviceId,
@@ -115,7 +111,6 @@ class DiscoveryGateway
                     requestMouseControl,
                     protocolVersion,
                     pinId(satelliteId, ip),
-                    pins,
                 )
             }
 
@@ -128,10 +123,9 @@ class DiscoveryGateway
             satelliteId: String = "",
         ): HttpReply =
             withContext(ioDispatcher) {
-                SatelliteHttpClient.getSession(ip, port, connectionId, deviceId, hmacProof, pinId(satelliteId, ip), pins)
+                http.getSession(ip, port, connectionId, deviceId, hmacProof, pinId(satelliteId, ip))
             }
 
-        @Suppress("LongParameterList")
         suspend fun putController(
             ip: String,
             port: Int,
@@ -143,7 +137,7 @@ class DiscoveryGateway
             satelliteId: String = "",
         ): HttpReply =
             withContext(ioDispatcher) {
-                SatelliteHttpClient.putController(
+                http.putController(
                     ip,
                     port,
                     connectionId,
@@ -152,11 +146,9 @@ class DiscoveryGateway
                     hmacProof,
                     descriptorJson,
                     pinId(satelliteId, ip),
-                    pins,
                 )
             }
 
-        @Suppress("LongParameterList")
         suspend fun deleteController(
             ip: String,
             port: Int,
@@ -167,7 +159,7 @@ class DiscoveryGateway
             satelliteId: String = "",
         ): HttpReply =
             withContext(ioDispatcher) {
-                SatelliteHttpClient.deleteController(
+                http.deleteController(
                     ip,
                     port,
                     connectionId,
@@ -175,11 +167,9 @@ class DiscoveryGateway
                     deviceId,
                     hmacProof,
                     pinId(satelliteId, ip),
-                    pins,
                 )
             }
 
-        @Suppress("LongParameterList")
         suspend fun disconnect(
             ip: String,
             port: Int,
@@ -189,7 +179,7 @@ class DiscoveryGateway
             satelliteId: String = "",
         ): HttpReply =
             withContext(ioDispatcher) {
-                SatelliteHttpClient.disconnect(ip, port, connectionId, deviceId, hmacProof, pinId(satelliteId, ip), pins)
+                http.disconnect(ip, port, connectionId, deviceId, hmacProof, pinId(satelliteId, ip))
             }
 
         suspend fun unpair(
@@ -200,7 +190,7 @@ class DiscoveryGateway
             satelliteId: String = "",
         ): HttpReply =
             withContext(ioDispatcher) {
-                SatelliteHttpClient.unpair(ip, port, deviceId, hmacProof, pinId(satelliteId, ip), pins)
+                http.unpair(ip, port, deviceId, hmacProof, pinId(satelliteId, ip))
             }
 
         suspend fun catalog(
@@ -211,7 +201,7 @@ class DiscoveryGateway
             satelliteId: String = "",
         ): HttpReply =
             withContext(ioDispatcher) {
-                SatelliteHttpClient.getCatalog(ip, port, acceptLanguage, etag, pinId(satelliteId, ip), pins)
+                http.getCatalog(ip, port, acceptLanguage, etag, pinId(satelliteId, ip))
             }
 
         suspend fun serverCapabilities(
@@ -220,7 +210,7 @@ class DiscoveryGateway
             satelliteId: String = "",
         ): HttpReply =
             withContext(ioDispatcher) {
-                SatelliteHttpClient.getServerCapabilities(ip, port, pinId(satelliteId, ip), pins)
+                http.getServerCapabilities(ip, port, pinId(satelliteId, ip))
             }
 
         companion object {

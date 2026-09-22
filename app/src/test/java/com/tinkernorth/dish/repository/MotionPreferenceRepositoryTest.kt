@@ -104,7 +104,9 @@ class MotionPreferenceRepositoryTest {
 
     private fun fakePrefs(seedFrom: Context? = null): Pair<Context, MutableMap<String, Any?>> {
         val store: MutableMap<String, Any?> =
-            (seedFrom?.getSharedPreferences("motion_preferences", 0)?.all as? Map<String, Any?>)
+            seedFrom
+                ?.getSharedPreferences("motion_preferences", 0)
+                ?.all
                 ?.toMutableMap()
                 ?: mutableMapOf()
 

@@ -5,6 +5,7 @@ package com.tinkernorth.dish.ui.connections
 import android.Manifest
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -12,6 +13,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import android.view.View
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
@@ -73,6 +75,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.Locale
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -647,7 +650,9 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         private val tempId: String,
         initialDiscoverableUntilMs: Long?,
     ) {
-        private val view = layoutInflater.inflate(R.layout.dialog_bt_device_picker, null)
+        // Inflated against a stand-in for the dialog's own FrameLayout so the root's layout
+        // params resolve; attachToRoot=false keeps it detached until setView.
+        private val view = layoutInflater.inflate(R.layout.dialog_bt_device_picker, FrameLayout(this@ConnectionsActivity), false)
         private val container = view.findViewById<LinearLayout>(R.id.deviceContainer)
         private val progress = view.findViewById<TextView>(R.id.scanProgress)
         private val empty = view.findViewById<TextView>(R.id.deviceEmpty)
@@ -821,8 +826,9 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         val hostField = view.findViewById<TextInputEditText>(R.id.etSatelliteHost)
         val httpsField = view.findViewById<TextInputEditText>(R.id.etSatelliteHttpsPort)
         val udpField = view.findViewById<TextInputEditText>(R.id.etSatelliteUdpPort)
-        httpsField.setText(DEFAULT_HTTPS_PORT.toString())
-        udpField.setText(DEFAULT_UDP_PORT.toString())
+        // Port fields parse back through toIntOrNull, so the defaults are written in ASCII digits.
+        httpsField.setText(String.format(Locale.ROOT, "%d", DEFAULT_HTTPS_PORT))
+        udpField.setText(String.format(Locale.ROOT, "%d", DEFAULT_UDP_PORT))
 
         val dialog =
             MaterialAlertDialogBuilder(this)
@@ -1276,11 +1282,23 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         pendingBtRegistration = PendingBtRegistration(connId, resolvedProfile)
     }
 
-    // SuppressLint: @RequiresPermission propagates from BluetoothAdapter field; gated by adapter-state banner and prior permission grant.
-    @android.annotation.SuppressLint("MissingPermission")
+    // The enable request needs BLUETOOTH_CONNECT from 31, and a cut-down build may carry no
+    // activity for either intent. Both failures land on the same answer they always did: the
+    // Bluetooth settings screen, which the user can act on without the grant.
     private fun requestEnableBt() {
-        runCatching { startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) }
-            .onFailure { runCatching { startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) } }
+        try {
+            startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+            return
+        } catch (e: SecurityException) {
+            Log.w(TAG, "enable request refused without BLUETOOTH_CONNECT: ${e.message}")
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "no activity for the Bluetooth enable request: ${e.message}")
+        }
+        try {
+            startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "no Bluetooth settings screen on this device: ${e.message}")
+        }
     }
 
     private fun openWifiSettings() {

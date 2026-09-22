@@ -38,7 +38,7 @@ Kotlin UI
   ├── SatelliteHttpClient    HTTPS pairing + REST (port 9443)
   ├── InputManager listener  gamepad hot-plug
   └── dispatchKeyEvent / dispatchGenericMotionEvent
-        └── SatelliteNative (JNI)
+        └── core.jni *Native objects (JNI)
               └── satellite_jni.cpp
                     ├── UDP discovery       (port 9879 broadcast + mDNS)
                     ├── UDP gamepad stream  (port 9876, encrypted)

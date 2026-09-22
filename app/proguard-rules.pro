@@ -13,12 +13,20 @@
 # FindClass / GetStaticMethodID. Renaming the class, its package, the method
 # name, or the parameter signature breaks the native bind at runtime.
 
-# Native function exports: every `external fun` in SatelliteNative resolves to
-# Java_com_tinkernorth_dish_core_jni_SatelliteNative_<name>. Keep the class and
-# all native methods.
--keep class com.tinkernorth.dish.core.jni.SatelliteNative { *; }
--keepclasseswithmembernames,includedescriptorclasses class com.tinkernorth.dish.core.jni.SatelliteNative {
+# Native function exports: every `external fun` in the core.jni *Native objects
+# (SessionNative, SlotReportNative, PhysicalSlotNative, UsbDirectNative,
+# ModelTableNative, InstrumentationNative) resolves to
+# Java_com_tinkernorth_dish_core_jni_<Object>_<name>. Keep the classes and all
+# native methods.
+-keep class com.tinkernorth.dish.core.jni.*Native { *; }
+-keepclasseswithmembernames,includedescriptorclasses class com.tinkernorth.dish.core.jni.*Native {
     native <methods>;
+}
+
+# UsbDirectNative.attachUsbDevice reads the claim's fields by name through
+# GetFieldID; the names are the contract, so neither may go nor be renamed.
+-keepclassmembers class com.tinkernorth.dish.core.jni.UsbInterfaceClaim {
+    <fields>;
 }
 
 # Java→native callback target for BT-bound physical-gamepad reports. Called
@@ -29,7 +37,7 @@
 }
 
 # Java→native callback target for satellite → phone rumble. Called from the
-# Kotlin Dispatchers.IO thread that drives SatelliteNative.receiveAck.
+# Kotlin Dispatchers.IO thread that drives SessionNative.receiveAck.
 -keep class com.tinkernorth.dish.hotpath.input.RumbleBridge { *; }
 -keepclasseswithmembernames,includedescriptorclasses class com.tinkernorth.dish.hotpath.input.RumbleBridge {
     native <methods>;

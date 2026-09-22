@@ -11,6 +11,7 @@ import android.view.MotionEvent
 import android.view.View
 import androidx.core.content.ContextCompat
 import com.tinkernorth.dish.R
+import com.tinkernorth.dish.source.connection.TouchpadReport
 import kotlin.math.roundToInt
 
 class TouchpadSurfaceView
@@ -35,6 +36,30 @@ class TouchpadSurfaceView
             var eventTimeMs: Long = 0L,
         ) {
             fun anyFingerDown(): Boolean = finger0Active || finger1Active
+
+            // The wire frame for this surface state. The click and the mouse-mode fields are the
+            // caller's: a pad surface sends its own click, the mouse surface its buttons and wheel.
+            fun toReport(
+                buttonPressed: Boolean,
+                rightPressed: Boolean = false,
+                middlePressed: Boolean = false,
+                scrollDelta: Short = 0,
+            ): TouchpadReport =
+                TouchpadReport(
+                    finger0Active = finger0Active,
+                    finger1Active = finger1Active,
+                    buttonPressed = buttonPressed,
+                    rightPressed = rightPressed,
+                    middlePressed = middlePressed,
+                    finger0TrackingId = finger0TrackingId,
+                    finger0X = finger0X,
+                    finger0Y = finger0Y,
+                    finger1TrackingId = finger1TrackingId,
+                    finger1X = finger1X,
+                    finger1Y = finger1Y,
+                    eventTimeMs = eventTimeMs,
+                    scrollDelta = scrollDelta,
+                )
         }
 
         interface Listener {

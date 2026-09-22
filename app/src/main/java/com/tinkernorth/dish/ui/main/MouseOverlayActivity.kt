@@ -317,7 +317,6 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
         conn.sendMouseMoveRel(dx, dy)
     }
 
-    @Suppress("LongParameterList")
     private fun sendMouseReport(
         fingers: TouchpadSurfaceView.TouchpadState,
         left: Boolean,
@@ -331,19 +330,7 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
                 .toShort()
         satellite.get(connectionId)?.sendTouchpad(
             slotId,
-            fingers.finger0Active,
-            fingers.finger1Active,
-            buttonPressed = left,
-            rightPressed = right,
-            middlePressed = middle,
-            fingers.finger0TrackingId,
-            fingers.finger0X,
-            fingers.finger0Y,
-            fingers.finger1TrackingId,
-            fingers.finger1X,
-            fingers.finger1Y,
-            fingers.eventTimeMs,
-            scrollDelta = scroll,
+            fingers.toReport(buttonPressed = left, rightPressed = right, middlePressed = middle, scrollDelta = scroll),
         )
     }
 

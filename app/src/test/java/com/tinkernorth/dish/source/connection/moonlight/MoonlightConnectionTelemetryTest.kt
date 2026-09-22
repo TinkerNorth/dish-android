@@ -8,6 +8,7 @@ import com.tinkernorth.dish.core.net.moonlight.MoonlightControlSession
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEvent
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
+import com.tinkernorth.dish.source.connection.TouchpadReport
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -111,20 +112,22 @@ class MoonlightConnectionTelemetryTest {
     @Test
     fun `touch frames become DOWN then UP events with normalized coordinates`() {
         conn.sendTouchpad(
-            slotId = "slot-a",
-            finger0Active = true,
-            finger1Active = false,
-            buttonPressed = false,
-            rightPressed = false,
-            middlePressed = false,
-            finger0TrackingId = 4,
-            finger0X = 0,
-            finger0Y = Short.MAX_VALUE,
-            finger1TrackingId = 0,
-            finger1X = 0,
-            finger1Y = 0,
-            eventTimeMs = 0L,
-            scrollDelta = 0,
+            "slot-a",
+            TouchpadReport(
+                finger0Active = true,
+                finger1Active = false,
+                buttonPressed = false,
+                rightPressed = false,
+                middlePressed = false,
+                finger0TrackingId = 4,
+                finger0X = 0,
+                finger0Y = Short.MAX_VALUE,
+                finger1TrackingId = 0,
+                finger1X = 0,
+                finger1Y = 0,
+                eventTimeMs = 0L,
+                scrollDelta = 0,
+            ),
         )
         verify(exactly = 1) {
             session.sendControllerTouch(
@@ -137,20 +140,22 @@ class MoonlightConnectionTelemetryTest {
             )
         }
         conn.sendTouchpad(
-            slotId = "slot-a",
-            finger0Active = false,
-            finger1Active = false,
-            buttonPressed = false,
-            rightPressed = false,
-            middlePressed = false,
-            finger0TrackingId = 0,
-            finger0X = 0,
-            finger0Y = 0,
-            finger1TrackingId = 0,
-            finger1X = 0,
-            finger1Y = 0,
-            eventTimeMs = 0L,
-            scrollDelta = 0,
+            "slot-a",
+            TouchpadReport(
+                finger0Active = false,
+                finger1Active = false,
+                buttonPressed = false,
+                rightPressed = false,
+                middlePressed = false,
+                finger0TrackingId = 0,
+                finger0X = 0,
+                finger0Y = 0,
+                finger1TrackingId = 0,
+                finger1X = 0,
+                finger1Y = 0,
+                eventTimeMs = 0L,
+                scrollDelta = 0,
+            ),
         )
         verify(exactly = 1) {
             session.sendControllerTouch(
@@ -178,20 +183,22 @@ class MoonlightConnectionTelemetryTest {
             rightY = 4,
         )
         conn.sendTouchpad(
-            slotId = "slot-a",
-            finger0Active = false,
-            finger1Active = false,
-            buttonPressed = true,
-            rightPressed = false,
-            middlePressed = false,
-            finger0TrackingId = 0,
-            finger0X = 0,
-            finger0Y = 0,
-            finger1TrackingId = 0,
-            finger1X = 0,
-            finger1Y = 0,
-            eventTimeMs = 0L,
-            scrollDelta = 0,
+            "slot-a",
+            TouchpadReport(
+                finger0Active = false,
+                finger1Active = false,
+                buttonPressed = true,
+                rightPressed = false,
+                middlePressed = false,
+                finger0TrackingId = 0,
+                finger0X = 0,
+                finger0Y = 0,
+                finger1TrackingId = 0,
+                finger1X = 0,
+                finger1Y = 0,
+                eventTimeMs = 0L,
+                scrollDelta = 0,
+            ),
         )
         verify(exactly = 1) {
             session.sendControllerState(

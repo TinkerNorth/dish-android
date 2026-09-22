@@ -19,7 +19,6 @@ interface TelemetrySink {
      */
     fun motionWanted(slotId: String): Boolean = true
 
-    @Suppress("LongParameterList")
     fun sendMotion(
         slotId: String,
         gyroX: Short,
@@ -37,21 +36,8 @@ interface TelemetrySink {
         status: Int,
     )
 
-    @Suppress("LongParameterList")
     fun sendTouchpad(
         slotId: String,
-        finger0Active: Boolean,
-        finger1Active: Boolean,
-        buttonPressed: Boolean,
-        rightPressed: Boolean,
-        middlePressed: Boolean,
-        finger0TrackingId: Int,
-        finger0X: Short,
-        finger0Y: Short,
-        finger1TrackingId: Int,
-        finger1X: Short,
-        finger1Y: Short,
-        eventTimeMs: Long,
-        scrollDelta: Short,
+        report: TouchpadReport,
     )
 }

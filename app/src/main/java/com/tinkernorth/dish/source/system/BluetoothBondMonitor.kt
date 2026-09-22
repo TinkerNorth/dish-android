@@ -7,9 +7,9 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.repository.ConnectionStore
@@ -82,13 +82,8 @@ class BluetoothBondMonitor
             btRegistry.markStale(remembered.id, BtStaleReason.BOND_REMOVED)
         }
 
-        @Suppress("DEPRECATION")
         private fun extractDevice(intent: Intent): BluetoothDevice? =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-            } else {
-                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-            }
+            IntentCompat.getParcelableExtra(intent, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
 
         private companion object {
             const val TAG = "DishBT"

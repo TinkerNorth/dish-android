@@ -134,7 +134,6 @@ class MoonlightTouchDiffer {
         last1 = FingerState(false, 0, 0f, 0f)
     }
 
-    @Suppress("LongParameterList")
     fun diff(
         finger0Active: Boolean,
         finger0Id: Int,

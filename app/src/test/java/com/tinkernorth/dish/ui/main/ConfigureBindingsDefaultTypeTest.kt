@@ -25,9 +25,12 @@ import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManag
 import com.tinkernorth.dish.source.store.MicEnabledStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
+import com.tinkernorth.dish.source.store.SatelliteHostFacts
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
+import com.tinkernorth.dish.source.store.SlotToggleStores
 import com.tinkernorth.dish.source.store.SpeakerEnabledStore
 import com.tinkernorth.dish.source.system.MicPermissionGate
+import com.tinkernorth.dish.source.usb.PhysicalPadSources
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import io.mockk.coEvery
 import io.mockk.every
@@ -136,20 +139,19 @@ class ConfigureBindingsDefaultTypeTest {
             ConfigureBindingsViewModel(
                 context,
                 hub,
-                gamepadRegistry,
-                motionEnabledStore,
-                rumbleEnabledStore,
-                micEnabledStore,
-                speakerEnabledStore,
+                PhysicalPadSources(gamepadRegistry, native, usbGamepadManager, mockk(relaxed = true)),
+                SlotToggleStores(motionEnabledStore, rumbleEnabledStore, micEnabledStore, speakerEnabledStore),
                 micPermission,
                 capabilityComposer,
                 satellite,
                 moonlight,
-                usbGamepadManager,
-                catalogRepo,
-                capabilitiesRepo,
-                native,
-                SatelliteHostFeaturesStore(),
+                SatelliteHostFacts(
+                    features = SatelliteHostFeaturesStore(),
+                    runtime = mockk(),
+                    motionBackend = mockk(),
+                    catalog = catalogRepo,
+                    capabilities = capabilitiesRepo,
+                ),
             )
     }
 

@@ -474,7 +474,11 @@
     <string name="diagnostics_hz">%1$d Hz</string>
     <string name="diagnostics_ms">%1$.2f ms</string>
     <string name="diagnostics_ms_approx">~%1$.2f ms</string>
-    <string name="diagnostics_ms_approx_window">~%1$.2f ms · last %2$d pings</string>
+    <string name="diagnostics_ms_approx_window">~%1$.2f ms · %2$s</string>
+    <plurals name="diagnostics_last_pings">
+        <item quantity="one">last %1$d ping</item>
+        <item quantity="other">last %1$d pings</item>
+    </plurals>
     <string name="diagnostics_ms_p50_p99">%1$.2f ms (p50) · %2$.2f ms (p99)</string>
     <string name="diagnostics_unknown">Unknown</string>
     <string name="diagnostics_present">Present</string>
@@ -605,9 +609,21 @@
     <string name="diagnostics_bt_waiting">Waiting for the PC</string>
     <string name="diagnostics_bt_no_round_trip">No round trip on Bluetooth HID.</string>
     <string name="diagnostics_usb_pads">Pads</string>
-    <string name="diagnostics_usb_pads_value">%1$d standard · %2$d direct</string>
+    <string name="diagnostics_usb_pads_value">%1$s · %2$s</string>
+    <plurals name="diagnostics_pads_standard">
+        <item quantity="one">%1$d standard</item>
+        <item quantity="other">%1$d standard</item>
+    </plurals>
+    <plurals name="diagnostics_pads_direct">
+        <item quantity="one">%1$d direct</item>
+        <item quantity="other">%1$d direct</item>
+    </plurals>
     <string name="diagnostics_endpoint">Endpoint</string>
-    <string name="diagnostics_endpoint_value">%1$d Hz · %2$d bytes · interval %3$d</string>
+    <string name="diagnostics_endpoint_value">%1$d Hz · %2$s · interval %3$d</string>
+    <plurals name="diagnostics_bytes">
+        <item quantity="one">%1$d byte</item>
+        <item quantity="other">%1$d bytes</item>
+    </plurals>
     <string name="diagnostics_high_speed">high speed</string>
     <string name="diagnostics_section_device">DEVICE</string>
     <string name="diagnostics_model">Model</string>
@@ -666,9 +682,25 @@
     <string name="diagnostics_host_profile">Profile</string>
     <string name="diagnostics_host_connected_as">Connected to</string>
     <string name="diagnostics_round_trip">Round trip</string>
-    <string name="diagnostics_rtt_value">%1$.1f ms (p50) · %2$.1f ms (p99) · ~%3$.1f ms one way · %4$d pings</string>
+    <string name="diagnostics_rtt_value">%1$.1f ms (p50) · %2$.1f ms (p99) · ~%3$.1f ms one way · %4$s</string>
+    <plurals name="diagnostics_pings_count">
+        <item quantity="one">%1$d ping</item>
+        <item quantity="other">%1$d pings</item>
+    </plurals>
     <string name="diagnostics_pings">Pings</string>
-    <string name="diagnostics_pings_value">%1$d sent · %2$d acked · %3$d missed in a row</string>
+    <string name="diagnostics_pings_value">%1$s · %2$s · %3$s</string>
+    <plurals name="diagnostics_pings_sent">
+        <item quantity="one">%1$d sent</item>
+        <item quantity="other">%1$d sent</item>
+    </plurals>
+    <plurals name="diagnostics_pings_acked">
+        <item quantity="one">%1$d acked</item>
+        <item quantity="other">%1$d acked</item>
+    </plurals>
+    <plurals name="diagnostics_pings_missed">
+        <item quantity="one">%1$d missed in a row</item>
+        <item quantity="other">%1$d missed in a row</item>
+    </plurals>
     <string name="diagnostics_packets_sent">Packets sent</string>
     <string name="diagnostics_ms_whole" translatable="false">%1$d ms</string>
     <string name="diagnostics_control_round_trip">Control round trip</string>
@@ -708,14 +740,21 @@
     <string name="diagnostics_mic_capturing">capturing</string>
     <string name="diagnostics_speaker_playing">playing</string>
     <string name="diagnostics_speaker_idle">idle</string>
-    <string name="diagnostics_dropped_samples">%1$d samples dropped</string>
+    <plurals name="diagnostics_dropped_samples">
+        <item quantity="one">%1$d sample dropped</item>
+        <item quantity="other">%1$d samples dropped</item>
+    </plurals>
     <string name="diagnostics_rumble_target">Rumble goes to</string>
     <string name="diagnostics_target_phone">phone vibrator</string>
     <string name="diagnostics_target_pad">pad motors</string>
     <string name="diagnostics_target_pad_framework">pad motors via Android</string>
     <string name="diagnostics_target_none">nowhere</string>
     <string name="diagnostics_last_feedback">Last host feedback</string>
-    <string name="diagnostics_feedback_value">%1$s · %2$s · %3$d total</string>
+    <string name="diagnostics_feedback_value">%1$s · %2$s · %3$s</string>
+    <plurals name="diagnostics_total_count">
+        <item quantity="one">%1$d total</item>
+        <item quantity="other">%1$d total</item>
+    </plurals>
     <string name="diagnostics_latency_estimate">Input to host</string>
     <string name="diagnostics_estimate_parts">poll %1$s · phone %2$s · network %3$s</string>
     <string name="diagnostics_joined" translatable="false">%1$s · %2$s</string>
@@ -758,6 +797,8 @@
     <string name="binding_label_functions">Functions</string>
     <string name="binding_label_input">Input</string>
     <string name="binding_label_binding">Binding</string>
+    <!-- The controller name after the link label on the input row: a middle dot, then the name. -->
+    <string name="binding_input_name_after_link" translatable="false">" · %1$s"</string>
 
     <string name="binding_link_usb">USB</string>
     <string name="binding_link_bluetooth">Bluetooth</string>

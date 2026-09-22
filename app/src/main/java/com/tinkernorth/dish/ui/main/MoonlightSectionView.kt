@@ -22,15 +22,16 @@ fun BindingSectionMoonlightBinding.bindMoonlightSession(
     onAction: (MoonlightAction) -> Unit,
 ) {
     val ctx = root.context
+    val strings = ContextStrings(ctx)
     sessionSpinner.visibility = if (session.showsSpinner) View.VISIBLE else View.GONE
 
-    val titleRes = session.titleRes()
-    tvSessionTitle.visibility = if (titleRes == 0) View.GONE else View.VISIBLE
-    if (titleRes != 0) {
-        tvSessionTitle.text = ctx.formatted(titleRes, session.titleArgs(hostLabel))
+    val title = session.title(hostLabel, strings)
+    tvSessionTitle.visibility = if (title == null) View.GONE else View.VISIBLE
+    if (title != null) {
+        tvSessionTitle.text = title
         tvSessionTitle.setTextColor(ctx.getColor(session.tone().colorRes()))
     }
-    tvSessionBody.text = ctx.formatted(session.bodyRes(), session.bodyArgs(hostLabel))
+    tvSessionBody.text = session.body(hostLabel, strings)
 
     val noteRes = session.noteRes()
     tvSessionNote.visibility = if (noteRes == 0) View.GONE else View.VISIBLE
@@ -66,12 +67,15 @@ private fun BindingSectionMoonlightBinding.bindApps(
 }
 
 // The state chooses its own format arguments, so the view can fill a string without
-// knowing which state it is drawing; the spread is the price of that indirection.
-@Suppress("SpreadOperator")
-private fun Context.formatted(
-    @StringRes res: Int,
-    args: List<Any>,
-): String = getString(res, *args.toTypedArray())
+// knowing which state it is drawing; this is the Context end of that seam.
+private class ContextStrings(
+    private val ctx: Context,
+) : StringLookup {
+    override fun format(
+        @StringRes res: Int,
+        vararg args: Any,
+    ): String = ctx.getString(res, *args)
+}
 
 // Rebuilt from scratch on every render rather than toggled, because the number of buttons
 // changes with the state. The first action gets the filled layout and the rest the outlined
@@ -83,6 +87,7 @@ private fun BindingSectionMoonlightBinding.bindActions(
     onAction: (MoonlightAction) -> Unit,
 ) {
     val ctx = root.context
+    val strings = ContextStrings(ctx)
     val inflater = LayoutInflater.from(ctx)
     sessionActions.removeAllViews()
     val actions = session.actions()
@@ -90,7 +95,7 @@ private fun BindingSectionMoonlightBinding.bindActions(
     actions.forEachIndexed { index, action ->
         val layout = if (index == 0) R.layout.binding_action_button else R.layout.binding_action_button_outlined
         val button = inflater.inflate(layout, sessionActions, false) as MaterialButton
-        button.text = ctx.formatted(action.labelRes(), action.labelArgs(hostLabel))
+        button.text = action.label(hostLabel, strings)
         button.setOnClickListener { onAction(action) }
         sessionActions.addView(button)
     }

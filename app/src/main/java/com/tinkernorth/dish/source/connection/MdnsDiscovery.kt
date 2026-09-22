@@ -14,12 +14,10 @@ import com.tinkernorth.dish.di.IoDispatcher
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.coroutines.resume
 
 @Singleton
 class MdnsDiscovery
@@ -107,55 +105,18 @@ class MdnsDiscovery
                 ) = Unit
             }
 
-        // resolveService deprecated on API 34+ but the replacement is API 34-only; minSdk is 24.
-        @Suppress("DEPRECATION")
         private suspend fun resolveOne(
             nsd: NsdManager,
             info: NsdServiceInfo,
-        ): DiscoveredServer? =
-            suspendCancellableCoroutine { cont ->
-                val listener =
-                    object : NsdManager.ResolveListener {
-                        override fun onResolveFailed(
-                            si: NsdServiceInfo,
-                            errorCode: Int,
-                        ) {
-                            if (cont.isActive) cont.resume(null)
-                        }
+        ): DiscoveredServer? = NsdServiceResolver.resolve(nsd, info)?.let(::toServer)
 
-                        override fun onServiceResolved(si: NsdServiceInfo) {
-                            if (cont.isActive) cont.resume(toServer(si))
-                        }
-                    }
-                try {
-                    nsd.resolveService(info, listener)
-                } catch (e: IllegalArgumentException) {
-                    // Some OEMs race past the for-loop's serialisation and reject as in-flight.
-                    if (cont.isActive) cont.resume(null)
-                }
-            }
-
-        // NsdServiceInfo.host deprecated on API 34+; single-address host still correct on API 24-33.
-        // API 34+ exposes the full address list. Prefer an IPv4 from it: the UDP
-        // data path is IPv4-only, so an IPv6-resolved host can't carry a session
-        // (openSocket refuses non-IPv4 literals rather than streaming to 0.0.0.0).
-        @Suppress("DEPRECATION")
-        private fun toServer(info: NsdServiceInfo): DiscoveredServer? {
-            val hostAddress =
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    val addresses = info.hostAddresses
-                    (addresses.firstOrNull { it is java.net.Inet4Address } ?: addresses.firstOrNull())
-                        ?.hostAddress
-                } else {
-                    info.host?.hostAddress
-                }
-            return mdnsServiceToServer(
+        private fun toServer(info: NsdServiceInfo): DiscoveredServer? =
+            mdnsServiceToServer(
                 serviceName = info.serviceName.orEmpty(),
-                hostAddress = hostAddress,
+                hostAddress = NsdServiceResolver.hostAddress(info),
                 srvPort = info.port,
                 txt = info.attributes.orEmpty(),
             )
-        }
 
         private companion object {
             const val TAG = "MdnsDiscovery"

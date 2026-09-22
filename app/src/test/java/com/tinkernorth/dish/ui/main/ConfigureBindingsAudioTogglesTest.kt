@@ -22,9 +22,12 @@ import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManag
 import com.tinkernorth.dish.source.store.MicEnabledStore
 import com.tinkernorth.dish.source.store.MotionEnabledStore
 import com.tinkernorth.dish.source.store.RumbleEnabledStore
+import com.tinkernorth.dish.source.store.SatelliteHostFacts
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
+import com.tinkernorth.dish.source.store.SlotToggleStores
 import com.tinkernorth.dish.source.store.SpeakerEnabledStore
 import com.tinkernorth.dish.source.system.MicPermissionGate
+import com.tinkernorth.dish.source.usb.PhysicalPadSources
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
 import io.mockk.coEvery
 import io.mockk.every
@@ -137,20 +140,26 @@ class ConfigureBindingsAudioTogglesTest {
             ConfigureBindingsViewModel(
                 context = mockk<Context>(relaxed = true),
                 hub = hub,
-                gamepadRegistry = registry,
-                motionEnabledStore = mockk<MotionEnabledStore>(relaxed = true),
-                rumbleEnabledStore = mockk<RumbleEnabledStore>(relaxed = true),
-                micEnabledStore = micStore,
-                speakerEnabledStore = speakerStore,
+                pads = PhysicalPadSources(registry, mockk<PhysicalInputNative>(relaxed = true), usb, mockk(relaxed = true)),
+                toggles =
+                    SlotToggleStores(
+                        motion = mockk<MotionEnabledStore>(relaxed = true),
+                        rumble = mockk<RumbleEnabledStore>(relaxed = true),
+                        mic = micStore,
+                        speaker = speakerStore,
+                    ),
                 micPermission = micPermission,
                 capabilityComposer = composer,
                 satellite = satellite,
                 moonlight = mockk<MoonlightConnectionManager>(relaxed = true),
-                usbGamepadManager = usb,
-                catalogRepo = catalogRepo,
-                capabilitiesRepo = capabilitiesRepo,
-                native = mockk<PhysicalInputNative>(relaxed = true),
-                hostFeaturesStore = SatelliteHostFeaturesStore(),
+                hostFacts =
+                    SatelliteHostFacts(
+                        features = SatelliteHostFeaturesStore(),
+                        runtime = mockk(),
+                        motionBackend = mockk(),
+                        catalog = catalogRepo,
+                        capabilities = capabilitiesRepo,
+                    ),
             )
     }
 

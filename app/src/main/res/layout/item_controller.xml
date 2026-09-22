@@ -77,15 +77,10 @@
 
     <LinearLayout
         android:id="@+id/edgeOverlay"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@color/colorOverlayScrim"
-        android:clickable="true"
-        android:focusable="true"
+        style="@style/Widget.Dish.Scrim"
         android:gravity="center"
         android:orientation="vertical"
-        android:padding="@dimen/binding_edge_padding"
-        android:visibility="gone">
+        android:padding="@dimen/binding_edge_padding">
 
         <ImageView
             android:id="@+id/ivEdgeIcon"

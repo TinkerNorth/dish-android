@@ -135,8 +135,14 @@ class ConnectionCoordinatorTest {
                 store = store,
                 bindingStore = bindingStore,
                 typeStore = typeStore,
-                hostFeaturesStore = hostFeaturesStore,
-                hostRuntimeStore = hostRuntimeStore,
+                hostFacts =
+                    com.tinkernorth.dish.source.store.SatelliteHostFacts(
+                        features = hostFeaturesStore,
+                        runtime = hostRuntimeStore,
+                        motionBackend = mockk(),
+                        catalog = mockk(),
+                        capabilities = mockk(),
+                    ),
                 composer = composer,
                 gamepadRegistry = gamepadRegistry,
             )

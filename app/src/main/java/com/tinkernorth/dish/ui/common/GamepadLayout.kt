@@ -65,7 +65,6 @@ internal data class GamepadLayout(
     val micMuteRect: RectF? = null,
 )
 
-@Suppress("LongMethod")
 internal fun computeGamepadLayout(
     width: Int,
     height: Int,
@@ -132,46 +131,13 @@ internal fun computeGamepadLayout(
     val r3StickCx = rightStickCx - stickRadius - l3StickRadius - l3Gap
     val r3StickCy = rightStickCy
 
-    val smallBtnRadius = SMALL_BTN_RADIUS_DP * density
-    val centerBtnCy = contentTop + smallBtnRadius * CENTER_BTN_TOP_OFFSET_FACTOR
-    val centerCx = (contentLeft + contentRight) / 2f
-    val centerHalfGap = CENTER_BTN_HALF_GAP_DP * density
-
-    // The trackpad sits where the real DS4/DualSense carries it: top centre, with the
-    // Share/Create and Options buttons flanking it and the PS button dropping below.
-    val trackpadRect =
-        if (psLayout && trackpad) {
-            val padH = min(contentW * TRACKPAD_WIDTH_FRACTION / TRACKPAD_ASPECT, contentH * TRACKPAD_MAX_HEIGHT_FRACTION)
-            val padW = padH * TRACKPAD_ASPECT
-            RectF(centerCx - padW / 2, contentTop, centerCx + padW / 2, contentTop + padH)
-        } else {
-            null
-        }
-    val flankGap = TRACKPAD_FLANK_BTN_GAP_DP * density
-    val selectCx = trackpadRect?.let { it.left - flankGap - smallBtnRadius } ?: (centerCx - centerHalfGap)
-    val startCx = trackpadRect?.let { it.right + flankGap + smallBtnRadius } ?: (centerCx + centerHalfGap)
-    val homeCy =
-        trackpadRect?.let { it.bottom + TRACKPAD_HOME_GAP_DP * density + smallBtnRadius }
-            ?: (centerBtnCy + smallBtnRadius * HOME_VERTICAL_OFFSET_FACTOR)
-
-    // Under the PS button, where the real DualSense puts it. Clamped to the content band so a
-    // short screen pushes it up against the bottom edge rather than off it. The clamp can slide
-    // the pill into the home button's pickup halo; the gesture recognizer hit-tests the pill
-    // before the centre circles, so the overlap costs home some invisible forgiveness zone and
-    // never costs the pill its own drawn area.
-    val micMuteRect =
-        if (skin.hasMicMute) {
-            val muteW = MIC_MUTE_WIDTH_DP * density
-            val muteH = MIC_MUTE_HEIGHT_DP * density
-            val muteTop =
-                min(
-                    homeCy + smallBtnRadius + MIC_MUTE_GAP_DP * density,
-                    contentBottom - muteH,
-                )
-            RectF(centerCx - muteW / 2, muteTop, centerCx + muteW / 2, muteTop + muteH)
-        } else {
-            null
-        }
+    val centre =
+        computeCentreCluster(
+            content = RectF(contentLeft, contentTop, contentRight, contentBottom),
+            density = density,
+            trackpad = psLayout && trackpad,
+            micMute = skin.hasMicMute,
+        )
 
     return GamepadLayout(
         dpadRect = dpadRect,
@@ -191,6 +157,78 @@ internal fun computeGamepadLayout(
         stickRadius = stickRadius,
         l3StickRadius = l3StickRadius,
         btnRadius = btnRadius,
+        smallBtnRadius = centre.smallBtnRadius,
+        selectCx = centre.selectCx,
+        startCx = centre.startCx,
+        homeCx = centre.homeCx,
+        homeCy = centre.homeCy,
+        centerBtnCy = centre.centerBtnCy,
+        trackpadRect = centre.trackpadRect,
+        micMuteRect = centre.micMuteRect,
+    )
+}
+
+// The controls between the two stick/cluster columns: the trackpad (PlayStation skins only),
+// the select/start pair flanking it, the home button and the mic-mute pill below.
+private class CentreCluster(
+    val smallBtnRadius: Float,
+    val selectCx: Float,
+    val startCx: Float,
+    val homeCx: Float,
+    val homeCy: Float,
+    val centerBtnCy: Float,
+    val trackpadRect: RectF?,
+    val micMuteRect: RectF?,
+)
+
+private fun computeCentreCluster(
+    content: RectF,
+    density: Float,
+    trackpad: Boolean,
+    micMute: Boolean,
+): CentreCluster {
+    val smallBtnRadius = SMALL_BTN_RADIUS_DP * density
+    val centerBtnCy = content.top + smallBtnRadius * CENTER_BTN_TOP_OFFSET_FACTOR
+    val centerCx = content.centerX()
+    val centerHalfGap = CENTER_BTN_HALF_GAP_DP * density
+
+    // The trackpad sits where the real DS4/DualSense carries it: top centre, with the
+    // Share/Create and Options buttons flanking it and the PS button dropping below.
+    val trackpadRect =
+        if (trackpad) {
+            val padH =
+                min(content.width() * TRACKPAD_WIDTH_FRACTION / TRACKPAD_ASPECT, content.height() * TRACKPAD_MAX_HEIGHT_FRACTION)
+            val padW = padH * TRACKPAD_ASPECT
+            RectF(centerCx - padW / 2, content.top, centerCx + padW / 2, content.top + padH)
+        } else {
+            null
+        }
+    val flankGap = TRACKPAD_FLANK_BTN_GAP_DP * density
+    val selectCx = trackpadRect?.let { it.left - flankGap - smallBtnRadius } ?: (centerCx - centerHalfGap)
+    val startCx = trackpadRect?.let { it.right + flankGap + smallBtnRadius } ?: (centerCx + centerHalfGap)
+    val homeCy =
+        trackpadRect?.let { it.bottom + TRACKPAD_HOME_GAP_DP * density + smallBtnRadius }
+            ?: (centerBtnCy + smallBtnRadius * HOME_VERTICAL_OFFSET_FACTOR)
+
+    // Under the PS button, where the real DualSense puts it. Clamped to the content band so a
+    // short screen pushes it up against the bottom edge rather than off it. The clamp can slide
+    // the pill into the home button's pickup halo; the gesture recognizer hit-tests the pill
+    // before the centre circles, so the overlap costs home some invisible forgiveness zone and
+    // never costs the pill its own drawn area.
+    val micMuteRect =
+        if (micMute) {
+            val muteW = MIC_MUTE_WIDTH_DP * density
+            val muteH = MIC_MUTE_HEIGHT_DP * density
+            val muteTop =
+                min(
+                    homeCy + smallBtnRadius + MIC_MUTE_GAP_DP * density,
+                    content.bottom - muteH,
+                )
+            RectF(centerCx - muteW / 2, muteTop, centerCx + muteW / 2, muteTop + muteH)
+        } else {
+            null
+        }
+    return CentreCluster(
         smallBtnRadius = smallBtnRadius,
         selectCx = selectCx,
         startCx = startCx,

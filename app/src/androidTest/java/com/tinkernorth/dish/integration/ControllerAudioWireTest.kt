@@ -4,7 +4,7 @@ package com.tinkernorth.dish.integration
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
-import com.tinkernorth.dish.core.jni.SatelliteNative
+import com.tinkernorth.dish.core.jni.SlotReportNative
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.hotpath.audio.SpeakerAudioBridge
 import com.tinkernorth.dish.source.connection.SatelliteConnection
@@ -102,7 +102,7 @@ class ControllerAudioWireTest {
         // frames is enough to see the sequence advance and to leave Opus's
         // start-up transient behind.
         for (f in 0 until 10) {
-            SatelliteNative.sendMicFrame(conn.handle, ctrlIdx, tone(f))
+            SlotReportNative.sendMicFrame(conn.handle, ctrlIdx, tone(f))
             Thread.sleep(20)
         }
         assertTrue("mic frames must decrypt at the satellite", satellite.awaitMicAudioFrames(3))
@@ -131,17 +131,17 @@ class ControllerAudioWireTest {
 
         // A mis-framed buffer must not become a packet the satellite cannot
         // place in its timeline, so nothing leaves the device at all.
-        assertTrue(!SatelliteNative.sendMicFrame(conn.handle, ctrlIdx, ShortArray(FRAME_SAMPLES - 1)))
-        assertTrue(!SatelliteNative.sendMicFrame(conn.handle, ctrlIdx, ShortArray(FRAME_SAMPLES + 1)))
-        assertTrue(!SatelliteNative.sendMicFrame(conn.handle, ctrlIdx, ShortArray(0)))
-        assertTrue(!SatelliteNative.sendMicFrame(-1, ctrlIdx, tone(0)))
+        assertTrue(!SlotReportNative.sendMicFrame(conn.handle, ctrlIdx, ShortArray(FRAME_SAMPLES - 1)))
+        assertTrue(!SlotReportNative.sendMicFrame(conn.handle, ctrlIdx, ShortArray(FRAME_SAMPLES + 1)))
+        assertTrue(!SlotReportNative.sendMicFrame(conn.handle, ctrlIdx, ShortArray(0)))
+        assertTrue(!SlotReportNative.sendMicFrame(-1, ctrlIdx, tone(0)))
         Thread.sleep(300)
         assertEquals(emptyList<String>(), fake!!.micAudioViolations)
         assertTrue("nothing may reach the wire from a mis-framed window", fake!!.micAudioFrames.isEmpty())
 
         // And the encoder is not wedged by the refusals.
         for (f in 0 until 10) {
-            SatelliteNative.sendMicFrame(conn.handle, ctrlIdx, tone(f))
+            SlotReportNative.sendMicFrame(conn.handle, ctrlIdx, tone(f))
             Thread.sleep(20)
         }
         assertTrue("well-framed windows must reach the wire after the refusals", fake!!.awaitMicAudioFrames(1))
@@ -213,7 +213,7 @@ class ControllerAudioWireTest {
         satellite.sendMicLed(ctrlIdx, UNKNOWN_MIC_LED_STATE)
         Thread.sleep(100)
 
-        assertTrue(SatelliteNative.sendMicFrame(conn.handle, ctrlIdx, tone(0)))
+        assertTrue(SlotReportNative.sendMicFrame(conn.handle, ctrlIdx, tone(0)))
         assertTrue("the session survives an unknown lamp state", satellite.awaitMicAudioFrames(1))
     }
 
@@ -240,7 +240,7 @@ class ControllerAudioWireTest {
         val conn = manager.get(SatelliteConnection.idFor(satellite.server()))!!
         val ctrlIdx = conn.slots.value[VIRTUAL_SLOT_ID]!!.controllerIndex
         for (f in 0 until count + 2) {
-            SatelliteNative.sendMicFrame(conn.handle, ctrlIdx, tone(f))
+            SlotReportNative.sendMicFrame(conn.handle, ctrlIdx, tone(f))
             Thread.sleep(20)
         }
         assertTrue("the fixture run must reach the fake", satellite.awaitMicAudioFrames(count + 2))

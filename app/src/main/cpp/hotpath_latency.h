@@ -3,7 +3,7 @@
 // hotpath_latency - opt-in, on-device latency instrumentation for the USB-direct
 // hot path and the heartbeat round trip. Disabled by default; every mark is a
 // single relaxed atomic load when off, so the streaming path pays nothing unless
-// a benchmark explicitly turns it on (SatelliteNative.setHotPathBench(true)).
+// a benchmark explicitly turns it on (InstrumentationNative.setHotPathBench(true)).
 //
 // Stages (see satellite tools/bench/README.md for the full chain):
 //   stage 1  USB-direct hot path : markInputRead() at URB reap, markGamepadSent()

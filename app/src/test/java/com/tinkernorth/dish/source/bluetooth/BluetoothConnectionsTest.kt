@@ -7,6 +7,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
@@ -27,7 +28,7 @@ class BluetoothConnectionsTest {
 
     @Before
     fun setUp() {
-        mockkStatic(ContextCompat::class)
+        mockkStatic(ContextCompat::class, IntentCompat::class)
         every { ContextCompat.registerReceiver(any(), capture(receiverSlot), any(), any()) } returns null
         changes = 0
         connections = BluetoothConnections(context)
@@ -39,17 +40,16 @@ class BluetoothConnectionsTest {
         unmockkAll()
     }
 
-    // One-arg getParcelableExtra: the JVM stub's SDK_INT=0 drives the legacy path.
-    @Suppress("DEPRECATION")
+    // The receiver reads the device through IntentCompat, so the compat entry point is what the
+    // intent mock answers: the JVM stub cannot carry a real Parcelable extra.
     private fun aclEvent(
         action: String,
         deviceName: String?,
     ): Intent {
         val device = mockk<BluetoothDevice> { every { name } returns deviceName }
-        return mockk<Intent> {
-            every { this@mockk.action } returns action
-            every { getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE) } returns device
-        }
+        val intent = mockk<Intent> { every { this@mockk.action } returns action }
+        every { IntentCompat.getParcelableExtra(intent, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java) } returns device
+        return intent
     }
 
     private fun deliver(
