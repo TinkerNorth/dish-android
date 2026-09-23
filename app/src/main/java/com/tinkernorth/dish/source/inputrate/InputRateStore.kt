@@ -100,22 +100,34 @@ class InputRateStore
             }
             rebaselineIfResuming()
 
-            val devices = registry.devices.value
+            val sampled = sampleSlots(registry.devices.value, nowMs)
+            screenTracker.update(screenCount.get(), nowMs)
+            trackers.keys.retainAll(sampled.liveSlotIds)
+            motionCounts.keys.retainAll(sampled.liveSlotIds)
+            setState(InputRates(screenPeakHz = screenTracker.peakHz, slots = sampled.slots))
+        }
+
+        // liveSlotIds is every slot that exists, which is not the same as every slot that
+        // produced a sample: a quiet pad keeps its tracker, only a departed one loses it.
+        private class SampledSlots(
+            val slots: Map<String, SlotInputRates>,
+            val liveSlotIds: Set<String>,
+        )
+
+        private fun sampleSlots(
+            devices: Map<Int, PhysicalGamepadRegistry.Device>,
+            nowMs: Long,
+        ): SampledSlots {
             val slotIds = HashSet<String>(devices.size * 2 + 2)
             slotIds.add(VIRTUAL_SLOT_ID)
             val slots = HashMap<String, SlotInputRates>(devices.size * 2 + 2)
-
             for ((id, device) in devices) {
                 val slotId = id.toString()
                 slotIds.add(slotId)
                 samplePhysicalSlot(slotId, id, device, nowMs)?.let { slots[slotId] = it }
             }
             sampleVirtualSlot(nowMs)?.let { slots[VIRTUAL_SLOT_ID] = it }
-
-            screenTracker.update(screenCount.get(), nowMs)
-            trackers.keys.retainAll(slotIds)
-            motionCounts.keys.retainAll(slotIds)
-            setState(InputRates(screenPeakHz = screenTracker.peakHz, slots = slots))
+            return SampledSlots(slots, slotIds)
         }
 
         private fun rebaselineIfResuming() {

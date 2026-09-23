@@ -283,29 +283,32 @@ class PhysicalSlotBindingObserver
                 }.associate { it.slotId to it.number }
 
         private fun push(state: BindingState) {
-            val present = state.devices.keys
-            val referencedConnIds = state.bindings.values.toSet()
-            val liveIds = moonlightLiveIds(referencedConnIds)
-            val ops =
-                reconcileSlots(
-                    present = present,
-                    lastBound = lastBoundDeviceIds,
-                    bindings = state.bindings,
-                    summaries = state.summaries,
-                    perConnectionSlotInfo = satelliteSlotSnapshots(referencedConnIds),
-                    btConnectedIds = referencedConnIds.filterTo(mutableSetOf()) { bt.isConnected(it) },
-                    moonlightLiveIds = liveIds,
-                    moonlightPadNumbers = moonlightPadNumbers(liveIds),
-                )
+            val ops = reconcile(state)
             // A satellite re-bind is not idempotent on the native side: bindPhysicalSlotSatellite
-            // re-runs syncSlotBaseline, which resets the device to neutral and publishes it, briefly
-            // releasing every held button/trigger until the next physical report. push() fires on
-            // every upstream re-emit (a few Hz), so replaying an unchanged bind makes held inputs
-            // flicker. Drop binds identical to the one already applied; let changed binds through.
+            // re-runs syncSlotBaseline, which resets the device to neutral and publishes it,
+            // briefly releasing every held button and trigger until the next physical report.
+            // push() fires on every upstream re-emit (a few Hz), so replaying an unchanged bind
+            // makes held inputs flicker. Binds identical to the one already applied are dropped;
+            // changed binds go through.
             val deduped = dedupeBindOps(ops, lastAppliedBinds)
             for (op in deduped.ops) execute(op)
             lastAppliedBinds = deduped.applied
-            lastBoundDeviceIds = present
+            lastBoundDeviceIds = state.devices.keys
+        }
+
+        private fun reconcile(state: BindingState): List<BindOp> {
+            val referencedConnIds = state.bindings.values.toSet()
+            val liveIds = moonlightLiveIds(referencedConnIds)
+            return reconcileSlots(
+                present = state.devices.keys,
+                lastBound = lastBoundDeviceIds,
+                bindings = state.bindings,
+                summaries = state.summaries,
+                perConnectionSlotInfo = satelliteSlotSnapshots(referencedConnIds),
+                btConnectedIds = referencedConnIds.filterTo(mutableSetOf()) { bt.isConnected(it) },
+                moonlightLiveIds = liveIds,
+                moonlightPadNumbers = moonlightPadNumbers(liveIds),
+            )
         }
 
         private fun execute(op: BindOp) {

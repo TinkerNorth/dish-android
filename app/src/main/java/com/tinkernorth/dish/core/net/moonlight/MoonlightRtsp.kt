@@ -155,20 +155,37 @@ object MoonlightRtsp {
      * `RTSP/1.0`-style status line, so a truncated or non-RTSP reply is
      * rejected rather than misparsed.
      */
-    fun parseResponse(raw: String): Response? {
+    private class RawResponse(val headerLines: List<String>, val payload: String)
+
+    // RTSP is a CRLF protocol, but a host that sends bare LF still has to parse; the blank line
+    // separates the headers from the payload.
+    private fun splitHeadersAndPayload(raw: String): RawResponse {
         val normalized = raw.replace("\r\n", "\n")
         val headerEnd = normalized.indexOf("\n\n")
         val headerBlock = if (headerEnd >= 0) normalized.substring(0, headerEnd) else normalized
         val payload = if (headerEnd >= 0) normalized.substring(headerEnd + 2) else ""
-        val lines = headerBlock.split('\n').filter { it.isNotEmpty() }
-        if (lines.isEmpty()) return null
-        val statusLine = lines.first().trim().split(' ', limit = 3)
-        if (statusLine.size < 2 || !statusLine[0].startsWith("RTSP/")) return null
-        val code = statusLine[1].toIntOrNull() ?: return null
-        val message = statusLine.getOrElse(2) { "" }
+        return RawResponse(headerBlock.split('\n').filter { it.isNotEmpty() }, payload)
+    }
+
+    private class StatusLine(val code: Int, val message: String)
+
+    // "RTSP/1.0 200 OK". Null for anything that is not one, which is how a body arriving without
+    // a status line is rejected rather than half-parsed.
+    private fun parseStatusLine(line: String): StatusLine? {
+        val parts = line.trim().split(' ', limit = 3)
+        if (parts.size < 2 || !parts[0].startsWith("RTSP/")) return null
+        val code = parts[1].toIntOrNull() ?: return null
+        return StatusLine(code, parts.getOrElse(2) { "" })
+    }
+
+    private class ParsedHeaders(val cseq: Int, val options: Map<String, String>)
+
+    // CSeq is lifted out of the option map because callers match it against the request they
+    // sent; everything else stays an option, in the order the host wrote it.
+    private fun parseHeaders(lines: List<String>): ParsedHeaders {
         val options = LinkedHashMap<String, String>()
         var cseq = 0
-        for (line in lines.drop(1)) {
+        for (line in lines) {
             val idx = line.indexOf(':')
             if (idx <= 0) continue
             val key = line.substring(0, idx).trim()
@@ -179,7 +196,15 @@ object MoonlightRtsp {
                 options[key] = value
             }
         }
-        return Response(code, message, cseq, options, payload)
+        return ParsedHeaders(cseq, options)
+    }
+
+    fun parseResponse(raw: String): Response? {
+        val split = splitHeadersAndPayload(raw)
+        val first = split.headerLines.firstOrNull() ?: return null
+        val status = parseStatusLine(first) ?: return null
+        val headers = parseHeaders(split.headerLines.drop(1))
+        return Response(status.code, status.message, headers.cseq, headers.options, split.payload)
     }
 
     /**

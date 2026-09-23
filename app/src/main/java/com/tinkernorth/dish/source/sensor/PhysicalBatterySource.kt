@@ -63,29 +63,29 @@ class PhysicalBatterySource
 
         override fun onStart(owner: LifecycleOwner) {
             if (pollJob != null) return
-            pollJob =
-                scope.launch {
-                    polls.receiveAsFlow().collect { pollOnce() }
-                }
-            reachableJob =
-                reachability.state
-                    .onEach(::onReachableChanged)
-                    .launchIn(scope)
-            devicesJob =
-                registry.devices
-                    .map { devs -> devs.mapValues { (_, d) -> d.transport } }
-                    .distinctUntilChanged()
-                    .onEach(::onDevicesChanged)
-                    .launchIn(scope)
-            tickJob =
-                scope.launch {
-                    while (isActive) {
-                        requestPoll()
-                        delay(BatteryValidator.REPORT_INTERVAL_SECONDS * 1000L)
-                    }
-                }
+            pollJob = scope.launch { polls.receiveAsFlow().collect { pollOnce() } }
+            reachableJob = reachability.state.onEach(::onReachableChanged).launchIn(scope)
+            devicesJob = observeTransports()
+            tickJob = startPollTicker()
             registerChargingReceiver()
         }
+
+        // Only the transport decides which reader answers for a pad, so a device that changes
+        // anything else must not re-run the whole poll.
+        private fun observeTransports(): Job =
+            registry.devices
+                .map { devs -> devs.mapValues { (_, d) -> d.transport } }
+                .distinctUntilChanged()
+                .onEach(::onDevicesChanged)
+                .launchIn(scope)
+
+        private fun startPollTicker(): Job =
+            scope.launch {
+                while (isActive) {
+                    requestPoll()
+                    delay(BatteryValidator.REPORT_INTERVAL_SECONDS * 1000L)
+                }
+            }
 
         override fun onStop(owner: LifecycleOwner) {
             reachableJob?.cancel()

@@ -72,31 +72,36 @@ class MoonlightControlSession(
      * elapses. Returns true on success.
      */
     fun connect(handshakeTimeoutMs: Int = DEFAULT_HANDSHAKE_TIMEOUT_MS): Boolean {
+        beginHandshake()
+        pumpUntilHandshakeSettles(nowMs() + handshakeTimeoutMs)
+        return finishHandshake()
+    }
+
+    private fun beginHandshake() {
         synchronized(lock) {
             state = State.CONNECTING
             transport.send(enet.connect())
         }
-        val deadline = nowMs() + handshakeTimeoutMs
+    }
+
+    // A quiet poll still ticks, so a dropped connect request is retransmitted rather than waited
+    // out until the deadline.
+    private fun pumpUntilHandshakeSettles(deadline: Long) {
         while (nowMs() < deadline && enetState() == EnetClient.State.CONNECTING) {
             val datagram = transport.receive(HANDSHAKE_POLL_MS)
             synchronized(lock) {
-                if (datagram == null) {
-                    enet.tick().forEach(transport::send)
-                } else {
-                    enet.onDatagram(datagram).forEach(transport::send)
-                }
-            }
-        }
-        return synchronized(lock) {
-            if (enet.state == EnetClient.State.CONNECTED) {
-                state = State.CONNECTED
-                true
-            } else {
-                state = State.CLOSED
-                false
+                val outgoing = if (datagram == null) enet.tick() else enet.onDatagram(datagram)
+                outgoing.forEach(transport::send)
             }
         }
     }
+
+    private fun finishHandshake(): Boolean =
+        synchronized(lock) {
+            val connected = enet.state == EnetClient.State.CONNECTED
+            state = if (connected) State.CONNECTED else State.CLOSED
+            connected
+        }
 
     private fun enetState(): EnetClient.State = synchronized(lock) { enet.state }
 
@@ -222,8 +227,19 @@ class MoonlightControlSession(
      * loop.
      */
     fun pump(budget: Int = RECEIVE_BUDGET) {
-        var handled = 0
         val events = mutableListOf<MoonlightEvent>()
+        receiveUpTo(budget, events)
+        tickAndObserveClose()
+        // Dispatched outside the lock: a rumble sink is somebody else's code and must never be
+        // able to hold up the input thread.
+        events.forEach(onEvent)
+    }
+
+    private fun receiveUpTo(
+        budget: Int,
+        events: MutableList<MoonlightEvent>,
+    ) {
+        var handled = 0
         while (handled < budget) {
             val datagram = transport.receive(RECEIVE_POLL_MS) ?: break
             synchronized(lock) {
@@ -232,16 +248,15 @@ class MoonlightControlSession(
             }
             handled += 1
         }
+    }
+
+    private fun tickAndObserveClose() {
         synchronized(lock) {
             enet.tick().forEach(transport::send)
             maybePingLocked()
-            if (enet.state == EnetClient.State.DISCONNECTED && state == State.CONNECTED) {
-                state = State.CLOSED
-            }
+            val peerGaveUp = enet.state == EnetClient.State.DISCONNECTED && state == State.CONNECTED
+            if (peerGaveUp) state = State.CLOSED
         }
-        // Dispatched outside the lock: a rumble sink is somebody else's code and
-        // must never be able to hold up the input thread.
-        events.forEach(onEvent)
     }
 
     private fun drainEventsLocked(into: MutableList<MoonlightEvent>) {
