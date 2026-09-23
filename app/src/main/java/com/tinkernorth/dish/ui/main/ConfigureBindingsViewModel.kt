@@ -35,6 +35,7 @@ import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.repository.SatelliteCapabilitiesRepository
 import com.tinkernorth.dish.repository.SatelliteCatalogRepository
+import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionManager
@@ -919,18 +920,9 @@ class ConfigureBindingsViewModel
         // answered before the satellite lookup: satellite.get() is null for a Moonlight id, which
         // used to leave the type unresolved forever and Apply disabled with it.
         private fun refreshTypeOptions(hostId: String) {
-            if (hub.summary(hostId)?.kind == ConnectionKind.MOONLIGHT) {
-                val stored = loadedSlotId?.let { hub.satTypes.value[hostId to it] }
-                val seeded = fromStored(stored ?: moonlight.rememberedEmulatedType(hostId))
-                _ui.update { state ->
-                    state
-                        .copy(
-                            typeOptions = moonlightTypeOptions(),
-                            typeFetchFailed = false,
-                            draft = state.draft?.copy(type = state.draft.type ?: seeded),
-                        ).withCapabilities()
-                }
-                refreshMoonlight()
+            val isMoonlightHost = hub.summary(hostId)?.kind == ConnectionKind.MOONLIGHT
+            if (isMoonlightHost) {
+                refreshMoonlightTypeOptions(hostId)
                 return
             }
             val conn = satellite.get(hostId)
@@ -938,36 +930,65 @@ class ConfigureBindingsViewModel
                 _ui.update { it.copy(typeOptions = bundledTypeOptions()) }
                 return
             }
-            // Fresh resolve for this satellite host: clear any prior error, seed from cache if present.
+            seedSatelliteTypeOptionsFromCache(hostId)
+            viewModelScope.launch { fetchSatelliteCatalog(conn, hostId) }
+        }
+
+        private fun refreshMoonlightTypeOptions(hostId: String) {
+            val stored = loadedSlotId?.let { hub.satTypes.value[hostId to it] }
+            val seeded = fromStored(stored ?: moonlight.rememberedEmulatedType(hostId))
+            _ui.update { state ->
+                state
+                    .copy(
+                        typeOptions = moonlightTypeOptions(),
+                        typeFetchFailed = false,
+                        draft = state.draft?.copy(type = state.draft.type ?: seeded),
+                    ).withCapabilities()
+            }
+            refreshMoonlight()
+        }
+
+        // Fresh resolve for this satellite host: clear any prior error, seed from cache if present.
+        private fun seedSatelliteTypeOptionsFromCache(hostId: String) {
             _ui.update { state ->
                 val cleared = state.copy(typeFetchFailed = false)
-                catalogRepo.cached(hostId)?.let { cached ->
-                    cleared
-                        .copy(typeOptions = typeOptionsFrom(cached.controllerTypes))
-                        .withCatalogDefault(cached.controllerTypes)
-                } ?: cleared
+                val cached = catalogRepo.cached(hostId) ?: return@update cleared
+                cleared
+                    .copy(typeOptions = typeOptionsFrom(cached.controllerTypes))
+                    .withCatalogDefault(cached.controllerTypes)
             }
-            viewModelScope.launch {
-                // Probe live host state first: it seeds the host layer + pre-bind runtime
-                // (motion backend up/down) before the catalog round-trip, so the candidate
-                // report reflects the real receiver even if the catalog is slow/unreachable.
-                capabilitiesRepo.refresh(conn.server.value, hostId)
-                _ui.update { state -> state.withCapabilities() }
-                val catalog = catalogRepo.catalogFor(conn.server.value, hostId)
-                if (catalog == null) {
-                    // Fetch failed: surface Error only when nothing is cached (a cache still resolves the type).
-                    _ui.update { state -> if (catalogRepo.cached(hostId) == null) state.copy(typeFetchFailed = true) else state }
-                    return@launch
-                }
-                // Recompute the gates too: the fetched catalog's per-type features now back
-                // the type layer, not just the picker labels.
-                _ui.update { state ->
-                    state
-                        .copy(typeOptions = typeOptionsFrom(catalog.controllerTypes), typeFetchFailed = false)
-                        .withCatalogDefault(catalog.controllerTypes)
-                        .withCapabilities()
-                }
+        }
+
+        private suspend fun fetchSatelliteCatalog(
+            conn: SatelliteConnection,
+            hostId: String,
+        ) {
+            // Probe live host state first: it seeds the host layer + pre-bind runtime (motion
+            // backend up/down) before the catalog round-trip, so the candidate report reflects the
+            // real receiver even if the catalog is slow or unreachable.
+            capabilitiesRepo.refresh(conn.server.value, hostId)
+            _ui.update { state -> state.withCapabilities() }
+
+            val catalog = catalogRepo.catalogFor(conn.server.value, hostId)
+            if (catalog == null) {
+                markCatalogFetchFailed(hostId)
+                return
             }
+            // Recompute the gates too: the fetched catalog's per-type features now back the type
+            // layer, not just the picker labels.
+            _ui.update { state ->
+                state
+                    .copy(typeOptions = typeOptionsFrom(catalog.controllerTypes), typeFetchFailed = false)
+                    .withCatalogDefault(catalog.controllerTypes)
+                    .withCapabilities()
+            }
+        }
+
+        // Surface Error only when nothing is cached: a cache still resolves the type.
+        private fun markCatalogFetchFailed(hostId: String) {
+            val nothingCached = catalogRepo.cached(hostId) == null
+            if (!nothingCached) return
+            _ui.update { state -> state.copy(typeFetchFailed = true) }
         }
 
         private fun typeOptionsFrom(types: List<CatalogTypeDto>): List<TypeOption> {
