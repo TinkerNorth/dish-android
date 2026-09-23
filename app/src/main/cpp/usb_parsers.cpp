@@ -22,12 +22,14 @@
 namespace usbparsers {
 
 using gamepad::DeviceState;
+using gamepad::hatDirectionBits;
 using gamepad::WBUTTON_MIC_MUTE;
 using gamepad::XUSB_A;
 using gamepad::XUSB_B;
 using gamepad::XUSB_BACK;
 using gamepad::XUSB_DPAD_DOWN;
 using gamepad::XUSB_DPAD_LEFT;
+using gamepad::XUSB_DPAD_MASK;
 using gamepad::XUSB_DPAD_RIGHT;
 using gamepad::XUSB_DPAD_UP;
 using gamepad::XUSB_GUIDE;
@@ -670,23 +672,10 @@ int16_t ds4AccelAxisToWire(int32_t raw, const PsImuCalib& c, int axis) {
     return (int16_t)wire;
 }
 
-// A HID hat's eight directions, clockwise from up. Anything else is centred.
-constexpr uint16_t HAT_DIRECTION_BITS[] = {
-    XUSB_DPAD_UP,    XUSB_DPAD_UP | XUSB_DPAD_RIGHT,
-    XUSB_DPAD_RIGHT, XUSB_DPAD_DOWN | XUSB_DPAD_RIGHT,
-    XUSB_DPAD_DOWN,  XUSB_DPAD_DOWN | XUSB_DPAD_LEFT,
-    XUSB_DPAD_LEFT,  XUSB_DPAD_UP | XUSB_DPAD_LEFT,
-};
-
-constexpr uint16_t XUSB_DPAD_MASK_ALL =
-    XUSB_DPAD_UP | XUSB_DPAD_DOWN | XUSB_DPAD_LEFT | XUSB_DPAD_RIGHT;
-
 uint16_t setDpadFromHat(uint16_t buttons, uint8_t hat) {
-    const uint16_t withoutDpad = (uint16_t)(buttons & ~XUSB_DPAD_MASK_ALL);
-    const uint8_t direction = (uint8_t)(hat & 0x0F);
-    const bool isCentred = direction >= 8;
-    if (isCentred) return withoutDpad;
-    return (uint16_t)(withoutDpad | HAT_DIRECTION_BITS[direction]);
+    const uint16_t withoutDpad = (uint16_t)(buttons & ~XUSB_DPAD_MASK);
+    const int direction = (int)(hat & 0x0F);
+    return (uint16_t)(withoutDpad | hatDirectionBits(direction));
 }
 
 // Both Xbox reports lay the four stick axes out as little-endian int16 in the order LX LY RX RY;
@@ -835,9 +824,13 @@ void decodePsMotion(const uint8_t* buf, const int gyroBase, const int accelBase,
     s.motionValid = true;
 }
 
+void setBattery(DeviceState& s, const uint8_t level, const uint8_t status) {
+    s.batteryLevel = level;
+    s.batteryStatus = status;
+}
+
 void setBatteryUnknown(DeviceState& s) {
-    s.batteryLevel = PAD_BATTERY_LEVEL_UNKNOWN;
-    s.batteryStatus = PAD_BATTERY_STATUS_UNKNOWN;
+    setBattery(s, PAD_BATTERY_LEVEL_UNKNOWN, PAD_BATTERY_STATUS_UNKNOWN);
 }
 
 // hid-playstation's status[0]: low nibble the charge in tenths, 0x10 the cable. With the cable in,
@@ -846,23 +839,14 @@ void decodeDs4Battery(const uint8_t status, DeviceState& s) {
     const uint8_t tenths = (uint8_t)(status & 0x0F);
     const bool cableIn = (status & 0x10) != 0;
     s.batteryValid = true;
-    if (!cableIn) {
-        s.batteryLevel = sonyTenthsToPercent(tenths);
-        s.batteryStatus = PAD_BATTERY_STATUS_DISCHARGING;
-        return;
-    }
+    if (!cableIn) return setBattery(s, sonyTenthsToPercent(tenths), PAD_BATTERY_STATUS_DISCHARGING);
+
     const bool stillCharging = tenths <= 10;
-    if (stillCharging) {
-        s.batteryLevel = sonyTenthsToPercent(tenths);
-        s.batteryStatus = PAD_BATTERY_STATUS_CHARGING;
-        return;
-    }
+    if (stillCharging)
+        return setBattery(s, sonyTenthsToPercent(tenths), PAD_BATTERY_STATUS_CHARGING);
+
     const bool full = tenths == 11;
-    if (full) {
-        s.batteryLevel = 100;
-        s.batteryStatus = PAD_BATTERY_STATUS_FULL;
-        return;
-    }
+    if (full) return setBattery(s, 100, PAD_BATTERY_STATUS_FULL);
     setBatteryUnknown(s);
 }
 
@@ -874,20 +858,13 @@ void decodeDualSenseBattery(const uint8_t status, DeviceState& s) {
     s.batteryValid = true;
     switch (state) {
     case 0x0:
-        s.batteryLevel = sonyTenthsToPercent(tenths);
-        s.batteryStatus = PAD_BATTERY_STATUS_DISCHARGING;
-        break;
+        return setBattery(s, sonyTenthsToPercent(tenths), PAD_BATTERY_STATUS_DISCHARGING);
     case 0x1:
-        s.batteryLevel = sonyTenthsToPercent(tenths);
-        s.batteryStatus = PAD_BATTERY_STATUS_CHARGING;
-        break;
+        return setBattery(s, sonyTenthsToPercent(tenths), PAD_BATTERY_STATUS_CHARGING);
     case 0x2:
-        s.batteryLevel = 100;
-        s.batteryStatus = PAD_BATTERY_STATUS_FULL;
-        break;
+        return setBattery(s, 100, PAD_BATTERY_STATUS_FULL);
     default:
-        setBatteryUnknown(s);
-        break;
+        return setBatteryUnknown(s);
     }
 }
 
@@ -1097,6 +1074,21 @@ bool decodeSwitchProUsb(const uint8_t* buf, size_t len, DeviceState& s, ParserSt
     return true;
 }
 
+uint16_t decodeStadiaButtons(const uint8_t faceByte, const uint8_t systemByte, const uint8_t hat) {
+    uint16_t buttons = 0;
+    if (faceByte & 0x40) buttons |= XUSB_A;
+    if (faceByte & 0x20) buttons |= XUSB_B;
+    if (faceByte & 0x10) buttons |= XUSB_X;
+    if (faceByte & 0x08) buttons |= XUSB_Y;
+    if (faceByte & 0x04) buttons |= XUSB_LB;
+    if (faceByte & 0x02) buttons |= XUSB_RB;
+    if (systemByte & 0x80) buttons |= XUSB_START;
+    if (systemByte & 0x40) buttons |= XUSB_BACK;
+    if (systemByte & 0x20) buttons |= XUSB_THUMB_L;
+    if (systemByte & 0x10) buttons |= XUSB_THUMB_R;
+    return setDpadFromHat(buttons, (uint8_t)(hat & 0x0F));
+}
+
 bool decodeStadia(const uint8_t* buf, size_t len, DeviceState& s) {
     if (len < 11) return false;
     if (buf[0] != 0x03) return false;
@@ -1106,19 +1098,7 @@ bool decodeStadia(const uint8_t* buf, size_t len, DeviceState& s) {
     s.sRY = scaleU8Centered(buf[4], true);
     s.bLT = buf[5];
     s.bRT = buf[6];
-    uint16_t b = 0;
-    if (buf[8] & 0x40) b |= XUSB_A;
-    if (buf[8] & 0x20) b |= XUSB_B;
-    if (buf[8] & 0x10) b |= XUSB_X;
-    if (buf[8] & 0x08) b |= XUSB_Y;
-    if (buf[8] & 0x04) b |= XUSB_LB;
-    if (buf[8] & 0x02) b |= XUSB_RB;
-    if (buf[9] & 0x80) b |= XUSB_START;
-    if (buf[9] & 0x40) b |= XUSB_BACK;
-    if (buf[9] & 0x20) b |= XUSB_THUMB_L;
-    if (buf[9] & 0x10) b |= XUSB_THUMB_R;
-    b = setDpadFromHat(b, buf[7] & 0x0F);
-    s.wButtons = b;
+    s.wButtons = decodeStadiaButtons(buf[8], buf[9], buf[7]);
     return true;
 }
 
@@ -1297,32 +1277,47 @@ void switchEncodeMotor(uint8_t* out, uint16_t magnitude) {
     out[3] = (uint8_t)(code->low & 0xFF);
 }
 
-} // namespace
-
-bool parsePsCalibration(const uint8_t* buf, size_t len, PsImuCalib& out) {
-    out = PsImuCalib{};
-    if (len < 35) return false; // gyro/accel calibration occupies bytes 1..34
-    int32_t gyroBias[3] = {rdLe16(buf, 1), rdLe16(buf, 3), rdLe16(buf, 5)};
-    int32_t gyroPlus[3] = {rdLe16(buf, 7), rdLe16(buf, 11), rdLe16(buf, 15)};
-    int32_t gyroMinus[3] = {rdLe16(buf, 9), rdLe16(buf, 13), rdLe16(buf, 17)};
-    int32_t speed2x = rdLe16(buf, 19) + rdLe16(buf, 21);
+// Gyro calibration occupies bytes 1..21: a per-axis bias, the readings at the two rotation
+// extremes, and the two speed words whose sum is the scale. A zero span means the pad never
+// answered with usable calibration.
+bool parsePsGyroCalibration(const uint8_t* buf, PsImuCalib& out) {
+    const int32_t gyroBias[3] = {rdLe16(buf, 1), rdLe16(buf, 3), rdLe16(buf, 5)};
+    const int32_t gyroPlus[3] = {rdLe16(buf, 7), rdLe16(buf, 11), rdLe16(buf, 15)};
+    const int32_t gyroMinus[3] = {rdLe16(buf, 9), rdLe16(buf, 13), rdLe16(buf, 17)};
+    const int32_t speed2x = rdLe16(buf, 19) + rdLe16(buf, 21);
     for (int i = 0; i < 3; i++) {
-        int32_t a = gyroPlus[i] - gyroBias[i];
-        int32_t b = gyroMinus[i] - gyroBias[i];
-        int32_t denom = (a < 0 ? -a : a) + (b < 0 ? -b : b);
+        const int32_t a = gyroPlus[i] - gyroBias[i];
+        const int32_t b = gyroMinus[i] - gyroBias[i];
+        const int32_t denom = (a < 0 ? -a : a) + (b < 0 ? -b : b);
         if (denom == 0) return false;
         out.gyroNumer[i] = speed2x * kPsGyroResPerDegS;
         out.gyroDenom[i] = denom;
     }
-    int32_t accPlus[3] = {rdLe16(buf, 23), rdLe16(buf, 27), rdLe16(buf, 31)};
-    int32_t accMinus[3] = {rdLe16(buf, 25), rdLe16(buf, 29), rdLe16(buf, 33)};
+    return true;
+}
+
+// Accel calibration occupies bytes 23..34: the +1g and -1g reading per axis, whose midpoint is
+// the bias and whose span is the full 2g range.
+bool parsePsAccelCalibration(const uint8_t* buf, PsImuCalib& out) {
+    const int32_t accPlus[3] = {rdLe16(buf, 23), rdLe16(buf, 27), rdLe16(buf, 31)};
+    const int32_t accMinus[3] = {rdLe16(buf, 25), rdLe16(buf, 29), rdLe16(buf, 33)};
     for (int i = 0; i < 3; i++) {
-        int32_t range2g = accPlus[i] - accMinus[i];
+        const int32_t range2g = accPlus[i] - accMinus[i];
         if (range2g == 0) return false;
         out.accelBias[i] = accPlus[i] - range2g / 2;
         out.accelNumer[i] = 2 * kPsAccelResPerG;
         out.accelDenom[i] = range2g;
     }
+    return true;
+}
+
+} // namespace
+
+bool parsePsCalibration(const uint8_t* buf, size_t len, PsImuCalib& out) {
+    out = PsImuCalib{};
+    if (len < 35) return false; // gyro/accel calibration occupies bytes 1..34
+    if (!parsePsGyroCalibration(buf, out)) return false;
+    if (!parsePsAccelCalibration(buf, out)) return false;
     out.valid = true;
     return true;
 }
@@ -1371,6 +1366,21 @@ WirelessEvent checkWirelessEvent(Parser p, const uint8_t* buf, size_t len) {
     }
 }
 
+uint16_t decodeGenericHidButtons(const uint8_t btnLo, const uint8_t btnHi) {
+    uint16_t buttons = 0;
+    if (btnLo & 0x10) buttons |= XUSB_A;
+    if (btnLo & 0x20) buttons |= XUSB_B;
+    if (btnLo & 0x40) buttons |= XUSB_X;
+    if (btnLo & 0x80) buttons |= XUSB_Y;
+    if (btnHi & 0x01) buttons |= XUSB_LB;
+    if (btnHi & 0x02) buttons |= XUSB_RB;
+    if (btnHi & 0x04) buttons |= XUSB_BACK;
+    if (btnHi & 0x08) buttons |= XUSB_START;
+    if (btnHi & 0x10) buttons |= XUSB_THUMB_L;
+    if (btnHi & 0x20) buttons |= XUSB_THUMB_R;
+    return setDpadFromHat(buttons, (uint8_t)(btnLo & 0x0F));
+}
+
 bool decodeGenericHidGamepad(const uint8_t* buf, size_t len, DeviceState& s) {
     // Conservative shape check: most generic HID gamepads produce reports >= 7 bytes (4 axes,
     // hat+buttons low/high). Anything shorter probably isn't gamepad-shaped; bail rather than
@@ -1380,22 +1390,10 @@ bool decodeGenericHidGamepad(const uint8_t* buf, size_t len, DeviceState& s) {
     s.sLY = scaleU8Centered(buf[1], true);
     s.sRX = scaleU8Centered(buf[2], false);
     s.sRY = scaleU8Centered(buf[3], true);
-    uint16_t b = 0;
-    uint8_t hat = buf[4] & 0x0F;
-    b = setDpadFromHat(b, hat);
-    uint8_t btnLo = buf[4];
-    uint8_t btnHi = len > 5 ? buf[5] : 0;
-    if (btnLo & 0x10) b |= XUSB_A;
-    if (btnLo & 0x20) b |= XUSB_B;
-    if (btnLo & 0x40) b |= XUSB_X;
-    if (btnLo & 0x80) b |= XUSB_Y;
-    if (btnHi & 0x01) b |= XUSB_LB;
-    if (btnHi & 0x02) b |= XUSB_RB;
-    if (btnHi & 0x04) b |= XUSB_BACK;
-    if (btnHi & 0x08) b |= XUSB_START;
-    if (btnHi & 0x10) b |= XUSB_THUMB_L;
-    if (btnHi & 0x20) b |= XUSB_THUMB_R;
-    s.wButtons = b;
+
+    const uint8_t btnLo = buf[4];
+    const uint8_t btnHi = len > 5 ? buf[5] : 0;
+    s.wButtons = decodeGenericHidButtons(btnLo, btnHi);
     s.bLT = (btnHi & 0x40) ? 255 : 0;
     s.bRT = (btnHi & 0x80) ? 255 : 0;
     return true;

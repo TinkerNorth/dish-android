@@ -24,6 +24,21 @@ constexpr uint16_t XUSB_X = 0x4000;
 constexpr uint16_t XUSB_Y = 0x8000;
 constexpr uint16_t XUSB_DPAD_MASK = 0x000F;
 
+// A HID hat's eight directions, clockwise from up.
+constexpr uint16_t HAT_DIRECTION_BITS[] = {
+    XUSB_DPAD_UP,    XUSB_DPAD_UP | XUSB_DPAD_RIGHT,
+    XUSB_DPAD_RIGHT, XUSB_DPAD_DOWN | XUSB_DPAD_RIGHT,
+    XUSB_DPAD_DOWN,  XUSB_DPAD_DOWN | XUSB_DPAD_LEFT,
+    XUSB_DPAD_LEFT,  XUSB_DPAD_UP | XUSB_DPAD_LEFT,
+};
+
+// Zero for any direction outside the eight, which is how every HID hat spells centred.
+constexpr uint16_t hatDirectionBits(const int direction) {
+    const bool isADirection = direction >= 0 && direction < 8;
+    if (!isADirection) return 0;
+    return HAT_DIRECTION_BITS[direction];
+}
+
 // Not an XINPUT bit: 0x0800 is the one value the XINPUT-shaped word leaves
 // unassigned, and protocol 2 spends it on the DualSense mic-mute button
 // (satellite core/types.h WBUTTON_MIC_MUTE, docs/contract.md §Controller

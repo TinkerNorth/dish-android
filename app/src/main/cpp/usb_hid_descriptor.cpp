@@ -99,30 +99,6 @@ uint16_t switchOrderButtonBit(uint8_t idx) {
     return bitForDeclaredIndex(SWITCH_ORDER_BUTTON_MAP, idx);
 }
 
-uint16_t dpadBitsForDir(int dir) {
-    using namespace gamepad;
-    switch (dir) {
-    case 0:
-        return XUSB_DPAD_UP;
-    case 1:
-        return (uint16_t)(XUSB_DPAD_UP | XUSB_DPAD_RIGHT);
-    case 2:
-        return XUSB_DPAD_RIGHT;
-    case 3:
-        return (uint16_t)(XUSB_DPAD_DOWN | XUSB_DPAD_RIGHT);
-    case 4:
-        return XUSB_DPAD_DOWN;
-    case 5:
-        return (uint16_t)(XUSB_DPAD_DOWN | XUSB_DPAD_LEFT);
-    case 6:
-        return XUSB_DPAD_LEFT;
-    case 7:
-        return (uint16_t)(XUSB_DPAD_UP | XUSB_DPAD_LEFT);
-    default:
-        return 0;
-    }
-}
-
 void setAxis(HidAxis& a, uint32_t bit, uint32_t size, int32_t lo, int32_t hi) {
     if (a.present) return; // first declaration of an axis wins
     a.present = true;
@@ -187,22 +163,24 @@ struct HidItem {
     bool truncated;
 };
 
-HidItem readHidItem(const uint8_t* desc, const size_t len, size_t& i) {
+// A long item carries a payload-length byte, then a tag byte, then that many data bytes. No
+// gamepad descriptor uses one, so it is stepped over whole.
+HidItem readLongItem(const uint8_t* desc, const size_t len, size_t& i) {
     HidItem item = {0, 0, 0, 0, false, false};
-    const uint8_t prefix = desc[i++];
-
-    const bool isLongItem = prefix == 0xFE;
-    if (isLongItem) {
-        if (i >= len) {
-            item.truncated = true;
-            return item;
-        }
-        const uint8_t payload = desc[i];
-        i += 2u + payload;
-        item.skip = true;
+    if (i >= len) {
+        item.truncated = true;
         return item;
     }
+    const uint8_t payload = desc[i];
+    i += 2u + payload;
+    item.skip = true;
+    return item;
+}
 
+// A short item packs its data length, type and tag into the prefix byte; bSize 3 means 4 bytes,
+// which is the one size that is not its own encoding.
+HidItem readShortItem(const uint8_t* desc, const size_t len, const uint8_t prefix, size_t& i) {
+    HidItem item = {0, 0, 0, 0, false, false};
     const uint8_t bSize = prefix & 0x03u;
     item.dataLen = bSize == 3 ? 4 : bSize;
     item.type = (prefix >> 2) & 0x03u;
@@ -214,6 +192,13 @@ HidItem readHidItem(const uint8_t* desc, const size_t len, size_t& i) {
     for (uint8_t k = 0; k < item.dataLen; k++) item.data |= (uint32_t)desc[i + k] << (8u * k);
     i += item.dataLen;
     return item;
+}
+
+HidItem readHidItem(const uint8_t* desc, const size_t len, size_t& i) {
+    const uint8_t prefix = desc[i++];
+    const bool isLongItem = prefix == 0xFE;
+    if (isLongItem) return readLongItem(desc, len, i);
+    return readShortItem(desc, len, prefix, i);
 }
 
 // The global and local item state the stream accumulates until a Main item consumes it.
@@ -366,7 +351,7 @@ uint16_t decodeLayoutHat(const uint8_t* d, const size_t dlen, const HidLayout& L
     const int range = (int)L.hatLogicalMax - (int)L.hatLogicalMin;
     const bool isADirection = dir >= 0 && dir <= range && dir <= 7;
     if (!isADirection) return 0;
-    return dpadBitsForDir(dir);
+    return gamepad::hatDirectionBits(dir);
 }
 
 bool layoutButtonIsDown(const uint8_t* d, const size_t dlen, const HidLayout& L, const uint8_t i) {
@@ -404,6 +389,25 @@ uint16_t decodeStandardButtons(const uint8_t* d, const size_t dlen, const HidLay
 
 } // namespace
 
+// A Main item consumes whatever the Global and Local items have accumulated and then clears the
+// Local ones; only an Input main item carries fields this parser wants.
+void applyItem(const HidItem& item, HidParseState& st, HidLayout& out) {
+    const bool isMainItem = item.type == 0;
+    if (isMainItem) {
+        const bool isInputItem = item.tag == 0x8;
+        if (isInputItem) applyInputItem(item, st, out);
+        clearLocalItems(st);
+        return;
+    }
+    const bool isGlobalItem = item.type == 1;
+    if (isGlobalItem) {
+        applyGlobalItem(item, st);
+        return;
+    }
+    const bool isLocalItem = item.type == 2;
+    if (isLocalItem) applyLocalItem(item, st);
+}
+
 bool parseReportDescriptor(const uint8_t* desc, size_t len, HidLayout& out) {
     out = HidLayout{};
     HidParseState st = {};
@@ -413,19 +417,7 @@ bool parseReportDescriptor(const uint8_t* desc, size_t len, HidLayout& out) {
         const HidItem item = readHidItem(desc, len, i);
         if (item.truncated) break;
         if (item.skip) continue;
-
-        const bool isMainItem = item.type == 0;
-        const bool isGlobalItem = item.type == 1;
-        const bool isLocalItem = item.type == 2;
-        if (isMainItem) {
-            const bool isInputItem = item.tag == 0x8;
-            if (isInputItem) applyInputItem(item, st, out);
-            clearLocalItems(st);
-        } else if (isGlobalItem) {
-            applyGlobalItem(item, st);
-        } else if (isLocalItem) {
-            applyLocalItem(item, st);
-        }
+        applyItem(item, st, out);
     }
 
     out.valid = out.lx.present || out.ly.present || out.buttonCount > 0 || out.hasHat;
