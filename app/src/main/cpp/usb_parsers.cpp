@@ -800,43 +800,120 @@ static uint8_t sonyTenthsToPercent(uint8_t tenths) {
     return (uint8_t)(pct > 100u ? 100u : pct);
 }
 
-bool decodeDualShock4(const uint8_t* buf, size_t len, DeviceState& s, const PsImuCalib* calib) {
-    if (len < 10) return false;
-    if (buf[0] != 0x01) return false;
+// The DS4 and the DualSense carry the same button bits; only the byte offsets move.
+uint16_t decodePsButtons(const uint8_t faceByte, const uint8_t shoulderByte) {
+    uint16_t buttons = 0;
+    if (faceByte & 0x10) buttons |= XUSB_X;
+    if (faceByte & 0x20) buttons |= XUSB_A;
+    if (faceByte & 0x40) buttons |= XUSB_B;
+    if (faceByte & 0x80) buttons |= XUSB_Y;
+    if (shoulderByte & 0x01) buttons |= XUSB_LB;
+    if (shoulderByte & 0x02) buttons |= XUSB_RB;
+    if (shoulderByte & 0x10) buttons |= XUSB_BACK;
+    if (shoulderByte & 0x20) buttons |= XUSB_START;
+    if (shoulderByte & 0x40) buttons |= XUSB_THUMB_L;
+    if (shoulderByte & 0x80) buttons |= XUSB_THUMB_R;
+    return setDpadFromHat(buttons, (uint8_t)(faceByte & 0x0F));
+}
 
+void decodePsSticks(const uint8_t* buf, DeviceState& s) {
     s.sLX = scaleU8Centered(buf[1], false);
     s.sLY = scaleU8Centered(buf[2], true);
     s.sRX = scaleU8Centered(buf[3], false);
     s.sRY = scaleU8Centered(buf[4], true);
+}
 
-    uint16_t b = 0;
-    if (buf[5] & 0x10) b |= XUSB_X;
-    if (buf[5] & 0x20) b |= XUSB_A;
-    if (buf[5] & 0x40) b |= XUSB_B;
-    if (buf[5] & 0x80) b |= XUSB_Y;
-    if (buf[6] & 0x01) b |= XUSB_LB;
-    if (buf[6] & 0x02) b |= XUSB_RB;
-    if (buf[6] & 0x10) b |= XUSB_BACK;
-    if (buf[6] & 0x20) b |= XUSB_START;
-    if (buf[6] & 0x40) b |= XUSB_THUMB_L;
-    if (buf[6] & 0x80) b |= XUSB_THUMB_R;
-    b = setDpadFromHat(b, buf[5] & 0x0F);
-    s.wButtons = b;
+// Both pads lay the IMU out as six int16 LE words, gyro then accel; only the base offsets move.
+void decodePsMotion(const uint8_t* buf, const int gyroBase, const int accelBase,
+                    const PsImuCalib& calib, DeviceState& s) {
+    s.gyroX = ds4GyroAxisToWire(rdLe16(buf, gyroBase), calib, 0);
+    s.gyroY = ds4GyroAxisToWire(rdLe16(buf, gyroBase + 2), calib, 1);
+    s.gyroZ = ds4GyroAxisToWire(rdLe16(buf, gyroBase + 4), calib, 2);
+    s.accelX = ds4AccelAxisToWire(rdLe16(buf, accelBase), calib, 0);
+    s.accelY = ds4AccelAxisToWire(rdLe16(buf, accelBase + 2), calib, 1);
+    s.accelZ = ds4AccelAxisToWire(rdLe16(buf, accelBase + 4), calib, 2);
+    s.motionValid = true;
+}
 
+void setBatteryUnknown(DeviceState& s) {
+    s.batteryLevel = PAD_BATTERY_LEVEL_UNKNOWN;
+    s.batteryStatus = PAD_BATTERY_STATUS_UNKNOWN;
+}
+
+// hid-playstation's status[0]: low nibble the charge in tenths, 0x10 the cable. With the cable in,
+// 10 is still charging, 11 is full, and 12..15 are the firmware's error states.
+void decodeDs4Battery(const uint8_t status, DeviceState& s) {
+    const uint8_t tenths = (uint8_t)(status & 0x0F);
+    const bool cableIn = (status & 0x10) != 0;
+    s.batteryValid = true;
+    if (!cableIn) {
+        s.batteryLevel = sonyTenthsToPercent(tenths);
+        s.batteryStatus = PAD_BATTERY_STATUS_DISCHARGING;
+        return;
+    }
+    const bool stillCharging = tenths <= 10;
+    if (stillCharging) {
+        s.batteryLevel = sonyTenthsToPercent(tenths);
+        s.batteryStatus = PAD_BATTERY_STATUS_CHARGING;
+        return;
+    }
+    const bool full = tenths == 11;
+    if (full) {
+        s.batteryLevel = 100;
+        s.batteryStatus = PAD_BATTERY_STATUS_FULL;
+        return;
+    }
+    setBatteryUnknown(s);
+}
+
+// hid-playstation's status: low nibble the charge in tenths, high nibble the state. 0xA/0xB are a
+// temperature or voltage fault and 0xF a charging fault; a fault has no charge worth showing.
+void decodeDualSenseBattery(const uint8_t status, DeviceState& s) {
+    const uint8_t tenths = (uint8_t)(status & 0x0F);
+    const uint8_t state = (uint8_t)(status >> 4);
+    s.batteryValid = true;
+    switch (state) {
+    case 0x0:
+        s.batteryLevel = sonyTenthsToPercent(tenths);
+        s.batteryStatus = PAD_BATTERY_STATUS_DISCHARGING;
+        break;
+    case 0x1:
+        s.batteryLevel = sonyTenthsToPercent(tenths);
+        s.batteryStatus = PAD_BATTERY_STATUS_CHARGING;
+        break;
+    case 0x2:
+        s.batteryLevel = 100;
+        s.batteryStatus = PAD_BATTERY_STATUS_FULL;
+        break;
+    default:
+        setBatteryUnknown(s);
+        break;
+    }
+}
+
+// The press is an edge, the wire bit is a state: flip the latch on the way down only, so holding
+// the button does not chatter the mute on and off at report rate.
+void applyMicMuteLatch(const uint8_t buttonByte, ParserState& sticks, uint16_t& buttons) {
+    const bool muteDown = (buttonByte & 0x04) != 0;
+    const bool isAFreshPress = muteDown && !sticks.micMuteHeld;
+    if (isAFreshPress) sticks.micMuted = !sticks.micMuted;
+    sticks.micMuteHeld = muteDown;
+    if (sticks.micMuted) buttons |= WBUTTON_MIC_MUTE;
+}
+
+bool decodeDualShock4(const uint8_t* buf, size_t len, DeviceState& s, const PsImuCalib* calib) {
+    if (len < 10) return false;
+    if (buf[0] != 0x01) return false;
+
+    decodePsSticks(buf, s);
+    s.wButtons = decodePsButtons(buf[5], buf[6]);
     s.bLT = buf[8];
     s.bRT = buf[9];
 
     // gyro pitch/yaw/roll at 13/15/17, accel x/y/z at 19/21/23 (int16 LE). Axis signs are an
     // unflipped straight map, still unverified on hardware like the Switch IMU.
-    if (calib != nullptr && calib->valid && len >= 25) {
-        s.gyroX = ds4GyroAxisToWire(rdLe16(buf, 13), *calib, 0);
-        s.gyroY = ds4GyroAxisToWire(rdLe16(buf, 15), *calib, 1);
-        s.gyroZ = ds4GyroAxisToWire(rdLe16(buf, 17), *calib, 2);
-        s.accelX = ds4AccelAxisToWire(rdLe16(buf, 19), *calib, 0);
-        s.accelY = ds4AccelAxisToWire(rdLe16(buf, 21), *calib, 1);
-        s.accelZ = ds4AccelAxisToWire(rdLe16(buf, 23), *calib, 2);
-        s.motionValid = true;
-    }
+    const bool hasMotion = calib != nullptr && calib->valid && len >= 25;
+    if (hasMotion) decodePsMotion(buf, 13, 19, *calib, s);
 
     // Touch: [33] = bundled 9-byte frame count (timestamp + two points); only the newest frame
     // matters since the wire stream supersedes per send. Zero frames means "no touch update",
@@ -854,27 +931,7 @@ bool decodeDualShock4(const uint8_t* buf, size_t len, DeviceState& s, const PsIm
         }
     }
 
-    // Battery at buf[30] (hid-playstation's status[0]): the low nibble is the charge in tenths,
-    // bit 0x10 the cable. With the cable in, 10 is still charging, 11 is full, and 12..15 are the
-    // firmware's error states.
-    if (len >= 31) {
-        const uint8_t tenths = (uint8_t)(buf[30] & 0x0F);
-        const bool cable = (buf[30] & 0x10) != 0;
-        s.batteryValid = true;
-        if (!cable) {
-            s.batteryLevel = sonyTenthsToPercent(tenths);
-            s.batteryStatus = PAD_BATTERY_STATUS_DISCHARGING;
-        } else if (tenths <= 10) {
-            s.batteryLevel = sonyTenthsToPercent(tenths);
-            s.batteryStatus = PAD_BATTERY_STATUS_CHARGING;
-        } else if (tenths == 11) {
-            s.batteryLevel = 100;
-            s.batteryStatus = PAD_BATTERY_STATUS_FULL;
-        } else {
-            s.batteryLevel = PAD_BATTERY_LEVEL_UNKNOWN;
-            s.batteryStatus = PAD_BATTERY_STATUS_UNKNOWN;
-        }
-    }
+    if (len >= 31) decodeDs4Battery(buf[30], s);
     return true;
 }
 
@@ -889,47 +946,18 @@ bool decodeDualSense(const uint8_t* buf, size_t len, DeviceState& s, ParserState
     if (buf[0] != 0x01) return false;
     const PsImuCalib* calib = sticks != nullptr ? &sticks->psImu : nullptr;
 
-    s.sLX = scaleU8Centered(buf[1], false);
-    s.sLY = scaleU8Centered(buf[2], true);
-    s.sRX = scaleU8Centered(buf[3], false);
-    s.sRY = scaleU8Centered(buf[4], true);
-
+    decodePsSticks(buf, s);
     s.bLT = buf[5];
     s.bRT = buf[6];
 
-    uint16_t b = 0;
-    if (buf[8] & 0x10) b |= XUSB_X;
-    if (buf[8] & 0x20) b |= XUSB_A;
-    if (buf[8] & 0x40) b |= XUSB_B;
-    if (buf[8] & 0x80) b |= XUSB_Y;
-    if (buf[9] & 0x01) b |= XUSB_LB;
-    if (buf[9] & 0x02) b |= XUSB_RB;
-    if (buf[9] & 0x10) b |= XUSB_BACK;
-    if (buf[9] & 0x20) b |= XUSB_START;
-    if (buf[9] & 0x40) b |= XUSB_THUMB_L;
-    if (buf[9] & 0x80) b |= XUSB_THUMB_R;
-    b = setDpadFromHat(b, buf[8] & 0x0F);
-    // Mic-mute lives beside the touchpad click in button byte 10 (0x04 next to 0x02). The press
-    // is an edge, the wire bit is a state: flip the latch on the way down only, so holding the
-    // button does not chatter the mute on and off at report rate.
-    if (sticks != nullptr) {
-        const bool muteDown = (buf[10] & 0x04) != 0;
-        if (muteDown && !sticks->micMuteHeld) sticks->micMuted = !sticks->micMuted;
-        sticks->micMuteHeld = muteDown;
-        if (sticks->micMuted) b |= WBUTTON_MIC_MUTE;
-    }
-    s.wButtons = b;
+    uint16_t buttons = decodePsButtons(buf[8], buf[9]);
+    // Mic-mute lives beside the touchpad click in button byte 10 (0x04 next to 0x02).
+    if (sticks != nullptr) applyMicMuteLatch(buf[10], *sticks, buttons);
+    s.wButtons = buttons;
 
     // gyro at 16/18/20, accel at 22/24/26 (int16 LE); same calibration as DS4, signs unverified.
-    if (calib != nullptr && calib->valid && len >= 28) {
-        s.gyroX = ds4GyroAxisToWire(rdLe16(buf, 16), *calib, 0);
-        s.gyroY = ds4GyroAxisToWire(rdLe16(buf, 18), *calib, 1);
-        s.gyroZ = ds4GyroAxisToWire(rdLe16(buf, 20), *calib, 2);
-        s.accelX = ds4AccelAxisToWire(rdLe16(buf, 22), *calib, 0);
-        s.accelY = ds4AccelAxisToWire(rdLe16(buf, 24), *calib, 1);
-        s.accelZ = ds4AccelAxisToWire(rdLe16(buf, 26), *calib, 2);
-        s.motionValid = true;
-    }
+    const bool hasMotion = calib != nullptr && calib->valid && len >= 28;
+    if (hasMotion) decodePsMotion(buf, 16, 22, *calib, s);
 
     // Touch: two 4-byte points at 33/37 in every report (no DS4-style frame bundling); the
     // click rides button byte 10 bit 1. Taller surface than the DS4, hence its own Y max.
@@ -942,32 +970,7 @@ bool decodeDualSense(const uint8_t* buf, size_t len, DeviceState& s, ParserState
         s.touchValid = true;
     }
 
-    // Battery at buf[53] (hid-playstation's status): the low nibble is the charge in tenths, the
-    // high nibble the state: 0 discharging, 1 charging, 2 full, 0xA/0xB a temperature or voltage
-    // fault, 0xF a charging fault. A fault has no charge worth showing.
-    if (len >= 54) {
-        const uint8_t tenths = (uint8_t)(buf[53] & 0x0F);
-        const uint8_t state = (uint8_t)(buf[53] >> 4);
-        s.batteryValid = true;
-        switch (state) {
-        case 0x0:
-            s.batteryLevel = sonyTenthsToPercent(tenths);
-            s.batteryStatus = PAD_BATTERY_STATUS_DISCHARGING;
-            break;
-        case 0x1:
-            s.batteryLevel = sonyTenthsToPercent(tenths);
-            s.batteryStatus = PAD_BATTERY_STATUS_CHARGING;
-            break;
-        case 0x2:
-            s.batteryLevel = 100;
-            s.batteryStatus = PAD_BATTERY_STATUS_FULL;
-            break;
-        default:
-            s.batteryLevel = PAD_BATTERY_LEVEL_UNKNOWN;
-            s.batteryStatus = PAD_BATTERY_STATUS_UNKNOWN;
-            break;
-        }
-    }
+    if (len >= 54) decodeDualSenseBattery(buf[53], s);
     return true;
 }
 
@@ -976,95 +979,118 @@ bool decodeDualSense(const uint8_t* buf, size_t len, DeviceState& s, ParserState
 // position rather than label, the same convention used for DualShock 4: Switch A (right face) →
 // XUSB_B (right face), Switch B (bottom) → XUSB_A (bottom), Switch X (top) → XUSB_Y, Switch Y
 // (left) → XUSB_X. This is what PC games and ViGEm expect.
-bool decodeSwitchProUsb(const uint8_t* buf, size_t len, DeviceState& s, ParserState& sticks) {
-    if (len < 12) return false;
-    if (buf[0] != 0x30) return false;
+uint16_t decodeSwitchProButtons(const uint8_t right, const uint8_t shared, const uint8_t left) {
+    uint16_t buttons = 0;
+    if (right & 0x01) buttons |= XUSB_X;
+    if (right & 0x02) buttons |= XUSB_Y;
+    if (right & 0x04) buttons |= XUSB_A;
+    if (right & 0x08) buttons |= XUSB_B;
+    if (right & 0x40) buttons |= XUSB_RB;
+    if (shared & 0x01) buttons |= XUSB_BACK;
+    if (shared & 0x02) buttons |= XUSB_START;
+    if (shared & 0x04) buttons |= XUSB_THUMB_R;
+    if (shared & 0x08) buttons |= XUSB_THUMB_L;
+    if (left & 0x01) buttons |= XUSB_DPAD_DOWN;
+    if (left & 0x02) buttons |= XUSB_DPAD_UP;
+    if (left & 0x04) buttons |= XUSB_DPAD_RIGHT;
+    if (left & 0x08) buttons |= XUSB_DPAD_LEFT;
+    if (left & 0x40) buttons |= XUSB_LB;
+    return buttons;
+}
 
-    const uint8_t br = buf[3];
-    const uint8_t bs = buf[4];
-    const uint8_t bl = buf[5];
-
-    uint16_t b = 0;
-    if (br & 0x01) b |= XUSB_X;
-    if (br & 0x02) b |= XUSB_Y;
-    if (br & 0x04) b |= XUSB_A;
-    if (br & 0x08) b |= XUSB_B;
-    if (br & 0x40) b |= XUSB_RB;
-    if (bs & 0x01) b |= XUSB_BACK;
-    if (bs & 0x02) b |= XUSB_START;
-    if (bs & 0x04) b |= XUSB_THUMB_R;
-    if (bs & 0x08) b |= XUSB_THUMB_L;
-    if (bl & 0x01) b |= XUSB_DPAD_DOWN;
-    if (bl & 0x02) b |= XUSB_DPAD_UP;
-    if (bl & 0x04) b |= XUSB_DPAD_RIGHT;
-    if (bl & 0x08) b |= XUSB_DPAD_LEFT;
-    if (bl & 0x40) b |= XUSB_LB;
-    s.wButtons = b;
-
-    // ZL/ZR are digital on the Pro, so triggers are either fully pressed or released.
-    s.bLT = (bl & 0x80) ? 255 : 0;
-    s.bRT = (br & 0x80) ? 255 : 0;
-
+// Sticks are packed 12-bit values, two per three bytes.
+void decodeSwitchProSticks(const uint8_t* buf, ParserState& sticks, DeviceState& s) {
     const uint16_t lx = (uint16_t)buf[6] | (((uint16_t)buf[7] & 0x0F) << 8);
     const uint16_t ly = ((uint16_t)buf[7] >> 4) | ((uint16_t)buf[8] << 4);
     const uint16_t rx = (uint16_t)buf[9] | (((uint16_t)buf[10] & 0x0F) << 8);
     const uint16_t ry = ((uint16_t)buf[10] >> 4) | ((uint16_t)buf[11] << 4);
-
     s.sLX = scaleSwitchStickAuto(lx, sticks.lx);
     s.sLY = scaleSwitchStickAuto(ly, sticks.ly);
     s.sRX = scaleSwitchStickAuto(rx, sticks.rx);
     s.sRY = scaleSwitchStickAuto(ry, sticks.ry);
+}
 
-    // Battery in buf[2] (hid-nintendo's bat_con): bits 7..5 the charge in five steps (empty,
-    // critical, low, medium, full), bit 4 charging, bit 0 host-powered. The percent is the step's
-    // midpoint, the same coarse number the framework shows for this pad.
-    {
-        static constexpr uint8_t kStepPercent[] = {5, 25, 50, 75, 100};
-        const uint8_t step = (uint8_t)(buf[2] >> 5);
-        const bool charging = (buf[2] & 0x10) != 0;
-        const bool hostPowered = (buf[2] & 0x01) != 0;
-        s.batteryValid = true;
-        s.batteryLevel = step <= 4 ? kStepPercent[step] : PAD_BATTERY_LEVEL_UNKNOWN;
-        if (charging) {
-            s.batteryStatus = PAD_BATTERY_STATUS_CHARGING;
-        } else if (hostPowered && step == 4) {
-            s.batteryStatus = PAD_BATTERY_STATUS_FULL;
-        } else {
-            s.batteryStatus = PAD_BATTERY_STATUS_DISCHARGING;
-        }
+// hid-nintendo's bat_con: bits 7..5 the charge in five steps (empty, critical, low, medium,
+// full), bit 4 charging, bit 0 host-powered. The percent is the step's midpoint, the same coarse
+// number the framework shows for this pad.
+void decodeSwitchProBattery(const uint8_t batCon, DeviceState& s) {
+    static constexpr uint8_t kStepPercent[] = {5, 25, 50, 75, 100};
+    const uint8_t step = (uint8_t)(batCon >> 5);
+    const bool charging = (batCon & 0x10) != 0;
+    const bool hostPowered = (batCon & 0x01) != 0;
+    const bool stepIsKnown = step <= 4;
+    s.batteryValid = true;
+    s.batteryLevel = stepIsKnown ? kStepPercent[step] : PAD_BATTERY_LEVEL_UNKNOWN;
+    if (charging) {
+        s.batteryStatus = PAD_BATTERY_STATUS_CHARGING;
+        return;
     }
+    const bool toppedOffOnTheCable = hostPowered && step == 4;
+    s.batteryStatus =
+        toppedOffOnTheCable ? PAD_BATTERY_STATUS_FULL : PAD_BATTERY_STATUS_DISCHARGING;
+}
 
-    // Average the bundled IMU subframes (the pad packs up to three ~5ms samples per report; one
-    // 12-byte frame = accel int16 LE x3 then gyro x3, first at byte 13), then rotate the Switch IMU
-    // frame onto the DS4 wire convention (wire gyro X=pitch, Y=yaw, Z=roll); the pad reports those
-    // on raw gyro Y/Z/X. Pitch and roll are negated to match the DS4 sign convention. Hardware
-    // testing confirmed pitch and yaw; roll's sign and the accel signs are unverified.
-    size_t imuFrames = len >= 13 ? (len - 13) / 12 : 0;
-    if (imuFrames > 3) imuFrames = 3;
-    if (imuFrames > 0) {
-        int32_t ax = 0, ay = 0, az = 0, gx = 0, gy = 0, gz = 0;
-        for (size_t f = 0; f < imuFrames; f++) {
-            int off = 13 + 12 * (int)f;
-            ax += rdLe16(buf, off);
-            ay += rdLe16(buf, off + 2);
-            az += rdLe16(buf, off + 4);
-            gx += rdLe16(buf, off + 6);
-            gy += rdLe16(buf, off + 8);
-            gz += rdLe16(buf, off + 10);
-        }
-        int32_t n = (int32_t)imuFrames;
-        int32_t pitchAvg = -(gy / n);
-        int32_t rollAvg = -(gx / n);
-        if (pitchAvg > 32767) pitchAvg = 32767;
-        if (rollAvg > 32767) rollAvg = 32767;
-        s.gyroX = switchGyroToWire((int16_t)pitchAvg);
-        s.gyroY = switchGyroToWire((int16_t)(gz / n));
-        s.gyroZ = switchGyroToWire((int16_t)rollAvg);
-        s.accelX = switchAccelToWire((int16_t)(ay / n));
-        s.accelY = switchAccelToWire((int16_t)(az / n));
-        s.accelZ = switchAccelToWire((int16_t)(ax / n));
-        s.motionValid = true;
+struct SwitchImuSum {
+    int32_t ax, ay, az, gx, gy, gz;
+    int32_t frames;
+};
+
+// The pad packs up to three ~5ms samples per report; one 12-byte frame is accel int16 LE x3 then
+// gyro x3, the first at byte 13.
+SwitchImuSum sumSwitchImuFrames(const uint8_t* buf, const size_t len) {
+    SwitchImuSum sum = {0, 0, 0, 0, 0, 0, 0};
+    const size_t available = len >= 13 ? (len - 13) / 12 : 0;
+    const size_t frames = available > 3 ? 3 : available;
+    for (size_t f = 0; f < frames; f++) {
+        const int off = 13 + 12 * (int)f;
+        sum.ax += rdLe16(buf, off);
+        sum.ay += rdLe16(buf, off + 2);
+        sum.az += rdLe16(buf, off + 4);
+        sum.gx += rdLe16(buf, off + 6);
+        sum.gy += rdLe16(buf, off + 8);
+        sum.gz += rdLe16(buf, off + 10);
     }
+    sum.frames = (int32_t)frames;
+    return sum;
+}
+
+int16_t clampToInt16(const int32_t v) { return v > 32767 ? (int16_t)32767 : (int16_t)v; }
+
+// Rotate the Switch IMU frame onto the DS4 wire convention (wire gyro X=pitch, Y=yaw, Z=roll); the
+// pad reports those on raw gyro Y/Z/X. Pitch and roll are negated to match the DS4 sign
+// convention. Hardware testing confirmed pitch and yaw; roll's sign and the accel signs are
+// unverified.
+void applySwitchProMotion(const SwitchImuSum& sum, DeviceState& s) {
+    const int32_t n = sum.frames;
+    s.gyroX = switchGyroToWire(clampToInt16(-(sum.gy / n)));
+    s.gyroY = switchGyroToWire((int16_t)(sum.gz / n));
+    s.gyroZ = switchGyroToWire(clampToInt16(-(sum.gx / n)));
+    s.accelX = switchAccelToWire((int16_t)(sum.ay / n));
+    s.accelY = switchAccelToWire((int16_t)(sum.az / n));
+    s.accelZ = switchAccelToWire((int16_t)(sum.ax / n));
+    s.motionValid = true;
+}
+
+bool decodeSwitchProUsb(const uint8_t* buf, size_t len, DeviceState& s, ParserState& sticks) {
+    if (len < 12) return false;
+    if (buf[0] != 0x30) return false;
+
+    const uint8_t rightByte = buf[3];
+    const uint8_t sharedByte = buf[4];
+    const uint8_t leftByte = buf[5];
+
+    s.wButtons = decodeSwitchProButtons(rightByte, sharedByte, leftByte);
+
+    // ZL/ZR are digital on the Pro, so triggers are either fully pressed or released.
+    s.bLT = (leftByte & 0x80) ? 255 : 0;
+    s.bRT = (rightByte & 0x80) ? 255 : 0;
+
+    decodeSwitchProSticks(buf, sticks, s);
+    decodeSwitchProBattery(buf[2], s);
+
+    const SwitchImuSum imu = sumSwitchImuFrames(buf, len);
+    const bool hasMotion = imu.frames > 0;
+    if (hasMotion) applySwitchProMotion(imu, s);
     return true;
 }
 
