@@ -55,7 +55,7 @@ jobs:
         run: ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "cmake;3.22.1"
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           languages: ${{ matrix.language }}
           queries: security-extended,security-and-quality
@@ -70,7 +70,7 @@ jobs:
         # `continue-on-error` keeps the analysis running and surfacing
         # findings in the logs while GHAS enablement is still pending.
         continue-on-error: true
-        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           category: "/language:${{ matrix.language }}"
           upload: failure-only
