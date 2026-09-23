@@ -31,6 +31,21 @@ import kotlinx.coroutines.launch
  *   adb logcat -s DishHotpathBench
  */
 object HotPathBenchController {
+    // The adb-only switch: a broadcast turns the bench on and off without a UI, which is the
+    // whole reason the bench build exists.
+    private class BenchToggleReceiver(
+        private val scope: CoroutineScope,
+    ) : BroadcastReceiver() {
+        override fun onReceive(
+            context: Context,
+            intent: Intent,
+        ) {
+            if (intent.action != ACTION) return
+            val on = intent.getBooleanExtra("on", true)
+            if (on) enable(scope) else disable()
+        }
+    }
+
     private const val TAG = "DishHotpathBench"
     private const val ACTION = "com.tinkernorth.dish.HOTPATH_BENCH"
     private const val LOG_INTERVAL_MS = 3000L
@@ -43,17 +58,7 @@ object HotPathBenchController {
     ) {
         if (!BuildConfig.HOTPATH_BENCH) return
 
-        val receiver =
-            object : BroadcastReceiver() {
-                override fun onReceive(
-                    context: Context,
-                    intent: Intent,
-                ) {
-                    if (intent.action != ACTION) return
-                    val on = intent.getBooleanExtra("on", true)
-                    if (on) enable(scope) else disable()
-                }
-            }
+        val receiver = BenchToggleReceiver(scope)
         ContextCompat.registerReceiver(
             app,
             receiver,

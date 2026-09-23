@@ -15,6 +15,21 @@ import com.tinkernorth.dish.architecture.abstracts.AbstractStateSource
 import java.util.Calendar
 import java.util.Locale
 
+// The pre-dim countdown. The tick shows the second the user is about to lose, so it rounds up:
+// 3000 ms left reads "3", not "2".
+private class DimCountdown(
+    seconds: Int,
+    private val label: android.widget.TextView,
+    private val onFinished: () -> Unit,
+) : CountDownTimer(seconds * 1000L, 1000L) {
+    override fun onTick(millisUntilFinished: Long) {
+        val secondsRemaining = (millisUntilFinished / 1000) + 1
+        label.text = String.format(Locale.getDefault(), "%d", secondsRemaining)
+    }
+
+    override fun onFinish() = onFinished()
+}
+
 class LowPowerManager(
     private val window: Window,
 ) : AbstractStateSource<LowPowerManager.State>(State.IDLE) {
@@ -96,17 +111,7 @@ class LowPowerManager(
         applyStreamingHintVisibility()
         v.tvCountdownSeconds.text = String.format(Locale.getDefault(), "%d", COUNTDOWN_SECONDS)
         countdownTimer?.cancel()
-        countdownTimer =
-            object : CountDownTimer(COUNTDOWN_SECONDS * 1000L, 1000L) {
-                override fun onTick(millisUntilFinished: Long) {
-                    val secondsRemaining = (millisUntilFinished / 1000) + 1
-                    v.tvCountdownSeconds.text = String.format(Locale.getDefault(), "%d", secondsRemaining)
-                }
-
-                override fun onFinish() {
-                    enter()
-                }
-            }.start()
+        countdownTimer = DimCountdown(COUNTDOWN_SECONDS, v.tvCountdownSeconds, ::enter).start()
     }
 
     private fun enter() {

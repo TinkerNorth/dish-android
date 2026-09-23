@@ -64,7 +64,7 @@ class BluetoothHidSession(
             proxy = newProxy
             val myGen = ++generation
             emitLocked(BluetoothSessionState.Acquiring(profile, autoConnectMac))
-            newProxy.acquire(eventsFor(myGen))
+            newProxy.acquire(GenerationScopedEvents(myGen))
         }
     }
 
@@ -95,66 +95,68 @@ class BluetoothHidSession(
         snapshot.forEach { it.onStateChange(state) }
     }
 
-    // Events from older proxies (post-restart/release) are dropped by generation check.
-    private fun eventsFor(gen: Int) =
-        object : HidProxyClient.Events {
-            override fun onAcquired() =
-                ifCurrent(gen) {
-                    val s = _state.value as? BluetoothSessionState.Acquiring ?: return@ifCurrent
-                    proxy?.registerApp(s.profile)
-                }
-
-            override fun onReleased() =
-                ifCurrent(gen) {
-                    teardownLocked()
-                    emitLocked(BluetoothSessionState.Idle)
-                }
-
-            override fun onAppRegistered() =
-                ifCurrent(gen) {
-                    val s = _state.value as? BluetoothSessionState.Acquiring ?: return@ifCurrent
-                    emitLocked(BluetoothSessionState.Registered(s.profile, s.autoConnectMac))
-                    val mac = s.autoConnectMac ?: return@ifCurrent
-                    val alreadyConnectedName = proxy?.findOsConnectedHost(mac)
-                    if (alreadyConnectedName != null) {
-                        emitLocked(BluetoothSessionState.Connected(s.profile, mac, alreadyConnectedName))
-                    } else {
-                        proxy?.connectToHost(mac)
-                    }
-                }
-
-            override fun onAppUnregistered() =
-                ifCurrent(gen) {
-                    teardownLocked()
-                    emitLocked(BluetoothSessionState.Idle)
-                }
-
-            override fun onHostConnected(
-                mac: String,
-                name: String?,
-            ) = ifCurrent(gen) {
-                // Only accept inbound connections from a state that is awaiting one (Registered).
-                // When started for a specific host, reject any other mac the OS reports, mirroring
-                // the onHostDisconnected mac guard so a stray/foreign host cannot hijack the session.
-                val registered = _state.value as? BluetoothSessionState.Registered ?: return@ifCurrent
-                val intendedMac = registered.autoConnectMac
-                if (intendedMac != null && !intendedMac.equals(mac, ignoreCase = true)) return@ifCurrent
-                emitLocked(BluetoothSessionState.Connected(registered.profile, mac, name))
+    // Events from older proxies (post-restart, post-release) are dropped by the generation check:
+    // a proxy that has been replaced must not drive the session that replaced it.
+    private inner class GenerationScopedEvents(
+        private val gen: Int,
+    ) : HidProxyClient.Events {
+        override fun onAcquired() =
+            ifCurrent(gen) {
+                val s = _state.value as? BluetoothSessionState.Acquiring ?: return@ifCurrent
+                proxy?.registerApp(s.profile)
             }
 
-            override fun onHostDisconnected(mac: String) =
-                ifCurrent(gen) {
-                    val connected = _state.value as? BluetoothSessionState.Connected ?: return@ifCurrent
-                    if (!connected.mac.equals(mac, ignoreCase = true)) return@ifCurrent
-                    emitLocked(BluetoothSessionState.Registered(connected.profile, autoConnectMac = null))
-                }
+        override fun onReleased() =
+            ifCurrent(gen) {
+                teardownLocked()
+                emitLocked(BluetoothSessionState.Idle)
+            }
 
-            override fun onError(message: String) =
-                ifCurrent(gen) {
-                    teardownLocked()
-                    emitLocked(BluetoothSessionState.Failed(message))
+        override fun onAppRegistered() =
+            ifCurrent(gen) {
+                val s = _state.value as? BluetoothSessionState.Acquiring ?: return@ifCurrent
+                emitLocked(BluetoothSessionState.Registered(s.profile, s.autoConnectMac))
+                val mac = s.autoConnectMac ?: return@ifCurrent
+                val alreadyConnectedName = proxy?.findOsConnectedHost(mac)
+                if (alreadyConnectedName != null) {
+                    emitLocked(BluetoothSessionState.Connected(s.profile, mac, alreadyConnectedName))
+                } else {
+                    proxy?.connectToHost(mac)
                 }
+            }
+
+        override fun onAppUnregistered() =
+            ifCurrent(gen) {
+                teardownLocked()
+                emitLocked(BluetoothSessionState.Idle)
+            }
+
+        override fun onHostConnected(
+            mac: String,
+            name: String?,
+        ) = ifCurrent(gen) {
+            // Only accept inbound connections from a state that is awaiting one (Registered).
+            // When started for a specific host, reject any other mac the OS reports, mirroring
+            // the onHostDisconnected mac guard so a stray/foreign host cannot hijack the session.
+            val registered = _state.value as? BluetoothSessionState.Registered ?: return@ifCurrent
+            val intendedMac = registered.autoConnectMac
+            if (intendedMac != null && !intendedMac.equals(mac, ignoreCase = true)) return@ifCurrent
+            emitLocked(BluetoothSessionState.Connected(registered.profile, mac, name))
         }
+
+        override fun onHostDisconnected(mac: String) =
+            ifCurrent(gen) {
+                val connected = _state.value as? BluetoothSessionState.Connected ?: return@ifCurrent
+                if (!connected.mac.equals(mac, ignoreCase = true)) return@ifCurrent
+                emitLocked(BluetoothSessionState.Registered(connected.profile, autoConnectMac = null))
+            }
+
+        override fun onError(message: String) =
+            ifCurrent(gen) {
+                teardownLocked()
+                emitLocked(BluetoothSessionState.Failed(message))
+            }
+    }
 
     private inline fun ifCurrent(
         gen: Int,

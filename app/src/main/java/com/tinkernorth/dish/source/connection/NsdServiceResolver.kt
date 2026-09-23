@@ -7,6 +7,8 @@ import android.net.nsd.NsdServiceInfo
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
+import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.net.Inet4Address
 import java.util.concurrent.Executor
@@ -19,6 +21,41 @@ import kotlin.coroutines.resume
  * cancelled it.
  */
 private const val TAG = "NsdServiceResolver"
+
+/**
+ * Puts every service the platform reports onto [found], and closes it when discovery could not be
+ * started at all.
+ *
+ * A lost or stopped service is not interesting: a sweep is bounded by its caller's own timeout
+ * rather than by the platform's view of what is still on the network.
+ */
+internal class ChannelDiscoveryListener(
+    private val tag: String,
+    private val found: Channel<NsdServiceInfo>,
+) : NsdManager.DiscoveryListener {
+    override fun onServiceFound(serviceInfo: NsdServiceInfo) {
+        found.trySend(serviceInfo)
+    }
+
+    override fun onServiceLost(serviceInfo: NsdServiceInfo) = Unit
+
+    override fun onDiscoveryStarted(serviceType: String) = Unit
+
+    override fun onDiscoveryStopped(serviceType: String) = Unit
+
+    override fun onStartDiscoveryFailed(
+        serviceType: String,
+        errorCode: Int,
+    ) {
+        Log.w(tag, "discovery start failed: $errorCode")
+        found.close()
+    }
+
+    override fun onStopDiscoveryFailed(
+        serviceType: String,
+        errorCode: Int,
+    ) = Unit
+}
 
 suspend fun resolveNsdService(
     nsd: NsdManager,
@@ -51,27 +88,7 @@ private suspend fun resolveViaCallback(
     info: NsdServiceInfo,
 ): NsdServiceInfo? =
     suspendCancellableCoroutine { cont ->
-        val callback =
-            object : NsdManager.ServiceInfoCallback {
-                override fun onServiceInfoCallbackRegistrationFailed(errorCode: Int) {
-                    Log.w(TAG, "resolve of ${info.serviceName} could not be registered: $errorCode")
-                    if (cont.isActive) cont.resume(null)
-                }
-
-                override fun onServiceUpdated(serviceInfo: NsdServiceInfo) {
-                    if (!cont.isActive) return
-                    unregister(nsd, this)
-                    cont.resume(serviceInfo)
-                }
-
-                override fun onServiceLost() {
-                    if (!cont.isActive) return
-                    unregister(nsd, this)
-                    cont.resume(null)
-                }
-
-                override fun onServiceInfoCallbackUnregistered() = Unit
-            }
+        val callback = ResumeOnServiceInfo(nsd, info.serviceName.orEmpty(), cont)
         try {
             nsd.registerServiceInfoCallback(info, INLINE_EXECUTOR, callback)
         } catch (e: IllegalArgumentException) {
@@ -82,6 +99,34 @@ private suspend fun resolveViaCallback(
         }
         cont.invokeOnCancellation { unregister(nsd, callback) }
     }
+
+// The registration answers once and is dropped: the first update carries the host, and a lost
+// service or a cancelled caller is the same "no answer" to the coroutine waiting on it.
+@RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+private class ResumeOnServiceInfo(
+    private val nsd: NsdManager,
+    private val serviceName: String,
+    private val cont: CancellableContinuation<NsdServiceInfo?>,
+) : NsdManager.ServiceInfoCallback {
+    override fun onServiceInfoCallbackRegistrationFailed(errorCode: Int) {
+        Log.w(TAG, "resolve of $serviceName could not be registered: $errorCode")
+        if (cont.isActive) cont.resume(null)
+    }
+
+    override fun onServiceUpdated(serviceInfo: NsdServiceInfo) {
+        if (!cont.isActive) return
+        unregister(nsd, this)
+        cont.resume(serviceInfo)
+    }
+
+    override fun onServiceLost() {
+        if (!cont.isActive) return
+        unregister(nsd, this)
+        cont.resume(null)
+    }
+
+    override fun onServiceInfoCallbackUnregistered() = Unit
+}
 
 @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
 private fun unregister(
@@ -97,6 +142,24 @@ private fun unregister(
     }
 }
 
+// A failed resolve and a successful one are the same shape to the caller: one resume, and null
+// for anything that is not a record.
+@Suppress("DEPRECATION")
+private class ResumeOnResolve(
+    private val cont: CancellableContinuation<NsdServiceInfo?>,
+) : NsdManager.ResolveListener {
+    override fun onResolveFailed(
+        si: NsdServiceInfo,
+        errorCode: Int,
+    ) {
+        if (cont.isActive) cont.resume(null)
+    }
+
+    override fun onServiceResolved(si: NsdServiceInfo) {
+        if (cont.isActive) cont.resume(si)
+    }
+}
+
 // Marker: NsdManager.resolveService is the only resolveNsdService API before 34, where
 // registerServiceInfoCallback (used above) replaces it. Deprecated in the SDK the app
 // compiles against, current on every device that reaches this branch. The right fix is
@@ -107,19 +170,7 @@ private suspend fun resolveViaListener(
     info: NsdServiceInfo,
 ): NsdServiceInfo? =
     suspendCancellableCoroutine { cont ->
-        val listener =
-            object : NsdManager.ResolveListener {
-                override fun onResolveFailed(
-                    si: NsdServiceInfo,
-                    errorCode: Int,
-                ) {
-                    if (cont.isActive) cont.resume(null)
-                }
-
-                override fun onServiceResolved(si: NsdServiceInfo) {
-                    if (cont.isActive) cont.resume(si)
-                }
-            }
+        val listener = ResumeOnResolve(cont)
         try {
             nsd.resolveService(info, listener)
         } catch (e: IllegalArgumentException) {

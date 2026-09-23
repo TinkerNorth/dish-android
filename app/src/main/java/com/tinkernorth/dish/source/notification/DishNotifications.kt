@@ -65,6 +65,19 @@ class DishNotifications
         private val attachments = ArrayDeque<Attachment>()
         private val attachLock = Any()
 
+        // A screen that comes back to the front takes the queue again; one that is destroyed
+        // gives it up and clears whatever it was still showing.
+        private inner class AttachmentLifecycle(
+            private val attachment: Attachment,
+        ) : DefaultLifecycleObserver {
+            override fun onResume(owner: LifecycleOwner) = activate(attachment)
+
+            override fun onDestroy(owner: LifecycleOwner) {
+                drop(attachment)
+                attachment.dismissAll()
+            }
+        }
+
         private fun activate(attachment: Attachment) {
             synchronized(attachLock) {
                 attachments.remove(attachment)
@@ -189,18 +202,7 @@ class DishNotifications
                 }
             }
 
-            owner.lifecycle.addObserver(
-                object : DefaultLifecycleObserver {
-                    override fun onResume(owner: LifecycleOwner) {
-                        activate(attachment)
-                    }
-
-                    override fun onDestroy(owner: LifecycleOwner) {
-                        drop(attachment)
-                        attachment.dismissAll()
-                    }
-                },
-            )
+            owner.lifecycle.addObserver(AttachmentLifecycle(attachment))
 
             return attachment
         }
