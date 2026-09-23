@@ -387,24 +387,28 @@ class GamepadOverlayActivity :
         val summary = hub.summary(connectionId) ?: return
         if (!summary.live.isLiveLink()) return
         when (summary.kind) {
-            ConnectionKind.BLUETOOTH -> {
-                val report =
-                    btRegistry.buildReport(
-                        connectionId,
-                        state.buttons,
-                        state.hatSwitch,
-                        state.leftX,
-                        state.leftY,
-                        state.rightX,
-                        state.rightY,
-                        state.leftTrigger,
-                        state.rightTrigger,
-                    ) ?: return
-                btRegistry.sendReport(connectionId, report)
-            }
+            ConnectionKind.BLUETOOTH -> sendBluetoothReport(state)
             ConnectionKind.SATELLITE -> sendSatelliteReport(state)
             ConnectionKind.MOONLIGHT -> sendMoonlightReport(state)
         }
+    }
+
+    // A null report means the persona has no descriptor yet, which is a link that is up but not
+    // ready; dropping the frame is right, the next one carries the same state.
+    private fun sendBluetoothReport(state: GamepadTouchView.GamepadState) {
+        val report =
+            btRegistry.buildReport(
+                connectionId,
+                state.buttons,
+                state.hatSwitch,
+                state.leftX,
+                state.leftY,
+                state.rightX,
+                state.rightY,
+                state.leftTrigger,
+                state.rightTrigger,
+            ) ?: return
+        btRegistry.sendReport(connectionId, report)
     }
 
     // Moonlight's low-16 button flags share XInput's bit layout, so the XUSB

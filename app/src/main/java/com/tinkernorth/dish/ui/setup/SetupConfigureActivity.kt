@@ -137,34 +137,50 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
     // pick. A Bluetooth host has its type fixed upstream, so only the chosen one
     // shows and the cards stop being tappable.
     private fun renderType(state: ConfigUiState) {
+        renderTypeHeadings(state)
+        renderPadTypeCards(state)
+        renderMoonlightTypeCards(state)
+    }
+
+    private fun renderTypeHeadings(state: ConfigUiState) {
         val moonlight = state.isMoonlightHost
         binding.tvTitle.setText(if (moonlight) R.string.ml_type_title else R.string.setup_cfg_type_title)
-        binding.tvSubtitle.text =
-            when {
-                moonlight -> getString(R.string.ml_type_caption, state.selectedHost?.label.orEmpty())
-                state.isBluetoothHost -> getString(R.string.setup_cfg_type_locked_subtitle)
-                else -> getString(R.string.setup_cfg_type_subtitle)
-            }
+        binding.tvSubtitle.text = typeSubtitleFor(state)
         binding.btnContinue.setText(R.string.setup_cfg_continue)
-        // Tapping a type commits and advances; only the locked Bluetooth-host case,
-        // where the cards aren't tappable, needs the Next button.
+        // Tapping a type commits and advances; only the locked Bluetooth-host case, where the
+        // cards aren't tappable, needs the Next button.
         binding.btnContinue.visibility = visibleIf(state.isBluetoothHost)
+    }
 
-        val selectedType = state.draft?.type ?: CONTROLLER_TYPE_XBOX
+    private fun typeSubtitleFor(state: ConfigUiState): String =
+        when {
+            state.isMoonlightHost -> getString(R.string.ml_type_caption, state.selectedHost?.label.orEmpty())
+            state.isBluetoothHost -> getString(R.string.setup_cfg_type_locked_subtitle)
+            else -> getString(R.string.setup_cfg_type_subtitle)
+        }
+
+    private fun padTypeCards() =
+        listOf(
+            binding.cardTypeXbox to CONTROLLER_TYPE_XBOX,
+            binding.cardTypePlaystation to CONTROLLER_TYPE_PLAYSTATION,
+            binding.cardTypeDualsense to CONTROLLER_TYPE_DUALSENSE,
+            binding.cardTypeSwitchpro to CONTROLLER_TYPE_SWITCHPRO,
+        )
+
+    // A Bluetooth host locks to one type, so its other cards never show, and a Moonlight host
+    // uses the separate set below instead of these.
+    private fun renderPadTypeCards(state: ConfigUiState) {
+        val moonlight = state.isMoonlightHost
         val locked = state.isBluetoothHost
-        bindTypeCard(binding.cardTypeXbox, state, CONTROLLER_TYPE_XBOX, locked)
-        bindTypeCard(binding.cardTypePlaystation, state, CONTROLLER_TYPE_PLAYSTATION, locked)
-        bindTypeCard(binding.cardTypeDualsense, state, CONTROLLER_TYPE_DUALSENSE, locked)
-        bindTypeCard(binding.cardTypeSwitchpro, state, CONTROLLER_TYPE_SWITCHPRO, locked)
-        // A Bluetooth host locks to Xbox/PlayStation, so its other cards never show.
-        binding.cardTypeXbox.typeCard.visibility = visibleIf(!moonlight && (!locked || selectedType == CONTROLLER_TYPE_XBOX))
-        binding.cardTypePlaystation.typeCard.visibility =
-            visibleIf(!moonlight && (!locked || selectedType == CONTROLLER_TYPE_PLAYSTATION))
-        binding.cardTypeDualsense.typeCard.visibility =
-            visibleIf(!moonlight && (!locked || selectedType == CONTROLLER_TYPE_DUALSENSE))
-        binding.cardTypeSwitchpro.typeCard.visibility =
-            visibleIf(!moonlight && (!locked || selectedType == CONTROLLER_TYPE_SWITCHPRO))
+        val selectedType = state.draft?.type ?: CONTROLLER_TYPE_XBOX
+        for ((card, type) in padTypeCards()) {
+            bindTypeCard(card, state, type, locked)
+            card.typeCard.visibility = visibleIf(!moonlight && (!locked || selectedType == type))
+        }
+    }
 
+    private fun renderMoonlightTypeCards(state: ConfigUiState) {
+        val moonlight = state.isMoonlightHost
         bindMoonlightTypeCard(binding.cardMlAuto, state, AUTO, moonlight)
         bindMoonlightTypeCard(binding.cardMlXbox, state, XBOX, moonlight)
         bindMoonlightTypeCard(binding.cardMlPlaystation, state, PLAYSTATION, moonlight)
@@ -268,25 +284,39 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         binding.btnContinue.visibility = View.VISIBLE
 
         val motionVisible = state.motionAvailable
-        binding.motionRow.visibility = visibleIf(motionVisible)
-        if (motionVisible) {
-            binding.swMotion.setOnCheckedChangeListener(null)
-            binding.swMotion.isChecked = state.draft?.motionOn == true
-            binding.swMotion.setOnCheckedChangeListener { _, isChecked -> viewModel.setMotion(isChecked) }
-        }
-
         // Rumble shows when the path can carry it: a Satellite host returns it, the phone
         // vibrates as a fallback for the on-screen pad, and a physical pad needs its own motor.
         val rumbleVisible = state.capabilities.isAvailable(Feature.RUMBLE)
-        binding.rumbleDivider.visibility = visibleIf(rumbleVisible && motionVisible)
-        binding.rumbleRow.visibility = visibleIf(rumbleVisible)
-        if (rumbleVisible) {
-            binding.swRumble.setOnCheckedChangeListener(null)
-            binding.swRumble.isChecked = state.draft?.rumbleOn == true
-            binding.swRumble.setOnCheckedChangeListener { _, isChecked -> viewModel.setRumble(isChecked) }
-        }
-
+        renderMotionRow(state, motionVisible)
+        renderRumbleRow(state, rumbleVisible, motionVisible)
         binding.tvFeelEmpty.visibility = visibleIf(!motionVisible && !rumbleVisible)
+    }
+
+    // The listener is cleared before the checked state is set: setChecked fires it, and a render
+    // must not read as the user having flipped the switch.
+    private fun renderMotionRow(
+        state: ConfigUiState,
+        visible: Boolean,
+    ) {
+        binding.motionRow.visibility = visibleIf(visible)
+        if (!visible) return
+        binding.swMotion.setOnCheckedChangeListener(null)
+        binding.swMotion.isChecked = state.draft?.motionOn == true
+        binding.swMotion.setOnCheckedChangeListener { _, isChecked -> viewModel.setMotion(isChecked) }
+    }
+
+    // The divider only earns its space between two visible rows.
+    private fun renderRumbleRow(
+        state: ConfigUiState,
+        visible: Boolean,
+        motionVisible: Boolean,
+    ) {
+        binding.rumbleDivider.visibility = visibleIf(visible && motionVisible)
+        binding.rumbleRow.visibility = visibleIf(visible)
+        if (!visible) return
+        binding.swRumble.setOnCheckedChangeListener(null)
+        binding.swRumble.isChecked = state.draft?.rumbleOn == true
+        binding.swRumble.setOnCheckedChangeListener { _, isChecked -> viewModel.setRumble(isChecked) }
     }
 
     // 4C: one card per source and destination, each showing what it sends (up)

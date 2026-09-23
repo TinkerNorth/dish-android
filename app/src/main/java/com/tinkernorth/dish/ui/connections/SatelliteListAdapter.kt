@@ -97,6 +97,15 @@ class SatelliteListAdapter(
         private fun bindKnown(row: SatelliteRow.Known) {
             val c = row.summary
             b.paintConnection(c.label, c.detail, statusChipText(ctx, c.live), ConnectionKind.SATELLITE, c.live)
+            bindPrimaryAction(row)
+            bindForgetAction(row)
+            paintCompat(row.compat)
+        }
+
+        // The primary button offers whatever the link state leaves to do: a live link
+        // disconnects, a stale one repairs, and a connecting one only shows its spinner.
+        private fun bindPrimaryAction(row: SatelliteRow.Known) {
+            val c = row.summary
             when (c.live) {
                 LinkState.Connected, LinkState.Unstable -> {
                     b.btnRowAction.setLoading(false, "", ctx.getString(R.string.action_disconnect))
@@ -119,10 +128,12 @@ class SatelliteListAdapter(
                     b.btnRowAction.setOnClickListener { listener.onConnect(row) }
                 }
             }
+        }
+
+        private fun bindForgetAction(row: SatelliteRow.Known) {
             b.btnRowSecondary.visibility = View.VISIBLE
             b.btnRowSecondary.text = ctx.getString(R.string.action_forget_short)
-            b.btnRowSecondary.setOnClickListener { listener.onForget(c.id) }
-            paintCompat(row.compat)
+            b.btnRowSecondary.setOnClickListener { listener.onForget(row.summary.id) }
         }
 
         private fun paintCompat(compat: DishProtocolCompat) {
