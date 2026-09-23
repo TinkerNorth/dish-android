@@ -2,6 +2,8 @@
 
 #include "usb_hid_descriptor.h"
 
+#include <cstddef>
+
 namespace usbhid {
 
 using gamepad::DeviceState;
@@ -59,67 +61,42 @@ uint8_t scaleTrig8(uint32_t raw, const HidAxis& a) {
     return (uint8_t)scaled;
 }
 
-uint16_t buttonBit(uint8_t idx) {
-    using namespace gamepad;
-    switch (idx) {
-    case 0:
-        return XUSB_A;
-    case 1:
-        return XUSB_B;
-    case 2:
-        return XUSB_X;
-    case 3:
-        return XUSB_Y;
-    case 4:
-        return XUSB_LB;
-    case 5:
-        return XUSB_RB;
-    case 6:
-        return XUSB_BACK;
-    case 7:
-        return XUSB_START;
-    case 8:
-        return XUSB_THUMB_L;
-    case 9:
-        return XUSB_THUMB_R;
-    case 10:
-        return XUSB_GUIDE;
-    default:
-        return 0;
-    }
-}
+struct ButtonMapping {
+    uint8_t declaredIndex;
+    uint16_t xusbBit;
+};
+
+// A descriptor's buttons in declaration order.
+constexpr ButtonMapping STANDARD_BUTTON_MAP[] = {
+    {0, gamepad::XUSB_A},       {1, gamepad::XUSB_B},      {2, gamepad::XUSB_X},
+    {3, gamepad::XUSB_Y},       {4, gamepad::XUSB_LB},     {5, gamepad::XUSB_RB},
+    {6, gamepad::XUSB_BACK},    {7, gamepad::XUSB_START},  {8, gamepad::XUSB_THUMB_L},
+    {9, gamepad::XUSB_THUMB_R}, {10, gamepad::XUSB_GUIDE},
+};
 
 // Switch-order HID pads declare buttons in usage row Y B A X L R ZL ZR Minus Plus L3 R3 Home
-// Capture; remap by position to match decodeSwitchProUsb. ZL/ZR (indices 6/7) fold into the
-// triggers in decodeFromLayout instead of mapping here.
-uint16_t switchOrderButtonBit(uint8_t idx) {
-    using namespace gamepad;
-    switch (idx) {
-    case 0:
-        return XUSB_X;
-    case 1:
-        return XUSB_A;
-    case 2:
-        return XUSB_B;
-    case 3:
-        return XUSB_Y;
-    case 4:
-        return XUSB_LB;
-    case 5:
-        return XUSB_RB;
-    case 8:
-        return XUSB_BACK;
-    case 9:
-        return XUSB_START;
-    case 10:
-        return XUSB_THUMB_L;
-    case 11:
-        return XUSB_THUMB_R;
-    case 12:
-        return XUSB_GUIDE;
-    default:
-        return 0;
+// Capture, so the mapping is by position. Indices 6 and 7 are ZL/ZR and are absent here: they
+// fold into the triggers in decodeFromLayout instead.
+constexpr ButtonMapping SWITCH_ORDER_BUTTON_MAP[] = {
+    {0, gamepad::XUSB_X},        {1, gamepad::XUSB_A},      {2, gamepad::XUSB_B},
+    {3, gamepad::XUSB_Y},        {4, gamepad::XUSB_LB},     {5, gamepad::XUSB_RB},
+    {8, gamepad::XUSB_BACK},     {9, gamepad::XUSB_START},  {10, gamepad::XUSB_THUMB_L},
+    {11, gamepad::XUSB_THUMB_R}, {12, gamepad::XUSB_GUIDE},
+};
+
+template <size_t N>
+uint16_t bitForDeclaredIndex(const ButtonMapping (&mappings)[N], const uint8_t idx) {
+    for (const ButtonMapping& mapping : mappings) {
+        const bool isTheIndex = mapping.declaredIndex == idx;
+        if (isTheIndex) return mapping.xusbBit;
     }
+    return 0;
+}
+
+uint16_t buttonBit(uint8_t idx) { return bitForDeclaredIndex(STANDARD_BUTTON_MAP, idx); }
+
+uint16_t switchOrderButtonBit(uint8_t idx) {
+    return bitForDeclaredIndex(SWITCH_ORDER_BUTTON_MAP, idx);
 }
 
 uint16_t dpadBitsForDir(int dir) {

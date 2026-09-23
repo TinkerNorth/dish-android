@@ -670,38 +670,23 @@ int16_t ds4AccelAxisToWire(int32_t raw, const PsImuCalib& c, int axis) {
     return (int16_t)wire;
 }
 
+// A HID hat's eight directions, clockwise from up. Anything else is centred.
+constexpr uint16_t HAT_DIRECTION_BITS[] = {
+    XUSB_DPAD_UP,    XUSB_DPAD_UP | XUSB_DPAD_RIGHT,
+    XUSB_DPAD_RIGHT, XUSB_DPAD_DOWN | XUSB_DPAD_RIGHT,
+    XUSB_DPAD_DOWN,  XUSB_DPAD_DOWN | XUSB_DPAD_LEFT,
+    XUSB_DPAD_LEFT,  XUSB_DPAD_UP | XUSB_DPAD_LEFT,
+};
+
+constexpr uint16_t XUSB_DPAD_MASK_ALL =
+    XUSB_DPAD_UP | XUSB_DPAD_DOWN | XUSB_DPAD_LEFT | XUSB_DPAD_RIGHT;
+
 uint16_t setDpadFromHat(uint16_t buttons, uint8_t hat) {
-    buttons =
-        (uint16_t)(buttons & ~(XUSB_DPAD_UP | XUSB_DPAD_DOWN | XUSB_DPAD_LEFT | XUSB_DPAD_RIGHT));
-    switch (hat & 0x0F) {
-    case 0:
-        buttons |= XUSB_DPAD_UP;
-        break;
-    case 1:
-        buttons |= (uint16_t)(XUSB_DPAD_UP | XUSB_DPAD_RIGHT);
-        break;
-    case 2:
-        buttons |= XUSB_DPAD_RIGHT;
-        break;
-    case 3:
-        buttons |= (uint16_t)(XUSB_DPAD_DOWN | XUSB_DPAD_RIGHT);
-        break;
-    case 4:
-        buttons |= XUSB_DPAD_DOWN;
-        break;
-    case 5:
-        buttons |= (uint16_t)(XUSB_DPAD_DOWN | XUSB_DPAD_LEFT);
-        break;
-    case 6:
-        buttons |= XUSB_DPAD_LEFT;
-        break;
-    case 7:
-        buttons |= (uint16_t)(XUSB_DPAD_UP | XUSB_DPAD_LEFT);
-        break;
-    default:
-        break;
-    }
-    return buttons;
+    const uint16_t withoutDpad = (uint16_t)(buttons & ~XUSB_DPAD_MASK_ALL);
+    const uint8_t direction = (uint8_t)(hat & 0x0F);
+    const bool isCentred = direction >= 8;
+    if (isCentred) return withoutDpad;
+    return (uint16_t)(withoutDpad | HAT_DIRECTION_BITS[direction]);
 }
 
 // Xbox 360 wired interrupt-IN report. Fixed 20 bytes; byte 0 is report type (0x00 for input),
