@@ -256,24 +256,34 @@ class MainActivity :
     }
 
     private fun updateUI(s: MainUiState) {
-        // First emission has been rendered: release the splash hold so the
-        // system splash exits and MainActivity becomes interactive. Idempotent
-        // (the postDelayed safety net may also flip this) so subsequent
-        // emissions are no-ops.
+        // First emission has been rendered: release the splash hold so the system splash exits
+        // and MainActivity becomes interactive. Idempotent, since the postDelayed safety net may
+        // also flip it.
         splashHoldUntilFirstRender = false
-        // Unstable links are still streaming, so they count as online here just like on the connections screen.
-        val liveCount = s.connections.count { it.live.isLiveLink() }
-        val totalCount = s.connections.size
+        renderConnectionsSummary(s)
+        submitSlots(s)
+    }
+
+    private fun renderConnectionsSummary(s: MainUiState) {
         val checking = s.anyConnecting
         binding.ivConnectionsLoading.isVisible = checking
         if (checking) connectionsSpinner.start() else connectionsSpinner.stop()
-        binding.tvConnectionsSummary.text =
-            when {
-                liveCount == 0 && totalCount == 0 -> getString(R.string.status_tap_manage)
-                liveCount == 0 -> resources.getQuantityString(R.plurals.status_remembered, totalCount, totalCount)
-                // Quantity selects on totalCount; args order (liveCount, totalCount) matches %1$d/%2$d.
-                else -> resources.getQuantityString(R.plurals.status_connected_of, totalCount, liveCount, totalCount)
-            }
+        binding.tvConnectionsSummary.text = connectionsSummaryText(s)
+    }
+
+    // Unstable links are still streaming, so they count as online here just as on the connections
+    // screen. The plural selects on totalCount, and the args order matches %1${'$'}d/%2${'$'}d.
+    private fun connectionsSummaryText(s: MainUiState): String {
+        val liveCount = s.connections.count { it.live.isLiveLink() }
+        val totalCount = s.connections.size
+        return when {
+            liveCount == 0 && totalCount == 0 -> getString(R.string.status_tap_manage)
+            liveCount == 0 -> resources.getQuantityString(R.plurals.status_remembered, totalCount, totalCount)
+            else -> resources.getQuantityString(R.plurals.status_connected_of, totalCount, liveCount, totalCount)
+        }
+    }
+
+    private fun submitSlots(s: MainUiState) {
         controllerAdapter.submitSlots(
             s.slots,
             s.connections,
