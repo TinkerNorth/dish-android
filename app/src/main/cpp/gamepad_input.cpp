@@ -4,175 +4,192 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
 
 namespace gamepad {
 
-int16_t scaleAxis(float v, float max) {
-    float s = v * max;
-    if (s > 32767.f) s = 32767.f;
-    if (s < -32768.f) s = -32768.f;
-    return static_cast<int16_t>(s);
+namespace {
+
+constexpr float AXIS_MAX = 32767.f;
+constexpr float AXIS_MIN = -32768.f;
+constexpr float TRIGGER_MAX = 255.f;
+constexpr float TRIGGER_MIN = 0.f;
+
+} // namespace
+
+int16_t scaleAxis(const float v, const float max) {
+    const float scaled = v * max;
+    const float clamped = std::clamp(scaled, AXIS_MIN, AXIS_MAX);
+    return static_cast<int16_t>(clamped);
 }
 
-uint8_t scaleTrigger(float v, float max) {
-    float s = v * max;
-    if (s > 255.f) s = 255.f;
-    if (s < 0.f) s = 0.f;
-    return static_cast<uint8_t>(s);
+uint8_t scaleTrigger(const float v, const float max) {
+    const float scaled = v * max;
+    const float clamped = std::clamp(scaled, TRIGGER_MIN, TRIGGER_MAX);
+    return static_cast<uint8_t>(clamped);
 }
 
-float deadzone(float v, float flat) { return std::fabs(v) > flat ? v : 0.f; }
+float deadzone(const float v, const float flat) {
+    const bool isOutsideTheFlatZone = std::fabs(v) > flat;
+    return isOutsideTheFlatZone ? v : 0.f;
+}
 
-uint16_t keycodeToXusb(int32_t kc) {
-    switch (kc) {
-    case KC_BUTTON_A:
-        return XUSB_A;
-    case KC_BUTTON_B:
-        return XUSB_B;
-    case KC_BUTTON_X:
-        return XUSB_X;
-    case KC_BUTTON_Y:
-        return XUSB_Y;
-    case KC_BUTTON_L1:
-        return XUSB_LB;
-    case KC_BUTTON_R1:
-        return XUSB_RB;
-    case KC_BUTTON_THUMBL:
-        return XUSB_THUMB_L;
-    case KC_BUTTON_THUMBR:
-        return XUSB_THUMB_R;
-    case KC_BUTTON_START:
-        return XUSB_START;
-    case KC_BUTTON_SELECT:
-        return XUSB_BACK;
-    case KC_DPAD_UP:
-        return XUSB_DPAD_UP;
-    case KC_DPAD_DOWN:
-        return XUSB_DPAD_DOWN;
-    case KC_DPAD_LEFT:
-        return XUSB_DPAD_LEFT;
-    case KC_DPAD_RIGHT:
-        return XUSB_DPAD_RIGHT;
-    case KC_BUTTON_1:
-        return XUSB_A;
-    case KC_BUTTON_2:
-        return XUSB_B;
-    case KC_BUTTON_3:
-        return XUSB_X;
-    case KC_BUTTON_4:
-        return XUSB_Y;
-    case KC_BUTTON_5:
-        return XUSB_LB;
-    case KC_BUTTON_6:
-        return XUSB_RB;
-    case KC_BUTTON_9:
-        return XUSB_BACK;
-    case KC_BUTTON_10:
-        return XUSB_START;
-    case KC_BUTTON_11:
-        return XUSB_THUMB_L;
-    case KC_BUTTON_12:
-        return XUSB_THUMB_R;
-    default:
-        return 0;
+namespace {
+
+struct KeycodeMapping {
+    int32_t androidKeycode;
+    uint16_t xusbBit;
+};
+
+constexpr KeycodeMapping BASE_KEYCODE_MAP[] = {
+    {KC_BUTTON_A, XUSB_A},
+    {KC_BUTTON_B, XUSB_B},
+    {KC_BUTTON_X, XUSB_X},
+    {KC_BUTTON_Y, XUSB_Y},
+    {KC_BUTTON_L1, XUSB_LB},
+    {KC_BUTTON_R1, XUSB_RB},
+    {KC_BUTTON_THUMBL, XUSB_THUMB_L},
+    {KC_BUTTON_THUMBR, XUSB_THUMB_R},
+    {KC_BUTTON_START, XUSB_START},
+    {KC_BUTTON_SELECT, XUSB_BACK},
+    {KC_DPAD_UP, XUSB_DPAD_UP},
+    {KC_DPAD_DOWN, XUSB_DPAD_DOWN},
+    {KC_DPAD_LEFT, XUSB_DPAD_LEFT},
+    {KC_DPAD_RIGHT, XUSB_DPAD_RIGHT},
+    {KC_BUTTON_1, XUSB_A},
+    {KC_BUTTON_2, XUSB_B},
+    {KC_BUTTON_3, XUSB_X},
+    {KC_BUTTON_4, XUSB_Y},
+    {KC_BUTTON_5, XUSB_LB},
+    {KC_BUTTON_6, XUSB_RB},
+    {KC_BUTTON_9, XUSB_BACK},
+    {KC_BUTTON_10, XUSB_START},
+    {KC_BUTTON_11, XUSB_THUMB_L},
+    {KC_BUTTON_12, XUSB_THUMB_R},
+};
+
+constexpr KeycodeMapping SWITCH_LAYOUT_KEYCODE_MAP[] = {
+    {KC_BUTTON_A, XUSB_X},
+    {KC_BUTTON_B, XUSB_A},
+    {KC_BUTTON_C, XUSB_B},
+    {KC_BUTTON_X, XUSB_Y},
+    {KC_BUTTON_Y, XUSB_LB},
+    {KC_BUTTON_Z, XUSB_RB},
+    {KC_BUTTON_L2, XUSB_BACK},
+    {KC_BUTTON_R2, XUSB_START},
+    {KC_BUTTON_SELECT, XUSB_THUMB_L},
+    {KC_BUTTON_START, XUSB_THUMB_R},
+    {KC_BUTTON_MODE, XUSB_GUIDE},
+    {KC_DPAD_UP, XUSB_DPAD_UP},
+    {KC_DPAD_DOWN, XUSB_DPAD_DOWN},
+    {KC_DPAD_LEFT, XUSB_DPAD_LEFT},
+    {KC_DPAD_RIGHT, XUSB_DPAD_RIGHT},
+};
+
+constexpr uint16_t NO_XUSB_BIT = 0;
+constexpr uint8_t TRIGGER_FULL = 255;
+constexpr uint8_t TRIGGER_RELEASED = 0;
+
+template <size_t N>
+uint16_t lookUpXusbBit(const KeycodeMapping (&mappings)[N], const int32_t androidKeycode) {
+    for (const KeycodeMapping& mapping : mappings) {
+        const bool isTheKeycode = mapping.androidKeycode == androidKeycode;
+        if (isTheKeycode) return mapping.xusbBit;
     }
+    return NO_XUSB_BIT;
 }
 
-// Switch-order HID pads (usage row Y B A X L R ZL ZR Minus Plus L3 R3 Home Capture) arrive from
-// Generic.kl as BUTTON_A..BUTTON_THUMBL; remap by position to match decodeSwitchProUsb.
-uint16_t switchLayoutKeycodeToXusb(int32_t kc) {
-    switch (kc) {
-    case KC_BUTTON_A:
-        return XUSB_X;
-    case KC_BUTTON_B:
-        return XUSB_A;
-    case KC_BUTTON_C:
-        return XUSB_B;
-    case KC_BUTTON_X:
-        return XUSB_Y;
-    case KC_BUTTON_Y:
-        return XUSB_LB;
-    case KC_BUTTON_Z:
-        return XUSB_RB;
-    case KC_BUTTON_L2:
-        return XUSB_BACK;
-    case KC_BUTTON_R2:
-        return XUSB_START;
-    case KC_BUTTON_SELECT:
-        return XUSB_THUMB_L;
-    case KC_BUTTON_START:
-        return XUSB_THUMB_R;
-    case KC_BUTTON_MODE:
-        return XUSB_GUIDE;
-    case KC_DPAD_UP:
-        return XUSB_DPAD_UP;
-    case KC_DPAD_DOWN:
-        return XUSB_DPAD_DOWN;
-    case KC_DPAD_LEFT:
-        return XUSB_DPAD_LEFT;
-    case KC_DPAD_RIGHT:
-        return XUSB_DPAD_RIGHT;
-    default:
-        return 0;
-    }
+void setButtonBit(DeviceState& s, const uint16_t xusbBit, const bool down) {
+    const uint16_t withBitSet = static_cast<uint16_t>(s.wButtons | xusbBit);
+    const uint16_t withBitCleared = static_cast<uint16_t>(s.wButtons & ~xusbBit);
+    s.wButtons = down ? withBitSet : withBitCleared;
 }
 
-bool switchLayoutConsumesKey(int32_t kc) {
-    return kc == KC_BUTTON_L1 || kc == KC_BUTTON_R1 || switchLayoutKeycodeToXusb(kc) != 0;
+void setLeftTriggerFromKey(DeviceState& s, const bool down) {
+    s.ltFromKey = down;
+    s.bLT = down ? TRIGGER_FULL : TRIGGER_RELEASED;
 }
 
-uint16_t applyButtonQuirk(uint16_t bit, uint8_t quirk) {
-    if (quirk & QUIRK_SWAP_AB) {
-        if (bit == XUSB_A) return XUSB_B;
-        if (bit == XUSB_B) return XUSB_A;
-    }
-    if (quirk & QUIRK_SWAP_XY) {
-        if (bit == XUSB_X) return XUSB_Y;
-        if (bit == XUSB_Y) return XUSB_X;
-    }
-    return bit;
+void setRightTriggerFromKey(DeviceState& s, const bool down) {
+    s.rtFromKey = down;
+    s.bRT = down ? TRIGGER_FULL : TRIGGER_RELEASED;
 }
 
-bool applyKey(DeviceState& s, int32_t kc, bool down) {
-    if (s.quirk & QUIRK_SWITCH_LAYOUT) {
-        if (kc == KC_BUTTON_L1) {
-            s.ltFromKey = down;
-            s.bLT = down ? 255 : 0;
-            return true;
-        }
-        if (kc == KC_BUTTON_R1) {
-            s.rtFromKey = down;
-            s.bRT = down ? 255 : 0;
-            return true;
-        }
-        uint16_t bit = switchLayoutKeycodeToXusb(kc);
-        if (bit == 0) return false;
-        if (down) {
-            s.wButtons = static_cast<uint16_t>(s.wButtons | bit);
-        } else {
-            s.wButtons = static_cast<uint16_t>(s.wButtons & ~bit);
-        }
+bool applySwitchLayoutKey(DeviceState& s, const int32_t androidKeycode, const bool down) {
+    const bool isZl = androidKeycode == KC_BUTTON_L1;
+    if (isZl) {
+        setLeftTriggerFromKey(s, down);
         return true;
     }
-    if (kc == KC_BUTTON_L2 || kc == KC_BUTTON_7) {
-        s.ltFromKey = down;
-        s.bLT = down ? 255 : 0;
+    const bool isZr = androidKeycode == KC_BUTTON_R1;
+    if (isZr) {
+        setRightTriggerFromKey(s, down);
         return true;
     }
-    if (kc == KC_BUTTON_R2 || kc == KC_BUTTON_8) {
-        s.rtFromKey = down;
-        s.bRT = down ? 255 : 0;
-        return true;
-    }
-    uint16_t bit = applyButtonQuirk(keycodeToXusb(kc), s.quirk);
-    if (bit == 0) return false;
-    if (down) {
-        s.wButtons = static_cast<uint16_t>(s.wButtons | bit);
-    } else {
-        s.wButtons = static_cast<uint16_t>(s.wButtons & ~bit);
-    }
+    const uint16_t xusbBit = switchLayoutKeycodeToXusb(androidKeycode);
+    const bool isMapped = xusbBit != NO_XUSB_BIT;
+    if (!isMapped) return false;
+
+    setButtonBit(s, xusbBit, down);
     return true;
+}
+
+bool applyStandardKey(DeviceState& s, const int32_t androidKeycode, const bool down) {
+    const bool isLeftTrigger = androidKeycode == KC_BUTTON_L2 || androidKeycode == KC_BUTTON_7;
+    if (isLeftTrigger) {
+        setLeftTriggerFromKey(s, down);
+        return true;
+    }
+    const bool isRightTrigger = androidKeycode == KC_BUTTON_R2 || androidKeycode == KC_BUTTON_8;
+    if (isRightTrigger) {
+        setRightTriggerFromKey(s, down);
+        return true;
+    }
+    const uint16_t mappedBit = keycodeToXusb(androidKeycode);
+    const uint16_t xusbBit = applyButtonQuirk(mappedBit, s.quirk);
+    const bool isMapped = xusbBit != NO_XUSB_BIT;
+    if (!isMapped) return false;
+
+    setButtonBit(s, xusbBit, down);
+    return true;
+}
+
+} // namespace
+
+uint16_t keycodeToXusb(const int32_t androidKeycode) {
+    return lookUpXusbBit(BASE_KEYCODE_MAP, androidKeycode);
+}
+
+uint16_t switchLayoutKeycodeToXusb(const int32_t androidKeycode) {
+    return lookUpXusbBit(SWITCH_LAYOUT_KEYCODE_MAP, androidKeycode);
+}
+
+bool switchLayoutConsumesKey(const int32_t androidKeycode) {
+    const bool isZl = androidKeycode == KC_BUTTON_L1;
+    const bool isZr = androidKeycode == KC_BUTTON_R1;
+    const bool isMappedButton = switchLayoutKeycodeToXusb(androidKeycode) != NO_XUSB_BIT;
+    return isZl || isZr || isMappedButton;
+}
+
+uint16_t applyButtonQuirk(const uint16_t xusbBit, const uint8_t quirk) {
+    const bool swapsAb = (quirk & QUIRK_SWAP_AB) != 0;
+    if (swapsAb) {
+        if (xusbBit == XUSB_A) return XUSB_B;
+        if (xusbBit == XUSB_B) return XUSB_A;
+    }
+    const bool swapsXy = (quirk & QUIRK_SWAP_XY) != 0;
+    if (swapsXy) {
+        if (xusbBit == XUSB_X) return XUSB_Y;
+        if (xusbBit == XUSB_Y) return XUSB_X;
+    }
+    return xusbBit;
+}
+
+bool applyKey(DeviceState& s, const int32_t androidKeycode, const bool down) {
+    const bool usesSwitchLayout = (s.quirk & QUIRK_SWITCH_LAYOUT) != 0;
+    if (usesSwitchLayout) return applySwitchLayoutKey(s, androidKeycode, down);
+    return applyStandardKey(s, androidKeycode, down);
 }
 
 void applyAxes(DeviceState& s, float x, float y, float z, float rz, float leftTrigger,
