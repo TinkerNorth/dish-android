@@ -25,6 +25,7 @@ import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.core.net.DishProtocolCompat
 import com.tinkernorth.dish.core.net.moonlight.AUTO
+import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import com.tinkernorth.dish.core.net.moonlight.NINTENDO
 import com.tinkernorth.dish.core.net.moonlight.ORDER
 import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
@@ -562,7 +563,7 @@ class ConfigureBindingsViewModel
         // A live job is REPLACED, not a reason to do nothing. New code is only ever offered
         // while a pairing is in flight, so the old guard made the one button that state
         // exists to offer unreachable by construction.
-        private fun startMoonlightPairing(host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost) {
+        private fun startMoonlightPairing(host: MoonlightHost) {
             cancelMoonlightPairing()
             pairingJob =
                 viewModelScope.launch {
