@@ -139,24 +139,10 @@ class PadTouchpadCapture(
      */
     fun onGenericMotionEvent(event: MotionEvent): Boolean {
         val slotId = slotForEvent(routes, event.source, event.deviceId) ?: return false
-        val device = event.device
-        val xRange =
-            device
-                ?.getMotionRange(
-                    MotionEvent.AXIS_X,
-                    InputDevice.SOURCE_TOUCHPAD,
-                )?.let { Range(it.min, it.max) }
-        val yRange =
-            device
-                ?.getMotionRange(
-                    MotionEvent.AXIS_Y,
-                    InputDevice.SOURCE_TOUCHPAD,
-                )?.let { Range(it.min, it.max) }
+        val xRange = axisRange(event.device, MotionEvent.AXIS_X)
+        val yRange = axisRange(event.device, MotionEvent.AXIS_Y)
         if (xRange == null || yRange == null) {
-            if (!warnedNoRange) {
-                warnedNoRange = true
-                Log.w(TAG, "captured touchpad on device ${event.deviceId} reports no axis range; dropping its frames")
-            }
+            warnOnceAboutMissingRange(event.deviceId)
             return true
         }
         val frame =
@@ -170,6 +156,18 @@ class PadTouchpadCapture(
         lastFrame[slotId] = frame
         reachability.state.value[slotId]?.let { send(it, slotId, frame) }
         return true
+    }
+
+    private fun axisRange(
+        device: InputDevice?,
+        axis: Int,
+    ): Range? = device?.getMotionRange(axis, InputDevice.SOURCE_TOUCHPAD)?.let { Range(it.min, it.max) }
+
+    // Once per process: a pad that reports no range will report none for every frame it sends.
+    private fun warnOnceAboutMissingRange(deviceId: Int) {
+        if (warnedNoRange) return
+        warnedNoRange = true
+        Log.w(TAG, "captured touchpad on device $deviceId reports no axis range; dropping its frames")
     }
 
     // Every pointer still on the surface after this event: the one lifting on an UP is gone,

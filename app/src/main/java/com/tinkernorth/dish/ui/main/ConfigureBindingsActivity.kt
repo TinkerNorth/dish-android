@@ -445,36 +445,43 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
         if (blocker == null) return
         binding.btnBlockerCancel.setOnClickListener { finish() }
         when (blocker) {
-            is BindingBlocker.InputLost -> {
-                val icon = if (state.snapshot?.link == BindingLink.BLUETOOTH) R.drawable.ic_bluetooth else R.drawable.ic_usb
-                bindBlockerMessage(
-                    icon,
-                    R.color.colorWarning,
-                    R.string.binding_edge_input_lost_title,
-                    getString(R.string.binding_blocker_input_lost_body),
-                )
-                bindBlockerPrimary(null, busy = false) {}
-            }
-            is BindingBlocker.HostLost -> {
-                val label = blocker.hostLabel.ifBlank { getString(R.string.satellite_fallback_name) }
-                bindBlockerMessage(
-                    R.drawable.ic_error,
-                    R.color.colorError,
-                    R.string.binding_edge_host_lost_title,
-                    getString(R.string.binding_edge_host_lost_detail, label),
-                )
-                bindBlockerPrimary(R.string.binding_edge_action_reconnect, blocker.reconnecting) { viewModel.reconnectHosts() }
-            }
-            is BindingBlocker.HostUnsteady -> {
-                bindBlockerMessage(
-                    R.drawable.ic_warning,
-                    R.color.colorWarning,
-                    R.string.binding_edge_unsteady_title,
-                    getString(R.string.binding_edge_unsteady_detail),
-                )
-                bindBlockerPrimary(R.string.binding_edge_action_dismiss, busy = false) { viewModel.dismissUnsteady() }
-            }
+            is BindingBlocker.InputLost -> renderInputLostBlocker(state)
+            is BindingBlocker.HostLost -> renderHostLostBlocker(blocker)
+            is BindingBlocker.HostUnsteady -> renderUnsteadyBlocker()
         }
+    }
+
+    // Nothing to offer: the pad has to come back on its own, so the blocker has no primary action.
+    private fun renderInputLostBlocker(state: ConfigUiState) {
+        val overBluetooth = state.snapshot?.link == BindingLink.BLUETOOTH
+        bindBlockerMessage(
+            if (overBluetooth) R.drawable.ic_bluetooth else R.drawable.ic_usb,
+            R.color.colorWarning,
+            R.string.binding_edge_input_lost_title,
+            getString(R.string.binding_blocker_input_lost_body),
+        )
+        bindBlockerPrimary(null, busy = false) {}
+    }
+
+    private fun renderHostLostBlocker(blocker: BindingBlocker.HostLost) {
+        val label = blocker.hostLabel.ifBlank { getString(R.string.satellite_fallback_name) }
+        bindBlockerMessage(
+            R.drawable.ic_error,
+            R.color.colorError,
+            R.string.binding_edge_host_lost_title,
+            getString(R.string.binding_edge_host_lost_detail, label),
+        )
+        bindBlockerPrimary(R.string.binding_edge_action_reconnect, blocker.reconnecting) { viewModel.reconnectHosts() }
+    }
+
+    private fun renderUnsteadyBlocker() {
+        bindBlockerMessage(
+            R.drawable.ic_warning,
+            R.color.colorWarning,
+            R.string.binding_edge_unsteady_title,
+            getString(R.string.binding_edge_unsteady_detail),
+        )
+        bindBlockerPrimary(R.string.binding_edge_action_dismiss, busy = false) { viewModel.dismissUnsteady() }
     }
 
     private fun bindBlockerMessage(
