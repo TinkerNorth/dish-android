@@ -107,7 +107,14 @@ app, JNI and test code alike.
   - a `@JvmStatic` bridge that native code calls (`BluetoothGamepadBridge`,
     `MoonlightGamepadBridge`),
   - a framework that demands it (a Hilt `@Module`, a `Parcelable.CREATOR`),
-  - a sealed-hierarchy case with no payload (`RumbleTarget.Phone`).
+  - a sealed-hierarchy case with no payload (`RumbleTarget.Phone`),
+  - a namespace of `const val`s that the call site reads better for
+    (`EnetProtocol`): Kotlin compiles a constant in an object to a
+    `getstatic`, so those cost no instance at all; it is the *functions* on an
+    object that pay for one,
+  - a process-wide switch that owns state by definition
+    (`HotPathBenchController`, whose one job is to be the single thing a
+    broadcast toggles).
 
   Hilt `@Singleton` bindings are a different thing and are fine: they are
   graph-scoped, injected, and replaceable in a test.

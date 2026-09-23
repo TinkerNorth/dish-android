@@ -93,12 +93,12 @@ class MicLevelProbeTest {
 
     @Test
     fun `the meter maps silence to zero and full scale to one`() {
-        val silence = MicLevelMeter.level(ShortArray(960))
+        val silence = level(ShortArray(960))
         assertEquals(0f, silence.rms, 0f)
         assertEquals(0f, silence.peak, 0f)
         assertEquals(0f, silence.meter, 0f)
 
-        val loud = MicLevelMeter.level(ShortArray(960) { if (it % 2 == 0) Short.MAX_VALUE else Short.MIN_VALUE })
+        val loud = level(ShortArray(960) { if (it % 2 == 0) Short.MAX_VALUE else Short.MIN_VALUE })
         assertEquals(1f, loud.peak, 0.001f)
         assertEquals(1f, loud.rms, 0.001f)
         assertEquals(1f, loud.meter, 0.001f)
@@ -106,8 +106,8 @@ class MicLevelProbeTest {
 
     @Test
     fun `the meter is a clamped decibel scale over a 60 dB floor`() {
-        assertEquals(0f, MicLevelMeter.meter(0.0005f), 0f)
-        assertEquals(0.5f, MicLevelMeter.meter(0.0316f), 0.01f)
-        assertTrue(MicLevelMeter.meter(0.1f) > MicLevelMeter.meter(0.01f))
+        assertEquals(0f, meter(0.0005f), 0f)
+        assertEquals(0.5f, meter(0.0316f), 0.01f)
+        assertTrue(meter(0.1f) > meter(0.01f))
     }
 }

@@ -51,7 +51,7 @@ class MoonlightCatalogTest {
 
     @Test
     fun `PlayStation is the only type with motion, touchpad and a lightbar`() {
-        val ps = MoonlightCatalog.typeCapabilities(PLAYSTATION)
+        val ps = moonlightTypeCapabilities(PLAYSTATION)
         assertTrue(Feature.RUMBLE in ps)
         assertTrue(Feature.MOTION in ps)
         assertTrue(Feature.TOUCHPAD in ps)
@@ -60,7 +60,7 @@ class MoonlightCatalogTest {
 
     @Test
     fun `Xbox carries rumble and nothing else beyond a pad`() {
-        val xbox = MoonlightCatalog.typeCapabilities(XBOX)
+        val xbox = moonlightTypeCapabilities(XBOX)
         assertTrue(Feature.GAMEPAD in xbox)
         assertTrue(Feature.ANALOG_TRIGGERS in xbox)
         assertTrue(Feature.RUMBLE in xbox)
@@ -72,12 +72,12 @@ class MoonlightCatalogTest {
     // into a PlayStation pad, so a Nintendo type over Moonlight has no gyro at all.
     @Test
     fun `Nintendo has no motion over Moonlight, unlike the satellite switchpro type`() {
-        val nintendo = MoonlightCatalog.typeCapabilities(NINTENDO)
+        val nintendo = moonlightTypeCapabilities(NINTENDO)
         assertTrue(Feature.RUMBLE in nintendo)
         assertFalse(Feature.MOTION in nintendo)
         assertFalse(Feature.TOUCHPAD in nintendo)
         assertEquals(
-            MoonlightCatalog.typeCapabilities(XBOX),
+            moonlightTypeCapabilities(XBOX),
             nintendo,
         )
     }
@@ -92,38 +92,38 @@ class MoonlightCatalogTest {
             Feature.MOUSE,
             Feature.RUMBLE,
             Feature.LIGHTBAR,
-        ).forEach { assertTrue(it.name, it in MoonlightCatalog.HOST_LAYER) }
+        ).forEach { assertTrue(it.name, it in HOST_LAYER) }
     }
 
     @Test
     fun `mouse rides the control stream on every type, keyboard stays out until implemented`() {
         listOf(XBOX, PLAYSTATION, NINTENDO)
-            .forEach { type -> assertTrue(Feature.MOUSE in MoonlightCatalog.typeCapabilities(type)) }
-        assertFalse(Feature.KEYBOARD in MoonlightCatalog.HOST_LAYER)
+            .forEach { type -> assertTrue(Feature.MOUSE in moonlightTypeCapabilities(type)) }
+        assertFalse(Feature.KEYBOARD in HOST_LAYER)
     }
 
     @Test
     fun `source bits claim a battery only when the source reports one`() {
         assertEquals(
             CAP_BATTERY,
-            MoonlightCatalog.sourceBits(everything) and CAP_BATTERY,
+            sourceBits(everything) and CAP_BATTERY,
         )
         val noBattery = everything - CapabilitySet.of(Feature.BATTERY)
-        assertEquals(0, MoonlightCatalog.sourceBits(noBattery) and CAP_BATTERY)
+        assertEquals(0, sourceBits(noBattery) and CAP_BATTERY)
     }
 
     @Test
     fun `a fully capable source declares the base bits for Xbox and Nintendo and 0xFF for PlayStation`() {
-        assertEquals(baseBits, MoonlightCatalog.capabilityBits(XBOX, everything))
-        assertEquals(baseBits, MoonlightCatalog.capabilityBits(NINTENDO, everything))
-        assertEquals(0xFF, MoonlightCatalog.capabilityBits(PLAYSTATION, everything))
+        assertEquals(baseBits, capabilityBits(XBOX, everything))
+        assertEquals(baseBits, capabilityBits(NINTENDO, everything))
+        assertEquals(0xFF, capabilityBits(PLAYSTATION, everything))
     }
 
     @Test
     fun `trigger rumble and battery ride only when the source really has them`() {
         val noExtras =
             CapabilitySet.of(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.RUMBLE)
-        val bits = MoonlightCatalog.capabilityBits(XBOX, noExtras)
+        val bits = capabilityBits(XBOX, noExtras)
         // Rumble no longer drags CAP_TRIGGER_RUMBLE along: a pad without the
         // trigger motors must not invite RUMBLE_TRIGGERS events it would eat.
         assertEquals(0, bits and CAP_TRIGGER_RUMBLE)
@@ -136,7 +136,7 @@ class MoonlightCatalogTest {
                 Feature.TRIGGER_RUMBLE,
                 Feature.BATTERY,
             )
-        val bits2 = MoonlightCatalog.capabilityBits(XBOX, withExtras)
+        val bits2 = capabilityBits(XBOX, withExtras)
         assertEquals(CAP_TRIGGER_RUMBLE, bits2 and CAP_TRIGGER_RUMBLE)
         assertEquals(CAP_BATTERY, bits2 and CAP_BATTERY)
     }
@@ -144,7 +144,7 @@ class MoonlightCatalogTest {
     @Test
     fun `a source without motion does not let a PlayStation type ask for gyro reports`() {
         val noMotion = CapabilitySet.of(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.RUMBLE)
-        val bits = MoonlightCatalog.capabilityBits(PLAYSTATION, noMotion)
+        val bits = capabilityBits(PLAYSTATION, noMotion)
         assertEquals(0, bits and CAP_GYRO)
         assertEquals(0, bits and CAP_ACCELEROMETER)
         assertEquals(0, bits and CAP_TOUCHPAD)
@@ -169,7 +169,7 @@ class MoonlightCatalogTest {
         expectedCaps: Int,
         expectedButtons: Int,
     ) {
-        val caps = MoonlightCatalog.capabilityBits(type, everything)
+        val caps = capabilityBits(type, everything)
         val buttons = supportedButtons(caps)
         assertEquals("capabilities for type $type", expectedCaps, caps)
         assertEquals("buttons for type $type", expectedButtons, buttons)

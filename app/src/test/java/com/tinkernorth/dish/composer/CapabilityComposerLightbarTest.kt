@@ -188,7 +188,7 @@ class CapabilityComposerLightbarTest {
                     candidateHostId = "moon-A",
                 )
             assertTrue(Feature.LIGHTBAR in caps.available)
-            val bits = MoonlightCatalog.capabilityBits(PLAYSTATION, caps.available)
+            val bits = capabilityBits(PLAYSTATION, caps.available)
             assertEquals(CAP_RGB_LED, bits and CAP_RGB_LED)
         }
 

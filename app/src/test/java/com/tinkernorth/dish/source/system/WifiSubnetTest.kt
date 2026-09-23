@@ -9,17 +9,17 @@ import org.junit.Test
 class WifiSubnetTest {
     @Test
     fun `hosts inside the phone's prefix are on the same network`() {
-        assertEquals(true, WifiSubnet.sameSubnet("192.168.1.20", 24, "192.168.1.7"))
-        assertEquals(false, WifiSubnet.sameSubnet("192.168.1.20", 24, "192.168.2.7"))
-        assertEquals(true, WifiSubnet.sameSubnet("10.0.5.9", 8, "10.200.1.1"))
+        assertEquals(true, sameSubnet("192.168.1.20", 24, "192.168.1.7"))
+        assertEquals(false, sameSubnet("192.168.1.20", 24, "192.168.2.7"))
+        assertEquals(true, sameSubnet("10.0.5.9", 8, "10.200.1.1"))
     }
 
     @Test
     fun `anything that is not a dotted quad is unknown`() {
-        assertNull(WifiSubnet.sameSubnet(null, 24, "192.168.1.7"))
-        assertNull(WifiSubnet.sameSubnet("192.168.1.20", 24, "my-pc.local"))
-        assertNull(WifiSubnet.sameSubnet("192.168.1.20", 0, "192.168.1.7"))
-        assertNull(WifiSubnet.sameSubnet("fe80::1", 64, "192.168.1.7"))
+        assertNull(sameSubnet(null, 24, "192.168.1.7"))
+        assertNull(sameSubnet("192.168.1.20", 24, "my-pc.local"))
+        assertNull(sameSubnet("192.168.1.20", 0, "192.168.1.7"))
+        assertNull(sameSubnet("fe80::1", 64, "192.168.1.7"))
     }
 
     @Test
