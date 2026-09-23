@@ -14,6 +14,7 @@ import androidx.activity.viewModels
 import androidx.annotation.ColorRes
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.appcompat.app.AlertDialog
 import androidx.core.net.toUri
 import androidx.core.view.isEmpty
 import androidx.lifecycle.Lifecycle
@@ -586,36 +587,54 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
                 .setView(list.root)
                 .setNegativeButton(android.R.string.cancel, null)
                 .create()
-        val moonlight = host.kind == ConnectionKind.MOONLIGHT
         state.typeOptions.forEach { option ->
-            val card = SetupTypeCardBinding.inflate(layoutInflater, container, false)
-            val candidate = if (moonlight) viewModel.moonlightResolvedType(option.id) else option.id
-            card.typeTitle.text = option.label
-            card.typeChevron.visibility = View.GONE
-            card.typeCard.isChecked = option.id == state.draft?.type
-            // Auto is resolved here, on the client: the card shows the rows of the type it
-            // will actually send, and says which one that is rather than implying a fifth type.
-            val isAuto = moonlight && option.id == AUTO
-            card.typeBadge.visibility = if (isAuto) View.VISIBLE else View.GONE
-            if (isAuto) card.typeBadge.setText(R.string.ml_type_auto_badge)
-            card.typeCaption.visibility = if (isAuto) View.VISIBLE else View.GONE
-            if (isAuto) {
-                card.typeCaption.text =
-                    getString(R.string.ml_type_auto_resolved, getString(moonlightTypeLabelRes(candidate)))
-            }
-            card.capabilityContainer.bindCapabilityRows(
-                capabilityRows(
-                    viewModel.capabilityForCandidate(snapshot.slotId, candidate, host.kind, host.id),
-                    inputUnknown = state.inputUnknown,
-                ),
-            )
-            card.typeCard.setOnClickListener {
-                viewModel.setType(option.id)
-                dialog.dismiss()
-            }
-            container.addView(card.root)
+            container.addView(typeCardFor(option, state, snapshot, host, container, dialog))
         }
         dialog.show()
+    }
+
+    private fun typeCardFor(
+        option: TypeOption,
+        state: ConfigUiState,
+        snapshot: BindingSnapshot,
+        host: BindingHost,
+        container: ViewGroup,
+        dialog: AlertDialog,
+    ): View {
+        val card = SetupTypeCardBinding.inflate(layoutInflater, container, false)
+        val isMoonlight = host.kind == ConnectionKind.MOONLIGHT
+        val candidate = if (isMoonlight) viewModel.moonlightResolvedType(option.id) else option.id
+
+        card.typeTitle.text = option.label
+        card.typeChevron.visibility = View.GONE
+        card.typeCard.isChecked = option.id == state.draft?.type
+        bindAutoBadge(card, isMoonlight && option.id == AUTO, candidate)
+        card.capabilityContainer.bindCapabilityRows(
+            capabilityRows(
+                viewModel.capabilityForCandidate(snapshot.slotId, candidate, host.kind, host.id),
+                inputUnknown = state.inputUnknown,
+            ),
+        )
+        card.typeCard.setOnClickListener {
+            viewModel.setType(option.id)
+            dialog.dismiss()
+        }
+        return card.root
+    }
+
+    // Auto is resolved here, on the client: the card shows the rows of the type it will actually
+    // send, and says which one that is rather than implying a fifth type.
+    private fun bindAutoBadge(
+        card: SetupTypeCardBinding,
+        isAuto: Boolean,
+        candidate: Int,
+    ) {
+        card.typeBadge.visibility = if (isAuto) View.VISIBLE else View.GONE
+        card.typeCaption.visibility = if (isAuto) View.VISIBLE else View.GONE
+        if (!isAuto) return
+        card.typeBadge.setText(R.string.ml_type_auto_badge)
+        card.typeCaption.text =
+            getString(R.string.ml_type_auto_resolved, getString(moonlightTypeLabelRes(candidate)))
     }
 
     companion object {
