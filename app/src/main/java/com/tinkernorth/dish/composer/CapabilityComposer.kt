@@ -78,7 +78,6 @@ class CapabilityComposer
         private val hostFacts: SatelliteHostFacts,
         scope: CoroutineScope,
     ) : AbstractComposer<Map<String, SlotCapabilities>>(scope, emptyMap()) {
-        // Fixed hardware fact, captured at construction so it needs no flow of its own.
         private val phoneHasGyro: Boolean = phoneAvailability.hasGyro
 
         private val slotToggles: Flow<SlotToggles> =
@@ -145,10 +144,8 @@ class CapabilityComposer
                 }
             }.distinctUntilChanged()
 
-        // The live per-slot map is the reactive read-surface for consumers that show a
-        // BOUND slot's capabilities (dashboard cards, overlay), migrated onto it
-        // incrementally. Draft-editing screens that preview an unsaved type/host use
-        // capabilityForCandidate, since the bound state does not reflect the draft.
+        // The read-surface for BOUND slots. A screen previewing an unsaved type/host uses
+        // capabilityForCandidate instead, since this does not reflect the draft.
         fun capabilityFor(slotId: String): SlotCapabilities = state.value[slotId] ?: SlotCapabilities.NONE
 
         /**
@@ -205,8 +202,6 @@ class CapabilityComposer
                 type = typeCapabilitiesFor(candidateType, candidateHostId, candidateHostKind),
                 host = candidateHostLayer(candidateHostKind, candidateHostId),
                 userEnabled = ALL,
-                // Pre-bind runtime probe: lets the report show a feature present-but-down
-                // (e.g. motion backend missing) before the user commits.
                 runtimeDown = candidateRuntimeDownLayer(candidateHostKind, candidateHostId),
             )
 
@@ -235,15 +230,8 @@ class CapabilityComposer
         }
 
         private fun virtualControllerLayer(): CapabilitySet {
-            // The phone IS the input AND the actuator: its screen sources the touchpad
-            // and mouse, its vibrator actuates rumble (trigger rumble folds into it),
-            // its own battery reports, and the skin renders the light surfaces the
-            // hardware lacks — lightbar, player LEDs and an active adaptive-trigger
-            // effect all draw on the on-screen pad (VirtualPadFeedbackStore). Motion
-            // rides only if the phone has a gyro. Audio needs no probe at all: every
-            // phone has a microphone and a speaker, which is exactly what the emulated
-            // pad's two endpoints need, so both ride unconditionally. The type layer
-            // still gates which of these a given emulated pad actually carries.
+            // The phone is both the input and the actuator; the light surfaces it has no
+            // hardware for are drawn on the on-screen pad (VirtualPadFeedbackStore).
             val out =
                 mutableSetOf(
                     Feature.GAMEPAD,
@@ -267,11 +255,6 @@ class CapabilityComposer
             device: PhysicalGamepadRegistry.Device,
             direct: Boolean = device.isUsbSynthetic,
         ): CapabilitySet {
-            // The pad supplies the gamepad axes. Touch comes from the pad's OWN trackpad where
-            // the path can read it (USB Direct); the phone screen substitutes only for a pad
-            // that has no trackpad at all. Rumble needs the pad's OWN motor: routing never
-            // falls back to the phone for a physical controller, so a motorless pad has no
-            // rumble.
             val vid = device.vendorId
             val pid = device.productId
             val out = mutableSetOf(Feature.GAMEPAD, Feature.ANALOG_TRIGGERS, Feature.BATTERY)
@@ -280,9 +263,8 @@ class CapabilityComposer
                 out += Feature.MOUSE
             }
             if (direct) {
-                // A Direct pad has no framework InputDevice to probe; everything, including the
-                // trigger and player-LED surfaces the framework path never reaches, comes from the
-                // native tables. (The light bar is the one framework pads also drive, over Bluetooth.)
+                // A Direct pad has no framework InputDevice to probe, so everything comes from
+                // the native tables.
                 if (native.modelHasImu(vid, pid)) out += Feature.MOTION
                 if (native.modelHasRumble(vid, pid)) out += Feature.RUMBLE
                 if (native.modelHasLightbar(vid, pid)) out += Feature.LIGHTBAR
@@ -300,9 +282,8 @@ class CapabilityComposer
                     out += Feature.LIGHTBAR
                 }
             }
-            // The pad's own audio endpoints are Android's to route, not ours: we claim only
-            // the HID interface (or, on the framework path, nothing at all), so its USB-audio
-            // function stays with the OS on either path. That makes the model tables the wrong
+            // We claim only the HID interface, so the pad's USB-audio function stays with the
+            // OS on either path. That makes the model tables the wrong
             // source here, and the OS route table the right one: a pad whose audio function
             // the OS never enumerated can't be captured from or played to, whatever its model
             // says it has. A Bluetooth pad has no such function and resolves to nothing.

@@ -5,6 +5,7 @@ package com.tinkernorth.dish.source.audio
 import com.tinkernorth.dish.ui.main.VIRTUAL_SLOT_ID
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -85,16 +86,40 @@ class SpeakerPlayoutPolicyTest {
     }
 
     @Test
-    fun `the route key packs a handle and an index without collision`() {
+    fun `the route key packs a handle, an index and a lane without collision`() {
         val seen = HashSet<Long>()
         for (handle in 0..8) {
             for (index in 0..4) {
-                assertTrue(
-                    "handle=$handle index=$index collided",
-                    seen.add(SpeakerPlayoutPlan.routeKey(handle, index)),
-                )
+                for (lane in PlayoutLane.entries) {
+                    assertTrue(
+                        "handle=$handle index=$index lane=$lane collided",
+                        seen.add(SpeakerPlayoutPlan.routeKey(handle, index, lane)),
+                    )
+                }
             }
         }
+    }
+
+    @Test
+    fun `the two lanes of one pad are different voices, so haptics never overwrites the speaker`() {
+        val speaker = SpeakerPlayoutPlan.routeKey(HANDLE, CTRL_IDX, PlayoutLane.SPEAKER)
+        val haptics = SpeakerPlayoutPlan.routeKey(HANDLE, CTRL_IDX, PlayoutLane.HAPTICS)
+        assertNotEquals(speaker, haptics)
+    }
+
+    @Test
+    fun `the lane defaults to the speaker, which is what a protocol-2 host addresses`() {
+        assertEquals(
+            SpeakerPlayoutPlan.routeKey(HANDLE, CTRL_IDX, PlayoutLane.SPEAKER),
+            SpeakerPlayoutPlan.routeKey(HANDLE, CTRL_IDX),
+        )
+    }
+
+    @Test
+    fun `the lanes sit at their own pair offsets in the pad's channel order, speaker first`() {
+        assertEquals(0, PlayoutLane.SPEAKER.pairOffset)
+        assertEquals(PlayoutLane.STEREO_CHANNELS, PlayoutLane.HAPTICS.pairOffset)
+        assertEquals(PlayoutLane.QUAD_CHANNELS, PlayoutLane.entries.size * PlayoutLane.STEREO_CHANNELS)
     }
 
     @Test

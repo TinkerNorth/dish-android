@@ -117,4 +117,37 @@ class BatteryRoutingTest {
         val flipped = route(Transport.Bluetooth, device = device(level = 80), phone = phone)
         assertEquals(BatteryValidator.STATUS_CHARGING, flipped.wire.status)
     }
+
+    @Test
+    fun `lowest with no phone sample answers the device`() {
+        val pad = device(level = 40)
+        assertEquals(pad, lowest(pad, phone = null))
+    }
+
+    @Test
+    fun `lowest answers whichever level is lower`() {
+        assertEquals(device(level = 10), lowest(device(level = 10), phone))
+        assertEquals(phone, lowest(device(level = 90), phone))
+    }
+
+    @Test
+    fun `lowest keeps the device on a tie, so a matching phone never displaces it`() {
+        val pad = device(level = 55)
+        assertEquals(pad, lowest(pad, phone))
+    }
+
+    @Test
+    fun `an unknown level never wins the comparison`() {
+        val unknownPad = device(level = BatteryValidator.LEVEL_UNKNOWN)
+        assertEquals(phone, lowest(unknownPad, phone))
+        val unknownPhone = BatterySample(BatteryValidator.LEVEL_UNKNOWN, BatteryValidator.STATUS_UNKNOWN)
+        assertEquals(device(level = 5), lowest(device(level = 5), unknownPhone))
+    }
+
+    @Test
+    fun `two unknown levels keep the device`() {
+        val unknownPad = device(level = BatteryValidator.LEVEL_UNKNOWN)
+        val unknownPhone = BatterySample(BatteryValidator.LEVEL_UNKNOWN, BatteryValidator.STATUS_UNKNOWN)
+        assertEquals(unknownPad, lowest(unknownPad, unknownPhone))
+    }
 }

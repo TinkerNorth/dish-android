@@ -2,10 +2,9 @@
 
 package com.tinkernorth.dish.source.usb
 
-// Explicit lifecycle for one USB controller's input path. Pure and exhaustively tested: every
-// (phase x event) is defined here, so a failed/odd transition can never silently drop the slot the
-// way the previous scattered logic did. The coordinator (UsbGamepadManager) turns world changes into
-// events, runs `reduce`, and executes the returned effects against the real subsystems.
+// Explicit lifecycle for one USB controller's input path. The coordinator (UsbGamepadManager)
+// turns world changes into events, runs `reduce`, and executes the returned effects against the
+// real subsystems.
 
 enum class UsbPhase {
     Routed, // Standard: a framework InputDevice is present.
@@ -35,8 +34,7 @@ data class UsbController(
     // re-enumerated framework card can show the cause.
     val failure: DirectClaimFailure? = null,
     // Whether releasing to Standard re-enumerates a framework gamepad. False for models whose
-    // stand-alone identity is a keyboard/mouse (the Steam Controller): waiting for a framework
-    // device that never comes would strand every release in RestoreStuck, so those settle at once.
+    // stand-alone identity is a keyboard/mouse, such as the Steam Controller.
     val frameworkExpected: Boolean = true,
 )
 
@@ -62,9 +60,8 @@ sealed interface UsbEvent {
         val syntheticId: Int,
     ) : UsbEvent
 
-    // frameworkStolen: the interface was claimed (kernel HID driver detached) before the failure, so the
-    // framework device must re-enumerate before we can settle on Standard. When false the framework was
-    // never touched, so the slot is already usable on Standard.
+    // frameworkStolen: the interface was claimed (kernel HID driver detached) before the failure, so
+    // the framework device must re-enumerate before we can settle on Standard.
     data class ClaimFailed(
         val reason: DirectClaimFailure,
         val frameworkStolen: Boolean,
@@ -152,7 +149,6 @@ fun reduce(
     c: UsbController,
     event: UsbEvent,
 ): Reduction {
-    // Physical unplug wins from any phase: tear down and forget.
     if (event is UsbEvent.UsbUnplugged) {
         val effects =
             buildList {
