@@ -193,7 +193,10 @@ class MicEngineTest {
 
     private fun await(
         what: String,
-        timeoutMs: Long = 2_000,
+        // A loaded CI runner executes both flavours' suites in parallel; 2s was enough locally
+        // and not on the runner, and this only bounds a failure, so it costs a passing run
+        // nothing.
+        timeoutMs: Long = 10_000,
         condition: () -> Boolean,
     ) {
         val deadline = System.currentTimeMillis() + timeoutMs
