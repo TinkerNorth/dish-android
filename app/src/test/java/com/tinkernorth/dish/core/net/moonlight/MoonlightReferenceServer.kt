@@ -31,19 +31,19 @@ internal class MoonlightReferenceServer(
         private set
 
     fun getServerCert(saltHex: String): String {
-        aesKey = MoonlightCrypto.pairingKey(hexToBytes(saltHex), pin)
+        aesKey = pairingKey(hexToBytes(saltHex), pin)
         return identity.certificatePem
     }
 
     fun challengeResponse(clientChallengeHex: String): String {
-        clientChallenge = MoonlightCrypto.aesEcbDecrypt(aesKey, hexToBytes(clientChallengeHex))
-        val hash = MoonlightCrypto.sha256(clientChallenge, identity.certificateSignature, serverSecret)
-        return bytesToHex(MoonlightCrypto.aesEcbEncrypt(aesKey, hash + serverChallenge))
+        clientChallenge = aesEcbDecrypt(aesKey, hexToBytes(clientChallengeHex))
+        val hash = sha256(clientChallenge, identity.certificateSignature, serverSecret)
+        return bytesToHex(aesEcbEncrypt(aesKey, hash + serverChallenge))
     }
 
     fun clientHashResponse(serverChallengeRespHex: String): String {
-        storedClientHash = MoonlightCrypto.aesEcbDecrypt(aesKey, hexToBytes(serverChallengeRespHex))
-        val signature = MoonlightCrypto.signRsaSha256(identity.privateKey, serverSecret)
+        storedClientHash = aesEcbDecrypt(aesKey, hexToBytes(serverChallengeRespHex))
+        val signature = signRsaSha256(identity.privateKey, serverSecret)
         return bytesToHex(serverSecret + signature)
     }
 
@@ -51,9 +51,9 @@ internal class MoonlightReferenceServer(
         val secret = hexToBytes(clientPairingSecretHex)
         val clientSecret = secret.copyOfRange(0, BLOCK)
         val clientSignature = secret.copyOfRange(BLOCK, secret.size)
-        val expected = MoonlightCrypto.sha256(serverChallenge, MoonlightCert.signatureOf(clientCertPem), clientSecret)
-        if (!MoonlightCrypto.constantTimeEquals(expected, storedClientHash)) return false
-        paired = MoonlightCrypto.verifyRsaSha256(MoonlightCert.publicKeyOf(clientCertPem), clientSecret, clientSignature)
+        val expected = sha256(serverChallenge, signatureOf(clientCertPem), clientSecret)
+        if (!constantTimeEquals(expected, storedClientHash)) return false
+        paired = verifyRsaSha256(publicKeyOf(clientCertPem), clientSecret, clientSignature)
         return paired
     }
 

@@ -6,8 +6,8 @@ import com.tinkernorth.dish.architecture.abstracts.AbstractComposer
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.source.audio.MicCapturePlan
-import com.tinkernorth.dish.source.audio.MicCapturePolicy
 import com.tinkernorth.dish.source.audio.MicSlotInput
+import com.tinkernorth.dish.source.audio.micCapturePlanFor
 import com.tinkernorth.dish.source.store.MicMuteStore
 import com.tinkernorth.dish.source.system.MicPermissionGate
 import kotlinx.coroutines.CoroutineScope
@@ -59,7 +59,7 @@ class MicCaptureComposer
                             muted = muted[slotId] ?: MicMuteStore.DEFAULT_MUTED,
                         )
                     }
-                MicCapturePolicy.plan(slots, permissionGranted = granted)
+                micCapturePlanFor(slots, permissionGranted = granted)
             }.distinctUntilChanged()
 
         // Only a satellite carries controller audio at all: the Moonlight control protocol has no

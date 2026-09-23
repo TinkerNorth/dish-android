@@ -7,7 +7,7 @@ import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.net.moonlight.AUTO
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightTrustState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -27,7 +27,7 @@ class ConfigUiStateMoonlightTest {
     ) = ConnectionSummary(id = id, kind = kind, label = "PC", detail = "", live = live, boundSlotIds = emptyList())
 
     private fun state(
-        type: Int? = MoonlightEmulatedType.AUTO,
+        type: Int? = AUTO,
         moonlight: MoonlightSessionInput? = MoonlightSessionInput(),
         kind: ConnectionKind = ConnectionKind.MOONLIGHT,
     ) = ConfigUiState(

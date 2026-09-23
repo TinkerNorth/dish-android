@@ -17,14 +17,20 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.InputFunctions
 import com.tinkernorth.dish.composer.LinkState
-import com.tinkernorth.dish.composer.LinkTiers
+import com.tinkernorth.dish.composer.comparatorByLinkTier
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.CatalogTypeDto
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
-import com.tinkernorth.dish.core.net.DishProtocol
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.net.DishProtocolCompat
+import com.tinkernorth.dish.core.net.moonlight.AUTO
+import com.tinkernorth.dish.core.net.moonlight.NINTENDO
+import com.tinkernorth.dish.core.net.moonlight.ORDER
+import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
+import com.tinkernorth.dish.core.net.moonlight.XBOX
+import com.tinkernorth.dish.core.net.moonlight.fromStored
+import com.tinkernorth.dish.core.net.moonlight.resolveMoonlightEmulatedType
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
 import com.tinkernorth.dish.repository.SatelliteCapabilitiesRepository
@@ -82,7 +88,7 @@ data class BindingHost(
     val kind: ConnectionKind,
 )
 
-internal fun List<BindingHost>.orderedForPicker(): List<BindingHost> = sortedWith(LinkTiers.byTier(BindingHost::kind))
+internal fun List<BindingHost>.orderedForPicker(): List<BindingHost> = sortedWith(comparatorByLinkTier(BindingHost::kind))
 
 // The host side of each candidate resolution (transport ∩ type ∩ host), unioned across
 // the candidate types. The input's controller layer deliberately stays out: the card
@@ -165,7 +171,7 @@ data class ConfigUiState(
     // What the chosen Moonlight host last told us. Null for every other kind of destination.
     val moonlight: MoonlightSessionInput? = null,
     // Per-connection protocol verdict (satellite hosts only), for the update chips.
-    val hostCompat: Map<String, DishProtocol.DishProtocolCompat> = emptyMap(),
+    val hostCompat: Map<String, DishProtocolCompat> = emptyMap(),
     // RECORD_AUDIO, re-read on every resume: the OS says nothing when a grant is revoked.
     val micPermissionGranted: Boolean = false,
 ) {
@@ -381,7 +387,7 @@ class ConfigureBindingsViewModel
         ): CapabilitySet {
             val candidateTypes =
                 if (hostKind == ConnectionKind.MOONLIGHT) {
-                    listOf(MoonlightEmulatedType.XBOX, MoonlightEmulatedType.PLAYSTATION, MoonlightEmulatedType.NINTENDO)
+                    listOf(XBOX, PLAYSTATION, NINTENDO)
                 } else {
                     listOf(
                         CONTROLLER_TYPE_XBOX,
@@ -401,18 +407,18 @@ class ConfigureBindingsViewModel
          * card renders the resolved type's rows for exactly this reason.
          */
         fun moonlightResolvedType(type: Int): Int {
-            val picked = MoonlightEmulatedType.fromStored(type)
-            if (picked != MoonlightEmulatedType.AUTO) return picked
-            val slotId = loadedSlotId ?: return MoonlightEmulatedType.XBOX
+            val picked = fromStored(type)
+            if (picked != AUTO) return picked
+            val slotId = loadedSlotId ?: return XBOX
             val caps =
                 capabilityComposer.capabilityForCandidate(
                     slotId = slotId,
-                    candidateType = MoonlightEmulatedType.XBOX,
+                    candidateType = XBOX,
                     candidateHostKind = ConnectionKind.MOONLIGHT,
                     candidateHostId = _ui.value.draft?.hostId,
                     candidateDirect = _ui.value.candidateDirect,
                 )
-            return MoonlightEmulatedType.resolveMoonlightEmulatedType(picked, caps.inputOk(Feature.MOTION))
+            return resolveMoonlightEmulatedType(picked, caps.inputOk(Feature.MOTION))
         }
 
         /** Re-verify the chosen Moonlight host: on entering the screen, and before a session. */
@@ -869,8 +875,7 @@ class ConfigureBindingsViewModel
         // The four types a Moonlight host can be asked to plug in. Hard-coded because no host
         // reports them: the type byte travels client to host in CONTROLLER_ARRIVAL and nothing
         // comes back the other way.
-        private fun moonlightTypeOptions(): List<TypeOption> =
-            MoonlightEmulatedType.ORDER.map { TypeOption(it, context.getString(moonlightTypeLabelRes(it))) }
+        private fun moonlightTypeOptions(): List<TypeOption> = ORDER.map { TypeOption(it, context.getString(moonlightTypeLabelRes(it))) }
 
         // A Moonlight host owns its own four types and has no catalog to fetch, so it must be
         // answered before the satellite lookup: satellite.get() is null for a Moonlight id, which
@@ -878,7 +883,7 @@ class ConfigureBindingsViewModel
         private fun refreshTypeOptions(hostId: String) {
             if (hub.summary(hostId)?.kind == ConnectionKind.MOONLIGHT) {
                 val stored = loadedSlotId?.let { hub.satTypes.value[hostId to it] }
-                val seeded = MoonlightEmulatedType.fromStored(stored ?: moonlight.rememberedEmulatedType(hostId))
+                val seeded = fromStored(stored ?: moonlight.rememberedEmulatedType(hostId))
                 _ui.update { state ->
                     state
                         .copy(

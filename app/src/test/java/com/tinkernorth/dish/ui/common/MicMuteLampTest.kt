@@ -2,9 +2,9 @@
 
 package com.tinkernorth.dish.ui.common
 
-import com.tinkernorth.dish.ui.common.GamepadConstants.MIC_MUTE_LAMP_ALPHA
-import com.tinkernorth.dish.ui.common.GamepadConstants.MIC_MUTE_PULSE_MIN_ALPHA
-import com.tinkernorth.dish.ui.common.GamepadConstants.MIC_MUTE_PULSE_PERIOD_MS
+import com.tinkernorth.dish.ui.common.MIC_MUTE_LAMP_ALPHA
+import com.tinkernorth.dish.ui.common.MIC_MUTE_PULSE_MIN_ALPHA
+import com.tinkernorth.dish.ui.common.MIC_MUTE_PULSE_PERIOD_MS
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue

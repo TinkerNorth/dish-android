@@ -2,7 +2,9 @@
 
 package com.tinkernorth.dish.repository
 
-import com.tinkernorth.dish.composer.BundledCatalog
+import com.tinkernorth.dish.composer.SLUG_DS4
+import com.tinkernorth.dish.composer.SLUG_XBOX360
+import com.tinkernorth.dish.composer.typeCapabilities
 import com.tinkernorth.dish.core.model.CatalogDto
 import com.tinkernorth.dish.core.model.CatalogFeatureDto
 import com.tinkernorth.dish.core.model.CatalogTypeDto
@@ -31,8 +33,8 @@ class LegacyCatalogTranslator
                 catalogVersion = LEGACY_V1,
                 controllerTypes =
                     listOf(
-                        legacyType(id = 0, slug = BundledCatalog.SLUG_XBOX360),
-                        legacyType(id = 1, slug = BundledCatalog.SLUG_DS4),
+                        legacyType(id = 0, slug = SLUG_XBOX360),
+                        legacyType(id = 1, slug = SLUG_DS4),
                     ),
             )
 
@@ -42,7 +44,7 @@ class LegacyCatalogTranslator
         ): CatalogTypeDto = CatalogTypeDto(id = id, slug = slug, features = legacyFeatures(slug))
 
         private fun legacyFeatures(slug: String): Map<String, CatalogFeatureDto> {
-            val caps = BundledCatalog.typeCapabilities(slug) ?: return emptyMap()
+            val caps = typeCapabilities(slug) ?: return emptyMap()
             return buildMap {
                 for (feature in caps.features) {
                     val featureSlug = feature.catalogSlug ?: continue
@@ -51,7 +53,7 @@ class LegacyCatalogTranslator
                     // for a current host. v1 is a fixed historical shape, not a floor.
                     if (feature in AUDIO_FEATURES) continue
                     // Touchpad is the DS4 pad mode: the resolver gates it on the "ds4" mode slug.
-                    val modes = if (feature == Feature.TOUCHPAD) listOf(TouchpadModeValue.TOUCHPAD_MODE_DS4) else emptyList()
+                    val modes = if (feature == Feature.TOUCHPAD) listOf(TOUCHPAD_MODE_DS4) else emptyList()
                     put(featureSlug, CatalogFeatureDto(supported = true, modes = modes))
                 }
             }

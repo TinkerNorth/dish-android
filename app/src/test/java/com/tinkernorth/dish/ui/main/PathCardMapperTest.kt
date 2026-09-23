@@ -24,7 +24,7 @@ class PathCardMapperTest {
         directFailure: DirectClaimFailure? = null,
         padHasTouchpad: Boolean = false,
         wiredUsbPresent: Boolean = false,
-    ) = PathCardMapper.mapPathCard(
+    ) = mapPathCard(
         transport = transport,
         claim =
             ClaimState(

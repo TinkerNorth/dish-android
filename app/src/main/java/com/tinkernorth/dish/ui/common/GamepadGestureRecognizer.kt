@@ -4,13 +4,13 @@ package com.tinkernorth.dish.ui.common
 
 import android.graphics.RectF
 import android.view.MotionEvent
-import com.tinkernorth.dish.ui.common.GamepadConstants.ABXY_BTN_SPACING_FACTOR
-import com.tinkernorth.dish.ui.common.GamepadConstants.ABXY_CENTER_ZONE_FRACTION
-import com.tinkernorth.dish.ui.common.GamepadConstants.CENTER_BTN_PICKUP_FACTOR
-import com.tinkernorth.dish.ui.common.GamepadConstants.DPAD_DIAGONAL_THRESHOLD
-import com.tinkernorth.dish.ui.common.GamepadConstants.PICKUP_RADIUS_FACTOR
-import com.tinkernorth.dish.ui.common.GamepadConstants.TRACKPAD_TAP_MAX_MS
-import com.tinkernorth.dish.ui.common.GamepadConstants.TRIGGER_MAX
+import com.tinkernorth.dish.ui.common.ABXY_BTN_SPACING_FACTOR
+import com.tinkernorth.dish.ui.common.ABXY_CENTER_ZONE_FRACTION
+import com.tinkernorth.dish.ui.common.CENTER_BTN_PICKUP_FACTOR
+import com.tinkernorth.dish.ui.common.DPAD_DIAGONAL_THRESHOLD
+import com.tinkernorth.dish.ui.common.PICKUP_RADIUS_FACTOR
+import com.tinkernorth.dish.ui.common.TRACKPAD_TAP_MAX_MS
+import com.tinkernorth.dish.ui.common.TRIGGER_MAX
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
@@ -646,7 +646,7 @@ internal fun triggerRailValue(
     if (!analog) return TRIGGER_MAX
     if (bottom <= top) return TRIGGER_MAX
     val clamped = y.coerceIn(top, bottom)
-    val boundary = top + (bottom - top) * GamepadConstants.TRIGGER_FULL_ZONE_FRACTION
+    val boundary = top + (bottom - top) * TRIGGER_FULL_ZONE_FRACTION
     if (clamped <= boundary) return TRIGGER_MAX
     val ramp = (bottom - clamped) / (bottom - boundary)
     return (ramp * TRIGGER_MAX).toInt().coerceIn(0, TRIGGER_MAX)

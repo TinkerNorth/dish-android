@@ -14,7 +14,7 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.DiscoveredServer
-import com.tinkernorth.dish.core.net.DishProtocol
+import com.tinkernorth.dish.core.net.DishProtocolCompat
 import com.tinkernorth.dish.databinding.RowConnectionBinding
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.ui.common.setLoading
@@ -23,7 +23,7 @@ import com.tinkernorth.dish.ui.common.statusChipText
 sealed interface SatelliteRow {
     data class Known(
         val summary: ConnectionSummary,
-        val compat: DishProtocol.DishProtocolCompat = DishProtocol.DishProtocolCompat.UNKNOWN,
+        val compat: DishProtocolCompat = DishProtocolCompat.UNKNOWN,
     ) : SatelliteRow
 
     data class Discovered(
@@ -125,16 +125,16 @@ class SatelliteListAdapter(
             paintCompat(row.compat)
         }
 
-        private fun paintCompat(compat: DishProtocol.DishProtocolCompat) {
+        private fun paintCompat(compat: DishProtocolCompat) {
             val spec =
                 when (compat) {
-                    DishProtocol.DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE ->
+                    DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE ->
                         Triple(R.string.chip_satellite_update_available, R.drawable.bg_binding_pill_warn, R.color.colorTertiary)
-                    DishProtocol.DishProtocolCompat.SATELLITE_UPDATE_REQUIRED ->
+                    DishProtocolCompat.SATELLITE_UPDATE_REQUIRED ->
                         Triple(R.string.chip_satellite_update_required, R.drawable.bg_binding_pill_error, R.color.colorError)
-                    DishProtocol.DishProtocolCompat.APP_UPDATE_REQUIRED ->
+                    DishProtocolCompat.APP_UPDATE_REQUIRED ->
                         Triple(R.string.chip_app_update_required, R.drawable.bg_binding_pill_error, R.color.colorError)
-                    DishProtocol.DishProtocolCompat.UNKNOWN, DishProtocol.DishProtocolCompat.CURRENT -> null
+                    DishProtocolCompat.UNKNOWN, DishProtocolCompat.CURRENT -> null
                 }
             if (spec == null) {
                 b.tvRowUpdate.visibility = View.GONE

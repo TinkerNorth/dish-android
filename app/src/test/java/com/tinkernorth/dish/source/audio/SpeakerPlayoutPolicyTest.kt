@@ -31,7 +31,7 @@ class SpeakerPlayoutPolicyTest {
         var playing = 0
         for ((streaming, enabled, registered) in rows) {
             val plan =
-                SpeakerPlayoutPolicy.plan(
+                speakerPlayoutPlanFor(
                     listOf(
                         slot(
                             streaming = streaming,
@@ -52,7 +52,7 @@ class SpeakerPlayoutPolicyTest {
 
     @Test
     fun `an eligible slot is keyed by the address its frames carry`() {
-        val plan = SpeakerPlayoutPolicy.plan(listOf(slot()))
+        val plan = speakerPlayoutPlanFor(listOf(slot()))
         val target = plan.voices[SpeakerPlayoutPlan.routeKey(HANDLE, CTRL_IDX)]!!
         assertEquals(VIRTUAL_SLOT_ID, target.slotId)
         assertEquals(HANDLE, target.sessionHandle)
@@ -64,13 +64,13 @@ class SpeakerPlayoutPolicyTest {
     @Test
     fun `a slot with no live session does not play`() {
         // handle is -1 until the session PUT lands, and a frame can never arrive for it.
-        assertFalse(SpeakerPlayoutPolicy.plan(listOf(slot(handle = -1))).playing)
+        assertFalse(speakerPlayoutPlanFor(listOf(slot(handle = -1))).playing)
     }
 
     @Test
     fun `two slots on one session each get their own voice`() {
         val plan =
-            SpeakerPlayoutPolicy.plan(
+            speakerPlayoutPlanFor(
                 listOf(slot(), slot(slotId = "-1000", index = CTRL_IDX + 1, playbackDeviceId = 11)),
             )
         assertEquals(2, plan.voices.size)
@@ -80,7 +80,7 @@ class SpeakerPlayoutPolicyTest {
 
     @Test
     fun `the same controller index on two sessions is two voices`() {
-        val plan = SpeakerPlayoutPolicy.plan(listOf(slot(), slot(slotId = "-1000", handle = HANDLE + 1)))
+        val plan = speakerPlayoutPlanFor(listOf(slot(), slot(slotId = "-1000", handle = HANDLE + 1)))
         assertEquals(2, plan.voices.size)
     }
 
@@ -99,7 +99,7 @@ class SpeakerPlayoutPolicyTest {
 
     @Test
     fun `an idle plan is the empty one`() {
-        assertEquals(SpeakerPlayoutPlan.IDLE, SpeakerPlayoutPolicy.plan(emptyList()))
+        assertEquals(SpeakerPlayoutPlan.IDLE, speakerPlayoutPlanFor(emptyList()))
         assertFalse(SpeakerPlayoutPlan.IDLE.playing)
     }
 
@@ -113,7 +113,7 @@ class SpeakerPlayoutPolicyTest {
     @Test
     fun `haptics plan a second voice on a 4-channel endpoint and none on a stereo one`() {
         val quad =
-            SpeakerPlayoutPolicy.plan(
+            speakerPlayoutPlanFor(
                 listOf(
                     SpeakerSlotInput(
                         "s",
@@ -137,7 +137,7 @@ class SpeakerPlayoutPolicyTest {
         assertEquals(7, haptic.playbackDeviceId)
 
         val stereo =
-            SpeakerPlayoutPolicy.plan(
+            speakerPlayoutPlanFor(
                 listOf(
                     SpeakerSlotInput(
                         "s",
@@ -161,7 +161,7 @@ class SpeakerPlayoutPolicyTest {
 
         // Unknown width opens as stereo and cannot carry the lane.
         val unknown =
-            SpeakerPlayoutPolicy.plan(
+            speakerPlayoutPlanFor(
                 listOf(SpeakerSlotInput("s", 1, 0, streaming = true, speakerEnabled = true, hapticEnabled = true)),
             )
         assertEquals(1, unknown.voices.size)
@@ -176,7 +176,7 @@ class SpeakerPlayoutPolicyTest {
     @Test
     fun `the haptic lane has its own gate and does not need the speaker's`() {
         val plan =
-            SpeakerPlayoutPolicy.plan(
+            speakerPlayoutPlanFor(
                 listOf(
                     SpeakerSlotInput(
                         "s",

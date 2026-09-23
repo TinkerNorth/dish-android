@@ -139,7 +139,7 @@ private class AndroidLightbars(
     private fun openSession(deviceId: Int): FrameworkLightGateway.Lightbar? {
         val device = inputManager.getInputDevice(deviceId) ?: return null
         // Confirm a bar exists before opening, so a pad with none never holds an idle session.
-        if (FrameworkLightProbe.lightbarOf(device) == null) return null
+        if (lightbarOf(device) == null) return null
         val session = lightCall("openSession", deviceId) { device.lightsManager.openSession() } ?: return null
         return AndroidLightbar(inputManager, deviceId, session)
     }
@@ -155,7 +155,7 @@ private class AndroidLightbar(
         // Re-resolve every write: the service reassigns light ids when the merged device gains a
         // sub-device, and a stale id is silently ignored, so a cached light could go dead-quiet.
         val device = inputManager.getInputDevice(deviceId) ?: return false
-        val light = FrameworkLightProbe.lightbarOf(device) ?: return false
+        val light = lightbarOf(device) ?: return false
         val request = LightsRequest.Builder().addLight(light, LightState.Builder().setColor(argb).build()).build()
         return lightCall("requestLights", deviceId) { session.requestLights(request) } != null
     }

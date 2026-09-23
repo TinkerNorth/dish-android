@@ -3,7 +3,7 @@
 package com.tinkernorth.dish.ui.main
 
 import com.tinkernorth.dish.composer.ConnectionKind
-import com.tinkernorth.dish.repository.TouchpadModeValue
+import com.tinkernorth.dish.repository.TOUCHPAD_MODE_DS4
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -12,7 +12,7 @@ class ScreenRateUserFacingOnTest {
     private fun pointer(
         touchpad: Boolean,
         mouse: Boolean,
-    ) = PointerSlotUi(mode = TouchpadModeValue.TOUCHPAD_MODE_DS4, touchpadOpenable = touchpad, mouseOpenable = mouse)
+    ) = PointerSlotUi(mode = TOUCHPAD_MODE_DS4, touchpadOpenable = touchpad, mouseOpenable = mouse)
 
     @Test
     fun `the virtual slot always computes regardless of binding`() {

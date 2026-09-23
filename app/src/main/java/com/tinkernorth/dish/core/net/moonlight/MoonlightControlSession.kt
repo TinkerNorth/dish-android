@@ -145,7 +145,7 @@ class MoonlightControlSession(
     ) {
         synchronized(lock) {
             sendControlPlaintextLocked(
-                MoonlightInputEncoder.controllerArrival(controllerNumber, emulatedType, capabilities, supportedButtons),
+                controllerArrival(controllerNumber, emulatedType, capabilities, supportedButtons),
             )
         }
     }
@@ -155,7 +155,7 @@ class MoonlightControlSession(
         deltaY: Int,
     ) {
         synchronized(lock) {
-            sendControlPlaintextLocked(MoonlightInputEncoder.mouseMoveRel(deltaX, deltaY))
+            sendControlPlaintextLocked(mouseMoveRel(deltaX, deltaY))
         }
     }
 
@@ -164,13 +164,13 @@ class MoonlightControlSession(
         button: Int,
     ) {
         synchronized(lock) {
-            sendControlPlaintextLocked(MoonlightInputEncoder.mouseButton(down, button))
+            sendControlPlaintextLocked(mouseButton(down, button))
         }
     }
 
     fun sendMouseScroll(amount: Int) {
         synchronized(lock) {
-            sendControlPlaintextLocked(MoonlightInputEncoder.mouseScroll(amount))
+            sendControlPlaintextLocked(mouseScroll(amount))
         }
     }
 
@@ -184,7 +184,7 @@ class MoonlightControlSession(
     ) {
         synchronized(lock) {
             sendControlPlaintextLocked(
-                MoonlightInputEncoder.controllerTouch(controllerNumber, eventType, pointerId, x, y, pressure),
+                controllerTouch(controllerNumber, eventType, pointerId, x, y, pressure),
             )
         }
     }
@@ -198,7 +198,7 @@ class MoonlightControlSession(
     ) {
         synchronized(lock) {
             sendControlPlaintextLocked(
-                MoonlightInputEncoder.controllerMotion(controllerNumber, motionType, x, y, z),
+                controllerMotion(controllerNumber, motionType, x, y, z),
             )
         }
     }
@@ -210,7 +210,7 @@ class MoonlightControlSession(
     ) {
         synchronized(lock) {
             sendControlPlaintextLocked(
-                MoonlightInputEncoder.controllerBattery(controllerNumber, batteryState, percentage),
+                controllerBattery(controllerNumber, batteryState, percentage),
             )
         }
     }
@@ -248,7 +248,7 @@ class MoonlightControlSession(
         while (enet.received.isNotEmpty()) {
             val payload = enet.received.removeFirst()
             val plaintext = runCatching { opener.open(payload) }.getOrNull() ?: continue
-            MoonlightEventDecoder.decodeMoonlightEvent(plaintext)?.let(into::add)
+            decodeMoonlightEvent(plaintext)?.let(into::add)
         }
     }
 
@@ -261,7 +261,7 @@ class MoonlightControlSession(
         val now = nowMs()
         if (state == State.CONNECTED && now - lastPingMs >= PING_INTERVAL_MS) {
             lastPingMs = now
-            sendControlPlaintextLocked(MoonlightInputEncoder.periodicPing())
+            sendControlPlaintextLocked(periodicPing())
         }
     }
 
@@ -277,7 +277,7 @@ class MoonlightControlSession(
     fun stop() {
         synchronized(lock) {
             if (state == State.CONNECTED) {
-                runCatching { sendControlPlaintextLocked(MoonlightInputEncoder.termination()) }
+                runCatching { sendControlPlaintextLocked(termination()) }
             }
             runCatching { enet.disconnect()?.let(transport::send) }
             runCatching { transport.close() }

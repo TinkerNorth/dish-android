@@ -53,7 +53,7 @@ class SetupInputActivity : BaseGamepadHostActivity() {
             R.string.setup_input_onscreen_title,
             R.string.setup_input_onscreen_body,
             badge = null,
-        ) { nav.toSetupConnection(SetupFlow.INPUT_ONSCREEN, VIRTUAL_SLOT_ID) }
+        ) { nav.toSetupConnection(INPUT_ONSCREEN, VIRTUAL_SLOT_ID) }
     }
 
     private fun bindChoice(

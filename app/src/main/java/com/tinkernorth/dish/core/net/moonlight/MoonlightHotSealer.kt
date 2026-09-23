@@ -29,13 +29,13 @@ class MoonlightHotSealer(
 
     // Reused across every packet: the plaintext scratch, the GCM output, and the
     // final framed datagram body.
-    private val plaintext = ByteBuffer.allocate(MoonlightInputEncoder.CONTROLLER_MULTI_LEN).order(ByteOrder.LITTLE_ENDIAN)
-    private val plaintextWriter = MoonlightInputEncoder.ControllerMultiWriter(plaintext)
-    private val cipherOut = ByteArray(MoonlightInputEncoder.CONTROLLER_MULTI_LEN + MoonlightCrypto.GCM_TAG_LEN)
+    private val plaintext = ByteBuffer.allocate(CONTROLLER_MULTI_LEN).order(ByteOrder.LITTLE_ENDIAN)
+    private val plaintextWriter = ControllerMultiWriter(plaintext)
+    private val cipherOut = ByteArray(CONTROLLER_MULTI_LEN + GCM_TAG_LEN)
     private val iv = ByteArray(GCM_IV_LEN)
     private val framed =
         ByteBuffer
-            .allocate(FRAME_HEADER_LEN + SEQ_LEN + MoonlightInputEncoder.CONTROLLER_MULTI_LEN + MoonlightCrypto.GCM_TAG_LEN)
+            .allocate(FRAME_HEADER_LEN + SEQ_LEN + CONTROLLER_MULTI_LEN + GCM_TAG_LEN)
             .order(ByteOrder.LITTLE_ENDIAN)
 
     private var seq = 0
@@ -78,14 +78,14 @@ class MoonlightHotSealer(
         val written = cipher.doFinal(plaintext.array(), 0, plaintext.limit(), cipherOut, 0)
         seq = currentSeq + 1
 
-        val ctLen = written - MoonlightCrypto.GCM_TAG_LEN
+        val ctLen = written - GCM_TAG_LEN
         val len = SEQ_LEN + written
         framed.clear()
-        framed.putShort(MoonlightControlProtocol.PACKET_TYPE_ENCRYPTED.toShort())
+        framed.putShort(PACKET_TYPE_ENCRYPTED.toShort())
         framed.putShort(len.toShort())
         framed.putInt(currentSeq)
         // Moonlight wants the tag first, then the ciphertext.
-        framed.put(cipherOut, ctLen, MoonlightCrypto.GCM_TAG_LEN)
+        framed.put(cipherOut, ctLen, GCM_TAG_LEN)
         framed.put(cipherOut, 0, ctLen)
         framed.flip()
         val out = ByteArray(framed.remaining())
@@ -101,18 +101,18 @@ class MoonlightHotSealer(
      */
     fun seal(plaintext: ByteArray): ByteArray {
         val currentSeq = seq
-        val tagThenCt = MoonlightCrypto.controlSeal(keySpec.encoded, currentSeq, plaintext)
+        val tagThenCt = controlSeal(keySpec.encoded, currentSeq, plaintext)
         seq = currentSeq + 1
         val len = SEQ_LEN + tagThenCt.size
         val out = ByteBuffer.allocate(FRAME_HEADER_LEN + len).order(ByteOrder.LITTLE_ENDIAN)
-        out.putShort(MoonlightControlProtocol.PACKET_TYPE_ENCRYPTED.toShort())
+        out.putShort(PACKET_TYPE_ENCRYPTED.toShort())
         out.putShort(len.toShort())
         out.putInt(currentSeq)
         out.put(tagThenCt)
         return out.array()
     }
 
-    /** The low byte of the seq and nothing else; see MoonlightCrypto.controlIv. */
+    /** The low byte of the seq and nothing else; see controlIv. */
     private fun writeIv(currentSeq: Int) {
         iv.fill(0)
         iv[0] = (currentSeq and 0xFF).toByte()

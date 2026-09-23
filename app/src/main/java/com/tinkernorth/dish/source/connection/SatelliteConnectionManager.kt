@@ -13,17 +13,20 @@ import com.tinkernorth.dish.core.model.PairResponse
 import com.tinkernorth.dish.core.model.SessionResponse
 import com.tinkernorth.dish.core.model.SessionViewDto
 import com.tinkernorth.dish.core.net.ControllerDescriptor
+import com.tinkernorth.dish.core.net.DISH_PROTOCOL_CURRENT
+import com.tinkernorth.dish.core.net.DISH_PROTOCOL_MIN
 import com.tinkernorth.dish.core.net.DiscoveryGateway
-import com.tinkernorth.dish.core.net.DishProtocol
 import com.tinkernorth.dish.core.net.HttpReply
-import com.tinkernorth.dish.core.net.SessionCrypto
+import com.tinkernorth.dish.core.net.deriveSessionKey
+import com.tinkernorth.dish.core.net.dishProtocolSpeakFor
 import com.tinkernorth.dish.core.net.hexToBytes
+import com.tinkernorth.dish.core.net.hmacProof
 import com.tinkernorth.dish.core.net.isPrivateHostLiteral
 import com.tinkernorth.dish.di.IoDispatcher
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedSatellite
 import com.tinkernorth.dish.source.store.SatelliteHostFacts
-import com.tinkernorth.dish.source.system.LocalNetworkAccess
+import com.tinkernorth.dish.source.system.isGranted
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -158,7 +161,7 @@ class SatelliteConnectionManager
                     .featuresFor(id)
                     ?.protocolVersion
                     ?.takeIf { it > 0 }
-            return DishProtocol.dishProtocolSpeakFor(advertised)
+            return dishProtocolSpeakFor(advertised)
         }
 
         private fun noteNegotiated(
@@ -173,12 +176,12 @@ class SatelliteConnectionManager
         // means no shared version exists and protocolRejectMessage says which side to update.
         private fun protocolRetryVersion(body: String): Int? {
             val supported = supportedVersionFrom(body) ?: return null
-            return supported.takeIf { it in DishProtocol.DISH_PROTOCOL_MIN..DishProtocol.DISH_PROTOCOL_CURRENT }
+            return supported.takeIf { it in DISH_PROTOCOL_MIN..DISH_PROTOCOL_CURRENT }
         }
 
         private fun protocolRejectMessage(body: String): String =
             when {
-                (supportedVersionFrom(body) ?: 0) > DishProtocol.DISH_PROTOCOL_CURRENT -> APP_UPDATE_REQUIRED_MSG
+                (supportedVersionFrom(body) ?: 0) > DISH_PROTOCOL_CURRENT -> APP_UPDATE_REQUIRED_MSG
                 else -> SATELLITE_UPDATE_REQUIRED_MSG
             }
 
@@ -206,7 +209,7 @@ class SatelliteConnectionManager
             val token = runCatching { hexToBytes(tokenHex) }.getOrNull()
             val salt = runCatching { hexToBytes(saltHex) }.getOrNull()
             if (token == null || token.size != 4 || salt == null || salt.size != 8) return null
-            val sessionKey = SessionCrypto.deriveSessionKey(pairingKey, salt, token)
+            val sessionKey = deriveSessionKey(pairingKey, salt, token)
             val handle = controllerRepo.openSocket(server.ip, server.udpPort)
             if (handle < 0) return null
             controllerRepo.setConnectionParams(handle, token, sessionKey, negotiated)
@@ -259,7 +262,7 @@ class SatelliteConnectionManager
             pin: String,
             clientPin: String = "",
         ): HttpReply? {
-            val speak = versionToSpeak(id) ?: DishProtocol.DISH_PROTOCOL_MIN
+            val speak = versionToSpeak(id) ?: DISH_PROTOCOL_MIN
             val first =
                 runCatching {
                     discoveryRepo.pair(
@@ -347,7 +350,7 @@ class SatelliteConnectionManager
             intent: ConnectIntent = ConnectIntent.USER_INITIATED,
         ) {
             // Only user-initiated connects (which prompt) may open LAN sockets before the Android 17 grant.
-            if (intent != ConnectIntent.USER_INITIATED && !LocalNetworkAccess.isGranted(context)) return
+            if (intent != ConnectIntent.USER_INITIATED && !isGranted(context)) return
             val id = SatelliteConnection.idFor(server)
             if (intent == ConnectIntent.USER_INITIATED) retryAttempts.remove(id)
             // Atomic find-or-create: prevents two concurrent first-time connects allocating duplicates.
@@ -513,19 +516,19 @@ class SatelliteConnectionManager
                         // A transient null reply is treated as still-pending, not a refusal.
                         val st =
                             if (statusRaw.isNullOrBlank()) {
-                                PairingApproval.Status.Pending
+                                Status.Pending
                             } else {
-                                PairingApproval.classifyStatus(statusRaw)
+                                classifyStatus(statusRaw)
                             }
                         // Re-check: Live may have flipped during the poll round-trip.
                         if (conn.state.value == SatelliteSessionState.Live) return@launch
-                        if (st is PairingApproval.Status.Approved) {
+                        if (st is Status.Approved) {
                             clearStale(id)
                             store.setSatelliteSharedKey(id, st.sharedKeyHex)
                             openSession(conn, server, ConnectIntent.USER_INITIATED)
                             return@launch
                         }
-                        if (st is PairingApproval.Status.Declined) {
+                        if (st is Status.Declined) {
                             conn.markDisconnected()
                             _events.emit(ConnectionEvent.Error(APPROVAL_DECLINED_MSG))
                             return@launch
@@ -557,7 +560,7 @@ class SatelliteConnectionManager
             val keyHex = store.satelliteSharedKey(id) ?: return null
             val key = if (keyHex.length == 64) runCatching { hexToBytes(keyHex) }.getOrNull() else null
             if (key == null || key.size != 32) return null
-            return Credentials(key, SessionCrypto.hmacProof(key, deviceId))
+            return Credentials(key, hmacProof(key, deviceId))
         }
 
         /**

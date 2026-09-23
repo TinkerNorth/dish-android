@@ -59,7 +59,7 @@ class SetupUsbActivity : BaseGamepadHostActivity() {
                 viewModel.events.collect { event ->
                     when (event) {
                         is SetupUsbViewModel.Event.Proceed ->
-                            nav.toSetupConnection(SetupFlow.INPUT_USB, event.slotId)
+                            nav.toSetupConnection(INPUT_USB, event.slotId)
                         is SetupUsbViewModel.Event.Recover -> showRecovery(event.reason)
                     }
                 }
@@ -127,7 +127,7 @@ class SetupUsbActivity : BaseGamepadHostActivity() {
     // start over / exit are handled by the dialog.
     private fun showRecovery(reason: DirectClaimFailure?) {
         val message = reason?.let { getString(reasonText(it)) }
-        SetupErrorDialog.show(this, message) {
+        show(this, message) {
             when (viewModel.state.value.stage) {
                 SetupUsbViewModel.Stage.GRANTING -> viewModel.showPrompt()
                 else -> viewModel.chooseStandard()

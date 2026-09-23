@@ -37,8 +37,8 @@ import com.tinkernorth.dish.composer.ConnectionCoordinator
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
-import com.tinkernorth.dish.composer.LinkTiers
-import com.tinkernorth.dish.core.input.BluetoothGamepad
+import com.tinkernorth.dish.composer.linkTierFor
+import com.tinkernorth.dish.core.input.GamepadProfile
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.DiscoverySource
 import com.tinkernorth.dish.core.model.DishNotification
@@ -49,19 +49,20 @@ import com.tinkernorth.dish.source.bluetooth.BluetoothDeviceScanner
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.bluetooth.BtStaleReason
 import com.tinkernorth.dish.source.connection.ConnectionEvent
-import com.tinkernorth.dish.source.connection.PairingApproval
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
+import com.tinkernorth.dish.source.connection.generatePin
 import com.tinkernorth.dish.source.notification.dishSnackbar
 import com.tinkernorth.dish.source.store.BluetoothPermissionBannerStore
 import com.tinkernorth.dish.source.system.BluetoothAdapterState
 import com.tinkernorth.dish.source.system.BluetoothAdapterStateObserver
-import com.tinkernorth.dish.source.system.BluetoothPermissionBannerDecision
 import com.tinkernorth.dish.source.system.BluetoothPermissionBannerVariant
 import com.tinkernorth.dish.source.system.BluetoothPermissionStateObserver
-import com.tinkernorth.dish.source.system.LocalNetworkAccess
 import com.tinkernorth.dish.source.system.NetworkState
 import com.tinkernorth.dish.source.system.NetworkStateObserver
+import com.tinkernorth.dish.source.system.PERMISSION
+import com.tinkernorth.dish.source.system.evaluate
+import com.tinkernorth.dish.source.system.isGranted
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.StaticViewAdapter
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
@@ -383,7 +384,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                         btPermissionState.state,
                         btPermissionBannerStore.state,
                     ) { permission, dismissed ->
-                        BluetoothPermissionBannerDecision.evaluate(permission, dismissed)
+                        evaluate(permission, dismissed)
                     }
                 bannerFlow.collect { variant -> applyBtPermissionBanner(variant) }
             }
@@ -442,21 +443,21 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 R.drawable.ic_satellite,
                 R.string.section_satellites,
                 R.string.action_add,
-                tier = LinkTiers.forKind(ConnectionKind.SATELLITE),
+                tier = linkTierFor(ConnectionKind.SATELLITE),
             ) { showAddSatelliteDialog() }
         bluetoothHeader =
             SectionHeaderAdapter(
                 R.drawable.ic_bluetooth,
                 R.string.section_bluetooth_hosts,
                 R.string.action_add,
-                tier = LinkTiers.forKind(ConnectionKind.BLUETOOTH),
+                tier = linkTierFor(ConnectionKind.BLUETOOTH),
             ) { requestBtPermissions(continueToAdd = true) }
         moonlightHeader =
             SectionHeaderAdapter(
                 R.drawable.ic_pc_monitor,
                 R.string.section_moonlight_hosts,
                 R.string.action_add,
-                tier = LinkTiers.forKind(ConnectionKind.MOONLIGHT),
+                tier = linkTierFor(ConnectionKind.MOONLIGHT),
             ) { showAddMoonlightDialog() }
         satelliteList = SatelliteListAdapter(satelliteRowListener)
         bluetoothList = BluetoothListAdapter(bluetoothRowListener)
@@ -600,7 +601,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     }
 
     private fun showProfilePicker() {
-        val profiles = BluetoothGamepad.GamepadProfile.entries
+        val profiles = GamepadProfile.entries
         val names = profiles.map { it.profileName }.toTypedArray()
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.dialog_controller_profile_title)
@@ -609,7 +610,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
             .show()
     }
 
-    private fun onBtProfileChosen(profile: BluetoothGamepad.GamepadProfile) {
+    private fun onBtProfileChosen(profile: GamepadProfile) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
             startBtRegistration(profile)
             return
@@ -638,7 +639,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     }
 
     private fun showDevicePicker(
-        profile: BluetoothGamepad.GamepadProfile,
+        profile: GamepadProfile,
         tempId: String,
         initialDiscoverableUntilMs: Long?,
     ) {
@@ -646,7 +647,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     }
 
     private inner class DevicePickerSession(
-        private val profile: BluetoothGamepad.GamepadProfile,
+        private val profile: GamepadProfile,
         private val tempId: String,
         initialDiscoverableUntilMs: Long?,
     ) {
@@ -798,7 +799,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     }
 
     private fun startBtRegistration(
-        profile: BluetoothGamepad.GamepadProfile,
+        profile: GamepadProfile,
         autoConnectMac: String? = null,
     ) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
@@ -814,7 +815,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
 
     private data class PendingBtRegistration(
         val tempId: String,
-        val profile: BluetoothGamepad.GamepadProfile,
+        val profile: GamepadProfile,
         val autoConnectMac: String? = null,
     )
 
@@ -972,7 +973,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         pairingServer = server
         // This dish's own PIN for the reverse direction. The operator can
         // accept it on the satellite instead of the user typing the server PIN.
-        val clientPin = PairingApproval.generatePin()
+        val clientPin = generatePin()
         val dialog =
             PairPinDialog(
                 this,
@@ -1199,7 +1200,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     }
 
     private fun ensureLocalNetworkThenDiscover(userInitiated: Boolean = false) {
-        if (LocalNetworkAccess.isGranted(this)) {
+        if (isGranted(this)) {
             dismissLocalNetworkBanner()
             satellite.startDiscovery()
             moonlight.startDiscovery()
@@ -1207,7 +1208,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         }
         if (userInitiated || !localNetworkPrompted) {
             localNetworkPrompted = true
-            localNetworkPermissionLauncher.launch(LocalNetworkAccess.PERMISSION)
+            localNetworkPermissionLauncher.launch(PERMISSION)
         } else {
             showLocalNetworkBanner()
         }
@@ -1277,8 +1278,8 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
             btRegistry
                 .state(connId)
                 .profileName
-                ?.let { name -> BluetoothGamepad.GamepadProfile.entries.firstOrNull { it.profileName == name } }
-                ?: BluetoothGamepad.GamepadProfile.XBOX
+                ?.let { name -> GamepadProfile.entries.firstOrNull { it.profileName == name } }
+                ?: GamepadProfile.XBOX
         pendingBtRegistration = PendingBtRegistration(connId, resolvedProfile)
     }
 

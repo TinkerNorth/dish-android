@@ -22,9 +22,9 @@ import com.tinkernorth.dish.core.input.hidToXusb
 import com.tinkernorth.dish.core.input.withMicMute
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
-import com.tinkernorth.dish.core.net.moonlight.MoonlightControlProtocol
+import com.tinkernorth.dish.core.net.moonlight.BTN_TOUCHPAD
 import com.tinkernorth.dish.databinding.ActivityGamepadOverlayBinding
-import com.tinkernorth.dish.repository.TouchpadModeValue
+import com.tinkernorth.dish.repository.TOUCHPAD_MODE_OFF
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.sensor.MotionStreamState
 import com.tinkernorth.dish.source.sensor.PhoneBatterySource
@@ -299,7 +299,7 @@ class GamepadOverlayActivity :
         when {
             !capability.typeOk(Feature.TOUCHPAD) -> GamepadTouchView.TrackpadMode.NONE
             summary?.kind == ConnectionKind.SATELLITE &&
-                capabilityComposer.touchpadWireMode(VIRTUAL_SLOT_ID) != TouchpadModeValue.TOUCHPAD_MODE_OFF ->
+                capabilityComposer.touchpadWireMode(VIRTUAL_SLOT_ID) != TOUCHPAD_MODE_OFF ->
                 GamepadTouchView.TrackpadMode.TOUCH
             summary?.kind == ConnectionKind.MOONLIGHT -> GamepadTouchView.TrackpadMode.TOUCH
             else -> GamepadTouchView.TrackpadMode.NONE
@@ -400,7 +400,7 @@ class GamepadOverlayActivity :
     private fun sendMoonlightReport(state: GamepadTouchView.GamepadState) {
         var buttons = hidToXusb(state.buttons, state.hatSwitch)
         if (state.buttons and GamepadTouchView.BTN_TOUCHPAD_CLICK != 0) {
-            buttons = buttons or MoonlightControlProtocol.BTN_TOUCHPAD
+            buttons = buttons or BTN_TOUCHPAD
         }
         val conn = moonlight.get(connectionId) ?: return
         val pad = conn.padFor(VIRTUAL_SLOT_ID) ?: return

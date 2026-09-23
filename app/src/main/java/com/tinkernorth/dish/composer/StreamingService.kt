@@ -20,8 +20,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.tinkernorth.dish.DishApplication
 import com.tinkernorth.dish.R
-import com.tinkernorth.dish.source.audio.MicIndicatorPolicy
 import com.tinkernorth.dish.source.audio.MicIndicatorState
+import com.tinkernorth.dish.source.audio.micIndicatorStateOf
 import com.tinkernorth.dish.source.bluetooth.BluetoothGamepadRegistry
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
@@ -87,7 +87,7 @@ class StreamingService : Service() {
                 usbGamepadManager.controllers,
                 micCapture.state,
             ) { count, conns, controllers, plan ->
-                ServiceSnapshot(count, conns, controllers.directClaimCount(), plan.arming, MicIndicatorPolicy.micIndicatorStateOf(plan))
+                ServiceSnapshot(count, conns, controllers.directClaimCount(), plan.arming, micIndicatorStateOf(plan))
             }.onEach(::refresh)
                 .launchIn(wakeStateScope())
     }
@@ -134,7 +134,7 @@ class StreamingService : Service() {
             build(
                 count = wakeState.streamingSlotCount.value,
                 primaryLabel = null,
-                micState = MicIndicatorPolicy.micIndicatorStateOf(plan),
+                micState = micIndicatorStateOf(plan),
             )
         return startInForeground(notification, plan.arming)
     }

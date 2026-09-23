@@ -2,7 +2,9 @@
 
 package com.tinkernorth.dish.core.model
 
-import com.tinkernorth.dish.core.net.DishProtocol
+import com.tinkernorth.dish.core.net.DISH_PROTOCOL_EXTENDED_MOUSE
+import com.tinkernorth.dish.core.net.DishProtocolCompat
+import com.tinkernorth.dish.core.net.dishProtocolCompatFor
 
 // Phone's perspective: input rides out (SEND), feedback rides in (RECEIVE).
 enum class Direction { SEND, RECEIVE }
@@ -146,9 +148,9 @@ data class HostFeatureSet(
     // extended-mouse gate: only a version that decodes the v2 pointer frame reports 2+.
     val protocolVersion: Int = 0,
 ) {
-    val extendedMouse: Boolean get() = mouseControl && protocolVersion >= DishProtocol.DISH_PROTOCOL_EXTENDED_MOUSE
+    val extendedMouse: Boolean get() = mouseControl && protocolVersion >= DISH_PROTOCOL_EXTENDED_MOUSE
 
-    val compat: DishProtocol.DishProtocolCompat get() = DishProtocol.dishProtocolCompatFor(protocolVersion.takeIf { it > 0 })
+    val compat: DishProtocolCompat get() = dishProtocolCompatFor(protocolVersion.takeIf { it > 0 })
 
     fun toCapabilitySet(): CapabilitySet {
         // The per-type surfaces (lightbar/triggerEffects/playerLeds) are the type

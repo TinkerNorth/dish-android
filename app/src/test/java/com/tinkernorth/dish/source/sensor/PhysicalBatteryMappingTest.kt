@@ -11,10 +11,10 @@ class PhysicalBatteryMappingTest {
     @Test
     fun `pad with no battery present maps to null for phone fallback`() {
         assertNull(
-            PhysicalBatteryMapping.controllerSample(
+            controllerSample(
                 isPresent = false,
                 capacity = Float.NaN,
-                status = PhysicalBatteryMapping.ANDROID_STATUS_UNKNOWN,
+                status = ANDROID_STATUS_UNKNOWN,
             ),
         )
     }
@@ -22,10 +22,10 @@ class PhysicalBatteryMappingTest {
     @Test
     fun `not-present wins even when a capacity is somehow set`() {
         assertNull(
-            PhysicalBatteryMapping.controllerSample(
+            controllerSample(
                 isPresent = false,
                 capacity = 0.5f,
-                status = PhysicalBatteryMapping.ANDROID_STATUS_DISCHARGING,
+                status = ANDROID_STATUS_DISCHARGING,
             ),
         )
     }
@@ -33,10 +33,10 @@ class PhysicalBatteryMappingTest {
     @Test
     fun `wireless pad capacity maps to a percentage in the 0 to 100 range`() {
         val sample =
-            PhysicalBatteryMapping.controllerSample(
+            controllerSample(
                 isPresent = true,
                 capacity = 0.84f,
-                status = PhysicalBatteryMapping.ANDROID_STATUS_DISCHARGING,
+                status = ANDROID_STATUS_DISCHARGING,
             )
         assertEquals(84, sample?.level)
         assertEquals(BatteryValidator.STATUS_DISCHARGING, sample?.status)
@@ -46,14 +46,12 @@ class PhysicalBatteryMappingTest {
     fun `capacity endpoints map to 0 and 100`() {
         assertEquals(
             0,
-            PhysicalBatteryMapping
-                .controllerSample(true, 0f, PhysicalBatteryMapping.ANDROID_STATUS_DISCHARGING)
+            controllerSample(true, 0f, ANDROID_STATUS_DISCHARGING)
                 ?.level,
         )
         assertEquals(
             100,
-            PhysicalBatteryMapping
-                .controllerSample(true, 1f, PhysicalBatteryMapping.ANDROID_STATUS_FULL)
+            controllerSample(true, 1f, ANDROID_STATUS_FULL)
                 ?.level,
         )
     }
@@ -63,8 +61,7 @@ class PhysicalBatteryMappingTest {
         // Some HID descriptors report slightly-over-1.0 capacity. Clamp rather than letting validator reject >100.
         assertEquals(
             100,
-            PhysicalBatteryMapping
-                .controllerSample(true, 1.02f, PhysicalBatteryMapping.ANDROID_STATUS_CHARGING)
+            controllerSample(true, 1.02f, ANDROID_STATUS_CHARGING)
                 ?.level,
         )
     }
@@ -72,10 +69,10 @@ class PhysicalBatteryMappingTest {
     @Test
     fun `present pad with NaN capacity reports the unknown-level sentinel`() {
         val sample =
-            PhysicalBatteryMapping.controllerSample(
+            controllerSample(
                 isPresent = true,
                 capacity = Float.NaN,
-                status = PhysicalBatteryMapping.ANDROID_STATUS_CHARGING,
+                status = ANDROID_STATUS_CHARGING,
             )
         assertEquals(BatteryValidator.LEVEL_UNKNOWN, sample?.level)
         assertEquals(BatteryValidator.STATUS_CHARGING, sample?.status)
@@ -84,10 +81,10 @@ class PhysicalBatteryMappingTest {
     @Test
     fun `present pad with negative capacity reports the unknown-level sentinel`() {
         val sample =
-            PhysicalBatteryMapping.controllerSample(
+            controllerSample(
                 isPresent = true,
                 capacity = -1f,
-                status = PhysicalBatteryMapping.ANDROID_STATUS_DISCHARGING,
+                status = ANDROID_STATUS_DISCHARGING,
             )
         assertEquals(BatteryValidator.LEVEL_UNKNOWN, sample?.level)
     }
@@ -96,7 +93,7 @@ class PhysicalBatteryMappingTest {
     fun `charging status maps to the wire charging status`() {
         assertEquals(
             BatteryValidator.STATUS_CHARGING,
-            PhysicalBatteryMapping.statusToWire(PhysicalBatteryMapping.ANDROID_STATUS_CHARGING),
+            statusToWire(ANDROID_STATUS_CHARGING),
         )
     }
 
@@ -104,7 +101,7 @@ class PhysicalBatteryMappingTest {
     fun `full status maps to the wire full status`() {
         assertEquals(
             BatteryValidator.STATUS_FULL,
-            PhysicalBatteryMapping.statusToWire(PhysicalBatteryMapping.ANDROID_STATUS_FULL),
+            statusToWire(ANDROID_STATUS_FULL),
         )
     }
 
@@ -112,7 +109,7 @@ class PhysicalBatteryMappingTest {
     fun `discharging status maps to the wire discharging status`() {
         assertEquals(
             BatteryValidator.STATUS_DISCHARGING,
-            PhysicalBatteryMapping.statusToWire(PhysicalBatteryMapping.ANDROID_STATUS_DISCHARGING),
+            statusToWire(ANDROID_STATUS_DISCHARGING),
         )
     }
 
@@ -121,7 +118,7 @@ class PhysicalBatteryMappingTest {
         // Plugged-but-held (charge limiter): matches the phone-battery choice from the player's view.
         assertEquals(
             BatteryValidator.STATUS_DISCHARGING,
-            PhysicalBatteryMapping.statusToWire(PhysicalBatteryMapping.ANDROID_STATUS_NOT_CHARGING),
+            statusToWire(ANDROID_STATUS_NOT_CHARGING),
         )
     }
 
@@ -129,14 +126,14 @@ class PhysicalBatteryMappingTest {
     fun `unknown status maps to the wire unknown status`() {
         assertEquals(
             BatteryValidator.STATUS_UNKNOWN,
-            PhysicalBatteryMapping.statusToWire(PhysicalBatteryMapping.ANDROID_STATUS_UNKNOWN),
+            statusToWire(ANDROID_STATUS_UNKNOWN),
         )
     }
 
     @Test
     fun `an out-of-range status falls back to unknown`() {
-        assertEquals(BatteryValidator.STATUS_UNKNOWN, PhysicalBatteryMapping.statusToWire(99))
-        assertEquals(BatteryValidator.STATUS_UNKNOWN, PhysicalBatteryMapping.statusToWire(-1))
+        assertEquals(BatteryValidator.STATUS_UNKNOWN, statusToWire(99))
+        assertEquals(BatteryValidator.STATUS_UNKNOWN, statusToWire(-1))
     }
 
     @Test
@@ -144,14 +141,14 @@ class PhysicalBatteryMappingTest {
         val validator = BatteryValidator()
         val cases =
             listOf(
-                Triple(true, 0f, PhysicalBatteryMapping.ANDROID_STATUS_DISCHARGING),
-                Triple(true, 1f, PhysicalBatteryMapping.ANDROID_STATUS_FULL),
-                Triple(true, 0.5f, PhysicalBatteryMapping.ANDROID_STATUS_CHARGING),
-                Triple(true, 1.5f, PhysicalBatteryMapping.ANDROID_STATUS_CHARGING),
-                Triple(true, Float.NaN, PhysicalBatteryMapping.ANDROID_STATUS_CHARGING),
+                Triple(true, 0f, ANDROID_STATUS_DISCHARGING),
+                Triple(true, 1f, ANDROID_STATUS_FULL),
+                Triple(true, 0.5f, ANDROID_STATUS_CHARGING),
+                Triple(true, 1.5f, ANDROID_STATUS_CHARGING),
+                Triple(true, Float.NaN, ANDROID_STATUS_CHARGING),
             )
         for ((present, cap, status) in cases) {
-            val sample = PhysicalBatteryMapping.controllerSample(present, cap, status)!!
+            val sample = controllerSample(present, cap, status)!!
             var emitted = false
             validator.publish(sample) { emitted = true }
             org.junit.Assert.assertTrue(emitted)
@@ -164,19 +161,19 @@ class DirectPadSampleTest {
     fun `unpacks the native reader's level and status`() {
         assertEquals(
             BatterySample(75, BatteryValidator.STATUS_CHARGING),
-            PhysicalBatteryMapping.directPadSample((75 shl 8) or BatteryValidator.STATUS_CHARGING),
+            directPadSample((75 shl 8) or BatteryValidator.STATUS_CHARGING),
         )
         assertEquals(
             BatterySample(100, BatteryValidator.STATUS_FULL),
-            PhysicalBatteryMapping.directPadSample((100 shl 8) or BatteryValidator.STATUS_FULL),
+            directPadSample((100 shl 8) or BatteryValidator.STATUS_FULL),
         )
     }
 
     @Test
     fun `no reading yet, a gone device, and a fault reading all clear the card`() {
-        assertNull(PhysicalBatteryMapping.directPadSample(-1))
+        assertNull(directPadSample(-1))
         assertNull(
-            PhysicalBatteryMapping.directPadSample(
+            directPadSample(
                 (BatteryValidator.LEVEL_UNKNOWN shl 8) or BatteryValidator.STATUS_UNKNOWN,
             ),
         )
@@ -186,7 +183,7 @@ class DirectPadSampleTest {
     fun `an unknown level with a known status still shows the status`() {
         assertEquals(
             BatterySample(BatteryValidator.LEVEL_UNKNOWN, BatteryValidator.STATUS_CHARGING),
-            PhysicalBatteryMapping.directPadSample(
+            directPadSample(
                 (BatteryValidator.LEVEL_UNKNOWN shl 8) or BatteryValidator.STATUS_CHARGING,
             ),
         )

@@ -8,7 +8,7 @@ import com.tinkernorth.dish.core.model.CatalogTypeDto
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.core.net.ControllerDescriptor
-import com.tinkernorth.dish.repository.TouchpadModeValue
+import com.tinkernorth.dish.repository.TOUCHPAD_MODE_DS4
 
 // Reducer: pure layer math. The composer reads live state once and hands the four layers in here.
 object CapabilityResolver {
@@ -59,7 +59,7 @@ object CapabilityResolver {
     private fun typeOffersFeature(
         feature: Feature,
         dto: CatalogFeatureDto,
-    ): Boolean = feature != Feature.TOUCHPAD || dto.modes.isEmpty() || TouchpadModeValue.TOUCHPAD_MODE_DS4 in dto.modes
+    ): Boolean = feature != Feature.TOUCHPAD || dto.modes.isEmpty() || TOUCHPAD_MODE_DS4 in dto.modes
 
     // The wire describes the EMULATED pad the satellite must plug: a type-driven base
     // (analog triggers + rumble, always) plus motion gated on the phone/controller gyro

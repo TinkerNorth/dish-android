@@ -6,15 +6,29 @@ package com.tinkernorth.dish.source.connection.moonlight
 import android.util.Log
 import androidx.core.content.edit
 import com.tinkernorth.dish.core.net.bytesToHex
+import com.tinkernorth.dish.core.net.moonlight.AUTO
+import com.tinkernorth.dish.core.net.moonlight.MoonlightApp
 import com.tinkernorth.dish.core.net.moonlight.MoonlightControlSession
-import com.tinkernorth.dish.core.net.moonlight.MoonlightCrypto
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity
 import com.tinkernorth.dish.core.net.moonlight.MoonlightPairing
-import com.tinkernorth.dish.core.net.moonlight.MoonlightUrls
-import com.tinkernorth.dish.core.net.moonlight.MoonlightXml
 import com.tinkernorth.dish.core.net.moonlight.RememberedMoonlight
+import com.tinkernorth.dish.core.net.moonlight.ServerInfo
+import com.tinkernorth.dish.core.net.moonlight.Status
+import com.tinkernorth.dish.core.net.moonlight.appList
+import com.tinkernorth.dish.core.net.moonlight.cancel
+import com.tinkernorth.dish.core.net.moonlight.fromStored
+import com.tinkernorth.dish.core.net.moonlight.launch
+import com.tinkernorth.dish.core.net.moonlight.pairHttp
+import com.tinkernorth.dish.core.net.moonlight.pairHttps
+import com.tinkernorth.dish.core.net.moonlight.parseAppList
+import com.tinkernorth.dish.core.net.moonlight.parsePairReply
+import com.tinkernorth.dish.core.net.moonlight.parseServerInfo
+import com.tinkernorth.dish.core.net.moonlight.parseStatus
+import com.tinkernorth.dish.core.net.moonlight.randomBytes
+import com.tinkernorth.dish.core.net.moonlight.resume
+import com.tinkernorth.dish.core.net.moonlight.serverInfoHttp
+import com.tinkernorth.dish.core.net.moonlight.serverInfoHttps
 import com.tinkernorth.dish.di.IoDispatcher
 import com.tinkernorth.dish.repository.RememberedMoonlightRepository
 import com.tinkernorth.dish.source.store.MoonlightHostFactsStore
@@ -241,9 +255,9 @@ class MoonlightConnectionManager
             scope.launch(ioDispatcher) {
                 val info =
                     gateway
-                        .getHttp(MoonlightUrls.serverInfoHttp(address, MoonlightHost.DEFAULT_HTTP_PORT, deviceId))
+                        .getHttp(serverInfoHttp(address, MoonlightHost.DEFAULT_HTTP_PORT, deviceId))
                         .takeIf { it.ok }
-                        ?.let { MoonlightXml.parseServerInfo(it.body) }
+                        ?.let { parseServerInfo(it.body) }
                 if (info == null) {
                     Log.w(TAG, "manual add: nothing answered /serverinfo at $address")
                     _events.emit(MoonlightConnectionEvent.Error("No Moonlight host answered at $address."))
@@ -270,7 +284,7 @@ class MoonlightConnectionManager
             value = value.filterNot { it.id == host.id } + host
         }
 
-        private fun externalPortOr(info: MoonlightXml.ServerInfo): Int = info.externalPort ?: MoonlightHost.DEFAULT_HTTP_PORT
+        private fun externalPortOr(info: ServerInfo): Int = info.externalPort ?: MoonlightHost.DEFAULT_HTTP_PORT
 
         private fun findOrCreate(host: MoonlightHost): MoonlightConnection {
             val id = host.id
@@ -290,9 +304,9 @@ class MoonlightConnectionManager
             withContext(ioDispatcher) {
                 val plain =
                     gateway
-                        .getHttp(MoonlightUrls.serverInfoHttp(host.address, host.httpPort, deviceId))
+                        .getHttp(serverInfoHttp(host.address, host.httpPort, deviceId))
                         .takeIf { it.ok }
-                        ?.let { MoonlightXml.parseServerInfo(it.body) }
+                        ?.let { parseServerInfo(it.body) }
                 plain?.let { hostFacts.note(host.id, it) }
                 // "Do we hold a pairing" is the PAIRED FLAG, not a non-empty uniqueid.
                 // Real hosts publish no uniqueid TXT record, so reading it off that made
@@ -317,13 +331,13 @@ class MoonlightConnectionManager
                 // a 1. Treating the 0 as "not paired" made the probe unable to return
                 // PAIRED at all, and openStream only launches on PAIRED, so no session
                 // could ever start. The mutual-TLS call is the only thing that can say.
-                val secure = gateway.getHttps(MoonlightUrls.serverInfoHttps(host.address, host.httpsPort, deviceId), host.id)
+                val secure = gateway.getHttps(serverInfoHttps(host.address, host.httpsPort, deviceId), host.id)
                 if (!secure.ok) {
                     val trust = if (record == null) MoonlightTrustState.NOT_PAIRED else MoonlightTrustState.TRUST_LOST
                     Log.i(TAG, "${host.address} refused mutual TLS (HTTP ${secure.status}): $trust")
                     return@withContext MoonlightProbe(trust = trust)
                 }
-                val info = MoonlightXml.parseServerInfo(secure.body)
+                val info = parseServerInfo(secure.body)
                 info?.let { hostFacts.note(host.id, it) }
                 if (info?.paired != true) {
                     val trust = if (record == null) MoonlightTrustState.NOT_PAIRED else MoonlightTrustState.TRUST_LOST
@@ -517,21 +531,21 @@ class MoonlightConnectionManager
             }
 
         /** Fetch the host's app list (empty when unreachable/unpaired). */
-        suspend fun fetchApps(host: MoonlightHost): List<MoonlightXml.MoonlightApp> = withContext(ioDispatcher) { fetchAppList(host) }
+        suspend fun fetchApps(host: MoonlightHost): List<MoonlightApp> = withContext(ioDispatcher) { fetchAppList(host) }
 
-        private fun fetchAppList(host: MoonlightHost): List<MoonlightXml.MoonlightApp> {
-            val reply = gateway.getHttps(MoonlightUrls.appList(host.address, host.httpsPort, deviceId), host.id)
+        private fun fetchAppList(host: MoonlightHost): List<MoonlightApp> {
+            val reply = gateway.getHttps(appList(host.address, host.httpsPort, deviceId), host.id)
             if (!reply.ok) throw java.io.IOException("applist refused by ${host.address}: HTTP ${reply.status}")
-            return MoonlightXml.parseAppList(reply.body)
+            return parseAppList(reply.body)
         }
 
         private fun isPaired(host: MoonlightHost): Boolean {
-            val reply = gateway.getHttps(MoonlightUrls.serverInfoHttps(host.address, host.httpsPort, deviceId), host.id)
+            val reply = gateway.getHttps(serverInfoHttps(host.address, host.httpsPort, deviceId), host.id)
             if (!reply.ok) {
                 Log.i(TAG, "${host.address} did not answer mutual TLS (HTTP ${reply.status}): a PIN is needed")
                 return false
             }
-            val paired = MoonlightXml.parseServerInfo(reply.body)?.paired == true
+            val paired = parseServerInfo(reply.body)?.paired == true
             Log.i(TAG, "${host.address} answered mutual TLS, PairStatus paired=$paired")
             if (paired) markVerified(host.id)
             return paired
@@ -574,11 +588,11 @@ class MoonlightConnectionManager
             // entered, so this one waits on a human rather than on the network.
             val p1 =
                 gateway.getHttp(
-                    MoonlightUrls.pairHttp(host.address, host.httpPort, pairing.phase1Params(deviceId)),
+                    pairHttp(host.address, host.httpPort, pairing.phase1Params(deviceId)),
                     MoonlightHttpGateway.PAIR_PIN_TIMEOUT_MS,
                 )
             val cert =
-                required(MoonlightXml.parsePairReply(p1.body)?.plainCert) { "phase 1 returned no host certificate (HTTP ${p1.status})" }
+                required(parsePairReply(p1.body)?.plainCert) { "phase 1 returned no host certificate (HTTP ${p1.status})" }
             pairing.onPhase1(
                 String(
                     com.tinkernorth.dish.core.net
@@ -587,16 +601,16 @@ class MoonlightConnectionManager
                 ),
             )
 
-            val p2 = gateway.getHttp(MoonlightUrls.pairHttp(host.address, host.httpPort, pairing.phase2Params(deviceId)))
-            val challenge = required(MoonlightXml.parsePairReply(p2.body)?.challengeResponse) { "phase 2 returned no challenge response" }
+            val p2 = gateway.getHttp(pairHttp(host.address, host.httpPort, pairing.phase2Params(deviceId)))
+            val challenge = required(parsePairReply(p2.body)?.challengeResponse) { "phase 2 returned no challenge response" }
             verified(pairing.onPhase2(challenge)) { "phase 2 challenge did not verify (wrong PIN)" }
 
-            val p3 = gateway.getHttp(MoonlightUrls.pairHttp(host.address, host.httpPort, pairing.phase3Params(deviceId)))
-            val secret = required(MoonlightXml.parsePairReply(p3.body)?.pairingSecret) { "phase 3 returned no pairing secret" }
+            val p3 = gateway.getHttp(pairHttp(host.address, host.httpPort, pairing.phase3Params(deviceId)))
+            val secret = required(parsePairReply(p3.body)?.pairingSecret) { "phase 3 returned no pairing secret" }
             verified(pairing.onPhase3(secret)) { "phase 3 signature did not verify" }
 
-            val p4 = gateway.getHttp(MoonlightUrls.pairHttp(host.address, host.httpPort, pairing.phase4Params(deviceId)))
-            verified(MoonlightXml.parsePairReply(p4.body)?.paired == true) { "phase 4 did not confirm the pairing" }
+            val p4 = gateway.getHttp(pairHttp(host.address, host.httpPort, pairing.phase4Params(deviceId)))
+            verified(parsePairReply(p4.body)?.paired == true) { "phase 4 did not confirm the pairing" }
 
             // Phases 1-4 proved the peer holds the PIN-derived key and signed with
             // the certificate it presented, which outranks the pin this would keep.
@@ -604,7 +618,7 @@ class MoonlightConnectionManager
             gateway.forgetPin(host.id)
 
             // Phase 5 (HTTPS): confirm the client-cert-authenticated channel.
-            gateway.getHttps(MoonlightUrls.pairHttps(host.address, host.httpsPort, pairing.phase5Params(deviceId)), host.id)
+            gateway.getHttps(pairHttps(host.address, host.httpsPort, pairing.phase5Params(deviceId)), host.id)
         }
 
         // A phase's answer that must be there; the host refusing to give it ends the pairing.
@@ -636,9 +650,9 @@ class MoonlightConnectionManager
             appId: String,
             appName: String,
         ) {
-            val rikey = MoonlightCrypto.randomBytes(RIKEY_LEN)
+            val rikey = randomBytes(RIKEY_LEN)
             val rikeyId =
-                MoonlightCrypto.randomBytes(4).let {
+                randomBytes(4).let {
                     (it[0].toInt() and 0xFF) or ((it[1].toInt() and 0xFF) shl 8) or
                         ((it[2].toInt() and 0xFF) shl 16) or ((it[3].toInt() and 0xFF) shl 24)
                 }
@@ -715,9 +729,9 @@ class MoonlightConnectionManager
             rikeyHex: String,
             rikeyId: Int,
         ): Int? {
-            val url = MoonlightUrls.launch(host.address, host.httpsPort, deviceId, appId, rikeyHex, rikeyId, LAUNCH_MODE)
+            val url = launch(host.address, host.httpsPort, deviceId, appId, rikeyHex, rikeyId, LAUNCH_MODE)
             val reply = gateway.getHttps(url, host.id)
-            val status = MoonlightXml.parseStatus(reply.body)
+            val status = parseStatus(reply.body)
             val rtspPort = parseRtspPort(reply.body)
             Log.i(
                 TAG,
@@ -740,7 +754,7 @@ class MoonlightConnectionManager
         private suspend fun resumeSession(
             conn: MoonlightConnection,
             host: MoonlightHost,
-            launchStatus: MoonlightXml.Status,
+            launchStatus: Status,
             rikeyHex: String,
             rikeyId: Int,
         ): Int? {
@@ -751,8 +765,8 @@ class MoonlightConnectionManager
                 return null
             }
             val reply =
-                gateway.getHttps(MoonlightUrls.resume(host.address, host.httpsPort, deviceId, rikeyHex, rikeyId), host.id)
-            val status = MoonlightXml.parseStatus(reply.body)
+                gateway.getHttps(resume(host.address, host.httpsPort, deviceId, rikeyHex, rikeyId), host.id)
+            val status = parseStatus(reply.body)
             val rtspPort = parseRtspPort(reply.body)
             Log.i(
                 TAG,
@@ -787,8 +801,8 @@ class MoonlightConnectionManager
         }
 
         private fun cancelHostApp(host: MoonlightHost): Boolean {
-            val reply = gateway.getHttps(MoonlightUrls.cancel(host.address, host.httpsPort, deviceId), host.id)
-            val status = MoonlightXml.parseStatus(reply.body)
+            val reply = gateway.getHttps(cancel(host.address, host.httpsPort, deviceId), host.id)
+            val status = parseStatus(reply.body)
             Log.i(TAG, "cancel on ${host.address}: HTTP ${reply.status}, host ${status?.code ?: "?"}")
             return reply.ok && status?.ok != false
         }
@@ -933,8 +947,7 @@ class MoonlightConnectionManager
         }
 
         /** The remembered emulated-device pick for [hostId], defaulting to Auto. */
-        fun rememberedEmulatedType(hostId: String): Int =
-            MoonlightEmulatedType.fromStored(store.get(hostId)?.emulatedType ?: MoonlightEmulatedType.AUTO)
+        fun rememberedEmulatedType(hostId: String): Int = fromStored(store.get(hostId)?.emulatedType ?: AUTO)
 
         /** The remembered last-launched app id for [hostId], or empty. */
         fun rememberedAppId(hostId: String): String = store.get(hostId)?.lastAppId.orEmpty()

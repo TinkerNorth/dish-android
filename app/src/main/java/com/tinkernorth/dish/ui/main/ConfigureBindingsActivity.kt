@@ -26,8 +26,8 @@ import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.core.model.Feature
-import com.tinkernorth.dish.core.net.DishProtocol
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.net.DishProtocolCompat
+import com.tinkernorth.dish.core.net.moonlight.AUTO
 import com.tinkernorth.dish.databinding.ActivityConfigureBindingsBinding
 import com.tinkernorth.dish.databinding.BindingApplyStepBinding
 import com.tinkernorth.dish.databinding.BindingValueNoneBinding
@@ -289,7 +289,7 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
         val selectedCompat =
             state.selectedHost
                 ?.takeIf { !noHosts }
-                ?.let { state.hostCompat[it.id] } ?: DishProtocol.DishProtocolCompat.UNKNOWN
+                ?.let { state.hostCompat[it.id] } ?: DishProtocolCompat.UNKNOWN
         d.destCompatPill.bindCompat(selectedCompat)
         val plainSatellite = state.hostChosen && !state.isBluetoothHost && !state.isMoonlightHost
         d.legendSatellite.visibility = if (plainSatellite) View.VISIBLE else View.GONE
@@ -536,7 +536,7 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
             card.reviewSublabel.text = destinationSublabel(host)
             card.reviewTierPill.bindPill(tierPillSpec(host.kind))
             card.reviewTierPill.root.visibility = View.VISIBLE
-            card.reviewCompatPill.bindCompat(state.hostCompat[host.id] ?: DishProtocol.DishProtocolCompat.UNKNOWN)
+            card.reviewCompatPill.bindCompat(state.hostCompat[host.id] ?: DishProtocolCompat.UNKNOWN)
             bindReviewFlows(card.reviewSendsRow, card.reviewSendsChips, destinationSends(potential))
             bindReviewFlows(card.reviewGetsRow, card.reviewGetsChips, destinationGets(potential))
             card.reviewCard.isClickable = true
@@ -595,7 +595,7 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
             card.typeCard.isChecked = option.id == state.draft?.type
             // Auto is resolved here, on the client: the card shows the rows of the type it
             // will actually send, and says which one that is rather than implying a fifth type.
-            val isAuto = moonlight && option.id == MoonlightEmulatedType.AUTO
+            val isAuto = moonlight && option.id == AUTO
             card.typeBadge.visibility = if (isAuto) View.VISIBLE else View.GONE
             if (isAuto) card.typeBadge.setText(R.string.ml_type_auto_badge)
             card.typeCaption.visibility = if (isAuto) View.VISIBLE else View.GONE

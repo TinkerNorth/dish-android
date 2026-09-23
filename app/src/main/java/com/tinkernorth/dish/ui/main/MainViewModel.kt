@@ -15,7 +15,10 @@ import com.tinkernorth.dish.composer.TouchpadSource
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.net.moonlight.AUTO
+import com.tinkernorth.dish.core.net.moonlight.XBOX
+import com.tinkernorth.dish.core.net.moonlight.fromStored
+import com.tinkernorth.dish.core.net.moonlight.resolveMoonlightEmulatedType
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
@@ -242,16 +245,16 @@ class MainViewModel
             slotId: String,
             summary: ConnectionSummary,
         ): Int {
-            val picked = MoonlightEmulatedType.fromStored(summary.satelliteControllerTypes[slotId] ?: MoonlightEmulatedType.AUTO)
-            if (picked != MoonlightEmulatedType.AUTO) return picked
+            val picked = fromStored(summary.satelliteControllerTypes[slotId] ?: AUTO)
+            if (picked != AUTO) return picked
             val source =
                 capabilityComposer.capabilityForCandidate(
                     slotId = slotId,
-                    candidateType = MoonlightEmulatedType.XBOX,
+                    candidateType = XBOX,
                     candidateHostKind = ConnectionKind.MOONLIGHT,
                     candidateHostId = summary.id,
                 )
-            return MoonlightEmulatedType.resolveMoonlightEmulatedType(picked, source.inputOk(Feature.MOTION))
+            return resolveMoonlightEmulatedType(picked, source.inputOk(Feature.MOTION))
         }
 
         private fun pathCardFor(
@@ -274,7 +277,7 @@ class MainViewModel
                 } else {
                     PathCapabilities(rumble = device.hasRumble, motion = device.hasGyro)
                 }
-            return PathCardMapper.mapPathCard(
+            return mapPathCard(
                 transport = device.transport,
                 claim =
                     ClaimState(

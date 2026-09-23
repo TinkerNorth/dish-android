@@ -11,7 +11,7 @@ import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.satelliteLinkState
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.HostFeatureSet
-import com.tinkernorth.dish.core.net.DishProtocol
+import com.tinkernorth.dish.core.net.DishProtocolCompat
 import com.tinkernorth.dish.source.connection.ConnectIntent
 import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnection
@@ -58,7 +58,7 @@ class SetupConnectionViewModel
             val name: String,
             val link: LinkState,
             val server: DiscoveredServer,
-            val compat: DishProtocol.DishProtocolCompat = DishProtocol.DishProtocolCompat.UNKNOWN,
+            val compat: DishProtocolCompat = DishProtocolCompat.UNKNOWN,
         )
 
         // A Moonlight host is picked, never connected: pairing is remembered trust and the
@@ -261,7 +261,7 @@ class SetupConnectionViewModel
                             isDiscovered = id in discoveredById,
                         ),
                     server = server,
-                    compat = features[id]?.compat ?: DishProtocol.DishProtocolCompat.UNKNOWN,
+                    compat = features[id]?.compat ?: DishProtocolCompat.UNKNOWN,
                 )
             }
         }

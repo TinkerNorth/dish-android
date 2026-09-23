@@ -16,14 +16,15 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.composer.LinkTier
-import com.tinkernorth.dish.composer.LinkTiers
+import com.tinkernorth.dish.composer.linkTierFor
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.databinding.ActivitySetupConnectionBinding
 import com.tinkernorth.dish.databinding.SetupChoiceRowBinding
 import com.tinkernorth.dish.databinding.SetupHostRowBinding
-import com.tinkernorth.dish.source.connection.PairingApproval
+import com.tinkernorth.dish.source.connection.generatePin
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
-import com.tinkernorth.dish.source.system.LocalNetworkAccess
+import com.tinkernorth.dish.source.system.PERMISSION
+import com.tinkernorth.dish.source.system.isGranted
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.paintTierBadge
@@ -48,9 +49,9 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
     private val nav by lazy { DishNavigator(this) }
 
     private val inputType: String by lazy {
-        intent.getStringExtra(SetupFlow.EXTRA_INPUT_TYPE) ?: SetupFlow.INPUT_ONSCREEN
+        intent.getStringExtra(EXTRA_INPUT_TYPE) ?: INPUT_ONSCREEN
     }
-    private val slotId: String by lazy { intent.getStringExtra(SetupFlow.EXTRA_SLOT_ID).orEmpty() }
+    private val slotId: String by lazy { intent.getStringExtra(EXTRA_SLOT_ID).orEmpty() }
 
     // Reused PIN dialog state, mirroring ConnectionsActivity: the manager drives
     // setBusy/setAwaitingApproval/showError around the in-flight pair call, and
@@ -67,7 +68,7 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
             if (granted) {
                 resume?.invoke()
             } else {
-                SetupErrorDialog.show(this, getString(R.string.setup_conn_local_network_denied)) {
+                show(this, getString(R.string.setup_conn_local_network_denied)) {
                     withLocalNetwork(resume ?: { viewModel.startDiscovery() })
                 }
             }
@@ -86,21 +87,21 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
             R.drawable.ic_satellite,
             R.string.setup_conn_satellite_title,
             R.string.setup_conn_satellite_body,
-            LinkTiers.forKind(ConnectionKind.SATELLITE),
+            linkTierFor(ConnectionKind.SATELLITE),
         ) { withLocalNetwork { viewModel.chooseSatellite() } }
         bindChoice(
             binding.cardMoonlight,
             R.drawable.ic_pc_monitor,
             R.string.ml_dest_section,
             R.string.setup_conn_moonlight_body,
-            LinkTiers.forKind(ConnectionKind.MOONLIGHT),
+            linkTierFor(ConnectionKind.MOONLIGHT),
         ) { withLocalNetwork { viewModel.chooseMoonlight() } }
         bindChoice(
             binding.cardBluetoothHost,
             R.drawable.ic_bluetooth,
             R.string.setup_conn_bt_host_title,
             R.string.setup_conn_bt_host_body,
-            LinkTiers.forKind(ConnectionKind.BLUETOOTH),
+            linkTierFor(ConnectionKind.BLUETOOTH),
         ) { nav.toSetupBluetoothHost(inputType, slotId) }
 
         binding.btnBack.setOnClickListener { handleBack() }
@@ -219,7 +220,7 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
     private fun showPairingDialog(server: DiscoveredServer) {
         pinDialog?.dismiss()
         pairingServer = server
-        val clientPin = PairingApproval.generatePin()
+        val clientPin = generatePin()
         val dialog =
             PairPinDialog(
                 this,
@@ -264,7 +265,7 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
             dialog.showError(message)
             return
         }
-        SetupErrorDialog.show(this, message) { withLocalNetwork { viewModel.startDiscovery() } }
+        show(this, message) { withLocalNetwork { viewModel.startDiscovery() } }
     }
 
     private fun openGitHub() {
@@ -273,12 +274,12 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
 
     // Request before scanning: a pre-grant blocked scan would shadow the real one via the single-flight guard.
     private fun withLocalNetwork(action: () -> Unit) {
-        if (LocalNetworkAccess.isGranted(this)) {
+        if (isGranted(this)) {
             action()
             return
         }
         onLocalNetworkGranted = action
-        localNetworkPermissionLauncher.launch(LocalNetworkAccess.PERMISSION)
+        localNetworkPermissionLauncher.launch(PERMISSION)
     }
 
     private fun bindChoice(

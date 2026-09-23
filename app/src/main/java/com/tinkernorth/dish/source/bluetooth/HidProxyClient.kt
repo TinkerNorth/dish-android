@@ -2,7 +2,7 @@
 
 package com.tinkernorth.dish.source.bluetooth
 
-import com.tinkernorth.dish.core.input.BluetoothGamepad
+import com.tinkernorth.dish.core.input.GamepadProfile
 
 interface HidProxyClient {
     interface Events {
@@ -28,7 +28,7 @@ interface HidProxyClient {
 
     fun acquire(events: Events)
 
-    fun registerApp(profile: BluetoothGamepad.GamepadProfile)
+    fun registerApp(profile: GamepadProfile)
 
     fun connectToHost(mac: String)
 

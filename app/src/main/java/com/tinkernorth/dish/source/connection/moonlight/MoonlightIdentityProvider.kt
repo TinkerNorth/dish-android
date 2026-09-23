@@ -8,6 +8,7 @@ import android.security.keystore.KeyInfo
 import android.security.keystore.KeyProperties
 import android.util.Log
 import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity
+import com.tinkernorth.dish.core.net.moonlight.signRsaSha256
 import java.math.BigInteger
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
@@ -25,7 +26,7 @@ import javax.security.auth.x500.X500Principal
  * reused for every host). AndroidKeyStore auto-generates the self-signed
  * certificate for us, keeping the platform-APIs-only, BouncyCastle-free rule and
  * keeping the private key non-exportable. Pairing signs with it via
- * [com.tinkernorth.dish.core.net.moonlight.MoonlightCrypto.signRsaSha256], and
+ * [com.tinkernorth.dish.core.net.moonlight.signRsaSha256], and
  * the same key authenticates the dish on every mutual-TLS call afterwards, so
  * it is generated with the authorizations both of those need.
  *

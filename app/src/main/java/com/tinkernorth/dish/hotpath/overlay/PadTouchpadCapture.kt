@@ -15,10 +15,14 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.PhysicalReachabilityComposer
-import com.tinkernorth.dish.hotpath.input.CapturedTouchpadMapper
 import com.tinkernorth.dish.hotpath.input.PadTouchFrame
-import com.tinkernorth.dish.hotpath.input.PadTouchpadCapturePolicy
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
+import com.tinkernorth.dish.hotpath.input.Pointer
+import com.tinkernorth.dish.hotpath.input.Range
+import com.tinkernorth.dish.hotpath.input.frame
+import com.tinkernorth.dish.hotpath.input.routes
+import com.tinkernorth.dish.hotpath.input.shouldCapture
+import com.tinkernorth.dish.hotpath.input.slotForEvent
 import com.tinkernorth.dish.source.connection.TelemetrySink
 import com.tinkernorth.dish.source.connection.TouchpadReport
 import com.tinkernorth.dish.ui.common.ResendPacer
@@ -90,7 +94,7 @@ class PadTouchpadCapture(
     fun install() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         combine(registry.devices, reachability.state) { devices, reachable ->
-            PadTouchpadCapturePolicy.routes(devices, reachable.keys, capabilities::touchpadSource)
+            routes(devices, reachable.keys, capabilities::touchpadSource)
         }.distinctUntilChanged()
             .onEach { next ->
                 routes = next
@@ -114,7 +118,7 @@ class PadTouchpadCapture(
 
     private fun apply() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        if (PadTouchpadCapturePolicy.shouldCapture(routes, focused)) {
+        if (shouldCapture(routes, focused)) {
             if (!rootView.hasPointerCapture()) rootView.requestPointerCapture()
             startResend()
         } else {
@@ -134,20 +138,20 @@ class PadTouchpadCapture(
      * axis, a mouse the app never captured, a surface it does not route) is left alone.
      */
     fun onGenericMotionEvent(event: MotionEvent): Boolean {
-        val slotId = PadTouchpadCapturePolicy.slotForEvent(routes, event.source, event.deviceId) ?: return false
+        val slotId = slotForEvent(routes, event.source, event.deviceId) ?: return false
         val device = event.device
         val xRange =
             device
                 ?.getMotionRange(
                     MotionEvent.AXIS_X,
                     InputDevice.SOURCE_TOUCHPAD,
-                )?.let { CapturedTouchpadMapper.Range(it.min, it.max) }
+                )?.let { Range(it.min, it.max) }
         val yRange =
             device
                 ?.getMotionRange(
                     MotionEvent.AXIS_Y,
                     InputDevice.SOURCE_TOUCHPAD,
-                )?.let { CapturedTouchpadMapper.Range(it.min, it.max) }
+                )?.let { Range(it.min, it.max) }
         if (xRange == null || yRange == null) {
             if (!warnedNoRange) {
                 warnedNoRange = true
@@ -156,7 +160,7 @@ class PadTouchpadCapture(
             return true
         }
         val frame =
-            CapturedTouchpadMapper.frame(
+            frame(
                 down = downPointers(event),
                 xRange = xRange,
                 yRange = yRange,
@@ -170,7 +174,7 @@ class PadTouchpadCapture(
 
     // Every pointer still on the surface after this event: the one lifting on an UP is gone,
     // all of them on a CANCEL, and a hover carries no finger at all.
-    private fun downPointers(event: MotionEvent): List<CapturedTouchpadMapper.Pointer> {
+    private fun downPointers(event: MotionEvent): List<Pointer> {
         val lifting =
             when (event.actionMasked) {
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> event.actionIndex
@@ -183,7 +187,7 @@ class PadTouchpadCapture(
             }
         return (0 until event.pointerCount)
             .filter { it != lifting }
-            .map { CapturedTouchpadMapper.Pointer(event.getPointerId(it), event.getX(it), event.getY(it)) }
+            .map { Pointer(event.getPointerId(it), event.getX(it), event.getY(it)) }
     }
 
     private fun liftAll() {
@@ -243,7 +247,7 @@ class PadTouchpadCapture(
                 pacers.remove(slotId)
             }
         }
-        if (lastFrame.isEmpty() && !PadTouchpadCapturePolicy.shouldCapture(routes, focused)) stopResend()
+        if (lastFrame.isEmpty() && !shouldCapture(routes, focused)) stopResend()
     }
 
     private fun send(

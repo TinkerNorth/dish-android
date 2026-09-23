@@ -4,6 +4,7 @@ package com.tinkernorth.dish.integration
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.tinkernorth.dish.core.model.DiscoveredServer
+import com.tinkernorth.dish.core.net.DISH_PROTOCOL_CURRENT
 import com.tinkernorth.dish.integration.AppSingletons.await
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteSessionState
@@ -66,7 +67,7 @@ class SatelliteProtocolTest {
         assertEquals("satellite mints one pairing key", satellite.pairingKeyHex != null, true)
         assertTrue("exactly the paired satellite is remembered", manager.remembered().any { it.id == id })
         val put = satellite.sessionPuts.last()
-        assertEquals(com.tinkernorth.dish.core.net.DishProtocol.DISH_PROTOCOL_CURRENT, put.getInt("protocolVersion"))
+        assertEquals(com.tinkernorth.dish.core.net.DISH_PROTOCOL_CURRENT, put.getInt("protocolVersion"))
         assertTrue("session PUT carries deviceId", put.getString("deviceId").isNotEmpty())
         assertTrue("declarative controllers array is present", put.has("controllers"))
     }

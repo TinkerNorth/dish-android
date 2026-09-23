@@ -19,7 +19,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
-import com.tinkernorth.dish.core.input.BluetoothGamepad
+import com.tinkernorth.dish.core.input.GamepadProfile
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.databinding.ActivitySetupBluetoothHostBinding
 import com.tinkernorth.dish.databinding.SetupChoiceRowBinding
@@ -64,7 +64,7 @@ class SetupBluetoothHostActivity : BaseGamepadHostActivity() {
         binding.toolbar.setNavigationOnClickListener { handleBack() }
         binding.breadcrumb.applyStep(SETUP_STEP_DESTINATION)
 
-        viewModel.bindArgs(intent.getStringExtra(SetupFlow.EXTRA_SLOT_ID).orEmpty())
+        viewModel.bindArgs(intent.getStringExtra(EXTRA_SLOT_ID).orEmpty())
 
         binding.btnBack.setOnClickListener { handleBack() }
         binding.btnGrant.setOnClickListener { requestBluetoothPermission() }
@@ -72,8 +72,8 @@ class SetupBluetoothHostActivity : BaseGamepadHostActivity() {
         binding.rowPairNew.choiceCard.setOnClickListener { viewModel.onPairNewDevice() }
 
         bindPairNewRow()
-        bindTypeCard(binding.cardXbox, BluetoothGamepad.GamepadProfile.XBOX)
-        bindTypeCard(binding.cardPlaystation, BluetoothGamepad.GamepadProfile.PLAYSTATION)
+        bindTypeCard(binding.cardXbox, GamepadProfile.XBOX)
+        bindTypeCard(binding.cardPlaystation, GamepadProfile.PLAYSTATION)
 
         onBackPressedDispatcher.addCallback(this) { handleBack() }
 
@@ -154,13 +154,13 @@ class SetupBluetoothHostActivity : BaseGamepadHostActivity() {
 
     private fun bindTypeCard(
         card: SetupTypeCardBinding,
-        profile: BluetoothGamepad.GamepadProfile,
+        profile: GamepadProfile,
     ) {
         card.typeTitle.setText(typeTitleRes(profile))
         card.typeGlyph.setImageResource(
             when (profile) {
-                BluetoothGamepad.GamepadProfile.XBOX -> R.drawable.ic_ctrl_xbox
-                BluetoothGamepad.GamepadProfile.PLAYSTATION -> R.drawable.ic_ctrl_ds4
+                GamepadProfile.XBOX -> R.drawable.ic_ctrl_xbox
+                GamepadProfile.PLAYSTATION -> R.drawable.ic_ctrl_ds4
             },
         )
         card.typeCard.setOnClickListener { viewModel.onTypeChosen(profile) }
@@ -249,16 +249,16 @@ class SetupBluetoothHostActivity : BaseGamepadHostActivity() {
         nav.finishSetupToDashboard()
     }
 
-    private fun typeTitleRes(profile: BluetoothGamepad.GamepadProfile): Int =
+    private fun typeTitleRes(profile: GamepadProfile): Int =
         when (profile) {
-            BluetoothGamepad.GamepadProfile.XBOX -> R.string.setup_bth_type_xbox
-            BluetoothGamepad.GamepadProfile.PLAYSTATION -> R.string.setup_bth_type_playstation
+            GamepadProfile.XBOX -> R.string.setup_bth_type_xbox
+            GamepadProfile.PLAYSTATION -> R.string.setup_bth_type_playstation
         }
 
-    private fun typeBadgeRes(profile: BluetoothGamepad.GamepadProfile): Int =
+    private fun typeBadgeRes(profile: GamepadProfile): Int =
         when (profile) {
-            BluetoothGamepad.GamepadProfile.XBOX -> R.string.setup_bth_badge_xbox
-            BluetoothGamepad.GamepadProfile.PLAYSTATION -> R.string.setup_bth_badge_playstation
+            GamepadProfile.XBOX -> R.string.setup_bth_badge_xbox
+            GamepadProfile.PLAYSTATION -> R.string.setup_bth_badge_playstation
         }
 
     private fun visibleIf(condition: Boolean): Int = if (condition) View.VISIBLE else View.GONE

@@ -113,11 +113,11 @@ class PhoneMotionSource(
         if (values.size < 3) return
         // Re-read rotation per sample: activity configChanges swallow landscape flips.
         val rotation = rotationSupplier()
-        val result = MotionScaling.remapLandscape(values[0], values[1], values[2], rotation, remapScratch)
-        if (result is MotionScaling.RemapResult.Fallback) onUnknownRotation(result.unknownRotation)
-        accelX = MotionScaling.accelMssToWire(remapScratch[0])
-        accelY = MotionScaling.accelMssToWire(remapScratch[1])
-        accelZ = MotionScaling.accelMssToWire(remapScratch[2])
+        val result = remapLandscape(values[0], values[1], values[2], rotation, remapScratch)
+        if (result is RemapResult.Fallback) onUnknownRotation(result.unknownRotation)
+        accelX = accelMssToWire(remapScratch[0])
+        accelY = accelMssToWire(remapScratch[1])
+        accelZ = accelMssToWire(remapScratch[2])
         accelSeen = true
     }
 
@@ -130,13 +130,13 @@ class PhoneMotionSource(
         }
         val cb = emit ?: return
         val rotation = rotationSupplier()
-        val result = MotionScaling.remapLandscape(values[0], values[1], values[2], rotation, remapScratch)
-        if (result is MotionScaling.RemapResult.Fallback) onUnknownRotation(result.unknownRotation)
+        val result = remapLandscape(values[0], values[1], values[2], rotation, remapScratch)
+        if (result is RemapResult.Fallback) onUnknownRotation(result.unknownRotation)
         val sample =
             MotionRateLimiter.MotionSample(
-                gyroX = MotionScaling.gyroRadToWire(-remapScratch[0]),
-                gyroY = MotionScaling.gyroRadToWire(remapScratch[1]),
-                gyroZ = MotionScaling.gyroRadToWire(remapScratch[2]),
+                gyroX = gyroRadToWire(-remapScratch[0]),
+                gyroY = gyroRadToWire(remapScratch[1]),
+                gyroZ = gyroRadToWire(remapScratch[2]),
                 accelX = accelX,
                 accelY = accelY,
                 accelZ = accelZ,

@@ -8,7 +8,9 @@ import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_SWITCHPRO
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.net.moonlight.NINTENDO
+import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
+import com.tinkernorth.dish.core.net.moonlight.XBOX
 
 // Bundled label for a catalog id; the live catalog name wins where available
 // (ConfigureBindingsViewModel.typeLabel), this is the offline/diagnostic fallback.
@@ -26,9 +28,9 @@ fun bundledControllerTypeLabelRes(type: Int): Int =
 @StringRes
 fun moonlightTypeLabelRes(type: Int): Int =
     when (type) {
-        MoonlightEmulatedType.XBOX -> R.string.ml_type_xbox
-        MoonlightEmulatedType.PLAYSTATION -> R.string.ml_type_playstation
-        MoonlightEmulatedType.NINTENDO -> R.string.ml_type_nintendo
+        XBOX -> R.string.ml_type_xbox
+        PLAYSTATION -> R.string.ml_type_playstation
+        NINTENDO -> R.string.ml_type_nintendo
         else -> R.string.ml_type_auto
     }
 
@@ -47,8 +49,8 @@ fun bundledControllerTypeGlyphRes(type: Int): Int =
 @DrawableRes
 fun moonlightTypeGlyphRes(type: Int): Int =
     when (type) {
-        MoonlightEmulatedType.XBOX -> R.drawable.ic_ctrl_xbox
-        MoonlightEmulatedType.PLAYSTATION -> R.drawable.ic_ctrl_ds4
-        MoonlightEmulatedType.NINTENDO -> R.drawable.ic_ctrl_switchpro
+        XBOX -> R.drawable.ic_ctrl_xbox
+        PLAYSTATION -> R.drawable.ic_ctrl_ds4
+        NINTENDO -> R.drawable.ic_ctrl_switchpro
         else -> R.drawable.ic_gamepad
     }

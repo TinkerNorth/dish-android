@@ -7,7 +7,8 @@ import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.DiscoveredServer
 import com.tinkernorth.dish.core.model.HostFeatureSet
-import com.tinkernorth.dish.core.net.DishProtocol
+import com.tinkernorth.dish.core.net.DISH_PROTOCOL_CURRENT
+import com.tinkernorth.dish.core.net.DishProtocolCompat
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -64,16 +65,16 @@ class ConnectionsUiStateTest {
     @Test
     fun `a never-probed satellite shows no compat verdict`() {
         val rows = satelliteRows(listOf(summary("satellite:mid:aa")), emptyList())
-        assertEquals(DishProtocol.DishProtocolCompat.UNKNOWN, (rows[0] as SatelliteRow.Known).compat)
+        assertEquals(DishProtocolCompat.UNKNOWN, (rows[0] as SatelliteRow.Known).compat)
     }
 
     @Test
     fun `the compat chip follows the advertised protocol version`() {
         val features =
             mapOf(
-                "old" to HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DishProtocol.DISH_PROTOCOL_CURRENT - 1),
-                "current" to HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DishProtocol.DISH_PROTOCOL_CURRENT),
-                "future" to HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DishProtocol.DISH_PROTOCOL_CURRENT + 1),
+                "old" to HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DISH_PROTOCOL_CURRENT - 1),
+                "current" to HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DISH_PROTOCOL_CURRENT),
+                "future" to HostFeatureSet.SATELLITE_DEFAULT.copy(protocolVersion = DISH_PROTOCOL_CURRENT + 1),
             )
         val rows =
             satelliteRows(
@@ -82,9 +83,9 @@ class ConnectionsUiStateTest {
                 features = features,
             )
         val compats = rows.filterIsInstance<SatelliteRow.Known>().associate { it.summary.id to it.compat }
-        assertEquals(DishProtocol.DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE, compats["old"])
-        assertEquals(DishProtocol.DishProtocolCompat.CURRENT, compats["current"])
-        assertEquals(DishProtocol.DishProtocolCompat.APP_UPDATE_REQUIRED, compats["future"])
+        assertEquals(DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE, compats["old"])
+        assertEquals(DishProtocolCompat.CURRENT, compats["current"])
+        assertEquals(DishProtocolCompat.APP_UPDATE_REQUIRED, compats["future"])
     }
 
     @Test
@@ -95,6 +96,6 @@ class ConnectionsUiStateTest {
                 discovered = emptyList(),
                 features = mapOf("satellite:mid:aa" to HostFeatureSet.SATELLITE_DEFAULT),
             )
-        assertEquals(DishProtocol.DishProtocolCompat.UNKNOWN, (rows[0] as SatelliteRow.Known).compat)
+        assertEquals(DishProtocolCompat.UNKNOWN, (rows[0] as SatelliteRow.Known).compat)
     }
 }

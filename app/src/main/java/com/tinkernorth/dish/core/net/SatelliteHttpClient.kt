@@ -256,7 +256,7 @@ class SatelliteHttpClient
             pin: String,
             satelliteId: String,
             clientPin: String = "",
-            protocolVersion: Int = DishProtocol.DISH_PROTOCOL_CURRENT,
+            protocolVersion: Int = DISH_PROTOCOL_CURRENT,
         ): HttpReply =
             request(
                 method = "POST",

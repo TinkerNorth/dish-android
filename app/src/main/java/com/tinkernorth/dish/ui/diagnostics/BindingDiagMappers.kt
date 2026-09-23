@@ -42,7 +42,7 @@ internal fun bindingDiag(
                 .any { it.slotId == slotId },
         speakerDropped = world.audio.speakerDrops[slotId] ?: 0L,
         latency =
-            LatencyEstimatePolicy.estimate(
+            estimate(
                 pollRateHz = rates?.controllerHz?.takeIf { it > 0 } ?: device?.pollRateHz ?: 0,
                 phonePathMs = device?.let { world.pads.deviceLatency[it.id]?.stage1P50Ms },
                 rttMs = rttFor(host, snapshot, world),

@@ -4,8 +4,16 @@ package com.tinkernorth.dish.composer
 
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
-import com.tinkernorth.dish.core.net.moonlight.MoonlightControlProtocol
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.net.moonlight.CAP_ACCELEROMETER
+import com.tinkernorth.dish.core.net.moonlight.CAP_ANALOG_TRIGGERS
+import com.tinkernorth.dish.core.net.moonlight.CAP_BATTERY
+import com.tinkernorth.dish.core.net.moonlight.CAP_GYRO
+import com.tinkernorth.dish.core.net.moonlight.CAP_RGB_LED
+import com.tinkernorth.dish.core.net.moonlight.CAP_RUMBLE
+import com.tinkernorth.dish.core.net.moonlight.CAP_TOUCHPAD
+import com.tinkernorth.dish.core.net.moonlight.CAP_TRIGGER_RUMBLE
+import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
+import com.tinkernorth.dish.core.net.moonlight.capabilityBits
 
 // The Moonlight side of the capability layering, sibling of [BundledCatalog]. Hard-coded
 // because there is nothing to fetch: the capability byte travels client to host inside
@@ -33,7 +41,7 @@ object MoonlightCatalog {
     // Trigger rumble and battery describe the physical pad, so every type passes them.
     fun typeCapabilities(type: Int): CapabilitySet =
         when (type) {
-            MoonlightEmulatedType.PLAYSTATION ->
+            PLAYSTATION ->
                 padType(Feature.RUMBLE, Feature.MOTION, Feature.TOUCHPAD, Feature.LIGHTBAR)
             else -> padType(Feature.RUMBLE)
         }
@@ -44,22 +52,22 @@ object MoonlightCatalog {
     // make a host waste RUMBLE_TRIGGERS events on a pad that eats them).
     fun sourceBits(caps: CapabilitySet): Int {
         var bits = 0
-        if (Feature.ANALOG_TRIGGERS in caps) bits = bits or MoonlightControlProtocol.CAP_ANALOG_TRIGGERS
-        if (Feature.RUMBLE in caps) bits = bits or MoonlightControlProtocol.CAP_RUMBLE
-        if (Feature.TRIGGER_RUMBLE in caps) bits = bits or MoonlightControlProtocol.CAP_TRIGGER_RUMBLE
-        if (Feature.TOUCHPAD in caps) bits = bits or MoonlightControlProtocol.CAP_TOUCHPAD
+        if (Feature.ANALOG_TRIGGERS in caps) bits = bits or CAP_ANALOG_TRIGGERS
+        if (Feature.RUMBLE in caps) bits = bits or CAP_RUMBLE
+        if (Feature.TRIGGER_RUMBLE in caps) bits = bits or CAP_TRIGGER_RUMBLE
+        if (Feature.TOUCHPAD in caps) bits = bits or CAP_TOUCHPAD
         if (Feature.MOTION in caps) {
-            bits = bits or MoonlightControlProtocol.CAP_ACCELEROMETER or MoonlightControlProtocol.CAP_GYRO
+            bits = bits or CAP_ACCELEROMETER or CAP_GYRO
         }
-        if (Feature.BATTERY in caps) bits = bits or MoonlightControlProtocol.CAP_BATTERY
-        if (Feature.LIGHTBAR in caps) bits = bits or MoonlightControlProtocol.CAP_RGB_LED
+        if (Feature.BATTERY in caps) bits = bits or CAP_BATTERY
+        if (Feature.LIGHTBAR in caps) bits = bits or CAP_RGB_LED
         return bits
     }
 
     fun capabilityBits(
         type: Int,
         caps: CapabilitySet,
-    ): Int = MoonlightEmulatedType.capabilityBits(type, sourceBits(caps))
+    ): Int = capabilityBits(type, sourceBits(caps))
 
     // Every emulated pad carries the gamepad axes, analog triggers, trigger rumble and
     // battery (the latter two are physical-pad surfaces the type never gates). Mouse is

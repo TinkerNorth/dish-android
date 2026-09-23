@@ -7,8 +7,8 @@ import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.source.audio.SlotAudioRoutes
 import com.tinkernorth.dish.source.audio.SpeakerPlayoutPlan
-import com.tinkernorth.dish.source.audio.SpeakerPlayoutPolicy
 import com.tinkernorth.dish.source.audio.SpeakerSlotInput
+import com.tinkernorth.dish.source.audio.speakerPlayoutPlanFor
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -78,7 +78,7 @@ class SpeakerPlayoutComposer
                                     playbackChannels = routing.forSlot(slotId).playbackChannels,
                                 )
                             }
-                        SpeakerPlayoutPolicy.plan(slots)
+                        speakerPlayoutPlanFor(slots)
                     }
                 }.distinctUntilChanged()
 
