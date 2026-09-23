@@ -3,14 +3,10 @@
 package com.tinkernorth.dish.source.audio
 
 /**
- * One emulated pad's speaker endpoint: the slot to play for, addressed the way the stream arrives.
+ * One emulated pad's speaker endpoint, addressed the way MSG_SPEAKER_AUDIO arrives.
  *
- * MSG_SPEAKER_AUDIO names its controller by (session handle, controller index) and nothing else,
- * because that is all the host knows about us. Resolving that pair to a slot is the same job
- * [com.tinkernorth.dish.hotpath.input.FeedbackRouter] does for the lamp and the lightbar; the
- * difference is that this one is done ONCE per plan rather than once per frame, since 50 frames a
- * second per stream arrive on the native dispatch thread and that thread must not be spending them
- * walking connection maps.
+ * Resolved once per plan, never per frame: 50 frames a second per stream land on the native
+ * dispatch thread, which must not spend them walking connection maps.
  */
 data class SpeakerTarget(
     val slotId: String,
@@ -29,10 +25,9 @@ data class SpeakerTarget(
 )
 
 /**
- * The two lane pairs of a DualSense's own render endpoint, speaker first, in the pad's own
- * channel order. Each is its own voice on the same endpoint rather than a mix into one track:
- * the two streams are independent on the wire (own seq, own silence suppression), so pairing
- * their windows would need a clock the push model has not got; the platform mixes the tracks.
+ * The two lane pairs of a DualSense's own render endpoint. Each is its own voice rather than a
+ * mix into one track: the streams are independent on the wire (own seq, own silence
+ * suppression), so pairing their windows would need a clock the push model has not got.
  */
 enum class PlayoutLane(
     val pairOffset: Int,
@@ -48,14 +43,11 @@ enum class PlayoutLane(
 }
 
 /**
- * Everything the eligibility rule knows about one slot, flattened out of the capability model and
- * the connection hub so the rule itself stays pure.
+ * Everything the eligibility rule knows about one slot, flattened out of the capability model
+ * and the connection hub so the rule itself stays pure.
  *
- * [speakerEnabled] is the composed answer, not the raw toggle: the whole path has to carry a
- * speaker (an audio-capable emulated type, on a host with controller audio on, behind an output
- * that can play it) AND the user has to have left it on. That is the same set the descriptor's
- * CAP_SPEAKER is projected from, so a slot that plays is always a slot the host was told to send
- * to.
+ * [speakerEnabled] is the composed answer, not the raw toggle, and is the same set the
+ * descriptor's CAP_SPEAKER is projected from.
  */
 data class SpeakerSlotInput(
     val slotId: String,
@@ -77,16 +69,13 @@ data class SpeakerSlotInput(
 data class SpeakerPlayoutPlan(
     val voices: Map<Long, SpeakerTarget>,
 ) {
-    /** Whether anything is playing at all: what decides if the native dispatch thread is worth starting. */
+    /** What decides whether the native dispatch thread is worth starting. */
     val playing: Boolean get() = voices.isNotEmpty()
 
     companion object {
         val IDLE = SpeakerPlayoutPlan(emptyMap())
 
-        /**
-         * (handle, controller index, lane) as one key. Handle and index are small non-negative
-         * ints by the time they get here, so the pack is exact and the unpack is never needed.
-         */
+        /** (handle, controller index, lane) as one key; the unpack is never needed. */
         fun routeKey(
             sessionHandle: Int,
             controllerIndex: Int,

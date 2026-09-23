@@ -112,4 +112,17 @@ class MoonlightCryptoTest {
         assertTrue(verifyRsaSha256(kp.public, data, sig))
         assertTrue(!verifyRsaSha256(kp.public, "other".toByteArray(), sig))
     }
+
+    @Test
+    fun `randomBytes answers exactly the length asked for`() {
+        assertEquals(0, randomBytes(0).size)
+        assertEquals(1, randomBytes(1).size)
+        assertEquals(GCM_TAG_LEN, randomBytes(GCM_TAG_LEN).size)
+    }
+
+    @Test
+    fun `randomBytes does not repeat itself, so a salt is never reused`() {
+        val seen = (1..64).map { randomBytes(16).toList() }.toSet()
+        assertEquals(64, seen.size)
+    }
 }
