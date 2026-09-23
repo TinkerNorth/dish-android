@@ -56,8 +56,7 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
     // Reused PIN dialog state, mirroring ConnectionsActivity: the manager drives
     // setBusy/setAwaitingApproval/showError around the in-flight pair call, and
     // a host reaching Connected dismisses it via the Connected event.
-    private var pinDialog: PairPinDialog? = null
-    private var pairingServer: DiscoveredServer? = null
+    private val pairing = SetupPairing()
 
     private var onLocalNetworkGranted: (() -> Unit)? = null
 
@@ -120,9 +119,7 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
     }
 
     override fun onDestroy() {
-        pinDialog?.setOnDismissListener(null)
-        pinDialog?.dismiss()
-        pinDialog = null
+        pairing.close()
         super.onDestroy()
     }
 
@@ -136,7 +133,7 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.events.collect { event ->
                     when (event) {
-                        is SetupConnectionViewModel.Event.ShowPairing -> showPairingDialog(event.server)
+                        is SetupConnectionViewModel.Event.ShowPairing -> pairing.show(event.server)
                         is SetupConnectionViewModel.Event.Connected -> onConnected(event.hostId)
                         is SetupConnectionViewModel.Event.Error -> onConnectionError(event.message)
                     }
@@ -216,61 +213,103 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
         }
 
     private fun onConnected(hostId: String) {
-        pinDialog?.dismiss()
+        pairing.dismiss()
         nav.toSetupConfigure(slotId, hostId)
     }
 
     // 3C: reuse the connections-screen PIN dialog verbatim. Path A is type the
     // satellite's PIN; Path B shows this dish's PIN for the operator to accept,
     // sent immediately on open so no extra tap is needed.
-    private fun showPairingDialog(server: DiscoveredServer) {
-        pinDialog?.dismiss()
-        pairingServer = server
-        val clientPin = generatePin()
-        val dialog =
+    // The PIN exchange: one dialog at a time and the server it belongs to, kept together so the
+    // Activity does not carry either. Path A is typing the satellite's PIN; path B shows this
+    // dish's PIN for the operator to accept.
+    private inner class SetupPairing {
+        private var dialog: PairPinDialog? = null
+        private var server: DiscoveredServer? = null
+
+        fun show(target: DiscoveredServer) {
+            dialog?.dismiss()
+            server = target
+            val clientPin = generatePin()
+            val built = build(target, clientPin)
+            dialog = built
+            built.show()
+            built.setAwaitingApproval(true)
+            viewModel.requestApproval(target, clientPin)
+        }
+
+        fun dismiss() {
+            dialog?.dismiss()
+        }
+
+        fun close() {
+            dialog?.setOnDismissListener(null)
+            dialog?.dismiss()
+            dialog = null
+        }
+
+        /** Answers whether a pairing was in flight to take the error, keeping the typed PIN. */
+        fun showError(message: String): Boolean {
+            val live = dialog ?: return false
+            if (server == null) return false
+            live.setBusy(false)
+            live.setAwaitingApproval(false)
+            live.showError(message)
+            return true
+        }
+
+        private fun build(
+            target: DiscoveredServer,
+            clientPin: String,
+        ): PairPinDialog =
             PairPinDialog(
-                this,
+                this@SetupConnectionActivity,
                 clientPin = clientPin,
-                onRequestApproval = {
-                    pinDialog?.setAwaitingApproval(true)
-                    pinDialog?.showError(null)
-                    viewModel.requestApproval(server, clientPin)
-                },
-            ) { pin ->
-                pinDialog?.setBusy(true)
-                pinDialog?.showError(null)
-                viewModel.pairWithPin(server, pin)
-            }.apply {
-                dishTitle = getString(R.string.pair_dialog_title)
-                dishSubtitle =
-                    if (server.name.isNotEmpty()) {
-                        getString(R.string.pair_dialog_subtitle_named, server.name)
-                    } else {
-                        getString(R.string.pair_dialog_subtitle)
-                    }
-                setOnDismissListener {
-                    if (pinDialog === this) {
-                        pinDialog = null
-                        pairingServer = null
-                    }
+                onRequestApproval = { requestApprovalAgain(target, clientPin) },
+            ) { pin -> submitServerPin(target, pin) }
+                .apply {
+                    dishTitle = getString(R.string.pair_dialog_title)
+                    dishSubtitle = subtitleFor(target)
+                    setOnDismissListener { forget(this) }
                 }
-            }
-        pinDialog = dialog
-        dialog.show()
-        dialog.setAwaitingApproval(true)
-        viewModel.requestApproval(server, clientPin)
+
+        private fun requestApprovalAgain(
+            target: DiscoveredServer,
+            clientPin: String,
+        ) {
+            dialog?.setAwaitingApproval(true)
+            dialog?.showError(null)
+            viewModel.requestApproval(target, clientPin)
+        }
+
+        private fun submitServerPin(
+            target: DiscoveredServer,
+            pin: String,
+        ) {
+            dialog?.setBusy(true)
+            dialog?.showError(null)
+            viewModel.pairWithPin(target, pin)
+        }
+
+        private fun subtitleFor(target: DiscoveredServer): String {
+            val isNamed = target.name.isNotEmpty()
+            if (isNamed) return getString(R.string.pair_dialog_subtitle_named, target.name)
+            return getString(R.string.pair_dialog_subtitle)
+        }
+
+        // Only the dialog still on screen may clear the fields; a late dismiss from a replaced one
+        // must not wipe the new attempt.
+        private fun forget(dismissed: PairPinDialog) {
+            if (dialog !== dismissed) return
+            dialog = null
+            server = null
+        }
     }
 
     // A failure while a pair dialog is open keeps the typed PIN and routes the
     // message through the dialog; otherwise surface the generic error sheet.
     private fun onConnectionError(message: String) {
-        val dialog = pinDialog
-        if (dialog != null && pairingServer != null) {
-            dialog.setBusy(false)
-            dialog.setAwaitingApproval(false)
-            dialog.showError(message)
-            return
-        }
+        if (pairing.showError(message)) return
         show(this, message) { withLocalNetwork { viewModel.startDiscovery() } }
     }
 
