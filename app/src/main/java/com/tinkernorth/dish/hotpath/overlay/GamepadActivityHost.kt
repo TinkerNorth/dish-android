@@ -145,25 +145,29 @@ class GamepadActivityHost(
             requestUnbufferedJoystickDispatch(event)
         }
         if (isJoy && inputTiming.enabled) inputTiming.record(event.deviceId, event.eventTime, SystemClock.uptimeMillis())
-        return isJoy &&
-            PhysicalSlotNative.processGamepadMotionEvent(
-                event.deviceId,
-                event.source,
-                event.action,
-                event.getAxisValue(MotionEvent.AXIS_X),
-                event.getAxisValue(MotionEvent.AXIS_Y),
-                event.getAxisValue(MotionEvent.AXIS_Z),
-                event.getAxisValue(MotionEvent.AXIS_RZ),
-                event.getAxisValue(MotionEvent.AXIS_RX),
-                event.getAxisValue(MotionEvent.AXIS_RY),
-                event.getAxisValue(MotionEvent.AXIS_HAT_X),
-                event.getAxisValue(MotionEvent.AXIS_HAT_Y),
-                event.getAxisValue(MotionEvent.AXIS_LTRIGGER),
-                event.getAxisValue(MotionEvent.AXIS_RTRIGGER),
-                event.getAxisValue(MotionEvent.AXIS_BRAKE),
-                event.getAxisValue(MotionEvent.AXIS_GAS),
-            )
+        return isJoy && sendMotionToNative(event)
     }
+
+    // The 250 Hz path. A private, monomorphic call that allocates nothing and reads each axis
+    // straight off the event the framework already handed us: nothing here is copied or boxed.
+    private fun sendMotionToNative(event: MotionEvent): Boolean =
+        PhysicalSlotNative.processGamepadMotionEvent(
+            event.deviceId,
+            event.source,
+            event.action,
+            event.getAxisValue(MotionEvent.AXIS_X),
+            event.getAxisValue(MotionEvent.AXIS_Y),
+            event.getAxisValue(MotionEvent.AXIS_Z),
+            event.getAxisValue(MotionEvent.AXIS_RZ),
+            event.getAxisValue(MotionEvent.AXIS_RX),
+            event.getAxisValue(MotionEvent.AXIS_RY),
+            event.getAxisValue(MotionEvent.AXIS_HAT_X),
+            event.getAxisValue(MotionEvent.AXIS_HAT_Y),
+            event.getAxisValue(MotionEvent.AXIS_LTRIGGER),
+            event.getAxisValue(MotionEvent.AXIS_RTRIGGER),
+            event.getAxisValue(MotionEvent.AXIS_BRAKE),
+            event.getAxisValue(MotionEvent.AXIS_GAS),
+        )
 
     // Read overlayActive BEFORE notifying so a DOWN that dismisses the dim still wins the gate and consumes the rest of the gesture.
     fun dispatchTouchEvent(ev: MotionEvent): Boolean {
