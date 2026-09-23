@@ -166,14 +166,13 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         }
 
     private var btAdapterBannerId: Long? = null
-    private var networkBannerId: Long? = null
     private var localNetworkBannerId: Long? = null
 
     private var localNetworkPrompted = false
 
     private val btPermissionBanner = BtPermissionBanner()
 
-    private val btStaleBannerIds = HashMap<String, Long>()
+    private val connectionBanners = ConnectionBanners()
 
     private var pendingBtRegistration: PendingBtRegistration? = null
 
@@ -293,30 +292,46 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     }
 
     private fun observeSatelliteHub() {
+        observeUiState()
+        observeSatelliteEvents()
+        observeMoonlightEvents()
+    }
+
+    private fun observeUiState() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.ui.collect { state ->
-                    render(state)
-                    binding.btnScanAll.setLoading(
-                        state.scanning || state.moonlightScanning,
-                        getString(R.string.action_scanning),
-                        getString(R.string.action_scan),
-                    )
-                    // Success path emits no ConnectionEvent, so observe state directly to dismiss PIN dialog.
-                    dismissPinDialogIfPaired(state)
-                }
+                viewModel.ui.collect { state -> renderConnections(state) }
             }
         }
+    }
+
+    private fun renderConnections(state: ConnectionsUiState) {
+        render(state)
+        binding.btnScanAll.setLoading(
+            state.scanning || state.moonlightScanning,
+            getString(R.string.action_scanning),
+            getString(R.string.action_scan),
+        )
+        // The success path emits no ConnectionEvent, so the PIN dialog is dismissed off state.
+        dismissPinDialogIfPaired(state)
+    }
+
+    private fun observeSatelliteEvents() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                satellite.events.collect { ev ->
-                    when (ev) {
-                        is ConnectionEvent.Error -> onConnectionError(ev.message)
-                        is ConnectionEvent.PairingRequired -> showPairingDialog(ev.server)
-                    }
-                }
+                satellite.events.collect(::onSatelliteEvent)
             }
         }
+    }
+
+    private fun onSatelliteEvent(ev: ConnectionEvent) {
+        when (ev) {
+            is ConnectionEvent.Error -> onConnectionError(ev.message)
+            is ConnectionEvent.PairingRequired -> showPairingDialog(ev.server)
+        }
+    }
+
+    private fun observeMoonlightEvents() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 moonlight.events.collect(::onMoonlightEvent)
@@ -400,7 +415,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                networkState.state.collect { state -> applyNetworkBanner(state) }
+                networkState.state.collect { state -> connectionBanners.applyNetwork(state) }
             }
         }
     }
@@ -408,7 +423,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     private fun observeBluetoothRegistry() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                btRegistry.staleBtIds.collect { stale -> applyBtStaleBanners(stale) }
+                btRegistry.staleBtIds.collect { stale -> connectionBanners.applyStaleBt(stale) }
             }
         }
         lifecycleScope.launch {
@@ -1109,6 +1124,90 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
             }
     }
 
+    // Two banner families with their own ids, kept together so the Activity does not carry the
+    // dismissal bookkeeping for either.
+    private inner class ConnectionBanners {
+        private var networkBannerId: Long? = null
+        private val staleBtBannerIds = HashMap<String, Long>()
+
+        fun applyNetwork(state: NetworkState) {
+            networkBannerId?.let { notifications.dismiss(it) }
+            networkBannerId =
+                when (state) {
+                    NetworkState.WIFI -> null
+                    NetworkState.NONE -> showNoNetwork()
+                    NetworkState.CELLULAR -> showCellularOnly()
+                }
+        }
+
+        fun applyStaleBt(stale: Map<String, BtStaleReason>) {
+            val gone = staleBtBannerIds.keys - stale.keys
+            for (id in gone) {
+                staleBtBannerIds.remove(id)?.let(notifications::dismiss)
+            }
+            for ((id, reason) in stale) {
+                val alreadyShowing = id in staleBtBannerIds
+                if (alreadyShowing) continue
+                val entry = store.rememberedBt().firstOrNull { it.id == id } ?: continue
+                staleBtBannerIds[id] = showStaleBt(id, reason, entry)
+            }
+        }
+
+        private fun openWifiSettingsAction() =
+            DishNotification.Action(label = getString(R.string.action_open_settings)) { openWifiSettings() }
+
+        private fun showNoNetwork(): Long =
+            notifications.error(
+                glyph = R.drawable.ic_satellite_off,
+                title = getString(R.string.notif_no_network_title),
+                body = getString(R.string.notif_no_network_body),
+                action = openWifiSettingsAction(),
+                key = "network-none",
+                durationMs = DishNotification.DURATION_PERSISTENT,
+            )
+
+        private fun showCellularOnly(): Long =
+            notifications.warn(
+                glyph = R.drawable.ic_satellite_off,
+                title = getString(R.string.notif_cellular_only_title),
+                body = getString(R.string.notif_cellular_only_body),
+                action = openWifiSettingsAction(),
+                key = "network-cellular",
+                durationMs = DishNotification.DURATION_PERSISTENT,
+            )
+
+        @StringRes
+        private fun staleTitleRes(reason: BtStaleReason): Int =
+            when (reason) {
+                BtStaleReason.KEY_MISSING -> R.string.notif_bt_key_missing_title
+                BtStaleReason.BOND_REMOVED -> R.string.notif_bt_bond_removed_title
+            }
+
+        @StringRes
+        private fun staleBodyRes(reason: BtStaleReason): Int =
+            when (reason) {
+                BtStaleReason.KEY_MISSING -> R.string.notif_bt_key_missing_body
+                BtStaleReason.BOND_REMOVED -> R.string.notif_bt_bond_removed_body
+            }
+
+        private fun showStaleBt(
+            id: String,
+            reason: BtStaleReason,
+            entry: RememberedBt,
+        ): Long =
+            notifications.warn(
+                glyph = R.drawable.ic_bluetooth_off,
+                title = getString(staleTitleRes(reason), entry.name),
+                body = getString(staleBodyRes(reason)),
+                action =
+                    DishNotification.Action(
+                        label = getString(R.string.action_open_settings),
+                    ) { openBluetoothDeviceDetails(entry.mac) },
+                key = "bt-stale:$id",
+                durationMs = DishNotification.DURATION_PERSISTENT,
+            )
+    }
+
     // One snackbar with its own state, kept together so ConnectionsActivity does not carry the
     // banner's fields and lifecycle alongside everything else.
     private inner class BtPermissionBanner {
@@ -1186,82 +1285,6 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         val titleRes: Int,
         val bodyRes: Int,
     )
-
-    private fun applyBtStaleBanners(stale: Map<String, BtStaleReason>) {
-        val gone = btStaleBannerIds.keys - stale.keys
-        for (id in gone) {
-            btStaleBannerIds.remove(id)?.let(notifications::dismiss)
-        }
-        for ((id, reason) in stale) {
-            val alreadyShowing = id in btStaleBannerIds
-            if (alreadyShowing) continue
-            val entry = store.rememberedBt().firstOrNull { it.id == id } ?: continue
-            btStaleBannerIds[id] = showBtStaleBanner(id, reason, entry)
-        }
-    }
-
-    @StringRes
-    private fun btStaleTitleRes(reason: BtStaleReason): Int =
-        when (reason) {
-            BtStaleReason.KEY_MISSING -> R.string.notif_bt_key_missing_title
-            BtStaleReason.BOND_REMOVED -> R.string.notif_bt_bond_removed_title
-        }
-
-    @StringRes
-    private fun btStaleBodyRes(reason: BtStaleReason): Int =
-        when (reason) {
-            BtStaleReason.KEY_MISSING -> R.string.notif_bt_key_missing_body
-            BtStaleReason.BOND_REMOVED -> R.string.notif_bt_bond_removed_body
-        }
-
-    private fun showBtStaleBanner(
-        id: String,
-        reason: BtStaleReason,
-        entry: RememberedBt,
-    ): Long =
-        notifications.warn(
-            glyph = R.drawable.ic_bluetooth_off,
-            title = getString(btStaleTitleRes(reason), entry.name),
-            body = getString(btStaleBodyRes(reason)),
-            action =
-                DishNotification.Action(
-                    label = getString(R.string.action_open_settings),
-                ) { openBluetoothDeviceDetails(entry.mac) },
-            key = "bt-stale:$id",
-            durationMs = DishNotification.DURATION_PERSISTENT,
-        )
-
-    private fun applyNetworkBanner(state: com.tinkernorth.dish.source.system.NetworkState) {
-        networkBannerId?.let { notifications.dismiss(it) }
-        networkBannerId =
-            when (state) {
-                com.tinkernorth.dish.source.system.NetworkState.WIFI -> null
-                com.tinkernorth.dish.source.system.NetworkState.NONE ->
-                    notifications.error(
-                        glyph = R.drawable.ic_satellite_off,
-                        title = getString(R.string.notif_no_network_title),
-                        body = getString(R.string.notif_no_network_body),
-                        action =
-                            DishNotification.Action(
-                                label = getString(R.string.action_open_settings),
-                            ) { openWifiSettings() },
-                        key = "network-none",
-                        durationMs = DishNotification.DURATION_PERSISTENT,
-                    )
-                com.tinkernorth.dish.source.system.NetworkState.CELLULAR ->
-                    notifications.warn(
-                        glyph = R.drawable.ic_satellite_off,
-                        title = getString(R.string.notif_cellular_only_title),
-                        body = getString(R.string.notif_cellular_only_body),
-                        action =
-                            DishNotification.Action(
-                                label = getString(R.string.action_open_settings),
-                            ) { openWifiSettings() },
-                        key = "network-cellular",
-                        durationMs = DishNotification.DURATION_PERSISTENT,
-                    )
-            }
-    }
 
     private fun ensureLocalNetworkThenDiscover(userInitiated: Boolean = false) {
         if (isGranted(this)) {
