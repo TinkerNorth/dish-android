@@ -39,18 +39,102 @@ license: the project is LGPL-3.0-or-later end-to-end (`LICENSE`,
 
 ## Style
 
+`ktlint` and `detekt` (Kotlin) and `clang-format` (JNI) are authoritative
+for layout; run `./gradlew ktlintFormat` and `clang-format -i` to fix.
+This section is about what a formatter cannot check.
+
+### Shape of the code
+
+These rules are enforced in review, not by a gate. They come from the
+Parchment library and are adapted where Kotlin, C++ or Android make the
+literal form worse than the thing it is meant to achieve. They apply to
+app, JNI and test code alike.
+
+- **As immutable and as static as possible.** `val` over `var`; `const val`
+  for a compile-time literal; `private` unless something outside needs it.
+  In the JNI, `const` on every local and parameter that is not reassigned,
+  and `constexpr` for a value known at compile time. A value that never
+  changes is a named constant, never a literal in the middle of a function.
+  A type that holds no state is a set of functions, not a class.
+
+- **Split values into simple, named steps.** One operation per line, with
+  the result in a named `val` that says what it is, even when that reads
+  longer:
+
+  ```kotlin
+  val isAnotherSlot = entry.key != deviceId
+  val isAPlaceholder = other.transitioning || other.needsReplug
+  val isTheSameModel = other.vendorId == device.vendorId &&
+      other.productId == device.productId
+  return isAnotherSlot && isAPlaceholder && isTheSameModel
+  ```
+
+  not one five-term boolean. The names are the documentation, the debugger
+  can show each value, and a test can pin each step.
+
+- **One function, one flow.** When a function would hold two algorithms
+  chosen by a condition, the condition dispatches to two named things that
+  each do one thing, and the dispatcher does nothing else. In Kotlin that is
+  usually a sealed type and an exhaustive `when` -- `RumbleTarget` in
+  `FeedbackRouter` is the pattern -- so the compiler checks that every flow
+  is handled. A guard clause is not an algorithm: do not invent indirection
+  where there is only one flow.
+
+- **A callback with a body gets a name.** A lambda is fine as a
+  one-expression forward, and fine as an argument to an `inline` stdlib or
+  coroutines function (`map`, `filter`, `let`, `update`), where the compiler
+  inlines the body and there is no object to name. A lambda that carries an
+  algorithm becomes a named function, so it can be found, read and tested on
+  its own. A callback that is *stored* rather than called immediately prefers
+  a function reference:
+
+  ```kotlin
+  btConnections.start(::refreshTransports)
+  ```
+
+  This is Parchment's "no anonymous methods" narrowed to what Kotlin can
+  express. `launch`, `async`, `withContext`, `apply`, `run` and `flow` take
+  *receiver* function types, which the language does not allow as a
+  supertype, so for those there is no named form to prefer.
+
+- **No singletons.** A stateless helper is a top-level `internal fun` in the
+  file that owns it. Kotlin emits a top-level function as a real
+  `public static final` method on the file class, with no `INSTANCE` field,
+  no private constructor and no virtual dispatch; an `object` emits all
+  three. An `object` is justified only where something genuinely requires a
+  single static entry point:
+
+  - a `@JvmStatic` bridge that native code calls (`BluetoothGamepadBridge`,
+    `MoonlightGamepadBridge`),
+  - a framework that demands it (a Hilt `@Module`, a `Parcelable.CREATOR`),
+  - a sealed-hierarchy case with no payload (`RumbleTarget.Phone`).
+
+  Hilt `@Singleton` bindings are a different thing and are fine: they are
+  graph-scoped, injected, and replaceable in a test.
+
+- **Member naming.** Kotlin properties carry no prefix. The JNI uses a
+  trailing underscore (`registry_`), which is the same "state, not scratch"
+  signal at the point of use. Keep it; do not mix in `m_`.
+
+- **Prefer a test to a comment.** Behaviour that needs explaining gets a test
+  named for the behaviour. A comment is the last resort for a constraint that
+  genuinely cannot be tested -- a platform quirk, a build-tool limitation, a
+  wire-format byte layout, a lock order -- states why in one or two lines,
+  and never narrates what the next line does. Before writing a comment, ask
+  whether a test could pin the behaviour instead; then write the test.
+
+  Exempt, because the constraint is untestable by construction: the pin-map
+  headers in `.github/workflows/`, the usage headers in `scripts/`, and
+  `app/proguard-rules.pro`, where a keep rule's comment explains what would
+  otherwise be shrunk away.
+
 ### Kotlin
 
-- 4-space indent, ~120-column soft limit. `ktlint` and `detekt` are
-  authoritative: run `./gradlew ktlintFormat` to autofix and
-  `./gradlew detekt` to lint.
-- `MainViewModel` exposes a single immutable `MainUiState` via a
-  `StateFlow`. Don't introduce competing sources of truth: every UI-bound
-  field belongs in `MainUiState`.
+- 4-space indent, ~120-column soft limit.
+- `MainViewModel` exposes a single immutable `MainUiState` via a `StateFlow`.
+  Don't introduce competing sources of truth: every UI-bound field belongs in
+  `MainUiState`.
 - Coroutines for async, `kotlinx.serialization` for JSON, Hilt for DI.
-- Comments state non-obvious constraints only (why a lock order matters,
-  what a magic value encodes). No narration of what the next line does.
-  Older files are denser; new code follows this rule, not their example.
 - All in-app navigation goes through `DishNavigator`; raw Intents are for
   external targets (system settings, browsers) only.
 - Screens with reactive state or multi-step flows get a ViewModel exposing
@@ -59,15 +143,74 @@ license: the project is LGPL-3.0-or-later end-to-end (`LICENSE`,
 - Views are defined in layout XML and inflated; no programmatic View
   construction. Standard screens go through
   `BaseGamepadHostActivity.setScaffoldContent`.
+- Pure decision and mapping logic belongs in a reducer or a mapper, not in a
+  coordinator. [`docs/architecture.md`](docs/architecture.md) defines both
+  and says where the line is.
 
 ### JNI / C++
 
 - C++17, four-space indent, 100-column soft limit. The same `.clang-format`
-  ships with `satellite`, `dish-linux`, and this repo. Run
-  `clang-format -i app/src/main/cpp/*.{cpp,h}` if you're unsure.
-- The JNI is the **hot path**. No allocations per packet, no JNI calls
-  from the input thread other than `sendReport`, no logging on the
-  per-event path.
+  ships with `satellite`, `dish-linux`, and this repo.
+- The JNI is the **hot path**. No allocations per packet, no JNI calls from
+  the input thread other than `sendReport`, no logging on the per-event path.
+- The shape rules above apply, and the hot path is where they pay: a named
+  `const bool` costs nothing at runtime and a small function inlines, but a
+  per-event allocation does not. Where a shape rule and the hot path
+  disagree, the hot path wins and the reason goes in a test name, not a
+  comment.
+
+### Resources (XML)
+
+- No magic dimensions. A size is a `@dimen`, a colour a `@color`, a string a
+  `@string`. A literal `16dp` in a layout is the same defect as a literal in
+  the middle of a function.
+- Resource invariants that matter are tests, not comments: that every
+  declared string is translated in every shipped locale, that an array's
+  order matches the enum it indexes.
+- `res/drawable/` vectors are generated from SVG by `tools/svg2vd.ps1`.
+  Don't hand-edit them and don't apply style rules to them: change the SVG
+  and regenerate.
+
+## Tests
+
+- `app/src/test`: JVM unit tests. No Robolectric and no Hilt in this source
+  set. If a test seems to need either, the logic under test is in the wrong
+  place: lift it into a reducer, a mapper or a top-level function first.
+- `app/src/test/cpp`: googletest over the host-buildable JNI split
+  (`gamepad_input`, `wire_encoders`, `audio_jitter`, `audio_codec`).
+- `app/src/androidTest`: instrumented tests for what genuinely needs a
+  device.
+
+### Test-driven, every flow
+
+- **Write the test first and watch it fail.** A fix starts with a test that
+  reproduces the bug on the current code; a feature starts with a test that
+  describes the behaviour. Red, then green. Say in the PR which tests failed
+  before the change; a test that never failed has not proven anything.
+
+- **Cover every flow, not every line.** Line coverage is not the target.
+  Each branch of each new condition, each early return, each end of a clamp
+  or a loop, and each state a machine can be in when the new code runs gets
+  its own case, named for the behaviour
+  (`deviceAdded_whenAPlaceholderForTheSameModelIsShowing_replacesIt`). If a
+  branch has no test, either it is dead and goes, or it needs one.
+
+- **Assume nothing; validate with a test.** A claim about how the framework
+  behaves -- what `InputDevice.getLightsManager` reports on API 33, what a
+  `MotionEvent` carries once a view has captured the pointer, what SDL does
+  with a Bluetooth pad before the rumble hint -- is confirmed by a test or a
+  throwaway probe, never by reading a comment or a doc. Keep the test if it
+  pins a dependency; delete it if it was only a probe.
+
+- **Test at the level where the behaviour lives.** Decision logic in the
+  reducer's test, derivation in the mapper's test, byte layout in
+  `wire_encoders_test`, input processing in `gamepad_input_test`, and
+  anything that genuinely needs the framework in `androidTest`. A test that
+  reaches two layers down is testing the wrong thing.
+
+- **Tests follow the same shape rules as the code.** Named functions instead
+  of lambdas carrying algorithms, `val` locals, one asserted step at a time,
+  and a named constant wherever a magic literal would need explaining.
 
 ## Branching & PRs
 
