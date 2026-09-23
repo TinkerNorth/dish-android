@@ -175,25 +175,28 @@ class DishApplication : Application() {
     private fun installStrictModeIfDebuggable() {
         val isDebuggable = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
         if (!isDebuggable) return
-        StrictMode.setThreadPolicy(
-            StrictMode.ThreadPolicy
-                .Builder()
-                .detectDiskReads()
-                .detectDiskWrites()
-                .detectNetwork()
-                .penaltyLog()
-                .build(),
-        )
-        StrictMode.setVmPolicy(
-            StrictMode.VmPolicy
-                .Builder()
-                .detectLeakedClosableObjects()
-                .detectLeakedRegistrationObjects()
-                .detectActivityLeaks()
-                .penaltyLog()
-                .build(),
-        )
+        StrictMode.setThreadPolicy(loggingThreadPolicy())
+        StrictMode.setVmPolicy(loggingVmPolicy())
     }
+
+    // Logged rather than fatal: a debug build should surface these, not refuse to run.
+    private fun loggingThreadPolicy(): StrictMode.ThreadPolicy =
+        StrictMode.ThreadPolicy
+            .Builder()
+            .detectDiskReads()
+            .detectDiskWrites()
+            .detectNetwork()
+            .penaltyLog()
+            .build()
+
+    private fun loggingVmPolicy(): StrictMode.VmPolicy =
+        StrictMode.VmPolicy
+            .Builder()
+            .detectLeakedClosableObjects()
+            .detectLeakedRegistrationObjects()
+            .detectActivityLeaks()
+            .penaltyLog()
+            .build()
 
     private fun installNativeBackedObservers() {
         val lifecycle = ProcessLifecycleOwner.get().lifecycle

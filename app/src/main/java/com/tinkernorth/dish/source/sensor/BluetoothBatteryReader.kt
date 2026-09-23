@@ -34,27 +34,30 @@ class BluetoothBatteryReader(
     }
 
     private fun bondedDeviceNamed(name: String): BluetoothDevice? {
-        val bonded =
-            try {
-                adapter()?.bondedDevices ?: return null
-            } catch (e: SecurityException) {
-                Log.d(TAG, "bondedDevices blocked: ${e.message}")
-                return null
-            }
-        val byName: Map<String, BluetoothDevice> =
-            bonded
-                .mapNotNull { dev ->
-                    val n =
-                        try {
-                            dev.name
-                        } catch (_: SecurityException) {
-                            null
-                        }
-                    n?.let { it to dev }
-                }.toMap()
+        val bonded = bondedDevices() ?: return null
+        val byName = bonded.mapNotNull(::nameToDevice).toMap()
         val matchName = matchBondedDeviceName(name, byName.keys) ?: return null
         return byName[matchName]
     }
+
+    // Null rather than empty: a permission that was refused is not the same as a phone with no
+    // bonded devices, and the caller must not treat it as one.
+    private fun bondedDevices(): Set<BluetoothDevice>? =
+        try {
+            adapter()?.bondedDevices
+        } catch (e: SecurityException) {
+            Log.d(TAG, "bondedDevices blocked: ${e.message}")
+            null
+        }
+
+    // A single device can have its name withheld while its neighbours do not, so this drops one
+    // rather than failing the sweep.
+    private fun nameToDevice(device: BluetoothDevice): Pair<String, BluetoothDevice>? =
+        try {
+            device.name?.let { it to device }
+        } catch (_: SecurityException) {
+            null
+        }
 
     private fun adapter(): BluetoothAdapter? = context.getSystemService(BluetoothManager::class.java)?.adapter
 

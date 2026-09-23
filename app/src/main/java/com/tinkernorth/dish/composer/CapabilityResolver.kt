@@ -11,6 +11,26 @@ import com.tinkernorth.dish.core.net.ControllerDescriptor
 import com.tinkernorth.dish.repository.TOUCHPAD_MODE_DS4
 
 // Reducer: pure layer math. The composer reads live state once and hands the four layers in here.
+// Whatever the pad can do, the host is told about: there is no user switch behind these.
+private val HARDWARE_CAPS =
+    listOf(
+        Feature.LIGHTBAR to ControllerDescriptor.CAP_LIGHTBAR,
+        Feature.TRIGGER_EFFECTS to ControllerDescriptor.CAP_TRIGGER_EFFECTS,
+        Feature.PLAYER_LEDS to ControllerDescriptor.CAP_PLAYER_LEDS,
+    )
+
+// These advertise the client's own source or actuator like the hardware caps above, but they
+// follow their toggle as well: capture and playback are things the user switches off, and an
+// advertised cap the client will not honor would have the host stream audio into nothing and,
+// for the mic, light a mute lamp for a microphone that is not running.
+private val TOGGLED_CAPS =
+    listOf(
+        Feature.MOTION to ControllerDescriptor.CAP_MOTION,
+        Feature.MIC to ControllerDescriptor.CAP_MIC,
+        Feature.SPEAKER to ControllerDescriptor.CAP_SPEAKER,
+        Feature.HAPTIC_AUDIO to ControllerDescriptor.CAP_HAPTIC_AUDIO,
+    )
+
 object CapabilityResolver {
     fun resolve(
         controller: CapabilitySet,
@@ -71,29 +91,11 @@ object CapabilityResolver {
     // them simply never sends the message.
     fun wireCaps(slot: SlotCapabilities): Int {
         var caps = ControllerDescriptor.CAP_ANALOG_TRIGGERS or ControllerDescriptor.CAP_RUMBLE
-        if (Feature.MOTION in slot.controller && Feature.MOTION in slot.userEnabled) {
-            caps = caps or ControllerDescriptor.CAP_MOTION
+        for ((feature, bit) in HARDWARE_CAPS) {
+            if (feature in slot.controller) caps = caps or bit
         }
-        if (Feature.LIGHTBAR in slot.controller) caps = caps or ControllerDescriptor.CAP_LIGHTBAR
-        if (Feature.TRIGGER_EFFECTS in slot.controller) {
-            caps = caps or ControllerDescriptor.CAP_TRIGGER_EFFECTS
-        }
-        if (Feature.PLAYER_LEDS in slot.controller) {
-            caps = caps or ControllerDescriptor.CAP_PLAYER_LEDS
-        }
-        // The audio caps advertise the client's own source/actuator like the feedback
-        // caps, but they follow their toggles the way motion does: capture and playback
-        // are things the user switches off, and an advertised cap the client will not
-        // honor would have the host stream audio into nothing (and, for `mic`, send a
-        // mute lamp for a microphone that is not running).
-        if (Feature.MIC in slot.controller && Feature.MIC in slot.userEnabled) {
-            caps = caps or ControllerDescriptor.CAP_MIC
-        }
-        if (Feature.SPEAKER in slot.controller && Feature.SPEAKER in slot.userEnabled) {
-            caps = caps or ControllerDescriptor.CAP_SPEAKER
-        }
-        if (Feature.HAPTIC_AUDIO in slot.controller && Feature.HAPTIC_AUDIO in slot.userEnabled) {
-            caps = caps or ControllerDescriptor.CAP_HAPTIC_AUDIO
+        for ((feature, bit) in TOGGLED_CAPS) {
+            if (feature in slot.controller && feature in slot.userEnabled) caps = caps or bit
         }
         return caps
     }

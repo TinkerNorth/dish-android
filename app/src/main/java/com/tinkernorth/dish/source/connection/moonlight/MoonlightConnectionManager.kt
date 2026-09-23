@@ -253,32 +253,42 @@ class MoonlightConnectionManager
         /** Probe a manually typed address and add it if it answers /serverinfo. */
         fun addManualHost(address: String) {
             scope.launch(ioDispatcher) {
-                val info =
-                    gateway
-                        .getHttp(serverInfoHttp(address, MoonlightHost.DEFAULT_HTTP_PORT, deviceId))
-                        .takeIf { it.ok }
-                        ?.let { parseServerInfo(it.body) }
+                val info = probeServerInfo(address)
                 if (info == null) {
                     Log.w(TAG, "manual add: nothing answered /serverinfo at $address")
                     _events.emit(MoonlightConnectionEvent.Error("No Moonlight host answered at $address."))
                     return@launch
                 }
-                val host =
-                    MoonlightHost(
-                        name = info.hostname.ifEmpty { address },
-                        address = address,
-                        httpPort = externalPortOr(info),
-                        httpsPort = info.httpsPort ?: MoonlightHost.DEFAULT_HTTPS_PORT,
-                        uniqueId = info.uniqueId,
-                        manual = true,
-                    )
+                val host = manualHostFrom(address, info)
                 Log.i(TAG, "manual add: ${host.name} at $address as ${host.id}")
                 _discovered.mergeHost(host)
-                // Typing an address is durable interest, so the host outlives the
-                // discovery list it would otherwise be the only copy of.
+                // Typing an address is durable interest, so the host outlives the discovery list
+                // it would otherwise be the only copy of.
                 rememberInterest(host)
             }
         }
+
+        // Plain HTTP on the default port: a host that has never been paired will not talk HTTPS
+        // to this client yet, and the ports it really listens on come back in the answer.
+        private suspend fun probeServerInfo(address: String): ServerInfo? =
+            gateway
+                .getHttp(serverInfoHttp(address, MoonlightHost.DEFAULT_HTTP_PORT, deviceId))
+                .takeIf { it.ok }
+                ?.let { parseServerInfo(it.body) }
+
+        // A host that answers with no hostname is shown by the address that was typed, which is
+        // the only name the user has for it.
+        private fun manualHostFrom(
+            address: String,
+            info: ServerInfo,
+        ) = MoonlightHost(
+            name = info.hostname.ifEmpty { address },
+            address = address,
+            httpPort = externalPortOr(info),
+            httpsPort = info.httpsPort ?: MoonlightHost.DEFAULT_HTTPS_PORT,
+            uniqueId = info.uniqueId,
+            manual = true,
+        )
 
         private fun MutableStateFlow<List<MoonlightHost>>.mergeHost(host: MoonlightHost) {
             value = value.filterNot { it.id == host.id } + host

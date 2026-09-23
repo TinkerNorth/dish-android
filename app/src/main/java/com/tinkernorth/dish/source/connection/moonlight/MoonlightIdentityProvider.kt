@@ -103,30 +103,32 @@ class MoonlightIdentityProvider
          * who can extract it.
          */
         private fun generateKeyPair() {
-            val notBefore = Calendar.getInstance()
-            val notAfter = (notBefore.clone() as Calendar).apply { add(Calendar.YEAR, CERT_VALIDITY_YEARS) }
-            val spec =
-                KeyGenParameterSpec
-                    .Builder(ALIAS, KeyProperties.PURPOSE_SIGN)
-                    .setKeySize(RSA_KEY_SIZE)
-                    // DIGEST_NONE: raw-RSA TLS signing hands over an already-digested
-                    // (and, for PSS, already-encoded) block. SHA-256: the pairing signature.
-                    .setDigests(KeyProperties.DIGEST_NONE, KeyProperties.DIGEST_SHA256)
-                    .setSignaturePaddings(KeyProperties.SIGNATURE_PADDING_RSA_PKCS1)
-                    // Spells KM_PAD_NONE, the padding a raw private-key operation runs
-                    // under. Both padding setters feed one KM_TAG_PADDING list, and the
-                    // purpose stays SIGN-only, so this authorizes raw signing, not
-                    // decryption.
-                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                    .setCertificateSubject(X500Principal(CERT_SUBJECT))
-                    .setCertificateSerialNumber(BigInteger.ONE)
-                    .setCertificateNotBefore(notBefore.time)
-                    .setCertificateNotAfter(notAfter.time)
-                    .build()
             KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_RSA, ANDROID_KEYSTORE).apply {
-                initialize(spec)
+                initialize(pairingKeySpec())
                 generateKeyPair()
             }
+        }
+
+        private fun pairingKeySpec(): KeyGenParameterSpec {
+            val notBefore = Calendar.getInstance()
+            val notAfter = (notBefore.clone() as Calendar).apply { add(Calendar.YEAR, CERT_VALIDITY_YEARS) }
+            return KeyGenParameterSpec
+                .Builder(ALIAS, KeyProperties.PURPOSE_SIGN)
+                .setKeySize(RSA_KEY_SIZE)
+                // DIGEST_NONE: raw-RSA TLS signing hands over an already-digested
+                // (and, for PSS, already-encoded) block. SHA-256: the pairing signature.
+                .setDigests(KeyProperties.DIGEST_NONE, KeyProperties.DIGEST_SHA256)
+                .setSignaturePaddings(KeyProperties.SIGNATURE_PADDING_RSA_PKCS1)
+                // Spells KM_PAD_NONE, the padding a raw private-key operation runs
+                // under. Both padding setters feed one KM_TAG_PADDING list, and the
+                // purpose stays SIGN-only, so this authorizes raw signing, not
+                // decryption.
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setCertificateSubject(X500Principal(CERT_SUBJECT))
+                .setCertificateSerialNumber(BigInteger.ONE)
+                .setCertificateNotBefore(notBefore.time)
+                .setCertificateNotAfter(notAfter.time)
+                .build()
         }
 
         private fun toPem(certificate: X509Certificate): String {

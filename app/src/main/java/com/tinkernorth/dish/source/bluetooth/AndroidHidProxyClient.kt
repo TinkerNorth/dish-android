@@ -57,29 +57,39 @@ class AndroidHidProxyClient(
     override fun registerApp(profile: GamepadProfile) {
         val hid = hidDevice ?: return
         currentProfile = profile
-        val sdp =
-            BluetoothHidDeviceAppSdpSettings(
-                profile.sdpName,
-                profile.sdpDescription,
-                profile.sdpProvider,
-                BluetoothHidDevice.SUBCLASS2_GAMEPAD,
-                buildHidDescriptor(),
-            )
-        val qos =
-            BluetoothHidDeviceAppQosSettings(
-                BluetoothHidDeviceAppQosSettings.SERVICE_GUARANTEED,
-                TOKEN_RATE,
-                BluetoothHidDeviceAppQosSettings.MAX,
-                BluetoothHidDeviceAppQosSettings.MAX,
-                BT_SLOT_US,
-                JITTER_US,
-            )
         try {
-            hid.registerApp(sdp, null, qos, { it.run() }, hidCallback)
+            hid.registerApp(sdpFor(profile), null, guaranteedQos(), ::runInPlace, hidCallback)
         } catch (e: SecurityException) {
             events?.onError("Bluetooth permission denied: ${e.message ?: "BLUETOOTH_CONNECT not granted"}")
         }
     }
+
+    // The callbacks already arrive on a thread this client is happy to work on, so there is
+    // nothing to hand them off to.
+    private fun runInPlace(command: Runnable) = command.run()
+
+    // What the host reads about this pad before it has ever sent a report: the profile's identity
+    // plus the HID descriptor the persona is built from.
+    private fun sdpFor(profile: GamepadProfile) =
+        BluetoothHidDeviceAppSdpSettings(
+            profile.sdpName,
+            profile.sdpDescription,
+            profile.sdpProvider,
+            BluetoothHidDevice.SUBCLASS2_GAMEPAD,
+            buildHidDescriptor(),
+        )
+
+    // Guaranteed rather than best-effort: an input report that arrives late is worse than one
+    // that costs the link a slot.
+    private fun guaranteedQos() =
+        BluetoothHidDeviceAppQosSettings(
+            BluetoothHidDeviceAppQosSettings.SERVICE_GUARANTEED,
+            TOKEN_RATE,
+            BluetoothHidDeviceAppQosSettings.MAX,
+            BluetoothHidDeviceAppQosSettings.MAX,
+            BT_SLOT_US,
+            JITTER_US,
+        )
 
     override fun connectToHost(mac: String) {
         val hid = hidDevice ?: return

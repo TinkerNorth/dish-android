@@ -112,24 +112,30 @@ class SetupUsbViewModel
         private fun runPath(choice: PathChoice) {
             if (pathJob?.isActive == true) return
             val key = activeKey ?: return
-            val c = usb.controllers.value[key] ?: return
+            val controller = usb.controllers.value[key] ?: return
             _state.update { it.copy(working = true) }
-            pathJob =
-                viewModelScope.launch {
-                    try {
-                        usb.setPathChoice(c.vendorId, c.productId, choice)
-                        withTimeoutOrNull(timeoutFor(choice)) {
-                            usb.controllers.first { resolved(it[key]) }
-                        }
-                        // The user backed out or unplugged while we waited: don't navigate behind them.
-                        if (activeKey != key) return@launch
-                        val landed = usb.controllers.value[key]
-                        val slot = proceedSlot(landed)
-                        _events.emit(if (slot != null) Event.Proceed(slot) else Event.Recover(landed?.failure))
-                    } finally {
-                        _state.update { it.copy(working = false) }
-                    }
+            pathJob = viewModelScope.launch { applyPathChoice(key, controller.vendorId, controller.productId, choice) }
+        }
+
+        private suspend fun applyPathChoice(
+            key: Int,
+            vendorId: Int,
+            productId: Int,
+            choice: PathChoice,
+        ) {
+            try {
+                usb.setPathChoice(vendorId, productId, choice)
+                withTimeoutOrNull(timeoutFor(choice)) {
+                    usb.controllers.first { resolved(it[key]) }
                 }
+                // The user backed out or unplugged while we waited: don't navigate behind them.
+                if (activeKey != key) return
+                val landed = usb.controllers.value[key]
+                val slot = proceedSlot(landed)
+                _events.emit(if (slot != null) Event.Proceed(slot) else Event.Recover(landed?.failure))
+            } finally {
+                _state.update { it.copy(working = false) }
+            }
         }
 
         // True for "back was handled in-flow"; the Activity finishes only when false.
