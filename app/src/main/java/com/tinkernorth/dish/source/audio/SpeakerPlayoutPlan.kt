@@ -107,37 +107,38 @@ data class SpeakerPlayoutPlan(
 fun speakerPlayoutPlanFor(slots: Collection<SpeakerSlotInput>): SpeakerPlayoutPlan {
     val voices = LinkedHashMap<Long, SpeakerTarget>()
     for (slot in slots) {
-        if (!slot.streaming) continue
-        if (slot.sessionHandle < 0 || slot.controllerIndex < 0) continue
-        // The endpoint's own width when the platform reported one, so a 4-channel pad
-        // gets its stereo on the speaker pair and not spread across the actuators.
-        val channels =
-            if (slot.playbackChannels > 0) slot.playbackChannels else PlayoutLane.STEREO_CHANNELS
-        if (slot.speakerEnabled) {
-            voices[SpeakerPlayoutPlan.routeKey(slot.sessionHandle, slot.controllerIndex, PlayoutLane.SPEAKER)] =
-                SpeakerTarget(
-                    slotId = slot.slotId,
-                    sessionHandle = slot.sessionHandle,
-                    controllerIndex = slot.controllerIndex,
-                    playbackDeviceId = slot.playbackDeviceId,
-                    lane = PlayoutLane.SPEAKER,
-                    deviceChannels = channels,
-                )
-        }
+        if (!slot.isAddressable) continue
+        val channels = slot.endpointChannels()
+
+        if (slot.speakerEnabled) voices.putVoice(slot, PlayoutLane.SPEAKER, channels)
         // The haptic lane needs its pair to exist at the offset it writes.
-        if (slot.hapticEnabled && channels >= PlayoutLane.QUAD_CHANNELS) {
-            voices[SpeakerPlayoutPlan.routeKey(slot.sessionHandle, slot.controllerIndex, PlayoutLane.HAPTICS)] =
-                SpeakerTarget(
-                    slotId = slot.slotId,
-                    sessionHandle = slot.sessionHandle,
-                    controllerIndex = slot.controllerIndex,
-                    playbackDeviceId = slot.playbackDeviceId,
-                    lane = PlayoutLane.HAPTICS,
-                    deviceChannels = channels,
-                )
-        }
+        val hapticPairExists = channels >= PlayoutLane.QUAD_CHANNELS
+        if (slot.hapticEnabled && hapticPairExists) voices.putVoice(slot, PlayoutLane.HAPTICS, channels)
     }
     return SpeakerPlayoutPlan(voices)
+}
+
+private val SpeakerSlotInput.isAddressable: Boolean
+    get() = streaming && sessionHandle >= 0 && controllerIndex >= 0
+
+// The endpoint's own width when the platform reported one, so a 4-channel pad gets its stereo on
+// the speaker pair and not spread across the actuators.
+private fun SpeakerSlotInput.endpointChannels(): Int = if (playbackChannels > 0) playbackChannels else PlayoutLane.STEREO_CHANNELS
+
+private fun MutableMap<Long, SpeakerTarget>.putVoice(
+    slot: SpeakerSlotInput,
+    lane: PlayoutLane,
+    channels: Int,
+) {
+    this[SpeakerPlayoutPlan.routeKey(slot.sessionHandle, slot.controllerIndex, lane)] =
+        SpeakerTarget(
+            slotId = slot.slotId,
+            sessionHandle = slot.sessionHandle,
+            controllerIndex = slot.controllerIndex,
+            playbackDeviceId = slot.playbackDeviceId,
+            lane = lane,
+            deviceChannels = channels,
+        )
 }
 // How much silence to slip in front of a window to rebuild the anti-underrun cushion.
 // The satellite sends nothing for a digitally silent window, so a live stream goes quiet for

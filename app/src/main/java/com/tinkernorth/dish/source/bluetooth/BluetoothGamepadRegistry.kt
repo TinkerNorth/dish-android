@@ -177,39 +177,45 @@ class BluetoothGamepadRegistry
         private fun onSessionState(state: BluetoothSessionState) {
             val connId = synchronized(lock) { activeConnId } ?: return
             when (state) {
-                is BluetoothSessionState.Idle,
-                is BluetoothSessionState.Failed,
-                ->
-                    _states.update { map ->
-                        val cur = map[connId] ?: return@update map
-                        map + (
-                            connId to
-                                cur.copy(
-                                    registered = false,
-                                    connected = false,
-                                    connectedName = null,
-                                    autoReconnecting = false,
-                                    acquiring = false,
-                                )
-                        )
-                    }
+                is BluetoothSessionState.Idle, is BluetoothSessionState.Failed -> onSessionDown(connId)
                 is BluetoothSessionState.Acquiring -> Unit
-                is BluetoothSessionState.Registered ->
-                    _states.update { map ->
-                        val cur = map[connId] ?: SlotState()
-                        map + (
-                            connId to
-                                cur.copy(
-                                    registered = true,
-                                    connected = false,
-                                    connectedName = null,
-                                    acquiring = false,
-                                )
-                        )
-                    }
+                is BluetoothSessionState.Registered -> onSessionRegistered(connId)
                 is BluetoothSessionState.Connected -> onConnected(connId, state)
             }
             if (state is BluetoothSessionState.Failed) _errors.tryEmit(state.message)
+        }
+
+        // An unknown slot stays unknown: a session that went down for a connection we are not
+        // tracking has nothing to clear.
+        private fun onSessionDown(connId: String) {
+            _states.update { map ->
+                val cur = map[connId] ?: return@update map
+                map + (
+                    connId to
+                        cur.copy(
+                            registered = false,
+                            connected = false,
+                            connectedName = null,
+                            autoReconnecting = false,
+                            acquiring = false,
+                        )
+                )
+            }
+        }
+
+        private fun onSessionRegistered(connId: String) {
+            _states.update { map ->
+                val cur = map[connId] ?: SlotState()
+                map + (
+                    connId to
+                        cur.copy(
+                            registered = true,
+                            connected = false,
+                            connectedName = null,
+                            acquiring = false,
+                        )
+                )
+            }
         }
 
         private fun onConnected(
