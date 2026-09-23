@@ -1002,8 +1002,6 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
             dialog.show()
         }
 
-        /** Answers whether the typed host was accepted; paints the field errors when it was not. */
-
         // Null means the fields were marked with what is still missing. Every field is marked in the
         // same pass rather than stopping at the first, so one attempt shows everything to fix.
         private fun readTypedSatellite(fields: AddSatelliteFields): TypedSatellite? {
@@ -1023,7 +1021,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
             return TypedSatellite(host, httpsPort, udpPort)
         }
 
-        /** Answers whether the dialog may close. */
+        /** Answers whether the typed host was accepted, and so whether the dialog may close. */
         private fun connectToTypedSatellite(fields: AddSatelliteFields): Boolean {
             val typed = readTypedSatellite(fields) ?: return false
             // A typed address has no mDNS name behind it, so it stands in for its own label until

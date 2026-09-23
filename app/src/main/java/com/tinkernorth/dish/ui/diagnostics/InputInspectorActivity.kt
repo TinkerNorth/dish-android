@@ -190,6 +190,11 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
     }
 
     private fun wireFeedbackBench() {
+        wireRumbleRows()
+        wireLightRows()
+    }
+
+    private fun wireRumbleRows() {
         bindTestRow(
             binding.rowRumble,
             R.string.setup_cap_rumble,
@@ -204,6 +209,9 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
             R.string.inspector_trigger_right to { viewModel.triggerRumble(left = 0, right = TEST_MAGNITUDE) },
             R.string.inspector_rumble_both to { viewModel.triggerRumble(left = TEST_MAGNITUDE, right = TEST_MAGNITUDE) },
         )
+    }
+
+    private fun wireLightRows() {
         bindTestRow(binding.rowLightbar, R.string.setup_cap_lightbar, R.string.inspector_cycle to { viewModel.cycleLightbar() })
         bindTestRow(binding.rowPlayerLeds, R.string.setup_cap_player_leds, R.string.inspector_cycle to { viewModel.cyclePlayerLeds() })
         bindTestRow(
@@ -330,32 +338,47 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
     }
 
     private fun renderLive(s: InputSnapshot) {
+        renderSticksAndTriggers(s)
+        renderButtons(s)
+        renderMotion(s)
+        renderTouch(s)
+    }
+
+    private fun renderSticksAndTriggers(s: InputSnapshot) {
         binding.plotLeftStick.update(s.leftSample())
         binding.plotRightStick.update(s.rightSample())
         binding.tvRawValues.text = getString(R.string.inspector_values, s.lx, s.ly, s.rx, s.ry, s.lt, s.rt)
         binding.barLeftTrigger.progress = s.lt
         binding.barRightTrigger.progress = s.rt
+    }
 
+    private fun renderButtons(s: InputSnapshot) {
         val pressed = WireButton.entries.filter { (s.buttons and it.bit) != 0 }.joinToString(" · ") { it.label }
         binding.tvButtons.text =
             getString(R.string.inspector_pressed, pressed.ifEmpty { getString(R.string.inspector_none) })
+    }
 
-        if (s.motionValid) {
-            binding.tvGyro.text =
-                getString(R.string.inspector_gyro_value, wireGyroToDps(s.gx), wireGyroToDps(s.gy), wireGyroToDps(s.gz))
-            binding.tvAccel.text =
-                getString(R.string.inspector_accel_value, wireAccelToG(s.ax), wireAccelToG(s.ay), wireAccelToG(s.az))
-        } else {
+    // A pad with no IMU says so once rather than showing zeroes, which would read as a sensor
+    // that is working and perfectly still.
+    private fun renderMotion(s: InputSnapshot) {
+        if (!s.motionValid) {
             binding.tvGyro.text = getString(R.string.inspector_motion_missing)
             binding.tvAccel.text = ""
+            return
         }
+        binding.tvGyro.text =
+            getString(R.string.inspector_gyro_value, wireGyroToDps(s.gx), wireGyroToDps(s.gy), wireGyroToDps(s.gz))
+        binding.tvAccel.text =
+            getString(R.string.inspector_accel_value, wireAccelToG(s.ax), wireAccelToG(s.ay), wireAccelToG(s.az))
+    }
 
-        if (s.touchValid) {
-            binding.plotTouch.update(s)
-            binding.tvTouchHint.text = ""
-        } else {
+    private fun renderTouch(s: InputSnapshot) {
+        if (!s.touchValid) {
             binding.tvTouchHint.text = getString(R.string.inspector_touch_missing)
+            return
         }
+        binding.plotTouch.update(s)
+        binding.tvTouchHint.text = ""
     }
 
     private fun startCapture(

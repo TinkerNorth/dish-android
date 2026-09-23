@@ -47,13 +47,25 @@ private fun AppCompatActivity.attachFloatingDonatePill(): (() -> Unit)? {
     val content = findViewById<ViewGroup>(android.R.id.content) ?: return null
     val pill = layoutInflater.inflate(R.layout.view_donate_pill, content, false)
     val baseGap = resources.getDimensionPixelSize(R.dimen.spacing_5xl)
+    placePillBottomEnd(pill, baseGap)
 
+    content.addView(pill)
+    val hide = { slidePillOut(pill) { content.removeView(pill) } }
+    wireDonatePill(pill, hide)
+    return hide
+}
+
+// The pill floats over the content, so it keeps its own gap clear of the system bars rather than
+// relying on a parent that does not inset.
+private fun placePillBottomEnd(
+    pill: View,
+    baseGap: Int,
+) {
     (pill.layoutParams as? FrameLayout.LayoutParams)?.apply {
         gravity = Gravity.BOTTOM or Gravity.END
         marginEnd = baseGap
         bottomMargin = baseGap
     }
-
     ViewCompat.setOnApplyWindowInsetsListener(pill) { v, insets ->
         val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
         v.updateLayoutParams<FrameLayout.LayoutParams> {
@@ -62,11 +74,6 @@ private fun AppCompatActivity.attachFloatingDonatePill(): (() -> Unit)? {
         }
         insets
     }
-
-    content.addView(pill)
-    val hide = { slidePillOut(pill) { content.removeView(pill) } }
-    wireDonatePill(pill, hide)
-    return hide
 }
 
 private fun AppCompatActivity.hideOnceSupporting(hide: () -> Unit) {
@@ -108,30 +115,33 @@ private fun dismissDonatePill(context: Context) {
         .edit { putLong(DONATE_PILL_DISMISSED_AT, System.currentTimeMillis()) }
 }
 
+// An infinite animator on a detached view keeps a frame callback alive for nothing, so the
+// animation follows the view on and off screen.
+private class RunWhileAttached(
+    private val animator: ObjectAnimator,
+) : View.OnAttachStateChangeListener {
+    override fun onViewAttachedToWindow(v: View) = animator.start()
+
+    override fun onViewDetachedFromWindow(v: View) = animator.cancel()
+}
+
+private fun AppCompatActivity.heartbeatAnimator(heart: View): ObjectAnimator =
+    ObjectAnimator
+        .ofPropertyValuesHolder(
+            heart,
+            PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, HEARTBEAT_SCALE),
+            PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, HEARTBEAT_SCALE),
+        ).apply {
+            duration = resources.getInteger(R.integer.motion_duration_pulse).toLong()
+            repeatCount = ObjectAnimator.INFINITE
+            repeatMode = ObjectAnimator.REVERSE
+            interpolator = AccelerateDecelerateInterpolator()
+        }
+
 private fun AppCompatActivity.startHeartbeat(heart: View) {
     if (animationsDisabled()) return
-    val animator =
-        ObjectAnimator
-            .ofPropertyValuesHolder(
-                heart,
-                PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, HEARTBEAT_SCALE),
-                PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, HEARTBEAT_SCALE),
-            ).apply {
-                duration = resources.getInteger(R.integer.motion_duration_pulse).toLong()
-                repeatCount = ObjectAnimator.INFINITE
-                repeatMode = ObjectAnimator.REVERSE
-                interpolator = AccelerateDecelerateInterpolator()
-            }
-    heart.addOnAttachStateChangeListener(
-        object : View.OnAttachStateChangeListener {
-            override fun onViewAttachedToWindow(v: View) {
-                animator.start()
-            }
-
-            override fun onViewDetachedFromWindow(v: View) {
-                animator.cancel()
-            }
-        },
-    )
+    val animator = heartbeatAnimator(heart)
+    heart.addOnAttachStateChangeListener(RunWhileAttached(animator))
+    // A view already on screen never fires the attach callback, so it is started here.
     if (heart.isAttachedToWindow) animator.start()
 }
