@@ -30,6 +30,27 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private data class LoggedAxis(
+    val code: Int,
+    val label: String,
+)
+
+private val LOGGED_AXES =
+    listOf(
+        LoggedAxis(MotionEvent.AXIS_X, "X"),
+        LoggedAxis(MotionEvent.AXIS_Y, "Y"),
+        LoggedAxis(MotionEvent.AXIS_Z, "Z"),
+        LoggedAxis(MotionEvent.AXIS_RZ, "RZ"),
+        LoggedAxis(MotionEvent.AXIS_RX, "RX"),
+        LoggedAxis(MotionEvent.AXIS_RY, "RY"),
+        LoggedAxis(MotionEvent.AXIS_HAT_X, "HX"),
+        LoggedAxis(MotionEvent.AXIS_HAT_Y, "HY"),
+        LoggedAxis(MotionEvent.AXIS_LTRIGGER, "LT"),
+        LoggedAxis(MotionEvent.AXIS_RTRIGGER, "RT"),
+        LoggedAxis(MotionEvent.AXIS_BRAKE, "BR"),
+        LoggedAxis(MotionEvent.AXIS_GAS, "GS"),
+    )
+
 @Singleton
 class PhysicalGamepadRegistry
     @Inject
@@ -465,23 +486,22 @@ class PhysicalGamepadRegistry
                     current.hasRumble != nextHasRumble ||
                     current.hasLightbar != nextHasLightbar ||
                     current.touchpadDeviceId != nextTouchpad
-            if (needsUpdate) {
-                if (current?.hasGyro != nextHasGyro) {
-                    Log.i(
-                        TAG,
-                        "pad $deviceId (${dev.name}) hasGyro re-probed: " +
-                            "${current?.hasGyro} -> $nextHasGyro",
-                    )
-                }
-                if (current?.hasRumble != nextHasRumble) {
-                    Log.i(
-                        TAG,
-                        "pad $deviceId (${dev.name}) hasRumble re-probed: " +
-                            "${current?.hasRumble} -> $nextHasRumble",
-                    )
-                }
-                _devices.update { it + (deviceId to makeRoutedDevice(deviceId, dev)) }
-            }
+            if (!needsUpdate) return
+
+            logReprobe(deviceId, dev, "hasGyro", current?.hasGyro, nextHasGyro)
+            logReprobe(deviceId, dev, "hasRumble", current?.hasRumble, nextHasRumble)
+            _devices.update { it + (deviceId to makeRoutedDevice(deviceId, dev)) }
+        }
+
+        private fun logReprobe(
+            deviceId: Int,
+            dev: InputDevice,
+            capability: String,
+            was: Boolean?,
+            now: Boolean,
+        ) {
+            if (was == now) return
+            Log.i(TAG, "pad $deviceId (${dev.name}) $capability re-probed: $was -> $now")
         }
 
         private fun scheduleDisconnect(device: Device) {
@@ -576,51 +596,23 @@ class PhysicalGamepadRegistry
         }
 
         private fun logDeviceCapabilities(dev: InputDevice) {
-            val axes =
-                intArrayOf(
-                    MotionEvent.AXIS_X,
-                    MotionEvent.AXIS_Y,
-                    MotionEvent.AXIS_Z,
-                    MotionEvent.AXIS_RZ,
-                    MotionEvent.AXIS_RX,
-                    MotionEvent.AXIS_RY,
-                    MotionEvent.AXIS_HAT_X,
-                    MotionEvent.AXIS_HAT_Y,
-                    MotionEvent.AXIS_LTRIGGER,
-                    MotionEvent.AXIS_RTRIGGER,
-                    MotionEvent.AXIS_BRAKE,
-                    MotionEvent.AXIS_GAS,
-                )
-            val names =
-                arrayOf("X", "Y", "Z", "RZ", "RX", "RY", "HX", "HY", "LT", "RT", "BR", "GS")
-            val sb = StringBuilder()
-            sb
-                .append("DEVCAPS id=")
-                .append(dev.id)
-                .append(" name=\"")
-                .append(dev.name)
-                .append('"')
-                .append(" sources=0x")
-                .append(Integer.toHexString(dev.sources))
-                .append(" ranges=[")
-            var first = true
-            for (i in axes.indices) {
-                val r = dev.getMotionRange(axes[i], InputDevice.SOURCE_JOYSTICK) ?: continue
-                if (!first) sb.append(',')
-                first = false
-                sb
-                    .append(names[i])
-                    .append('(')
-                    .append(r.min)
-                    .append("..")
-                    .append(r.max)
-                    .append(",flat=")
-                    .append(r.flat)
-                    .append(')')
-            }
-            sb.append(']')
-            Log.i("SatelliteJNI", sb.toString())
+            Log.i("SatelliteJNI", deviceCapabilitiesLine(dev))
         }
+
+        private fun deviceCapabilitiesLine(dev: InputDevice): String =
+            buildString {
+                append("DEVCAPS id=").append(dev.id)
+                append(" name=\"").append(dev.name).append('"')
+                append(" sources=0x").append(Integer.toHexString(dev.sources))
+                append(" ranges=[").append(motionRangesLine(dev)).append(']')
+            }
+
+        private fun motionRangesLine(dev: InputDevice): String =
+            LOGGED_AXES
+                .mapNotNull { axis ->
+                    val range = dev.getMotionRange(axis.code, InputDevice.SOURCE_JOYSTICK)
+                    range?.let { "${axis.label}(${it.min}..${it.max},flat=${it.flat})" }
+                }.joinToString(",")
 
         // Generic HID joysticks expose buttons as KEYCODE_BUTTON_1..16; gating on hasKeys would hide them.
         private fun isGamepad(d: InputDevice): Boolean = isGamepadDeviceFromCapabilities(d.sources, d.keyboardType)
