@@ -142,26 +142,27 @@ class UsbGamepadManager
             }
         }
 
-        private val receiver =
-            object : BroadcastReceiver() {
-                override fun onReceive(
-                    ctx: Context,
-                    intent: Intent,
-                ) {
-                    val device = deviceFromIntent(intent) ?: return
-                    when (intent.action) {
-                        UsbManager.ACTION_USB_DEVICE_ATTACHED -> onUsbPresent(device)
-                        UsbManager.ACTION_USB_DEVICE_DETACHED -> onUsbGone(device)
-                        ACTION_USB_PERMISSION ->
-                            if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
-                                onUsbPresent(device)
-                                applyEvent(vpk(device.vendorId, device.productId), UsbEvent.PermissionGranted)
-                            } else {
-                                applyEvent(vpk(device.vendorId, device.productId), UsbEvent.PermissionDenied)
-                            }
-                    }
+        private inner class UsbPermissionReceiver : BroadcastReceiver() {
+            override fun onReceive(
+                ctx: Context,
+                intent: Intent,
+            ) {
+                val device = deviceFromIntent(intent) ?: return
+                when (intent.action) {
+                    UsbManager.ACTION_USB_DEVICE_ATTACHED -> onUsbPresent(device)
+                    UsbManager.ACTION_USB_DEVICE_DETACHED -> onUsbGone(device)
+                    ACTION_USB_PERMISSION ->
+                        if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+                            onUsbPresent(device)
+                            applyEvent(vpk(device.vendorId, device.productId), UsbEvent.PermissionGranted)
+                        } else {
+                            applyEvent(vpk(device.vendorId, device.productId), UsbEvent.PermissionDenied)
+                        }
                 }
             }
+        }
+
+        private val receiver = UsbPermissionReceiver()
 
         // ── Signal sources → events ──────────────────────────────────────────
 

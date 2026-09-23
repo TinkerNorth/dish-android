@@ -149,24 +149,7 @@ class MoonlightListAdapter(
         private const val TYPE_ROW = 0
         private const val TYPE_EMPTY = 1
 
-        private val Diff =
-            object : DiffUtil.ItemCallback<MoonlightRow>() {
-                override fun areItemsTheSame(
-                    o: MoonlightRow,
-                    n: MoonlightRow,
-                ): Boolean =
-                    when {
-                        o is MoonlightRow.Known && n is MoonlightRow.Known -> o.summary.id == n.summary.id
-                        o is MoonlightRow.Discovered && n is MoonlightRow.Discovered -> o.host.id == n.host.id
-                        o is MoonlightRow.Empty && n is MoonlightRow.Empty -> true
-                        else -> false
-                    }
-
-                override fun areContentsTheSame(
-                    o: MoonlightRow,
-                    n: MoonlightRow,
-                ): Boolean = o == n
-            }
+        private val Diff = MoonlightRowDiff()
     }
 }
 
@@ -221,3 +204,21 @@ internal fun moonlightTrustFor(
         paired -> MoonlightTrustState.REMEMBERED
         else -> MoonlightTrustState.NOT_PAIRED
     }
+
+private class MoonlightRowDiff : DiffUtil.ItemCallback<MoonlightRow>() {
+    override fun areItemsTheSame(
+        o: MoonlightRow,
+        n: MoonlightRow,
+    ): Boolean =
+        when {
+            o is MoonlightRow.Known && n is MoonlightRow.Known -> o.summary.id == n.summary.id
+            o is MoonlightRow.Discovered && n is MoonlightRow.Discovered -> o.host.id == n.host.id
+            o is MoonlightRow.Empty && n is MoonlightRow.Empty -> true
+            else -> false
+        }
+
+    override fun areContentsTheSame(
+        o: MoonlightRow,
+        n: MoonlightRow,
+    ): Boolean = o == n
+}

@@ -41,23 +41,24 @@ class NetworkStateObserver
             setState(next)
         }
 
-        private val callback =
-            object : ConnectivityManager.NetworkCallback() {
-                override fun onAvailable(network: Network) {
-                    publish(currentState())
-                }
-
-                override fun onLost(network: Network) {
-                    publish(currentState())
-                }
-
-                override fun onCapabilitiesChanged(
-                    network: Network,
-                    capabilities: NetworkCapabilities,
-                ) {
-                    publish(currentState())
-                }
+        private inner class NetworkStateCallback : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                publish(currentState())
             }
+
+            override fun onLost(network: Network) {
+                publish(currentState())
+            }
+
+            override fun onCapabilitiesChanged(
+                network: Network,
+                capabilities: NetworkCapabilities,
+            ) {
+                publish(currentState())
+            }
+        }
+
+        private val callback = NetworkStateCallback()
 
         init {
             publish(currentState())
