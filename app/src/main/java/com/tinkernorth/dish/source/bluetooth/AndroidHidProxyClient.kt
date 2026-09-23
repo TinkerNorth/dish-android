@@ -222,31 +222,40 @@ class AndroidHidProxyClient(
 
     private val profileListener = HidProfileListener()
 
-    private val hidCallback =
-        object : BluetoothHidDevice.Callback() {
-            override fun onAppStatusChanged(
-                pluggedDevice: BluetoothDevice?,
-                registered: Boolean,
-            ) {
-                if (registered) events?.onAppRegistered() else events?.onAppUnregistered()
-            }
+    // The platform's own view of this HID app: whether it is registered, and which host is on
+    // the other end of it.
+    private inner class HidDeviceCallback : BluetoothHidDevice.Callback() {
+        override fun onAppStatusChanged(
+            pluggedDevice: BluetoothDevice?,
+            registered: Boolean,
+        ) {
+            if (registered) events?.onAppRegistered() else events?.onAppUnregistered()
+        }
 
-            override fun onConnectionStateChanged(
-                device: BluetoothDevice,
-                state: Int,
-            ) {
-                when (state) {
-                    BluetoothProfile.STATE_CONNECTED -> {
-                        connectedDevice = device
-                        events?.onHostConnected(device.address, hostName(device))
-                    }
-                    BluetoothProfile.STATE_DISCONNECTED -> {
-                        if (connectedDevice?.address == device.address) connectedDevice = null
-                        events?.onHostDisconnected(device.address)
-                    }
-                }
+        override fun onConnectionStateChanged(
+            device: BluetoothDevice,
+            state: Int,
+        ) {
+            when (state) {
+                BluetoothProfile.STATE_CONNECTED -> onHostConnected(device)
+                BluetoothProfile.STATE_DISCONNECTED -> onHostDisconnected(device)
             }
         }
+
+        private fun onHostConnected(device: BluetoothDevice) {
+            connectedDevice = device
+            events?.onHostConnected(device.address, hostName(device))
+        }
+
+        // A disconnect for a host that is not the current one is stale; it still reaches the
+        // listener, but it must not clear a newer connection.
+        private fun onHostDisconnected(device: BluetoothDevice) {
+            if (connectedDevice?.address == device.address) connectedDevice = null
+            events?.onHostDisconnected(device.address)
+        }
+    }
+
+    private val hidCallback = HidDeviceCallback()
 
     // The connected callback runs whatever the grant is; a host whose name we may not read is
     // still connected, just unnamed.

@@ -71,6 +71,13 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
             return
         }
 
+        bindFooterButtons()
+        viewModel.load(slotId)
+        observe()
+    }
+
+    // Unbind closes the screen itself: there is nothing left to configure once the slot is free.
+    private fun bindFooterButtons() {
         binding.btnBack.setOnClickListener { finish() }
         binding.btnCancel.setOnClickListener { finish() }
         binding.btnUnbind.setOnClickListener {
@@ -78,9 +85,6 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
             finish()
         }
         binding.btnApply.setOnClickListener { viewModel.apply() }
-
-        viewModel.load(slotId)
-        observe()
     }
 
     // Re-verify on entering the screen: a Moonlight pairing is remembered trust, and the
@@ -289,30 +293,36 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
     }
 
     private fun bindBindingSection(state: ConfigUiState) {
-        val bz = binding.sectionBinding
         bindEmulateRow(state)
-
-        val motionVisible = state.motionAvailable
-        bz.motionDivider.visibility = if (motionVisible) View.VISIBLE else View.GONE
-        bz.motionRow.visibility = if (motionVisible) View.VISIBLE else View.GONE
-        if (motionVisible) {
-            bz.swMotion.setOnCheckedChangeListener(null)
-            bz.swMotion.isChecked = state.draft?.motionOn == true
-            bz.swMotion.setOnCheckedChangeListener { _, isChecked -> viewModel.setMotion(isChecked) }
-        }
-
-        // Rumble shows when the path can carry it: the phone vibrates as a fallback for the
-        // on-screen pad, a physical pad needs its own motor, and a Bluetooth host has no return path.
-        val rumbleVisible = state.capabilities.isAvailable(Feature.RUMBLE)
-        bz.rumbleDivider.visibility = if (rumbleVisible) View.VISIBLE else View.GONE
-        bz.rumbleRow.visibility = if (rumbleVisible) View.VISIBLE else View.GONE
-        if (rumbleVisible) {
-            bz.swRumble.setOnCheckedChangeListener(null)
-            bz.swRumble.isChecked = state.draft?.rumbleOn == true
-            bz.swRumble.setOnCheckedChangeListener { _, isChecked -> viewModel.setRumble(isChecked) }
-        }
-
+        bindMotionRow(state)
+        bindRumbleRow(state)
         bindAudioRows(state)
+    }
+
+    // The listener is cleared before the checked state is set: setChecked fires it, and a render
+    // must not read as the user having flipped the switch.
+    private fun bindMotionRow(state: ConfigUiState) {
+        val bz = binding.sectionBinding
+        val visible = state.motionAvailable
+        bz.motionDivider.visibility = if (visible) View.VISIBLE else View.GONE
+        bz.motionRow.visibility = if (visible) View.VISIBLE else View.GONE
+        if (!visible) return
+        bz.swMotion.setOnCheckedChangeListener(null)
+        bz.swMotion.isChecked = state.draft?.motionOn == true
+        bz.swMotion.setOnCheckedChangeListener { _, isChecked -> viewModel.setMotion(isChecked) }
+    }
+
+    // Rumble shows when the path can carry it: the phone vibrates as a fallback for the on-screen
+    // pad, a physical pad needs its own motor, and a Bluetooth host has no return path at all.
+    private fun bindRumbleRow(state: ConfigUiState) {
+        val bz = binding.sectionBinding
+        val visible = state.capabilities.isAvailable(Feature.RUMBLE)
+        bz.rumbleDivider.visibility = if (visible) View.VISIBLE else View.GONE
+        bz.rumbleRow.visibility = if (visible) View.VISIBLE else View.GONE
+        if (!visible) return
+        bz.swRumble.setOnCheckedChangeListener(null)
+        bz.swRumble.isChecked = state.draft?.rumbleOn == true
+        bz.swRumble.setOnCheckedChangeListener { _, isChecked -> viewModel.setRumble(isChecked) }
     }
 
     // The emulated pad's own audio endpoints, shown only where the whole path carries
@@ -346,17 +356,30 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
     // A satellite host shows a loader until its catalog resolves the type, the dropdown once Ready, or a
     // tap-to-retry affordance if the fetch failed with nothing cached — never a guessed default.
     private fun bindEmulateRow(state: ConfigUiState) {
-        val bz = binding.sectionBinding
         if (state.isBluetoothHost) {
-            bz.tvEmulateText.text = viewModel.typeLabel(state.draft?.type ?: CONTROLLER_TYPE_XBOX)
-            bz.emulatePill.visibility = View.VISIBLE
-            bz.emulateLoading.visibility = View.GONE
-            bz.emulateDropdown.visibility = View.GONE
+            bindLockedEmulateRow(state)
             return
         }
+        bindEmulateDropdown(state)
+    }
+
+    // A Bluetooth host's persona is fixed by the pairing, so the row states it rather than
+    // offering a choice that would be refused.
+    private fun bindLockedEmulateRow(state: ConfigUiState) {
+        val bz = binding.sectionBinding
+        bz.tvEmulateText.text = viewModel.typeLabel(state.draft?.type ?: CONTROLLER_TYPE_XBOX)
+        bz.emulatePill.visibility = View.VISIBLE
+        bz.emulateLoading.visibility = View.GONE
+        bz.emulateDropdown.visibility = View.GONE
+    }
+
+    // The error state keeps the dropdown, so the retry sits where the choice will be.
+    private fun bindEmulateDropdown(state: ConfigUiState) {
+        val bz = binding.sectionBinding
+        val loading = state.typeLoad == TypeLoad.Loading
         bz.emulatePill.visibility = View.GONE
-        bz.emulateLoading.visibility = if (state.typeLoad == TypeLoad.Loading) View.VISIBLE else View.GONE
-        bz.emulateDropdown.visibility = if (state.typeLoad == TypeLoad.Loading) View.GONE else View.VISIBLE
+        bz.emulateLoading.visibility = if (loading) View.VISIBLE else View.GONE
+        bz.emulateDropdown.visibility = if (loading) View.GONE else View.VISIBLE
         when (state.typeLoad) {
             TypeLoad.Loading -> Unit
             TypeLoad.Ready -> {

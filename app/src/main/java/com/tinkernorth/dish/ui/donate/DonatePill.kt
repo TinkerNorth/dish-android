@@ -76,16 +76,21 @@ private fun placePillBottomEnd(
     }
 }
 
+// Checked on every resume rather than once: the tip may be bought on the donate screen this
+// pill opened, and the observer removes itself the first time it fires.
+private class HideOnceSupporting(
+    private val isSupporter: () -> Boolean,
+    private val hide: () -> Unit,
+) : DefaultLifecycleObserver {
+    override fun onResume(owner: LifecycleOwner) {
+        if (!isSupporter()) return
+        hide()
+        owner.lifecycle.removeObserver(this)
+    }
+}
+
 private fun AppCompatActivity.hideOnceSupporting(hide: () -> Unit) {
-    lifecycle.addObserver(
-        object : DefaultLifecycleObserver {
-            override fun onResume(owner: LifecycleOwner) {
-                if (!isSupporter()) return
-                hide()
-                owner.lifecycle.removeObserver(this)
-            }
-        },
-    )
+    lifecycle.addObserver(HideOnceSupporting(::isSupporter, hide))
 }
 
 private fun AppCompatActivity.wireDonatePill(

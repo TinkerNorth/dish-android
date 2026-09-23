@@ -535,14 +535,28 @@ class GamepadTouchView
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
+            drawBackground(canvas)
+            val l = layout ?: return
+            val s = recognizer.state
+            drawControls(canvas, l, s)
+        }
+
+        // A pad with a light bar tints its whole surface towards the bar's colour, which is the
+        // only way a flat drawing can show a light the phone does not have.
+        private fun drawBackground(canvas: Canvas) {
             paintBg.color =
                 lightbarColor
                     ?.takeIf { skin.hasLightbar }
                     ?.let { ColorUtils.blendARGB(surfaceColor, it, LIGHTBAR_BG_BLEND_FRACTION) }
                     ?: surfaceColor
             canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paintBg)
-            val l = layout ?: return
-            val s = recognizer.state
+        }
+
+        private fun drawControls(
+            canvas: Canvas,
+            l: GamepadLayout,
+            s: GamepadState,
+        ) {
             drawDpad(canvas, l, s)
             drawAbxy(canvas, l, s)
             drawStick(canvas, l.leftStickCx, l.leftStickCy, recognizer.leftStickDx, recognizer.leftStickDy, l.stickRadius, "L")
@@ -884,15 +898,18 @@ class GamepadTouchView
             }
         }
 
+        // Opt out of vsync coalescing so each touch sensor sample is delivered as it arrives
+        // instead of being batched to display refresh.
+        private fun requestUnbufferedOnFirstDown(event: MotionEvent) {
+            val isADown =
+                event.actionMasked == MotionEvent.ACTION_DOWN ||
+                    event.actionMasked == MotionEvent.ACTION_POINTER_DOWN
+            if (isADown) requestUnbufferedDispatch(event)
+        }
+
         override fun onTouchEvent(event: MotionEvent): Boolean {
             val l = layout ?: return false
-            // Opt out of vsync coalescing so each touch sensor sample is delivered as it
-            // arrives instead of being batched to display refresh.
-            if (event.actionMasked == MotionEvent.ACTION_DOWN ||
-                event.actionMasked == MotionEvent.ACTION_POINTER_DOWN
-            ) {
-                requestUnbufferedDispatch(event)
-            }
+            requestUnbufferedOnFirstDown(event)
             recognizer.onTouchEvent(event, l) {
                 listener?.onGamepadStateChanged(recognizer.state)
             }
@@ -929,15 +946,19 @@ class GamepadTouchView
                     eventTimeMs = tap.eventTimeMs,
                 ),
             )
-            postDelayed({
-                trackpadClickFlash = false
-                if (!recognizer.trackpadState.anyFingerDown()) {
-                    listener?.onTrackpadStateChanged(
-                        TouchpadSurfaceView.TouchpadState(eventTimeMs = tap.eventTimeMs + TRACKPAD_CLICK_PULSE_MS),
-                    )
-                }
-                invalidate()
-            }, TRACKPAD_CLICK_PULSE_MS)
+            postDelayed({ endTrackpadClickPulse(tap) }, TRACKPAD_CLICK_PULSE_MS)
+        }
+
+        // A finger that landed during the pulse owns the surface now, so the lift is not
+        // published over it. The flash clears either way.
+        private fun endTrackpadClickPulse(tap: GamepadGestureRecognizer.TrackpadTap) {
+            trackpadClickFlash = false
+            if (!recognizer.trackpadState.anyFingerDown()) {
+                listener?.onTrackpadStateChanged(
+                    TouchpadSurfaceView.TouchpadState(eventTimeMs = tap.eventTimeMs + TRACKPAD_CLICK_PULSE_MS),
+                )
+            }
+            invalidate()
         }
     }
 
