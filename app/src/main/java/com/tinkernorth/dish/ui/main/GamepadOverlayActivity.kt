@@ -30,6 +30,7 @@ import com.tinkernorth.dish.source.sensor.MotionStreamState
 import com.tinkernorth.dish.source.sensor.PhoneBatterySource
 import com.tinkernorth.dish.source.sensor.PhoneMotionSource
 import com.tinkernorth.dish.source.store.MicMuteStore
+import com.tinkernorth.dish.source.store.VirtualPadFeedback
 import com.tinkernorth.dish.ui.common.GamepadSkin
 import com.tinkernorth.dish.ui.common.GamepadTouchView
 import com.tinkernorth.dish.ui.common.ResendPacer
@@ -38,6 +39,7 @@ import com.tinkernorth.dish.ui.common.paintConnectionMenuItem
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.common.showConnectionDialog
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -107,54 +109,72 @@ class GamepadOverlayActivity :
         batterySource = PhoneBatterySource(applicationContext)
         repaintFrom(currentMotionPaint())
 
+        observeMotionPaint()
+        observeVirtualFeedback()
+        observeMicMute()
+    }
+
+    private fun observeMotionPaint() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 try {
-                    combine(
-                        hub.connections.map { conns -> conns.firstOrNull { it.id == connectionId } },
-                        capabilityComposer.state.map {
-                            it[VIRTUAL_SLOT_ID] ?: SlotCapabilities.NONE
-                        },
-                        motionSource.state,
-                    ) { summary, capability, sourceState ->
-                        OverlayMotionPaint(summary, capability, sourceState)
-                    }.distinctUntilChanged().collect { paint ->
-                        applyMotionGate(paint.capability, paint.summary)
-                        repaintFrom(paint)
-                    }
+                    overlayMotionPaint().collect { paint -> repaint(paint) }
                 } finally {
-                    // Stop on collector cancellation (STOP / activity destroy)
-                    // so a backgrounded overlay never leaks sensor listeners.
+                    // Stop on collector cancellation (STOP / activity destroy) so a backgrounded
+                    // overlay never leaks sensor listeners.
                     motionSource.stop()
                 }
             }
         }
+    }
+
+    private fun overlayMotionPaint(): Flow<OverlayMotionPaint> =
+        combine(
+            hub.connections.map { conns -> conns.firstOrNull { it.id == connectionId } },
+            capabilityComposer.state.map { it[VIRTUAL_SLOT_ID] ?: SlotCapabilities.NONE },
+            motionSource.state,
+        ) { summary, capability, sourceState -> OverlayMotionPaint(summary, capability, sourceState) }
+            .distinctUntilChanged()
+
+    private fun repaint(paint: OverlayMotionPaint) {
+        applyMotionGate(paint.capability, paint.summary)
+        repaintFrom(paint)
+    }
+
+    // Host-driven feedback painted onto the skin: lightbar colour, player LEDs, adaptive-trigger
+    // accents.
+    private fun observeVirtualFeedback() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                // Host-driven feedback painted onto the skin: lightbar colour,
-                // player LEDs, adaptive-trigger accents.
-                virtualFeedback.state.collect { fb ->
-                    binding.gamepadTouchView.lightbarColor = fb.lightbarColor
-                    binding.gamepadTouchView.playerLedMask = fb.playerLedMask
-                    binding.gamepadTouchView.leftTriggerEffect = fb.leftTriggerEffect
-                    binding.gamepadTouchView.rightTriggerEffect = fb.rightTriggerEffect
-                    binding.gamepadTouchView.micMuteLedState = fb.micLedState
-                }
+                virtualFeedback.state.collect { fb -> showVirtualFeedback(fb) }
             }
         }
+    }
+
+    private fun showVirtualFeedback(fb: VirtualPadFeedback) {
+        binding.gamepadTouchView.lightbarColor = fb.lightbarColor
+        binding.gamepadTouchView.playerLedMask = fb.playerLedMask
+        binding.gamepadTouchView.leftTriggerEffect = fb.leftTriggerEffect
+        binding.gamepadTouchView.rightTriggerEffect = fb.rightTriggerEffect
+        binding.gamepadTouchView.micMuteLedState = fb.micLedState
+    }
+
+    // The mute state itself, which is what rides the wire, gates capture, and owns the mute pill's
+    // face. It lives in the store rather than in the view because the pad's own button (and the
+    // app-wide mic chip) writes the same state, and because the microphone must keep obeying it
+    // after the overlay is gone.
+    private fun observeMicMute() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                // The mute state itself, which is what rides the wire, gates capture, and owns
-                // the mute pill's face. It lives in the store rather than in the view because
-                // the pad's own button (and the app-wide mic chip) writes the same state, and
-                // because the microphone must keep obeying it after the overlay is gone.
-                micMute.state.collect {
-                    val muted = it[VIRTUAL_SLOT_ID] ?: MicMuteStore.DEFAULT_MUTED
-                    micMuted = muted
-                    binding.gamepadTouchView.micMuted = muted
-                }
+                micMute.state.collect { muted -> showMicMuted(muted[VIRTUAL_SLOT_ID]) }
             }
         }
+    }
+
+    private fun showMicMuted(muted: Boolean?) {
+        val isMuted = muted ?: MicMuteStore.DEFAULT_MUTED
+        micMuted = isMuted
+        binding.gamepadTouchView.micMuted = isMuted
     }
 
     // Resend-thread-only (single-threaded Handler dispatcher).

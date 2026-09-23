@@ -261,6 +261,13 @@ data class ApplyStep(
     val label: String,
 )
 
+private data class ApplyTarget(
+    val snapshot: BindingSnapshot,
+    val draft: BindingDraft,
+    val type: Int,
+    val host: BindingHost,
+)
+
 sealed interface ApplyState {
     data object Idle : ApplyState
 
@@ -684,6 +691,51 @@ class ConfigureBindingsViewModel
             return twins.any { !it.isDisconnecting }
         }
 
+        // Apply is gated on canApply (a resolved type); guard defensively so an unresolved type
+        // never ships. Every one of these used to return without a word, so a Bind button that
+        // could not act was indistinguishable from one that had not been pressed.
+        private fun resolveApplyTarget(state: ConfigUiState): ApplyTarget? {
+            val snapshot = state.snapshot
+            val draft = state.draft
+            val type = draft?.type
+            val host = state.hosts.firstOrNull { it.id == draft?.hostId }
+            if (snapshot == null || draft == null || type == null || host == null) {
+                Log.w(
+                    TAG,
+                    "apply refused: snapshot=${snapshot != null} draft=${draft != null} " +
+                        "type=$type host=${draft?.hostId}",
+                )
+                return null
+            }
+            return ApplyTarget(snapshot, draft, type, host)
+        }
+
+        private fun finished(
+            target: ApplyTarget,
+            errorMessage: String? = null,
+            warningMessage: String? = null,
+        ) = ApplyState.Finished(
+            errorMessage = errorMessage,
+            warningMessage = warningMessage,
+            hostName = target.host.label,
+            controllerName = target.snapshot.name,
+        )
+
+        // Local delivery gates, persisted per slot. Rumble applies regardless of the controller's
+        // own motor because the phone vibrates as a fallback. Motion and audio are gated on the
+        // path carrying them: writing a mic "on" for a slot with no microphone endpoint would
+        // advertise one the moment the user moved that slot to a host that has one.
+        private fun persistLocalGates(
+            state: ConfigUiState,
+            draft: BindingDraft,
+            slotId: String,
+        ) {
+            if (state.motionAvailable) motionEnabledStore.setEnabled(slotId, draft.motionOn)
+            rumbleEnabledStore.setEnabled(slotId, draft.rumbleOn)
+            if (state.micAvailable) micEnabledStore.setEnabled(slotId, draft.micOn)
+            if (state.speakerAvailable) speakerEnabledStore.setEnabled(slotId, draft.speakerOn)
+        }
+
         /**
          * Nothing the user edits commits until here. The whole binding is ONE
          * declarative call to the satellite: the descriptor (type, caps,
@@ -693,90 +745,76 @@ class ConfigureBindingsViewModel
          */
         fun apply() {
             val state = _ui.value
-            val snapshot = state.snapshot
-            val draft = state.draft
-            // Apply is gated on canApply (a resolved type); guard defensively so an unresolved
-            // type never ships. Every one of these used to return without a word, so a Bind
-            // button that could not act was indistinguishable from one that had not been pressed.
-            val type = draft?.type
-            val host = state.hosts.firstOrNull { it.id == draft?.hostId }
-            if (snapshot == null || draft == null || type == null || host == null) {
-                Log.w(
-                    TAG,
-                    "apply refused: snapshot=${snapshot != null} draft=${draft != null} " +
-                        "type=$type host=${draft?.hostId}",
-                )
-                return
-            }
-            val hostId = host.id
+            val target = resolveApplyTarget(state) ?: return
             if (_applyState.value is ApplyState.Running) return
+            viewModelScope.launch { runApply(state, target, buildSteps(state)) }
+        }
 
-            val steps = buildSteps(state)
-            viewModelScope.launch {
-                var done = 0
-                _applyState.value = ApplyState.Running(steps, done)
+        private suspend fun runApply(
+            state: ConfigUiState,
+            target: ApplyTarget,
+            steps: List<ApplyStep>,
+        ) {
+            var done = 0
+            _applyState.value = ApplyState.Running(steps, done)
 
-                var directFellBack = false
-                if (snapshot.link == BindingLink.USB && snapshot.directCapable) {
-                    val achieved = applyUsbPath(snapshot.slotId, draft.directOn)
-                    directFellBack = draft.directOn && !achieved
-                    done++
-                    _applyState.value = ApplyState.Running(steps, done)
-                }
-
-                val slotId = resolveCurrentSlotId(snapshot)
-
-                if (state.motionAvailable) {
-                    // Local gate; its capability bit rides the same descriptor.
-                    motionEnabledStore.setEnabled(slotId, draft.motionOn)
-                }
-                // Rumble is a local delivery gate (the phone vibrates as a fallback),
-                // so it applies regardless of the controller's own motor.
-                rumbleEnabledStore.setEnabled(slotId, draft.rumbleOn)
-                // Audio persists like motion, gated on the path carrying it: writing a
-                // mic "on" for a slot that has no microphone endpoint would advertise one
-                // the moment the user later moved that slot to a host that does.
-                if (state.micAvailable) micEnabledStore.setEnabled(slotId, draft.micOn)
-                if (state.speakerAvailable) speakerEnabledStore.setEnabled(slotId, draft.speakerOn)
-                val bound = hub.bind(slotId, hostId, type)
-                if (!bound) {
-                    _applyState.value =
-                        ApplyState.Finished(
-                            errorMessage = context.getString(R.string.binding_apply_error_slot_gone, snapshot.name),
-                            warningMessage = null,
-                            hostName = host.label,
-                            controllerName = snapshot.name,
-                        )
-                    return@launch
-                }
-                val applied = awaitApplied(host, slotId)
+            val directFellBack = applyDirectPathIfOffered(target)
+            if (directFellBack != null) {
                 done++
                 _applyState.value = ApplyState.Running(steps, done)
-                if (!applied) {
-                    _applyState.value =
-                        ApplyState.Finished(
-                            errorMessage = context.getString(R.string.binding_apply_error_no_connect, host.label),
-                            warningMessage = null,
-                            hostName = host.label,
-                            controllerName = snapshot.name,
-                        )
-                    return@launch
-                }
-
-                val warningMessage =
-                    if (directFellBack) {
-                        context.getString(R.string.binding_apply_warn_detail, snapshot.name, host.label)
-                    } else {
-                        null
-                    }
-                _applyState.value =
-                    ApplyState.Finished(
-                        errorMessage = null,
-                        warningMessage = warningMessage,
-                        hostName = host.label,
-                        controllerName = snapshot.name,
-                    )
             }
+
+            val slotId = resolveCurrentSlotId(target.snapshot)
+            persistLocalGates(state, target.draft, slotId)
+
+            val bound = hub.bind(slotId, target.host.id, target.type)
+            if (!bound) {
+                _applyState.value =
+                    finished(
+                        target,
+                        errorMessage =
+                            context.getString(R.string.binding_apply_error_slot_gone, target.snapshot.name),
+                    )
+                return
+            }
+
+            val applied = awaitApplied(target.host, slotId)
+            done++
+            _applyState.value = ApplyState.Running(steps, done)
+            if (!applied) {
+                _applyState.value =
+                    finished(
+                        target,
+                        errorMessage =
+                            context.getString(R.string.binding_apply_error_no_connect, target.host.label),
+                    )
+                return
+            }
+
+            val fellBack = directFellBack == true
+            _applyState.value =
+                finished(
+                    target,
+                    warningMessage =
+                        if (fellBack) {
+                            context.getString(
+                                R.string.binding_apply_warn_detail,
+                                target.snapshot.name,
+                                target.host.label,
+                            )
+                        } else {
+                            null
+                        },
+                )
+        }
+
+        // Null when this slot has no Direct path to move; otherwise whether Direct was asked for
+        // and did not take, which is the warning the user sees at the end.
+        private suspend fun applyDirectPathIfOffered(target: ApplyTarget): Boolean? {
+            val offersDirect = target.snapshot.link == BindingLink.USB && target.snapshot.directCapable
+            if (!offersDirect) return null
+            val achieved = applyUsbPath(target.snapshot.slotId, target.draft.directOn)
+            return target.draft.directOn && !achieved
         }
 
         private fun buildSteps(state: ConfigUiState): List<ApplyStep> {
