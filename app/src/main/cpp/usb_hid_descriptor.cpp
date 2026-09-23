@@ -199,119 +199,185 @@ void assignUsage(HidLayout& out, uint32_t page, uint32_t usage, uint32_t bit, ui
     }
 }
 
+// One item off the descriptor stream. A long item (prefix 0xFE) carries no data this parser
+// understands, so it is reported with `skip` set and its payload stepped over.
+struct HidItem {
+    uint8_t type;
+    uint8_t tag;
+    uint32_t data;
+    uint8_t dataLen;
+    bool skip;
+    bool truncated;
+};
+
+HidItem readHidItem(const uint8_t* desc, const size_t len, size_t& i) {
+    HidItem item = {0, 0, 0, 0, false, false};
+    const uint8_t prefix = desc[i++];
+
+    const bool isLongItem = prefix == 0xFE;
+    if (isLongItem) {
+        if (i >= len) {
+            item.truncated = true;
+            return item;
+        }
+        const uint8_t payload = desc[i];
+        i += 2u + payload;
+        item.skip = true;
+        return item;
+    }
+
+    const uint8_t bSize = prefix & 0x03u;
+    item.dataLen = bSize == 3 ? 4 : bSize;
+    item.type = (prefix >> 2) & 0x03u;
+    item.tag = (prefix >> 4) & 0x0Fu;
+    if (i + item.dataLen > len) {
+        item.truncated = true;
+        return item;
+    }
+    for (uint8_t k = 0; k < item.dataLen; k++) item.data |= (uint32_t)desc[i + k] << (8u * k);
+    i += item.dataLen;
+    return item;
+}
+
+// The global and local item state the stream accumulates until a Main item consumes it.
+struct HidParseState {
+    uint32_t usagePage;
+    uint32_t reportSize;
+    uint32_t reportCount;
+    int32_t logMin;
+    int32_t logMax;
+    uint8_t currentReportId;
+    uint32_t bitCursor;
+    bool locked;
+    uint8_t lockedReportId;
+    uint32_t usages[kMaxUsages];
+    size_t usageCount;
+    uint32_t usageMin;
+    bool haveRange;
+};
+
+void applyGlobalItem(const HidItem& item, HidParseState& st) {
+    switch (item.tag) {
+    case 0x0:
+        st.usagePage = item.data;
+        break;
+    case 0x1:
+        st.logMin = signExtend(item.data, item.dataLen);
+        break;
+    case 0x2:
+        st.logMax = signExtend(item.data, item.dataLen);
+        break;
+    case 0x7:
+        st.reportSize = item.data;
+        break;
+    case 0x8:
+        st.currentReportId = (uint8_t)item.data;
+        st.bitCursor = 0;
+        break;
+    case 0x9:
+        st.reportCount = item.data;
+        break;
+    default:
+        break;
+    }
+}
+
+void applyLocalItem(const HidItem& item, HidParseState& st) {
+    switch (item.tag) {
+    case 0x0:
+        if (st.usageCount < kMaxUsages) st.usages[st.usageCount++] = item.data;
+        break;
+    case 0x1:
+        st.usageMin = item.data;
+        st.haveRange = true;
+        break;
+    case 0x2:
+        st.haveRange = true;
+        break;
+    default:
+        break;
+    }
+}
+
+void takeButtonField(const HidParseState& st, const uint32_t startBit, HidLayout& out) {
+    const bool alreadyTaken = out.buttonCount != 0;
+    if (alreadyTaken) return;
+    out.buttonBitOffset = (uint16_t)startBit;
+    const uint32_t count = st.reportCount > kMaxButtons ? kMaxButtons : st.reportCount;
+    out.buttonCount = (uint8_t)count;
+}
+
+void takeAxisFields(const HidParseState& st, const uint32_t startBit, HidLayout& out) {
+    for (uint32_t f = 0; f < st.reportCount; f++) {
+        uint32_t usage;
+        if (st.haveRange) {
+            usage = st.usageMin + f;
+        } else if (st.usageCount == 0) {
+            break;
+        } else {
+            usage = st.usages[f < st.usageCount ? f : st.usageCount - 1];
+        }
+        assignUsage(out, st.usagePage, usage, startBit + f * st.reportSize, st.reportSize,
+                    st.logMin, st.logMax);
+    }
+}
+
+// The first non-constant Input item locks the report id this layout describes; later items from a
+// different report are the device's other interfaces and are not ours to read.
+void applyInputItem(const HidItem& item, HidParseState& st, HidLayout& out) {
+    const uint32_t startBit = st.bitCursor;
+    st.bitCursor += st.reportSize * st.reportCount;
+
+    const bool isConstantPadding = (item.data & 0x01u) != 0;
+    const bool carriesFields = st.reportSize > 0 && st.reportCount > 0;
+    if (isConstantPadding || !carriesFields) return;
+
+    if (!st.locked) {
+        st.locked = true;
+        st.lockedReportId = st.currentReportId;
+        out.reportId = st.currentReportId;
+    }
+    const bool isTheLockedReport = st.currentReportId == st.lockedReportId;
+    if (!isTheLockedReport) return;
+
+    const bool isButtonPage = st.usagePage == 0x09;
+    if (isButtonPage) {
+        takeButtonField(st, startBit, out);
+        return;
+    }
+    const bool isAxisPage = st.usagePage == 0x01 || st.usagePage == 0x02;
+    if (isAxisPage) takeAxisFields(st, startBit, out);
+}
+
+void clearLocalItems(HidParseState& st) {
+    st.usageCount = 0;
+    st.haveRange = false;
+    st.usageMin = 0;
+}
+
 } // namespace
 
 bool parseReportDescriptor(const uint8_t* desc, size_t len, HidLayout& out) {
     out = HidLayout{};
-
-    uint32_t usagePage = 0, reportSize = 0, reportCount = 0;
-    int32_t logMin = 0, logMax = 0;
-    uint8_t currentReportId = 0;
-    uint32_t bitCursor = 0;
-    bool locked = false;
-    uint8_t lockedReportId = 0;
-
-    uint32_t usages[kMaxUsages];
-    size_t usageCount = 0;
-    uint32_t usageMin = 0;
-    bool haveRange = false;
+    HidParseState st = {};
 
     size_t i = 0;
     while (i < len) {
-        uint8_t prefix = desc[i++];
-        if (prefix == 0xFE) { // long item: 1 size byte + 1 tag byte + payload
-            if (i >= len) break;
-            uint8_t payload = desc[i];
-            i += 2u + payload;
-            continue;
-        }
-        uint8_t bSize = prefix & 0x03u;
-        uint8_t dataLen = bSize == 3 ? 4 : bSize;
-        uint8_t bType = (prefix >> 2) & 0x03u;
-        uint8_t bTag = (prefix >> 4) & 0x0Fu;
-        if (i + dataLen > len) break;
-        uint32_t data = 0;
-        for (uint8_t k = 0; k < dataLen; k++) data |= (uint32_t)desc[i + k] << (8u * k);
-        i += dataLen;
+        const HidItem item = readHidItem(desc, len, i);
+        if (item.truncated) break;
+        if (item.skip) continue;
 
-        if (bType == 0) {      // Main
-            if (bTag == 0x8) { // Input
-                uint32_t startBit = bitCursor;
-                bitCursor += reportSize * reportCount;
-                bool isConst = (data & 0x01u) != 0;
-                if (!isConst && reportSize > 0 && reportCount > 0) {
-                    if (!locked) {
-                        locked = true;
-                        lockedReportId = currentReportId;
-                        out.reportId = currentReportId;
-                    }
-                    if (currentReportId == lockedReportId) {
-                        if (usagePage == 0x09) {
-                            if (out.buttonCount == 0) {
-                                out.buttonBitOffset = (uint16_t)startBit;
-                                uint32_t cnt =
-                                    reportCount > kMaxButtons ? kMaxButtons : reportCount;
-                                out.buttonCount = (uint8_t)cnt;
-                            }
-                        } else if (usagePage == 0x01 || usagePage == 0x02) {
-                            for (uint32_t f = 0; f < reportCount; f++) {
-                                uint32_t usage;
-                                if (haveRange) {
-                                    usage = usageMin + f;
-                                } else if (usageCount == 0) {
-                                    break;
-                                } else {
-                                    usage = usages[f < usageCount ? f : usageCount - 1];
-                                }
-                                assignUsage(out, usagePage, usage, startBit + f * reportSize,
-                                            reportSize, logMin, logMax);
-                            }
-                        }
-                    }
-                }
-            }
-            usageCount = 0;
-            haveRange = false;
-            usageMin = 0;
-        } else if (bType == 1) { // Global
-            switch (bTag) {
-            case 0x0:
-                usagePage = data;
-                break;
-            case 0x1:
-                logMin = signExtend(data, dataLen);
-                break;
-            case 0x2:
-                logMax = signExtend(data, dataLen);
-                break;
-            case 0x7:
-                reportSize = data;
-                break;
-            case 0x8:
-                currentReportId = (uint8_t)data;
-                bitCursor = 0;
-                break;
-            case 0x9:
-                reportCount = data;
-                break;
-            default:
-                break;
-            }
-        } else if (bType == 2) { // Local
-            switch (bTag) {
-            case 0x0:
-                if (usageCount < kMaxUsages) usages[usageCount++] = data;
-                break;
-            case 0x1:
-                usageMin = data;
-                haveRange = true;
-                break;
-            case 0x2:
-                haveRange = true;
-                break;
-            default:
-                break;
-            }
+        const bool isMainItem = item.type == 0;
+        const bool isGlobalItem = item.type == 1;
+        const bool isLocalItem = item.type == 2;
+        if (isMainItem) {
+            const bool isInputItem = item.tag == 0x8;
+            if (isInputItem) applyInputItem(item, st, out);
+            clearLocalItems(st);
+        } else if (isGlobalItem) {
+            applyGlobalItem(item, st);
+        } else if (isLocalItem) {
+            applyLocalItem(item, st);
         }
     }
 
