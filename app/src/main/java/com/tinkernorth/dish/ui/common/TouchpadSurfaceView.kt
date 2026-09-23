@@ -152,52 +152,62 @@ class TouchpadSurfaceView
 
         override fun onTouchEvent(event: MotionEvent): Boolean {
             if (!accepting) return false
-            // Pre-layout (width/height = 0) would normalise to int16 saturation and poison every subsequent delta.
-            if (width <= 0 || height <= 0) return false
+            // Pre-layout (width/height = 0) would normalise to int16 saturation and poison every
+            // subsequent delta.
+            val laidOut = width > 0 && height > 0
+            if (!laidOut) return false
 
             when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
-                    // Opt out of vsync coalescing so the first MOVE's delta isn't a full
-                    // input-frame larger than subsequent ones (cause of the first-touch jump).
-                    requestUnbufferedDispatch(event)
-                    val wasIdle = !state.anyFingerDown()
-                    val index = event.actionIndex
-                    val pointerId = event.getPointerId(index)
-                    assignSlot(pointerId)
-                    writePointerToState(event, index, pointerId)
-                    updateButton()
-                    if (wasIdle && state.anyFingerDown()) {
-                        listener?.onTouchActivityChanged(true)
-                    }
-                    emit()
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    var changed = false
-                    for (i in 0 until event.pointerCount) {
-                        val pid = event.getPointerId(i)
-                        if (slotForPointerId.containsKey(pid)) {
-                            writePointerToState(event, i, pid)
-                            changed = true
-                        }
-                    }
-                    if (changed) emit()
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
-                    val index = event.actionIndex
-                    val pointerId = event.getPointerId(index)
-                    releaseSlot(pointerId)
-                    updateButton()
-                    emit()
-                    if (!state.anyFingerDown()) {
-                        listener?.onTouchActivityChanged(false)
-                        if (event.actionMasked != MotionEvent.ACTION_CANCEL) {
-                            performClick()
-                        }
-                    }
-                }
+                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> onFingerDown(event)
+                MotionEvent.ACTION_MOVE -> onFingersMoved(event)
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL ->
+                    // performClick stays in onTouchEvent: the ClickableViewAccessibility check
+                    // only recognises the call when it is here.
+                    if (onFingerUp(event)) performClick()
                 else -> return false
             }
             return true
+        }
+
+        private fun onFingerDown(event: MotionEvent) {
+            // Opt out of vsync coalescing so the first MOVE's delta isn't a full input-frame
+            // larger than subsequent ones (cause of the first-touch jump).
+            requestUnbufferedDispatch(event)
+            val wasIdle = !state.anyFingerDown()
+            val index = event.actionIndex
+            val pointerId = event.getPointerId(index)
+            assignSlot(pointerId)
+            writePointerToState(event, index, pointerId)
+            updateButton()
+            val firstFingerLanded = wasIdle && state.anyFingerDown()
+            if (firstFingerLanded) listener?.onTouchActivityChanged(true)
+            emit()
+        }
+
+        private fun onFingersMoved(event: MotionEvent) {
+            var changed = false
+            for (i in 0 until event.pointerCount) {
+                val pointerId = event.getPointerId(i)
+                val isOneOfOurs = slotForPointerId.containsKey(pointerId)
+                if (!isOneOfOurs) continue
+                writePointerToState(event, i, pointerId)
+                changed = true
+            }
+            if (changed) emit()
+        }
+
+        /** Answers whether that lift ended a tap the view should report as a click. */
+        private fun onFingerUp(event: MotionEvent): Boolean {
+            val index = event.actionIndex
+            val pointerId = event.getPointerId(index)
+            releaseSlot(pointerId)
+            updateButton()
+            emit()
+
+            val lastFingerLifted = !state.anyFingerDown()
+            if (!lastFingerLifted) return false
+            listener?.onTouchActivityChanged(false)
+            return event.actionMasked != MotionEvent.ACTION_CANCEL
         }
 
         override fun performClick(): Boolean {
