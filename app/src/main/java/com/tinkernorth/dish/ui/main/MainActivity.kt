@@ -6,6 +6,7 @@ import android.content.res.Configuration
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.View
 import android.widget.LinearLayout
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -157,18 +158,7 @@ class MainActivity :
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         applyPaneLayout(resources.configuration)
-        gamepadHost =
-            attachGamepadHost(
-                binding.root,
-                wakeState,
-                gamepadRegistry,
-                notifications,
-                lowPowerSignal,
-                micIndicator,
-                inputTiming,
-                reachability,
-                capabilityComposer,
-            )
+        gamepadHost = attachHost()
         applyDishSystemBars(binding.root)
         applyDishActivityTransitions()
         attachDonatePill()
@@ -177,9 +167,22 @@ class MainActivity :
         controllerAdapter = ControllerAdapter(this)
         setupUI()
         observeViewModel()
-        // Fallback splash release: happy path is updateUI()'s first emission.
+        // Fallback splash release: the happy path is updateUI()'s first emission.
         binding.root.postDelayed({ splashHoldUntilFirstRender = false }, SPLASH_HOLD_MAX_MS)
     }
+
+    private fun attachHost() =
+        attachGamepadHost(
+            binding.root,
+            wakeState,
+            gamepadRegistry,
+            notifications,
+            lowPowerSignal,
+            micIndicator,
+            inputTiming,
+            reachability,
+            capabilityComposer,
+        )
 
     override fun onStop() {
         super.onStop()
@@ -213,11 +216,30 @@ class MainActivity :
         val controllersPane = binding.llControllersPane ?: return
         val landscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE
         panes.orientation = if (landscape) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+        movePaneToFront(panes, controllersPane, landscape)
+        weightPanes(infoPane, controllersPane, landscape)
+    }
+
+    // Controllers lead in landscape and follow in portrait, so the pane is re-parented rather
+    // than laid out twice.
+    private fun movePaneToFront(
+        panes: LinearLayout,
+        controllersPane: View,
+        landscape: Boolean,
+    ) {
         val controllersIndex = if (landscape) 0 else 1
-        if (panes.indexOfChild(controllersPane) != controllersIndex) {
-            panes.removeView(controllersPane)
-            panes.addView(controllersPane, controllersIndex)
-        }
+        if (panes.indexOfChild(controllersPane) == controllersIndex) return
+        panes.removeView(controllersPane)
+        panes.addView(controllersPane, controllersIndex)
+    }
+
+    // Landscape splits the width 2:3; portrait gives the info pane its content height and lets
+    // the controllers take the rest.
+    private fun weightPanes(
+        infoPane: View,
+        controllersPane: View,
+        landscape: Boolean,
+    ) {
         infoPane.updateLayoutParams<LinearLayout.LayoutParams> {
             width = if (landscape) 0 else LinearLayout.LayoutParams.MATCH_PARENT
             height = LinearLayout.LayoutParams.WRAP_CONTENT

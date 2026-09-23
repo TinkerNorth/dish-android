@@ -32,7 +32,12 @@ class SetupInputActivity : BaseGamepadHostActivity() {
         setupDishToolbar(binding.toolbar)
         wireSetupSkip(binding.toolbar, onboarding)
         binding.breadcrumb.applyStep(SETUP_STEP_INPUT)
+        bindInputChoices()
+    }
 
+    // Wired first: it is the only path with no pairing step and the lowest latency, which is what
+    // the badge says.
+    private fun bindInputChoices() {
         bindChoice(
             binding.cardWired,
             R.drawable.ic_usb,

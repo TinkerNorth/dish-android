@@ -57,32 +57,46 @@ class PairPinDialog(
         requestWindowFeature(Window.FEATURE_NO_TITLE)
         binding = DialogPairPinBinding.inflate(LayoutInflater.from(context))
         setContentView(binding.root)
+        applyWindowChrome()
         pendingTitle?.let { binding.tvPairTitle.text = it }
         pendingSubtitle?.let { binding.tvPairSubtitle.text = it }
+        bindButtons()
+        bindClientPinSection()
+    }
+
+    // The layout draws its own card, so the dialog window itself must not draw a second one
+    // behind it.
+    private fun applyWindowChrome() {
         window?.setBackgroundDrawableResource(android.R.color.transparent)
         window?.setLayout(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.WRAP_CONTENT,
         )
+    }
 
+    private fun bindButtons() {
         binding.btnPairCancel.setOnClickListener { cancel() }
-        binding.btnPairSubmit.setOnClickListener {
-            val pin = binding.etPin.text.toString()
-            if (pin.isEmpty()) {
-                showError(context.getString(R.string.pair_dialog_error_empty))
-                binding.etPin.requestFocus()
-                return@setOnClickListener
-            }
-            showError(null)
-            onSubmit(pin)
-        }
+        binding.btnPairSubmit.setOnClickListener { submitTypedPin() }
+        binding.btnPairApprove.setOnClickListener { onRequestApproval() }
+    }
 
-        // Path B: show this dish's PIN for the operator to accept on the
-        // satellite. Hidden entirely when no client PIN was supplied.
+    private fun submitTypedPin() {
+        val pin = binding.etPin.text.toString()
+        if (pin.isEmpty()) {
+            showError(context.getString(R.string.pair_dialog_error_empty))
+            binding.etPin.requestFocus()
+            return
+        }
+        showError(null)
+        onSubmit(pin)
+    }
+
+    // Path B: this dish's own PIN, for the operator to accept on the satellite. Hidden entirely
+    // when no client PIN was supplied, which is the path-A-only case.
+    private fun bindClientPinSection() {
         binding.tvClientPin.text = clientPin
         binding.clientPinSection.visibility =
             if (clientPin.isNotEmpty()) View.VISIBLE else View.GONE
-        binding.btnPairApprove.setOnClickListener { onRequestApproval() }
     }
 
     fun setBusy(busy: Boolean) {

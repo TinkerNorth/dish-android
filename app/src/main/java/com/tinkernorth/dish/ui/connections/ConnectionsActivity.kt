@@ -188,6 +188,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     private var onDiscoverableResult: ((granted: Boolean, durationSec: Int) -> Unit)? = null
 
     private val satellitePairing = SatellitePairing()
+    private val addHostDialogs = AddHostDialogs()
 
     // Nothing the user presses here may end in a shrug: a row whose button does nothing
     // is indistinguishable from a broken app, and used to be exactly that.
@@ -465,7 +466,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 R.string.section_satellites,
                 R.string.action_add,
                 tier = linkTierFor(ConnectionKind.SATELLITE),
-            ) { showAddSatelliteDialog() }
+            ) { addHostDialogs.showSatellite() }
         bluetoothHeader =
             SectionHeaderAdapter(
                 R.drawable.ic_bluetooth,
@@ -479,7 +480,7 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 R.string.section_moonlight_hosts,
                 R.string.action_add,
                 tier = linkTierFor(ConnectionKind.MOONLIGHT),
-            ) { showAddMoonlightDialog() }
+            ) { addHostDialogs.showMoonlight() }
     }
 
     // Narrow layouts stack every section in one scroller, dividers included.
@@ -822,70 +823,6 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         val autoConnectMac: String? = null,
     )
 
-    private class AddSatelliteFields(
-        view: View,
-    ) {
-        val hostLayout: TextInputLayout = view.findViewById(R.id.tilSatelliteHost)
-        val httpsLayout: TextInputLayout = view.findViewById(R.id.tilSatelliteHttpsPort)
-        val udpLayout: TextInputLayout = view.findViewById(R.id.tilSatelliteUdpPort)
-        val hostField: TextInputEditText = view.findViewById(R.id.etSatelliteHost)
-        val httpsField: TextInputEditText = view.findViewById(R.id.etSatelliteHttpsPort)
-        val udpField: TextInputEditText = view.findViewById(R.id.etSatelliteUdpPort)
-    }
-
-    private fun showAddSatelliteDialog() {
-        val view = layoutInflater.inflate(R.layout.dialog_add_satellite, null)
-        val fields = AddSatelliteFields(view)
-        // Port fields parse back through toIntOrNull, so the defaults are written in ASCII digits.
-        fields.httpsField.setText(String.format(Locale.ROOT, "%d", DEFAULT_HTTPS_PORT))
-        fields.udpField.setText(String.format(Locale.ROOT, "%d", DEFAULT_UDP_PORT))
-
-        val dialog =
-            MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.action_add_custom_satellite)
-                .setView(view)
-                .setPositiveButton(R.string.action_connect, null)
-                .setNegativeButton(R.string.action_cancel, null)
-                .create()
-        // The positive button is wired after show() so a failed validation keeps the dialog open.
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                if (connectToTypedSatellite(fields)) dialog.dismiss()
-            }
-        }
-        dialog.show()
-    }
-
-    /** Answers whether the typed host was accepted; paints the field errors when it was not. */
-    private fun connectToTypedSatellite(fields: AddSatelliteFields): Boolean {
-        val host =
-            fields.hostField.text
-                ?.toString()
-                ?.trim()
-                .orEmpty()
-        val httpsPort = parsePort(fields.httpsField)
-        val udpPort = parsePort(fields.udpField)
-
-        fields.hostLayout.error = if (host.isEmpty()) getString(R.string.add_satellite_error_host) else null
-        fields.httpsLayout.error = if (httpsPort == null) getString(R.string.add_satellite_error_port) else null
-        fields.udpLayout.error = if (udpPort == null) getString(R.string.add_satellite_error_port) else null
-
-        val isComplete = host.isNotEmpty() && httpsPort != null && udpPort != null
-        if (!isComplete) return false
-
-        satellite.connect(
-            DiscoveredServer(
-                name = host,
-                ip = host,
-                udpPort = udpPort,
-                pairPort = httpsPort,
-                httpPort = httpsPort,
-                source = DiscoverySource.MANUAL,
-            ),
-        )
-        return true
-    }
-
     // ── Moonlight host flow ─────────────────────────────────────────────────
 
     // The hosts screen owns trust and nothing else: pairing, forgetting, and the
@@ -948,44 +885,6 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 .show()
     }
 
-    private fun showAddMoonlightDialog() {
-        val view = layoutInflater.inflate(R.layout.dialog_add_moonlight, null)
-        val layout = view.findViewById<TextInputLayout>(R.id.tilMoonlightHost)
-        val input = view.findViewById<TextInputEditText>(R.id.etMoonlightHost)
-        val dialog =
-            MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.action_add_moonlight_host)
-                .setView(view)
-                .setPositiveButton(R.string.action_add, null)
-                .setNegativeButton(R.string.action_cancel, null)
-                .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val address =
-                    input.text
-                        ?.toString()
-                        ?.trim()
-                        .orEmpty()
-                if (address.isEmpty()) {
-                    layout.error = getString(R.string.add_moonlight_error_host)
-                } else {
-                    moonlight.addManualHost(address)
-                    dialog.dismiss()
-                }
-            }
-        }
-        dialog.show()
-    }
-
-    private fun parsePort(field: TextInputEditText): Int? {
-        val port =
-            field.text
-                ?.toString()
-                ?.trim()
-                ?.toIntOrNull() ?: return null
-        return if (port in 1..MAX_PORT) port else null
-    }
-
     // A pairing in flight owns the error: it belongs in the dialog the user is looking at, not in
     // a banner behind it.
     private fun onConnectionError(message: String) {
@@ -1024,32 +923,170 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         )
     }
 
-    private fun applyBtAdapterBanner(state: com.tinkernorth.dish.source.system.BluetoothAdapterState) {
+    private fun applyBtAdapterBanner(state: BluetoothAdapterState) {
         btAdapterBannerId?.let { notifications.dismiss(it) }
         btAdapterBannerId =
             when (state) {
-                com.tinkernorth.dish.source.system.BluetoothAdapterState.ON -> null
-                com.tinkernorth.dish.source.system.BluetoothAdapterState.UNSUPPORTED ->
-                    notifications.info(
-                        glyph = R.drawable.ic_bluetooth_off,
-                        title = getString(R.string.notif_bt_unsupported_title),
-                        body = getString(R.string.notif_bt_unsupported_body),
-                        key = "bt-adapter-unsupported",
-                        durationMs = DishNotification.DURATION_PERSISTENT,
-                    )
-                com.tinkernorth.dish.source.system.BluetoothAdapterState.OFF ->
-                    notifications.warn(
-                        glyph = R.drawable.ic_bluetooth_off,
-                        title = getString(R.string.notif_bt_adapter_off_title),
-                        body = getString(R.string.notif_bt_adapter_off_body),
-                        action =
-                            DishNotification.Action(
-                                label = getString(R.string.action_turn_on),
-                            ) { requestEnableBt() },
-                        key = "bt-adapter-off",
-                        durationMs = DishNotification.DURATION_PERSISTENT,
-                    )
+                BluetoothAdapterState.ON -> null
+                BluetoothAdapterState.UNSUPPORTED -> showBtUnsupportedBanner()
+                BluetoothAdapterState.OFF -> showBtOffBanner()
             }
+    }
+
+    // A phone with no Bluetooth radio at all. Informational rather than a warning: there is
+    // nothing for the user to fix, and the rest of the screen still works.
+    private fun showBtUnsupportedBanner() =
+        notifications.info(
+            glyph = R.drawable.ic_bluetooth_off,
+            title = getString(R.string.notif_bt_unsupported_title),
+            body = getString(R.string.notif_bt_unsupported_body),
+            key = "bt-adapter-unsupported",
+            durationMs = DishNotification.DURATION_PERSISTENT,
+        )
+
+    // A radio that is off is one tap from working, so this one carries the action.
+    private fun showBtOffBanner() =
+        notifications.warn(
+            glyph = R.drawable.ic_bluetooth_off,
+            title = getString(R.string.notif_bt_adapter_off_title),
+            body = getString(R.string.notif_bt_adapter_off_body),
+            action =
+                DishNotification.Action(
+                    label = getString(R.string.action_turn_on),
+                ) { requestEnableBt() },
+            key = "bt-adapter-off",
+            durationMs = DishNotification.DURATION_PERSISTENT,
+        )
+
+    // The two dialogs that add a host by typing its address. Both keep themselves open on a
+    // field the user still has to fix, which is the one thing they share and the reason they
+    // sit together rather than on the Activity.
+    private class AddSatelliteFields(
+        view: View,
+    ) {
+        val hostLayout: TextInputLayout = view.findViewById(R.id.tilSatelliteHost)
+        val httpsLayout: TextInputLayout = view.findViewById(R.id.tilSatelliteHttpsPort)
+        val udpLayout: TextInputLayout = view.findViewById(R.id.tilSatelliteUdpPort)
+        val hostField: TextInputEditText = view.findViewById(R.id.etSatelliteHost)
+        val httpsField: TextInputEditText = view.findViewById(R.id.etSatelliteHttpsPort)
+        val udpField: TextInputEditText = view.findViewById(R.id.etSatelliteUdpPort)
+    }
+
+    private class TypedSatellite(
+        val host: String,
+        val httpsPort: Int,
+        val udpPort: Int,
+    )
+
+    private inner class AddHostDialogs {
+        fun showSatellite() {
+            val view = layoutInflater.inflate(R.layout.dialog_add_satellite, null)
+            val fields = AddSatelliteFields(view)
+            // Port fields parse back through toIntOrNull, so the defaults are written in ASCII digits.
+            fields.httpsField.setText(String.format(Locale.ROOT, "%d", DEFAULT_HTTPS_PORT))
+            fields.udpField.setText(String.format(Locale.ROOT, "%d", DEFAULT_UDP_PORT))
+
+            val dialog =
+                MaterialAlertDialogBuilder(this@ConnectionsActivity)
+                    .setTitle(R.string.action_add_custom_satellite)
+                    .setView(view)
+                    .setPositiveButton(R.string.action_connect, null)
+                    .setNegativeButton(R.string.action_cancel, null)
+                    .create()
+            // The positive button is wired after show() so a failed validation keeps the dialog open.
+            dialog.setOnShowListener {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                    if (connectToTypedSatellite(fields)) dialog.dismiss()
+                }
+            }
+            dialog.show()
+        }
+
+        /** Answers whether the typed host was accepted; paints the field errors when it was not. */
+
+        // Null means the fields were marked with what is still missing. Every field is marked in the
+        // same pass rather than stopping at the first, so one attempt shows everything to fix.
+        private fun readTypedSatellite(fields: AddSatelliteFields): TypedSatellite? {
+            val host =
+                fields.hostField.text
+                    ?.toString()
+                    ?.trim()
+                    .orEmpty()
+            val httpsPort = parsePort(fields.httpsField)
+            val udpPort = parsePort(fields.udpField)
+
+            fields.hostLayout.error = if (host.isEmpty()) getString(R.string.add_satellite_error_host) else null
+            fields.httpsLayout.error = if (httpsPort == null) getString(R.string.add_satellite_error_port) else null
+            fields.udpLayout.error = if (udpPort == null) getString(R.string.add_satellite_error_port) else null
+
+            if (host.isEmpty() || httpsPort == null || udpPort == null) return null
+            return TypedSatellite(host, httpsPort, udpPort)
+        }
+
+        /** Answers whether the dialog may close. */
+        private fun connectToTypedSatellite(fields: AddSatelliteFields): Boolean {
+            val typed = readTypedSatellite(fields) ?: return false
+            // A typed address has no mDNS name behind it, so it stands in for its own label until
+            // the satellite answers with one.
+            satellite.connect(
+                DiscoveredServer(
+                    name = typed.host,
+                    ip = typed.host,
+                    udpPort = typed.udpPort,
+                    pairPort = typed.httpsPort,
+                    httpPort = typed.httpsPort,
+                    source = DiscoverySource.MANUAL,
+                ),
+            )
+            return true
+        }
+
+        fun showMoonlight() {
+            val view = layoutInflater.inflate(R.layout.dialog_add_moonlight, null)
+            val layout = view.findViewById<TextInputLayout>(R.id.tilMoonlightHost)
+            val input = view.findViewById<TextInputEditText>(R.id.etMoonlightHost)
+            val dialog =
+                MaterialAlertDialogBuilder(this@ConnectionsActivity)
+                    .setTitle(R.string.action_add_moonlight_host)
+                    .setView(view)
+                    .setPositiveButton(R.string.action_add, null)
+                    .setNegativeButton(R.string.action_cancel, null)
+                    .create()
+            // The positive button is wired after show() so a failed validation keeps the dialog open.
+            dialog.setOnShowListener {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                    if (addTypedMoonlightHost(input, layout)) dialog.dismiss()
+                }
+            }
+            dialog.show()
+        }
+
+        /** Answers whether the dialog may close: a blank address keeps it open, marked. */
+        private fun addTypedMoonlightHost(
+            input: TextInputEditText,
+            layout: TextInputLayout,
+        ): Boolean {
+            val address =
+                input.text
+                    ?.toString()
+                    ?.trim()
+                    .orEmpty()
+            if (address.isEmpty()) {
+                layout.error = getString(R.string.add_moonlight_error_host)
+                return false
+            }
+            moonlight.addManualHost(address)
+            return true
+        }
+
+        private fun parsePort(field: TextInputEditText): Int? {
+            val port =
+                field.text
+                    ?.toString()
+                    ?.trim()
+                    ?.toIntOrNull() ?: return null
+            return if (port in 1..MAX_PORT) port else null
+        }
     }
 
     // The satellite PIN exchange: one dialog at a time and the server it belongs to, kept together
