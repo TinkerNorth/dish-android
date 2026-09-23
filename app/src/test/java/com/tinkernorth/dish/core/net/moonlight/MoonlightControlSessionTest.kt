@@ -103,7 +103,7 @@ class MoonlightControlSessionTest {
         val session = MoonlightControlSession(key, 0x1234, transport, { clock })
         session.connect()
         val before = transport.sent.size
-        session.sendControllerState(0, 1, MoonlightControlProtocol.BTN_A, 0, 0, 0, 0, 0, 0)
+        session.sendControllerState(0, 1, BTN_A, 0, 0, 0, 0, 0, 0)
         assertEquals(before + 1, transport.sent.size)
     }
 
@@ -125,7 +125,7 @@ class MoonlightControlSessionTest {
             ByteBuffer
                 .allocate(4 + 10)
                 .order(ByteOrder.LITTLE_ENDIAN)
-                .putShort(MoonlightControlProtocol.EVENT_RUMBLE_DATA.toShort())
+                .putShort(EVENT_RUMBLE_DATA.toShort())
                 .putShort(10)
                 .put(body.array())
                 .array()

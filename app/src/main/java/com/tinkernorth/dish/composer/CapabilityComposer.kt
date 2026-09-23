@@ -8,10 +8,11 @@ import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.HostFeatureSet
 import com.tinkernorth.dish.core.model.SlotCapabilities
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.net.moonlight.fromStored
+import com.tinkernorth.dish.core.net.moonlight.resolveMoonlightEmulatedType
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.hotpath.input.Transport
-import com.tinkernorth.dish.repository.TouchpadModeValue
+import com.tinkernorth.dish.repository.TOUCHPAD_MODE_OFF
 import com.tinkernorth.dish.source.audio.PadAudioRoutes
 import com.tinkernorth.dish.source.sensor.PhoneMotionAvailability
 import com.tinkernorth.dish.source.store.MicEnabledStore
@@ -170,8 +171,8 @@ class CapabilityComposer
          * so going through [state] would declare a stale "off" and need a second PUT to heal.
          */
         fun touchpadWireMode(slotId: String): String {
-            val connId = hub.bindings.value[slotId] ?: return TouchpadModeValue.TOUCHPAD_MODE_OFF
-            return TouchpadRouting.wireMode(
+            val connId = hub.bindings.value[slotId] ?: return TOUCHPAD_MODE_OFF
+            return wireMode(
                 mouseSurfaceOpen = mouseSurface.isOpen(slotId),
                 controller = liveControllerLayer(slotId),
                 type =
@@ -200,7 +201,7 @@ class CapabilityComposer
         ): SlotCapabilities =
             CapabilityResolver.resolve(
                 controller = candidateControllerLayer(slotId, candidateDirect),
-                transport = TransportProfiles.forKind(candidateHostKind),
+                transport = transportProfileFor(candidateHostKind),
                 type = typeCapabilitiesFor(candidateType, candidateHostId, candidateHostKind),
                 host = candidateHostLayer(candidateHostKind, candidateHostId),
                 userEnabled = ALL,
@@ -365,7 +366,7 @@ class CapabilityComposer
             device: PhysicalGamepadRegistry.Device,
             direct: Boolean = device.isUsbSynthetic,
         ): TouchpadSource =
-            TouchpadRouting.sourceFor(
+            sourceFor(
                 isVirtual = false,
                 padHasTouchpad = native.modelHasTouchpad(device.vendorId, device.productId),
                 padCaptured = direct || (!device.isUsbSynthetic && device.touchpadDeviceId != null),
@@ -395,7 +396,7 @@ class CapabilityComposer
         }
 
         // Unbound slots get a permissive transport so candidate/report queries see inherent availability.
-        private fun transportLayer(summary: ConnectionSummary?): CapabilitySet = summary?.let { TransportProfiles.forKind(it.kind) } ?: ALL
+        private fun transportLayer(summary: ConnectionSummary?): CapabilitySet = summary?.let { transportProfileFor(it.kind) } ?: ALL
 
         private fun typeLayer(
             slotId: String,
@@ -418,8 +419,8 @@ class CapabilityComposer
         ): CapabilitySet {
             if (kind == ConnectionKind.MOONLIGHT) {
                 return MoonlightCatalog.typeCapabilities(
-                    MoonlightEmulatedType.resolveMoonlightEmulatedType(
-                        MoonlightEmulatedType.fromStored(typeId),
+                    resolveMoonlightEmulatedType(
+                        fromStored(typeId),
                         sourceHasMotion = false,
                     ),
                 )
@@ -430,7 +431,7 @@ class CapabilityComposer
                     ?.controllerTypes
                     ?.firstOrNull { it.id == typeId }
             return catalogType?.let { CapabilityResolver.typeCapabilities(it) }
-                ?: BundledCatalog.typeCapabilitiesById(typeId)
+                ?: typeCapabilitiesById(typeId)
         }
 
         // BLUETOOTH limits via transport, so its host layer is permissive; an unbound slot is

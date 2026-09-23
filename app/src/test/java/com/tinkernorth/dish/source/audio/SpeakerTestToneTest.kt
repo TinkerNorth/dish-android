@@ -58,9 +58,9 @@ class SpeakerTestToneTest {
     fun `plays every frame on the pad's own endpoint and closes the track`() =
         runTest {
             val sink = FakeSink()
-            assertTrue(SpeakerTestTone(sink, routing, TestTonePolicy.FRAMES).play("-5"))
+            assertTrue(SpeakerTestTone(sink, routing, FRAMES).play("-5"))
             assertEquals(42, sink.openedEndpoint)
-            assertEquals(TestTonePolicy.FRAMES, sink.written.size)
+            assertEquals(FRAMES, sink.written.size)
             assertTrue(sink.written.all { it.size == SpeakerEngine.FRAME_SAMPLES })
             assertTrue(sink.closed)
         }
@@ -69,7 +69,7 @@ class SpeakerTestToneTest {
     fun `the phone route plays out the default output`() =
         runTest {
             val sink = FakeSink()
-            assertTrue(SpeakerTestTone(sink, routing, TestTonePolicy.FRAMES).play("virtual"))
+            assertTrue(SpeakerTestTone(sink, routing, FRAMES).play("virtual"))
             assertEquals(NO_AUDIO_DEVICE, sink.openedEndpoint)
         }
 
@@ -77,20 +77,20 @@ class SpeakerTestToneTest {
     fun `a refused output reports false and writes nothing`() =
         runTest {
             val sink = FakeSink(refuse = true)
-            assertFalse(SpeakerTestTone(sink, routing, TestTonePolicy.FRAMES).play("-5"))
+            assertFalse(SpeakerTestTone(sink, routing, FRAMES).play("-5"))
             assertTrue(sink.written.isEmpty())
         }
 
     @Test
     fun `the tone fades in from silence, stays under full scale and keeps both channels equal`() {
-        val first = TestTonePolicy.frame(0)
+        val first = frame(0)
         assertEquals(0, first[0].toInt())
         assertEquals(0, first[1].toInt())
-        val last = TestTonePolicy.frame(TestTonePolicy.FRAMES - 1)
+        val last = frame(FRAMES - 1)
         assertEquals(0, last[last.size - 2].toInt())
         var peak = 0
-        for (index in 0 until TestTonePolicy.FRAMES) {
-            val frame = TestTonePolicy.frame(index)
+        for (index in 0 until FRAMES) {
+            val frame = frame(index)
             for (i in 0 until frame.size step 2) {
                 assertEquals(frame[i], frame[i + 1])
                 peak = maxOf(peak, abs(frame[i].toInt()))

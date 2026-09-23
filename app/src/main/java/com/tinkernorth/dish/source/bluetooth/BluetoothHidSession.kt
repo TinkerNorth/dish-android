@@ -2,7 +2,7 @@
 
 package com.tinkernorth.dish.source.bluetooth
 
-import com.tinkernorth.dish.core.input.BluetoothGamepad
+import com.tinkernorth.dish.core.input.GamepadProfile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -11,17 +11,17 @@ sealed interface BluetoothSessionState {
     data object Idle : BluetoothSessionState
 
     data class Acquiring(
-        val profile: BluetoothGamepad.GamepadProfile,
+        val profile: GamepadProfile,
         val autoConnectMac: String?,
     ) : BluetoothSessionState
 
     data class Registered(
-        val profile: BluetoothGamepad.GamepadProfile,
+        val profile: GamepadProfile,
         val autoConnectMac: String?,
     ) : BluetoothSessionState
 
     data class Connected(
-        val profile: BluetoothGamepad.GamepadProfile,
+        val profile: GamepadProfile,
         val mac: String,
         val name: String?,
     ) : BluetoothSessionState
@@ -55,7 +55,7 @@ class BluetoothHidSession(
     }
 
     fun start(
-        profile: BluetoothGamepad.GamepadProfile,
+        profile: GamepadProfile,
         autoConnectMac: String?,
     ) {
         synchronized(lock) {

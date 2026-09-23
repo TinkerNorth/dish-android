@@ -5,8 +5,9 @@ package com.tinkernorth.dish.ui.common
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_SWITCHPRO
-import com.tinkernorth.dish.core.input.BluetoothGamepad
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.input.GamepadProfile
+import com.tinkernorth.dish.core.net.moonlight.NINTENDO
+import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
 
 // On-screen glyph set for the virtual pad, one per emulated identity. The layout
 // (stick/d-pad placement) splits the PlayStation family from the rest; the glyphs
@@ -39,17 +40,17 @@ enum class GamepadSkin(
 
         // Moonlight emulated type → skin, in the Moonlight id table (its ids overlap the
         // catalog's, so the two mappers never share a caller). AUTO must be resolved to a
-        // concrete type first (MoonlightEmulatedType.resolveMoonlightEmulatedType); an unresolved value lands
+        // concrete type first (resolveMoonlightEmulatedType); an unresolved value lands
         // on the generic Xbox skin, matching the wire's own fallback.
         fun forMoonlightType(type: Int): GamepadSkin =
             when (type) {
-                MoonlightEmulatedType.PLAYSTATION -> PlayStation
-                MoonlightEmulatedType.NINTENDO -> Switch
+                PLAYSTATION -> PlayStation
+                NINTENDO -> Switch
                 else -> Xbox
             }
 
         fun forBtProfile(profileName: String?): GamepadSkin =
-            if (profileName == BluetoothGamepad.GamepadProfile.PLAYSTATION.profileName) PlayStation else Xbox
+            if (profileName == GamepadProfile.PLAYSTATION.profileName) PlayStation else Xbox
 
         fun fromName(name: String?): GamepadSkin = entries.firstOrNull { it.name == name } ?: Xbox
     }

@@ -19,8 +19,11 @@ import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.core.model.DishNotification
 import com.tinkernorth.dish.core.model.Feature
-import com.tinkernorth.dish.core.net.DishProtocol
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.net.DishProtocolCompat
+import com.tinkernorth.dish.core.net.moonlight.AUTO
+import com.tinkernorth.dish.core.net.moonlight.NINTENDO
+import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
+import com.tinkernorth.dish.core.net.moonlight.XBOX
 import com.tinkernorth.dish.databinding.ActivitySetupConfigureBinding
 import com.tinkernorth.dish.databinding.SetupReviewCardBinding
 import com.tinkernorth.dish.databinding.SetupTypeCardBinding
@@ -79,8 +82,8 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         wireSetupSkip(binding.toolbar, onboarding)
         binding.breadcrumb.applyStep(SETUP_STEP_BINDING)
 
-        val slotId = intent.getStringExtra(SetupFlow.EXTRA_SLOT_ID)
-        val connectionId = intent.getStringExtra(SetupFlow.EXTRA_CONNECTION_ID)
+        val slotId = intent.getStringExtra(EXTRA_SLOT_ID)
+        val connectionId = intent.getStringExtra(EXTRA_CONNECTION_ID)
         if (slotId == null || connectionId == null) {
             finish()
             return
@@ -104,10 +107,10 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         binding.cardTypeDualsense.typeCard.setOnClickListener { pickType(CONTROLLER_TYPE_DUALSENSE) }
         binding.cardTypeSwitchpro.typeCard.setOnClickListener { pickType(CONTROLLER_TYPE_SWITCHPRO) }
 
-        binding.cardMlAuto.typeCard.setOnClickListener { pickType(MoonlightEmulatedType.AUTO) }
-        binding.cardMlXbox.typeCard.setOnClickListener { pickType(MoonlightEmulatedType.XBOX) }
-        binding.cardMlPlaystation.typeCard.setOnClickListener { pickType(MoonlightEmulatedType.PLAYSTATION) }
-        binding.cardMlNintendo.typeCard.setOnClickListener { pickType(MoonlightEmulatedType.NINTENDO) }
+        binding.cardMlAuto.typeCard.setOnClickListener { pickType(AUTO) }
+        binding.cardMlXbox.typeCard.setOnClickListener { pickType(XBOX) }
+        binding.cardMlPlaystation.typeCard.setOnClickListener { pickType(PLAYSTATION) }
+        binding.cardMlNintendo.typeCard.setOnClickListener { pickType(NINTENDO) }
     }
 
     private fun observe() {
@@ -173,10 +176,10 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         binding.cardTypeSwitchpro.typeCard.visibility =
             visibleIf(!moonlight && (!locked || selectedType == CONTROLLER_TYPE_SWITCHPRO))
 
-        bindMoonlightTypeCard(binding.cardMlAuto, state, MoonlightEmulatedType.AUTO, moonlight)
-        bindMoonlightTypeCard(binding.cardMlXbox, state, MoonlightEmulatedType.XBOX, moonlight)
-        bindMoonlightTypeCard(binding.cardMlPlaystation, state, MoonlightEmulatedType.PLAYSTATION, moonlight)
-        bindMoonlightTypeCard(binding.cardMlNintendo, state, MoonlightEmulatedType.NINTENDO, moonlight)
+        bindMoonlightTypeCard(binding.cardMlAuto, state, AUTO, moonlight)
+        bindMoonlightTypeCard(binding.cardMlXbox, state, XBOX, moonlight)
+        bindMoonlightTypeCard(binding.cardMlPlaystation, state, PLAYSTATION, moonlight)
+        bindMoonlightTypeCard(binding.cardMlNintendo, state, NINTENDO, moonlight)
     }
 
     private fun bindTypeCard(
@@ -227,7 +230,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         card.typeChevron.visibility = View.GONE
         card.typeCard.isClickable = true
         card.typeCard.isChecked = state.draft?.type == candidateType
-        val auto = candidateType == MoonlightEmulatedType.AUTO
+        val auto = candidateType == AUTO
         card.typeBadge.visibility = visibleIf(auto)
         card.typeCaption.visibility = visibleIf(auto)
         if (auto) {
@@ -465,7 +468,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
                 sublabel = getString(R.string.setup_cfg_dest_satellite),
                 sends = emptyList(),
                 gets = if (model.mouseMode) listOf(mouse) else emptyList(),
-                compat = state.draft?.hostId?.let { state.hostCompat[it] } ?: DishProtocol.DishProtocolCompat.UNKNOWN,
+                compat = state.draft?.hostId?.let { state.hostCompat[it] } ?: DishProtocolCompat.UNKNOWN,
             ),
             ReviewNode(
                 kind = R.string.binding_label_destination,
@@ -496,7 +499,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         val motion = ReviewFlow(R.drawable.ic_motion, R.string.binding_func_gyro)
         val touchpad = ReviewFlow(R.drawable.ic_touchpad, R.string.touchpad_mode_pad)
         val mouse = ReviewFlow(R.drawable.ic_mouse, R.string.touchpad_mode_mouse)
-        val stored = state.draft?.type ?: MoonlightEmulatedType.AUTO
+        val stored = state.draft?.type ?: AUTO
         return listOf(
             ReviewNode(
                 kind = R.string.binding_label_destination,
@@ -545,7 +548,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
         val sublabel: String,
         val sends: List<ReviewFlow>,
         val gets: List<ReviewFlow>,
-        val compat: DishProtocol.DishProtocolCompat = DishProtocol.DishProtocolCompat.UNKNOWN,
+        val compat: DishProtocolCompat = DishProtocolCompat.UNKNOWN,
     )
 
     private fun renderApplyState(state: ApplyState) {
@@ -555,7 +558,7 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
             is ApplyState.Finished -> {
                 setBindBusy(false)
                 if (state.errorMessage != null) {
-                    SetupErrorDialog.show(this, state.errorMessage) { viewModel.apply() }
+                    show(this, state.errorMessage) { viewModel.apply() }
                 } else {
                     finishToDashboard(state)
                 }

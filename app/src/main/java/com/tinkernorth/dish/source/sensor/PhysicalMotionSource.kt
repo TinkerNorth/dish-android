@@ -93,9 +93,9 @@ class PhysicalMotionSource
             private fun onAccel(values: FloatArray) {
                 if (values.size < 3) return
                 // No remap: a controller's IMU is already in the wire frame.
-                accelX = MotionScaling.accelMssToWire(values[0])
-                accelY = MotionScaling.accelMssToWire(values[1])
-                accelZ = MotionScaling.accelMssToWire(values[2])
+                accelX = accelMssToWire(values[0])
+                accelY = accelMssToWire(values[1])
+                accelZ = accelMssToWire(values[2])
                 accelSeen = true
             }
 
@@ -227,9 +227,9 @@ class PhysicalMotionSource
                 accelZ: Short,
             ): MotionRateLimiter.MotionSample =
                 MotionRateLimiter.MotionSample(
-                    gyroX = MotionScaling.gyroRadToWire(gyroX),
-                    gyroY = MotionScaling.gyroRadToWire(gyroY),
-                    gyroZ = MotionScaling.gyroRadToWire(gyroZ),
+                    gyroX = gyroRadToWire(gyroX),
+                    gyroY = gyroRadToWire(gyroY),
+                    gyroZ = gyroRadToWire(gyroZ),
                     accelX = accelX,
                     accelY = accelY,
                     accelZ = accelZ,

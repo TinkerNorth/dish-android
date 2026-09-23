@@ -7,7 +7,11 @@ import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_SWITCHPRO
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.net.moonlight.AUTO
+import com.tinkernorth.dish.core.net.moonlight.NINTENDO
+import com.tinkernorth.dish.core.net.moonlight.ORDER
+import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
+import com.tinkernorth.dish.core.net.moonlight.XBOX
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -29,14 +33,14 @@ class GamepadSkinTest {
 
     @Test
     fun `a Moonlight Xbox pad wears the Xbox skin, not the catalog skin its id collides with`() {
-        assertEquals(GamepadSkin.Xbox, GamepadSkin.forMoonlightType(MoonlightEmulatedType.XBOX))
-        assertEquals(GamepadSkin.PlayStation, GamepadSkin.forMoonlightType(MoonlightEmulatedType.PLAYSTATION))
-        assertEquals(GamepadSkin.Switch, GamepadSkin.forMoonlightType(MoonlightEmulatedType.NINTENDO))
+        assertEquals(GamepadSkin.Xbox, GamepadSkin.forMoonlightType(XBOX))
+        assertEquals(GamepadSkin.PlayStation, GamepadSkin.forMoonlightType(PLAYSTATION))
+        assertEquals(GamepadSkin.Switch, GamepadSkin.forMoonlightType(NINTENDO))
     }
 
     @Test
     fun `an unresolved Moonlight value lands on the generic Xbox skin`() {
-        assertEquals(GamepadSkin.Xbox, GamepadSkin.forMoonlightType(MoonlightEmulatedType.AUTO))
+        assertEquals(GamepadSkin.Xbox, GamepadSkin.forMoonlightType(AUTO))
         assertEquals(GamepadSkin.Xbox, GamepadSkin.forMoonlightType(0))
     }
 
@@ -70,7 +74,7 @@ class GamepadSkinTest {
     fun `no Moonlight or Bluetooth destination can reach the mute button`() {
         // Neither transport carries controller audio, and neither mapper can produce DualSense.
         val reachable =
-            (MoonlightEmulatedType.ORDER + listOf(0, 99)).map(GamepadSkin::forMoonlightType) +
+            (ORDER + listOf(0, 99)).map(GamepadSkin::forMoonlightType) +
                 listOf(GamepadSkin.forBtProfile("PLAYSTATION"), GamepadSkin.forBtProfile(null))
         assertEquals(emptyList<GamepadSkin>(), reachable.filter { it.hasMicMute })
     }

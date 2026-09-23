@@ -150,7 +150,7 @@ class PhysicalBatterySource
             for ((deviceId, device) in devices) {
                 if (device.transitioning || device.isDisconnecting) continue
                 val slotId = deviceId.toString()
-                val routed = BatteryRouting.route(device.transport, reader.sample(device), phone)
+                val routed = route(device.transport, reader.sample(device), phone)
                 publishDisplay(slotId, routed.display)
                 val conn = reachable[slotId] ?: continue
                 validator.publish(routed.wire) { s ->

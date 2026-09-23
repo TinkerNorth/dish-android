@@ -24,7 +24,7 @@ class MoonlightHostModelsTest {
                 httpsPort = 47984,
                 uniqueId = "x",
                 lastAppId = "42",
-                emulatedType = MoonlightEmulatedType.PLAYSTATION,
+                emulatedType = PLAYSTATION,
             )
         val host = remembered.toHost()
         assertEquals("PC", host.name)
@@ -36,13 +36,13 @@ class MoonlightHostModelsTest {
     @Test
     fun `emulated Auto resolves to a concrete arrival type, explicit passes through`() {
         assertEquals(
-            MoonlightControlProtocol.CONTROLLER_TYPE_XBOX,
-            MoonlightEmulatedType.resolveMoonlightEmulatedType(MoonlightEmulatedType.AUTO, sourceHasMotion = false),
+            CONTROLLER_TYPE_XBOX,
+            resolveMoonlightEmulatedType(AUTO, sourceHasMotion = false),
         )
         assertEquals(
-            MoonlightControlProtocol.CONTROLLER_TYPE_PS,
-            MoonlightEmulatedType.resolveMoonlightEmulatedType(MoonlightEmulatedType.PLAYSTATION, sourceHasMotion = false),
+            CONTROLLER_TYPE_PS,
+            resolveMoonlightEmulatedType(PLAYSTATION, sourceHasMotion = false),
         )
-        assertTrue(MoonlightEmulatedType.AUTO == 0xFF)
+        assertTrue(AUTO == 0xFF)
     }
 }

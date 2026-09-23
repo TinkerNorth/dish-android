@@ -5,7 +5,8 @@ package com.tinkernorth.dish.ui.diagnostics
 import android.content.Context
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionKind
-import com.tinkernorth.dish.core.net.DishProtocol
+import com.tinkernorth.dish.core.net.DishProtocolCompat
+import com.tinkernorth.dish.core.net.dishProtocolCompatFor
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightSessionState
 import com.tinkernorth.dish.ui.common.statusChipTextRes
@@ -71,12 +72,12 @@ internal fun Context.satelliteHostLines(host: HostDiag): List<String> {
 private fun Context.protocolValue(version: Int): String {
     val base = getString(R.string.diagnostics_protocol_value, version)
     val compat =
-        when (DishProtocol.dishProtocolCompatFor(version)) {
-            DishProtocol.DishProtocolCompat.CURRENT -> getString(R.string.diagnostics_protocol_current)
-            DishProtocol.DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE -> getString(R.string.chip_satellite_update_available)
-            DishProtocol.DishProtocolCompat.SATELLITE_UPDATE_REQUIRED -> getString(R.string.chip_satellite_update_required)
-            DishProtocol.DishProtocolCompat.APP_UPDATE_REQUIRED -> getString(R.string.chip_app_update_required)
-            DishProtocol.DishProtocolCompat.UNKNOWN -> null
+        when (dishProtocolCompatFor(version)) {
+            DishProtocolCompat.CURRENT -> getString(R.string.diagnostics_protocol_current)
+            DishProtocolCompat.SATELLITE_UPDATE_AVAILABLE -> getString(R.string.chip_satellite_update_available)
+            DishProtocolCompat.SATELLITE_UPDATE_REQUIRED -> getString(R.string.chip_satellite_update_required)
+            DishProtocolCompat.APP_UPDATE_REQUIRED -> getString(R.string.chip_app_update_required)
+            DishProtocolCompat.UNKNOWN -> null
         }
     return compat?.let { getString(R.string.diagnostics_joined, base, it) } ?: base
 }

@@ -8,16 +8,6 @@ import android.os.Build
 import android.view.InputDevice
 import androidx.annotation.RequiresApi
 
-// One light the framework lists for an input device, lifted off android.hardware.lights.Light so
-// the selection rule is JVM-testable. `input` is the LIGHT_TYPE_INPUT class (a single mono or RGB
-// LED, as opposed to a player-id row or a keyboard backlight); `rgb` is what hasRgbControl reports.
-data class FrameworkLight(
-    val id: Int,
-    val name: String,
-    val input: Boolean,
-    val rgb: Boolean,
-)
-
 // The names the framework gives the light bar it composes from a driver's LEDs. hid-sony builds one
 // RGB light out of a DualShock 4's red/green/blue nodes and hardcodes the name "RGB"; hid-playstation
 // exposes the DualSense (and, from kernel 6.2, DualShock 4) light bar as one multicolor LED whose
@@ -60,34 +50,32 @@ fun lightbarLight(
  * Only `InputDevice.getLightsManager()` is used (API 31, no permission); the system LightsManager
  * service is a different, permission-gated flavor and is never touched.
  */
-object FrameworkLightProbe {
-    fun hasLightbar(device: InputDevice): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
-        return lightbarOf(device) != null
-    }
-
-    fun lightbarOf(device: InputDevice): Light? {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
-        return resolve(device, Build.VERSION.SDK_INT)
-    }
-
-    @RequiresApi(Build.VERSION_CODES.S)
-    private fun resolve(
-        device: InputDevice,
-        sdkInt: Int,
-    ): Light? {
-        // A binder call into the input service; a device that has gone away lists nothing.
-        val lights = runCatching { device.lightsManager.lights }.getOrNull().orEmpty()
-        val picked = lightbarLight(lights.map { it.facts() }, sdkInt) ?: return null
-        return lights.firstOrNull { it.id == picked.id }
-    }
-
-    @RequiresApi(Build.VERSION_CODES.S)
-    private fun Light.facts(): FrameworkLight =
-        FrameworkLight(
-            id = id,
-            name = name.orEmpty(),
-            input = type == Light.LIGHT_TYPE_INPUT,
-            rgb = hasRgbControl(),
-        )
+fun hasLightbar(device: InputDevice): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
+    return lightbarOf(device) != null
 }
+
+fun lightbarOf(device: InputDevice): Light? {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
+    return resolve(device, Build.VERSION.SDK_INT)
+}
+
+@RequiresApi(Build.VERSION_CODES.S)
+private fun resolve(
+    device: InputDevice,
+    sdkInt: Int,
+): Light? {
+    // A binder call into the input service; a device that has gone away lists nothing.
+    val lights = runCatching { device.lightsManager.lights }.getOrNull().orEmpty()
+    val picked = lightbarLight(lights.map { it.facts() }, sdkInt) ?: return null
+    return lights.firstOrNull { it.id == picked.id }
+}
+
+@RequiresApi(Build.VERSION_CODES.S)
+private fun Light.facts(): FrameworkLight =
+    FrameworkLight(
+        id = id,
+        name = name.orEmpty(),
+        input = type == Light.LIGHT_TYPE_INPUT,
+        rgb = hasRgbControl(),
+    )

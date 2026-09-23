@@ -5,9 +5,9 @@ package com.tinkernorth.dish.source.connection.moonlight
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity
 import com.tinkernorth.dish.core.net.moonlight.RememberedMoonlight
+import com.tinkernorth.dish.core.net.moonlight.XBOX
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -52,7 +52,7 @@ class MoonlightSessionRefcountTest {
     private fun pad(slotId: String) =
         MoonlightPadRequest(
             slotId = slotId,
-            emulatedType = MoonlightEmulatedType.XBOX,
+            emulatedType = XBOX,
             capabilities = 0x03,
             supportedButtons = 0xFFFF,
         )

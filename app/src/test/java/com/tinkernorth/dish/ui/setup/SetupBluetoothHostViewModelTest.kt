@@ -5,7 +5,7 @@ package com.tinkernorth.dish.ui.setup
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
 import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.composer.ConnectionCoordinator
-import com.tinkernorth.dish.core.input.BluetoothGamepad
+import com.tinkernorth.dish.core.input.GamepadProfile
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedBt
@@ -95,7 +95,7 @@ class SetupBluetoothHostViewModelTest {
             perm.value = BluetoothPermissionState(required = true, connectGranted = false, scanGranted = false)
             dispatcher.scheduler.runCurrent()
             vm.onHostSelected(
-                SetupBluetoothHostViewModel.HostRow("bt:X", "PC", "AA", BluetoothGamepad.GamepadProfile.XBOX),
+                SetupBluetoothHostViewModel.HostRow("bt:X", "PC", "AA", GamepadProfile.XBOX),
             )
             assertEquals(SetupBluetoothHostViewModel.Stage.PERMISSION, vm.state.value.stage)
             verify(exactly = 0) { registry.start(any(), any(), any()) }
@@ -114,11 +114,11 @@ class SetupBluetoothHostViewModelTest {
         runTest(dispatcher) {
             dispatcher.scheduler.runCurrent()
             val events = collectEvents()
-            vm.onTypeChosen(BluetoothGamepad.GamepadProfile.PLAYSTATION)
+            vm.onTypeChosen(GamepadProfile.PLAYSTATION)
             dispatcher.scheduler.runCurrent()
 
             assertEquals(SetupBluetoothHostViewModel.Stage.ADVERTISING, vm.state.value.stage)
-            verify { registry.start(any(), BluetoothGamepad.GamepadProfile.PLAYSTATION, null) }
+            verify { registry.start(any(), GamepadProfile.PLAYSTATION, null) }
             assertTrue(events.contains(SetupBluetoothHostViewModel.Event.RequestDiscoverable))
         }
 
@@ -133,7 +133,7 @@ class SetupBluetoothHostViewModelTest {
             vm.onPairNewDevice()
             val events = collectEvents()
 
-            vm.onTypeChosen(BluetoothGamepad.GamepadProfile.XBOX)
+            vm.onTypeChosen(GamepadProfile.XBOX)
             dispatcher.scheduler.runCurrent()
             assertFalse(events.any { it is SetupBluetoothHostViewModel.Event.Done })
 
@@ -152,7 +152,7 @@ class SetupBluetoothHostViewModelTest {
         runTest(dispatcher) {
             dispatcher.scheduler.runCurrent()
             vm.onPairNewDevice()
-            vm.onTypeChosen(BluetoothGamepad.GamepadProfile.XBOX)
+            vm.onTypeChosen(GamepadProfile.XBOX)
             dispatcher.scheduler.runCurrent()
             assertEquals(SetupBluetoothHostViewModel.Stage.ADVERTISING, vm.state.value.stage)
 

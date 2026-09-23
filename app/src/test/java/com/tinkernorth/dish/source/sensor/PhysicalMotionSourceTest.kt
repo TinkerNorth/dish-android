@@ -76,9 +76,9 @@ class PhysicalMotionSourceTest {
                 accelY = 0,
                 accelZ = 0,
             )
-        assertEquals(MotionScaling.gyroRadToWire(gx), s.gyroX)
-        assertEquals(MotionScaling.gyroRadToWire(gy), s.gyroY)
-        assertEquals(MotionScaling.gyroRadToWire(gz), s.gyroZ)
+        assertEquals(gyroRadToWire(gx), s.gyroX)
+        assertEquals(gyroRadToWire(gy), s.gyroY)
+        assertEquals(gyroRadToWire(gz), s.gyroZ)
         assertEquals(true, s.gyroX > 0)
         assertEquals(true, s.gyroY < 0)
         assertEquals(true, s.gyroZ > 0)

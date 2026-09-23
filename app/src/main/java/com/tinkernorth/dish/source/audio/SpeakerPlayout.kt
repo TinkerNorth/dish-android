@@ -244,7 +244,7 @@ class AudioTrackSpeakerSink
             private fun refillCushion() {
                 val underruns = runCatching { track.underrunCount }.getOrNull() ?: return
                 val refill =
-                    SpeakerCushionPolicy.refillSamples(
+                    refillSamples(
                         playing = playing,
                         underruns = underruns,
                         lastSeenUnderruns = lastSeenUnderruns,

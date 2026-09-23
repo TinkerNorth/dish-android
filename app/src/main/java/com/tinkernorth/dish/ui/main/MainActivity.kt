@@ -32,7 +32,8 @@ import com.tinkernorth.dish.source.inputrate.FrameworkInputTimingStore
 import com.tinkernorth.dish.source.lowpower.LowPowerSignal
 import com.tinkernorth.dish.source.notification.DishNotifications
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
-import com.tinkernorth.dish.source.system.LocalNetworkAccess
+import com.tinkernorth.dish.source.system.PERMISSION
+import com.tinkernorth.dish.source.system.isGranted
 import com.tinkernorth.dish.source.update.UpdateNotices
 import com.tinkernorth.dish.source.usb.PathChoice
 import com.tinkernorth.dish.source.usb.UsbGamepadManager
@@ -184,10 +185,10 @@ class MainActivity :
 
     // The reconnect observer runs off an Activity and can't prompt; ask here or Android 17 fails it silently.
     private fun ensureLocalNetworkForReconnect() {
-        if (localNetworkRequested || LocalNetworkAccess.isGranted(this)) return
+        if (localNetworkRequested || isGranted(this)) return
         if (satellite.remembered().isEmpty()) return
         localNetworkRequested = true
-        localNetworkPermissionLauncher.launch(LocalNetworkAccess.PERMISSION)
+        localNetworkPermissionLauncher.launch(PERMISSION)
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {

@@ -130,7 +130,7 @@ class BindingDiagMappersTest {
     @Test
     fun `an unbound slot has no binding and the estimate stays unknown without every part`() {
         assertNull(bindingDiag(VIRTUAL_SLOT_ID, world(), touchpadMode))
-        val estimate = LatencyEstimatePolicy.estimate(pollRateHz = 0, phonePathMs = 0.3, rttMs = null)
+        val estimate = estimate(pollRateHz = 0, phonePathMs = 0.3, rttMs = null)
         assertNull(estimate.pollHalfMs)
         assertNull(estimate.totalMs)
     }

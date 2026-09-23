@@ -115,75 +115,66 @@ data class SpeakerPlayoutPlan(
  * so a slot the user switched off does not open an audio output, and so a track is never held for
  * a pad that is gone.
  */
-object SpeakerPlayoutPolicy {
-    fun plan(slots: Collection<SpeakerSlotInput>): SpeakerPlayoutPlan {
-        val voices = LinkedHashMap<Long, SpeakerTarget>()
-        for (slot in slots) {
-            if (!slot.streaming) continue
-            if (slot.sessionHandle < 0 || slot.controllerIndex < 0) continue
-            // The endpoint's own width when the platform reported one, so a 4-channel pad
-            // gets its stereo on the speaker pair and not spread across the actuators.
-            val channels =
-                if (slot.playbackChannels > 0) slot.playbackChannels else PlayoutLane.STEREO_CHANNELS
-            if (slot.speakerEnabled) {
-                voices[SpeakerPlayoutPlan.routeKey(slot.sessionHandle, slot.controllerIndex, PlayoutLane.SPEAKER)] =
-                    SpeakerTarget(
-                        slotId = slot.slotId,
-                        sessionHandle = slot.sessionHandle,
-                        controllerIndex = slot.controllerIndex,
-                        playbackDeviceId = slot.playbackDeviceId,
-                        lane = PlayoutLane.SPEAKER,
-                        deviceChannels = channels,
-                    )
-            }
-            // The haptic lane needs its pair to exist at the offset it writes.
-            if (slot.hapticEnabled && channels >= PlayoutLane.QUAD_CHANNELS) {
-                voices[SpeakerPlayoutPlan.routeKey(slot.sessionHandle, slot.controllerIndex, PlayoutLane.HAPTICS)] =
-                    SpeakerTarget(
-                        slotId = slot.slotId,
-                        sessionHandle = slot.sessionHandle,
-                        controllerIndex = slot.controllerIndex,
-                        playbackDeviceId = slot.playbackDeviceId,
-                        lane = PlayoutLane.HAPTICS,
-                        deviceChannels = channels,
-                    )
-            }
+fun speakerPlayoutPlanFor(slots: Collection<SpeakerSlotInput>): SpeakerPlayoutPlan {
+    val voices = LinkedHashMap<Long, SpeakerTarget>()
+    for (slot in slots) {
+        if (!slot.streaming) continue
+        if (slot.sessionHandle < 0 || slot.controllerIndex < 0) continue
+        // The endpoint's own width when the platform reported one, so a 4-channel pad
+        // gets its stereo on the speaker pair and not spread across the actuators.
+        val channels =
+            if (slot.playbackChannels > 0) slot.playbackChannels else PlayoutLane.STEREO_CHANNELS
+        if (slot.speakerEnabled) {
+            voices[SpeakerPlayoutPlan.routeKey(slot.sessionHandle, slot.controllerIndex, PlayoutLane.SPEAKER)] =
+                SpeakerTarget(
+                    slotId = slot.slotId,
+                    sessionHandle = slot.sessionHandle,
+                    controllerIndex = slot.controllerIndex,
+                    playbackDeviceId = slot.playbackDeviceId,
+                    lane = PlayoutLane.SPEAKER,
+                    deviceChannels = channels,
+                )
         }
-        return SpeakerPlayoutPlan(voices)
+        // The haptic lane needs its pair to exist at the offset it writes.
+        if (slot.hapticEnabled && channels >= PlayoutLane.QUAD_CHANNELS) {
+            voices[SpeakerPlayoutPlan.routeKey(slot.sessionHandle, slot.controllerIndex, PlayoutLane.HAPTICS)] =
+                SpeakerTarget(
+                    slotId = slot.slotId,
+                    sessionHandle = slot.sessionHandle,
+                    controllerIndex = slot.controllerIndex,
+                    playbackDeviceId = slot.playbackDeviceId,
+                    lane = PlayoutLane.HAPTICS,
+                    deviceChannels = channels,
+                )
+        }
     }
+    return SpeakerPlayoutPlan(voices)
 }
+// How much silence to slip in front of a window to rebuild the anti-underrun cushion.
+// The satellite sends nothing for a digitally silent window, so a live stream goes quiet for
+// seconds at a time and the track drains. Resuming into a drained track leaves no cushion at all,
+// which is the condition the two-window start threshold exists to prevent.
+// Silence rather than a pause-and-re-prime: withholding windows until the threshold is met again
+// would strand a sound shorter than the cushion, leaving a lone 20 ms blip unplayed until the next
+// one arrived. Writing silence delays the resumed audio by the same 40 ms and can never swallow it.
+// The signal is the track's own underrun counter, which keeps wrapping frame arithmetic out of the
+// one path where a bug is audible.
 
 /**
- * How much silence to slip in front of a window to rebuild the anti-underrun cushion.
+ * Samples of silence to write before the next window, or 0 to write it straight through.
  *
- * The satellite sends nothing for a digitally silent window, so a live stream goes quiet for
- * seconds at a time and the track drains. Resuming into a drained track leaves no cushion at all,
- * which is the condition the two-window start threshold exists to prevent.
- *
- * Silence rather than a pause-and-re-prime: withholding windows until the threshold is met again
- * would strand a sound shorter than the cushion, leaving a lone 20 ms blip unplayed until the next
- * one arrived. Writing silence delays the resumed audio by the same 40 ms and can never swallow it.
- *
- * The signal is the track's own underrun counter, which keeps wrapping frame arithmetic out of the
- * one path where a bug is audible.
+ * [lastSeenUnderruns] is what this session observed the last time it refilled. A counter that
+ * has not moved means the track kept up; one that went backwards means it was reset under us
+ * (a flush, or a new track on the same session), which is not an underrun to compensate for.
  */
-object SpeakerCushionPolicy {
-    /**
-     * Samples of silence to write before the next window, or 0 to write it straight through.
-     *
-     * [lastSeenUnderruns] is what this session observed the last time it refilled. A counter that
-     * has not moved means the track kept up; one that went backwards means it was reset under us
-     * (a flush, or a new track on the same session), which is not an underrun to compensate for.
-     */
-    fun refillSamples(
-        playing: Boolean,
-        underruns: Int,
-        lastSeenUnderruns: Int,
-        cushionSamples: Int,
-    ): Int {
-        // Not playing yet: the start threshold owns the cushion until it does.
-        if (!playing) return 0
-        if (cushionSamples <= 0) return 0
-        return if (underruns > lastSeenUnderruns) cushionSamples else 0
-    }
+fun refillSamples(
+    playing: Boolean,
+    underruns: Int,
+    lastSeenUnderruns: Int,
+    cushionSamples: Int,
+): Int {
+    // Not playing yet: the start threshold owns the cushion until it does.
+    if (!playing) return 0
+    if (cushionSamples <= 0) return 0
+    return if (underruns > lastSeenUnderruns) cushionSamples else 0
 }

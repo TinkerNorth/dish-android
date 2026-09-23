@@ -26,8 +26,9 @@ import com.tinkernorth.dish.composer.ConnectionSummary
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
-import com.tinkernorth.dish.core.net.DishProtocol
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.net.DishProtocolCompat
+import com.tinkernorth.dish.core.net.moonlight.AUTO
+import com.tinkernorth.dish.core.net.moonlight.fromStored
 import com.tinkernorth.dish.databinding.BindingDecisionRowBinding
 import com.tinkernorth.dish.databinding.BindingPillBinding
 import com.tinkernorth.dish.databinding.BindingValueMonoBinding
@@ -35,7 +36,7 @@ import com.tinkernorth.dish.databinding.BindingValueNoneBinding
 import com.tinkernorth.dish.databinding.BindingValueNotBoundBinding
 import com.tinkernorth.dish.databinding.ItemControllerBinding
 import com.tinkernorth.dish.hotpath.input.Transport
-import com.tinkernorth.dish.repository.TouchpadModeValue
+import com.tinkernorth.dish.repository.TOUCHPAD_MODE_DS4
 import com.tinkernorth.dish.source.inputrate.SlotInputRates
 import com.tinkernorth.dish.ui.common.bundledControllerTypeLabelRes
 import com.tinkernorth.dish.ui.common.moonlightTypeLabelRes
@@ -142,7 +143,7 @@ class ControllerAdapter(
         val pathCard: PathCard? = null,
         val inputRates: SlotInputRates? = null,
         val screenPeakHz: Int = 0,
-        val hostCompat: DishProtocol.DishProtocolCompat = DishProtocol.DishProtocolCompat.UNKNOWN,
+        val hostCompat: DishProtocolCompat = DishProtocolCompat.UNKNOWN,
     )
 
     fun submitSlots(
@@ -153,7 +154,7 @@ class ControllerAdapter(
         pathCards: Map<String, PathCard> = emptyMap(),
         inputRates: Map<String, SlotInputRates> = emptyMap(),
         screenPeakHz: Int = 0,
-        hostCompat: Map<String, DishProtocol.DishProtocolCompat> = emptyMap(),
+        hostCompat: Map<String, DishProtocolCompat> = emptyMap(),
     ) {
         submitList(
             slots.map { slot ->
@@ -165,7 +166,7 @@ class ControllerAdapter(
                     pathCard = pathCards[slot.id],
                     inputRates = inputRates[slot.id],
                     screenPeakHz = screenPeakHz,
-                    hostCompat = slot.boundConnectionId?.let { hostCompat[it] } ?: DishProtocol.DishProtocolCompat.UNKNOWN,
+                    hostCompat = slot.boundConnectionId?.let { hostCompat[it] } ?: DishProtocolCompat.UNKNOWN,
                 )
             },
         )
@@ -348,7 +349,7 @@ class ControllerAdapter(
                 // the label comes from the Moonlight mapper and never the bundled one.
                 ConnectionKind.MOONLIGHT -> {
                     val stored = bound.satelliteControllerTypes[row.slot.id]
-                    ctx.getString(moonlightTypeLabelRes(MoonlightEmulatedType.fromStored(stored ?: MoonlightEmulatedType.AUTO)))
+                    ctx.getString(moonlightTypeLabelRes(fromStored(stored ?: AUTO)))
                 }
             }
 
@@ -750,7 +751,7 @@ internal fun pointerFuncFacts(row: ControllerAdapter.Row): List<PointerPillFact>
     buildList {
         when {
             row.pathCard?.suggestDirectForTouch == true -> add(PointerPillFact.PAD_NEEDS_DIRECT)
-            row.pointer?.mode == TouchpadModeValue.TOUCHPAD_MODE_DS4 -> add(PointerPillFact.PAD_ON)
+            row.pointer?.mode == TOUCHPAD_MODE_DS4 -> add(PointerPillFact.PAD_ON)
             row.motionCap.typeOk(Feature.TOUCHPAD) -> add(PointerPillFact.PAD_OFF)
         }
         if (row.pointer?.mouseOpenable == true) add(PointerPillFact.MOUSE_READY)

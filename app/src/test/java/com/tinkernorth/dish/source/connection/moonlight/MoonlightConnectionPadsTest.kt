@@ -3,8 +3,9 @@
 
 package com.tinkernorth.dish.source.connection.moonlight
 
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
+import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
+import com.tinkernorth.dish.core.net.moonlight.XBOX
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -27,7 +28,7 @@ class MoonlightConnectionPadsTest {
     private fun MoonlightConnection.take(slotId: String) =
         acquirePad(
             slotId = slotId,
-            emulatedType = MoonlightEmulatedType.XBOX,
+            emulatedType = XBOX,
             capabilities = 0x03,
             supportedButtons = 0xFFFF,
         )
@@ -100,12 +101,12 @@ class MoonlightConnectionPadsTest {
         val ps =
             conn.acquirePad(
                 slotId = "b",
-                emulatedType = MoonlightEmulatedType.PLAYSTATION,
+                emulatedType = PLAYSTATION,
                 capabilities = 0xBF,
                 supportedButtons = 0xFFFF or 0x100000,
             )
-        assertEquals(MoonlightEmulatedType.XBOX, conn.padFor("a")?.emulatedType)
-        assertEquals(MoonlightEmulatedType.PLAYSTATION, ps?.emulatedType)
+        assertEquals(XBOX, conn.padFor("a")?.emulatedType)
+        assertEquals(PLAYSTATION, ps?.emulatedType)
         assertEquals(0xBF, ps?.capabilities)
         assertEquals(0x03, conn.padFor("a")?.capabilities)
     }

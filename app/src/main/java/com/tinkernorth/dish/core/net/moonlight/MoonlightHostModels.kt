@@ -51,7 +51,7 @@ data class RememberedMoonlight(
     val lastAppId: String = "",
     val lastAppName: String = "",
     // The emulated-device pick (CONTROLLER_ARRIVAL type): Auto/Xbox/PS/Nintendo.
-    val emulatedType: Int = MoonlightEmulatedType.AUTO,
+    val emulatedType: Int = AUTO,
     // Whether the host has ever accepted this device, as opposed to one the user has
     // only shown durable interest in (added by address, or bound to). Both belong in
     // this list; only the first is trust. Defaults true because every record written
@@ -76,48 +76,46 @@ data class RememberedMoonlight(
  * the satellite's own CONTROLLER_TYPE_XBOX as well, so a stored 0 is ambiguous
  * twice over; [fromStored] migrates one back to Auto on read.
  */
-object MoonlightEmulatedType {
-    const val AUTO = 0xFF
-    const val XBOX = MoonlightControlProtocol.CONTROLLER_TYPE_XBOX
-    const val PLAYSTATION = MoonlightControlProtocol.CONTROLLER_TYPE_PS
-    const val NINTENDO = MoonlightControlProtocol.CONTROLLER_TYPE_NINTENDO
+const val AUTO = 0xFF
+const val XBOX = CONTROLLER_TYPE_XBOX
+const val PLAYSTATION = CONTROLLER_TYPE_PS
+const val NINTENDO = CONTROLLER_TYPE_NINTENDO
 
-    val ORDER = listOf(AUTO, XBOX, PLAYSTATION, NINTENDO)
+val ORDER = listOf(AUTO, XBOX, PLAYSTATION, NINTENDO)
 
-    fun fromStored(stored: Int): Int = if (stored == MoonlightControlProtocol.CONTROLLER_TYPE_UNKNOWN) AUTO else stored
+fun fromStored(stored: Int): Int = if (stored == CONTROLLER_TYPE_UNKNOWN) AUTO else stored
 
-    fun resolveMoonlightEmulatedType(
-        picked: Int,
-        sourceHasMotion: Boolean,
-    ): Int =
-        when {
-            picked != AUTO -> picked
-            sourceHasMotion -> PLAYSTATION
-            else -> XBOX
-        }
+fun resolveMoonlightEmulatedType(
+    picked: Int,
+    sourceHasMotion: Boolean,
+): Int =
+    when {
+        picked != AUTO -> picked
+        sourceHasMotion -> PLAYSTATION
+        else -> XBOX
+    }
 
-    fun typeMaximum(type: Int): Int = if (type == PLAYSTATION) PLAYSTATION_MAXIMUM else BASE_MAXIMUM
+fun typeMaximum(type: Int): Int = if (type == PLAYSTATION) PLAYSTATION_MAXIMUM else BASE_MAXIMUM
 
-    fun capabilityBits(
-        type: Int,
-        sourceBits: Int,
-    ): Int = typeMaximum(type) and sourceBits
+fun capabilityBits(
+    type: Int,
+    sourceBits: Int,
+): Int = typeMaximum(type) and sourceBits
 
-    fun supportedButtons(capabilities: Int): Int =
-        if (capabilities and MoonlightControlProtocol.CAP_TOUCHPAD != 0) {
-            BASE_BUTTONS or MoonlightControlProtocol.BTN_TOUCHPAD
-        } else {
-            BASE_BUTTONS
-        }
+fun supportedButtons(capabilities: Int): Int =
+    if (capabilities and CAP_TOUCHPAD != 0) {
+        BASE_BUTTONS or BTN_TOUCHPAD
+    } else {
+        BASE_BUTTONS
+    }
 
-    // Trigger rumble and battery describe the PHYSICAL pad's surfaces, not the
-    // emulated identity, so every type may carry them (moonlight-qt advertises the
-    // same way); the source bits decide whether they actually ride.
-    private const val BASE_MAXIMUM =
-        MoonlightControlProtocol.CAP_ANALOG_TRIGGERS or MoonlightControlProtocol.CAP_RUMBLE or
-            MoonlightControlProtocol.CAP_TRIGGER_RUMBLE or MoonlightControlProtocol.CAP_BATTERY
+// Trigger rumble and battery describe the PHYSICAL pad's surfaces, not the
+// emulated identity, so every type may carry them (moonlight-qt advertises the
+// same way); the source bits decide whether they actually ride.
+private const val BASE_MAXIMUM =
+    CAP_ANALOG_TRIGGERS or CAP_RUMBLE or
+        CAP_TRIGGER_RUMBLE or CAP_BATTERY
 
-    private const val PLAYSTATION_MAXIMUM = 0xFF
+private const val PLAYSTATION_MAXIMUM = 0xFF
 
-    private const val BASE_BUTTONS = 0xFFFF
-}
+private const val BASE_BUTTONS = 0xFFFF

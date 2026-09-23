@@ -6,6 +6,7 @@ package com.tinkernorth.dish.source.connection.moonlight
 import android.util.Log
 import com.tinkernorth.dish.core.net.TofuTrustManager
 import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity
+import com.tinkernorth.dish.core.net.moonlight.parseMoonlightCert
 import com.tinkernorth.dish.repository.SatellitePinRepository
 import java.net.Socket
 import java.security.KeyStore
@@ -171,8 +172,7 @@ class MoonlightHttpGateway
                         identity.privateKey,
                         CharArray(0),
                         arrayOf(
-                            com.tinkernorth.dish.core.net.moonlight.MoonlightCert
-                                .parseMoonlightCert(identity.certificatePem),
+                            parseMoonlightCert(identity.certificatePem),
                         ),
                     )
                 }

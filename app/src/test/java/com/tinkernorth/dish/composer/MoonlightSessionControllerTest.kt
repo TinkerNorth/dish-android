@@ -8,9 +8,11 @@ import androidx.lifecycle.LifecycleOwner
 import com.tinkernorth.dish.core.model.CapabilitySet
 import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.SlotCapabilities
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEvent
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
+import com.tinkernorth.dish.core.net.moonlight.NINTENDO
+import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
+import com.tinkernorth.dish.core.net.moonlight.XBOX
 import com.tinkernorth.dish.hotpath.input.FeedbackRouter
 import com.tinkernorth.dish.hotpath.input.RumbleRouter
 import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnection
@@ -146,7 +148,7 @@ class MoonlightSessionControllerTest {
 
             verify { moonlight.applyDesired(capture(desired)) }
             val pad = desired.captured.getValue("moonlight:pc").single()
-            assertEquals(MoonlightEmulatedType.XBOX, pad.emulatedType)
+            assertEquals(XBOX, pad.emulatedType)
             assertEquals(0x03, pad.capabilities)
             assertEquals(0xFFFF, pad.supportedButtons)
         }
@@ -164,7 +166,7 @@ class MoonlightSessionControllerTest {
 
             verify { moonlight.applyDesired(capture(desired)) }
             assertEquals(
-                MoonlightEmulatedType.PLAYSTATION,
+                PLAYSTATION,
                 desired.captured
                     .getValue("moonlight:pc")
                     .single()
@@ -185,7 +187,7 @@ class MoonlightSessionControllerTest {
 
             verify { moonlight.applyDesired(capture(desired)) }
             assertEquals(
-                MoonlightEmulatedType.XBOX,
+                XBOX,
                 desired.captured
                     .getValue("moonlight:pc")
                     .single()
@@ -198,7 +200,7 @@ class MoonlightSessionControllerTest {
         runTest(dispatcher) {
             connections.value = listOf(summary("moonlight:pc"))
             bindings.value = mapOf("1" to "moonlight:pc")
-            satTypes.value = mapOf(("moonlight:pc" to "1") to MoonlightEmulatedType.NINTENDO)
+            satTypes.value = mapOf(("moonlight:pc" to "1") to NINTENDO)
             val desired = slot<Map<String, List<MoonlightPadRequest>>>()
 
             controller().onStart(owner)
@@ -206,7 +208,7 @@ class MoonlightSessionControllerTest {
 
             verify { moonlight.applyDesired(capture(desired)) }
             assertEquals(
-                MoonlightEmulatedType.NINTENDO,
+                NINTENDO,
                 desired.captured
                     .getValue("moonlight:pc")
                     .single()
@@ -303,8 +305,8 @@ class MoonlightSessionControllerTest {
                     scope = TestScope(dispatcher),
                     ioDispatcher = dispatcher,
                 )
-            conn.acquirePad("pad-a", MoonlightEmulatedType.XBOX, 0x03, 0xFFFF)
-            conn.acquirePad("pad-b", MoonlightEmulatedType.XBOX, 0x03, 0xFFFF)
+            conn.acquirePad("pad-a", XBOX, 0x03, 0xFFFF)
+            conn.acquirePad("pad-b", XBOX, 0x03, 0xFFFF)
             every { moonlight.connections } returns MutableStateFlow(mapOf(conn.id to conn))
             controller()
             dispatcher.scheduler.advanceUntilIdle()
@@ -325,8 +327,8 @@ class MoonlightSessionControllerTest {
                     scope = TestScope(dispatcher),
                     ioDispatcher = dispatcher,
                 )
-            conn.acquirePad("pad-a", MoonlightEmulatedType.XBOX, 0x07, 0xFFFF)
-            conn.acquirePad("pad-b", MoonlightEmulatedType.XBOX, 0x07, 0xFFFF)
+            conn.acquirePad("pad-a", XBOX, 0x07, 0xFFFF)
+            conn.acquirePad("pad-b", XBOX, 0x07, 0xFFFF)
             every { moonlight.connections } returns MutableStateFlow(mapOf(conn.id to conn))
             controller()
             dispatcher.scheduler.advanceUntilIdle()
@@ -350,7 +352,7 @@ class MoonlightSessionControllerTest {
                     scope = TestScope(dispatcher),
                     ioDispatcher = dispatcher,
                 )
-            conn.acquirePad("pad-a", MoonlightEmulatedType.PLAYSTATION, 0x37, 0xFFFF)
+            conn.acquirePad("pad-a", PLAYSTATION, 0x37, 0xFFFF)
             every { moonlight.connections } returns MutableStateFlow(mapOf(conn.id to conn))
             controller()
             dispatcher.scheduler.advanceUntilIdle()

@@ -12,8 +12,9 @@ import com.tinkernorth.dish.composer.InputFunctions
 import com.tinkernorth.dish.composer.LinkState
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.core.model.SlotCapabilities
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.net.moonlight.AUTO
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
+import com.tinkernorth.dish.core.net.moonlight.XBOX
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.repository.SatelliteCapabilitiesRepository
 import com.tinkernorth.dish.repository.SatelliteCatalogRepository
@@ -100,7 +101,7 @@ class ConfigureBindingsMoonlightActionsTest {
         moonlight = mockk(relaxed = true)
         every { moonlight.events } returns events
         every { moonlight.rememberedHost(host.id) } returns host
-        every { moonlight.rememberedEmulatedType(host.id) } returns MoonlightEmulatedType.AUTO
+        every { moonlight.rememberedEmulatedType(host.id) } returns AUTO
         every { moonlight.rememberedAppId(host.id) } returns ""
         every { moonlight.rememberedAppName(host.id) } returns ""
         every { moonlight.get(host.id) } returns null
@@ -181,7 +182,7 @@ class ConfigureBindingsMoonlightActionsTest {
                 assertNull("$trust ended in ${finished.errorMessage}", finished.errorMessage)
                 vm.dismissApplyResult()
             }
-            verify(exactly = states.size) { hub.bind(VIRTUAL_SLOT_ID, host.id, MoonlightEmulatedType.AUTO) }
+            verify(exactly = states.size) { hub.bind(VIRTUAL_SLOT_ID, host.id, AUTO) }
         }
 
     // B7. The controller number is 1-based for the reader and 0-based on the wire, so the
@@ -190,7 +191,7 @@ class ConfigureBindingsMoonlightActionsTest {
     fun `a live session names the app and this binding's own controller number`() =
         runTest(dispatcher) {
             val conn = MoonlightConnection(host.id, host, TestScope(dispatcher), dispatcher)
-            conn.acquirePad(VIRTUAL_SLOT_ID, MoonlightEmulatedType.XBOX, 0x03, 0xFFFF)
+            conn.acquirePad(VIRTUAL_SLOT_ID, XBOX, 0x03, 0xFFFF)
             every { moonlight.get(host.id) } returns conn
             coEvery { moonlight.probe(any()) } returns MoonlightProbe(trust = MoonlightTrustState.PAIRED)
 

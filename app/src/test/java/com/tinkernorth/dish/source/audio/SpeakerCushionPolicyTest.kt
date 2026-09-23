@@ -19,7 +19,7 @@ class SpeakerCushionPolicyTest {
     fun `a track that underran since the last window gets the cushion back`() {
         assertEquals(
             CUSHION,
-            SpeakerCushionPolicy.refillSamples(
+            refillSamples(
                 playing = true,
                 underruns = 1,
                 lastSeenUnderruns = 0,
@@ -32,7 +32,7 @@ class SpeakerCushionPolicyTest {
     fun `a track that kept up is written straight through`() {
         assertEquals(
             0,
-            SpeakerCushionPolicy.refillSamples(
+            refillSamples(
                 playing = true,
                 underruns = 4,
                 lastSeenUnderruns = 4,
@@ -48,7 +48,7 @@ class SpeakerCushionPolicyTest {
         // latency the stream never gets back.
         var seen = 0
         val first =
-            SpeakerCushionPolicy.refillSamples(
+            refillSamples(
                 playing = true,
                 underruns = 3,
                 lastSeenUnderruns = seen,
@@ -56,7 +56,7 @@ class SpeakerCushionPolicyTest {
             )
         seen = 3
         val second =
-            SpeakerCushionPolicy.refillSamples(
+            refillSamples(
                 playing = true,
                 underruns = 3,
                 lastSeenUnderruns = seen,
@@ -70,7 +70,7 @@ class SpeakerCushionPolicyTest {
     fun `several underruns in one silence still buy exactly one cushion`() {
         assertEquals(
             CUSHION,
-            SpeakerCushionPolicy.refillSamples(
+            refillSamples(
                 playing = true,
                 underruns = 50,
                 lastSeenUnderruns = 0,
@@ -85,7 +85,7 @@ class SpeakerCushionPolicyTest {
         // would count the same silence twice and start the stream 40 ms later than it has to.
         assertEquals(
             0,
-            SpeakerCushionPolicy.refillSamples(
+            refillSamples(
                 playing = false,
                 underruns = 9,
                 lastSeenUnderruns = 0,
@@ -100,7 +100,7 @@ class SpeakerCushionPolicyTest {
         // underrun would inject a cushion into a track that never missed a sample.
         assertEquals(
             0,
-            SpeakerCushionPolicy.refillSamples(
+            refillSamples(
                 playing = true,
                 underruns = 0,
                 lastSeenUnderruns = 12,
@@ -114,7 +114,7 @@ class SpeakerCushionPolicyTest {
         for (size in intArrayOf(0, -1)) {
             assertEquals(
                 0,
-                SpeakerCushionPolicy.refillSamples(
+                refillSamples(
                     playing = true,
                     underruns = 1,
                     lastSeenUnderruns = 0,
@@ -131,7 +131,7 @@ class SpeakerCushionPolicyTest {
             val playing = bits and 1 != 0
             val drained = bits and 2 != 0
             val refill =
-                SpeakerCushionPolicy.refillSamples(
+                refillSamples(
                     playing = playing,
                     underruns = if (drained) 1 else 0,
                     lastSeenUnderruns = 0,

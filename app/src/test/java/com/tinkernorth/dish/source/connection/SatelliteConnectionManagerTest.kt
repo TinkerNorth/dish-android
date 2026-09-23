@@ -7,21 +7,23 @@ import android.content.SharedPreferences
 import com.tinkernorth.dish.composer.CapabilityComposer
 import com.tinkernorth.dish.core.jni.ControllerRepository
 import com.tinkernorth.dish.core.model.DiscoveredServer
+import com.tinkernorth.dish.core.net.DISH_PROTOCOL_CURRENT
 import com.tinkernorth.dish.core.net.DiscoveryGateway
-import com.tinkernorth.dish.core.net.DishProtocol
 import com.tinkernorth.dish.core.net.HttpReply
+import com.tinkernorth.dish.core.net.deriveSessionKey
+import com.tinkernorth.dish.core.net.hmacProof
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedSatellite
 import com.tinkernorth.dish.source.store.SatelliteHostFacts
 import com.tinkernorth.dish.source.store.SatelliteHostFeaturesStore
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatusStore
-import com.tinkernorth.dish.source.system.LocalNetworkAccess
+import com.tinkernorth.dish.source.system.isGranted
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.mockkObject
-import io.mockk.unmockkObject
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
 import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
@@ -250,7 +252,7 @@ class SatelliteConnectionManagerTest {
             scope.testScheduler.advanceUntilIdle()
 
             val expectedProof =
-                com.tinkernorth.dish.core.net.SessionCrypto.hmacProof(
+                com.tinkernorth.dish.core.net.hmacProof(
                     com.tinkernorth.dish.core.net
                         .hexToBytes(keyHex),
                     "test-device-id",
@@ -286,7 +288,7 @@ class SatelliteConnectionManagerTest {
                 com.tinkernorth.dish.core.net
                     .hexToBytes(keyHex)
             val expected =
-                com.tinkernorth.dish.core.net.SessionCrypto.deriveSessionKey(
+                com.tinkernorth.dish.core.net.deriveSessionKey(
                     pairingKey,
                     com.tinkernorth.dish.core.net
                         .hexToBytes("0102030405060708"),
@@ -449,8 +451,8 @@ class SatelliteConnectionManagerTest {
     @Test
     fun `AUTO_RECONNECT is refused before any handshake when local network access is missing`() =
         runMgrTest { mgr, _ ->
-            mockkObject(LocalNetworkAccess)
-            every { LocalNetworkAccess.isGranted(any(), any()) } returns false
+            mockkStatic("com.tinkernorth.dish.source.system.LocalNetworkAccessKt")
+            every { isGranted(any(), any()) } returns false
             try {
                 mgr.connect(server, ConnectIntent.AUTO_RECONNECT)
                 scope.testScheduler.advanceUntilIdle()
@@ -459,7 +461,7 @@ class SatelliteConnectionManagerTest {
                 verify(exactly = 0) { controllerRepo.openSocket(any(), any()) }
                 assertNull(mgr.get(serverId))
             } finally {
-                unmockkObject(LocalNetworkAccess)
+                unmockkStatic("com.tinkernorth.dish.source.system.LocalNetworkAccessKt")
             }
         }
 
@@ -897,7 +899,7 @@ class SatelliteConnectionManagerTest {
     fun `pair 409 with a speakable version retries once at that version`() =
         runMgrTest { mgr, events ->
             coEvery {
-                discoveryRepo.pair(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.DISH_PROTOCOL_CURRENT))
+                discoveryRepo.pair(any(), any(), any(), any(), any(), any(), any(), eq(DISH_PROTOCOL_CURRENT))
             } returns reply(409, """{"error":"protocol version unsupported","supported":1}""")
             coEvery {
                 discoveryRepo.pair(any(), any(), any(), any(), any(), any(), any(), eq(1))
@@ -936,7 +938,7 @@ class SatelliteConnectionManagerTest {
         runMgrTest { mgr, _ ->
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.DISH_PROTOCOL_CURRENT))
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DISH_PROTOCOL_CURRENT))
             } returns reply(409, """{"error":"protocol version unsupported","supported":1}""")
             coEvery {
                 discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(1))
@@ -962,7 +964,7 @@ class SatelliteConnectionManagerTest {
         runMgrTest { mgr, _ ->
             every { store.satelliteSharedKey(serverId) } returns "aa".repeat(32)
             coEvery {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.DISH_PROTOCOL_CURRENT))
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DISH_PROTOCOL_CURRENT))
             } returns reply(409, """{"error":"protocol version unsupported","supported":1}""")
             coEvery {
                 discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(1))
@@ -982,7 +984,7 @@ class SatelliteConnectionManagerTest {
             scope.testScheduler.runCurrent()
 
             coVerify(exactly = 1) {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.DISH_PROTOCOL_CURRENT))
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DISH_PROTOCOL_CURRENT))
             }
             coVerify(exactly = 2) {
                 discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(1))
@@ -1009,7 +1011,7 @@ class SatelliteConnectionManagerTest {
 
             assertEquals(SatelliteSessionState.Live, mgr.get(serverId)?.state?.value)
             coVerify(exactly = 0) {
-                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DishProtocol.DISH_PROTOCOL_CURRENT))
+                discoveryRepo.putSession(any(), any(), any(), any(), any(), any(), any(), eq(DISH_PROTOCOL_CURRENT))
             }
         }
 

@@ -11,7 +11,9 @@ import com.google.android.material.appbar.MaterialToolbar
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.ConnectionKind
 import com.tinkernorth.dish.composer.ConnectionSummary
-import com.tinkernorth.dish.core.net.moonlight.MoonlightControlProtocol
+import com.tinkernorth.dish.core.net.moonlight.MOUSE_BUTTON_LEFT
+import com.tinkernorth.dish.core.net.moonlight.MOUSE_BUTTON_MIDDLE
+import com.tinkernorth.dish.core.net.moonlight.MOUSE_BUTTON_RIGHT
 import com.tinkernorth.dish.databinding.ActivityMouseOverlayBasicBinding
 import com.tinkernorth.dish.databinding.ActivityMouseOverlayBinding
 import com.tinkernorth.dish.source.store.MouseSurfaceStore
@@ -184,15 +186,15 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
     private fun releaseMoonlightButtons() {
         val conn = moonlight.get(connectionId) ?: return
         if (mlLeftSent) {
-            conn.sendMouseButton(false, MoonlightControlProtocol.MOUSE_BUTTON_LEFT)
+            conn.sendMouseButton(false, MOUSE_BUTTON_LEFT)
             mlLeftSent = false
         }
         if (mlRightSent) {
-            conn.sendMouseButton(false, MoonlightControlProtocol.MOUSE_BUTTON_RIGHT)
+            conn.sendMouseButton(false, MOUSE_BUTTON_RIGHT)
             mlRightSent = false
         }
         if (mlMiddleSent) {
-            conn.sendMouseButton(false, MoonlightControlProtocol.MOUSE_BUTTON_MIDDLE)
+            conn.sendMouseButton(false, MOUSE_BUTTON_MIDDLE)
             mlMiddleSent = false
         }
     }
@@ -275,15 +277,15 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
     ) {
         val conn = moonlight.get(connectionId) ?: return
         if (leftHeld != mlLeftSent) {
-            conn.sendMouseButton(leftHeld, MoonlightControlProtocol.MOUSE_BUTTON_LEFT)
+            conn.sendMouseButton(leftHeld, MOUSE_BUTTON_LEFT)
             mlLeftSent = leftHeld
         }
         if (rightHeld != mlRightSent) {
-            conn.sendMouseButton(rightHeld, MoonlightControlProtocol.MOUSE_BUTTON_RIGHT)
+            conn.sendMouseButton(rightHeld, MOUSE_BUTTON_RIGHT)
             mlRightSent = rightHeld
         }
         if (middleHeld != mlMiddleSent) {
-            conn.sendMouseButton(middleHeld, MoonlightControlProtocol.MOUSE_BUTTON_MIDDLE)
+            conn.sendMouseButton(middleHeld, MOUSE_BUTTON_MIDDLE)
             mlMiddleSent = middleHeld
         }
         if (scrollNotches != 0) {

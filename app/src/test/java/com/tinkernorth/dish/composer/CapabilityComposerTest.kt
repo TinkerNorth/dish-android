@@ -11,7 +11,7 @@ import com.tinkernorth.dish.core.model.Feature
 import com.tinkernorth.dish.core.model.HostFeatureSet
 import com.tinkernorth.dish.core.model.SlotCapabilities
 import com.tinkernorth.dish.core.net.ControllerDescriptor
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
+import com.tinkernorth.dish.core.net.moonlight.PLAYSTATION
 import com.tinkernorth.dish.hotpath.input.PhysicalGamepadRegistry
 import com.tinkernorth.dish.source.store.SatelliteHostRuntime
 import com.tinkernorth.dish.source.store.SatelliteMotionBackendStatus
@@ -1171,7 +1171,7 @@ class CapabilityComposerTest {
             val caps =
                 composer.capabilityForCandidate(
                     slotId = VIRTUAL_SLOT_ID,
-                    candidateType = MoonlightEmulatedType.PLAYSTATION,
+                    candidateType = PLAYSTATION,
                     candidateHostKind = ConnectionKind.MOONLIGHT,
                     candidateHostId = "ml-A",
                 )

@@ -11,51 +11,51 @@ import org.junit.Test
 class MoonlightTelemetryTest {
     @Test
     fun `gyro wire scale maps full range to 2000 deg per second`() {
-        assertEquals(2000.0f, MoonlightTelemetry.gyroDegS(32767), 0.001f)
-        assertEquals(-2000.0f, MoonlightTelemetry.gyroDegS(-32767), 0.001f)
-        assertEquals(0.0f, MoonlightTelemetry.gyroDegS(0), 0.0f)
+        assertEquals(2000.0f, gyroDegS(32767), 0.001f)
+        assertEquals(-2000.0f, gyroDegS(-32767), 0.001f)
+        assertEquals(0.0f, gyroDegS(0), 0.0f)
         // 1 deg/s = 32767/2000 wire units.
-        assertEquals(1.0f, MoonlightTelemetry.gyroDegS(16), 0.05f)
+        assertEquals(1.0f, gyroDegS(16), 0.05f)
     }
 
     @Test
     fun `accel wire scale maps full range to 4 g in meters per second squared`() {
-        assertEquals(4 * 9.80665f, MoonlightTelemetry.accelMs2(32767), 0.001f)
-        assertEquals(-4 * 9.80665f, MoonlightTelemetry.accelMs2(-32767), 0.001f)
+        assertEquals(4 * 9.80665f, accelMs2(32767), 0.001f)
+        assertEquals(-4 * 9.80665f, accelMs2(-32767), 0.001f)
         // 1 g = 8191.75 wire units.
-        assertEquals(9.80665f, MoonlightTelemetry.accelMs2(8192), 0.01f)
+        assertEquals(9.80665f, accelMs2(8192), 0.01f)
     }
 
     @Test
     fun `touch coordinates normalize the full int16 range onto 0 to 1`() {
-        assertEquals(0.0f, MoonlightTelemetry.touchNorm(Short.MIN_VALUE), 0.0f)
-        assertEquals(1.0f, MoonlightTelemetry.touchNorm(Short.MAX_VALUE), 0.0001f)
-        assertEquals(0.5f, MoonlightTelemetry.touchNorm(0), 0.0001f)
+        assertEquals(0.0f, touchNorm(Short.MIN_VALUE), 0.0f)
+        assertEquals(1.0f, touchNorm(Short.MAX_VALUE), 0.0001f)
+        assertEquals(0.5f, touchNorm(0), 0.0001f)
     }
 
     @Test
     fun `battery status maps satellite bytes onto Wolf BATTERY_STATE values`() {
-        assertEquals(MoonlightControlProtocol.BATTERY_STATE_UNKNOWN, MoonlightTelemetry.batteryState(0))
-        assertEquals(MoonlightControlProtocol.BATTERY_DISCHARGING, MoonlightTelemetry.batteryState(1))
-        assertEquals(MoonlightControlProtocol.BATTERY_CHARGING, MoonlightTelemetry.batteryState(2))
-        assertEquals(MoonlightControlProtocol.BATTERY_FULL, MoonlightTelemetry.batteryState(3))
-        assertEquals(MoonlightControlProtocol.BATTERY_NOT_PRESENT, MoonlightTelemetry.batteryState(4))
-        assertEquals(MoonlightControlProtocol.BATTERY_STATE_UNKNOWN, MoonlightTelemetry.batteryState(99))
+        assertEquals(BATTERY_STATE_UNKNOWN, batteryState(0))
+        assertEquals(BATTERY_DISCHARGING, batteryState(1))
+        assertEquals(BATTERY_CHARGING, batteryState(2))
+        assertEquals(BATTERY_FULL, batteryState(3))
+        assertEquals(BATTERY_NOT_PRESENT, batteryState(4))
+        assertEquals(BATTERY_STATE_UNKNOWN, batteryState(99))
     }
 
     @Test
     fun `battery percentage passes 0 to 100 and turns everything else unknown`() {
-        assertEquals(0, MoonlightTelemetry.batteryPercentage(0))
-        assertEquals(100, MoonlightTelemetry.batteryPercentage(100))
-        assertEquals(MoonlightControlProtocol.BATTERY_PERCENTAGE_UNKNOWN, MoonlightTelemetry.batteryPercentage(0xFF))
-        assertEquals(MoonlightControlProtocol.BATTERY_PERCENTAGE_UNKNOWN, MoonlightTelemetry.batteryPercentage(101))
-        assertEquals(MoonlightControlProtocol.BATTERY_PERCENTAGE_UNKNOWN, MoonlightTelemetry.batteryPercentage(-1))
+        assertEquals(0, batteryPercentage(0))
+        assertEquals(100, batteryPercentage(100))
+        assertEquals(BATTERY_PERCENTAGE_UNKNOWN, batteryPercentage(0xFF))
+        assertEquals(BATTERY_PERCENTAGE_UNKNOWN, batteryPercentage(101))
+        assertEquals(BATTERY_PERCENTAGE_UNKNOWN, batteryPercentage(-1))
     }
 }
 
 class MoonlightMotionGateTest {
-    private val gyro = MoonlightControlProtocol.MOTION_TYPE_GYRO
-    private val accel = MoonlightControlProtocol.MOTION_TYPE_ACCEL
+    private val gyro = MOTION_TYPE_GYRO
+    private val accel = MOTION_TYPE_ACCEL
 
     @Test
     fun `nothing is wanted before the host asks`() {
@@ -123,9 +123,9 @@ class MoonlightMotionGateTest {
 }
 
 class MoonlightTouchDifferTest {
-    private val down = MoonlightControlProtocol.TOUCH_EVENT_DOWN
-    private val up = MoonlightControlProtocol.TOUCH_EVENT_UP
-    private val move = MoonlightControlProtocol.TOUCH_EVENT_MOVE
+    private val down = TOUCH_EVENT_DOWN
+    private val up = TOUCH_EVENT_UP
+    private val move = TOUCH_EVENT_MOVE
 
     private fun MoonlightTouchDiffer.frame(
         f0: Triple<Int, Float, Float>? = null,

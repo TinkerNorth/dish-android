@@ -6,9 +6,9 @@ package com.tinkernorth.dish.source.connection.moonlight
 import android.content.Context
 import android.content.SharedPreferences
 import com.tinkernorth.dish.core.net.moonlight.MoonlightControlSession
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.core.net.moonlight.MoonlightIdentity
 import com.tinkernorth.dish.core.net.moonlight.RememberedMoonlight
+import com.tinkernorth.dish.core.net.moonlight.XBOX
 import io.mockk.MockKMatcherScope
 import io.mockk.every
 import io.mockk.mockk
@@ -72,7 +72,7 @@ class MoonlightSessionLifecycleTest {
     private fun pad(slotId: String) =
         MoonlightPadRequest(
             slotId = slotId,
-            emulatedType = MoonlightEmulatedType.XBOX,
+            emulatedType = XBOX,
             capabilities = 0x03,
             supportedButtons = 0xFFFF,
         )
@@ -189,7 +189,7 @@ class MoonlightSessionLifecycleTest {
             verify(exactly = 0) { cancels() }
             assertEquals(2, connection().padCount)
             assertEquals(1, connection().padFor("b")?.number)
-            verify { session.sendControllerArrival(1, MoonlightEmulatedType.XBOX, 0x03, 0xFFFF) }
+            verify { session.sendControllerArrival(1, XBOX, 0x03, 0xFFFF) }
         }
 
     // B18. A control stream that stops without the host saying so is as likely to be a

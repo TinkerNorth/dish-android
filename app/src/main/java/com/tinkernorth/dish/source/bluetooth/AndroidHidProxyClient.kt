@@ -12,7 +12,7 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
-import com.tinkernorth.dish.core.input.BluetoothGamepad
+import com.tinkernorth.dish.core.input.GamepadProfile
 import com.tinkernorth.dish.core.input.REPORT_ID
 import com.tinkernorth.dish.core.input.REPORT_SIZE
 import com.tinkernorth.dish.core.input.buildHidDescriptor
@@ -28,7 +28,7 @@ class AndroidHidProxyClient(
     @Volatile private var hidDevice: BluetoothHidDevice? = null
 
     @Volatile private var connectedDevice: BluetoothDevice? = null
-    private var currentProfile: BluetoothGamepad.GamepadProfile? = null
+    private var currentProfile: GamepadProfile? = null
 
     // Per-thread (sendReport is reached from the BT dispatch and on-screen-pad threads); avoids a
     // payload allocation per report.
@@ -54,7 +54,7 @@ class AndroidHidProxyClient(
         }
     }
 
-    override fun registerApp(profile: BluetoothGamepad.GamepadProfile) {
+    override fun registerApp(profile: GamepadProfile) {
         val hid = hidDevice ?: return
         currentProfile = profile
         val sdp =

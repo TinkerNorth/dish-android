@@ -4,14 +4,20 @@
 package com.tinkernorth.dish.source.connection.moonlight
 
 import android.util.Log
-import com.tinkernorth.dish.core.net.moonlight.MoonlightControlProtocol
+import com.tinkernorth.dish.core.net.moonlight.BTN_TOUCHPAD
+import com.tinkernorth.dish.core.net.moonlight.MOTION_TYPE_ACCEL
+import com.tinkernorth.dish.core.net.moonlight.MOTION_TYPE_GYRO
 import com.tinkernorth.dish.core.net.moonlight.MoonlightControlSession
-import com.tinkernorth.dish.core.net.moonlight.MoonlightEmulatedType
 import com.tinkernorth.dish.core.net.moonlight.MoonlightEvent
 import com.tinkernorth.dish.core.net.moonlight.MoonlightHost
 import com.tinkernorth.dish.core.net.moonlight.MoonlightMotionGate
-import com.tinkernorth.dish.core.net.moonlight.MoonlightTelemetry
 import com.tinkernorth.dish.core.net.moonlight.MoonlightTouchDiffer
+import com.tinkernorth.dish.core.net.moonlight.XBOX
+import com.tinkernorth.dish.core.net.moonlight.accelMs2
+import com.tinkernorth.dish.core.net.moonlight.batteryPercentage
+import com.tinkernorth.dish.core.net.moonlight.batteryState
+import com.tinkernorth.dish.core.net.moonlight.gyroDegS
+import com.tinkernorth.dish.core.net.moonlight.touchNorm
 import com.tinkernorth.dish.source.connection.TelemetrySink
 import com.tinkernorth.dish.source.connection.TouchpadReport
 import kotlinx.coroutines.CoroutineScope
@@ -261,7 +267,7 @@ class MoonlightConnection(
         lastPadFrames[controllerNumber] = frame
         if (controllerNumber in 0 until MAX_PADS) sentByNumber.incrementAndGet(controllerNumber)
         val clickBit =
-            if (touchClickByNumber[controllerNumber] == true) MoonlightControlProtocol.BTN_TOUCHPAD else 0
+            if (touchClickByNumber[controllerNumber] == true) BTN_TOUCHPAD else 0
         live.sendControllerState(
             controllerNumber = controllerNumber,
             activeMask = activeMask(),
@@ -339,22 +345,22 @@ class MoonlightConnection(
         val live = session ?: return
         val pad = padFor(slotId) ?: return
         val nowNs = System.nanoTime()
-        if (motionGate.shouldSend(pad.number, MoonlightControlProtocol.MOTION_TYPE_GYRO, nowNs)) {
+        if (motionGate.shouldSend(pad.number, MOTION_TYPE_GYRO, nowNs)) {
             live.sendControllerMotion(
                 controllerNumber = pad.number,
-                motionType = MoonlightControlProtocol.MOTION_TYPE_GYRO,
-                x = MoonlightTelemetry.gyroDegS(gyroX),
-                y = MoonlightTelemetry.gyroDegS(gyroY),
-                z = MoonlightTelemetry.gyroDegS(gyroZ),
+                motionType = MOTION_TYPE_GYRO,
+                x = gyroDegS(gyroX),
+                y = gyroDegS(gyroY),
+                z = gyroDegS(gyroZ),
             )
         }
-        if (motionGate.shouldSend(pad.number, MoonlightControlProtocol.MOTION_TYPE_ACCEL, nowNs)) {
+        if (motionGate.shouldSend(pad.number, MOTION_TYPE_ACCEL, nowNs)) {
             live.sendControllerMotion(
                 controllerNumber = pad.number,
-                motionType = MoonlightControlProtocol.MOTION_TYPE_ACCEL,
-                x = MoonlightTelemetry.accelMs2(accelX),
-                y = MoonlightTelemetry.accelMs2(accelY),
-                z = MoonlightTelemetry.accelMs2(accelZ),
+                motionType = MOTION_TYPE_ACCEL,
+                x = accelMs2(accelX),
+                y = accelMs2(accelY),
+                z = accelMs2(accelZ),
             )
         }
     }
@@ -368,8 +374,8 @@ class MoonlightConnection(
         val pad = padFor(slotId) ?: return
         live.sendControllerBattery(
             controllerNumber = pad.number,
-            batteryState = MoonlightTelemetry.batteryState(status),
-            percentage = MoonlightTelemetry.batteryPercentage(level),
+            batteryState = batteryState(status),
+            percentage = batteryPercentage(level),
         )
     }
 
@@ -398,12 +404,12 @@ class MoonlightConnection(
             differ.diff(
                 finger0Active = report.finger0Active,
                 finger0Id = report.finger0TrackingId,
-                finger0X = MoonlightTelemetry.touchNorm(report.finger0X),
-                finger0Y = MoonlightTelemetry.touchNorm(report.finger0Y),
+                finger0X = touchNorm(report.finger0X),
+                finger0Y = touchNorm(report.finger0Y),
                 finger1Active = report.finger1Active,
                 finger1Id = report.finger1TrackingId,
-                finger1X = MoonlightTelemetry.touchNorm(report.finger1X),
-                finger1Y = MoonlightTelemetry.touchNorm(report.finger1Y),
+                finger1X = touchNorm(report.finger1X),
+                finger1Y = touchNorm(report.finger1Y),
             )
         for (e in events) {
             live.sendControllerTouch(
@@ -459,7 +465,7 @@ class MoonlightConnection(
 
         // XUSB's low 16 plus the wire's own touchpad flag (buttonFlags2 on the wire);
         // anything else a caller sets is not a button this client can vouch for.
-        private const val WIRE_BUTTONS_MASK = 0xFFFF or MoonlightControlProtocol.BTN_TOUCHPAD
+        private const val WIRE_BUTTONS_MASK = 0xFFFF or BTN_TOUCHPAD
 
         // Comfortably inside every host deadline we have measured, and cheap.
         private const val MEDIA_PING_INTERVAL_MS = 500L
@@ -472,7 +478,7 @@ class MoonlightConnection(
 
         const val SUPPORTED_BUTTONS = 0xFFFF
 
-        val DEFAULT_TYPE = MoonlightEmulatedType.XBOX
+        val DEFAULT_TYPE = XBOX
     }
 }
 

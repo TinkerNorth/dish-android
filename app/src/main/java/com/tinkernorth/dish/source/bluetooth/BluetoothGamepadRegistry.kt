@@ -2,7 +2,7 @@
 
 package com.tinkernorth.dish.source.bluetooth
 
-import com.tinkernorth.dish.core.input.BluetoothGamepad
+import com.tinkernorth.dish.core.input.GamepadProfile
 import com.tinkernorth.dish.core.input.buildHidReport
 import com.tinkernorth.dish.repository.ConnectionStore
 import com.tinkernorth.dish.repository.RememberedBt
@@ -91,7 +91,7 @@ class BluetoothGamepadRegistry
 
         fun start(
             connId: String,
-            profile: BluetoothGamepad.GamepadProfile,
+            profile: GamepadProfile,
             autoConnectMac: String? = null,
         ) {
             synchronized(lock) {
@@ -156,10 +156,10 @@ class BluetoothGamepadRegistry
             return buildHidReport(buttons, hat, lx, ly, rx, ry, lt, rt)
         }
 
-        fun tryAutoReconnect(connId: String): BluetoothGamepad.GamepadProfile? {
+        fun tryAutoReconnect(connId: String): GamepadProfile? {
             val entry = store.rememberedBt().firstOrNull { it.id == connId } ?: return null
             val profile =
-                BluetoothGamepad.GamepadProfile.entries
+                GamepadProfile.entries
                     .firstOrNull { it.profileName == entry.profileName || it.name == entry.profileName }
                     ?: return null
             val current = _states.value[connId]

@@ -12,7 +12,7 @@ import android.view.MotionEvent
 import com.tinkernorth.dish.core.input.resolveGamepadQuirk
 import com.tinkernorth.dish.core.jni.PhysicalInputNative
 import com.tinkernorth.dish.source.bluetooth.BluetoothConnections
-import com.tinkernorth.dish.source.lights.FrameworkLightProbe
+import com.tinkernorth.dish.source.lights.hasLightbar
 import com.tinkernorth.dish.source.sensor.hasGyro
 import com.tinkernorth.dish.source.usb.DirectClaimFailure
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -176,7 +176,7 @@ class PhysicalGamepadRegistry
             val pid = runCatching { dev.productId }.getOrDefault(0)
             val hasGyro = hasGyro(deviceId)
             val hasRumble = probeRumble(dev)
-            val hasLightbar = FrameworkLightProbe.hasLightbar(dev)
+            val hasLightbar = hasLightbar(dev)
             val touchpadDeviceId = touchpadSurfaceFor(deviceId, dev, vid, pid)
             if (vid != 0 && pid != 0) {
                 lastFrameworkCaps[vpKey(vid, pid)] =
@@ -454,7 +454,7 @@ class PhysicalGamepadRegistry
             // pad's light bar as its merged device gains a sub-device); re-probe to catch a late one.
             val nextHasGyro = hasGyro(deviceId)
             val nextHasRumble = probeRumble(dev)
-            val nextHasLightbar = FrameworkLightProbe.hasLightbar(dev)
+            val nextHasLightbar = hasLightbar(dev)
             val current = _devices.value[deviceId]
             val nextTouchpad = touchpadSurfaceFor(deviceId, dev, current?.vendorId ?: 0, current?.productId ?: 0)
             val needsUpdate =

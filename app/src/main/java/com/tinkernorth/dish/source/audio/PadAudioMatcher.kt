@@ -39,71 +39,64 @@ data class UsbAudioEndpoint(
     val channelCounts: List<Int> = emptyList(),
 )
 
-/**
- * Matches a plugged pad to its own audio endpoints, conservatively.
- *
- * There is no public API that puts a vendor:product on an [android.media.AudioDeviceInfo]: the
- * class exposes an id, a type, a product name and an address, and nothing that names the USB
- * device behind it (true through API 37). The one field both sides genuinely share is the product
- * name, which on either side is the USB device's own iProduct string descriptor, so that is what
- * this matches on.
- *
- * Because it is only a name, every ambiguity resolves to "no route", never to a guess:
- *
- *  - The pad must actually carry a USB Audio Class interface. A name alone would let an unrelated
- *    USB audio dongle lend its endpoints to a pad that has none.
- *  - The name must identify exactly one attached device. Two DualSenses (or a DualSense next to a
- *    DualShock 4, which shares the string "Wireless Controller") are indistinguishable here, and
- *    routing a slot to the wrong pad's speaker is worse than not routing it.
- *  - The name must identify at most one endpoint per direction, for the same reason.
- *
- * A pad that resolves to nothing simply advertises neither cap, which is the honest answer for a
- * pad whose audio function this device cannot confidently name.
- */
-object PadAudioMatcher {
-    /** The DualSense's own render endpoint: speaker pair then haptic pair. */
-    const val HAPTIC_ENDPOINT_CHANNELS = 4
+// Matches a plugged pad to its own audio endpoints, conservatively.
+// There is no public API that puts a vendor:product on an [android.media.AudioDeviceInfo]: the
+// class exposes an id, a type, a product name and an address, and nothing that names the USB
+// device behind it (true through API 37). The one field both sides genuinely share is the product
+// name, which on either side is the USB device's own iProduct string descriptor, so that is what
+// this matches on.
+// Because it is only a name, every ambiguity resolves to "no route", never to a guess:
+// - The pad must actually carry a USB Audio Class interface. A name alone would let an unrelated
+// USB audio dongle lend its endpoints to a pad that has none.
+// - The name must identify exactly one attached device. Two DualSenses (or a DualSense next to a
+// DualShock 4, which shares the string "Wireless Controller") are indistinguishable here, and
+// routing a slot to the wrong pad's speaker is worse than not routing it.
+// - The name must identify at most one endpoint per direction, for the same reason.
+// A pad that resolves to nothing simply advertises neither cap, which is the honest answer for a
+// pad whose audio function this device cannot confidently name.
 
-    fun resolvePadAudioRoutes(
-        pads: List<UsbAudioPad>,
-        endpoints: List<UsbAudioEndpoint>,
-    ): Map<Int, PadAudioRoute> {
-        val padsByName =
-            pads
-                .filter { it.hasAudioFunction && !it.productName.isNullOrBlank() }
-                .groupBy { it.productName!!.trim() }
-        val sinks = uniqueByName(endpoints.filter { it.sink })
-        val sources = uniqueByName(endpoints.filter { it.source })
+/** The DualSense's own render endpoint: speaker pair then haptic pair. */
+const val HAPTIC_ENDPOINT_CHANNELS = 4
 
-        val out = HashMap<Int, PadAudioRoute>()
-        for ((name, candidates) in padsByName) {
-            val pad = candidates.singleOrNull() ?: continue
-            val sink = sinks[name]
-            val source = sources[name]
-            if (sink == null && source == null) continue
-            // The widest count the platform offers, so a pad that lists both stereo
-            // and quad opens at quad and keeps its lane pairs apart.
-            val playbackChannels = sink?.channelCounts?.maxOrNull() ?: 0
-            out[PadAudioRoutes.key(pad.vendorId, pad.productId)] =
-                PadAudioRoute(
-                    microphone = source != null,
-                    speaker = sink != null,
-                    captureDeviceId = source?.deviceId ?: NO_AUDIO_DEVICE,
-                    playbackDeviceId = sink?.deviceId ?: NO_AUDIO_DEVICE,
-                    haptics = sink != null && pad.hasHapticLanes && playbackChannels >= HAPTIC_ENDPOINT_CHANNELS,
-                    playbackChannels = playbackChannels,
-                )
-        }
-        return out
-    }
-
-    // Named endpoints only, and only where the name picks out one of them. Duplicate ids are
-    // folded first: some platforms hand the same endpoint back in more than one query.
-    private fun uniqueByName(endpoints: List<UsbAudioEndpoint>): Map<String, UsbAudioEndpoint> =
-        endpoints
-            .filter { !it.productName.isNullOrBlank() }
-            .distinctBy { it.deviceId }
+fun resolvePadAudioRoutes(
+    pads: List<UsbAudioPad>,
+    endpoints: List<UsbAudioEndpoint>,
+): Map<Int, PadAudioRoute> {
+    val padsByName =
+        pads
+            .filter { it.hasAudioFunction && !it.productName.isNullOrBlank() }
             .groupBy { it.productName!!.trim() }
-            .mapNotNull { (name, matches) -> matches.singleOrNull()?.let { name to it } }
-            .toMap()
+    val sinks = uniqueByName(endpoints.filter { it.sink })
+    val sources = uniqueByName(endpoints.filter { it.source })
+
+    val out = HashMap<Int, PadAudioRoute>()
+    for ((name, candidates) in padsByName) {
+        val pad = candidates.singleOrNull() ?: continue
+        val sink = sinks[name]
+        val source = sources[name]
+        if (sink == null && source == null) continue
+        // The widest count the platform offers, so a pad that lists both stereo
+        // and quad opens at quad and keeps its lane pairs apart.
+        val playbackChannels = sink?.channelCounts?.maxOrNull() ?: 0
+        out[PadAudioRoutes.key(pad.vendorId, pad.productId)] =
+            PadAudioRoute(
+                microphone = source != null,
+                speaker = sink != null,
+                captureDeviceId = source?.deviceId ?: NO_AUDIO_DEVICE,
+                playbackDeviceId = sink?.deviceId ?: NO_AUDIO_DEVICE,
+                haptics = sink != null && pad.hasHapticLanes && playbackChannels >= HAPTIC_ENDPOINT_CHANNELS,
+                playbackChannels = playbackChannels,
+            )
+    }
+    return out
 }
+
+// Named endpoints only, and only where the name picks out one of them. Duplicate ids are
+// folded first: some platforms hand the same endpoint back in more than one query.
+private fun uniqueByName(endpoints: List<UsbAudioEndpoint>): Map<String, UsbAudioEndpoint> =
+    endpoints
+        .filter { !it.productName.isNullOrBlank() }
+        .distinctBy { it.deviceId }
+        .groupBy { it.productName!!.trim() }
+        .mapNotNull { (name, matches) -> matches.singleOrNull()?.let { name to it } }
+        .toMap()

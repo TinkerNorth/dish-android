@@ -63,21 +63,19 @@ data class MicCapturePlan(
  * recorder that silently yields nothing, and the app would report a live microphone it does not
  * have.
  */
-object MicCapturePolicy {
-    fun plan(
-        slots: Collection<MicSlotInput>,
-        permissionGranted: Boolean,
-    ): MicCapturePlan {
-        if (!permissionGranted) return MicCapturePlan.IDLE
-        val armed = LinkedHashSet<MicCaptureTarget>()
-        val delivering = LinkedHashSet<MicCaptureTarget>()
-        for (slot in slots) {
-            val connectionId = slot.connectionId ?: continue
-            if (!slot.streaming || !slot.micEnabled) continue
-            val target = MicCaptureTarget(slot.slotId, connectionId)
-            armed += target
-            if (!slot.muted) delivering += target
-        }
-        return MicCapturePlan(armed = armed, delivering = delivering)
+fun micCapturePlanFor(
+    slots: Collection<MicSlotInput>,
+    permissionGranted: Boolean,
+): MicCapturePlan {
+    if (!permissionGranted) return MicCapturePlan.IDLE
+    val armed = LinkedHashSet<MicCaptureTarget>()
+    val delivering = LinkedHashSet<MicCaptureTarget>()
+    for (slot in slots) {
+        val connectionId = slot.connectionId ?: continue
+        if (!slot.streaming || !slot.micEnabled) continue
+        val target = MicCaptureTarget(slot.slotId, connectionId)
+        armed += target
+        if (!slot.muted) delivering += target
     }
+    return MicCapturePlan(armed = armed, delivering = delivering)
 }
