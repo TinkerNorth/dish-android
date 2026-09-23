@@ -536,25 +536,35 @@ class ConfigureBindingsActivity : BaseGamepadHostActivity() {
                 .setNegativeButton(android.R.string.cancel, null)
                 .create()
         state.hosts.forEach { host ->
-            val potential = viewModel.destinationPotential(snapshot.slotId, host.kind, host.id)
-            val card = SetupReviewCardBinding.inflate(layoutInflater, container, false)
-            card.reviewIcon.setImageResource(destinationGlyph(host.kind))
-            card.reviewKind.setText(R.string.binding_label_destination)
-            card.reviewName.text = host.label
-            card.reviewSublabel.text = destinationSublabel(host)
-            card.reviewTierPill.bindPill(tierPillSpec(host.kind))
-            card.reviewTierPill.root.visibility = View.VISIBLE
-            card.reviewCompatPill.bindCompat(state.hostCompat[host.id] ?: DishProtocolCompat.UNKNOWN)
-            bindReviewFlows(card.reviewSendsRow, card.reviewSendsChips, destinationSends(potential))
-            bindReviewFlows(card.reviewGetsRow, card.reviewGetsChips, destinationGets(potential))
-            card.reviewCard.isClickable = true
-            card.reviewCard.setOnClickListener {
-                viewModel.setHost(host.id)
-                dialog.dismiss()
-            }
-            container.addView(card.root)
+            container.addView(hostCardFor(host, state, snapshot, container, dialog))
         }
         dialog.show()
+    }
+
+    private fun hostCardFor(
+        host: BindingHost,
+        state: ConfigUiState,
+        snapshot: BindingSnapshot,
+        container: ViewGroup,
+        dialog: AlertDialog,
+    ): View {
+        val potential = viewModel.destinationPotential(snapshot.slotId, host.kind, host.id)
+        val card = SetupReviewCardBinding.inflate(layoutInflater, container, false)
+        card.reviewIcon.setImageResource(destinationGlyph(host.kind))
+        card.reviewKind.setText(R.string.binding_label_destination)
+        card.reviewName.text = host.label
+        card.reviewSublabel.text = destinationSublabel(host)
+        card.reviewTierPill.bindPill(tierPillSpec(host.kind))
+        card.reviewTierPill.root.visibility = View.VISIBLE
+        card.reviewCompatPill.bindCompat(state.hostCompat[host.id] ?: DishProtocolCompat.UNKNOWN)
+        bindReviewFlows(card.reviewSendsRow, card.reviewSendsChips, destinationSends(potential))
+        bindReviewFlows(card.reviewGetsRow, card.reviewGetsChips, destinationGets(potential))
+        card.reviewCard.isClickable = true
+        card.reviewCard.setOnClickListener {
+            viewModel.setHost(host.id)
+            dialog.dismiss()
+        }
+        return card.root
     }
 
     // One silhouette per destination kind, everywhere the destination is drawn.
