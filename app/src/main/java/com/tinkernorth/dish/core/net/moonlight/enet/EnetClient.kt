@@ -194,32 +194,51 @@ class EnetClient(
         val now = nowMs()
         val out = mutableListOf<ByteArray>()
         for (cmd in sentReliable.values) {
-            if (now - cmd.sentAtMs < cmd.roundTripTimeout) continue
+            val dueForRetry = now - cmd.sentAtMs >= cmd.roundTripTimeout
+            if (!dueForRetry) continue
             if (earliestTimeoutMs == 0L || cmd.sentAtMs < earliestTimeoutMs) earliestTimeoutMs = cmd.sentAtMs
             if (hasTimedOut(cmd, now)) {
-                state = State.DISCONNECTED
-                disconnectReason =
-                    "peer stopped acknowledging: channel ${cmd.channelId} seq ${cmd.reliableSeq} " +
-                    "unacked for ${now - earliestTimeoutMs} ms over ${cmd.sendAttempts} sends"
+                giveUpOn(cmd, now)
                 return out
             }
-            cmd.sendAttempts += 1
-            cmd.roundTripTimeout = retryTimeoutFor(cmd.sendAttempts)
-            cmd.sentAtMs = now
-            retransmits += 1
-            // Re-wrap rather than replay: the header's sent time is what the peer
-            // echoes back to measure the round trip, so a stale one poisons its RTT.
-            out += wrapRaw(cmd.command, now)
+            out += retransmit(cmd, now)
         }
-        if (state == State.CONNECTED &&
-            now - lastReceiveMs >= EnetProtocol.PING_INTERVAL_MS &&
-            now - lastPingMs >= EnetProtocol.PING_INTERVAL_MS
-        ) {
+        if (pingIsDue(now)) {
             lastPingMs = now
             out += buildPing(now)
         }
         return out
     }
+
+    private fun giveUpOn(
+        cmd: Outgoing,
+        now: Long,
+    ) {
+        state = State.DISCONNECTED
+        disconnectReason =
+            "peer stopped acknowledging: channel ${cmd.channelId} seq ${cmd.reliableSeq} " +
+            "unacked for ${now - earliestTimeoutMs} ms over ${cmd.sendAttempts} sends"
+    }
+
+    // Re-wrapped rather than replayed: the header's sent time is what the peer echoes back to
+    // measure the round trip, so a stale one poisons its RTT.
+    private fun retransmit(
+        cmd: Outgoing,
+        now: Long,
+    ): ByteArray {
+        cmd.sendAttempts += 1
+        cmd.roundTripTimeout = retryTimeoutFor(cmd.sendAttempts)
+        cmd.sentAtMs = now
+        retransmits += 1
+        return wrapRaw(cmd.command, now)
+    }
+
+    // Only while connected, and only once the link has been quiet in both directions: a peer that
+    // is still talking needs no keepalive.
+    private fun pingIsDue(now: Long): Boolean =
+        state == State.CONNECTED &&
+            now - lastReceiveMs >= EnetProtocol.PING_INTERVAL_MS &&
+            now - lastPingMs >= EnetProtocol.PING_INTERVAL_MS
 
     /**
      * protocol.c enet_protocol_check_timeouts: give up either after
