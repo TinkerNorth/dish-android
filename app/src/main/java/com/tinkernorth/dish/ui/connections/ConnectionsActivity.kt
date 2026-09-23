@@ -1078,56 +1078,75 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
             }
     }
 
-    private fun applyBtPermissionBanner(variant: BluetoothPermissionBannerVariant?) {
-        if (variant == null) {
-            btPermissionShownVariant = null
-            btPermissionSnackbar?.dismiss()
-            btPermissionSnackbar = null
-            return
-        }
-        if (variant == btPermissionShownVariant && btPermissionSnackbar?.isShownOrQueued == true) return
-        btPermissionSnackbar?.dismiss()
-        val (severity, titleRes, bodyRes) =
-            when (variant) {
-                BluetoothPermissionBannerVariant.CONNECT ->
-                    Triple(
-                        DishNotification.Severity.WARN,
-                        R.string.notif_bt_permission_title,
-                        R.string.notif_bt_permission_body,
-                    )
-                BluetoothPermissionBannerVariant.SCAN ->
-                    Triple(
-                        DishNotification.Severity.INFO,
-                        R.string.notif_bt_scan_permission_title,
-                        R.string.notif_bt_scan_permission_body,
-                    )
+    private data class BtPermissionBannerCopy(
+        val severity: DishNotification.Severity,
+        val titleRes: Int,
+        val bodyRes: Int,
+    )
+
+    private inner class BtPermissionSnackbarCallback : Snackbar.Callback() {
+        override fun onDismissed(
+            transientBottomBar: Snackbar?,
+            event: Int,
+        ) {
+            val isTheOneShowing = btPermissionSnackbar === transientBottomBar
+            if (isTheOneShowing) {
+                btPermissionSnackbar = null
+                btPermissionShownVariant = null
             }
+            val swipedAway = event == DISMISS_EVENT_SWIPE
+            if (swipedAway) btPermissionBannerStore.markDismissed()
+        }
+    }
+
+    private fun btPermissionBannerCopy(variant: BluetoothPermissionBannerVariant): BtPermissionBannerCopy =
+        when (variant) {
+            BluetoothPermissionBannerVariant.CONNECT ->
+                BtPermissionBannerCopy(
+                    DishNotification.Severity.WARN,
+                    R.string.notif_bt_permission_title,
+                    R.string.notif_bt_permission_body,
+                )
+            BluetoothPermissionBannerVariant.SCAN ->
+                BtPermissionBannerCopy(
+                    DishNotification.Severity.INFO,
+                    R.string.notif_bt_scan_permission_title,
+                    R.string.notif_bt_scan_permission_body,
+                )
+        }
+
+    private fun hideBtPermissionBanner() {
+        btPermissionShownVariant = null
+        btPermissionSnackbar?.dismiss()
+        btPermissionSnackbar = null
+    }
+
+    private fun showBtPermissionBanner(variant: BluetoothPermissionBannerVariant) {
+        val copy = btPermissionBannerCopy(variant)
         val snackbar =
             dishSnackbar(
                 binding.root,
-                severity,
-                getString(titleRes),
-                getString(bodyRes),
+                copy.severity,
+                getString(copy.titleRes),
+                getString(copy.bodyRes),
                 DishNotification.DURATION_PERSISTENT,
             )
         snackbar.setAction(getString(R.string.action_grant)) { requestBtPermissions(continueToAdd = false) }
-        snackbar.addCallback(
-            object : Snackbar.Callback() {
-                override fun onDismissed(
-                    transientBottomBar: Snackbar?,
-                    event: Int,
-                ) {
-                    if (btPermissionSnackbar === transientBottomBar) {
-                        btPermissionSnackbar = null
-                        btPermissionShownVariant = null
-                    }
-                    if (event == Snackbar.Callback.DISMISS_EVENT_SWIPE) btPermissionBannerStore.markDismissed()
-                }
-            },
-        )
+        snackbar.addCallback(BtPermissionSnackbarCallback())
         btPermissionShownVariant = variant
         btPermissionSnackbar = snackbar
         snackbar.show()
+    }
+
+    private fun applyBtPermissionBanner(variant: BluetoothPermissionBannerVariant?) {
+        if (variant == null) {
+            hideBtPermissionBanner()
+            return
+        }
+        val alreadyShowingIt = variant == btPermissionShownVariant && btPermissionSnackbar?.isShownOrQueued == true
+        if (alreadyShowingIt) return
+        btPermissionSnackbar?.dismiss()
+        showBtPermissionBanner(variant)
     }
 
     private fun applyBtStaleBanners(stale: Map<String, com.tinkernorth.dish.source.bluetooth.BtStaleReason>) {

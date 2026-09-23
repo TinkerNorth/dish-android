@@ -128,21 +128,31 @@ class MainActivity :
         val splash = installSplashScreen()
         splash.setKeepOnScreenCondition { splashHoldUntilFirstRender }
         super.onCreate(savedInstanceState)
-        // GameActivity loads native code on touch; route to fallback before JNI surface is hit.
+        if (redirectedAwayFromTheDashboard()) return
+        installDashboard()
+    }
+
+    // GameActivity loads native code on touch, so the fallback must be chosen before the JNI
+    // surface is hit. Either redirect releases the splash hold at once: this activity is
+    // finishing and the screen it hands off to needs to draw itself.
+    private fun redirectedAwayFromTheDashboard(): Boolean {
         if (com.tinkernorth.dish.DishApplication.nativeLoadFailed) {
-            // Release the splash hold immediately: this activity is finishing
-            // and the NativeUnavailable screen needs to draw itself.
             splashHoldUntilFirstRender = false
             nav.toNativeUnavailable()
             finish()
-            return
+            return true
         }
-        if (!onboarding.state.value.welcomeCompleted) {
+        val needsWelcome = !onboarding.state.value.welcomeCompleted
+        if (needsWelcome) {
             splashHoldUntilFirstRender = false
             nav.toSetupInput()
             finish()
-            return
+            return true
         }
+        return false
+    }
+
+    private fun installDashboard() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         applyPaneLayout(resources.configuration)
