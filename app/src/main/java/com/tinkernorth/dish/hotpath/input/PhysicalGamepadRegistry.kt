@@ -454,27 +454,48 @@ class PhysicalGamepadRegistry
                 return
             }
             cancelDisconnect(deviceId)
-            // Sensors and lights can enumerate after onInputDeviceAdded (Bluetooth Switch Pro gyro; a
-            // pad's light bar as its merged device gains a sub-device); re-probe to catch a late one.
-            val nextHasGyro = hasGyro(deviceId)
-            val nextHasRumble = probeRumble(dev)
-            val nextHasLightbar = hasLightbar(dev)
+            // Sensors and lights can enumerate after onInputDeviceAdded (a Bluetooth Switch Pro's
+            // gyro; a pad's light bar as its merged device gains a sub-device), so re-probe.
             val current = _devices.value[deviceId]
-            val nextTouchpad = touchpadSurfaceFor(deviceId, dev, current?.vendorId ?: 0, current?.productId ?: 0)
-            val needsUpdate =
-                current == null ||
-                    current.name != dev.name ||
-                    current.isDisconnecting ||
-                    current.hasGyro != nextHasGyro ||
-                    current.hasRumble != nextHasRumble ||
-                    current.hasLightbar != nextHasLightbar ||
-                    current.touchpadDeviceId != nextTouchpad
-            if (!needsUpdate) return
+            val probed = probeCapabilities(deviceId, dev, current)
+            if (!hasChanged(current, dev, probed)) return
 
-            logReprobe(deviceId, dev, "hasGyro", current?.hasGyro, nextHasGyro)
-            logReprobe(deviceId, dev, "hasRumble", current?.hasRumble, nextHasRumble)
+            logReprobe(deviceId, dev, "hasGyro", current?.hasGyro, probed.hasGyro)
+            logReprobe(deviceId, dev, "hasRumble", current?.hasRumble, probed.hasRumble)
             _devices.update { it + (deviceId to makeRoutedDevice(deviceId, dev)) }
         }
+
+        private data class ProbedCapabilities(
+            val hasGyro: Boolean,
+            val hasRumble: Boolean,
+            val hasLightbar: Boolean,
+            val touchpadDeviceId: Int?,
+        )
+
+        private fun probeCapabilities(
+            deviceId: Int,
+            dev: InputDevice,
+            current: Device?,
+        ) = ProbedCapabilities(
+            hasGyro = hasGyro(deviceId),
+            hasRumble = probeRumble(dev),
+            hasLightbar = hasLightbar(dev),
+            touchpadDeviceId =
+                touchpadSurfaceFor(deviceId, dev, current?.vendorId ?: 0, current?.productId ?: 0),
+        )
+
+        private fun hasChanged(
+            current: Device?,
+            dev: InputDevice,
+            probed: ProbedCapabilities,
+        ): Boolean =
+            current == null ||
+                current.name != dev.name ||
+                current.isDisconnecting ||
+                current.hasGyro != probed.hasGyro ||
+                current.hasRumble != probed.hasRumble ||
+                current.hasLightbar != probed.hasLightbar ||
+                current.touchpadDeviceId != probed.touchpadDeviceId
 
         private fun logReprobe(
             deviceId: Int,
