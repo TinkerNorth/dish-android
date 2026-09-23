@@ -59,20 +59,21 @@ class PhoneMotionSource(
 
     private val loggedUnknownRotations = HashSet<Int>()
 
-    private val listener =
-        object : SensorEventListener {
-            override fun onSensorChanged(event: SensorEvent) {
-                when (event.sensor.type) {
-                    Sensor.TYPE_ACCELEROMETER -> onAccel(event.values)
-                    Sensor.TYPE_GYROSCOPE -> onGyro(event.values)
-                }
+    private inner class PhoneSensorListener : SensorEventListener {
+        override fun onSensorChanged(event: SensorEvent) {
+            when (event.sensor.type) {
+                Sensor.TYPE_ACCELEROMETER -> onAccel(event.values)
+                Sensor.TYPE_GYROSCOPE -> onGyro(event.values)
             }
-
-            override fun onAccuracyChanged(
-                sensor: Sensor?,
-                accuracy: Int,
-            ) = Unit
         }
+
+        override fun onAccuracyChanged(
+            sensor: Sensor?,
+            accuracy: Int,
+        ) = Unit
+    }
+
+    private val listener = PhoneSensorListener()
 
     fun start(emit: Emit) {
         if (started || gyro == null) return

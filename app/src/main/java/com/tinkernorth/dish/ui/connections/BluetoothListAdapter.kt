@@ -116,22 +116,23 @@ class BluetoothListAdapter(
         private const val TYPE_ROW = 0
         private const val TYPE_EMPTY = 1
 
-        private val Diff =
-            object : DiffUtil.ItemCallback<BluetoothRow>() {
-                override fun areItemsTheSame(
-                    o: BluetoothRow,
-                    n: BluetoothRow,
-                ): Boolean =
-                    when {
-                        o is BluetoothRow.Item && n is BluetoothRow.Item -> o.ui.summary.id == n.ui.summary.id
-                        o is BluetoothRow.Empty && n is BluetoothRow.Empty -> true
-                        else -> false
-                    }
-
-                override fun areContentsTheSame(
-                    o: BluetoothRow,
-                    n: BluetoothRow,
-                ): Boolean = o == n
-            }
+        private val Diff = BluetoothRowDiff()
     }
+}
+
+private class BluetoothRowDiff : DiffUtil.ItemCallback<BluetoothRow>() {
+    override fun areItemsTheSame(
+        o: BluetoothRow,
+        n: BluetoothRow,
+    ): Boolean =
+        when {
+            o is BluetoothRow.Item && n is BluetoothRow.Item -> o.ui.summary.id == n.ui.summary.id
+            o is BluetoothRow.Empty && n is BluetoothRow.Empty -> true
+            else -> false
+        }
+
+    override fun areContentsTheSame(
+        o: BluetoothRow,
+        n: BluetoothRow,
+    ): Boolean = o == n
 }

@@ -162,22 +162,23 @@ class LowPowerManager(
             }
     }
 
-    private val clockRunnable =
-        object : Runnable {
-            override fun run() {
-                if (state.value != State.ACTIVE) return
-                val now = Calendar.getInstance()
-                views?.tvLowPowerTime?.text =
-                    String.format(
-                        Locale.ROOT,
-                        "%02d:%02d",
-                        now.get(Calendar.HOUR_OF_DAY),
-                        now.get(Calendar.MINUTE),
-                    )
-                updateStatus()
-                clockHandler.postDelayed(this, 15_000L)
-            }
+    private inner class ClockTick : Runnable {
+        override fun run() {
+            if (state.value != State.ACTIVE) return
+            val now = Calendar.getInstance()
+            views?.tvLowPowerTime?.text =
+                String.format(
+                    Locale.ROOT,
+                    "%02d:%02d",
+                    now.get(Calendar.HOUR_OF_DAY),
+                    now.get(Calendar.MINUTE),
+                )
+            updateStatus()
+            clockHandler.postDelayed(this, 15_000L)
         }
+    }
+
+    private val clockRunnable = ClockTick()
 
     private fun startClock() {
         clockRunnable.run()

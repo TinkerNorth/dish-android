@@ -52,20 +52,21 @@ class PhysicalMotionSource
             // Gate first gyro emission until accel reports; otherwise ships (0,0,0) read as zero-gravity.
             private var accelSeen: Boolean = false
 
-            private val listener =
-                object : SensorEventListener {
-                    override fun onSensorChanged(event: SensorEvent) {
-                        when (event.sensor.type) {
-                            Sensor.TYPE_ACCELEROMETER -> onAccel(event.values)
-                            Sensor.TYPE_GYROSCOPE -> onGyro(event.values)
-                        }
+            private inner class PadSensorListener : SensorEventListener {
+                override fun onSensorChanged(event: SensorEvent) {
+                    when (event.sensor.type) {
+                        Sensor.TYPE_ACCELEROMETER -> onAccel(event.values)
+                        Sensor.TYPE_GYROSCOPE -> onGyro(event.values)
                     }
-
-                    override fun onAccuracyChanged(
-                        sensor: Sensor?,
-                        accuracy: Int,
-                    ) = Unit
                 }
+
+                override fun onAccuracyChanged(
+                    sensor: Sensor?,
+                    accuracy: Int,
+                ) = Unit
+            }
+
+            private val listener = PadSensorListener()
 
             init {
                 // 4-arg registerListener keeps callbacks off the main thread.

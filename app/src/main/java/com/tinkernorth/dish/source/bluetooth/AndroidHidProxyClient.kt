@@ -192,24 +192,25 @@ class AndroidHidProxyClient(
         }
     }
 
-    private val profileListener =
-        object : BluetoothProfile.ServiceListener {
-            override fun onServiceConnected(
-                profile: Int,
-                proxy: BluetoothProfile,
-            ) {
-                if (profile != BluetoothProfile.HID_DEVICE) return
-                hidDevice = proxy as BluetoothHidDevice
-                events?.onAcquired()
-            }
-
-            override fun onServiceDisconnected(profile: Int) {
-                if (profile != BluetoothProfile.HID_DEVICE) return
-                hidDevice = null
-                connectedDevice = null
-                events?.onReleased()
-            }
+    private inner class HidProfileListener : BluetoothProfile.ServiceListener {
+        override fun onServiceConnected(
+            profile: Int,
+            proxy: BluetoothProfile,
+        ) {
+            if (profile != BluetoothProfile.HID_DEVICE) return
+            hidDevice = proxy as BluetoothHidDevice
+            events?.onAcquired()
         }
+
+        override fun onServiceDisconnected(profile: Int) {
+            if (profile != BluetoothProfile.HID_DEVICE) return
+            hidDevice = null
+            connectedDevice = null
+            events?.onReleased()
+        }
+    }
+
+    private val profileListener = HidProfileListener()
 
     private val hidCallback =
         object : BluetoothHidDevice.Callback() {

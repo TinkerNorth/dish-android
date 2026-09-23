@@ -168,24 +168,25 @@ class SatelliteListAdapter(
         private const val TYPE_ROW = 0
         private const val TYPE_EMPTY = 1
 
-        private val Diff =
-            object : DiffUtil.ItemCallback<SatelliteRow>() {
-                override fun areItemsTheSame(
-                    o: SatelliteRow,
-                    n: SatelliteRow,
-                ): Boolean =
-                    when {
-                        o is SatelliteRow.Known && n is SatelliteRow.Known -> o.summary.id == n.summary.id
-                        o is SatelliteRow.Discovered && n is SatelliteRow.Discovered ->
-                            SatelliteConnection.idFor(o.server) == SatelliteConnection.idFor(n.server)
-                        o is SatelliteRow.Empty && n is SatelliteRow.Empty -> true
-                        else -> false
-                    }
-
-                override fun areContentsTheSame(
-                    o: SatelliteRow,
-                    n: SatelliteRow,
-                ): Boolean = o == n
-            }
+        private val Diff = SatelliteRowDiff()
     }
+}
+
+private class SatelliteRowDiff : DiffUtil.ItemCallback<SatelliteRow>() {
+    override fun areItemsTheSame(
+        o: SatelliteRow,
+        n: SatelliteRow,
+    ): Boolean =
+        when {
+            o is SatelliteRow.Known && n is SatelliteRow.Known -> o.summary.id == n.summary.id
+            o is SatelliteRow.Discovered && n is SatelliteRow.Discovered ->
+                SatelliteConnection.idFor(o.server) == SatelliteConnection.idFor(n.server)
+            o is SatelliteRow.Empty && n is SatelliteRow.Empty -> true
+            else -> false
+        }
+
+    override fun areContentsTheSame(
+        o: SatelliteRow,
+        n: SatelliteRow,
+    ): Boolean = o == n
 }
