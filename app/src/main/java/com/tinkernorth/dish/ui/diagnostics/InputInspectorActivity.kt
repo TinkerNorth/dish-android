@@ -72,37 +72,54 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
         setupDishToolbar(binding.toolbar)
         intent.getStringExtra(EXTRA_DEVICE_NAME)?.let { binding.toolbar.subtitle = it }
 
+        bindSectionLabels()
+        wireStickCaptures()
+        wireBench()
+        observeViewModel()
+        startLiveInputIfAttached()
+    }
+
+    private fun bindSectionLabels() {
         binding.sectionHost.labelSection.setText(R.string.inspector_section_host)
         binding.sectionDevice.labelSection.setText(R.string.diagnostics_section_device)
         binding.sectionInput.labelSection.setText(R.string.inspector_section_input)
-        binding.btnOpenBinding.setOnClickListener {
-            nav.toBindingInspector(
-                viewModel.slotId,
-                binding.toolbar.subtitle
-                    ?.toString()
-                    .orEmpty(),
-            )
-        }
         binding.sectionMotion.labelSection.setText(R.string.inspector_section_motion)
         binding.sectionTouch.labelSection.setText(R.string.inspector_section_touch)
         binding.sectionTests.labelSection.setText(R.string.inspector_section_tests)
         binding.sectionFeedback.labelSection.setText(R.string.inspector_section_feedback)
         binding.sectionAudio.labelSection.setText(R.string.inspector_section_audio)
+        binding.btnOpenBinding.setOnClickListener { openBindingInspector() }
+    }
 
+    private fun openBindingInspector() {
+        nav.toBindingInspector(
+            viewModel.slotId,
+            binding.toolbar.subtitle
+                ?.toString()
+                .orEmpty(),
+        )
+    }
+
+    private fun wireStickCaptures() {
         binding.btnDriftTest.setOnClickListener { startCapture(Capture.DRIFT, DRIFT_CAPTURE_MS) }
         binding.btnRangeTest.setOnClickListener { startCapture(Capture.RANGE, RANGE_CAPTURE_MS) }
-        wireBench()
+    }
 
+    private fun observeViewModel() {
         observe(viewModel.ui, ::renderUi)
         observe(viewModel.micTest, ::renderMicTest)
         observe(viewModel.speakerTest, ::renderSpeakerTest)
         observe(viewModel.micPermissionRequests) { requestMicPermission() }
+    }
 
-        if (deviceId != null) {
-            pollWhileStarted()
-        } else {
+    // Nothing to poll for a slot with no live device behind it, so that whole panel goes away
+    // rather than showing zeroes.
+    private fun startLiveInputIfAttached() {
+        if (deviceId == null) {
             binding.containerLiveInput.visibility = View.GONE
+            return
         }
+        pollWhileStarted()
     }
 
     private fun <T> observe(
@@ -171,6 +188,11 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
     }
 
     private fun wireBench() {
+        wireFeedbackBench()
+        wireAudioBench()
+    }
+
+    private fun wireFeedbackBench() {
         bindTestRow(
             binding.rowRumble,
             R.string.setup_cap_rumble,
@@ -199,6 +221,9 @@ class InputInspectorActivity : BaseGamepadHostActivity() {
             R.string.inspector_lamp_pulse to { viewModel.micLed(MIC_LED_PULSE) },
             R.string.setup_cap_off to { viewModel.micLed(MIC_LED_OFF) },
         )
+    }
+
+    private fun wireAudioBench() {
         binding.rowSpeaker.tvAudioLabel.setText(R.string.setup_cap_speaker)
         binding.rowSpeaker.btnAudioAction.setText(R.string.inspector_play_tone)
         binding.rowSpeaker.btnAudioAction.setOnClickListener { viewModel.playTestTone() }

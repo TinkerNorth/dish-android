@@ -82,6 +82,14 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
         binding.toolbar.setNavigationOnClickListener { handleBack() }
         binding.breadcrumb.applyStep(SETUP_STEP_DESTINATION)
 
+        bindDestinationChoices()
+        wireFooterButtons()
+        onBackPressedDispatcher.addCallback(this) { handleBack() }
+        observe()
+    }
+
+    // Ordered best link first, which is the same order the connections screen lists them in.
+    private fun bindDestinationChoices() {
         bindChoice(
             binding.cardSatellite,
             R.drawable.ic_satellite,
@@ -103,14 +111,12 @@ class SetupConnectionActivity : BaseGamepadHostActivity() {
             R.string.setup_conn_bt_host_body,
             linkTierFor(ConnectionKind.BLUETOOTH),
         ) { nav.toSetupBluetoothHost(inputType, slotId) }
+    }
 
+    private fun wireFooterButtons() {
         binding.btnBack.setOnClickListener { handleBack() }
         binding.btnRescan.setOnClickListener { withLocalNetwork { rescan() } }
         binding.btnGetSatellite.setOnClickListener { openGitHub() }
-
-        onBackPressedDispatcher.addCallback(this) { handleBack() }
-
-        observe()
     }
 
     override fun onDestroy() {
