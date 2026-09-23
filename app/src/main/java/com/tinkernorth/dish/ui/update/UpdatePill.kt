@@ -6,16 +6,13 @@ import android.view.View
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.source.update.UpdateNoticePhase
 import com.tinkernorth.dish.source.update.UpdateNoticeStatus
 import com.tinkernorth.dish.source.update.UpdateNotices
+import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.slidePillIn
 import com.tinkernorth.dish.ui.common.slidePillOut
-import kotlinx.coroutines.launch
 
 // The update notice on the main screen: the `updatePill` include docked above
 // the donate pill. It renders the coordinator's status and nothing else: shown
@@ -30,11 +27,7 @@ fun AppCompatActivity.attachUpdatePill(
     if (!notices.supported) return
     val pill = findViewById<View>(R.id.updatePill) ?: return
     val host = UpdatePillHost(this, pill, notices, open)
-    lifecycleScope.launch {
-        repeatOnLifecycle(Lifecycle.State.STARTED) {
-            notices.status.collect { host.render(it) }
-        }
-    }
+    observeWhileStarted(notices.status) { host.render(it) }
 }
 
 private class UpdatePillHost(

@@ -13,9 +13,6 @@ import android.view.View
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_XBOX
@@ -27,6 +24,7 @@ import com.tinkernorth.dish.databinding.SetupTypeCardBinding
 import com.tinkernorth.dish.source.store.OnboardingPreferenceStore
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.setLeadingIcon
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import dagger.hilt.android.AndroidEntryPoint
@@ -87,20 +85,12 @@ class SetupBluetoothHostActivity : BaseGamepadHostActivity() {
     }
 
     private fun observe() {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.state.collect { render(it) }
-            }
-        }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.events.collect { event ->
-                    when (event) {
-                        is SetupBluetoothHostViewModel.Event.RequestDiscoverable -> requestDiscoverable()
-                        is SetupBluetoothHostViewModel.Event.Done ->
-                            finishToDashboard(event.hostName, getString(typeTitleRes(event.profile)), event.bound)
-                    }
-                }
+        observeWhileStarted(viewModel.state) { render(it) }
+        observeWhileStarted(viewModel.events) { event ->
+            when (event) {
+                is SetupBluetoothHostViewModel.Event.RequestDiscoverable -> requestDiscoverable()
+                is SetupBluetoothHostViewModel.Event.Done ->
+                    finishToDashboard(event.hostName, getString(typeTitleRes(event.profile)), event.bound)
             }
         }
     }

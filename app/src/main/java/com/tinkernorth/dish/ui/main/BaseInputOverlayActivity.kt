@@ -32,6 +32,7 @@ import com.tinkernorth.dish.ui.common.FoldAwareSession
 import com.tinkernorth.dish.ui.common.Posture
 import com.tinkernorth.dish.ui.common.ResendPacer
 import com.tinkernorth.dish.ui.common.hingeInsetsFor
+import com.tinkernorth.dish.ui.common.observeWhileStarted
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.android.asCoroutineDispatcher
 import kotlinx.coroutines.delay
@@ -381,12 +382,8 @@ abstract class BaseInputOverlayActivity : BaseGamepadHostActivity() {
         val content = rootView().findViewById<View>(R.id.overlayContentFrame) ?: return
         val origTop = content.paddingTop
         val session = FoldAwareSession(this, this)
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                session.posture.collect { posture ->
-                    applyPostureToContent(content, posture, origTop)
-                }
-            }
+        observeWhileStarted(session.posture) { posture ->
+            applyPostureToContent(content, posture, origTop)
         }
     }
 

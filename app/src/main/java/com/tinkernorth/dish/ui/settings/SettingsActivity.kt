@@ -5,9 +5,6 @@ package com.tinkernorth.dish.ui.settings
 import android.os.Bundle
 import android.text.TextUtils
 import androidx.core.view.isVisible
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.BuildConfig
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.databinding.ActivitySettingsBinding
@@ -19,12 +16,12 @@ import com.tinkernorth.dish.source.update.UpdateNoticeStatus
 import com.tinkernorth.dish.source.update.UpdateNotices
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
+import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.donate.attachDonatePill
 import com.tinkernorth.dish.ui.donate.bindDonateSettingsCard
 import com.tinkernorth.dish.ui.update.updateStatusLine
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -135,11 +132,7 @@ class SettingsActivity : BaseGamepadHostActivity() {
 
     private fun bindCrashReportingSwitch() {
         // Observe-then-bind: opposite order would re-write the persisted preference on the first frame.
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                crashReportingStore.state.collect { enabled -> showCrashReportingEnabled(enabled) }
-            }
-        }
+        observeWhileStarted(crashReportingStore.state) { enabled -> showCrashReportingEnabled(enabled) }
         binding.switchCrashReporting.setOnCheckedChangeListener { _, isChecked ->
             crashReportingStore.setEnabled(isChecked)
         }
@@ -173,11 +166,7 @@ class SettingsActivity : BaseGamepadHostActivity() {
     }
 
     private fun observeUpdateStatus() {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                updateNotices.status.collect { status -> showUpdateStatus(status) }
-            }
-        }
+        observeWhileStarted(updateNotices.status) { status -> showUpdateStatus(status) }
     }
 
     private fun showUpdateStatus(status: UpdateNoticeStatus) {

@@ -8,9 +8,6 @@ import androidx.activity.addCallback
 import androidx.activity.viewModels
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.tinkernorth.dish.R
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_DUALSENSE
 import com.tinkernorth.dish.composer.CONTROLLER_TYPE_PLAYSTATION
@@ -33,6 +30,7 @@ import com.tinkernorth.dish.ui.common.DishNavigator
 import com.tinkernorth.dish.ui.common.bundledControllerTypeGlyphRes
 import com.tinkernorth.dish.ui.common.moonlightTypeGlyphRes
 import com.tinkernorth.dish.ui.common.moonlightTypeLabelRes
+import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.main.ApplyState
 import com.tinkernorth.dish.ui.main.BindingLink
@@ -45,7 +43,6 @@ import com.tinkernorth.dish.ui.main.bindCompat
 import com.tinkernorth.dish.ui.main.bindMoonlightSession
 import com.tinkernorth.dish.ui.main.iconRes
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 // Stage 4 of the guided flow: type + capability table (4A), feel (4B), review &
@@ -114,19 +111,11 @@ class SetupConfigureActivity : BaseGamepadHostActivity() {
     }
 
     private fun observe() {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.ui.collect { state ->
-                    current = state
-                    if (state.loaded) render(state)
-                }
-            }
+        observeWhileStarted(viewModel.ui) { state ->
+            current = state
+            if (state.loaded) render(state)
         }
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.applyState.collect { renderApplyState(it) }
-            }
-        }
+        observeWhileStarted(viewModel.applyState) { renderApplyState(it) }
     }
 
     private fun render(state: ConfigUiState) {

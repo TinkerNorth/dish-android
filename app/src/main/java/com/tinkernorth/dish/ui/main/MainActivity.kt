@@ -42,6 +42,7 @@ import com.tinkernorth.dish.ui.common.DishSpinnerDrawable
 import com.tinkernorth.dish.ui.common.applyDishActivityTransitions
 import com.tinkernorth.dish.ui.common.applyDishSystemBars
 import com.tinkernorth.dish.ui.common.attachGamepadHost
+import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.openExternalLink
 import com.tinkernorth.dish.ui.donate.attachDonatePill
 import com.tinkernorth.dish.ui.donate.wireDonateButton
@@ -245,11 +246,7 @@ class MainActivity :
     }
 
     private fun observeViewModel() {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.uiState.collect { updateUI(it) }
-            }
-        }
+        observeWhileStarted(viewModel.uiState) { updateUI(it) }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) { viewModel.events.collect { handleEvent(it) } }
         }

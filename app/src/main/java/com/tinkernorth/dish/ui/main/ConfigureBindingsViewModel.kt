@@ -325,9 +325,7 @@ class ConfigureBindingsViewModel
 
         private var loadedSlotId: String? = null
 
-        private var moonlightPairing: MoonlightPairingUi? = null
-        private var moonlightFailure: MoonlightFailure? = null
-        private var pairingJob: kotlinx.coroutines.Job? = null
+        private val moonlightSection = MoonlightSection()
 
         fun load(slotId: String) {
             if (loadedSlotId == slotId) return
@@ -340,7 +338,7 @@ class ConfigureBindingsViewModel
             observeConnections()
             observeControllerPresence()
             observeHostCompat()
-            observeMoonlightEvents()
+            moonlightSection.observeEvents()
         }
 
         private fun seedStateFor(
@@ -495,10 +493,10 @@ class ConfigureBindingsViewModel
             val full = (conn?.padCount ?: 0) >= MOONLIGHT_MAX_PADS && pad == null
             return MoonlightSessionInput(
                 trust = probe.trust,
-                pairing = moonlightPairing,
+                pairing = moonlightSection.pairing,
                 apps = appsUiFrom(probe),
                 phase = phase,
-                failure = if (full) MoonlightFailure.HostFull else moonlightFailure,
+                failure = if (full) MoonlightFailure.HostFull else moonlightSection.failure,
                 selectedAppId = moonlight.rememberedAppId(hostId).takeIf { it.isNotEmpty() },
             )
         }
@@ -523,92 +521,140 @@ class ConfigureBindingsViewModel
             }
         }
 
-        fun onMoonlightAction(action: MoonlightAction) {
-            val hostId = _ui.value.draft?.hostId
-            if (hostId == null) {
-                Log.w(TAG, "Moonlight action $action with no destination chosen")
-                return
+        fun onMoonlightAction(action: MoonlightAction) = moonlightSection.onAction(action)
+
+        // The Moonlight card's own state: what the pairing dialog is showing and what went wrong
+        // last, plus the one job that drives a pairing. It lives here rather than on the
+        // ViewModel because nothing outside the card reads any of it.
+        private inner class MoonlightSection {
+            var pairing: MoonlightPairingUi? = null
+                private set
+            var failure: MoonlightFailure? = null
+                private set
+
+            private var pairingJob: kotlinx.coroutines.Job? = null
+
+            fun observeEvents() {
+                moonlight.events
+                    .onEach(::onEvent)
+                    .launchIn(viewModelScope)
             }
-            val host = moonlight.rememberedHost(hostId)
-            if (host == null) {
-                Log.w(TAG, "Moonlight action $action for unknown host $hostId")
+
+            fun onAction(action: MoonlightAction) {
+                val hostId = _ui.value.draft?.hostId
+                if (hostId == null) {
+                    Log.w(TAG, "Moonlight action $action with no destination chosen")
+                    return
+                }
+                val host = hostOrNull(action, hostId) ?: return
+                Log.i(TAG, "Moonlight action $action on ${host.address}")
+                apply(action, hostId, host)
+            }
+
+            // Null means the remembered host is gone, which has been logged and leaves the card
+            // to re-render itself as unreachable.
+            private fun hostOrNull(
+                action: MoonlightAction,
+                hostId: String,
+            ): MoonlightHost? {
+                val host = moonlight.rememberedHost(hostId)
+                if (host == null) {
+                    Log.w(TAG, "Moonlight action $action for unknown host $hostId")
+                    refreshMoonlight()
+                }
+                return host
+            }
+
+            private fun apply(
+                action: MoonlightAction,
+                hostId: String,
+                host: MoonlightHost,
+            ) {
+                when (action) {
+                    MoonlightAction.PAIR, MoonlightAction.PAIR_AGAIN, MoonlightAction.TRY_AGAIN,
+                    MoonlightAction.NEW_CODE,
+                    -> startPairing(host)
+                    MoonlightAction.CANCEL -> cancelPairing()
+                    MoonlightAction.QUIT_APP -> quitApp(host)
+                    MoonlightAction.RETRY, MoonlightAction.RECONNECT, MoonlightAction.START_SESSION ->
+                        restartSession(hostId)
+                    MoonlightAction.SEE_BINDINGS -> Unit
+                }
+            }
+
+            // A live job is REPLACED, not a reason to do nothing. New code is only ever offered
+            // while a pairing is in flight, so an "already pairing" guard here would make the one
+            // button that state exists to offer unreachable by construction.
+            private fun startPairing(host: MoonlightHost) {
+                cancelJob()
+                pairingJob =
+                    viewModelScope.launch {
+                        moonlight.pairHost(host)
+                        refreshMoonlight()
+                    }
+            }
+
+            private fun cancelPairing() {
+                cancelJob()
+                pairing = null
                 refreshMoonlight()
-                return
             }
-            Log.i(TAG, "Moonlight action $action on ${host.address}")
-            when (action) {
-                MoonlightAction.PAIR, MoonlightAction.PAIR_AGAIN, MoonlightAction.TRY_AGAIN,
-                MoonlightAction.NEW_CODE,
-                -> startMoonlightPairing(host)
-                MoonlightAction.CANCEL -> {
-                    cancelMoonlightPairing()
-                    moonlightPairing = null
-                    refreshMoonlight()
-                }
-                MoonlightAction.QUIT_APP -> {
-                    moonlight.quitHostApp(host)
-                    moonlightFailure = null
-                    refreshMoonlight()
-                }
-                MoonlightAction.RETRY, MoonlightAction.RECONNECT, MoonlightAction.START_SESSION -> {
-                    moonlightFailure = null
-                    moonlight.disconnect(hostId)
-                    moonlight.retrySessions()
-                    refreshMoonlight()
-                }
-                MoonlightAction.SEE_BINDINGS -> Unit
+
+            private fun cancelJob() {
+                pairingJob?.cancel()
+                pairingJob = null
             }
-        }
 
-        // A live job is REPLACED, not a reason to do nothing. New code is only ever offered
-        // while a pairing is in flight, so the old guard made the one button that state
-        // exists to offer unreachable by construction.
-        private fun startMoonlightPairing(host: MoonlightHost) {
-            cancelMoonlightPairing()
-            pairingJob =
-                viewModelScope.launch {
-                    moonlight.pairHost(host)
-                    refreshMoonlight()
-                }
-        }
-
-        private fun cancelMoonlightPairing() {
-            pairingJob?.cancel()
-            pairingJob = null
-        }
-
-        private fun observeMoonlightEvents() {
-            moonlight.events
-                .onEach { event -> onMoonlightEvent(event) }
-                .launchIn(viewModelScope)
-        }
-
-        private fun onMoonlightEvent(event: MoonlightConnectionEvent) {
-            when (event) {
-                is MoonlightConnectionEvent.PairingPinReady -> moonlightPairing = MoonlightPairingUi.Pin(event.pin)
-                is MoonlightConnectionEvent.PairingFailed -> {
-                    Log.w(TAG, "pairing with ${event.host.address} failed: ${event.reason}")
-                    moonlightPairing = MoonlightPairingUi.Failed
-                }
-                is MoonlightConnectionEvent.Paired -> moonlightPairing = null
-                is MoonlightConnectionEvent.AppAlreadyRunning ->
-                    if (!event.resumable) moonlightFailure = MoonlightFailure.BusyOther
-                is MoonlightConnectionEvent.RejoinRefused -> moonlightFailure = MoonlightFailure.ResumeFailed
-                is MoonlightConnectionEvent.LaunchRefused -> moonlightFailure = MoonlightFailure.Refused(event.message)
-                is MoonlightConnectionEvent.SetupFailed -> moonlightFailure = MoonlightFailure.SetupFailed
-                is MoonlightConnectionEvent.HostFull -> moonlightFailure = MoonlightFailure.HostFull
-                is MoonlightConnectionEvent.HostReplaced, is MoonlightConnectionEvent.EndedByHost -> Unit
-                is MoonlightConnectionEvent.Error, is MoonlightConnectionEvent.Notice -> Unit
+            private fun quitApp(host: MoonlightHost) {
+                moonlight.quitHostApp(host)
+                failure = null
+                refreshMoonlight()
             }
-            _ui.update { state ->
-                if (!state.isMoonlightHost) {
-                    state
-                } else {
-                    state.copy(
-                        moonlight =
-                            state.moonlight?.copy(pairing = moonlightPairing, failure = moonlightFailure)
-                                ?: MoonlightSessionInput(pairing = moonlightPairing, failure = moonlightFailure),
-                    )
+
+            private fun restartSession(hostId: String) {
+                failure = null
+                moonlight.disconnect(hostId)
+                moonlight.retrySessions()
+                refreshMoonlight()
+            }
+
+            private fun onEvent(event: MoonlightConnectionEvent) {
+                record(event)
+                republish()
+            }
+
+            private fun record(event: MoonlightConnectionEvent) {
+                when (event) {
+                    is MoonlightConnectionEvent.PairingPinReady -> pairing = MoonlightPairingUi.Pin(event.pin)
+                    is MoonlightConnectionEvent.PairingFailed -> {
+                        Log.w(TAG, "pairing with ${event.host.address} failed: ${event.reason}")
+                        pairing = MoonlightPairingUi.Failed
+                    }
+                    is MoonlightConnectionEvent.Paired -> pairing = null
+                    is MoonlightConnectionEvent.AppAlreadyRunning ->
+                        if (!event.resumable) failure = MoonlightFailure.BusyOther
+                    is MoonlightConnectionEvent.RejoinRefused -> failure = MoonlightFailure.ResumeFailed
+                    is MoonlightConnectionEvent.LaunchRefused -> failure = MoonlightFailure.Refused(event.message)
+                    is MoonlightConnectionEvent.SetupFailed -> failure = MoonlightFailure.SetupFailed
+                    is MoonlightConnectionEvent.HostFull -> failure = MoonlightFailure.HostFull
+                    is MoonlightConnectionEvent.HostReplaced, is MoonlightConnectionEvent.EndedByHost -> Unit
+                    is MoonlightConnectionEvent.Error, is MoonlightConnectionEvent.Notice -> Unit
+                }
+            }
+
+            // A slot bound to something other than Moonlight has no card to update, so an event
+            // that arrives for a different screen leaves the state alone.
+            private fun republish() {
+                _ui.update { state ->
+                    if (!state.isMoonlightHost) {
+                        state
+                    } else {
+                        state.copy(
+                            moonlight =
+                                state.moonlight?.copy(pairing = pairing, failure = failure)
+                                    ?: MoonlightSessionInput(pairing = pairing, failure = failure),
+                        )
+                    }
                 }
             }
         }
@@ -1041,17 +1087,29 @@ class ConfigureBindingsViewModel
 
         private fun buildSnapshot(slotId: String): BindingSnapshot {
             val bound = hub.bindings.value[slotId] != null
-            if (slotId == VIRTUAL_SLOT_ID) {
-                return BindingSnapshot(
-                    slotId = slotId,
-                    name = context.getString(R.string.default_virtual_controller_name),
-                    link = BindingLink.ONSCREEN,
-                    directCapable = false,
-                    directVerified = false,
-                    bound = bound,
-                    directPollHz = 0,
-                )
-            }
+            if (slotId == VIRTUAL_SLOT_ID) return virtualSnapshot(bound)
+            return physicalSnapshot(slotId, bound)
+        }
+
+        // The on-screen pad has no device behind it: no transport to read and nothing to claim
+        // directly, so every capability that depends on hardware answers no.
+        private fun virtualSnapshot(bound: Boolean) =
+            BindingSnapshot(
+                slotId = VIRTUAL_SLOT_ID,
+                name = context.getString(R.string.default_virtual_controller_name),
+                link = BindingLink.ONSCREEN,
+                directCapable = false,
+                directVerified = false,
+                bound = bound,
+                directPollHz = 0,
+            )
+
+        // A slot whose device has gone still renders: the screen shows what was bound, not a
+        // blank, so an unplugged pad can be unbound rather than stranding the slot.
+        private fun physicalSnapshot(
+            slotId: String,
+            bound: Boolean,
+        ): BindingSnapshot {
             val device = slotId.toIntOrNull()?.let { gamepadRegistry.devices.value[it] }
             val isUsb = device?.transport != Transport.Bluetooth
             val vid = device?.vendorId ?: 0

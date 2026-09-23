@@ -35,6 +35,7 @@ import com.tinkernorth.dish.ui.common.GamepadSkin
 import com.tinkernorth.dish.ui.common.GamepadTouchView
 import com.tinkernorth.dish.ui.common.ResendPacer
 import com.tinkernorth.dish.ui.common.TouchpadSurfaceView
+import com.tinkernorth.dish.ui.common.observeWhileStarted
 import com.tinkernorth.dish.ui.common.paintConnectionMenuItem
 import com.tinkernorth.dish.ui.common.setupDishToolbar
 import com.tinkernorth.dish.ui.common.showConnectionDialog
@@ -144,11 +145,7 @@ class GamepadOverlayActivity :
     // Host-driven feedback painted onto the skin: lightbar colour, player LEDs, adaptive-trigger
     // accents.
     private fun observeVirtualFeedback() {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                virtualFeedback.state.collect { fb -> showVirtualFeedback(fb) }
-            }
-        }
+        observeWhileStarted(virtualFeedback.state) { fb -> showVirtualFeedback(fb) }
     }
 
     private fun showVirtualFeedback(fb: VirtualPadFeedback) {
@@ -164,11 +161,7 @@ class GamepadOverlayActivity :
     // app-wide mic chip) writes the same state, and because the microphone must keep obeying it
     // after the overlay is gone.
     private fun observeMicMute() {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                micMute.state.collect { muted -> showMicMuted(muted[VIRTUAL_SLOT_ID]) }
-            }
-        }
+        observeWhileStarted(micMute.state) { muted -> showMicMuted(muted[VIRTUAL_SLOT_ID]) }
     }
 
     private fun showMicMuted(muted: Boolean?) {
