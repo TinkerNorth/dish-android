@@ -91,6 +91,25 @@ size_t OpusStreamDecoder::decodeFec(const uint8_t* opus, size_t opusLen, int16_t
 
 // ---- encoder ---------------------------------------------------------------
 
+// Every ctl is checked: an encoder silently running at the wrong bitrate or without FEC would
+// degrade a live call in a way no test would catch later.
+static bool configureEncoder(::OpusEncoder* enc, const int bitrate) {
+    if (opus_encoder_ctl(enc, OPUS_SET_BITRATE(bitrate)) != OPUS_OK) return false;
+    if (opus_encoder_ctl(enc, OPUS_SET_VBR(1)) != OPUS_OK) return false;
+    if (opus_encoder_ctl(enc, OPUS_SET_INBAND_FEC(1)) != OPUS_OK) return false;
+    return opus_encoder_ctl(enc, OPUS_SET_PACKET_LOSS_PERC(OPUS_EXPECTED_PACKET_LOSS_PCT)) ==
+           OPUS_OK;
+}
+
+// The speaker encoder declines DTX deliberately, matching satellite: the gate cuts anything
+// ~26-30 dB below the recent peak, which on game audio replaces a reverb tail with comfort noise,
+// while the far end's own suppression of exact digital silence cannot touch audible content. On
+// the mic it is the only thing that can collapse a quiet room, because a live microphone never
+// goes digitally silent (satellite measured 123 of 250 frames gated at -50 dBFS after speech,
+// 30.0 -> 16.4 kbps, on libopus 1.6.1; this repo pins 1.5.2). Muting is a separate and stricter
+// thing: it stops delivery entirely, which DTX cannot do.
+static bool wantsDtx(const Stream stream) { return stream == Stream::Mic; }
+
 std::unique_ptr<OpusStreamEncoder> OpusStreamEncoder::create(Stream stream) {
     const int channels = channelsFor(stream);
     const int application = stream == Stream::Mic ? OPUS_APPLICATION_VOIP : OPUS_APPLICATION_AUDIO;
@@ -100,31 +119,8 @@ std::unique_ptr<OpusStreamEncoder> OpusStreamEncoder::create(Stream stream) {
     std::unique_ptr<::OpusEncoder, OpusEncoderDeleter> enc(
         opus_encoder_create(AUDIO_SAMPLE_RATE_HZ, channels, application, &err));
     if (!enc || err != OPUS_OK) return nullptr;
-
-    // Every ctl is checked: an encoder silently running at the wrong bitrate or
-    // without FEC would degrade a live call in a way no test would catch later.
-    if (opus_encoder_ctl(enc.get(), OPUS_SET_BITRATE(bitrate)) != OPUS_OK) return nullptr;
-    if (opus_encoder_ctl(enc.get(), OPUS_SET_VBR(1)) != OPUS_OK) return nullptr;
-    if (opus_encoder_ctl(enc.get(), OPUS_SET_INBAND_FEC(1)) != OPUS_OK) return nullptr;
-    if (opus_encoder_ctl(enc.get(), OPUS_SET_PACKET_LOSS_PERC(OPUS_EXPECTED_PACKET_LOSS_PCT)) !=
-        OPUS_OK) {
-        return nullptr;
-    }
-    // Mic only, and this is the encoder that actually ships: a live microphone
-    // never goes digitally silent, so a VAD gate is the only thing that can
-    // collapse a quiet room (satellite measured 123 of 250 frames gated at
-    // -50 dBFS after speech, 30.0 -> 16.4 kbps, on libopus 1.6.1; this repo
-    // pins 1.5.2, where the suite below re-proves the collapse holds). Muting
-    // is a separate and stricter thing -- it stops delivery entirely, which DTX
-    // cannot do.
-    //
-    // The speaker encoder declines it deliberately, matching satellite: that
-    // gate cuts anything ~26-30 dB below the recent peak, which on game audio
-    // replaces a reverb tail with comfort noise. The far end suppresses exact
-    // digital silence instead, which cannot touch audible content.
-    if (stream == Stream::Mic) {
-        if (opus_encoder_ctl(enc.get(), OPUS_SET_DTX(1)) != OPUS_OK) return nullptr;
-    }
+    if (!configureEncoder(enc.get(), bitrate)) return nullptr;
+    if (wantsDtx(stream) && opus_encoder_ctl(enc.get(), OPUS_SET_DTX(1)) != OPUS_OK) return nullptr;
     return std::unique_ptr<OpusStreamEncoder>(new OpusStreamEncoder(std::move(enc), channels));
 }
 

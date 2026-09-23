@@ -79,6 +79,10 @@ int32_t allocSyntheticId() { return g_nextSyntheticId.fetch_sub(1, std::memory_o
 // already redelivered the one we just resubmitted.
 static constexpr int kInFlightUrbs = 2;
 
+// Short enough that a stop request is observed promptly, long enough that an idle pad does not
+// spin the poll thread.
+static constexpr int kUrbPollTimeoutMs = 100;
+
 // Minimum spacing between MSG_MOTION sends per device (~125 Hz). Caps the motion stream so a
 // high-rate IMU (DS4/DualSense report far above the Switch's rate) can't flood the UDP queue;
 // the input reports themselves are never throttled.
@@ -278,6 +282,23 @@ bool reapReadyUrbs(DeviceCtx& ctx, UrbSlot* (&slots)[kInFlightUrbs], gamepad::De
     }
 }
 
+// What one wait on the URB fd came back with. Idle covers both a timeout and an EINTR: neither
+// is an error and neither has a completion to reap.
+enum class PollOutcome { Ready, Idle, Stop };
+
+PollOutcome waitForUrbCompletion(DeviceCtx& ctx) {
+    struct pollfd pfd = {};
+    pfd.fd = ctx.fd;
+    pfd.events = POLLOUT;
+    const int pr = poll(&pfd, 1, kUrbPollTimeoutMs);
+    if (ctx.stop.load(std::memory_order_relaxed)) return PollOutcome::Stop;
+    if (pr > 0) return PollOutcome::Ready;
+    if (pr == 0) return PollOutcome::Idle;
+    if (errno == EINTR) return PollOutcome::Idle;
+    LOGE("dev=%d poll failed: %s", ctx.syntheticDeviceId, strerror(errno));
+    return PollOutcome::Stop;
+}
+
 void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
     dish::elevateCurrentThreadToInputPriority();
     std::unique_ptr<UrbSlot> slotStorage[kInFlightUrbs];
@@ -295,17 +316,9 @@ void pollLoop(std::shared_ptr<DeviceCtx> ctx) {
     bool running = true;
 
     while (running && !ctx->stop.load(std::memory_order_relaxed)) {
-        struct pollfd pfd = {};
-        pfd.fd = ctx->fd;
-        pfd.events = POLLOUT;
-        const int pr = poll(&pfd, 1, 100);
-        if (ctx->stop.load(std::memory_order_relaxed)) break;
-        if (pr < 0) {
-            if (errno == EINTR) continue;
-            LOGE("dev=%d poll failed: %s", ctx->syntheticDeviceId, strerror(errno));
-            break;
-        }
-        if (pr == 0) continue;
+        const PollOutcome outcome = waitForUrbCompletion(*ctx);
+        if (outcome == PollOutcome::Stop) break;
+        if (outcome == PollOutcome::Idle) continue;
         running = reapReadyUrbs(*ctx, slots, scratch, lastMicMuted);
     }
 
