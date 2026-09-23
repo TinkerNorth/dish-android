@@ -355,6 +355,76 @@ void clearLocalItems(HidParseState& st) {
     st.usageMin = 0;
 }
 
+// The report-id prefix byte, when the layout says the device sends one.
+bool skipReportIdPrefix(const uint8_t* buf, const size_t len, const HidLayout& L,
+                        size_t& dataStart) {
+    const bool sendsAPrefix = L.reportId != 0;
+    if (!sendsAPrefix) {
+        dataStart = 0;
+        return true;
+    }
+    const bool isOurReport = len >= 1 && buf[0] == L.reportId;
+    if (!isOurReport) return false;
+    dataStart = 1;
+    return true;
+}
+
+void decodeLayoutAxes(const uint8_t* d, const size_t dlen, const HidLayout& L, DeviceState& s) {
+    if (L.lx.present)
+        s.sLX = scaleAxis16(extractBits(d, dlen, L.lx.bitOffset, L.lx.bitSize), L.lx, false);
+    if (L.ly.present)
+        s.sLY = scaleAxis16(extractBits(d, dlen, L.ly.bitOffset, L.ly.bitSize), L.ly, true);
+    if (L.rx.present)
+        s.sRX = scaleAxis16(extractBits(d, dlen, L.rx.bitOffset, L.rx.bitSize), L.rx, false);
+    if (L.ry.present)
+        s.sRY = scaleAxis16(extractBits(d, dlen, L.ry.bitOffset, L.ry.bitSize), L.ry, true);
+    if (L.lt.present) s.bLT = scaleTrig8(extractBits(d, dlen, L.lt.bitOffset, L.lt.bitSize), L.lt);
+    if (L.rt.present) s.bRT = scaleTrig8(extractBits(d, dlen, L.rt.bitOffset, L.rt.bitSize), L.rt);
+}
+
+uint16_t decodeLayoutHat(const uint8_t* d, const size_t dlen, const HidLayout& L) {
+    if (!L.hasHat) return 0;
+    const uint32_t raw = extractBits(d, dlen, L.hatBitOffset, L.hatBitSize);
+    const int dir = (int)raw - (int)L.hatLogicalMin;
+    const int range = (int)L.hatLogicalMax - (int)L.hatLogicalMin;
+    const bool isADirection = dir >= 0 && dir <= range && dir <= 7;
+    if (!isADirection) return 0;
+    return dpadBitsForDir(dir);
+}
+
+bool layoutButtonIsDown(const uint8_t* d, const size_t dlen, const HidLayout& L, const uint8_t i) {
+    return extractBits(d, dlen, (uint32_t)L.buttonBitOffset + i, 1) != 0;
+}
+
+// A Switch-order pad carries ZL and ZR in the button block; they drive the triggers, not buttons.
+uint16_t decodeSwitchOrderButtons(const uint8_t* d, const size_t dlen, const HidLayout& L,
+                                  DeviceState& s) {
+    uint16_t buttons = 0;
+    bool zl = false;
+    bool zr = false;
+    for (uint8_t i = 0; i < L.buttonCount; i++) {
+        if (!layoutButtonIsDown(d, dlen, L, i)) continue;
+        if (i == 6) {
+            zl = true;
+        } else if (i == 7) {
+            zr = true;
+        } else {
+            buttons = (uint16_t)(buttons | switchOrderButtonBit(i));
+        }
+    }
+    s.bLT = zl ? 255 : 0;
+    s.bRT = zr ? 255 : 0;
+    return buttons;
+}
+
+uint16_t decodeStandardButtons(const uint8_t* d, const size_t dlen, const HidLayout& L) {
+    uint16_t buttons = 0;
+    for (uint8_t i = 0; i < L.buttonCount; i++) {
+        if (layoutButtonIsDown(d, dlen, L, i)) buttons = (uint16_t)(buttons | buttonBit(i));
+    }
+    return buttons;
+}
+
 } // namespace
 
 bool parseReportDescriptor(const uint8_t* desc, size_t len, HidLayout& out) {
@@ -388,53 +458,17 @@ bool parseReportDescriptor(const uint8_t* desc, size_t len, HidLayout& out) {
 bool decodeFromLayout(const uint8_t* buf, size_t len, DeviceState& s, const HidLayout& L) {
     if (!L.valid) return false;
     size_t dataStart = 0;
-    if (L.reportId != 0) {
-        if (len < 1 || buf[0] != L.reportId) return false;
-        dataStart = 1;
-    }
+    if (!skipReportIdPrefix(buf, len, L, dataStart)) return false;
+
     const uint8_t* d = buf + dataStart;
-    size_t dlen = len - dataStart;
+    const size_t dlen = len - dataStart;
 
-    if (L.lx.present)
-        s.sLX = scaleAxis16(extractBits(d, dlen, L.lx.bitOffset, L.lx.bitSize), L.lx, false);
-    if (L.ly.present)
-        s.sLY = scaleAxis16(extractBits(d, dlen, L.ly.bitOffset, L.ly.bitSize), L.ly, true);
-    if (L.rx.present)
-        s.sRX = scaleAxis16(extractBits(d, dlen, L.rx.bitOffset, L.rx.bitSize), L.rx, false);
-    if (L.ry.present)
-        s.sRY = scaleAxis16(extractBits(d, dlen, L.ry.bitOffset, L.ry.bitSize), L.ry, true);
-    if (L.lt.present) s.bLT = scaleTrig8(extractBits(d, dlen, L.lt.bitOffset, L.lt.bitSize), L.lt);
-    if (L.rt.present) s.bRT = scaleTrig8(extractBits(d, dlen, L.rt.bitOffset, L.rt.bitSize), L.rt);
+    decodeLayoutAxes(d, dlen, L, s);
 
-    uint16_t b = 0;
-    if (L.hasHat) {
-        uint32_t raw = extractBits(d, dlen, L.hatBitOffset, L.hatBitSize);
-        int dir = (int)raw - (int)L.hatLogicalMin;
-        int range = (int)L.hatLogicalMax - (int)L.hatLogicalMin;
-        if (dir >= 0 && dir <= range && dir <= 7) b = (uint16_t)(b | dpadBitsForDir(dir));
-    }
-    if (L.switchOrderButtons) {
-        bool zl = false, zr = false;
-        for (uint8_t i = 0; i < L.buttonCount; i++) {
-            if (!extractBits(d, dlen, (uint32_t)L.buttonBitOffset + i, 1)) continue;
-            if (i == 6) {
-                zl = true;
-            } else if (i == 7) {
-                zr = true;
-            } else {
-                b = (uint16_t)(b | switchOrderButtonBit(i));
-            }
-        }
-        s.bLT = zl ? 255 : 0;
-        s.bRT = zr ? 255 : 0;
-    } else {
-        for (uint8_t i = 0; i < L.buttonCount; i++) {
-            if (extractBits(d, dlen, (uint32_t)L.buttonBitOffset + i, 1)) {
-                b = (uint16_t)(b | buttonBit(i));
-            }
-        }
-    }
-    s.wButtons = b;
+    const uint16_t hatBits = decodeLayoutHat(d, dlen, L);
+    const uint16_t buttonBits = L.switchOrderButtons ? decodeSwitchOrderButtons(d, dlen, L, s)
+                                                     : decodeStandardButtons(d, dlen, L);
+    s.wButtons = (uint16_t)(hatBits | buttonBits);
     return true;
 }
 

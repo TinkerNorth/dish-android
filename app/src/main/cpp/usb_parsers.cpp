@@ -1176,57 +1176,55 @@ int16_t steamGyroToWire(int32_t raw) { return steamClampI16((int64_t)raw * 32767
 
 int16_t steamAccelToWire(int32_t raw) { return steamClampI16((int64_t)raw * 32767 / 65536); }
 
-bool decodeSteamController(const uint8_t* buf, size_t len, DeviceState& s, ParserState& st) {
-    if (len < kSteamStateLen) return false;
-    if (buf[0] != 0x01 || buf[1] != 0x00) return false;
-    if (buf[2] != kSteamStateType) return false;
+uint16_t decodeSteamButtons(const uint32_t btn) {
+    uint16_t buttons = 0;
+    if (btn & kSteamSouth) buttons |= XUSB_A;
+    if (btn & kSteamEast) buttons |= XUSB_B;
+    if (btn & kSteamWest) buttons |= XUSB_X;
+    if (btn & kSteamNorth) buttons |= XUSB_Y;
+    if (btn & kSteamLeftBumper) buttons |= XUSB_LB;
+    if (btn & kSteamRightBumper) buttons |= XUSB_RB;
+    if (btn & kSteamMenu) buttons |= XUSB_BACK;
+    if (btn & kSteamEscape) buttons |= XUSB_START;
+    if (btn & kSteamGuide) buttons |= XUSB_GUIDE;
+    if (btn & kSteamDpadUp) buttons |= XUSB_DPAD_UP;
+    if (btn & kSteamDpadDown) buttons |= XUSB_DPAD_DOWN;
+    if (btn & kSteamDpadLeft) buttons |= XUSB_DPAD_LEFT;
+    if (btn & kSteamDpadRight) buttons |= XUSB_DPAD_RIGHT;
+    if (btn & kSteamRightPadClicked) buttons |= XUSB_THUMB_R;
+    return buttons;
+}
 
-    const uint32_t btn = (uint32_t)buf[8] | ((uint32_t)buf[9] << 8) | ((uint32_t)buf[10] << 16);
-
-    uint16_t b = 0;
-    if (btn & kSteamSouth) b |= XUSB_A;
-    if (btn & kSteamEast) b |= XUSB_B;
-    if (btn & kSteamWest) b |= XUSB_X;
-    if (btn & kSteamNorth) b |= XUSB_Y;
-    if (btn & kSteamLeftBumper) b |= XUSB_LB;
-    if (btn & kSteamRightBumper) b |= XUSB_RB;
-    if (btn & kSteamMenu) b |= XUSB_BACK;
-    if (btn & kSteamEscape) b |= XUSB_START;
-    if (btn & kSteamGuide) b |= XUSB_GUIDE;
-    if (btn & kSteamDpadUp) b |= XUSB_DPAD_UP;
-    if (btn & kSteamDpadDown) b |= XUSB_DPAD_DOWN;
-    if (btn & kSteamDpadLeft) b |= XUSB_DPAD_LEFT;
-    if (btn & kSteamDpadRight) b |= XUSB_DPAD_RIGHT;
-    if (btn & kSteamRightPadClicked) b |= XUSB_THUMB_R;
-
-    s.bLT = steamTriggerToWire(buf[11]);
-    s.bRT = steamTriggerToWire(buf[12]);
-
-    // One pair of axes carries either the stick or the left pad. The finger-down bit says which;
-    // the interleave bit means pad frames alternate with stick frames worth holding on to.
+// One pair of axes carries either the stick or the left pad. The finger-down bit says which; the
+// interleave bit means pad frames alternate with stick frames worth holding on to.
+void trackSteamLeftStick(const uint8_t* buf, const uint32_t btn, ParserState& st,
+                         uint16_t& buttons) {
     const bool padOnLeft = (btn & kSteamLeftPadFinger) != 0;
     const bool interleaved = (btn & kSteamLeftPadAndStick) != 0;
     if (!padOnLeft) {
         st.steamStickX = rdLe16(buf, 16);
         st.steamStickY = rdLe16(buf, 18);
         // With no live pad the firmware reports a stick click as a left-pad click.
-        if (!interleaved && (btn & kSteamLeftPadClicked)) b |= XUSB_THUMB_L;
+        const bool clickIsTheStick = !interleaved && (btn & kSteamLeftPadClicked) != 0;
+        if (clickIsTheStick) buttons |= XUSB_THUMB_L;
     } else if (!interleaved) {
         st.steamStickX = 0;
         st.steamStickY = 0;
     }
-    if (btn & kSteamStickButton) b |= XUSB_THUMB_L;
-    s.wButtons = b;
-    s.sLX = st.steamStickX;
-    s.sLY = st.steamStickY;
+    if (btn & kSteamStickButton) buttons |= XUSB_THUMB_L;
+}
 
-    if (btn & kSteamRightPadFinger) {
-        steamRotatePad(rdLe16(buf, 20), rdLe16(buf, 22), s.sRX, s.sRY);
-    } else {
+void decodeSteamRightPad(const uint8_t* buf, const uint32_t btn, DeviceState& s) {
+    const bool fingerDown = (btn & kSteamRightPadFinger) != 0;
+    if (!fingerDown) {
         s.sRX = 0;
         s.sRY = 0;
+        return;
     }
+    steamRotatePad(rdLe16(buf, 20), rdLe16(buf, 22), s.sRX, s.sRY);
+}
 
+void decodeSteamMotion(const uint8_t* buf, DeviceState& s) {
     const int16_t ax = rdLe16(buf, 28);
     const int16_t ay = rdLe16(buf, 30);
     const int16_t az = rdLe16(buf, 32);
@@ -1234,15 +1232,36 @@ bool decodeSteamController(const uint8_t* buf, size_t len, DeviceState& s, Parse
     const int16_t gy = rdLe16(buf, 36);
     const int16_t gz = rdLe16(buf, 38);
     // An all-zero block means the IMU setting never took; publishing it would stream a dead sensor.
-    if ((ax | ay | az | gx | gy | gz) != 0) {
-        s.gyroX = steamGyroToWire(gx);
-        s.gyroY = steamGyroToWire(gz);
-        s.gyroZ = steamGyroToWire(gy);
-        s.accelX = steamAccelToWire(ax);
-        s.accelY = steamAccelToWire(az);
-        s.accelZ = steamAccelToWire(-(int32_t)ay);
-        s.motionValid = true;
-    }
+    const bool imuIsAlive = (ax | ay | az | gx | gy | gz) != 0;
+    if (!imuIsAlive) return;
+
+    s.gyroX = steamGyroToWire(gx);
+    s.gyroY = steamGyroToWire(gz);
+    s.gyroZ = steamGyroToWire(gy);
+    s.accelX = steamAccelToWire(ax);
+    s.accelY = steamAccelToWire(az);
+    s.accelZ = steamAccelToWire(-(int32_t)ay);
+    s.motionValid = true;
+}
+
+bool decodeSteamController(const uint8_t* buf, size_t len, DeviceState& s, ParserState& st) {
+    if (len < kSteamStateLen) return false;
+    if (buf[0] != 0x01 || buf[1] != 0x00) return false;
+    if (buf[2] != kSteamStateType) return false;
+
+    const uint32_t btn = (uint32_t)buf[8] | ((uint32_t)buf[9] << 8) | ((uint32_t)buf[10] << 16);
+
+    uint16_t buttons = decodeSteamButtons(btn);
+    s.bLT = steamTriggerToWire(buf[11]);
+    s.bRT = steamTriggerToWire(buf[12]);
+
+    trackSteamLeftStick(buf, btn, st, buttons);
+    s.wButtons = buttons;
+    s.sLX = st.steamStickX;
+    s.sLY = st.steamStickY;
+
+    decodeSteamRightPad(buf, btn, s);
+    decodeSteamMotion(buf, s);
     return true;
 }
 
