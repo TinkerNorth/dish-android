@@ -52,6 +52,7 @@ import com.tinkernorth.dish.source.connection.ConnectionEvent
 import com.tinkernorth.dish.source.connection.SatelliteConnection
 import com.tinkernorth.dish.source.connection.SatelliteConnectionManager
 import com.tinkernorth.dish.source.connection.generatePin
+import com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent
 import com.tinkernorth.dish.source.notification.dishSnackbar
 import com.tinkernorth.dish.source.store.BluetoothPermissionBannerStore
 import com.tinkernorth.dish.source.system.BluetoothAdapterState
@@ -323,52 +324,60 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
         }
     }
 
-    private fun onMoonlightEvent(ev: com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent) {
+    private fun onMoonlightEvent(ev: MoonlightConnectionEvent) {
         when (ev) {
-            is com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent.PairingPinReady ->
-                showMoonlightPinDialog(ev.host, ev.pin)
-            // A pairing that succeeds has to LOOK like it succeeded. A host that already
-            // trusts this device answers without a PIN, so there is no dialog to dismiss
-            // and the row's chip is the only other feedback there would be.
-            is com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent.Paired -> {
-                cancelMoonlightPairing()
-                moonlightPinDialog?.dismiss()
-                notifications.info(
-                    glyph = R.drawable.ic_pc_monitor,
-                    title = getString(R.string.ml_paired_title, ev.host.name),
-                    body = getString(R.string.ml_paired_body),
-                    key = "moonlight-paired",
-                )
-            }
-            is com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent.PairingFailed -> {
-                cancelMoonlightPairing()
-                moonlightPinDialog?.dismiss()
-                Log.w(TAG, "pairing with ${ev.host.address} failed: ${ev.reason}")
-                notifications.error(
-                    glyph = R.drawable.ic_pc_monitor,
-                    title = getString(R.string.ml_pair_failed_title, ev.host.name),
-                    body = getString(R.string.ml_pair_failed_body),
-                )
-            }
-            is com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent.Notice ->
-                notifications.info(
-                    glyph = R.drawable.ic_pc_monitor,
-                    title = getString(R.string.section_moonlight_hosts),
-                    body = ev.message,
-                    key = "moonlight-notice",
-                )
-            is com.tinkernorth.dish.source.connection.moonlight.MoonlightConnectionEvent.Error -> {
-                moonlightPinDialog?.dismiss()
-                notifications.error(
-                    glyph = R.drawable.ic_pc_monitor,
-                    title = getString(R.string.section_moonlight_hosts),
-                    body = ev.message,
-                )
-            }
-            // Every remaining event belongs to a session, and a session belongs to a
-            // binding; the binding screen renders them where the user can act on them.
+            is MoonlightConnectionEvent.PairingPinReady -> showMoonlightPinDialog(ev.host, ev.pin)
+            is MoonlightConnectionEvent.Paired -> onMoonlightPaired(ev)
+            is MoonlightConnectionEvent.PairingFailed -> onMoonlightPairingFailed(ev)
+            is MoonlightConnectionEvent.Notice -> onMoonlightNotice(ev)
+            is MoonlightConnectionEvent.Error -> onMoonlightError(ev)
+            // Every remaining event belongs to a session, and a session belongs to a binding; the
+            // binding screen renders them where the user can act on them.
             else -> Unit
         }
+    }
+
+    // A pairing that succeeds has to LOOK like it succeeded. A host that already trusts this
+    // device answers without a PIN, so there is no dialog to dismiss and the row's chip is the
+    // only other feedback there would be.
+    private fun onMoonlightPaired(ev: MoonlightConnectionEvent.Paired) {
+        cancelMoonlightPairing()
+        moonlightPinDialog?.dismiss()
+        notifications.info(
+            glyph = R.drawable.ic_pc_monitor,
+            title = getString(R.string.ml_paired_title, ev.host.name),
+            body = getString(R.string.ml_paired_body),
+            key = "moonlight-paired",
+        )
+    }
+
+    private fun onMoonlightPairingFailed(ev: MoonlightConnectionEvent.PairingFailed) {
+        cancelMoonlightPairing()
+        moonlightPinDialog?.dismiss()
+        Log.w(TAG, "pairing with ${ev.host.address} failed: ${ev.reason}")
+        notifications.error(
+            glyph = R.drawable.ic_pc_monitor,
+            title = getString(R.string.ml_pair_failed_title, ev.host.name),
+            body = getString(R.string.ml_pair_failed_body),
+        )
+    }
+
+    private fun onMoonlightNotice(ev: MoonlightConnectionEvent.Notice) {
+        notifications.info(
+            glyph = R.drawable.ic_pc_monitor,
+            title = getString(R.string.section_moonlight_hosts),
+            body = ev.message,
+            key = "moonlight-notice",
+        )
+    }
+
+    private fun onMoonlightError(ev: MoonlightConnectionEvent.Error) {
+        moonlightPinDialog?.dismiss()
+        notifications.error(
+            glyph = R.drawable.ic_pc_monitor,
+            title = getString(R.string.section_moonlight_hosts),
+            body = ev.message,
+        )
     }
 
     private fun observeSystemStateBanners() {
@@ -438,6 +447,21 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
 
     private fun setupList() {
         binding.btnScanAll.setOnClickListener { ensureLocalNetworkThenDiscover(userInitiated = true) }
+        buildSectionHeaders()
+        satelliteList = SatelliteListAdapter(satelliteRowListener)
+        bluetoothList = BluetoothListAdapter(bluetoothRowListener)
+        moonlightList = MoonlightListAdapter(moonlightRowListener)
+
+        val single = binding.rvConnections
+        if (single != null) {
+            single.bindConnectionColumn(oneColumnAdapter())
+            return
+        }
+        binding.rvSatellites?.bindConnectionColumn(ConcatAdapter(satelliteHeader, satelliteList))
+        binding.rvBluetooth?.bindConnectionColumn(ConcatAdapter(bluetoothHeader, bluetoothList))
+    }
+
+    private fun buildSectionHeaders() {
         satelliteHeader =
             SectionHeaderAdapter(
                 R.drawable.ic_satellite,
@@ -459,28 +483,20 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
                 R.string.action_add,
                 tier = linkTierFor(ConnectionKind.MOONLIGHT),
             ) { showAddMoonlightDialog() }
-        satelliteList = SatelliteListAdapter(satelliteRowListener)
-        bluetoothList = BluetoothListAdapter(bluetoothRowListener)
-        moonlightList = MoonlightListAdapter(moonlightRowListener)
-        val single = binding.rvConnections
-        if (single != null) {
-            single.bindConnectionColumn(
-                ConcatAdapter(
-                    satelliteHeader,
-                    satelliteList,
-                    StaticViewAdapter(R.layout.item_connection_divider),
-                    moonlightHeader,
-                    moonlightList,
-                    StaticViewAdapter(R.layout.item_connection_divider),
-                    bluetoothHeader,
-                    bluetoothList,
-                ),
-            )
-            return
-        }
-        binding.rvSatellites?.bindConnectionColumn(ConcatAdapter(satelliteHeader, satelliteList))
-        binding.rvBluetooth?.bindConnectionColumn(ConcatAdapter(bluetoothHeader, bluetoothList))
     }
+
+    // Narrow layouts stack every section in one scroller, dividers included.
+    private fun oneColumnAdapter(): ConcatAdapter =
+        ConcatAdapter(
+            satelliteHeader,
+            satelliteList,
+            StaticViewAdapter(R.layout.item_connection_divider),
+            moonlightHeader,
+            moonlightList,
+            StaticViewAdapter(R.layout.item_connection_divider),
+            bluetoothHeader,
+            bluetoothList,
+        )
 
     private fun RecyclerView.bindConnectionColumn(concat: ConcatAdapter) {
         layoutManager = LinearLayoutManager(this@ConnectionsActivity)
