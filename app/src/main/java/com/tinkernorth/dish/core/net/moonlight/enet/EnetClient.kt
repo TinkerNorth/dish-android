@@ -161,18 +161,26 @@ class EnetClient(
      * (5000 ms) later. It read as "CLIENT DISCONNECTED about 6.4 seconds in"
      * with controller input flowing right up to the cut.
      */
+    private class DatagramHeader(val sentTime: Int, val hasSentTime: Boolean)
+
+    // Null means this client cannot read the datagram: it announces compression, which this
+    // client never negotiates, or it is truncated where the sent-time field should be. The buffer
+    // is left positioned on the first command either way.
+    private fun readDatagramHeader(buf: ByteBuffer): DatagramHeader? {
+        val peerField = buf.short.toInt() and 0xFFFF
+        val compressed = peerField and EnetProtocol.HEADER_FLAG_COMPRESSED != 0
+        if (compressed) return null
+        val hasSentTime = peerField and EnetProtocol.HEADER_FLAG_SENT_TIME != 0
+        if (!hasSentTime) return DatagramHeader(0, false)
+        if (buf.remaining() < 2) return null
+        return DatagramHeader(buf.short.toInt() and 0xFFFF, true)
+    }
+
     fun onDatagram(datagram: ByteArray): List<ByteArray> {
         if (datagram.size < EnetProtocol.NO_SENT_TIME_HEADER_LEN) return emptyList()
         val buf = ByteBuffer.wrap(datagram).order(ByteOrder.BIG_ENDIAN)
-        val peerField = buf.short.toInt() and 0xFFFF
-        val hasSentTime = peerField and EnetProtocol.HEADER_FLAG_SENT_TIME != 0
-        val compressed = peerField and EnetProtocol.HEADER_FLAG_COMPRESSED != 0
-        if (compressed) return emptyList() // this client never negotiates compression
-        var sentTime = 0
-        if (hasSentTime) {
-            if (buf.remaining() < 2) return emptyList()
-            sentTime = buf.short.toInt() and 0xFFFF
-        }
+        val datagramHeader = readDatagramHeader(buf) ?: return emptyList()
+
         val now = nowMs()
         lastReceiveMs = now
         val acks = mutableListOf<ByteArray>()
@@ -181,7 +189,16 @@ class EnetClient(
             val channelId = buf.get().toInt() and 0xFF
             val reliableSeq = buf.short.toInt() and 0xFFFF
             val header = EnetProtocol.CommandHeader(command, channelId, reliableSeq)
-            if (!handleCommand(header, buf, sentTime, hasSentTime, acks, now)) break
+            val keepGoing =
+                handleCommand(
+                    header,
+                    buf,
+                    datagramHeader.sentTime,
+                    datagramHeader.hasSentTime,
+                    acks,
+                    now,
+                )
+            if (!keepGoing) break
         }
         return acks
     }

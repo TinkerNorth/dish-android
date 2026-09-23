@@ -300,20 +300,24 @@ class MicEngine
                 if (!session.voiceProcessed) {
                     Log.i(TAG, "capturing without platform echo cancellation (fallback source)")
                 }
-                var clean = false
+                if (!captureUntilStopped(session)) markBroken()
+            }
+
+            // Answers whether the loop ended because capture was stopped, rather than because the
+            // recorder died under it.
+            private fun captureUntilStopped(session: MicCaptureSession): Boolean {
                 try {
                     val window = ShortArray(FRAME_SAMPLES)
                     while (running) {
-                        // A short read is a dead recorder, not a short packet: never send a partial
-                        // window, the far end cannot place one in its timeline.
+                        // A short read is a dead recorder, not a short packet: never send a
+                        // partial window, the far end cannot place one in its timeline.
                         if (session.read(window) != window.size) break
                         deliver(window)
                     }
-                    clean = !running
+                    return !running
                 } finally {
                     session.close()
                 }
-                if (!clean) markBroken()
             }
 
             private fun deliver(window: ShortArray) {

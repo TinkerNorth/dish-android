@@ -71,6 +71,20 @@ value class CapabilitySet(
     }
 }
 
+// Every host advertises these; the per-type surfaces are the type layer's job and the host layer
+// passes them through. Only the flags below toCapabilitySet vary per host.
+private val HOST_WIDE_FEATURES =
+    setOf(
+        Feature.GAMEPAD,
+        Feature.ANALOG_TRIGGERS,
+        Feature.MOTION,
+        Feature.TOUCHPAD,
+        Feature.BATTERY,
+        Feature.LIGHTBAR,
+        Feature.TRIGGER_EFFECTS,
+        Feature.PLAYER_LEDS,
+    )
+
 data class SlotCapabilities(
     val controller: CapabilitySet,
     val transport: CapabilitySet,
@@ -126,18 +140,7 @@ data class HostFeatureSet(
     val compat: DishProtocolCompat get() = dishProtocolCompatFor(protocolVersion.takeIf { it > 0 })
 
     fun toCapabilitySet(): CapabilitySet {
-        // The per-type surfaces are the type layer's job; the host layer passes them through.
-        val out =
-            mutableSetOf(
-                Feature.GAMEPAD,
-                Feature.ANALOG_TRIGGERS,
-                Feature.MOTION,
-                Feature.TOUCHPAD,
-                Feature.BATTERY,
-                Feature.LIGHTBAR,
-                Feature.TRIGGER_EFFECTS,
-                Feature.PLAYER_LEDS,
-            )
+        val out = HOST_WIDE_FEATURES.toMutableSet()
         if (mouseControl) out += Feature.MOUSE
         if (keyboardControl) out += Feature.KEYBOARD
         if (rumbleReturn) out += Feature.RUMBLE

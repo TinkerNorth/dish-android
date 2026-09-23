@@ -55,27 +55,43 @@ private fun parseIpv6(host: String): IntArray? {
     return bytes
 }
 
+// A literal carries at most one "::", and a zone index ("fe80::1%eth0") is not part of an
+// address this parser accepts.
+private fun isWellFormedIpv6(
+    host: String,
+    doubleColon: Int,
+): Boolean {
+    if (host.isEmpty() || host.contains('%')) return false
+    val hasASecondRun = doubleColon != -1 && host.indexOf("::", doubleColon + 1) != -1
+    return !hasASecondRun
+}
+
+// "::" stands for the run of zero groups that makes the address eight long, and for at least one
+// of them; null means it stood for none, which is not a legal literal.
+private fun expandGroups(
+    head: List<Int>,
+    tail: List<Int>,
+    hasDoubleColon: Boolean,
+): List<Int>? {
+    val groups = ArrayList<Int>(8)
+    groups.addAll(head)
+    if (hasDoubleColon) {
+        val missing = 8 - head.size - tail.size
+        if (missing < 1) return null
+        repeat(missing) { groups.add(0) }
+    }
+    groups.addAll(tail)
+    return groups
+}
+
 private fun ipv6Groups(host: String): IntArray? {
     val doubleColon = host.indexOf("::")
-    if (
-        host.isEmpty() ||
-        host.contains('%') ||
-        (doubleColon != -1 && host.indexOf("::", doubleColon + 1) != -1)
-    ) {
-        return null
-    }
+    if (!isWellFormedIpv6(host, doubleColon)) return null
     val headStr = if (doubleColon == -1) host else host.substring(0, doubleColon)
     val tailStr = if (doubleColon == -1) "" else host.substring(doubleColon + 2)
     val head = splitHextets(headStr) ?: return null
     val tail = splitHextets(tailStr) ?: return null
-    val groups = ArrayList<Int>(8)
-    groups.addAll(head)
-    if (doubleColon != -1) {
-        val missing = 8 - head.size - tail.size
-        if (missing < 1) return null // "::" must stand for at least one group
-        repeat(missing) { groups.add(0) }
-    }
-    groups.addAll(tail)
+    val groups = expandGroups(head, tail, doubleColon != -1) ?: return null
     return if (groups.size == 8) groups.toIntArray() else null
 }
 

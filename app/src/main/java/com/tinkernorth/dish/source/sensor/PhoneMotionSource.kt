@@ -130,21 +130,24 @@ class PhoneMotionSource(
             setState(MotionStreamState.Streaming)
         }
         val cb = emit ?: return
+        val sample = sampleFrom(values)
+        rateLimiter.publish(SINGLE_VIRTUAL_CONTROLLER, sample) { s, deltaUs -> cb.emit(s, deltaUs) }
+    }
+
+    // The sensor reports in device axes; landscape play rotates them, and X comes back negated
+    // because the wire convention is the opposite hand.
+    private fun sampleFrom(values: FloatArray): MotionRateLimiter.MotionSample {
         val rotation = rotationSupplier()
         val result = remapLandscape(values[0], values[1], values[2], rotation, remapScratch)
         if (result is RemapResult.Fallback) onUnknownRotation(result.unknownRotation)
-        val sample =
-            MotionRateLimiter.MotionSample(
-                gyroX = gyroRadToWire(-remapScratch[0]),
-                gyroY = gyroRadToWire(remapScratch[1]),
-                gyroZ = gyroRadToWire(remapScratch[2]),
-                accelX = accelX,
-                accelY = accelY,
-                accelZ = accelZ,
-            )
-        rateLimiter.publish(SINGLE_VIRTUAL_CONTROLLER, sample) { s, deltaUs ->
-            cb.emit(s, deltaUs)
-        }
+        return MotionRateLimiter.MotionSample(
+            gyroX = gyroRadToWire(-remapScratch[0]),
+            gyroY = gyroRadToWire(remapScratch[1]),
+            gyroZ = gyroRadToWire(remapScratch[2]),
+            accelX = accelX,
+            accelY = accelY,
+            accelZ = accelZ,
+        )
     }
 
     private fun onUnknownRotation(rotation: Int) {

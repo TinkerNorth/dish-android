@@ -188,26 +188,35 @@ class RumbleRouter
 
         private fun cancel(target: RumbleTarget) {
             when (target) {
-                RumbleTarget.Phone ->
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        phoneVibratorManager?.cancel()
-                    } else {
-                        phoneVibrator?.cancel()
-                    }
-                is RumbleTarget.Framework -> {
-                    val dev = InputDevice.getDevice(target.deviceId) ?: return
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        dev.vibratorManager.cancel()
-                    } else {
-                        dev.legacyVibrator()?.cancel()
-                    }
-                }
-                is RumbleTarget.DirectUsb -> {
-                    usbStopJobs.remove(target.deviceId)?.cancel()
-                    native.sendUsbRumble(target.deviceId, 0, 0)
-                }
+                RumbleTarget.Phone -> cancelPhone()
+                is RumbleTarget.Framework -> cancelFramework(target.deviceId)
+                is RumbleTarget.DirectUsb -> cancelDirectUsb(target.deviceId)
                 RumbleTarget.None -> Unit
             }
+        }
+
+        private fun cancelPhone() {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                phoneVibratorManager?.cancel()
+            } else {
+                phoneVibrator?.cancel()
+            }
+        }
+
+        private fun cancelFramework(deviceId: Int) {
+            val dev = InputDevice.getDevice(deviceId) ?: return
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                dev.vibratorManager.cancel()
+            } else {
+                dev.legacyVibrator()?.cancel()
+            }
+        }
+
+        // The stop job is dropped first: it would otherwise fire its own zero later and race a
+        // rumble that started in between.
+        private fun cancelDirectUsb(deviceId: Int) {
+            usbStopJobs.remove(deviceId)?.cancel()
+            native.sendUsbRumble(deviceId, 0, 0)
         }
 
         @RequiresApi(Build.VERSION_CODES.S)

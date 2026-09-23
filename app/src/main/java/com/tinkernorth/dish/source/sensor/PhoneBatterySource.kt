@@ -109,29 +109,32 @@ class PhoneBatterySource(
     }
 
     private fun sampleFromIntent(intent: Intent): BatterySample {
-        val rawLevel = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
-        val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
-        val level =
-            if (rawLevel >= 0 && scale > 0) {
-                (rawLevel * 100 / scale).coerceIn(0, 100)
-            } else {
-                BatteryValidator.LEVEL_UNKNOWN
-            }
-
-        val status =
-            when (intent.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN)) {
-                BatteryManager.BATTERY_STATUS_CHARGING -> BatteryValidator.STATUS_CHARGING
-                BatteryManager.BATTERY_STATUS_FULL -> BatteryValidator.STATUS_FULL
-                // NOT_CHARGING is plugged-but-held; reported as discharging to match player perception.
-                BatteryManager.BATTERY_STATUS_DISCHARGING,
-                BatteryManager.BATTERY_STATUS_NOT_CHARGING,
-                -> BatteryValidator.STATUS_DISCHARGING
-                else -> BatteryValidator.STATUS_UNKNOWN
-            }
-
+        val level = levelFrom(intent)
+        val status = statusFrom(intent)
         Log.d(TAG, "battery level=$level status=$status")
         return BatterySample(level, status)
     }
+
+    // The scale is the platform's own denominator and is not always 100; a broadcast that carries
+    // neither is a sticky one that arrived before the first real reading.
+    private fun levelFrom(intent: Intent): Int {
+        val rawLevel = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+        val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+        val isReadable = rawLevel >= 0 && scale > 0
+        if (!isReadable) return BatteryValidator.LEVEL_UNKNOWN
+        return (rawLevel * 100 / scale).coerceIn(0, 100)
+    }
+
+    private fun statusFrom(intent: Intent): Int =
+        when (intent.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN)) {
+            BatteryManager.BATTERY_STATUS_CHARGING -> BatteryValidator.STATUS_CHARGING
+            BatteryManager.BATTERY_STATUS_FULL -> BatteryValidator.STATUS_FULL
+            // NOT_CHARGING is plugged-but-held; reported as discharging to match player perception.
+            BatteryManager.BATTERY_STATUS_DISCHARGING,
+            BatteryManager.BATTERY_STATUS_NOT_CHARGING,
+            -> BatteryValidator.STATUS_DISCHARGING
+            else -> BatteryValidator.STATUS_UNKNOWN
+        }
 
     private companion object {
         const val TAG = "PhoneBatterySource"

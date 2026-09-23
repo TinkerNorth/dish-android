@@ -159,18 +159,32 @@ class PhysicalGamepadRegistry
             }
             pushDeadzones(dev)
             cancelDisconnect(deviceId)
-            val device = makeRoutedDevice(deviceId, dev)
+            adopt(deviceId, makeRoutedDevice(deviceId, dev))
+        }
+
+        // A pad that comes back under a new id takes over the placeholder its old id left behind,
+        // so a model swap or a replug shows one pad rather than two.
+        private fun adopt(
+            deviceId: Int,
+            device: Device,
+        ) {
             _devices.update { map ->
-                val withoutStalePlaceholder =
-                    map.filterNot { (id, d) ->
-                        id != deviceId &&
-                            (d.transitioning || d.needsReplug) &&
-                            !d.isUsbSynthetic &&
-                            d.vendorId == device.vendorId &&
-                            d.productId == device.productId
-                    }
-                withoutStalePlaceholder + (deviceId to device)
+                map.filterNot { (id, held) -> isStalePlaceholderFor(id, held, deviceId, device) } +
+                    (deviceId to device)
             }
+        }
+
+        private fun isStalePlaceholderFor(
+            id: Int,
+            held: Device,
+            deviceId: Int,
+            device: Device,
+        ): Boolean {
+            val isAnotherSlot = id != deviceId
+            val isAPlaceholder = held.transitioning || held.needsReplug
+            val isTheSameModel =
+                held.vendorId == device.vendorId && held.productId == device.productId
+            return isAnotherSlot && isAPlaceholder && !held.isUsbSynthetic && isTheSameModel
         }
 
         private fun makeRoutedDevice(
