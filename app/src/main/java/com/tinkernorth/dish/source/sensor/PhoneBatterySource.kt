@@ -60,19 +60,24 @@ class PhoneBatterySource(
         lastStatus = null
     }
 
+    // Takes the emitter through its constructor rather than capturing it, so the receiver can be
+    // read on its own.
+    private inner class ChargingReceiver(
+        private val emit: Emit,
+    ) : BroadcastReceiver() {
+        override fun onReceive(
+            ctx: Context?,
+            intent: Intent?,
+        ) {
+            val sample = intent?.let(::sampleFromIntent) ?: return
+            if (sample.status == lastStatus) return
+            Log.d(TAG, "charging state changed -> ${sample.status}")
+            forward(sample, emit)
+        }
+    }
+
     private fun registerChargingReceiver(emit: Emit) {
-        val receiver =
-            object : BroadcastReceiver() {
-                override fun onReceive(
-                    ctx: Context?,
-                    intent: Intent?,
-                ) {
-                    val sample = intent?.let(::sampleFromIntent) ?: return
-                    if (sample.status == lastStatus) return
-                    Log.d(TAG, "charging state changed -> ${sample.status}")
-                    forward(sample, emit)
-                }
-            }
+        val receiver = ChargingReceiver(emit)
         // Seed lastStatus from the sticky intent so the replay isn't mistaken for a transition.
         val sticky =
             ContextCompat.registerReceiver(
