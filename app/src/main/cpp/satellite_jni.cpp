@@ -265,6 +265,76 @@ static void enqueueBridgeReport(BridgeReport&& r) {
     g_bridgeQueueCv.notify_one();
 }
 
+static bool bridgeHasWork() {
+    return !g_bridgeDispatchRunning.load(std::memory_order_relaxed) || !g_bridgeQueue.empty() ||
+           !g_micMuteQueue.empty();
+}
+
+static bool bridgeIsDrainedAndStopping() {
+    return !g_bridgeDispatchRunning.load(std::memory_order_relaxed) && g_bridgeQueue.empty() &&
+           g_micMuteQueue.empty();
+}
+
+static void callMicMuteUpcall(JNIEnv* env, const int32_t deviceId, const bool muted) {
+    if (g_micMuteBridgeClass == nullptr || g_micMutePadMethod == nullptr) return;
+    env->CallStaticVoidMethod(g_micMuteBridgeClass, g_micMutePadMethod, (jint)deviceId,
+                              (jboolean)muted);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+}
+
+// Which static method carries this report. Answers false when the class or the method never
+// resolved, which is the honest answer for a bridge Kotlin has not installed.
+static bool bridgeTargetFor(const BridgeReport& r, jclass& outCls, jmethodID& outMethod) {
+    const bool isMoonlight = r.kind == SLOT_MOONLIGHT;
+    outCls = isMoonlight ? g_moonlightBridgeClass : g_btBridgeClass;
+    outMethod = isMoonlight ? g_moonlightDispatchMethod : g_btDispatchMethod;
+    if (isMoonlight && r.payload == BridgeReport::MOTION) outMethod = g_moonlightMotionMethod;
+    if (isMoonlight && r.payload == BridgeReport::TOUCH) outMethod = g_moonlightTouchMethod;
+    return outCls != nullptr && outMethod != nullptr;
+}
+
+// A Moonlight session carries up to four pads on one stream, so its upcall also names which pad
+// the report belongs to; the Bluetooth link is one pad by nature.
+static void callBridgeUpcall(JNIEnv* env, jclass cls, jmethodID method, jstring connId,
+                             const BridgeReport& r) {
+    const bool isMoonlight = r.kind == SLOT_MOONLIGHT;
+    const bool isMotion = isMoonlight && r.payload == BridgeReport::MOTION;
+    const bool isTouch = isMoonlight && r.payload == BridgeReport::TOUCH;
+
+    if (isMotion) {
+        env->CallStaticVoidMethod(cls, method, connId, (jint)r.controllerNumber, (jint)r.gyro[0],
+                                  (jint)r.gyro[1], (jint)r.gyro[2], (jint)r.accel[0],
+                                  (jint)r.accel[1], (jint)r.accel[2], (jint)r.timestampDeltaUs);
+        return;
+    }
+    if (isTouch) {
+        env->CallStaticVoidMethod(
+            cls, method, connId, (jint)r.controllerNumber, (jboolean)r.touch.f0Active,
+            (jint)r.touch.f0Id, (jint)r.touch.f0X, (jint)r.touch.f0Y, (jboolean)r.touch.f1Active,
+            (jint)r.touch.f1Id, (jint)r.touch.f1X, (jint)r.touch.f1Y, (jboolean)r.touch.clickDown);
+        return;
+    }
+    if (isMoonlight) {
+        env->CallStaticVoidMethod(cls, method, connId, (jint)r.controllerNumber, (jint)r.wButtons,
+                                  (jint)r.bLT, (jint)r.bRT, (jint)r.sLX, (jint)r.sLY, (jint)r.sRX,
+                                  (jint)r.sRY);
+        return;
+    }
+    env->CallStaticVoidMethod(cls, method, connId, (jint)r.wButtons, (jint)r.bLT, (jint)r.bRT,
+                              (jint)r.sLX, (jint)r.sLY, (jint)r.sRX, (jint)r.sRY);
+}
+
+static void dispatchBridgeReport(JNIEnv* env, const BridgeReport& r) {
+    jclass cls = nullptr;
+    jmethodID method = nullptr;
+    if (!bridgeTargetFor(r, cls, method)) return;
+
+    jstring connId = env->NewStringUTF(r.connectionId.c_str());
+    callBridgeUpcall(env, cls, method, connId, r);
+    env->DeleteLocalRef(connId);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+}
+
 static void bridgeDispatchLoop() {
     JNIEnv* env = nullptr;
     if (!g_jvm || g_jvm->AttachCurrentThread(&env, nullptr) != JNI_OK || env == nullptr) {
@@ -277,63 +347,22 @@ static void bridgeDispatchLoop() {
         BridgeReport r;
         {
             std::unique_lock<std::mutex> lock(g_bridgeQueueMtx);
-            g_bridgeQueueCv.wait(lock, [] {
-                return !g_bridgeDispatchRunning.load(std::memory_order_relaxed) ||
-                       !g_bridgeQueue.empty() || !g_micMuteQueue.empty();
-            });
-            if (!g_bridgeDispatchRunning.load(std::memory_order_relaxed) && g_bridgeQueue.empty() &&
-                g_micMuteQueue.empty())
-                break;
+            g_bridgeQueueCv.wait(lock, bridgeHasWork);
+            if (bridgeIsDrainedAndStopping()) break;
             // Mute edges first: they are rarer and they gate capture, so they must not wait
             // behind a queue of input reports.
             if (!g_micMuteQueue.empty()) {
-                auto ev = g_micMuteQueue.front();
+                const auto ev = g_micMuteQueue.front();
                 g_micMuteQueue.pop_front();
                 lock.unlock();
-                if (g_micMuteBridgeClass != nullptr && g_micMutePadMethod != nullptr) {
-                    env->CallStaticVoidMethod(g_micMuteBridgeClass, g_micMutePadMethod,
-                                              (jint)ev.first, (jboolean)ev.second);
-                    if (env->ExceptionCheck()) env->ExceptionClear();
-                }
+                callMicMuteUpcall(env, ev.first, ev.second);
                 continue;
             }
             if (g_bridgeQueue.empty()) continue;
             r = std::move(g_bridgeQueue.front());
             g_bridgeQueue.pop_front();
         }
-        jclass cls = r.kind == SLOT_MOONLIGHT ? g_moonlightBridgeClass : g_btBridgeClass;
-        jmethodID method =
-            r.kind == SLOT_MOONLIGHT ? g_moonlightDispatchMethod : g_btDispatchMethod;
-        if (r.kind == SLOT_MOONLIGHT && r.payload == BridgeReport::MOTION)
-            method = g_moonlightMotionMethod;
-        if (r.kind == SLOT_MOONLIGHT && r.payload == BridgeReport::TOUCH)
-            method = g_moonlightTouchMethod;
-        if (cls == nullptr || method == nullptr) continue;
-        jstring connId = env->NewStringUTF(r.connectionId.c_str());
-        // A Moonlight session carries up to four pads on one stream, so its upcall also
-        // names which pad the report belongs to; the Bluetooth link is one pad by nature.
-        if (r.kind == SLOT_MOONLIGHT && r.payload == BridgeReport::MOTION) {
-            env->CallStaticVoidMethod(cls, method, connId, (jint)r.controllerNumber,
-                                      (jint)r.gyro[0], (jint)r.gyro[1], (jint)r.gyro[2],
-                                      (jint)r.accel[0], (jint)r.accel[1], (jint)r.accel[2],
-                                      (jint)r.timestampDeltaUs);
-        } else if (r.kind == SLOT_MOONLIGHT && r.payload == BridgeReport::TOUCH) {
-            env->CallStaticVoidMethod(
-                cls, method, connId, (jint)r.controllerNumber, (jboolean)r.touch.f0Active,
-                (jint)r.touch.f0Id, (jint)r.touch.f0X, (jint)r.touch.f0Y,
-                (jboolean)r.touch.f1Active, (jint)r.touch.f1Id, (jint)r.touch.f1X,
-                (jint)r.touch.f1Y, (jboolean)r.touch.clickDown);
-        } else if (r.kind == SLOT_MOONLIGHT) {
-            env->CallStaticVoidMethod(cls, method, connId, (jint)r.controllerNumber,
-                                      (jint)r.wButtons, (jint)r.bLT, (jint)r.bRT, (jint)r.sLX,
-                                      (jint)r.sLY, (jint)r.sRX, (jint)r.sRY);
-        } else {
-            env->CallStaticVoidMethod(cls, method, connId, (jint)r.wButtons, (jint)r.bLT,
-                                      (jint)r.bRT, (jint)r.sLX, (jint)r.sLY, (jint)r.sRX,
-                                      (jint)r.sRY);
-        }
-        env->DeleteLocalRef(connId);
-        if (env->ExceptionCheck()) env->ExceptionClear();
+        dispatchBridgeReport(env, r);
     }
     g_jvm->DetachCurrentThread();
     LOGI("Bridge dispatch thread stopped");
