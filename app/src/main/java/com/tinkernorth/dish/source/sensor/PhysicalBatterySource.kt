@@ -108,20 +108,21 @@ class PhysicalBatterySource
             polls.trySend(Unit)
         }
 
+        private inner class HostChargingReceiver : BroadcastReceiver() {
+            override fun onReceive(
+                ctx: Context?,
+                intent: Intent?,
+            ) {
+                val status = intent?.let(::chargingStatusOf) ?: return
+                if (status == lastChargingStatus) return
+                lastChargingStatus = status
+                Log.d(TAG, "host charging state changed -> $status, polling pads")
+                requestPoll()
+            }
+        }
+
         private fun registerChargingReceiver() {
-            val receiver =
-                object : BroadcastReceiver() {
-                    override fun onReceive(
-                        ctx: Context?,
-                        intent: Intent?,
-                    ) {
-                        val status = intent?.let(::chargingStatusOf) ?: return
-                        if (status == lastChargingStatus) return
-                        lastChargingStatus = status
-                        Log.d(TAG, "host charging state changed -> $status, polling pads")
-                        requestPoll()
-                    }
-                }
+            val receiver = HostChargingReceiver()
             ContextCompat.registerReceiver(
                 context,
                 receiver,

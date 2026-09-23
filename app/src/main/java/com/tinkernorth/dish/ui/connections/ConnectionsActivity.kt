@@ -113,57 +113,59 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
     private lateinit var bluetoothList: BluetoothListAdapter
     private lateinit var moonlightList: MoonlightListAdapter
 
-    private val satelliteRowListener =
-        object : SatelliteRowListener {
-            override fun onConnect(row: SatelliteRow) {
-                when (row) {
-                    is SatelliteRow.Known -> {
-                        val remembered = satellite.remembered().firstOrNull { it.id == row.summary.id } ?: return
-                        satellite.connect(remembered.toDiscovered())
-                    }
-                    is SatelliteRow.Discovered -> satellite.connect(row.server)
-                    is SatelliteRow.Empty -> Unit
+    private inner class SatelliteRows : SatelliteRowListener {
+        override fun onConnect(row: SatelliteRow) {
+            when (row) {
+                is SatelliteRow.Known -> {
+                    val remembered = satellite.remembered().firstOrNull { it.id == row.summary.id } ?: return
+                    satellite.connect(remembered.toDiscovered())
                 }
-            }
-
-            override fun onDisconnect(id: String) {
-                satellite.disconnect(id)
-            }
-
-            override fun onRepair(id: String) {
-                val remembered = satellite.remembered().firstOrNull { it.id == id } ?: return
-                showPairingDialog(remembered.toDiscovered())
-            }
-
-            override fun onForget(id: String) {
-                hub.forgetConnection(id)
+                is SatelliteRow.Discovered -> satellite.connect(row.server)
+                is SatelliteRow.Empty -> Unit
             }
         }
 
-    private val bluetoothRowListener =
-        object : BluetoothRowListener {
-            override fun onConnect(id: String) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) btRegistry.tryAutoReconnect(id)
-            }
+        override fun onDisconnect(id: String) {
+            satellite.disconnect(id)
+        }
 
-            override fun onDisconnect(id: String) {
-                btRegistry.stop(id)
-            }
+        override fun onRepair(id: String) {
+            val remembered = satellite.remembered().firstOrNull { it.id == id } ?: return
+            showPairingDialog(remembered.toDiscovered())
+        }
 
-            override fun onRepair(id: String) {
-                val entry = store.rememberedBt().firstOrNull { it.id == id } ?: return
-                openBluetoothDeviceDetails(entry.mac)
-            }
+        override fun onForget(id: String) {
+            hub.forgetConnection(id)
+        }
+    }
 
-            override fun onSecondary(summary: ConnectionSummary) {
-                val remembered = store.rememberedBt().firstOrNull { it.id == summary.id }
-                if (remembered != null) {
-                    confirmForgetBt(summary.id, remembered)
-                } else {
-                    btRegistry.stop(summary.id)
-                }
+    private val satelliteRowListener = SatelliteRows()
+
+    private inner class BluetoothRows : BluetoothRowListener {
+        override fun onConnect(id: String) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) btRegistry.tryAutoReconnect(id)
+        }
+
+        override fun onDisconnect(id: String) {
+            btRegistry.stop(id)
+        }
+
+        override fun onRepair(id: String) {
+            val entry = store.rememberedBt().firstOrNull { it.id == id } ?: return
+            openBluetoothDeviceDetails(entry.mac)
+        }
+
+        override fun onSecondary(summary: ConnectionSummary) {
+            val remembered = store.rememberedBt().firstOrNull { it.id == summary.id }
+            if (remembered != null) {
+                confirmForgetBt(summary.id, remembered)
+            } else {
+                btRegistry.stop(summary.id)
             }
         }
+    }
+
+    private val bluetoothRowListener = BluetoothRows()
 
     private var btAdapterBannerId: Long? = null
     private var localNetworkBannerId: Long? = null
@@ -190,34 +192,35 @@ class ConnectionsActivity : BaseGamepadHostActivity() {
 
     // Nothing the user presses here may end in a shrug: a row whose button does nothing
     // is indistinguishable from a broken app, and used to be exactly that.
-    private val moonlightRowListener =
-        object : MoonlightRowListener {
-            override fun onPairKnown(summary: ConnectionSummary) {
-                val host = hostFor(summary.id)
-                if (host == null) {
-                    reportMoonlightHostGone(summary.label, summary.id)
-                    return
-                }
-                startMoonlightPairing(host)
+    private inner class MoonlightRows : MoonlightRowListener {
+        override fun onPairKnown(summary: ConnectionSummary) {
+            val host = hostFor(summary.id)
+            if (host == null) {
+                reportMoonlightHostGone(summary.label, summary.id)
+                return
             }
-
-            override fun onPairDiscovered(host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost) {
-                startMoonlightPairing(host)
-            }
-
-            override fun onQuitSession(id: String) {
-                val host = hostFor(id)
-                if (host == null) {
-                    reportMoonlightHostGone(id, id)
-                    return
-                }
-                moonlight.quitHostApp(host)
-            }
-
-            override fun onForget(id: String) {
-                confirmForgetMoonlight(id)
-            }
+            startMoonlightPairing(host)
         }
+
+        override fun onPairDiscovered(host: com.tinkernorth.dish.core.net.moonlight.MoonlightHost) {
+            startMoonlightPairing(host)
+        }
+
+        override fun onQuitSession(id: String) {
+            val host = hostFor(id)
+            if (host == null) {
+                reportMoonlightHostGone(id, id)
+                return
+            }
+            moonlight.quitHostApp(host)
+        }
+
+        override fun onForget(id: String) {
+            confirmForgetMoonlight(id)
+        }
+    }
+
+    private val moonlightRowListener = MoonlightRows()
 
     private var moonlightPinDialog: AlertDialog? = null
 
