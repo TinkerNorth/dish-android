@@ -15,6 +15,7 @@ import com.tinkernorth.dish.source.store.CrashReportingStore
 import com.tinkernorth.dish.source.store.ThemeMode
 import com.tinkernorth.dish.source.store.ThemePreferenceStore
 import com.tinkernorth.dish.source.update.UpdateNoticePhase
+import com.tinkernorth.dish.source.update.UpdateNoticeStatus
 import com.tinkernorth.dish.source.update.UpdateNotices
 import com.tinkernorth.dish.ui.common.BaseGamepadHostActivity
 import com.tinkernorth.dish.ui.common.DishNavigator
@@ -156,35 +157,53 @@ class SettingsActivity : BaseGamepadHostActivity() {
     private fun bindUpdateSection() {
         binding.groupUpdates.isVisible = updateNotices.supported
         if (!updateNotices.supported) return
+        bindUpdateRowLabels()
+        observeUpdateStatus()
+        binding.switchUpdateChecks.setOnCheckedChangeListener { _, isChecked ->
+            updateNotices.setChecksEnabled(isChecked)
+        }
+    }
+
+    private fun bindUpdateRowLabels() {
         binding.sectionUpdates.labelSection.setText(R.string.settings_section_updates)
         binding.cardRowUpdateChecks.cardRowIcon.setImageResource(R.drawable.ic_refresh)
         binding.cardRowUpdateChecks.cardRowTitle.setText(R.string.settings_update_checks_title)
         binding.cardRowUpdateChecks.cardRowSubtitle.setText(R.string.settings_update_checks_body)
         binding.cardRowUpdateCheckNow.cardRowIcon.setImageResource(R.drawable.ic_arrow_upward)
+    }
+
+    private fun observeUpdateStatus() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                updateNotices.status.collect { status ->
-                    if (binding.switchUpdateChecks.isChecked != status.checksEnabled) {
-                        binding.switchUpdateChecks.isChecked = status.checksEnabled
-                    }
-                    val line = updateStatusLine(status)
-                    binding.cardRowUpdateCheckNow.cardRowTitle.setText(line.title)
-                    binding.cardRowUpdateCheckNow.cardRowSubtitle.text =
-                        line.versionArg?.let { getString(line.body, it) } ?: getString(line.body)
-                    binding.cardUpdateCheckNow.isEnabled = line.actionable
-                    binding.cardUpdateCheckNow.setOnClickListener {
-                        if (status.phase == UpdateNoticePhase.Available) {
-                            openExternalUrl(status.downloadUrl)
-                        } else {
-                            updateNotices.checkNow()
-                        }
-                    }
-                }
+                updateNotices.status.collect { status -> showUpdateStatus(status) }
             }
         }
-        binding.switchUpdateChecks.setOnCheckedChangeListener { _, isChecked ->
-            updateNotices.setChecksEnabled(isChecked)
+    }
+
+    private fun showUpdateStatus(status: UpdateNoticeStatus) {
+        showUpdateChecksEnabled(status.checksEnabled)
+        val line = updateStatusLine(status)
+        binding.cardRowUpdateCheckNow.cardRowTitle.setText(line.title)
+        binding.cardRowUpdateCheckNow.cardRowSubtitle.text =
+            line.versionArg?.let { getString(line.body, it) } ?: getString(line.body)
+        binding.cardUpdateCheckNow.isEnabled = line.actionable
+        binding.cardUpdateCheckNow.setOnClickListener { onUpdateRowTapped(status) }
+    }
+
+    private fun showUpdateChecksEnabled(enabled: Boolean) {
+        val alreadyShowing = binding.switchUpdateChecks.isChecked == enabled
+        if (alreadyShowing) return
+        binding.switchUpdateChecks.isChecked = enabled
+    }
+
+    // The same row is the download link once there is something to download.
+    private fun onUpdateRowTapped(status: UpdateNoticeStatus) {
+        val hasAnUpdate = status.phase == UpdateNoticePhase.Available
+        if (hasAnUpdate) {
+            openExternalUrl(status.downloadUrl)
+            return
         }
+        updateNotices.checkNow()
     }
 
     private fun chooseChip(mode: ThemeMode) {
