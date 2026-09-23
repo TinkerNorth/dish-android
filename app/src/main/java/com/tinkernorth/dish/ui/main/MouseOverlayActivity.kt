@@ -122,28 +122,42 @@ class MouseOverlayActivity : BaseInputOverlayActivity() {
             motionOn = null,
         ) { views.toolbar.subtitle = it }
 
-        views.left.onHeldChanged = { held ->
-            leftHeld = held
-            report(latestFingers())
-        }
-        views.right?.onHeldChanged = { held ->
-            rightHeld = held
-            report(latestFingers())
-        }
-        views.strip?.onScroll = { notches ->
-            report(latestFingers(), scrollNotches = notches)
-        }
-        views.strip?.onMiddleTap = { pulseMiddleClick() }
+        wireMouseButtons()
+        wireMovePad()
+    }
 
+    private inner class MovePadListener : TouchpadSurfaceView.Listener {
+        override fun onTouchpadStateChanged(state: TouchpadSurfaceView.TouchpadState) {
+            report(state)
+        }
+    }
+
+    private fun setLeftHeld(held: Boolean) {
+        leftHeld = held
+        report(latestFingers())
+    }
+
+    private fun setRightHeld(held: Boolean) {
+        rightHeld = held
+        report(latestFingers())
+    }
+
+    private fun scrollBy(notches: Int) {
+        report(latestFingers(), scrollNotches = notches)
+    }
+
+    private fun wireMouseButtons() {
+        views.left.onHeldChanged = ::setLeftHeld
+        views.right?.onHeldChanged = ::setRightHeld
+        views.strip?.onScroll = ::scrollBy
+        views.strip?.onMiddleTap = ::pulseMiddleClick
+    }
+
+    private fun wireMovePad() {
         views.movePad.clickWhenTouched = false
         views.movePad.label = getString(R.string.touchpad_pad_move_label)
         views.movePad.hint = getString(R.string.touchpad_pad_move_hint)
-        views.movePad.listener =
-            object : TouchpadSurfaceView.Listener {
-                override fun onTouchpadStateChanged(state: TouchpadSurfaceView.TouchpadState) {
-                    report(state)
-                }
-            }
+        views.movePad.listener = MovePadListener()
     }
 
     private fun inflateFor(extended: Boolean): MouseViews =
