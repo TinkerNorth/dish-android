@@ -104,31 +104,31 @@ class PhysicalMotionSource
                 if (values.size < 3) return
                 if (!shouldEmitGyro(accel != null, accelSeen)) return
                 val conn = reachable[slotId] ?: return
-                // A Moonlight host consumes motion only after MOTION_EVENT asked for
-                // it; a satellite sink always wants it (descriptor-advertised).
+                // A Moonlight host consumes motion only after MOTION_EVENT asked for it; a
+                // satellite sink always wants it (descriptor-advertised).
                 if (!conn.motionWanted(slotId)) return
-                val sample =
-                    convertControllerSample(
-                        gyroX = values[0],
-                        gyroY = values[1],
-                        gyroZ = values[2],
-                        accelX = accelX,
-                        accelY = accelY,
-                        accelZ = accelZ,
-                    )
-                rateLimiter.publish(deviceId, sample) { s, deltaUs ->
-                    inputRateStore.recordMotionSample(slotId)
-                    conn.sendMotion(
-                        slotId,
-                        s.gyroX,
-                        s.gyroY,
-                        s.gyroZ,
-                        s.accelX,
-                        s.accelY,
-                        s.accelZ,
-                        deltaUs,
-                    )
-                }
+
+                val sample = sampleFrom(values)
+                rateLimiter.publish(deviceId, sample) { s, deltaUs -> send(conn, s, deltaUs) }
+            }
+
+            private fun sampleFrom(values: FloatArray) =
+                convertControllerSample(
+                    gyroX = values[0],
+                    gyroY = values[1],
+                    gyroZ = values[2],
+                    accelX = accelX,
+                    accelY = accelY,
+                    accelZ = accelZ,
+                )
+
+            private fun send(
+                conn: TelemetrySink,
+                s: MotionRateLimiter.MotionSample,
+                deltaUs: Int,
+            ) {
+                inputRateStore.recordMotionSample(slotId)
+                conn.sendMotion(slotId, s.gyroX, s.gyroY, s.gyroZ, s.accelX, s.accelY, s.accelZ, deltaUs)
             }
         }
 
