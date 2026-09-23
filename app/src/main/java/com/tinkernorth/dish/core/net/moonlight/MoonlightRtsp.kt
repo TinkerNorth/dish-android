@@ -155,7 +155,10 @@ object MoonlightRtsp {
      * `RTSP/1.0`-style status line, so a truncated or non-RTSP reply is
      * rejected rather than misparsed.
      */
-    private class RawResponse(val headerLines: List<String>, val payload: String)
+    private class RawResponse(
+        val headerLines: List<String>,
+        val payload: String,
+    )
 
     // RTSP is a CRLF protocol, but a host that sends bare LF still has to parse; the blank line
     // separates the headers from the payload.
@@ -167,7 +170,10 @@ object MoonlightRtsp {
         return RawResponse(headerBlock.split('\n').filter { it.isNotEmpty() }, payload)
     }
 
-    private class StatusLine(val code: Int, val message: String)
+    private class StatusLine(
+        val code: Int,
+        val message: String,
+    )
 
     // "RTSP/1.0 200 OK". Null for anything that is not one, which is how a body arriving without
     // a status line is rejected rather than half-parsed.
@@ -178,7 +184,10 @@ object MoonlightRtsp {
         return StatusLine(code, parts.getOrElse(2) { "" })
     }
 
-    private class ParsedHeaders(val cseq: Int, val options: Map<String, String>)
+    private class ParsedHeaders(
+        val cseq: Int,
+        val options: Map<String, String>,
+    )
 
     // CSeq is lifted out of the option map because callers match it against the request they
     // sent; everything else stays an option, in the order the host wrote it.

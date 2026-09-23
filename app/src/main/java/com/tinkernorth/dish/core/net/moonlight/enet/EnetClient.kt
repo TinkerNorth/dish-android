@@ -161,7 +161,10 @@ class EnetClient(
      * (5000 ms) later. It read as "CLIENT DISCONNECTED about 6.4 seconds in"
      * with controller input flowing right up to the cut.
      */
-    private class DatagramHeader(val sentTime: Int, val hasSentTime: Boolean)
+    private class DatagramHeader(
+        val sentTime: Int,
+        val hasSentTime: Boolean,
+    )
 
     // Null means this client cannot read the datagram: it announces compression, which this
     // client never negotiates, or it is truncated where the sent-time field should be. The buffer

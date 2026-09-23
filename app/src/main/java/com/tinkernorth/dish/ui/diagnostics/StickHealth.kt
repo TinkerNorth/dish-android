@@ -56,27 +56,37 @@ object StickHealth {
         val circularityError: Float?,
     )
 
+    // The furthest the stick reached in each direction around the circle. Only samples out at
+    // the rim describe the gate's shape; anything closer in is where the stick happened to be,
+    // not the limit of where it can go.
+    private class RimBuckets {
+        val max = FloatArray(BUCKETS)
+        val seen = BooleanArray(BUCKETS)
+
+        fun add(sample: StickSample) {
+            val mag = sample.magnitude
+            if (mag < RIM_THRESHOLD) return
+            val angle = atan2(sample.y, sample.x)
+            val bucket = (((angle + Math.PI) / (2 * Math.PI)) * BUCKETS).toInt().coerceIn(0, BUCKETS - 1)
+            seen[bucket] = true
+            if (mag > max[bucket]) max[bucket] = mag
+        }
+    }
+
     fun envelope(samples: List<StickSample>): Envelope {
+        val rim = RimBuckets()
         var minX = 0f
         var maxX = 0f
         var minY = 0f
         var maxY = 0f
-        val bucketMax = FloatArray(BUCKETS)
-        val bucketSeen = BooleanArray(BUCKETS)
         for (s in samples) {
             if (s.x < minX) minX = s.x
             if (s.x > maxX) maxX = s.x
             if (s.y < minY) minY = s.y
             if (s.y > maxY) maxY = s.y
-            val mag = s.magnitude
-            if (mag >= RIM_THRESHOLD) {
-                val angle = atan2(s.y, s.x)
-                val bucket = (((angle + Math.PI) / (2 * Math.PI)) * BUCKETS).toInt().coerceIn(0, BUCKETS - 1)
-                bucketSeen[bucket] = true
-                if (mag > bucketMax[bucket]) bucketMax[bucket] = mag
-            }
+            rim.add(s)
         }
-        return Envelope(minX, maxX, minY, maxY, circularityError(bucketMax, bucketSeen))
+        return Envelope(minX, maxX, minY, maxY, circularityError(rim.max, rim.seen))
     }
 
     private fun circularityError(

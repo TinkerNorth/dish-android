@@ -171,28 +171,39 @@ class MoonlightRtspClient(
      * rest of the stream is the body.
      */
     private fun readResponse(reader: BufferedReader): MoonlightRtsp.Response? {
-        val header = StringBuilder()
+        val header = readHeaderBlock(reader) ?: return null
+        val declared = declaredContentLength(header)
+        val body = if (declared != null) readExactly(reader, declared) else reader.readText()
+        val raw = header + body
+        return MoonlightRtsp.parseResponse(raw).also {
+            if (it == null) Log.w(TAG, "unparsable reply to $stage: ${escape(raw)}")
+        }
+    }
+
+    // Null means the host hung up before answering at all, which is a different failure from an
+    // answer this client could not parse.
+    private fun readHeaderBlock(reader: BufferedReader): String? {
         var line = reader.readLine()
         if (line == null) {
             Log.w(TAG, "host closed the connection during $stage, before answering")
             return null
         }
+        val header = StringBuilder()
         while (line != null && line.isNotEmpty()) {
             header.append(line).append(MoonlightRtsp.CRLF)
             line = reader.readLine()
         }
         header.append(MoonlightRtsp.CRLF)
-        val declared =
-            Regex("(?i)content-length:\\s*(\\d+)")
-                .find(header)
-                ?.groupValues
-                ?.get(1)
-                ?.toIntOrNull()
-        val raw = header.toString() + if (declared != null) readExactly(reader, declared) else reader.readText()
-        return MoonlightRtsp.parseResponse(raw).also {
-            if (it == null) Log.w(TAG, "unparsable reply to $stage: ${escape(raw)}")
-        }
+        return header.toString()
     }
+
+    // Absent means read to end of stream instead: some hosts answer without a length at all.
+    private fun declaredContentLength(header: String): Int? =
+        CONTENT_LENGTH
+            .find(header)
+            ?.groupValues
+            ?.get(1)
+            ?.toIntOrNull()
 
     /** Hands back what arrived even when the host stops short of its own count. */
     private fun readExactly(
@@ -224,5 +235,8 @@ class MoonlightRtspClient(
         const val READ_TIMEOUT_MS = 5_000
         const val RAW_LOG_CHARS = 512
         const val MAX_BODY_CHARS = 256 * 1024
+
+        // Compiled once: readResponse runs on every RTSP exchange of a session setup.
+        val CONTENT_LENGTH = Regex("""(?i)content-length:\s*(\d+)""")
     }
 }
