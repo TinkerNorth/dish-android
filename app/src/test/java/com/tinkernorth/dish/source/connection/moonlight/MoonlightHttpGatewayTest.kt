@@ -106,6 +106,7 @@ class MoonlightHttpGatewayTest {
         // still open, which is exactly what the pooled URL-stack version leaked.
         assertEquals(CALLS, host.awaitHeads(CALLS).size)
         assertEquals(CALLS, host.closedByPeer.size)
+        assertTrue("every connection must have ended at end-of-stream", host.closedByPeer.all { it })
     }
 
     @Test
@@ -218,10 +219,14 @@ class MoonlightHttpGatewayTest {
                         )
                         flush()
                     }
-                    // The client asked us to close, so it must not send anything
-                    // more: what comes back has to be end-of-stream.
-                    closedByPeer += socket.getInputStream().read() < 0
                 }
+                // The client asked us to close, so nothing more may come back. A clean
+                // end-of-stream and a reset both mean that, and a throw here is never data.
+                // Recorded OUTSIDE the block above on purpose: it used to sit inside, so a read
+                // that threw dropped the observation while served.countDown() still fired, and
+                // awaitHeads then returned before closedByPeer was complete. That is what made
+                // this test fail on a loaded runner and pass everywhere else.
+                closedByPeer += runCatching { socket.getInputStream().read() < 0 }.getOrDefault(true)
                 served.countDown()
             }
         }
